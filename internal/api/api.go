@@ -67,6 +67,8 @@ type Engine interface {
 	Pause(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
 	Merge(ctx context.Context, id domain.ItemID, by domain.Actor, method string) (domain.Item, error)
 	Note(ctx context.Context, id domain.ItemID, by domain.Actor, text string) (domain.Event, error)
+	Link(ctx context.Context, id, needs domain.ItemID, by domain.Actor) (domain.Edge, error)
+	Unlink(ctx context.Context, id, needs domain.ItemID, by domain.Actor) error
 	PullAndon(ctx context.Context, f domain.FactoryID, by domain.Actor, reason string) (domain.AndonPull, error)
 	ClearAndon(ctx context.Context, f domain.FactoryID, by domain.Actor, note string) (domain.AndonPull, error)
 }
@@ -420,6 +422,13 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 
 	out.Touches = s.itemTouchesOf(touches)
 
+	needs, dependents, err := s.itemLinks(ctx, it.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	out.Needs, out.Dependents = &needs, &dependents
+
 	return gen.GetItem200JSONResponse(out), nil
 }
 
@@ -556,7 +565,7 @@ func problemOf(err error) gen.Problem {
 	// The connection and knowledge routes' answers come before the definitions' (all wrap
 	// ports.ErrNameTaken).
 	for _, answer := range []func(error) (gen.Problem, bool){
-		fixedProblem, connectionProblem, knowledgeProblem, definitionProblem, controlProblem, agentProblem, apiKeyProblem, personalTokenProblem,
+		fixedProblem, edgeProblem, connectionProblem, knowledgeProblem, definitionProblem, controlProblem, agentProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {
 			return p

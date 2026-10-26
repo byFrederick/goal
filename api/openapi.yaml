@@ -1853,6 +1853,59 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/NoteReceipt" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/items/{item}/needs:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/ItemRef"
+    post:
+      operationId: linkItem
+      x-goal-scope: item:operate
+      tags: [work]
+      summary: Say that an item needs another, so it is not claimed until that one is done or cancelled
+      description: >-
+        Adds a dependency of kind linked by the caller (ADR 0012) and records an edge_added event on
+        the item; people cannot add planned or overlap edges. Problems: 404 item-not-found for
+        either item when it is unknown or the caller cannot read it; 400 edge-invalid for an item
+        that needs itself or an item of another factory; 409 edge-cycle when the needed item
+        already needs this one, directly or through others; 409 edge-exists when the item already
+        needs it; 409 item-closed for a done or cancelled item.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewLink" }
+      responses:
+        "201":
+          description: The new edge
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ItemLink" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/items/{item}/needs/{need}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/ItemRef"
+      - name: need
+        in: path
+        required: true
+        description: >-
+          The needed item's id (a UUID) or <factory>#<number>, as in goal#2 (percent-encode the #
+          as %23)
+        schema: { type: string }
+    delete:
+      operationId: unlinkItem
+      x-goal-scope: item:operate
+      tags: [work]
+      summary: Say that an item no longer needs another
+      description: >-
+        Removes the dependency, whatever its kind, and records an edge_removed event on the item.
+        Problems: 404 item-not-found for either item when it is unknown or the caller cannot read
+        it; 404 edge-not-found when the item does not need it; 409 item-closed for a done or
+        cancelled item.
+      responses:
+        "204":
+          description: The edge is removed
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/touches/{event}/reason:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -3390,6 +3443,33 @@ components:
         touches:
           description: The item's human touches; getItem only
           allOf: [{ $ref: "#/components/schemas/ItemTouches" }]
+        needs:
+          type: array
+          description: The items this item needs, oldest edge first; getItem only
+          items: { $ref: "#/components/schemas/ItemLink" }
+        dependents:
+          type: array
+          description: The items that need this item, oldest edge first; getItem only
+          items: { $ref: "#/components/schemas/ItemLink" }
+    NewLink:
+      type: object
+      required: [needs]
+      properties:
+        needs:
+          type: string
+          minLength: 1
+          description: The needed item's id (a UUID) or <factory>#<number>, as in goal#2; an item of the same factory
+    ItemLink:
+      type: object
+      description: One end of a dependency between two items, seen from the other end
+      required: [id, ref, kind, state, by, at]
+      properties:
+        id: { type: string, description: The other item's id }
+        ref: { type: string, description: "The other item's <factory name>#<number>" }
+        kind: { type: string, enum: [planned, linked, overlap], description: "planned by whoever split the work, linked by a person, or overlap (their files overlap)" }
+        state: { $ref: "#/components/schemas/ItemState" }
+        by: { type: string, description: "The edge's author, as an actor ref (<kind>:<id>, as in user:<id> or agent:<id>)" }
+        at: { type: string, format: date-time, description: When the edge was added }
     AssemblyParts:
       type: object
       required: [done, total, lead_time_seconds, parts]
