@@ -3,6 +3,7 @@
 import type { Board, BoardLine, BoardStation, ItemCard } from '../../api/types';
 import { formatDuration, formatPercent, formatUsd, formatUsdCompact, humanize, plural } from '../../shared/format';
 import { describeState, type StateLabel, waitingOnYou } from '../../shared/item-state';
+import { waitingShort } from '../../shared/waiting';
 import type { HatchTone } from '../../ui/hatch';
 
 /** "3 of 3, 2 ready", "2 of 5", "7 waiting", "4 today": a station's load. */
@@ -198,15 +199,14 @@ export function cardState(
 }
 
 /**
- * Why a queued or ready item waits on another item, as the API gives its refs: "Starts after sre#3
- * merges" for an item it needs, "Waits for sre#3: same files (internal/api/**)" for one whose files
- * overlap its own.
+ * The wait a queued or ready item is in, if any: the items it waits on, as the API gives them.
+ * Waiting for other work is normal flow, so it is never an error.
  */
+export function waitsOn(item: Pick<ItemCard, 'state' | 'waiting'>): ItemCard['waiting'] {
+  return item.state === 'queued' || item.state === 'ready' ? (item.waiting ?? null) : null;
+}
+
+/** The card's one muted line: "Waits for sre#3", or "Waits for sre#3 +2"; the full list is in waitingDetail. */
 function waitingReason(waiting: NonNullable<ItemCard['waiting']>): StateLabel {
-  const refs = waiting.items.join(', ');
-  if (waiting.kind === 'files') {
-    return { text: `Waits for ${refs}: same files (${waiting.files.join(', ')})`, tone: 'rework' };
-  }
-  const merge = waiting.items.length > 1 ? 'merge' : 'merges';
-  return { text: `Starts after ${refs} ${merge}`, tone: 'muted' };
+  return { text: waitingShort(waiting), tone: 'muted' };
 }

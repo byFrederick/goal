@@ -4,12 +4,13 @@ import type { CSSProperties, KeyboardEvent, PointerEvent, Ref } from 'react';
 import type { ItemCard } from '../../api/types';
 import { refParam, useFactory, useFactoryParams } from '../../shared/factory';
 import { formatAge, humanize, plural } from '../../shared/format';
-import { pullRequestLabel, toneText } from '../../shared/item-state';
+import { itemStatus, pullRequestLabel, toneText } from '../../shared/item-state';
 import { isMoveShortcut, MoveButton, moveShortcut } from '../../shared/move-menu';
 import { holds } from '../../shared/permissions';
+import { WaitLine } from '../../shared/waiting-for';
 import { cn } from '../../ui/cn';
 import type { OpenAssembly } from './board-filters';
-import { cardState, isExpedite } from './stats';
+import { cardState, isExpedite, waitsOn } from './stats';
 
 /** What the board's drag and drop attaches to a card (columns only; phones move by the button). */
 export interface CardDrag {
@@ -61,9 +62,13 @@ export function BoardCard({
   const expedite = isExpedite(item);
   const expediteLabel = expedite ? <ExpediteMark /> : null;
 
-  // A done card has no state line: its summary is on the item page. Two lines at most, so a card stays about as tall as its neighbours.
+  // A done card has no state line: its summary is on the item page. A wait is one line (its full list
+  // is the tooltip); any other state line is two lines at most, so a card stays about as tall as its neighbours.
+  const wait = waitsOn(item);
   const stateLine =
-    item.state === 'done' ? null : (
+    item.state === 'done' ? null : wait ? (
+      <WaitLine waiting={wait} status={itemStatus(item)} className={compact ? 'text-[13px]' : 'text-xs'} />
+    ) : (
       <span className={cn('line-clamp-2', compact ? 'text-[13px]' : 'text-xs', toneText[state.tone])}>
         {state.text}
       </span>

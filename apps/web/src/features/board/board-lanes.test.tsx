@@ -382,17 +382,20 @@ describe('board lanes', () => {
       .getByRole('link', { name: 'Ship the export migration' })
       .closest('article') as HTMLElement;
     expect(afterRow.querySelector('.lucide-clock')).not.toBeNull();
-    expect(within(afterRow).getByText('Starts after sre#3 merges')).toBeTruthy();
+    expect(within(afterRow).getByText('Waits for sre#3')).toBeTruthy();
 
     const filesRow = within(columns)
       .getByRole('link', { name: 'Adjust the export handler' })
       .closest('article') as HTMLElement;
     expect(filesRow.querySelector('.lucide-shuffle')).not.toBeNull();
     expect(filesRow.querySelector('.lucide-clock')).toBeNull();
-    const filesReason = 'Waits for sre#3: same files (internal/api/gen/export/handlers.go, web/src/features/export/**)';
-    const filesText = within(filesRow).getByText(filesReason);
+    const filesText = within(filesRow).getByText('Waits for sre#3');
     expect(filesText.classList).toContain('truncate');
-    expect(filesText.parentElement?.getAttribute('title')).toBe(filesReason);
+    expect(filesText.parentElement?.classList).toContain('text-muted');
+    // A wait is normal flow: no red anywhere on the row, the icon included.
+    expect(filesRow.querySelector('.text-rework')).toBeNull();
+    expect(filesRow.querySelector('.text-rework-ink')).toBeNull();
+    expect(within(filesRow).queryByText(/same files|\*\*/)).toBeNull();
 
     const readyRow = within(columns)
       .getByRole('link', { name: 'Document the export flags' })
@@ -526,7 +529,7 @@ describe('board waiting rows', () => {
   const waitingRow = (waiting: ItemWaiting | null) =>
     board({}, [item({ id: 'item-7', ref: 'sre#7', number: 7, title: QUEUED, board_lane: 'investigator', waiting })]);
 
-  it('says which open need a same-files wait holds the row for, the ref linked to that item', async () => {
+  it('shows one wait line for one needed item, its full list as the tooltip, and no list or link to it', async () => {
     renderBoardPage({
       page: BoardPage,
       org,
@@ -539,32 +542,45 @@ describe('board waiting rows', () => {
       }),
     });
 
-    expect((await screen.findAllByTitle('waits for the same files as sre#3 (terraform/)'))[0]).toBeTruthy();
-    const link = screen.getAllByRole('link', { name: 'sre#3' })[0];
-    expect(link?.getAttribute('href')).toBe('/o/acme/f/sre/items/3');
+    const [link] = await screen.findAllByRole('link', { name: QUEUED });
+    const row = link?.closest('article') as HTMLElement;
+    const line = within(row).getByText('Waits for sre#3');
+    expect(line.parentElement?.getAttribute('title')).toBe(
+      'sre#3 Move the state bucket (same files terraform/**, terraform/main.tf)\nShared files: terraform/main.tf',
+    );
+    expect(within(row).queryByRole('link', { name: 'sre#3' })).toBeNull();
+    expect(row.textContent).not.toMatch(/\*\*|terraform\//);
   });
 
-  it('says which need a wait for another item holds the row for, with the title when the need names no paths', async () => {
+  it('counts the other needed items in the one line: "+2" for three', async () => {
     renderBoardPage({
       page: BoardPage,
       org,
       factory,
       board: waitingRow({
         kind: 'after',
-        items: ['sre#2'],
+        items: ['sre#2', 'sre#4', 'sre#5'],
         files: [],
-        needs: [{ ref: 'sre#2', title: 'Set up the drum', paths: [] }],
+        needs: [
+          { ref: 'sre#2', title: 'Set up the drum', paths: [] },
+          { ref: 'sre#4', title: 'Split the export', paths: [] },
+          { ref: 'sre#5', title: 'Move the bucket', paths: [] },
+        ],
       }),
     });
 
-    expect((await screen.findAllByTitle('waits for sre#2 (moves Set up the drum)'))[0]).toBeTruthy();
-    expect(screen.getAllByRole('link', { name: 'sre#2' })[0]?.getAttribute('href')).toBe('/o/acme/f/sre/items/2');
+    const [link] = await screen.findAllByRole('link', { name: QUEUED });
+    const row = link?.closest('article') as HTMLElement;
+    expect(within(row).getByText('Waits for sre#2 +2')).toBeTruthy();
+    expect(row.querySelectorAll('.truncate')).toHaveLength(1);
   });
 
-  it('adds no need line to a row that does not wait on an item', async () => {
+  it('adds no wait line to a row that does not wait on an item', async () => {
     renderBoardPage({ page: BoardPage, org, factory, board: waitingRow(null) });
 
-    expect((await screen.findAllByText(QUEUED))[0]).toBeTruthy();
-    expect(screen.queryByTitle(/^waits for/)).toBeNull();
+    const [link] = await screen.findAllByRole('link', { name: QUEUED });
+    const row = link?.closest('article') as HTMLElement;
+    expect(within(row).queryByText(/^Waits for/)).toBeNull();
+    expect(row.querySelector('[title^="sre#"]')).toBeNull();
   });
 });
