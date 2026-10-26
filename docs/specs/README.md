@@ -82,7 +82,7 @@ These keep the specs from colliding. A spec that needs to break one says so in i
 12. Observability — logs, metrics, events.
 13. Testing — unit tests with port fakes, conformance suite, integration tests (PostgreSQL 18, RustFS), Playwright flows; no useless tests.
 14. Rollout and migration — from today's state (single tenant, env secrets) to the new one without losing data.
-15. Work breakdown — ordered, small pull requests, each with its acceptance criteria, how it is verified, and the AGENTS.md skills for its areas.
+15. Work breakdown — ordered, small pull requests, each with its acceptance criteria, how it is verified, and the skills that the `.claude/rules` file for each of its areas names.
 16. Cross-spec contracts — what this phase provides to and needs from other phases (by interface name, endpoint or table).
 17. Open questions.
 
@@ -103,5 +103,5 @@ These keep the specs from colliding. A spec that needs to break one says so in i
 
 A adds one package, `internal/retention` (A6: the purge job of deleted organizations; no-auth). Phase 3 adds no Go package under `internal/` (its code lives in `internal/api` and `internal/adapters/postgres`) and no `internal/adapters/oidc`. The `api` rule also denies `factorymodel` and `builder` in 2.2 (not `authoring`, whose request and result types `api.Definitions` names, B PR 9), and `connkind` and `knowledge` when phase 4 adds them (handlers reach them through interfaces declared in `internal/api`). The `engine` rule should become an allow-list (`domain`, `ports` only), since a deny-list misses the new core packages. Each new row goes into `docs/engineering/architecture.md`'s import table in the PR that adds the package.
 
-### Rules (binding, from AGENTS.md)
-Config-driven; factories keyed by UUID; PostgreSQL is the only database; stateless goald; hexagonal architecture enforced by depguard; manual constructor injection in `cmd/*/main.go`; 12-factor config; Terraform only in `terraform/`, for the platform's own infrastructure (phase 4 on Cloudflare), never per organization; no employer names (use `acme`, `example.com`); UI follows `design-system/goal/MASTER.md`; tests protect behaviour; forward-only migrations; one work item, one small pull request; load the AGENTS.md skills for the area a PR touches.
+### Rules (binding, from AGENTS.md and `.claude/rules`)
+Config-driven; factories keyed by UUID; PostgreSQL is the only database; stateless goald; hexagonal architecture enforced by depguard; manual constructor injection in `cmd/*/main.go`; 12-factor config; Terraform only in `terraform/`, for the platform's own infrastructure (phase 4 on Cloudflare), never per organization; no employer names (use `acme`, `example.com`); UI follows `design-system/goal/MASTER.md`; tests protect behaviour; forward-only migrations; one work item, one small pull request; load the skills named by the rule for each area a PR touches.
