@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useRouteContext } from '@tanstack/react-router';
 import { useCallback } from 'react';
-import { factoriesQuery } from '../api/queries';
+import { archivedFactoriesQuery, factoriesQuery } from '../api/queries';
 import type { Factory } from '../api/types';
 import { humanize } from './format';
 import { useOrg } from './org';
@@ -9,13 +9,16 @@ import { useOrg } from './org';
 /**
  * The factory of the current /o/$org/f/$factory route, as the organization's factory list has it
  * now: a publish elsewhere (its `definition` event refetches the list) changes its stations, work
- * types and version on the open page. Its queries are keyed by its `id`, which never changes; the
- * layout's copy, resolved when the route loaded, stands in until the list has it.
+ * types and version on the open page. An archived factory is in the archived list instead, which is
+ * read only while the factory list does not have it. Its queries are keyed by its `id`, which never
+ * changes; the layout's copy, resolved when the route loaded, stands in until a list has it.
  */
 export function useFactory(): Factory {
   const { org, factory } = useRouteContext({ from: '/o/$org/f/$factory' });
   const select = useCallback((list: Factory[]) => list.find((f) => f.id === factory.id), [factory.id]);
-  return useQuery({ ...factoriesQuery(org.id), select }).data ?? factory;
+  const listed = useQuery({ ...factoriesQuery(org.id), select }).data;
+  const archived = useQuery({ ...archivedFactoriesQuery(org.id), select, enabled: listed === undefined }).data;
+  return listed ?? archived ?? factory;
 }
 
 /**

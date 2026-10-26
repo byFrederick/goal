@@ -16,9 +16,10 @@ export interface FactorySquare {
   detail: string;
 }
 
+/** The rail's squares: the organization's factories that are not archived (an archived one leaves the rail). */
 export function useFactorySquares(org: OrgSummary): FactorySquare[] {
   const { data } = useSuspenseQuery(factoriesQuery(org.id));
-  const factories = data.toSorted((a, b) => a.name.localeCompare(b.name));
+  const factories = data.filter((f) => !f.archived_at).toSorted((a, b) => a.name.localeCompare(b.name));
   const attention = useAttention(org.id);
   return factories.map((factory) => {
     const mark = factoryMark(factory, factories);

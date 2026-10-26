@@ -8,13 +8,14 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { type ReactNode, useId, useState } from 'react';
 import { toast } from 'sonner';
-import { ApiError, archiveFactory, pauseFactory, purgeFactory, restoreFactory } from '../../api/client';
+import { ApiError, archiveFactory, pauseFactory, purgeFactory } from '../../api/client';
 import { defKeys, keys } from '../../api/queries';
 import type { Factory, OrgSummary } from '../../api/types';
 import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { SettingsSection } from '../org-settings/section';
 import { refreshFactory } from './refresh';
+import { useRestoreFactory } from './restore';
 
 /** Why an action failed, in the zone's words: goald's detail ("2 items are being worked") when it gives one. */
 function actionError(err: Error): string {
@@ -86,16 +87,7 @@ export function DangerZone({ org, factory, deletes }: DangerZoneProps) {
     onSettled: () => refreshFactory(client, org.id, factory.id),
   });
 
-  const restore = useMutation({
-    mutationFn: () => restoreFactory(org.id, factory.id),
-    onSuccess: (answer) => {
-      client.setQueryData(detailKey, answer);
-      toast.success(`Restored ${factory.name}`, {
-        description: 'It is listed again and stays paused until you resume it.',
-      });
-    },
-    onSettled: () => refreshFactory(client, org.id, factory.id),
-  });
+  const restore = useRestoreFactory(org, factory);
 
   const purge = useMutation({
     mutationFn: () => purgeFactory(org.id, factory.id),
