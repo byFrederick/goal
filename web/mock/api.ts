@@ -1308,7 +1308,10 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return json(res, 200, page);
     }
     if (rest === '/factories') {
-      return json(res, 200, { factories: state.factories.filter((f) => f.org_id === org.id) });
+      // The contract: archived factories only when archived=true, and none otherwise.
+      const archived = url.searchParams.get('archived') === 'true';
+      const factories = state.factories.filter((f) => f.org_id === org.id && Boolean(f.archived_at) === archived);
+      return json(res, 200, { factories });
     }
 
     if (rest === '/attention' && method === 'GET') {

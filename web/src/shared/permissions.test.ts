@@ -15,6 +15,43 @@ describe('holds', () => {
   });
 });
 
+describe('holds on an archived factory', () => {
+  const archived = {
+    archived_at: '2026-10-25T09:00:00Z',
+    can: [
+      'factory:manage',
+      'item:create',
+      'item:operate',
+      'item:decide',
+      'andon:manage',
+      'definition:edit',
+      'definition:publish',
+      'factory:archive',
+    ],
+  };
+
+  it.each([
+    'factory:manage',
+    'item:create',
+    'item:operate',
+    'item:decide',
+    'andon:manage',
+    'definition:edit',
+    'definition:publish',
+  ] as const)('holds no factory write, %s, while it is archived', (permission) => {
+    expect(holds(archived, permission)).toBe(false);
+  });
+
+  it('still holds an organization permission, which restores it', () => {
+    expect(holds(archived, 'factory:archive')).toBe(true);
+  });
+
+  it('holds its write permissions again once restored', () => {
+    const { archived_at: _archived, ...restored } = archived;
+    expect(holds(restored, 'item:create')).toBe(true);
+  });
+});
+
 describe('factoryRoleNote', () => {
   it('names the roles that hold less than an editor', () => {
     expect(factoryRoleNote('viewer', 'sre')).toBe('You’re a viewer of sre');

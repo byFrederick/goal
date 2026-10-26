@@ -106,6 +106,50 @@ export function renderFactoryPage({
 }
 
 /**
+ * Renders `page` as an organization's own page: the /o/$org route, at /o/<org> with `search` as its
+ * search params, and `seed` as the query data. A page that reads its search params reads them from
+ * this URL, so a control that navigates changes what it shows. Returns what render returns, and the
+ * router.
+ */
+export function renderOrgPage({
+  page,
+  org,
+  seed = [],
+  search,
+}: {
+  page: () => ReactNode;
+  org: OrgSummary;
+  seed?: readonly Seed[];
+  search?: Record<string, string> | undefined;
+}) {
+  polyfillLayout();
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+  for (const [key, data] of seed) queryClient.setQueryData(key, data);
+
+  const rootRoute = createRootRoute();
+  const orgRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/o/$org',
+    beforeLoad: () => ({ org }),
+    component: page,
+  });
+  const query = search && Object.keys(search).length > 0 ? `?${new URLSearchParams(search)}` : '';
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([orgRoute]),
+    history: createMemoryHistory({ initialEntries: [`/o/${org.slug}${query}`] }),
+  });
+
+  return {
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    ),
+    router,
+  };
+}
+
+/**
  * Renders a Board screen at /o/<org>/f/<factory>/board?station=…, with the board seeded as its query
  * data. Returns what render returns (unmount, and the rest of Testing Library's queries).
  */

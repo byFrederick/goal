@@ -356,7 +356,18 @@ export const invitationsQuery = (org: string) =>
 export const factoriesQuery = (org: string) =>
   queryOptions({
     queryKey: keys.factories(org),
-    queryFn: ({ signal }) => listFactories(org, signal),
+    queryFn: ({ signal }) => listFactories(org, { signal }),
+    staleTime: 60_000,
+  });
+
+/**
+ * The archived factories (listFactories with archived). Under keys.factories, so refreshFactory
+ * refetches it with the list: a restored factory leaves it, an archived one joins it.
+ */
+export const archivedFactoriesQuery = (org: string) =>
+  queryOptions({
+    queryKey: [...keys.factories(org), 'archived'] as const,
+    queryFn: ({ signal }) => listFactories(org, { archived: true, signal }),
     staleTime: 60_000,
   });
 

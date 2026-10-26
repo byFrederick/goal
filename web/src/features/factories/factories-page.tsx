@@ -1,8 +1,10 @@
 // The organization's home (C §10.7, canvas "Factories" and "Mobile-Factories"): a sentence on
 // what waits and what the week cost, one card per factory, what waits on you across them, and
 // the ways to start a new factory. Everything comes from GET /overview (7 days) and GET /inbox,
-// which the organization's stream keeps fresh.
+// which the organization's stream keeps fresh. The Archived filter (?archived=true) lists the
+// archived factories instead, with Restore (ArchivedFactories).
 import { useSuspenseQuery } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import { Factory as FactoryIcon } from 'lucide-react';
 import { useId } from 'react';
 import { inboxQuery, overviewQuery } from '../../api/queries';
@@ -12,6 +14,8 @@ import { reasons } from '../../shared/permissions';
 import { cn } from '../../ui/cn';
 import { EmptyState } from '../../ui/empty-state';
 import { actionsClass, descriptionClass, eyebrowClass, PageHeader } from '../../ui/page-header';
+import { SegmentedControl } from '../../ui/segmented-control';
+import { ArchivedFactories } from './archived-factories';
 import { FactoryCard } from './factory-card';
 import { NewFactoryButton, NewFactoryButtons, NewFactoryCard } from './new-factory';
 import { budgetLine, headerSentence, possessive } from './sentences';
@@ -20,8 +24,9 @@ import { WaitingBanner, WaitingList } from './waiting';
 /** The cards: one column below 640 px of room, two below 1000 px, else three (container queries on main). */
 const cardGrid = 'm-0 grid list-none gap-3 p-0 @[640px]:grid-cols-2 @[640px]:gap-4 @[1000px]:grid-cols-3';
 
-export function FactoriesPage() {
+export function FactoriesPage({ archived = false }: { archived?: boolean }) {
   const org = useOrg();
+  const navigate = useNavigate();
   const { data: overview } = useSuspenseQuery(overviewQuery(org.id));
   const { data: inbox } = useSuspenseQuery(inboxQuery(org.id));
   const listId = useId();
@@ -42,16 +47,35 @@ export function FactoriesPage() {
         title="Factories"
         eyebrow={<p className={cn(eyebrowClass, 'md:hidden')}>{org.name}</p>}
         description={
-          factories.length > 0 ? (
+          factories.length > 0 && !archived ? (
             <p className={cn(descriptionClass, 'hidden md:block')}>
               {headerSentence(org.name, overview.waiting_on_you, overview.spend_usd, overview.budget_usd)}
             </p>
           ) : null
         }
-        actions={factories.length > 0 && mayCreate ? actions : null}
+        actions={factories.length > 0 && mayCreate && !archived ? actions : null}
       />
 
-      {factories.length === 0 && mayCreate ? (
+      <SegmentedControl
+        label="Show"
+        className="self-start"
+        options={[
+          { value: 'active', label: 'Active' },
+          { value: 'archived', label: 'Archived' },
+        ]}
+        value={archived ? 'archived' : 'active'}
+        onChange={(value) =>
+          navigate({
+            to: '/o/$org',
+            params: { org: org.slug },
+            search: value === 'archived' ? { archived: true } : {},
+          })
+        }
+      />
+
+      {archived ? (
+        <ArchivedFactories org={org} />
+      ) : factories.length === 0 && mayCreate ? (
         <EmptyState
           icon={<FactoryIcon size={20} strokeWidth={1.5} />}
           title={`No factories in ${org.name} yet`}

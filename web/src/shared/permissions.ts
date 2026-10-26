@@ -24,30 +24,42 @@ export type OrgPermission =
   | 'knowledge:read'
   | 'knowledge:manage'
   | 'audit:read';
-export type FactoryPermission =
-  | 'factory:manage'
-  | 'item:create'
-  | 'item:decide'
-  | 'item:operate'
-  | 'andon:manage'
-  | 'definition:edit'
-  | 'definition:publish';
+/** The permissions that change a factory. An archived factory takes none of them (spec 2.2-b). */
+export const factoryPermissions = [
+  'factory:manage',
+  'item:create',
+  'item:decide',
+  'item:operate',
+  'andon:manage',
+  'definition:edit',
+  'definition:publish',
+] as const;
+export type FactoryPermission = (typeof factoryPermissions)[number];
 
-/** Anything goald answers `can` on. */
+/** Anything goald answers `can` on; a factory also says when it was archived. */
 interface Grants {
   can?: readonly string[] | undefined;
+  archived_at?: string | undefined;
 }
 
 /**
  * Whether goald lists `permission` for the caller. Nothing known (still loading, an answer without
- * `can`) holds nothing: a control waits for goald rather than offering what may be refused.
+ * `can`) holds nothing: a control waits for goald rather than offering what may be refused. An
+ * archived factory holds no factory permission, so its controls are not offered (goald refuses
+ * them too).
  */
 export function holds(subject: Grants | undefined, permission: OrgPermission | FactoryPermission): boolean {
+  if (subject?.archived_at && isFactoryPermission(permission)) return false;
   return subject?.can?.includes(permission) ?? false;
+}
+
+function isFactoryPermission(permission: string): permission is FactoryPermission {
+  return (factoryPermissions as readonly string[]).includes(permission);
 }
 
 /** Why a control of factory `factory` (its name) is disabled or absent. */
 export const reasons = {
+  archived: (date: string, who: string) => `Archived on ${date} by ${who}. It takes no work.`,
   decide: (factory: string) => `Approvers of ${factory} decide here.`,
   note: (factory: string) => `Approvers and editors of ${factory} send notes to its agents.`,
   andon: (pulled: boolean) =>

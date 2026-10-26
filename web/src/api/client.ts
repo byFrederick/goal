@@ -178,8 +178,17 @@ export function transferOwnership(org: string, to: string, confirm: string): Pro
   return unwrap(goal.POST(orgPath('/transfer'), { params: { path: { org } }, body: { to, confirm } }));
 }
 
-export async function listFactories(org: string, signal?: AbortSignal): Promise<Factory[]> {
-  const body = await unwrap(goal.GET(orgPath('/factories'), { params: { path: { org } }, ...cancel(signal) }));
+/** The factories, without the archived ones unless `archived` lists only those. */
+export async function listFactories(
+  org: string,
+  { archived = false, signal }: { archived?: boolean; signal?: AbortSignal } = {},
+): Promise<Factory[]> {
+  const body = await unwrap(
+    goal.GET(orgPath('/factories'), {
+      params: { path: { org }, query: archived ? { archived: true } : {} },
+      ...cancel(signal),
+    }),
+  );
   return body.factories;
 }
 
