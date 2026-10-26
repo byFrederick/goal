@@ -34,6 +34,11 @@ func TestDecodeWorkerLine_MapsProgressTypesToEventKinds(t *testing.T) {
 		},
 		{line: `{"type":"message","text":"hi"}`, kind: EventAgentMessage, data: map[string]any{"text": "hi"}, at: now},
 		{line: `{"type":"usage","input_tokens":3}`, kind: EventUsage, data: map[string]any{"input_tokens": 3.0}, at: now},
+		{
+			line: `{"type":"note_delivered","at":"2026-10-23T10:00:01Z","note_id":42}`,
+			kind: EventNoteDelivered, data: map[string]any{"note_id": float64(42)},
+			at: time.Date(2026, 10, 23, 10, 0, 1, 0, time.UTC),
+		},
 	}
 
 	for _, tt := range tests {
