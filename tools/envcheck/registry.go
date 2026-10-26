@@ -44,11 +44,12 @@ var processDirs = []struct{ dir, reader string }{
 	{"internal/cli/", readerCLI},
 	{"apps/auth/", readerAuth},
 	{"apps/worker/", readerWorker},
+	{"apps/control-worker/", readerControlWorker},
 	{"deploy/cloudflare/", readerControlWorker},
 }
 
 // tsDirs are the TypeScript sources whose reads count.
-var tsDirs = []string{"apps/auth/src/", "apps/worker/src/", "deploy/cloudflare/src/"}
+var tsDirs = []string{"apps/auth/src/", "apps/worker/src/", "apps/control-worker/src/"}
 
 // The classes of a variable.
 const (

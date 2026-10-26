@@ -1,17 +1,18 @@
-// Goal's control Worker on Cloudflare (spec 4 §5.12). A person deploys it with `wrangler deploy`
-// on Workers Paid, after deploy/terraform/ has made the bucket, DNS, the PlanetScale branch and the
-// Secrets Store secrets (docs/engineering/cloudflare-operations.md, bootstrap step 8); Terraform
-// owns the Workers route, so none is declared here. It creates nothing per organization. Images
-// build for linux/amd64 from this repository. `image` and `images` name Dockerfiles, which
-// `wrangler dev` builds; the production deploy (scripts/deploy.sh, task deploy:worker) builds them
-// itself with docker buildx, reproducibly and with a layer cache in CI, pushes them to Cloudflare's
-// registry and deploys a generated, git-ignored wrangler.deploy.jsonc: this file with each
-// Dockerfile replaced by its registry.cloudflare.com/<account>/<repository>@sha256:<digest>.
-// A Dockerfile added here needs its inputs in scripts/images.mjs.
+// Goal's control Worker on Cloudflare (spec 4 §5.12); its code is apps/control-worker, and wrangler
+// runs from that package's node_modules. A person deploys it with `wrangler deploy` on Workers
+// Paid, after deploy/terraform/ has made the bucket, DNS, the PlanetScale branch and the Secrets
+// Store secrets (docs/engineering/cloudflare-operations.md, bootstrap step 8); Terraform owns the
+// Workers route, so none is declared here. It creates nothing per organization. Images build for
+// linux/amd64 from this repository. `image` and `images` name Dockerfiles, which `wrangler dev`
+// builds; the production deploy (scripts/deploy.sh, task deploy:worker) builds them itself with
+// docker buildx, reproducibly and with a layer cache in CI, pushes them to Cloudflare's registry
+// and deploys a generated, git-ignored wrangler.deploy.jsonc: this file with each Dockerfile
+// replaced by its registry.cloudflare.com/<account>/<repository>@sha256:<digest>. A Dockerfile
+// added here needs its inputs in scripts/images.mjs.
 {
-  "$schema": "./node_modules/wrangler/config-schema.json",
+  "$schema": "../../apps/control-worker/node_modules/wrangler/config-schema.json",
   "name": "goal",
-  "main": "src/index.ts",
+  "main": "../../apps/control-worker/src/index.ts",
   "compatibility_date": "2026-10-01",
   // Terraform's route is the one public origin: no workers.dev or preview URL beside it.
   "workers_dev": false,

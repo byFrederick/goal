@@ -1,5 +1,5 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "extends": ["@goal/config/biome.json"],
-  "files": { "includes": ["src/**", "test/**", "scripts/**", "*.json", "*.ts", "!**/*.gen.*"] }
+  "files": { "includes": ["src/**", "test/**", "*.json", "*.ts", "!**/*.gen.*"] }
 }

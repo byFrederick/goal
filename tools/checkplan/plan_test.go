@@ -22,6 +22,7 @@ const (
 	envCheck = "env:check"
 	genCheck = "gen:check"
 	webCheck = "web:check"
+	cfCheck  = "cloudflare:check"
 )
 
 var (
@@ -91,7 +92,7 @@ func TestPlan(t *testing.T) {
 
 	tests := map[string]planCase{
 		"web only":                {[]string{"apps/web/src/routes/board.tsx", "apps/web/package.json"}, []string{webCheck}, "web (web:check): apps/web/src/routes/board.tsx and 1 more", ""},
-		"shared tsconfig":         {[]string{"packages/config/tsconfig.base.json"}, []string{"worker:check", "auth:check", "api-client:check", webCheck, "cloudflare:check"}, "shared by every TypeScript part", ""},
+		"shared tsconfig":         {[]string{"packages/config/tsconfig.base.json"}, []string{"worker:check", "auth:check", "api-client:check", webCheck, cfCheck}, "shared by every TypeScript part", ""},
 		"go file":                 {[]string{"internal/engine/pull.go"}, goEnvTasks, "go (lint, test, gen:check, validate): internal/engine/pull.go", ""},
 		"cli command":             {[]string{"internal/cli/main.go"}, goEnvTasks, "go (lint, test, gen:check, validate): internal/cli/main.go", ""},
 		"go file outside go dirs": {[]string{"apps/web/webui.go"}, goEnvTasks, "apps/web/webui.go", ""},
@@ -119,7 +120,8 @@ func TestPlan(t *testing.T) {
 		"generated route tree": {[]string{"apps/web/src/routeTree.gen.ts"}, []string{genCheck, webCheck}, "gen (gen:check): apps/web/src/routeTree.gen.ts", ""},
 		"generated queries":    {[]string{"internal/adapters/postgres/db/runs.sql.gen.go"}, goEnvTasks, "gen (gen:check): internal/adapters/postgres/db/runs.sql.gen.go", ""},
 		"api client":           {[]string{"packages/api-client/src/client.ts"}, []string{"api-client:check", webCheck}, "web (web:check): packages/api-client/src/client.ts", ""},
-		"control worker":       {[]string{"deploy/cloudflare/src/index.ts"}, []string{envCheck, "cloudflare:check"}, "cloudflare (cloudflare:check): deploy/cloudflare/src/index.ts", ""},
+		"control worker":       {[]string{"apps/control-worker/src/index.ts"}, []string{envCheck, cfCheck}, "cloudflare (cloudflare:check): apps/control-worker/src/index.ts", ""},
+		"deploy scripts":       {[]string{"deploy/cloudflare/scripts/deploy.sh"}, []string{envCheck, cfCheck}, "cloudflare (cloudflare:check): deploy/cloudflare/scripts/deploy.sh", ""},
 		"terraform":            {[]string{"deploy/terraform/r2.tf"}, []string{"tf:check"}, "terraform (tf:check): deploy/terraform/r2.tf", ""},
 		"sops rules":           {[]string{"deploy/terraform/.sops.yaml"}, []string{"tf:check"}, "terraform (tf:check): deploy/terraform/.sops.yaml", ""},
 		"agents map":           {[]string{"AGENTS.md"}, layoutTasks, "layout (layout:check): AGENTS.md", ""},
@@ -138,7 +140,7 @@ func TestPlan(t *testing.T) {
 			goEnvTasks, "env (env:check): tools/permgen/table.go", "",
 		},
 		"env reference":     {[]string{"docs/reference/environment.md"}, envTasks, "env (env:check): docs/reference/environment.md", ""},
-		"wrangler bindings": {[]string{"deploy/cloudflare/wrangler.jsonc"}, []string{envCheck, "cloudflare:check"}, "env (env:check): deploy/cloudflare/wrangler.jsonc", ""},
+		"wrangler bindings": {[]string{"deploy/cloudflare/wrangler.jsonc"}, []string{envCheck, cfCheck}, "env (env:check): deploy/cloudflare/wrangler.jsonc", ""},
 		"nothing to check": {
 			[]string{"docs/adr/0001.md", "docs/design/MASTER.md", ".claude/skills/x/SKILL.md", ".github/workflows/ci.yml", ".githooks/pre-push", "README.md", "skills-lock.json"},
 			nil, "", "",

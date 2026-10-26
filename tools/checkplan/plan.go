@@ -107,7 +107,8 @@ var rules = []rule{
 	// packages/config holds the Biome config and tsconfig bases every TypeScript part extends.
 	{under("packages/config"), []part{partWorker, partAuth, partAPIClient, partWeb, partCloudflare}, "shared by every TypeScript part"},
 	{under("apps/web"), []part{partWeb}, ""},
-	{under("deploy/cloudflare"), []part{partCloudflare, partEnv}, ""},
+	// The control Worker's code, and its wrangler config and deploy scripts.
+	{under("apps/control-worker", "deploy/cloudflare"), []part{partCloudflare, partEnv}, ""},
 	{under("deploy/terraform"), []part{partTerraform}, ""},
 	{under("docs", ".claude", ".github", ".githooks"), nil, ""},
 	{exact("skills-lock.json"), nil, ""},

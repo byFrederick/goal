@@ -132,7 +132,7 @@ jobs:
             exit 0
           fi
           changed=$(git diff --name-only "$prev" "$sha" -- \
-            cmd/ internal/ apps/web/ apps/worker/ apps/auth/ packages/ deploy/cloudflare/ db/migrations/ contracts/ \
+            cmd/ internal/ apps/web/ apps/worker/ apps/auth/ apps/control-worker/ packages/ deploy/cloudflare/ db/migrations/ contracts/ \
             go.mod go.sum package.json pnpm-lock.yaml pnpm-workspace.yaml)
           if [ -z "$changed" ]; then
             echo "The app did not change between $prev and $sha: nothing to deploy"

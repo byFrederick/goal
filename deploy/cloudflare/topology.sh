@@ -1,11 +1,13 @@
 #!/bin/sh
 # The control Worker's topology in wrangler dev (task cloudflare:topology): src/index.ts with
-# stand-ins for goald's and the auth service's images (test/topology), real local containers.
+# stand-ins for goald's and the auth service's images
+# (apps/control-worker/test/topology), real local containers.
 # Checks a public request reaches goald, goald's container reaches auth.internal and
 # sandbox.internal, a box reaches gateway.internal, and each container has only its own settings.
 # PORT (default 18788) is the Worker's port.
 set -eu
-cd "$(dirname "$0")"
+# wrangler dev runs from apps/control-worker, the Worker's package, with its node_modules.
+cd "$(dirname "$0")/../../apps/control-worker"
 port=${PORT:-18788}
 . ./test/dev.sh
 dev test/topology/wrangler.jsonc "$port"

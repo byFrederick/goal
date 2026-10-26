@@ -118,8 +118,8 @@ Goal then opens from its own icon, full screen, and keeps the phone's status bar
 | --- | --- |
 | `*.go` anywhere, `cmd/`, `internal/`, `db/queries/`, `db/sqlc.yaml`, `db/migrations/`; what Go embeds or its tests read: `apps/web/csp.txt`, `apps/web/placeholder/`, `compose.yaml`, `.env.example` | `lint`, `test`, `api:permissions-check`, `validate` |
 | `apps/auth/src/access.gen.ts` (compared by `api:permissions-check`) | the Go checks and `auth:check` |
-| `apps/worker/`, `apps/auth/`, `deploy/cloudflare/` | `worker:check`, `auth:check`, `cloudflare:check` |
-| what may read the environment: `*.go` (outside `tools/layoutcheck/`), `apps/worker/`, `apps/auth/`, `deploy/cloudflare/`, `compose.yaml`, `.env.example`; and `tools/envcheck/` (with the Go checks), `docs/reference/environment.md` | `env:check` as well |
+| `apps/worker/`, `apps/auth/`, `apps/control-worker/` and `deploy/cloudflare/` | `worker:check`, `auth:check`, `cloudflare:check` |
+| what may read the environment: `*.go` (outside `tools/layoutcheck/`), `apps/worker/`, `apps/auth/`, `apps/control-worker/`, `deploy/cloudflare/`, `compose.yaml`, `.env.example`; and `tools/envcheck/` (with the Go checks), `docs/reference/environment.md` | `env:check` as well |
 | `packages/api-client/` | `api-client:check` and `web:check` (web uses it) |
 | the rest of `apps/web/` | `web:check` |
 | `deploy/terraform/` | `tf:check` |
@@ -180,7 +180,7 @@ PostgreSQL 18 is the only database: work items, the event log, leases (`FOR UPDA
 
 ## Infrastructure
 
-`deploy/terraform/` holds the platform's own infrastructure and nothing per organization: on Cloudflare the R2 bucket, the DNS record and Workers route of `goal.byfrederick.work`, the R2 and Workers AI tokens and every Secrets Store secret; on PlanetScale the database's branch (adopted) and its administrator; the Google Cloud project of the sign-in OAuth client. Terraform generates every secret it can; only outside values and the master keys are in the age-encrypted `deploy/terraform/secrets/production.sops.yaml`. One root module, one Terraform workspace, `production`; state in an R2 bucket. wrangler deploys the control Worker and the containers (`deploy/cloudflare/`).
+`deploy/terraform/` holds the platform's own infrastructure and nothing per organization: on Cloudflare the R2 bucket, the DNS record and Workers route of `goal.byfrederick.work`, the R2 and Workers AI tokens and every Secrets Store secret; on PlanetScale the database's branch (adopted) and its administrator; the Google Cloud project of the sign-in OAuth client. Terraform generates every secret it can; only outside values and the master keys are in the age-encrypted `deploy/terraform/secrets/production.sops.yaml`. One root module, one Terraform workspace, `production`; state in an R2 bucket. wrangler deploys the control Worker (its code in `apps/control-worker/`) and the containers, from `deploy/cloudflare/`.
 
 ```bash
 task tf:check                 # fmt, validate, tflint, terraform test: offline, part of task check

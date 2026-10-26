@@ -147,7 +147,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_GATEWAY_TOKEN` | secret | yes | The run's gateway token, which the worker fetches its bundle and reaches the MCP gateway with. |
 | `GOAL_GATEWAY_URL` | config | yes | The MCP gateway's URL: for goald it defaults from the listeners; the worker needs it to fetch its run's bundle. |
 
-## The control Worker (`deploy/cloudflare`, its vars and Secrets Store bindings in `wrangler.jsonc`)
+## The control Worker (`apps/control-worker`, its vars and Secrets Store bindings in `deploy/cloudflare/wrangler.jsonc`)
 
 | Name | Class | Required | Meaning |
 | --- | --- | --- | --- |

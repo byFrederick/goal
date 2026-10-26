@@ -1,4 +1,4 @@
-# Sourced by sandboxtest.sh and topology.sh: dev CONFIG PORT starts wrangler dev on 127.0.0.1:PORT
+# Sourced by deploy/cloudflare's sandboxtest.sh and topology.sh, from apps/control-worker: dev CONFIG PORT starts wrangler dev on 127.0.0.1:PORT
 # with a fresh random GOAL_SANDBOX_KEY ($key) and state in a temporary folder, waits until it is
 # ready, and stops it at exit with every container it started. Locally only: nothing of a
 # Cloudflare account reaches wrangler, and it never deploys.
