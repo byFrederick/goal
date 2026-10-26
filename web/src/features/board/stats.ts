@@ -148,6 +148,22 @@ export function doingText(item: Pick<ItemCard, 'turn'>): string {
   return item.turn ? `Working, turn ${item.turn}` : 'Working';
 }
 
+/** One segment of a plan bar: a todo done, the one in hand, or a todo still to do. */
+export type PlanSegment = 'done' | 'current' | 'todo';
+
+/**
+ * A plan bar's segments, one per todo: the first `done` are done (`done` clamped to the total), the
+ * next is current while the plan has one left, the rest are todo. No segments when the plan lists none.
+ */
+export function planSegments(plan: NonNullable<ItemCard['plan_steps']>): PlanSegment[] {
+  const total = Math.max(0, plan.total);
+  const done = Math.min(Math.max(0, plan.done), total);
+  return Array.from({ length: total }, (_, i): PlanSegment => {
+    if (i < done) return 'done';
+    return i === done ? 'current' : 'todo';
+  });
+}
+
 const times = ['once', 'twice'];
 
 /** The most characters of a done item's summary a card shows; the item page shows all of it. */
@@ -183,17 +199,20 @@ export function summaryExcerpt(summary: string): string | null {
 }
 
 /**
- * A card's state line: the doing line while worked, "Needs your OK", work waiting in the drum's
- * buffer or held back by the rope, how often work was sent back, what a done item became (an
- * excerpt of its summary); otherwise the item's state.
+ * A card's state line: the doing line while worked (what the run is doing now, else "Working", with
+ * its turn), "Needs your OK", work waiting in the drum's buffer or held back by the rope, how often
+ * work was sent back, what a done item became (an excerpt of its summary); otherwise the item's state.
  */
 export function cardState(
-  item: Pick<ItemCard, 'state' | 'agent' | 'turn' | 'rework_count' | 'summary' | 'in_buffer' | 'rope_held'>,
+  item: Pick<
+    ItemCard,
+    'state' | 'agent' | 'turn' | 'rework_count' | 'summary' | 'in_buffer' | 'rope_held' | 'activity'
+  >,
   decides = true,
 ): StateLabel {
   switch (item.state) {
     case 'in_progress':
-      return { text: doingText(item), tone: 'run' };
+      return { text: item.activity || doingText(item), tone: 'run' };
     case 'waiting_human':
       return decides ? { text: 'Needs your OK', tone: 'you' } : { text: 'Waiting on an approver', tone: 'muted' };
     case 'done':
