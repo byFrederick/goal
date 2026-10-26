@@ -23,6 +23,7 @@ const (
 	checkReferences = "references" // every name and path points at something that exists
 	checkTools      = "tools"      // runtime.tools are mise tool specs
 	checkRemoved    = "removed"    // no form connections replaced is left
+	checkContracts  = "contracts"  // every output contract is a schema the model API takes as a tool's input
 	// checkAvailability: what the definition declares that this install cannot serve yet.
 	checkAvailability = "availability"
 )
@@ -55,6 +56,8 @@ const (
 	codePromptNotFound    = "prompt-not-found"
 	codeSkillNotFound     = "skill-not-found"
 	codeContractNotFound  = "contract-not-found"
+
+	codeContractNotToolSchema = "contract-not-tool-schema"
 
 	codeToolSpecInvalid = "tool-spec-invalid"
 
@@ -94,6 +97,7 @@ func (c *checker) run() []domain.DefinitionProblem {
 	c.line()
 	c.flowAndLearning()
 	c.tools()
+	c.outputContracts()
 	c.removedForms()
 
 	return c.problems
@@ -176,6 +180,67 @@ func (c *checker) files() {
 				"agent %s prompt: %s not found", a.Name, a.Prompt)
 		}
 	}
+}
+
+// topLevelRefused are the keywords the model API refuses at the top level of a tool's input_schema,
+// the ones its 400 names ("does not support oneOf, allOf, or anyOf at the top level"); it takes a
+// top-level not or if/then/else.
+var topLevelRefused = []string{"oneOf", "anyOf", "allOf"}
+
+// outputContracts checks each contract a station names as its output once: the worker hands it to
+// the model as a tool's input_schema, which must be a plain object at the top level. A contract
+// that is missing or does not parse is left to contract-not-found and json-invalid.
+func (c *checker) outputContracts() {
+	var used []string
+
+	for _, s := range c.f.Spec.Board.Stations {
+		if _, ok := c.f.Spec.Contracts[s.Output]; ok && !slices.Contains(used, s.Output) {
+			used = append(used, s.Output)
+		}
+	}
+
+	slices.Sort(used)
+
+	for _, name := range used {
+		file := c.f.Spec.Contracts[name]
+
+		raw, err := fs.ReadFile(c.f.files, path.Clean(file))
+		if err != nil || !json.Valid(raw) {
+			continue
+		}
+
+		if why := notToolSchema(raw); why != "" {
+			c.errorf(checkContracts, codeContractNotToolSchema, at("spec", "contracts", name),
+				"contract %s (%s): %s; the model API takes only a plain object as a tool's input_schema. "+
+					"Describe the alternatives in one object (optional fields, an enum field that names the form) "+
+					"or nest the choice under a property, and check the alternatives in Go", name, file, why)
+		}
+	}
+}
+
+// notToolSchema says why a contract's top level is not a plain object, "" when it is.
+func notToolSchema(raw []byte) string {
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &top); err != nil {
+		return "the top level is not an object"
+	}
+
+	for _, k := range topLevelRefused {
+		if _, ok := top[k]; ok {
+			return k + " at the top level"
+		}
+	}
+
+	var typ any
+	if t, ok := top["type"]; !ok || json.Unmarshal(t, &typ) != nil {
+		return `the top level has no "type": "object"`
+	}
+
+	if typ != "object" {
+		return fmt.Sprintf(`the top level has type %s, not "object"`, top["type"])
+	}
+
+	return ""
 }
 
 func (c *checker) agentRefs() {

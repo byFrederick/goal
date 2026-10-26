@@ -70,6 +70,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Parts_CascadeRefusedWritesNothing", testCascadeRefused},
 		{"Parts_AddPartQueuedAtTheAssemblysStation", testAddPart},
 		{"Parts_AddPartRefusedWritesNothing", testAddPartRefused},
+		{"Parts_CancelCascadeClosesTheAssemblyCancelled", testCancelCascadeClosesTheAssemblyCancelled},
 		{"HeartbeatLease_FencedByAcquiredAt", testHeartbeat},
 		{"Transition_MovesAndReleases", testTransition},
 		{"Transition_ConflictChangesNothing", testTransitionConflict},

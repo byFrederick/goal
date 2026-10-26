@@ -85,12 +85,12 @@ const (
 	checkSchema = "schema"
 )
 
-var configChecks = []string{"line", "references", "tools", "removed", "availability"}
+var configChecks = []string{"line", "references", "tools", "contracts", "removed", "availability"}
 
 var checkSections = map[string]string{
 	checkYAML: domain.SectionFiles, checkSchema: domain.SectionFiles, "line": domain.SectionLine,
 	"references": domain.SectionAgents, CheckName: domain.SectionBasics, CheckItems: domain.SectionLine,
-	"tools": domain.SectionBasics, "removed": domain.SectionBasics,
+	"tools": domain.SectionBasics, "contracts": domain.SectionFiles, "removed": domain.SectionBasics,
 	"availability": domain.SectionConnections, CheckConnections: domain.SectionConnections,
 }
 

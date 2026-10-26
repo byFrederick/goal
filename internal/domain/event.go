@@ -66,7 +66,11 @@ const (
 	// EventPaused is a person stopping an open item where it is: it is blocked until a retry.
 	// Data reason (optional) and actor (ref).
 	EventPaused EventKind = "paused"
-	// EventLeaseTaken is a person's action on an item in progress (move, pause, send back) that
+	// EventCancelled is a person closing an open item where it is, for good: it is cancelled.
+	// Data reason (optional) and actor (ref); a part cancelled with its assembly names it
+	// (assembly), and an assembly's counts the parts it cancelled (parts).
+	EventCancelled EventKind = "cancelled"
+	// EventLeaseTaken is a person's action on an item in progress (move, pause, cancel, send back) that
 	// took its lease: the instance running it stops the run. Data actor (ref) and action.
 	EventLeaseTaken EventKind = "lease_taken"
 	// EventToolDenied is a tool call the agent's policy (tools.deny, permissions) refused
@@ -92,6 +96,9 @@ const (
 	AuditItemMoved = "item.moved"
 	// AuditItemPaused is a person pausing an item (station, reason).
 	AuditItemPaused = "item.paused"
+	// AuditItemCancelled is a person cancelling an item (station, reason; assembly for a part
+	// cancelled with its assembly).
+	AuditItemCancelled = "item.cancelled"
 	// AuditItemRejected is a person sending an item back for rework (from, to, reason).
 	AuditItemRejected = "item.rejected"
 	// AuditItemPartAdded is a part added to an open assembly (part, key).

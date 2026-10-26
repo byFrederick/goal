@@ -333,7 +333,7 @@ func (s *Store) CascadeParts(ctx context.Context, c ports.Cascade) (domain.Parts
 				return err
 			}
 
-			if err := closeAssembly(ctx, q, row, st.t.At); err != nil {
+			if err := closeAssembly(ctx, q, row, st.t.At, c.Cancel); err != nil {
 				return err
 			}
 		}
@@ -472,9 +472,10 @@ func partsFrom(rows []db.WorkItem) (domain.Parts, error) {
 }
 
 // closeAssembly closes the assembly of row, a part just moved, when row closed its last open
-// part: done when any part is done, cancelled otherwise. The assembly's row is locked after the
-// part's, so of two last parts closing at once the second sees the first committed and closes it.
-func closeAssembly(ctx context.Context, q *db.Queries, row db.WorkItem, at time.Time) error {
+// part: cancelled when cancel is set (a person cancelled the assembly), else done when any part
+// is done, cancelled otherwise. The assembly's row is locked after the part's, so of two last
+// parts closing at once the second sees the first committed and closes it.
+func closeAssembly(ctx context.Context, q *db.Queries, row db.WorkItem, at time.Time, cancel bool) error {
 	state := domain.ItemState(row.State)
 	if row.PartKey == nil || row.ParentID == nil || (state != domain.StateDone && state != domain.StateCancelled) {
 		return nil
@@ -499,7 +500,7 @@ func closeAssembly(ctx context.Context, q *db.Queries, row db.WorkItem, at time.
 	}
 
 	closed := domain.StateCancelled
-	if c.Done > 0 {
+	if c.Done > 0 && !cancel {
 		closed = domain.StateDone
 	}
 

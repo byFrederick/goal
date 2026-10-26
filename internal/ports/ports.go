@@ -148,7 +148,8 @@ type Store interface {
 	// locks the parts c.Parts move in ascending id order, then the assembly (the order a closing
 	// part takes them in, so the two never deadlock), applies each part's transition as
 	// Transition does (fenced, its lease taken or released, its events and audit entry, closing
-	// the assembly with its last open part), appends c.Events and returns the assembly's parts.
+	// the assembly with its last open part: cancelled when c.Cancel is set, else done when any
+	// part is done), appends c.Events and returns the assembly's parts.
 	// A cascade naming no part, a part twice, a part of another assembly or a move to state
 	// assembly is refused with domain.ErrInvalid; an assembly no longer in state assembly, or any
 	// part's failed guard, with ErrConflict (or ErrLeaseLost). A refused cascade writes nothing.
@@ -590,11 +591,15 @@ type NewAssemblyPart struct {
 }
 
 // Cascade is a change of an assembly applied to its parts: one transition per part it moves,
-// and the events of the assembly itself (which stays in state assembly).
+// and the events of the assembly itself (which stays in state assembly unless the cascade closes
+// its last open part).
 type Cascade struct {
 	Assembly domain.ItemID
 	Parts    []Transition
 	Events   []domain.Event
+	// Cancel marks a person's cancel of the assembly: when the cascade closes its last open part,
+	// the assembly closes as cancelled, never done, whatever its parts' states.
+	Cancel bool
 }
 
 // Transition is one atomic change to an item.

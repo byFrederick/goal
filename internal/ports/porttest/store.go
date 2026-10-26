@@ -662,7 +662,7 @@ func (s *Store) transition(org domain.OrgID, t ports.Transition) (domain.Item, p
 	}
 
 	s.move(it, t)
-	s.closeAssembly(it, t.At)
+	s.closeAssembly(it, t.At, false)
 
 	return clone(it), s.audit, nil
 }

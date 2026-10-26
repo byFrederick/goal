@@ -1758,6 +1758,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/items/{item}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close an open item as cancelled, with its open parts when it is an assembly
+         * @description The item becomes cancelled at its station with a cancelled event. In progress, its lease is taken and its run stopped (lease_taken). An assembly cancels its open parts (neither done nor cancelled) in one transaction, each with its own cancelled event, and closes as cancelled even when some part is done. 409 item-closed (done or cancelled) or item-changed.
+         */
+        post: operations["cancelItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/items/{item}/retry": {
         parameters: {
             query?: never;
@@ -2700,6 +2725,10 @@ export interface components {
             /** @description Why the item is paused */
             reason?: string;
         };
+        CancelRequest: {
+            /** @description Why the item is cancelled */
+            reason?: string;
+        };
         MergeRequest: {
             /**
              * @default squash
@@ -2848,7 +2877,7 @@ export interface components {
              * @description The naming event; its reason is set by setTouchReason
              */
             event_id: number;
-            /** @description The naming event's kind: merged, rejected, approved, moved, paused, retried, note, ... */
+            /** @description The naming event's kind: merged, rejected, approved, moved, paused, cancelled, retried, note, ... */
             kind: string;
             station: string | null;
             /** Format: date-time */
@@ -7217,6 +7246,36 @@ export interface operations {
         };
         responses: {
             /** @description The paused (blocked) item */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    cancelItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CancelRequest"];
+            };
+        };
+        responses: {
+            /** @description The cancelled item */
             200: {
                 headers: {
                     [name: string]: unknown;

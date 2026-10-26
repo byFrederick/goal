@@ -95,3 +95,20 @@ func TestAPI_MoveOfAClosedItem(t *testing.T) {
 		t.Errorf("pause of a done item = %d %+v; want 409 item-closed", code, p)
 	}
 }
+
+func TestAPI_CancelItem(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.submit(t) // acme#1, queued at the inbox
+
+	var it gen.Item
+	if code := h.call(t, http.MethodPost, acmeItem1+"/cancel", `{"reason":"not needed"}`, &it); code != http.StatusOK || it.State != gen.ItemStateCancelled {
+		t.Fatalf("cancel = %d, item %s; want 200 cancelled", code, it.State)
+	}
+
+	var p gen.Problem
+	if code := h.call(t, http.MethodPost, acmeItem1+"/cancel", ``, &p); code != http.StatusConflict || deref(p.Code) != codeItemClosed {
+		t.Errorf("cancel of a cancelled item = %d %+v; want 409 item-closed", code, p)
+	}
+}
