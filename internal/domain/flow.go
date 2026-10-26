@@ -145,6 +145,12 @@ type FlowMetrics struct {
 	// the items done in the window; zero when none were.
 	LeadTimeP50 time.Duration
 	LeadTimeP85 time.Duration
+	// AssembliesDone is how many assemblies (items with parts) reached done in the window, and
+	// AssemblyLeadTimeP50 and AssemblyLeadTimeP85 the percentiles (linear interpolation) of
+	// their created → last part done; zero when none were. Cancelled assemblies are left out.
+	AssembliesDone      int
+	AssemblyLeadTimeP50 time.Duration
+	AssemblyLeadTimeP85 time.Duration
 	// WIP is how many items are in the line now, neither done nor cancelled.
 	WIP int
 	// SpendUSD is the cost of the agent runs started in the window.

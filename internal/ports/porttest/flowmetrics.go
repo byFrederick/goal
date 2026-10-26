@@ -25,7 +25,15 @@ func (s *Store) FlowMetrics(ctx context.Context, q ports.FlowQuery, longWaitsAt 
 		m        domain.FlowMetrics
 		perDay   = map[time.Time]int{}
 		leadTime []float64
+		assembly []float64
+		parents  = map[domain.ItemID]bool{}
 	)
+
+	for _, it := range s.items {
+		if it.OrgID == org && it.ParentID != "" && it.PartKey != "" {
+			parents[it.ParentID] = true
+		}
+	}
 
 	for _, it := range s.items {
 		if it.OrgID != org || it.FactoryID != q.FactoryID || !ofType(it, q.Type) {
@@ -50,6 +58,11 @@ func (s *Store) FlowMetrics(ctx context.Context, q ports.FlowQuery, longWaitsAt 
 
 			perDay[it.DoneAt.UTC().Truncate(24*time.Hour)]++
 			leadTime = append(leadTime, it.DoneAt.Sub(it.CreatedAt).Seconds())
+
+			if it.State == domain.StateDone && parents[it.ID] {
+				m.AssembliesDone++
+				assembly = append(assembly, it.DoneAt.Sub(it.CreatedAt).Seconds())
+			}
 		}
 	}
 
@@ -59,6 +72,8 @@ func (s *Store) FlowMetrics(ctx context.Context, q ports.FlowQuery, longWaitsAt 
 
 	slices.Sort(leadTime)
 	m.LeadTimeP50, m.LeadTimeP85 = percentile(leadTime, 0.5), percentile(leadTime, 0.85)
+	slices.Sort(assembly)
+	m.AssemblyLeadTimeP50, m.AssemblyLeadTimeP85 = percentile(assembly, 0.5), percentile(assembly, 0.85)
 	m.SpendUSD = s.spend(org, q.FactoryID, q.Since, q.Until, q.Type)
 
 	return m, nil

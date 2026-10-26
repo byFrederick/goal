@@ -181,3 +181,50 @@ func testFlowStatsTenancy(f *fixture) {
 		t.Errorf("DoneByBucket from another organization = %v, %v; want [0]", got, err)
 	}
 }
+
+// Assembly lead time is created → done of the assemblies (items with parts) done in the window,
+// of the asked type: cancelled assemblies and plain items are left out.
+func testFlowMetricsAssemblyLeadTime(f *fixture) {
+	t := f.t
+
+	since, until := hours(0), hours(72)
+
+	// closeWith makes an assembly of two parts created at `created` and closes its parts in
+	// state at first and last.
+	closeWith := func(n domain.NewItem, state domain.ItemState, first, last time.Time) {
+		it, l := f.planning(t, n)
+		_, parts := f.assemble(t, assembly(it, l, []domain.NewPart{{Key: "a", Title: "a"}, {Key: "b", Title: "b"}}))
+
+		if err := f.finishPart(t, parts.Items[0], state, first); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := f.finishPart(t, parts.Items[1], state, last); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	closeWith(domain.NewItem{Title: "12 h", CreatedAt: hours(2)}, domain.StateDone, hours(12), hours(14))
+	closeWith(domain.NewItem{Title: "36 h", CreatedAt: hours(4)}, domain.StateDone, hours(20), hours(40))
+	closeWith(domain.NewItem{Title: "other type", CreatedAt: hours(5), Type: typeOther}, domain.StateDone, hours(20), hours(30))
+	closeWith(domain.NewItem{Title: "cancelled", CreatedAt: hours(6)}, domain.StateCancelled, hours(20), hours(21))
+	closeWith(domain.NewItem{Title: "after the window", CreatedAt: hours(7)}, domain.StateDone, hours(20), until)
+	f.finish(t, f.create(t, domain.NewItem{CreatedAt: hours(3)}), hours(5), false)
+
+	q := ports.FlowQuery{FactoryID: f.factory, Since: since, Until: until, Type: typeTask}
+
+	got, err := f.Flow.FlowMetrics(f.ctx(t), q, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.AssembliesDone != 2 || got.AssemblyLeadTimeP50 != 24*time.Hour || got.AssemblyLeadTimeP85 != 32*time.Hour+24*time.Minute {
+		t.Errorf("assemblies of %s = %d, p50 %v, p85 %v; want 2, 24h, 32h24m", typeTask, got.AssembliesDone, got.AssemblyLeadTimeP50, got.AssemblyLeadTimeP85)
+	}
+
+	q.Type = ""
+
+	if got, err := f.Flow.FlowMetrics(f.ctx(t), q, ""); err != nil || got.AssembliesDone != 3 || got.AssemblyLeadTimeP50 != 25*time.Hour {
+		t.Errorf("assemblies of every type = %d, p50 %v, %v; want 3, 25h", got.AssembliesDone, got.AssemblyLeadTimeP50, err)
+	}
+}

@@ -40,6 +40,14 @@ func (s *Store) FlowMetrics(ctx context.Context, q ports.FlowQuery, longWaitsAt 
 		m.ItemsDone, m.Reworked = int(stats.ItemsDone), int(stats.Reworked)
 		m.LeadTimeP50, m.LeadTimeP85 = seconds(stats.P50Seconds), seconds(stats.P85Seconds)
 
+		asm, err := tx.FlowAssemblyStats(ctx, db.FlowAssemblyStatsParams{FactoryID: fid, Since: q.Since, Until: q.Until, Type: q.Type})
+		if err != nil {
+			return fmt.Errorf("assembly stats: %w", err)
+		}
+
+		m.AssembliesDone = int(asm.AssembliesDone)
+		m.AssemblyLeadTimeP50, m.AssemblyLeadTimeP85 = seconds(asm.P50Seconds), seconds(asm.P85Seconds)
+
 		wip, err := tx.FlowOpenItems(ctx, db.FlowOpenItemsParams{FactoryID: fid, Type: q.Type})
 		if err != nil {
 			return fmt.Errorf("open items: %w", err)
