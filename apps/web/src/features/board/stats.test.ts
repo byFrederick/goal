@@ -15,6 +15,7 @@ import {
   stationMeter,
   stationNote,
   stationStat,
+  waitsOn,
   wipText,
 } from './stats';
 
@@ -327,29 +328,38 @@ describe('cardState with a waiting reason', () => {
     needs: [{ ref: 'sre#3', title: 'Move the API', paths: ['internal/api/**'] }],
   };
 
-  it('says a queued or ready item starts after the items it needs merge, one or several', () => {
+  it('says a queued or ready item waits for the one item it needs, in one muted line', () => {
     expect(cardState(card({ state: 'queued', waiting: after }))).toEqual({
-      text: 'Starts after sre#3 merges',
+      text: 'Waits for sre#3',
       tone: 'muted',
     });
-    expect(
-      cardState(card({ state: 'ready', waiting: { kind: 'after', items: ['sre#3', 'sre#4'], files: [], needs: [] } }))
-        .text,
-    ).toBe('Starts after sre#3, sre#4 merge');
+    expect(cardState(card({ state: 'ready', waiting: after })).tone).toBe('muted');
   });
 
-  it('says a queued or ready item waits for the same files, with the paths it shares', () => {
-    expect(cardState(card({ state: 'queued', waiting: files }))).toEqual({
-      text: 'Waits for sre#3: same files (internal/api/**, web/src/**)',
-      tone: 'rework',
+  it('counts the other items after the first, and never shows a path or a glob', () => {
+    const several = { kind: 'after' as const, items: ['sre#3', 'sre#4', 'sre#5'], files: [], needs: [] };
+    expect(cardState(card({ state: 'ready', waiting: several }))).toEqual({
+      text: 'Waits for sre#3 +2',
+      tone: 'muted',
     });
+    expect(cardState(card({ state: 'queued', waiting: files }))).toEqual({
+      text: 'Waits for sre#3',
+      tone: 'muted',
+    });
+    expect(cardState(card({ state: 'queued', waiting: files })).text).not.toMatch(/[/*]|same files/);
   });
 
   it('checks the waiting reason before the buffer, the rope and the send-backs', () => {
-    expect(cardState(card({ state: 'ready', waiting: after, in_buffer: true })).text).toBe('Starts after sre#3 merges');
+    expect(cardState(card({ state: 'ready', waiting: after, in_buffer: true })).text).toBe('Waits for sre#3');
     expect(cardState(card({ state: 'queued', waiting: files, rope_held: true, rework_count: 2 })).text).toBe(
-      'Waits for sre#3: same files (internal/api/**, web/src/**)',
+      'Waits for sre#3',
     );
+  });
+
+  it('says waitsOn gives the wait of a queued or ready item only', () => {
+    expect(waitsOn(card({ state: 'queued', waiting: after }))).toBe(after);
+    expect(waitsOn(card({ state: 'in_progress', waiting: after }))).toBeNull();
+    expect(waitsOn(card({ state: 'queued', waiting: null }))).toBeNull();
   });
 
   it('says a ready item with nothing to wait on has its review approved and checks passed', () => {

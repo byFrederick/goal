@@ -153,7 +153,6 @@ export function ItemPage() {
               <li aria-current="page">{item.ref}</li>
             </ol>
           </nav>
-          <WaitingFor waiting={item.waiting} />
           <div className="flex flex-wrap gap-1.5 md:order-last">
             {item.class_of_service === 'expedite' ? <Chip tone="rework">Expedite</Chip> : null}
             {item.type ? <Chip tone="plain">{humanize(item.type)}</Chip> : null}
@@ -182,6 +181,8 @@ export function ItemPage() {
           className="hidden @[720px]:flex"
         />
       </header>
+
+      <WaitingFor waiting={item.waiting} />
 
       <div className="flex flex-col gap-3 @[720px]:grid @[720px]:grid-cols-3 @[720px]:items-start @[720px]:gap-4">
         <div className="contents @[720px]:flex @[720px]:flex-col @[720px]:gap-4">

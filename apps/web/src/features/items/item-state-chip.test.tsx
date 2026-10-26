@@ -71,6 +71,7 @@ describe('ItemStateChip for a waiting item', () => {
     );
 
     expect(screen.getByText('Waiting')).toBeTruthy();
-    expect(iconClass(container)).toContain('text-rework');
+    expect(iconClass(container)).toContain('text-muted');
+    expect(iconClass(container)).not.toContain('text-rework');
   });
 });

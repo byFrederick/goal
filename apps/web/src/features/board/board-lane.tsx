@@ -10,7 +10,7 @@ import { formatAge } from '../../shared/format';
 import { itemStatus, toneText } from '../../shared/item-state';
 import { MoveButton } from '../../shared/move-menu';
 import { holds } from '../../shared/permissions';
-import { WaitingFor } from '../../shared/waiting-for';
+import { WaitLine } from '../../shared/waiting-for';
 import { cn } from '../../ui/cn';
 import { StatusIcon } from '../../ui/status-icon';
 import {
@@ -26,7 +26,7 @@ import {
 } from './board-card';
 import { DraggableCard } from './board-dnd';
 import { type OpenAssembly, runsOf } from './board-filters';
-import { cardState, isExpedite, type PlanSegment, planSegments } from './stats';
+import { cardState, isExpedite, type PlanSegment, planSegments, waitsOn } from './stats';
 
 /** The open assemblies to head their grouped parts with, by id; undefined when the cards are not grouped. */
 export type OpenAssemblies = ReadonlyMap<string, OpenAssembly>;
@@ -353,7 +353,7 @@ const planTones: Record<PlanSegment, string> = {
   todo: 'border-rule-strong bg-surface',
 };
 
-/** A waiting row: an item queued for the lane, its title and the reason it waits, with its status icon. */
+/** A waiting row: an item queued for the lane, its title and the one line saying what it waits for. */
 function WaitingRow({
   item,
   decides,
@@ -372,6 +372,7 @@ function WaitingRow({
 }) {
   const reason = cardState(item, decides);
   const status = itemStatus(item);
+  const wait = waitsOn(item);
   const expedite = isExpedite(item);
   return (
     <article
@@ -396,11 +397,14 @@ function WaitingRow({
         <span className="text-xs text-muted tabular-nums">{item.ref}</span>
         {headed ? null : <AssemblyLine item={item} />}
         <CardTitle item={item} compact={compact} describedBy={drag?.describedBy} movable={Boolean(onMove)} />
-        <span className={cn('flex min-w-0 items-center gap-1.5 text-xs', toneText[reason.tone])} title={reason.text}>
-          {status ? <StatusIcon status={status} /> : null}
-          <span className="truncate">{reason.text}</span>
-        </span>
-        <WaitingFor waiting={item.waiting} />
+        {wait ? (
+          <WaitLine waiting={wait} status={status} />
+        ) : (
+          <span className={cn('flex min-w-0 items-center gap-1.5 text-xs', toneText[reason.tone])} title={reason.text}>
+            {status ? <StatusIcon status={status} /> : null}
+            <span className="truncate">{reason.text}</span>
+          </span>
+        )}
       </div>
       {onMove ? <MoveButton item={item} onMove={onMove} size={compact ? 'lg' : 'sm'} /> : null}
     </article>
