@@ -97,6 +97,7 @@ const (
 	promptPath  = "agents/engineer.md"
 	notesPath   = "notes.md"
 	acme        = "acme"
+	zeta        = "zeta"
 	acmeTitle   = "Acme"
 	stQA        = "qa"
 	stReview    = "review"

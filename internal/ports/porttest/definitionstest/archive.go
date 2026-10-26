@@ -148,7 +148,7 @@ func testArchiveListedWithItsStamp(f *fixture) {
 	t := f.t
 	ctx := f.ctx(t)
 	r := f.pausedFactory(t, acme)
-	kept := f.pausedFactory(t, "zeta")
+	kept := f.pausedFactory(t, zeta)
 
 	if _, err := f.Definitions.ArchiveFactory(ctx, r.ID, agent); err != nil {
 		t.Fatalf("ArchiveFactory: %v", err)
@@ -158,7 +158,7 @@ func testArchiveListedWithItsStamp(f *fixture) {
 	want.ArchivedAt, want.ArchivedBy = archivedSince, agent
 
 	list := f.records(t)
-	if got := names(list); !slices.Equal(got, []string{acme, "zeta"}) {
+	if got := names(list); !slices.Equal(got, []string{acme, zeta}) {
 		t.Fatalf("FactoryRecords = %v; want acme and zeta, archived ones included", got)
 	}
 
@@ -189,7 +189,7 @@ func testDeleteArchivedRemovesTheFactoryAndItsRows(f *fixture) {
 	t := f.t
 	ctx := f.ctx(t)
 	r, it := f.archivedFactory(t, acme)
-	kept := f.pausedFactory(t, "zeta")
+	kept := f.pausedFactory(t, zeta)
 
 	if err := f.Definitions.DeleteArchivedFactory(ctx, r.ID, local); err != nil {
 		t.Fatalf("DeleteArchivedFactory: %v", err)
@@ -202,7 +202,7 @@ func testDeleteArchivedRemovesTheFactoryAndItsRows(f *fixture) {
 	_, err = f.Items.Item(ctx, it.ID)
 	expect(t, "Item of a deleted factory", err, ports.ErrNotFound)
 
-	if got := names(f.records(t)); !slices.Equal(got, []string{"zeta"}) {
+	if got := names(f.records(t)); !slices.Equal(got, []string{zeta}) {
 		t.Errorf("FactoryRecords = %v; want only zeta", got)
 	}
 
