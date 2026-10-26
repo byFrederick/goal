@@ -146,6 +146,11 @@ func (s *spa) serveFile(w http.ResponseWriter, r *http.Request, name string) boo
 		w.Header().Set("Cache-Control", revalidate)
 	}
 
+	// Go's mime table has no .webmanifest and the image has no mime.types, so name the type here.
+	if path.Ext(name) == ".webmanifest" {
+		w.Header().Set("Content-Type", "application/manifest+json")
+	}
+
 	http.ServeContent(w, r, name, info.ModTime(), content)
 
 	return true
