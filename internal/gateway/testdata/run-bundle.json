@@ -59,6 +59,16 @@
           ]
         }
       }
+    ],
+    "rules": [
+      {
+        "name": "go-errors",
+        "sha256": "76c7583d46737a3d9c2dd91bbffc99bbda5d3e6d319b61988d450527713d2c54",
+        "paths": [
+          "**/*.go"
+        ],
+        "content": "Wrap with %w.\n"
+      }
     ]
   },
   "files": {

@@ -93,11 +93,15 @@ After a rebase the local branch has diverged from `origin/<branch>`, so the agen
       "mcp": { "command": ["sh", "-c", "npx -y @playwright/mcp@0.0.41"] } }
   ],
   "knowledge_sources": ["handbook"],
+  "rules": [
+    { "name": "go-errors", "sha256": "76c7…", "paths": ["**/*.go"],
+      "content": "---\ndescription: Wrap errors.\npaths:\n    - '**/*.go'\n---\n\nWrap with %w.\n" }
+  ],
   "base_conflicts": ["go.mod"]
 }
 ```
 
-`connections` are the agent's organization connections its token grants (the model and repository connections are not among them unless the agent names them): the names of the variables each sets in `goal-agent run`'s env, never a value, its MCP server and its kind's docs. `base_conflicts` (only after a conflict in prepare's step 3) names the files that conflict with the default branch.
+`connections` are the agent's organization connections its token grants (the model and repository connections are not among them unless the agent names them): the names of the variables each sets in `goal-agent run`'s env, never a value, its MCP server and its kind's docs. `rules` are the factory rules that apply to the run ([ADR 0014](../docs/adr/0014-factory-rules.md)), from the definition version it started on: each rule's name, the sha256 of its rule file, its `paths` (omitted when it has none) and `content`, the markdown file to write to the agent's rules; prepare does not write them yet. `base_conflicts` (only after a conflict in prepare's step 3) names the files that conflict with the default branch.
 
 ## How the agent runs
 
