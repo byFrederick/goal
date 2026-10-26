@@ -71,6 +71,7 @@ func TestEngine_OutputPathsSetItemPaths(t *testing.T) {
 
 	a := h.submit(t, domain.NewItem{Title: "a"})
 	c := h.submit(t, domain.NewItem{Title: "c"})
+
 	s.set(a.ID, stSpec, `{"touches":["internal/a/**"]}`)
 	s.set(c.ID, stSpec, `{"touches":["docs/c/**"]}`)
 	s.set(c.ID, stBuild, `{"touches":[]}`)
@@ -111,6 +112,7 @@ func twoOverlapping(t *testing.T, l domain.Line) (*harness, domain.Item, domain.
 
 	a := h.submit(t, domain.NewItem{Title: "a"})
 	b := h.submit(t, domain.NewItem{Title: "b"})
+
 	s.set(a.ID, stSpec, `{"touches":["internal/a/**"]}`)
 	s.set(b.ID, stSpec, `{"touches":["internal/a/b.go","docs/b.md"]}`)
 
@@ -183,6 +185,7 @@ func TestEngine_OverlapSkipsOwnAssemblyAndClosedItems(t *testing.T) {
 
 	old := h.submit(t, domain.NewItem{Title: "old"})
 	s.set(old.ID, stSpec, `{"touches":["db/**"]}`)
+
 	dropped := h.submit(t, domain.NewItem{Title: "dropped"})
 	s.set(dropped.ID, stSpec, `{"touches":["db/**"]}`)
 

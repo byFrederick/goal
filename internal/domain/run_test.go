@@ -58,19 +58,21 @@ func TestParseVerdict_KeepsTheCategory(t *testing.T) {
 func TestPathsFrom(t *testing.T) {
 	t.Parallel()
 
+	const field = "touches"
+
 	tests := []struct {
 		name, field, output string
 		want                []string
 	}{
-		{"mapped", "touches", `{"touches":["internal/a/**","docs/a.md"]}`, []string{"internal/a/**", "docs/a.md"}},
-		{"blank entries dropped", "touches", `{"touches":["", "internal/a/**"]}`, []string{"internal/a/**"}},
+		{"mapped", field, `{"touches":["internal/a/**","docs/a.md"]}`, []string{"internal/a/**", "docs/a.md"}},
+		{"blank entries dropped", field, `{"touches":["", "internal/a/**"]}`, []string{"internal/a/**"}},
 		{"unmapped", "", `{"touches":["internal/a/**"]}`, nil},
-		{"absent", "touches", `{"lane":"backend"}`, nil},
-		{"empty", "touches", `{"touches":[]}`, nil},
-		{"only blanks", "touches", `{"touches":[""]}`, nil},
-		{"not a list", "touches", `{"touches":"internal/a/**"}`, nil},
-		{"not strings", "touches", `{"touches":[1,2]}`, nil},
-		{"not an object", "touches", `[1]`, nil},
+		{"absent", field, `{"lane":"backend"}`, nil},
+		{"empty", field, `{"touches":[]}`, nil},
+		{"only blanks", field, `{"touches":[""]}`, nil},
+		{"not a list", field, `{"touches":"internal/a/**"}`, nil},
+		{"not strings", field, `{"touches":[1,2]}`, nil},
+		{"not an object", field, `[1]`, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

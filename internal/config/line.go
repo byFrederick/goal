@@ -83,32 +83,11 @@ func (f *Factory) Line() domain.Line {
 func flowPolicy(fl Flow) domain.FlowPolicy {
 	p := domain.FlowPolicy{
 		Release: domain.ReleasePush, Constraint: fl.Constraint,
-		Assemblies: domain.AssemblyPolicy{
-			FreshBase: domain.FreshBaseRebase, OnConflict: domain.ConflictRework,
-			Overlap: domain.OverlapSerialize, Materialize: true,
-		},
-		Retry: domain.RetryPolicy{TransientAttempts: domain.DefaultTransientAttempts},
+		Assemblies: assemblyPolicy(fl.Assemblies),
+		Retry:      domain.RetryPolicy{TransientAttempts: domain.DefaultTransientAttempts},
 	}
 	if r := fl.Retry; r != nil && r.Transient != nil && r.Transient.Attempts > 0 {
 		p.Retry.TransientAttempts = r.Transient.Attempts
-	}
-
-	if a := fl.Assemblies; a != nil {
-		if a.FreshBase != "" {
-			p.Assemblies.FreshBase = domain.FreshBase(a.FreshBase)
-		}
-
-		if a.OnConflict != "" {
-			p.Assemblies.OnConflict = domain.ConflictPolicy(a.OnConflict)
-		}
-
-		if a.Overlap != "" {
-			p.Assemblies.Overlap = domain.OverlapPolicy(a.Overlap)
-		}
-
-		if a.Materialize != nil {
-			p.Assemblies.Materialize = *a.Materialize
-		}
 	}
 
 	if d := fl.Dependencies; d != nil {
@@ -133,6 +112,36 @@ func flowPolicy(fl Flow) domain.FlowPolicy {
 			LeadTime:         time.Duration(t.LeadTimeHours * float64(time.Hour)),
 			ExpediteLeadTime: time.Duration(t.ExpediteLeadTimeMinutes) * time.Minute,
 		}
+	}
+
+	return p
+}
+
+// assemblyPolicy maps board.flow.assemblies; unset settings are rebase, rework, serialize and
+// materialize.
+func assemblyPolicy(a *Assemblies) domain.AssemblyPolicy {
+	p := domain.AssemblyPolicy{
+		FreshBase: domain.FreshBaseRebase, OnConflict: domain.ConflictRework,
+		Overlap: domain.OverlapSerialize, Materialize: true,
+	}
+	if a == nil {
+		return p
+	}
+
+	if a.FreshBase != "" {
+		p.FreshBase = domain.FreshBase(a.FreshBase)
+	}
+
+	if a.OnConflict != "" {
+		p.OnConflict = domain.ConflictPolicy(a.OnConflict)
+	}
+
+	if a.Overlap != "" {
+		p.Overlap = domain.OverlapPolicy(a.Overlap)
+	}
+
+	if a.Materialize != nil {
+		p.Materialize = *a.Materialize
 	}
 
 	return p
