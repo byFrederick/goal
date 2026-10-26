@@ -87,9 +87,10 @@ func testStationTimes(f *fixture) {
 	}
 }
 
-// Every item running under a live lease reports the usage events of its run; an item leased with
-// no run yet, a finished run and another factory's run report nothing.
-func testLiveTurns(f *fixture) {
+// Every item running under a live lease reports its run's usage events, its newest tool call and
+// its newest TodoWrite call; an item leased with no run yet, a finished run, another factory's run
+// and another organization report nothing.
+func testLiveRuns(f *fixture) {
 	t := f.t
 
 	running := f.create(t, domain.NewItem{CreatedAt: t0})
@@ -117,9 +118,15 @@ func testLiveTurns(f *fixture) {
 		return id
 	}
 
-	usage := func(it domain.Item, run domain.RunID, kind domain.EventKind) domain.Event {
-		return domain.Event{FactoryID: it.FactoryID, ItemID: it.ID, RunID: run, At: t1, Kind: kind, Station: stWork, Actor: agWorker}
+	event := func(it domain.Item, run domain.RunID, kind domain.EventKind, data map[string]any) domain.Event {
+		return domain.Event{FactoryID: it.FactoryID, ItemID: it.ID, RunID: run, At: t1, Kind: kind, Station: stWork, Actor: agWorker, Data: data}
 	}
+	call := func(tool, input string) map[string]any {
+		return map[string]any{"id": tool, domain.ToolCallTool: tool, domain.ToolCallInput: input}
+	}
+
+	plan := call(domain.ToolTodoWrite, `{"todos":[{"status":"completed"}]}`)
+	edit := call("Edit", `{"file_path":"x.go"}`)
 
 	finished, run, other := start(running), start(running), start(away)
 	if err := f.Store.FinishRun(f.ctx(t), finished, domain.RunResult{Status: domain.RunFailed}, t1); err != nil {
@@ -127,23 +134,29 @@ func testLiveTurns(f *fixture) {
 	}
 
 	if err := f.Store.AppendEvents(f.ctx(t),
-		usage(running, finished, domain.EventUsage),
-		usage(running, run, domain.EventUsage), usage(running, run, "tool_call"), usage(running, run, domain.EventUsage),
-		usage(away, other, domain.EventUsage),
+		event(running, finished, domain.EventUsage, nil), event(running, finished, domain.EventToolCall, call("Bash", "{}")),
+		event(running, run, domain.EventUsage, nil),
+		event(running, run, domain.EventToolCall, call(domain.ToolTodoWrite, `{"todos":[]}`)),
+		event(running, run, domain.EventToolCall, plan),
+		event(running, run, domain.EventToolCall, edit),
+		event(running, run, domain.EventToolResult, map[string]any{"id": "Edit", "summary": "ok"}),
+		event(running, run, domain.EventUsage, nil),
+		event(away, other, domain.EventUsage, nil), event(away, other, domain.EventToolCall, edit),
 	); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := f.Flow.LiveTurns(f.ctx(t), f.factory)
+	got, err := f.Flow.LiveRuns(f.ctx(t), f.factory)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if want := map[domain.ItemID]int{running.ID: 2}; !reflect.DeepEqual(got, want) {
-		t.Errorf("LiveTurns = %v, want %v (leased %s has no run)", got, want, leased.ID)
+	want := map[domain.ItemID]domain.LiveRun{running.ID: {Turns: 2, LastToolCall: edit, LastPlan: plan}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("LiveRuns = %+v, want %+v (leased %s has no run)", got, want, leased.ID)
 	}
 
-	if got, err := f.Flow.LiveTurns(domain.WithOrg(t.Context(), f.NewOrg(t)), f.factory); err != nil || len(got) != 0 {
-		t.Errorf("another organization's LiveTurns = %v (%v); want none", got, err)
+	if got, err := f.Flow.LiveRuns(domain.WithOrg(t.Context(), f.NewOrg(t)), f.factory); err != nil || len(got) != 0 {
+		t.Errorf("another organization's LiveRuns = %v (%v); want none", got, err)
 	}
 }

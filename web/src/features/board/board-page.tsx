@@ -218,17 +218,19 @@ function ColumnGrid({ board, onMove }: { board: Board; onMove: OnMove }) {
                 drum && constraintRing,
               )}
             >
-              <div className="flex items-baseline justify-between gap-2 px-1 pt-0.5 pb-1">
-                <h2 className="m-0 text-[15px] font-medium">{humanize(s.id)}</h2>
-                <span
-                  className={cn(
-                    'text-[13px] whitespace-nowrap text-muted',
-                    decides && waitingOnYou(s) > 0 && 'text-you',
-                  )}
-                >
-                  {columnCount(s)}
-                </span>
-              </div>
+              {s.kind === 'queue' ? null : (
+                <div className="flex items-baseline justify-between gap-2 px-1 pt-0.5 pb-1">
+                  <h2 className="m-0 text-[15px] font-medium">{humanize(s.id)}</h2>
+                  <span
+                    className={cn(
+                      'text-[13px] whitespace-nowrap text-muted',
+                      decides && waitingOnYou(s) > 0 && 'text-you',
+                    )}
+                  >
+                    {columnCount(s)}
+                  </span>
+                </div>
+              )}
               {!s.lanes?.length && s.items.length === 0 ? (
                 <p className="m-0 px-1 pb-1 text-[13px] text-muted">Empty</p>
               ) : null}

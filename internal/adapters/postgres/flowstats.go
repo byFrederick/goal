@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"math"
@@ -80,26 +81,54 @@ func (s *Store) CurrentRun(ctx context.Context, id domain.ItemID) (*domain.Curre
 	return &domain.CurrentRun{Run: run, Slot: int(r.LeaseSlot), Turns: int(r.UsageTurns)}, nil
 }
 
-// LiveTurns implements ports.FlowStats.
-func (s *Store) LiveTurns(ctx context.Context, factory domain.FactoryID) (map[domain.ItemID]int, error) {
+// LiveRuns implements ports.FlowStats.
+func (s *Store) LiveRuns(ctx context.Context, factory domain.FactoryID) (map[domain.ItemID]domain.LiveRun, error) {
 	fid, err := parseID("factory", string(factory))
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.LiveTurnsRow, error) {
-		return q.LiveTurns(ctx, db.LiveTurnsParams{FactoryID: fid, UsageKind: string(domain.EventUsage)})
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.LiveRunsRow, error) {
+		return q.LiveRuns(ctx, db.LiveRunsParams{
+			FactoryID: fid, UsageKind: string(domain.EventUsage), ToolCallKind: string(domain.EventToolCall),
+			TodoTool: domain.ToolTodoWrite,
+		})
 	})
 	if err != nil {
-		return nil, fmt.Errorf("live turns of factory %s: %w", factory, err)
+		return nil, fmt.Errorf("live runs of factory %s: %w", factory, err)
 	}
 
-	out := make(map[domain.ItemID]int, len(rows))
+	out := make(map[domain.ItemID]domain.LiveRun, len(rows))
+
 	for _, r := range rows {
-		out[domain.ItemID(r.ItemID.String())] = int(r.UsageTurns)
+		live := domain.LiveRun{Turns: int(r.UsageTurns)}
+
+		if live.LastToolCall, err = eventData(r.LastToolCall); err != nil {
+			return nil, fmt.Errorf("live runs of factory %s: last tool call of item %s: %w", factory, r.ItemID, err)
+		}
+
+		if live.LastPlan, err = eventData(r.LastPlan); err != nil {
+			return nil, fmt.Errorf("live runs of factory %s: last plan of item %s: %w", factory, r.ItemID, err)
+		}
+
+		out[domain.ItemID(r.ItemID.String())] = live
 	}
 
 	return out, nil
+}
+
+// eventData decodes an event's data; nil when there is none (SQL NULL).
+func eventData(raw []byte) (map[string]any, error) {
+	if raw == nil {
+		return nil, nil
+	}
+
+	var data map[string]any
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return nil, fmt.Errorf("decode event data: %w", err)
+	}
+
+	return data, nil
 }
 
 // StationTimes implements ports.FlowStats. Its reads share one snapshot.

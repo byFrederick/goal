@@ -166,6 +166,33 @@ export function PrLink({ item }: { item: Pick<ItemCard, 'pr_url'> }) {
   );
 }
 
+/**
+ * The assembly a part belongs to, on a lane card: "Migrate billing › 4 of 6", linking to the
+ * assembly's item page. The title may shrink to one line; the part count never does. Nothing when
+ * the item is no part of an assembly.
+ */
+export function AssemblyLine({ item }: { item: Pick<ItemCard, 'assembly'> }) {
+  const params = useFactoryParams();
+  const assembly = item.assembly;
+  if (!assembly) return null;
+  return (
+    <Link
+      to="/o/$org/f/$factory/items/$ref"
+      params={{ ...params, ref: refParam(assembly.ref) }}
+      draggable={false}
+      aria-label={`Part ${assembly.part} of ${assembly.parts} of ${assembly.title}`}
+      className="relative z-10 flex min-w-0 items-center gap-1 text-xs text-muted no-underline hover:text-run"
+    >
+      <span className="min-w-0 truncate" title={assembly.title}>
+        {assembly.title}
+      </span>
+      <span className="shrink-0 whitespace-nowrap">
+        › {assembly.part} of {assembly.parts}
+      </span>
+    </Link>
+  );
+}
+
 export function CardTitle({
   item,
   compact = false,
