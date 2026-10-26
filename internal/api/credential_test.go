@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // The API never accepts an agent's task token, nor any other credential it cannot use: such a

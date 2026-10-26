@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // The line carries the flow policy and targets the engine and the flow metrics read.

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // accessRecord is what one request's access log line says beyond its method, status and request

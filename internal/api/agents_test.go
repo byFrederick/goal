@@ -9,8 +9,8 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 const backendStats = "/v1/orgs/acme/factories/line/agents/backend/stats"

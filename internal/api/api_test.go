@@ -20,13 +20,13 @@ import (
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/connkind"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/engine"
+	"github.com/byFrederick/goal/internal/core/ports"
+	"github.com/byFrederick/goal/internal/core/ports/porttest"
 	"github.com/byFrederick/goal/internal/definitions"
-	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/egress"
-	"github.com/byFrederick/goal/internal/engine"
 	"github.com/byFrederick/goal/internal/knowledge"
-	"github.com/byFrederick/goal/internal/ports"
-	"github.com/byFrederick/goal/internal/ports/porttest"
 )
 
 const (

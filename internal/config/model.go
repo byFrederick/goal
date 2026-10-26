@@ -4,7 +4,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // ModelPointer maps a path in factory.yaml to the Visual editor's section and the RFC 6901

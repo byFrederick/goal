@@ -1,5 +1,5 @@
 // Goal's control Worker (spec 4 §5.12, ADR 0008): the only Cloudflare-specific code besides the Go
-// adapter internal/adapters/cloudflare.
+// adapter internal/adapters/sandboxes/cloudflare.
 //
 //   public https       ─▶ goald's container (every path)
 //   goald ─▶ auth.internal    ─▶ the auth service's container

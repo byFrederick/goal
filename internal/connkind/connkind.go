@@ -22,7 +22,7 @@ import (
 	"golang.org/x/text/message"
 
 	"github.com/byFrederick/goal/contracts/definitions"
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // MaxBytes bounds a kind file (00051 bounds the stored kind the same).

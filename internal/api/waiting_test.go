@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // A waiting item's card on the board and the list, and getItem, say what holds it: after the

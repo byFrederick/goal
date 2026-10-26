@@ -48,7 +48,7 @@ const run: Entry = {
     {
       id: 't1',
       tool: 'Read',
-      argument: 'internal/engine/claim.go',
+      argument: 'internal/core/engine/claim.go',
       summary: 'package engine',
       isError: false,
       at: '2026-10-25T08:00:30Z',

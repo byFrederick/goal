@@ -1,4 +1,4 @@
-// Package migrations embeds the forward-only SQL migrations that internal/adapters/postgres
+// Package migrations embeds the forward-only SQL migrations that internal/adapters/store/postgres
 // applies with goose.
 package migrations
 

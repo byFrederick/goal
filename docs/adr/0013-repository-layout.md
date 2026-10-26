@@ -17,7 +17,7 @@ The owner wants a small root, one home for each kind of file, rules that load on
    go.mod go.sum package.json pnpm-workspace.yaml        manifests
    pnpm-lock.yaml Taskfile.yml compose.yaml
    skills-lock.json .mise.toml and the dotfiles
-   cmd/ internal/                                        Go: cmd/ wires each binary, internal/ holds its code (internal/cli: the goal CLI)
+   cmd/ internal/                                        Go: cmd/ wires each binary, internal/ holds its code (internal/core: the hexagon's core; internal/cli: the goal CLI)
    tools/                                                repository tooling that is not a shipped binary
    apps/web/ apps/auth/ apps/worker/                     the pnpm apps
    apps/control-worker/                                  the control Worker's code (see the amendment below)
@@ -44,6 +44,8 @@ The owner wants a small root, one home for each kind of file, rules that load on
    *Amended 2026-10-26: `apps/control-worker`.* The control Worker is an app like the others (TypeScript, Vitest in the Workers runtime, its own package `@goal/cloudflare`), so its code moved from `deploy/cloudflare` to `apps/control-worker`: `src/`, `test/` (the `sandboxtest` and `topology` stand-ins and `dev.sh` included), `package.json`, `tsconfig.json`, `biome.json` and `vitest.config.ts`. `deploy/cloudflare` keeps only what deploys it: `wrangler.jsonc` (its `main` is `../../apps/control-worker/src/index.ts`), `scripts/deploy.sh`, `scripts/images.mjs` with its test, `sandboxtest.sh`, `topology.sh` and the `Taskfile.yml` of `cloudflare:*` and `deploy:*`, whose names did not change. `deploy/cloudflare` has no package of its own, so its scripts run wrangler from `apps/control-worker/node_modules`, and `task cloudflare:check` lints `deploy/cloudflare/scripts` with the shared Biome config. The deploy workflow counts a change under either folder as an app change.
 
    *Amended 2026-10-26: `packages/config`.* It is the shared TypeScript settings: `biome.json` (the Biome formatter and linter settings) and the tsconfig bases `tsconfig.base.json`, `tsconfig.node.json` (NodeNext, for the Node services), `tsconfig.browser.json` (DOM, bundled, no emit) and `tsconfig.workers.json` (the Workers runtime). It is the private workspace package `@goal/config`, and each project extends one variant and keeps only its own options: `include`, `rootDir`, `outDir`, `types` and each app's own checks stay in the project. It holds no Vitest preset. `packages/config` is not checked on its own; a change to it runs every TypeScript part's check (`tools/checkplan`). The `goald`, `auth` and `worker` Dockerfiles copy its manifest and sources, and their `.dockerignore` allowlists admit them.
+
+   *Amended 2026-10-26: `internal/core` and adapters by port.* The hexagon's core moved under `internal/core/`: `internal/core/domain`, `internal/core/ports` (with `porttest` and its conformance suites) and `internal/core/engine`. Each adapter now sits under a group named after the port it implements: `codehost/{github,gitlab}`, `sandboxes/{docker,cloudflare}`, `sourcereader/{gitdocs,confluence}`, `secrets/env`, `store/postgres` (with its sqlc `db/` and `roles.sql`), `objectstore/s3`, `masterkey/masterkey`, `minter/awssts`, `embedder/openai`, `skillsource/skillssh` and `clock/sys`. A package's name is its leaf directory, so `envsecrets`, `s3store`, `openaiembed` and `sysclock` are now `env`, `s3`, `openai` and `sys`; no exported identifier changed. The feature packages (`api`, `gateway`, `authoring`, `knowledge`, `definitions`, `builder`, `config`, `connkind`, `egress`, `factorymodel`, `retention`, `cli`) stayed where they were. The core's boundary is one strict depguard rule: `internal/core` imports only the standard library, itself and `github.com/google/uuid`. This lets the domain import the ports and the engine, which the old domain-only rule refused; the code does not do it today.
 
 2. **A new top-level directory needs an amendment to this ADR.** It names the directory, the kind of file it holds and why no existing home fits.
 
@@ -98,3 +100,15 @@ The old path of each directory or file that moves. Once the moves are done, this
 | `docs/jonah/` | `docs/history/jonah/` (`schema.sql` deleted) |
 | `cmd/goal/` (all but `main.go`) | `internal/cli/` |
 | `deploy/cloudflare/` (all but `wrangler.jsonc`, `Taskfile.yml`, `scripts/`, `sandboxtest.sh` and `topology.sh`) | `apps/control-worker/` |
+| `internal/domain/`, `internal/ports/`, `internal/engine/` | `internal/core/domain/`, `internal/core/ports/`, `internal/core/engine/` |
+| `internal/adapters/{github,gitlab}/` | `internal/adapters/codehost/{github,gitlab}/` |
+| `internal/adapters/{docker,cloudflare}/` | `internal/adapters/sandboxes/{docker,cloudflare}/` |
+| `internal/adapters/{gitdocs,confluence}/` | `internal/adapters/sourcereader/{gitdocs,confluence}/` |
+| `internal/adapters/envsecrets/` | `internal/adapters/secrets/env/` |
+| `internal/adapters/postgres/` | `internal/adapters/store/postgres/` |
+| `internal/adapters/s3store/` | `internal/adapters/objectstore/s3/` |
+| `internal/adapters/masterkey/` | `internal/adapters/masterkey/masterkey/` |
+| `internal/adapters/awssts/` | `internal/adapters/minter/awssts/` |
+| `internal/adapters/openaiembed/` | `internal/adapters/embedder/openai/` |
+| `internal/adapters/skillssh/` | `internal/adapters/skillsource/skillssh/` |
+| `internal/adapters/sysclock/` | `internal/adapters/clock/sys/` |

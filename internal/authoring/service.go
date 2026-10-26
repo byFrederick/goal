@@ -19,9 +19,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/factorymodel"
-	"github.com/byFrederick/goal/internal/ports"
 )
 
 // The factory model's types, so the API reaches them through this package (it may not import

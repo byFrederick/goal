@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // drumOf is the station the line is paced by: its configured constraint (flow.constraint naming a

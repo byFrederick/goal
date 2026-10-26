@@ -11,4 +11,4 @@ dev test/sandboxtest/wrangler.jsonc "${PORT:-18787}"
 
 cd ../..
 GOAL_TEST_SANDBOX_URL="http://127.0.0.1:${PORT:-18787}" GOAL_TEST_SANDBOX_KEY="$key" GOAL_TEST_SANDBOX_IMAGE=sandboxtest \
-  go test -race -count=1 -tags cloudflare -run TestSandboxes_Conformance -v ./internal/adapters/cloudflare
+  go test -race -count=1 -tags cloudflare -run TestSandboxes_Conformance -v ./internal/adapters/sandboxes/cloudflare

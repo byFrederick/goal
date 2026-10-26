@@ -3,7 +3,7 @@ paths:
   - "db/migrations/**"
   - "db/queries/**"
   - "db/sqlc.yaml"
-  - "internal/adapters/postgres/**"
+  - "internal/adapters/store/postgres/**"
 ---
 
 # Database
@@ -26,13 +26,13 @@ The data model and its reasons: [architecture.md](../../docs/engineering/archite
 
 ## Queries
 
-- Put SQL in `db/queries/` and regenerate with `task sqlc`, because `internal/adapters/postgres/db` is generated and never edited by hand.
+- Put SQL in `db/queries/` and regenerate with `task sqlc`, because `internal/adapters/store/postgres/db` is generated and never edited by hand.
 - Run each store method in one transaction and lock an item before its lease or runs, so concurrent methods cannot deadlock.
 
 ## Tests
 
-- Add new store behavior to the conformance suite in `internal/ports/porttest/storetest` (or the port's own suite), so the fake and PostgreSQL agree.
-- Run the adapter's integration tests, bounded: `go test -race -tags integration -run '<tests>' -timeout 10m ./internal/adapters/postgres/` with `GOAL_TEST_DATABASE_URL` set.
+- Add new store behavior to the conformance suite in `internal/core/ports/porttest/storetest` (or the port's own suite), so the fake and PostgreSQL agree.
+- Run the adapter's integration tests, bounded: `go test -race -tags integration -run '<tests>' -timeout 10m ./internal/adapters/store/postgres/` with `GOAL_TEST_DATABASE_URL` set.
 - Expect CI to run `task test-integration` and `task migrate-check`; run them locally when Docker is there.
 
 ## Skills

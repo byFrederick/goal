@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // Spec 3 §8.4: the inbox and the attention badges show only the factories the caller sees, and

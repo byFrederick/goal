@@ -7,7 +7,7 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // The lead-time bridge needs bridgeMinItems items done (domain.BridgeLeadTime) and reads at most

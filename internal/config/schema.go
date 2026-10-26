@@ -13,7 +13,7 @@ import (
 	"golang.org/x/text/message"
 
 	"github.com/byFrederick/goal/contracts/definitions"
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // english prints schema messages, as the validator does by default.

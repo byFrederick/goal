@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // A station with a gate shows the share of its verdicts that sent work back, and nothing before

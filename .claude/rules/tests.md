@@ -20,7 +20,7 @@ What to test at each layer, and the commands: [testing.md](../../docs/engineerin
 
 - Skip constructors, getters, struct literals, generated code (sqlc, oapi-codegen, the TypeScript schema) and wiring in `cmd/`, because they break nothing a test would catch.
 - Skip the standard library, pgx, the Docker SDK and the Agent SDK themselves, because their authors test them.
-- Never mock a type we own; use the in-memory fakes in `internal/ports/porttest`, because the conformance suites keep them faithful to the adapters.
+- Never mock a type we own; use the in-memory fakes in `internal/core/ports/porttest`, because the conformance suites keep them faithful to the adapters.
 
 ## How
 

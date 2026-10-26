@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/engine"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/engine"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // AuditLog reads the audit log of the organization in ctx; ports.Audit satisfies it.

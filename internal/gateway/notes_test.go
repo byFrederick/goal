@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // appendEvent records an event of kind on item it, by run when run is set, and returns its id.

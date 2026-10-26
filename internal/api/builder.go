@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // Builder is the factory editor's backend beside authoring: the install's metadata and the

@@ -21,8 +21,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // The catalog's types live in domain, so the API can name them; these are their names here.

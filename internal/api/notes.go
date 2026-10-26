@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/engine"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/engine"
 )
 
 // NoteItem records the request's actor's note for the agents working an item. The next run's

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 func TestLoad_ParsesRules(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 	"net/netip"
 	"regexp"
 
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // requestIDHeader carries a request's id both ways, so audit entries and logs trace back to it.

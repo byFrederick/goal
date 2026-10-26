@@ -31,28 +31,28 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/byFrederick/goal/apps/web"
-	"github.com/byFrederick/goal/internal/adapters/awssts"
-	"github.com/byFrederick/goal/internal/adapters/cloudflare"
-	"github.com/byFrederick/goal/internal/adapters/confluence"
-	"github.com/byFrederick/goal/internal/adapters/docker"
-	"github.com/byFrederick/goal/internal/adapters/envsecrets"
-	"github.com/byFrederick/goal/internal/adapters/gitdocs"
-	"github.com/byFrederick/goal/internal/adapters/masterkey"
-	"github.com/byFrederick/goal/internal/adapters/openaiembed"
-	"github.com/byFrederick/goal/internal/adapters/postgres"
-	"github.com/byFrederick/goal/internal/adapters/s3store"
-	"github.com/byFrederick/goal/internal/adapters/sysclock"
+	"github.com/byFrederick/goal/internal/adapters/clock/sys"
+	"github.com/byFrederick/goal/internal/adapters/embedder/openai"
+	"github.com/byFrederick/goal/internal/adapters/masterkey/masterkey"
+	"github.com/byFrederick/goal/internal/adapters/minter/awssts"
+	"github.com/byFrederick/goal/internal/adapters/objectstore/s3"
+	"github.com/byFrederick/goal/internal/adapters/sandboxes/cloudflare"
+	"github.com/byFrederick/goal/internal/adapters/sandboxes/docker"
+	"github.com/byFrederick/goal/internal/adapters/secrets/env"
+	"github.com/byFrederick/goal/internal/adapters/sourcereader/confluence"
+	"github.com/byFrederick/goal/internal/adapters/sourcereader/gitdocs"
+	"github.com/byFrederick/goal/internal/adapters/store/postgres"
 	"github.com/byFrederick/goal/internal/api"
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/connkind"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/engine"
+	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/definitions"
-	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/egress"
-	"github.com/byFrederick/goal/internal/engine"
 	"github.com/byFrederick/goal/internal/gateway"
 	"github.com/byFrederick/goal/internal/knowledge"
-	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/retention"
 )
 
@@ -105,8 +105,8 @@ func newLogger(s settings) *slog.Logger {
 }
 
 func run(ctx context.Context, s settings, log *slog.Logger) error {
-	secrets := envsecrets.New(os.LookupEnv)
-	clock := sysclock.Clock{}
+	secrets := env.New(os.LookupEnv)
+	clock := sys.Clock{}
 
 	key, err := gatewayKey(ctx, s, secrets)
 	if err != nil {
@@ -135,12 +135,12 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	s3cfg, err := s3store.ConfigFromEnv(os.Getenv)
+	s3cfg, err := s3.ConfigFromEnv(os.Getenv)
 	if err != nil {
 		return err
 	}
 
-	objects, err := s3store.New(ctx, s3cfg)
+	objects, err := s3.New(ctx, s3cfg)
 	if err != nil {
 		return err
 	}
@@ -261,7 +261,7 @@ func openKnowledge(s settings, store *postgres.Store, connections *postgres.Conn
 		cfg := s.Embed
 		cfg.Transport = connectionTransport(s.AllowPrivateUpstreams)
 
-		client, err := openaiembed.New(cfg) // settingsFrom checked it
+		client, err := openai.New(cfg) // settingsFrom checked it
 		if err != nil {
 			log.Error("knowledge base: keyword search only", slog.Any("error", err))
 		} else {

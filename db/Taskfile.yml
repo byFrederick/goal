@@ -6,7 +6,7 @@ version: "3"
 
 tasks:
   sqlc:
-    desc: Regenerate internal/adapters/postgres/db from db/queries/ and db/migrations/ (sqlc from .mise.toml)
+    desc: Regenerate internal/adapters/store/postgres/db from db/queries/ and db/migrations/ (sqlc from .mise.toml)
     cmds:
       - sqlc generate -f db/sqlc.yaml
 
@@ -28,7 +28,7 @@ tasks:
       - until docker exec {{.CONTAINER}} pg_isready -h 127.0.0.1 -U postgres -d goal >/dev/null 2>&1; do sleep 1; done
       # The roles first (as goal db init does), then every migration as goal_owner in one
       # transaction (--single-transaction), as goald runs them with goose.
-      - docker exec -i {{.CONTAINER}} psql -U postgres -d goal -v ON_ERROR_STOP=1 -q < internal/adapters/postgres/roles.sql
+      - docker exec -i {{.CONTAINER}} psql -U postgres -d goal -v ON_ERROR_STOP=1 -q < internal/adapters/store/postgres/roles.sql
       - docker exec {{.CONTAINER}} psql -U postgres -d goal -v ON_ERROR_STOP=1 -qc "{{.MIGRATE_GRANTS}}"
       - |
         for f in db/migrations/*.sql; do
@@ -50,7 +50,7 @@ tasks:
       - initdb -D "{{.PGTMP}}/data" -U postgres --auth=trust >/dev/null
       - pg_ctl -D "{{.PGTMP}}/data" -l "{{.PGTMP}}/server.log" -o "-k {{.PGTMP}} -c listen_addresses=''" -w start >/dev/null
       - createdb -h "{{.PGTMP}}" -U postgres goal
-      - psql -h "{{.PGTMP}}" -U postgres -d goal -v ON_ERROR_STOP=1 -q < internal/adapters/postgres/roles.sql
+      - psql -h "{{.PGTMP}}" -U postgres -d goal -v ON_ERROR_STOP=1 -q < internal/adapters/store/postgres/roles.sql
       - psql -h "{{.PGTMP}}" -U postgres -d goal -v ON_ERROR_STOP=1 -qc "{{.MIGRATE_GRANTS}}"
       - |
         for f in db/migrations/*.sql; do

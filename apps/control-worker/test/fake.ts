@@ -1,7 +1,7 @@
 // A stand-in for ctx.container in the Workers runtime under Vitest, where no container runs. It
 // records what the Worker asks of it and plays a few commands, the way a box with GNU timeout
 // would: output, exit codes, a long command that ends when killed, and the base file a box's
-// entrypoint writes. Real containers are sandboxtest's (internal/adapters/cloudflare).
+// entrypoint writes. Real containers are sandboxtest's (internal/adapters/sandboxes/cloudflare).
 
 /** What a command's stand-in gets: its argv (without timeout's wrapper), env and cwd. */
 export interface Call {

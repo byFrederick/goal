@@ -13,12 +13,12 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/byFrederick/goal/internal/adapters/envsecrets"
-	"github.com/byFrederick/goal/internal/adapters/skillssh"
-	"github.com/byFrederick/goal/internal/adapters/sysclock"
+	"github.com/byFrederick/goal/internal/adapters/clock/sys"
+	"github.com/byFrederick/goal/internal/adapters/secrets/env"
+	"github.com/byFrederick/goal/internal/adapters/skillsource/skillssh"
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 const (
@@ -89,7 +89,7 @@ func skillsCommand(ctx context.Context, out *printer, getenv func(string) string
 		return err
 	}
 
-	catalog := builder.New(objects, sysclock.Clock{}, builder.Config{})
+	catalog := builder.New(objects, sys.Clock{}, builder.Config{})
 
 	if args[1] == subList {
 		return listSkills(ctx, out, catalog, query)
@@ -126,7 +126,7 @@ func parseSyncArgs(args []string) (syncArgs, error) {
 // GOAL_SKILLS_GITHUB_API_URL), with the optional tokens GOAL_SKILLS_DIRECTORY_TOKEN and
 // GOAL_SKILLS_GITHUB_TOKEN resolved through the Secrets port.
 func newSkillSource(ctx context.Context, getenv func(string) string) (*skillssh.Source, error) {
-	secrets := envsecrets.New(func(name string) (string, bool) {
+	secrets := env.New(func(name string) (string, bool) {
 		v := getenv(name)
 		return v, v != ""
 	})
@@ -294,7 +294,7 @@ func templatesCommand(ctx context.Context, out *printer, getenv func(string) str
 		return err
 	}
 
-	catalog := authoring.NewTemplateCatalog(objects, sysclock.Clock{})
+	catalog := authoring.NewTemplateCatalog(objects, sys.Clock{})
 
 	if args[0] == subList {
 		return listTemplates(ctx, out, catalog)

@@ -22,7 +22,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // Factory is one parsed factory.yaml.

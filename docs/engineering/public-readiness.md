@@ -29,14 +29,14 @@ reported), with a one-line reason.
 | # | Rule | Commit | Path:line | Verdict | Remediation |
 | --- | --- | --- | --- | --- | --- |
 | 1 | hashicorp-tf-password | `3bd7b72b0280` | `deploy/terraform/tests/database_urls_unit_test.tftest.hcl:10` | test fixture: the mocked PlanetScale role's made-up password | none (allowlisted) |
-| 2 | generic-api-key | `2a04d5224074` | `internal/engine/connections_test.go:35` | test fixture: a fake leased key | none (allowlisted) |
-| 3 | gitlab-pat | `9d1af0be718c` | `internal/adapters/gitlab/gitlab_test.go:20` | test fixture: a `glpat-` prefixed string that names itself a test token | none (allowlisted) |
-| 4 | generic-api-key | `3a5b7f636db9` | `internal/adapters/s3store/s3store_integration_test.go:155` | false positive: an object key (`orgs/acme/…`) | none (allowlisted) |
+| 2 | generic-api-key | `2a04d5224074` | `internal/core/engine/connections_test.go:35` | test fixture: a fake leased key | none (allowlisted) |
+| 3 | gitlab-pat | `9d1af0be718c` | `internal/adapters/codehost/gitlab/gitlab_test.go:20` | test fixture: a `glpat-` prefixed string that names itself a test token | none (allowlisted) |
+| 4 | generic-api-key | `3a5b7f636db9` | `internal/adapters/objectstore/s3/s3store_integration_test.go:155` | false positive: an object key (`orgs/acme/…`) | none (allowlisted) |
 | 5, 6 | generic-api-key | `87b384620f44` | `cmd/goal/up_test.go:119` | test fixture: the same fake secret twice, to test that goal up refuses it | none (allowlisted) |
 | 7 | generic-api-key | `9d8f6ff1fbfe` | `cmd/goal/up_test.go:110` | test fixture: the earlier form of 5 and 6 | none (allowlisted) |
 | 8 | generic-api-key | `6d0703302c2a` | `internal/api/credential_internal_test.go:25` | test fixture: a fabricated task token (already marked `//nolint:gosec`) | none (allowlisted) |
 | 9 | generic-api-key | `991018c3b186` | `internal/authoring/templates_test.go:114` | false positive: a fixture UUID | none (allowlisted) |
-| 10 | generic-api-key | `b4a9780d501b` | `internal/adapters/s3store/s3store_integration_test.go:227` | false positive: an object key | none (allowlisted) |
+| 10 | generic-api-key | `b4a9780d501b` | `internal/adapters/objectstore/s3/s3store_integration_test.go:227` | false positive: an object key | none (allowlisted) |
 | 11, 12 | generic-api-key | `ea2ba255393a` | `.claude/skills/academic-paper/examples/version_family_reconciliation_example.md:28, 42` | false positive: citation keys in a vendored skill | none (allowlisted) |
 | 13, 14 | generic-api-key | `ea2ba255393a` | `.claude/skills/golang-security/references/secrets.md:31, 37` | doc example: a vendored skill's "don't do this" snippet (AWS's documented example key) | none (allowlisted) |
 | 15 | generic-api-key | `ea2ba255393a` | `.claude/skills/playwright-best-practices/advanced/authentication-flows.md:54` | doc example: a mocked token in a vendored skill | none (allowlisted) |

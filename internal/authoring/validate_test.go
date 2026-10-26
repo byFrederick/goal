@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/byFrederick/goal/internal/authoring"
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 func checkIDs(v authoring.Validation) []string {

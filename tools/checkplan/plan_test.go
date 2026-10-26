@@ -93,7 +93,7 @@ func TestPlan(t *testing.T) {
 	tests := map[string]planCase{
 		"web only":                {[]string{"apps/web/src/routes/board.tsx", "apps/web/package.json"}, []string{webCheck}, "web (web:check): apps/web/src/routes/board.tsx and 1 more", ""},
 		"shared tsconfig":         {[]string{"packages/config/tsconfig.base.json"}, []string{"worker:check", "auth:check", "api-client:check", webCheck, cfCheck}, "shared by every TypeScript part", ""},
-		"go file":                 {[]string{"internal/engine/pull.go"}, goEnvTasks, "go (lint, test, gen:check, validate): internal/engine/pull.go", ""},
+		"go file":                 {[]string{"internal/core/engine/pull.go"}, goEnvTasks, "go (lint, test, gen:check, validate): internal/core/engine/pull.go", ""},
 		"cli command":             {[]string{"internal/cli/main.go"}, goEnvTasks, "go (lint, test, gen:check, validate): internal/cli/main.go", ""},
 		"go file outside go dirs": {[]string{"apps/web/webui.go"}, goEnvTasks, "apps/web/webui.go", ""},
 		"go fixture":              {[]string{"internal/config/testdata/acme/factory.yaml"}, goTasks, "go (", ""},
@@ -104,7 +104,7 @@ func TestPlan(t *testing.T) {
 		"embedded connection kind": {
 			[]string{"internal/connkind/kinds/github.yaml"}, goTasks, "internal/connkind/kinds/github.yaml", "",
 		},
-		"embedded roles":   {[]string{"internal/adapters/postgres/roles.sql"}, goTasks, "roles.sql", ""},
+		"embedded roles":   {[]string{"internal/adapters/store/postgres/roles.sql"}, goTasks, "roles.sql", ""},
 		"migration":        {[]string{"db/migrations/00060_x.sql"}, goTasks, "db/migrations/00060_x.sql", "db/migrations/00060_x.sql changed: task migrate-check also applies"},
 		"compose read":     {[]string{"compose.yaml"}, goEnvTasks, "env (env:check): compose.yaml", ""},
 		"env example read": {[]string{".env.example"}, goEnvTasks, "env (env:check): .env.example", ""},
@@ -118,7 +118,7 @@ func TestPlan(t *testing.T) {
 			[]string{"packages/api-client/src/schema.gen.ts"}, []string{genCheck, "api-client:check", webCheck}, "gen (gen:check): packages/api-client/src/schema.gen.ts", "",
 		},
 		"generated route tree": {[]string{"apps/web/src/routeTree.gen.ts"}, []string{genCheck, webCheck}, "gen (gen:check): apps/web/src/routeTree.gen.ts", ""},
-		"generated queries":    {[]string{"internal/adapters/postgres/db/runs.sql.gen.go"}, goEnvTasks, "gen (gen:check): internal/adapters/postgres/db/runs.sql.gen.go", ""},
+		"generated queries":    {[]string{"internal/adapters/store/postgres/db/runs.sql.gen.go"}, goEnvTasks, "gen (gen:check): internal/adapters/store/postgres/db/runs.sql.gen.go", ""},
 		"api client":           {[]string{"packages/api-client/src/client.ts"}, []string{"api-client:check", webCheck}, "web (web:check): packages/api-client/src/client.ts", ""},
 		"control worker":       {[]string{"apps/control-worker/src/index.ts"}, []string{envCheck, cfCheck}, "cloudflare (cloudflare:check): apps/control-worker/src/index.ts", ""},
 		"deploy scripts":       {[]string{"deploy/cloudflare/scripts/deploy.sh"}, []string{envCheck, cfCheck}, "cloudflare (cloudflare:check): deploy/cloudflare/scripts/deploy.sh", ""},

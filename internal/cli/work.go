@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // Work commands talk to goald's HTTP API (GOAL_API_URL, default http://127.0.0.1:8080).

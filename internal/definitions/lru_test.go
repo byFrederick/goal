@@ -3,7 +3,7 @@ package definitions
 import (
 	"testing"
 
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 func TestLRU_DropsTheLeastRecentlyUsedVersionsBeyondItsBytes(t *testing.T) {

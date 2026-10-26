@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/byFrederick/goal/internal/config"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // Problem codes of the connections check (spec 4 §4.4). All are errors: a version that has them

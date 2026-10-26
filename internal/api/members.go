@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // People are the organizations' people, part of Access: their members and pending invitations,

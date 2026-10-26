@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/byFrederick/goal/internal/adapters/github"
-	"github.com/byFrederick/goal/internal/adapters/gitlab"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/adapters/codehost/github"
+	"github.com/byFrederick/goal/internal/adapters/codehost/gitlab"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // codeHosts are the code host adapters by the name connection kinds give them (codeHost). Merges

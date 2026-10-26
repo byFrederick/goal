@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // The credentials of a request (spec 3, §8.3): a bearer value, a Goal API key, a personal token

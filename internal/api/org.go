@@ -11,8 +11,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // Orgs are the install's organizations as the API reads and changes them; ports.Tenancy

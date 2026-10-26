@@ -7,8 +7,8 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // Listen keeps the cache current until ctx ends: on every notice that a factory's current

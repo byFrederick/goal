@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // Limits of a definition's files (B §11).

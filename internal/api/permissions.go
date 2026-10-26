@@ -8,8 +8,8 @@ import (
 	"slices"
 
 	"github.com/byFrederick/goal/internal/config"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // rule is one permission of contracts/api/permissions.yaml as tools/permgen generates it into
