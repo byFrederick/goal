@@ -38,6 +38,7 @@ export const tokenScopeGroups: readonly { id: TokenGroupId; label: string; scope
       { id: 'definition:publish', label: 'Publish versions', needs: 'editor' },
       { id: 'factory:create', label: 'Create factories', needs: null },
       { id: 'factory:archive', label: 'Archive factories', needs: null },
+      { id: 'factory:delete', label: 'Delete factories', needs: null },
     ],
   },
 ];

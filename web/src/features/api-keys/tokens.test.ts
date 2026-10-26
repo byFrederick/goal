@@ -29,7 +29,13 @@ describe('what a personal token can do', () => {
   });
 
   it('never puts a high-impact scope in the CLI: work preset', () => {
-    expect(highImpactScopes).toEqual(['definition:edit', 'definition:publish', 'factory:create', 'factory:archive']);
+    expect(highImpactScopes).toEqual([
+      'definition:edit',
+      'definition:publish',
+      'factory:create',
+      'factory:archive',
+      'factory:delete',
+    ]);
     for (const s of highImpactScopes) expect(cliWorkPreset).not.toContain(s);
     expect([...cliWorkPreset].sort()).toEqual(
       [
