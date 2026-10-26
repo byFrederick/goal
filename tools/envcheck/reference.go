@@ -14,7 +14,7 @@ var readerTitles = []struct{ reader, title string }{
 	{readerWorker, "The agent worker (`apps/worker`)"},
 	{readerControlWorker, "The control Worker (`deploy/cloudflare`, its vars and Secrets Store bindings in `wrangler.jsonc`)"},
 	{readerCompose, "Docker Compose (`compose.yaml`)"},
-	{readerTaskfile, "The Taskfile (`Taskfile.yml`)"},
+	{readerTaskfile, "The Taskfiles (`Taskfile.yml` and the area Taskfiles it includes)"},
 }
 
 // reference renders docs/reference/environment.md: one table per reader.

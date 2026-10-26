@@ -1,0 +1,15 @@
+# The TypeScript API client's checks (packages/api-client).
+# Included by the root Taskfile.yml with flatten: true and dir set to the repository root, so these
+# tasks keep their full names, run from the root (a task's dir: is relative to it) and see the
+# root's dotenv, env and vars. Run them from the root: `task <name>`.
+version: "3"
+
+tasks:
+  api-client:check:
+    desc: TypeScript API client typecheck and Vitest unit tests, and its generated types match contracts/api/openapi.yaml
+    deps: [worker:install]
+    dir: packages/api-client
+    cmds:
+      - pnpm run --silent check:gen
+      - pnpm run --silent typecheck
+      - pnpm run --silent test

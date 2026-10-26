@@ -14,7 +14,7 @@
 // of the same package is a read, and so is a string constant of the form "env:NAME" (a Secrets
 // reference). TypeScript is matched line by line: process.env.X, env.X, env['X'], get('X') and
 // required(env, 'X'). The vars and Secrets Store bindings of wrangler.jsonc are reads of the
-// control Worker; ${X} in compose.yaml and Taskfile.yml are reads of compose and the Taskfile.
+// control Worker; ${X} in compose.yaml and in every Taskfile.yml are reads of compose and the Taskfile.
 //
 // The reader names are a fixed list: a read through a helper with another name, or by a name
 // computed at run time, is not seen. Such a variable is declared with `indirect: <path>`, and counts

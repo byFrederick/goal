@@ -30,6 +30,9 @@ type repo struct {
 	agents string            // AGENTS.md
 	adr    string            // ADR 0013
 	rules  map[string]string // each .claude/rules/*.md by its path
+	// Each tracked Taskfile.yml by its path, and the committed list of task names (tasks.txt).
+	taskfiles map[string]string
+	taskNames string
 }
 
 // A problem is one place where the descriptions and the tree disagree.
@@ -51,6 +54,7 @@ func check(r repo) []problem {
 	problems = append(problems, checkTopLevel(t, r.agents, r.adr, history)...)
 	problems = append(problems, checkAgentsPaths(t, r.agents, history)...)
 	problems = append(problems, checkRules(r.files, r.rules)...)
+	problems = append(problems, checkTaskNames(r.taskfiles, r.taskNames)...)
 
 	slices.SortStableFunc(problems, func(a, b problem) int { return strings.Compare(a.file, b.file) })
 
