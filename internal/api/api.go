@@ -605,6 +605,13 @@ func problemOf(err error) gen.Problem {
 		p.Code = optional("precondition-required")
 
 		return p
+	case errors.Is(err, errFactoryArchived):
+		detail := archivedDetail
+
+		return gen.Problem{
+			Title: http.StatusText(http.StatusConflict), Status: http.StatusConflict, Detail: &detail,
+			Code: optional("factory-archived"),
+		}
 	case errors.Is(err, errTouchNotFound):
 		p := detailed(http.StatusNotFound, err)
 		p.Code = optional("touch-not-found")

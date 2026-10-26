@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
+	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/ports"
 )
@@ -211,7 +212,12 @@ func (s *server) ListConnections(ctx context.Context, req gen.ListConnectionsReq
 		return nil, err
 	}
 
-	users, kind := s.connectionUsers(ctx), deref(req.Params.Kind)
+	users, err := s.connectionUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	kind := deref(req.Params.Kind)
 	out := gen.ListConnections200JSONResponse{Connections: []gen.Connection{}}
 
 	for _, c := range conns {
@@ -265,7 +271,12 @@ func (s *server) GetConnection(ctx context.Context, req gen.GetConnectionRequest
 		return nil, err
 	}
 
-	out := s.connectionOut(ctx, c, kind, s.connectionUsers(ctx)[c.Name], sources[c.Name])
+	users, err := s.connectionUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := s.connectionOut(ctx, c, kind, users[c.Name], sources[c.Name])
 	env := append([]string{}, kind.Outline(c).Env...)
 	out.Env, out.Docs = &env, optional(kind.Spec.Docs)
 
@@ -281,7 +292,11 @@ func (s *server) UpdateConnection(ctx context.Context, req gen.UpdateConnectionR
 	}
 
 	b := req.Body
-	users := s.connectionUsers(ctx)
+
+	users, err := s.connectionUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	if b.Name != nil && *b.Name != req.Connection {
 		if err := inUse(req.Connection, users[req.Connection]); err != nil {
@@ -322,7 +337,12 @@ func (s *server) DeleteConnection(ctx context.Context, req gen.DeleteConnectionR
 		return nil, errors.New("delete connection: the request has no actor")
 	}
 
-	if err := inUse(req.Connection, s.connectionUsers(ctx)[req.Connection]); err != nil {
+	users, err := s.connectionUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := inUse(req.Connection, users[req.Connection]); err != nil {
 		return nil, err
 	}
 
@@ -424,17 +444,33 @@ func scrub(msg string, rc domain.ResolvedConnection) string {
 }
 
 // connectionUsers are the factories goald runs for the organization, by the connections their
-// current versions name.
-func (s *server) connectionUsers(ctx context.Context) map[string][]factoryUse {
+// current versions name; archived factories name none.
+func (s *server) connectionUsers(ctx context.Context) (map[string][]factoryUse, error) {
+	return s.usersBy(ctx, (*config.Factory).ConnectionNames)
+}
+
+// usersBy are the factories goald runs for the organization that are not archived, by the
+// names each one's current version uses (names). A factory the store cannot be asked about
+// fails the whole answer: an archived one is never assumed, nor a live one dropped.
+func (s *server) usersBy(ctx context.Context, names func(*config.Factory) []string) (map[string][]factoryUse, error) {
+	recs, err := s.records(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	out := map[string][]factoryUse{}
 
 	for _, f := range s.factories.Factories(ctx) {
-		for _, name := range f.ConnectionNames() {
+		if recs[domain.FactoryID(f.Metadata.ID)].Archived() {
+			continue
+		}
+
+		for _, name := range names(f) {
 			out[name] = append(out[name], factoryUse{id: domain.FactoryID(f.Metadata.ID), name: f.Metadata.Name})
 		}
 	}
 
-	return out
+	return out, nil
 }
 
 // factoryUse is a factory that names a connection.

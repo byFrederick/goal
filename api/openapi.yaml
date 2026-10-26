@@ -1488,6 +1488,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
+        "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/board:
     parameters:
@@ -1742,6 +1743,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AndonPull" }
+        "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/andon/clear:
     parameters:
@@ -1766,6 +1768,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AndonPull" }
+        "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/stream:
     parameters:
@@ -1886,6 +1889,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AssemblyParts" }
+        "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/runs:
     parameters:
@@ -1927,6 +1931,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/NoteReceipt" }
+        "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/needs:
     parameters:
@@ -1955,6 +1960,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ItemLink" }
+        "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/needs/{need}:
     parameters:
@@ -1980,6 +1986,7 @@ paths:
       responses:
         "204":
           description: The edge is removed
+        "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/touches/{event}/reason:
     parameters:
@@ -2007,6 +2014,7 @@ paths:
       responses:
         "204":
           description: The reason is set
+        "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/runs/{run}:
     parameters:
@@ -2042,6 +2050,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
+        "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/reject:
     parameters:
@@ -2067,6 +2076,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
+        "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/move:
     parameters:
@@ -2094,6 +2104,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
+        "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/pause:
     parameters:
@@ -2120,6 +2131,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
+        "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/cancel:
     parameters:
@@ -2146,6 +2158,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
+        "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/retry:
     parameters:
@@ -2165,6 +2178,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
+        "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/merge:
     parameters:
@@ -2198,6 +2212,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
+        "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/builder/meta:
     parameters:
@@ -2846,6 +2861,15 @@ components:
   responses:
     Problem:
       description: An error (RFC 9457 problem details)
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Conflict:
+      description: >-
+        A conflict (RFC 9457 problem details). factory-archived: the factory is archived and
+        read-only, so it takes no new items or parts, item writes or andon calls until it is
+        restored (detail "This factory is archived; restore it first"); reads keep working. The
+        operation's description names its other conflict codes.
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }

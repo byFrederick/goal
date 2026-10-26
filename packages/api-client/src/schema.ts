@@ -4852,6 +4852,15 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description A conflict (RFC 9457 problem details). factory-archived: the factory is archived and read-only, so it takes no new items or parts, item writes or andon calls until it is restored (detail "This factory is archived; restore it first"); reads keep working. The operation's description names its other conflict codes. */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
     };
     parameters: {
         /** @description A person's user id */
@@ -6668,6 +6677,7 @@ export interface operations {
                     "application/json": components["schemas"]["Item"];
                 };
             };
+            409: components["responses"]["Conflict"];
             default: components["responses"]["Problem"];
         };
     };
@@ -6957,6 +6967,7 @@ export interface operations {
                     "application/json": components["schemas"]["AndonPull"];
                 };
             };
+            409: components["responses"]["Conflict"];
             default: components["responses"]["Problem"];
         };
     };
@@ -6987,6 +6998,7 @@ export interface operations {
                     "application/json": components["schemas"]["AndonPull"];
                 };
             };
+            409: components["responses"]["Conflict"];
             default: components["responses"]["Problem"];
         };
     };
@@ -7126,6 +7138,7 @@ export interface operations {
                     "application/json": components["schemas"]["AssemblyParts"];
                 };
             };
+            409: components["responses"]["Conflict"];
             default: components["responses"]["Problem"];
         };
     };
@@ -7182,6 +7195,7 @@ export interface operations {
                     "application/json": components["schemas"]["NoteReceipt"];
                 };
             };
+            409: components["responses"]["Conflict"];
             default: components["responses"]["Problem"];
         };
     };
@@ -7212,6 +7226,7 @@ export interface operations {
                     "application/json": components["schemas"]["ItemLink"];
                 };
             };
+            409: components["responses"]["Conflict"];
             default: components["responses"]["Problem"];
         };
     };
@@ -7238,6 +7253,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            409: components["responses"]["Conflict"];
             default: components["responses"]["Problem"];
         };
     };
@@ -7268,6 +7284,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            409: components["responses"]["Conflict"];
             default: components["responses"]["Problem"];
         };
     };
@@ -7320,6 +7337,7 @@ export interface operations {
                     "application/json": components["schemas"]["Item"];
                 };
             };
+            409: components["responses"]["Conflict"];
             default: components["responses"]["Problem"];
         };
     };
@@ -7350,6 +7368,7 @@ export interface operations {
                     "application/json": components["schemas"]["Item"];
                 };
             };
+            409: components["responses"]["Conflict"];
             default: components["responses"]["Problem"];
         };
     };
@@ -7380,6 +7399,7 @@ export interface operations {
                     "application/json": components["schemas"]["Item"];
                 };
             };
+            409: components["responses"]["Conflict"];
             default: components["responses"]["Problem"];
         };
     };
@@ -7410,6 +7430,7 @@ export interface operations {
                     "application/json": components["schemas"]["Item"];
                 };
             };
+            409: components["responses"]["Conflict"];
             default: components["responses"]["Problem"];
         };
     };
@@ -7440,6 +7461,7 @@ export interface operations {
                     "application/json": components["schemas"]["Item"];
                 };
             };
+            409: components["responses"]["Conflict"];
             default: components["responses"]["Problem"];
         };
     };
@@ -7466,6 +7488,7 @@ export interface operations {
                     "application/json": components["schemas"]["Item"];
                 };
             };
+            409: components["responses"]["Conflict"];
             default: components["responses"]["Problem"];
         };
     };
@@ -7496,6 +7519,7 @@ export interface operations {
                     "application/json": components["schemas"]["Item"];
                 };
             };
+            409: components["responses"]["Conflict"];
             default: components["responses"]["Problem"];
         };
     };
