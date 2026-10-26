@@ -9,7 +9,7 @@
     "dev:mock": "GOAL_API=mock vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p src/sw/tsconfig.json",
     "lint": "biome check .",
     "test": "vitest run",
     "e2e": "playwright test"

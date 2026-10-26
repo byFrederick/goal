@@ -7,6 +7,7 @@ import { ApiError } from './api/client';
 import { keys } from './api/queries';
 import { safeNext, setSessionHandlers } from './api/session';
 import { ErrorScreen, NotFoundScreen, PendingScreen } from './app/states';
+import { registerServiceWorker } from './pwa/register';
 import { routeTree } from './routeTree.gen';
 
 const queryClient = new QueryClient({
@@ -56,6 +57,8 @@ setSessionHandlers({
     });
   },
 });
+
+registerServiceWorker();
 
 const root = document.getElementById('root');
 if (!root) throw new Error('index.html has no #root');

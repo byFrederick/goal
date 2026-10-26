@@ -232,7 +232,7 @@ One app, not two, filling the viewport with no outer frame. From 768 px: a 72 px
 
 ## PWA
 
-Goal installs to a phone's home screen as its own app (standalone, no browser chrome). The service worker, offline caching, update prompts and push notifications come in the next parts, so approvals can arrive as push notifications later.
+Goal installs to a phone's home screen as its own app (standalone, no browser chrome). It starts from the cached app shell, and it updates itself after a Reload prompt (below). Push notifications come later, so approvals can arrive that way.
 
 **Manifest.** `web/public/manifest.webmanifest` is served from the root and linked from `index.html`. Name and short name "Goal", `id`, `start_url` and `scope` "/", `display` "standalone", and `background_color` and `theme_color` `#eef1ef` (`--color-shell`). A manifest takes one colour, so dark mode keeps the media-specific `theme-color` metas in `index.html`. goald serves it as `application/manifest+json` (`web/webui.go` names the type, since Go's mime table lacks `.webmanifest` and the image has no `mime.types`) and revalidates it like the favicon.
 
@@ -310,6 +310,30 @@ writeFileSync(
 ```
 
 **iOS.** `index.html` carries `apple-mobile-web-app-capable` and `mobile-web-app-capable` (yes), `apple-mobile-web-app-status-bar-style` (black-translucent) and `apple-mobile-web-app-title` (Goal), and the `apple-touch-icon` link. `viewport-fit=cover` lets the page draw under the status bar and the home indicator.
+
+**Service worker.** `web/src/sw/sw.ts` is written by hand (no Workbox, no plugin: no new dependency). `vite build` emits it as `/sw.js` at the root of `dist/`, a self-contained classic script that shares no chunk with the app and imports nothing (a nested build in `web/vite.config.ts`). goald serves it at scope `/` with `Cache-Control: no-cache`, like the other unhashed root files, and the CSP's `worker-src 'self'` allows it. `web/src/pwa/register.ts` registers it from `main.tsx` in production builds only: never under `vite dev`, and never in a `GOAL_API=mock` dev server.
+
+The worker's routing is one pure function, `routeRequest` in `web/src/sw/routes.ts`, tested in `routes.test.ts`. A bypass returns before `respondWith`, so the browser goes to the network as if there were no worker:
+
+| Request | Route | What the worker does |
+| --- | --- | --- |
+| any non-GET; any cross-origin request | `bypass` | nothing |
+| `/v1/*`, `/api/*` (the identity service's `/api/auth/*`, OAuth callbacks included), `/mcp/*`, any navigation to them | `bypass` | nothing: never cached, never answered with the shell |
+| `/sw.js`, `/manifest.webmanifest` | `bypass` | nothing |
+| a same-origin navigation to any other path (`/`, `/o/acme/f/sre/board`, `/device`, `/sign-in`, `/invite/…`) | `network-first-shell` | fetches it; only when the fetch rejects (offline) answers the cached shell (`/`) |
+| `/assets/*` (content-hashed, immutable) | `cache-first` | answers from the cache, fetches and caches on a miss |
+| `/favicon.svg`, `/theme.js`, `/icons/*`, `/apple-touch-icon.png` | `stale-while-revalidate` | answers from the cache and refreshes it behind the answer |
+| any other same-origin GET | `bypass` | nothing |
+
+Only responses that are `ok` and of type `basic` (same origin, not opaque or redirected) are cached.
+
+**Why the API and auth are never cached.** `/v1` answers are the signed-in user's private data, and `/api/auth/*` is the sign-in, the session and the OAuth callbacks (`/api/auth/callback/google` is a top-level navigation that sets a cookie). A cached answer would show one person's data to the next, and a shell answered for `/api/auth/*` would break the sign-in redirect and the device-code page. So the worker never reads or writes those paths, and offline use of API data does not exist: the app opens offline, and its data needs the network.
+
+**Cache versioning.** The cache is `goal-shell-<build id>`. The build id is a 16-hex-digit hash of every file the build writes (the assets carry their own content hashes, so a change to any file changes it), injected into the worker as `__BUILD_ID__`. `install` precaches `/` (the shell, fetched with `cache: 'reload'`) and does not call `skipWaiting`, so a new build waits. `activate` deletes every other `goal-shell-*` cache, then calls `clients.claim()`. The old build's cache stays until the new worker activates, so an open page keeps running on the build it loaded.
+
+**Update prompt.** On load and on every `visibilitychange` to visible, the page calls `registration.update()`, which is how a phone that keeps the app open finds a new build. When a new worker is waiting (or has just finished installing under a controlling worker), a sonner toast says "A new version of Goal is ready" with a **Reload** action, through the app's `Toaster` in `__root.tsx`. Reload posts `{type: 'SKIP_WAITING'}` to the waiting worker; the worker activates, claims the page, and the page reloads once on `controllerchange`. The first worker a page gets (a first visit) is not an update and reloads nothing.
+
+**Checking it by hand.** Build A, serve it (goald or `pnpm --dir web preview`), open the app in Chrome, and install or add it to the home screen. Build B, deploy it, then open the app again: it shows the toast; tap Reload; the page reloads and runs build B (its `goal-shell-` cache name changes in DevTools › Application › Cache storage).
 
 **Safe areas.** With `black-translucent` the page is drawn under the status bar, so the phone top row pads its top by `env(safe-area-inset-top)` on top of its 8 px (`pt-[calc(8px_+_env(safe-area-inset-top))]`), and the shell pads its left and right by `env(safe-area-inset-left)` and `env(safe-area-inset-right)` for landscape. The bottom tab bar, the sheet and the wizard footer pad their bottoms by `env(safe-area-inset-bottom)`. In a browser tab every inset is 0, so nothing moves there. Use `calc()` with spaces around `+` (`calc(8px_+_env(...))`): without them the declaration is invalid CSS and is dropped.
 
