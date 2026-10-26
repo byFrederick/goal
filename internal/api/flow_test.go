@@ -22,12 +22,13 @@ const (
 	stMerge   = "merge"
 	stDone    = "done"
 	agBackend = "backend"
+	laneAPI   = "api"
 	prURL     = "https://github.com/acme/app/pull/7"
 )
 
 // build is the line factory's agent station, as the store sees it.
 var build = domain.Station{
-	ID: stBuild, Kind: domain.KindAgent, Route: map[string]string{"api": agBackend, "web": "frontend"}, Agents: 2, WIP: 2,
+	ID: stBuild, Kind: domain.KindAgent, Route: map[string]string{laneAPI: agBackend, "web": "frontend"}, Agents: 2, WIP: 2,
 }
 
 // seed creates an item of the line factory straight in the store, at station in state.
@@ -35,7 +36,7 @@ func (h *harness) seed(t *testing.T, station string, state domain.ItemState, cre
 	t.Helper()
 
 	it, err := h.store.CreateItem(inOrg(t), domain.NewItem{
-		FactoryID: lineID, Type: typeFeature, Lane: "api", Title: "item at " + station, Station: station,
+		FactoryID: lineID, Type: typeFeature, Lane: laneAPI, Title: "item at " + station, Station: station,
 		State: state, Class: domain.ClassStandard, CreatedAt: created,
 	})
 	if err != nil {
@@ -554,7 +555,7 @@ func TestAPI_ListItemsNewestFirstByPage(t *testing.T) {
 	var page gen.ItemPage
 	h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/items?limit=1", "", &page)
 
-	if c := page.Items[0]; c.Ref != "line#5" || c.AgeSeconds != 3600 || c.Lane == nil || *c.Lane != "api" || c.Agent != nil || c.PrUrl != nil {
+	if c := page.Items[0]; c.Ref != "line#5" || c.AgeSeconds != 3600 || c.Lane == nil || *c.Lane != laneAPI || c.Agent != nil || c.PrUrl != nil {
 		t.Errorf("card %+v, want line#5, an hour old, lane api, no agent, no pull request", c)
 	}
 }

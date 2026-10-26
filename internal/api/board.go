@@ -463,10 +463,10 @@ func (s *server) touchCounts(ctx context.Context, items []domain.Item) (map[doma
 
 // assemblyFields are an item's card's assembly, when it is a part of one of asms, and parts,
 // when it is one of asms.
-func assemblyFields(f *config.Factory, it domain.Item, asms map[domain.ItemID]domain.Assembly) (*gen.PartOf, *gen.AssemblyParts) {
+func assemblyFields(f *config.Factory, it domain.Item, asms map[domain.ItemID]domain.Assembly) (*gen.PartOf, *gen.PartsSummary) {
 	var (
 		of    *gen.PartOf
-		parts *gen.AssemblyParts
+		parts *gen.PartsSummary
 	)
 
 	if a, ok := asms[it.ParentID]; ok && it.ParentID != "" {
@@ -478,7 +478,7 @@ func assemblyFields(f *config.Factory, it domain.Item, asms map[domain.ItemID]do
 
 	if a, ok := asms[it.ID]; ok {
 		p := a.Progress()
-		parts = &gen.AssemblyParts{Total: p.Total, Merged: p.Merged, InProgress: p.InProgress, Waiting: p.Waiting, Stations: p.Stations}
+		parts = &gen.PartsSummary{Total: p.Total, Merged: p.Merged, InProgress: p.InProgress, Waiting: p.Waiting, Stations: p.Stations}
 	}
 
 	return of, parts

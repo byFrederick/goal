@@ -155,7 +155,7 @@ func TestAPI_ItemCardsCarryAssemblyAndParts(t *testing.T) {
 	h.child(t, asm) // created without a part key: no part
 	plain := h.seed(t, stBuild, domain.StateQueued, t0)
 
-	wantParts := &gen.AssemblyParts{Total: 3, Merged: 1, InProgress: 1, Waiting: 1, Stations: []string{stBuild, stMerge}}
+	wantParts := &gen.PartsSummary{Total: 3, Merged: 1, InProgress: 1, Waiting: 1, Stations: []string{stBuild, stMerge}}
 	wantOf := &gen.PartOf{Id: string(asm.ID), Ref: "line#" + strconv.FormatInt(asm.Number, 10), Title: asm.Title, Part: 2, Parts: 3}
 
 	var (
@@ -176,7 +176,7 @@ func TestAPI_ItemCardsCarryAssemblyAndParts(t *testing.T) {
 			name  string
 			it    domain.Item
 			of    *gen.PartOf
-			parts *gen.AssemblyParts
+			parts *gen.PartsSummary
 		}{
 			{"assembly", asm, nil, wantParts},
 			{"second part", second, wantOf, nil},

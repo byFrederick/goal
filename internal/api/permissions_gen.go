@@ -101,6 +101,7 @@ var operationScopes = map[string]string{
 	"listFactories":               "org:read",
 	"listInvitations":             "invitation:read",
 	"listItemEvents":              "factory:read",
+	"listItemParts":               "factory:read",
 	"listItemRuns":                "factory:read",
 	"listItems":                   "factory:read",
 	"listKnowledgeDocuments":      "knowledge:read",
