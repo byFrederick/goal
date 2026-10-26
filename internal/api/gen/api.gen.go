@@ -539,6 +539,7 @@ func (e InboxEntryKind) Valid() bool {
 
 // Defines values for ItemState.
 const (
+	ItemStateAssembly     ItemState = "assembly"
 	ItemStateBlocked      ItemState = "blocked"
 	ItemStateCancelled    ItemState = "cancelled"
 	ItemStateDone         ItemState = "done"
@@ -551,6 +552,8 @@ const (
 // Valid indicates whether the value is a known member of the ItemState enum.
 func (e ItemState) Valid() bool {
 	switch e {
+	case ItemStateAssembly:
+		return true
 	case ItemStateBlocked:
 		return true
 	case ItemStateCancelled:
@@ -2308,6 +2311,8 @@ type Inviter struct {
 
 // Item defines model for Item.
 type Item struct {
+	// Assembly For a part, the assembly it is a part of and its place among the parts in plan order; getItem only, absent or null for any other item
+	Assembly       *PartOf        `json:"assembly,omitempty"`
 	Body           string         `json:"body"`
 	ClassOfService ClassOfService `json:"class_of_service"`
 	CostUsd        float64        `json:"cost_usd"`
@@ -2324,14 +2329,25 @@ type Item struct {
 	// Outputs Each station's output, by station id
 	Outputs  map[string]interface{} `json:"outputs"`
 	ParentId *string                `json:"parent_id,omitempty"`
-	Priority int                    `json:"priority"`
+
+	// PartKey A part's key in its assembly's plan; absent for any other item
+	PartKey *string `json:"part_key,omitempty"`
+
+	// PartPaths The files a part's plan says it changes; absent for any other item
+	PartPaths *[]string `json:"part_paths,omitempty"`
+
+	// Parts For an assembly, its parts in plan order and how many are done; getItem only, absent or null for any other item
+	Parts    *ItemParts `json:"parts,omitempty"`
+	Priority int        `json:"priority"`
 
 	// Ref <factory name>#<number>, as in goal#2
-	Ref         string    `json:"ref"`
-	ReworkCount int       `json:"rework_count"`
-	State       ItemState `json:"state"`
-	Station     string    `json:"station"`
-	Title       string    `json:"title"`
+	Ref         string `json:"ref"`
+	ReworkCount int    `json:"rework_count"`
+
+	// State Where an item stands; assembly is an item split into parts (ADR 0012): it is never claimed and closes done, or cancelled, when its last open part closes
+	State   ItemState `json:"state"`
+	Station string    `json:"station"`
+	Title   string    `json:"title"`
 
 	// Touches The item's human touches; getItem only
 	Touches   *ItemTouches `json:"touches,omitempty"`
@@ -2341,8 +2357,10 @@ type Item struct {
 
 // ItemAt defines model for ItemAt.
 type ItemAt struct {
-	Id      string    `json:"id"`
-	Number  int64     `json:"number"`
+	Id     string `json:"id"`
+	Number int64  `json:"number"`
+
+	// State Where an item stands; assembly is an item split into parts (ADR 0012): it is never claimed and closes done, or cancelled, when its last open part closes
 	State   ItemState `json:"state"`
 	Station string    `json:"station"`
 }
@@ -2393,7 +2411,9 @@ type ItemCard struct {
 	RopeHeld bool `json:"rope_held"`
 
 	// Slot While in progress at a station that runs several copies of its agent, the copy working it, 1-based (investigator-2); else null
-	Slot    *int      `json:"slot"`
+	Slot *int `json:"slot"`
+
+	// State Where an item stands; assembly is an item split into parts (ADR 0012): it is never claimed and closes done, or cancelled, when its last open part closes
 	State   ItemState `json:"state"`
 	Station string    `json:"station"`
 
@@ -2436,6 +2456,35 @@ type ItemPage struct {
 	NextAfter *int64 `json:"next_after"`
 }
 
+// ItemPart One part of an assembly as its item read lists it
+type ItemPart struct {
+	Id     string `json:"id"`
+	Number int64  `json:"number"`
+
+	// PartKey The part's key in the plan
+	PartKey string `json:"part_key"`
+
+	// Ref <factory name>#<number>
+	Ref string `json:"ref"`
+
+	// State Where an item stands; assembly is an item split into parts (ADR 0012): it is never claimed and closes done, or cancelled, when its last open part closes
+	State   ItemState `json:"state"`
+	Station string    `json:"station"`
+	Title   string    `json:"title"`
+}
+
+// ItemParts An assembly's parts ("4 of 6 done")
+type ItemParts struct {
+	// Done Parts done
+	Done int `json:"done"`
+
+	// List The parts in plan order
+	List []ItemPart `json:"list"`
+
+	// Total Parts in all
+	Total int `json:"total"`
+}
+
 // ItemSpan A stretch of time the item spent at one station in one state and rework round
 type ItemSpan struct {
 	EnteredAt time.Time `json:"entered_at"`
@@ -2447,12 +2496,14 @@ type ItemSpan struct {
 	ReworkBy *string `json:"rework_by"`
 
 	// ReworkRound The item's rework count during the span
-	ReworkRound int       `json:"rework_round"`
-	State       ItemState `json:"state"`
-	Station     string    `json:"station"`
+	ReworkRound int `json:"rework_round"`
+
+	// State Where an item stands; assembly is an item split into parts (ADR 0012): it is never claimed and closes done, or cancelled, when its last open part closes
+	State   ItemState `json:"state"`
+	Station string    `json:"station"`
 }
 
-// ItemState defines model for ItemState.
+// ItemState Where an item stands; assembly is an item split into parts (ADR 0012): it is never claimed and closes done, or cancelled, when its last open part closes
 type ItemState string
 
 // ItemTouches defines model for ItemTouches.
@@ -3463,7 +3514,9 @@ type StreamEvent struct {
 	OrgId string `json:"org_id"`
 
 	// Ref <factory name>#<number>, as in goal#2
-	Ref     string    `json:"ref"`
+	Ref string `json:"ref"`
+
+	// State Where an item stands; assembly is an item split into parts (ADR 0012): it is never claimed and closes done, or cancelled, when its last open part closes
 	State   ItemState `json:"state"`
 	Station *string   `json:"station,omitempty"`
 }

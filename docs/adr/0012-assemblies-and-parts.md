@@ -16,7 +16,7 @@ Some requests need more than one pull request. The station that plans the work (
 6. **Planned edges are the dependency gate.** A part waits for the parts it needs through the existing claim gate: it is not claimed while a need is neither done nor cancelled.
 7. **The assembly is never claimed and closes in the store.** State `assembly` is neither queued nor ready and opens no item span. The transition that closes the assembly's last open part also closes the assembly, in the same transaction: done, or cancelled when every part was cancelled. The part's row is locked before the assembly's, every time, so two parts finishing together close it exactly once.
 8. **No nested assemblies.** A part never becomes an assembly; `Assemble` refuses one.
-9. **Later steps.** Reading `plan` and creating the parts when a station finishes, behind `flow.assemblies.materialize` (default true) in the factory definition; cascading pause, cancel, priority and expedite from an assembly to its open parts; holding parts whose `part_paths` overlap with `overlap` edges and keeping their branches fresh; the API's `assembly` state and parts with done/total; the board and item page.
+9. **Later steps.** Reading `plan` and creating the parts when a station finishes, behind `flow.assemblies.materialize` (default true) in the factory definition; cascading pause, cancel, priority and expedite from an assembly to its open parts; holding parts whose `part_paths` overlap with `overlap` edges and keeping their branches fresh; the board and item page. The API step is done: `ItemState` includes `assembly`, every item carries its `part_key` and `part_paths`, and the item read returns an assembly's parts with done/total and a part's assembly and place.
 
 ## Consequences
 

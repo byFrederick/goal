@@ -83,6 +83,7 @@ type Items interface {
 	Run(ctx context.Context, id domain.RunID) (domain.Run, error)
 	ListItems(ctx context.Context, q ports.ItemQuery) ([]domain.Item, error)
 	Assemblies(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID]domain.Assembly, error)
+	Parts(ctx context.Context, parent domain.ItemID) (domain.Parts, error)
 	Leases(ctx context.Context, factory domain.FactoryID, station string) ([]domain.Lease, error)
 	StationLoads(ctx context.Context, factory domain.FactoryID) ([]domain.StationLoad, error)
 	FlowMetrics(ctx context.Context, q ports.FlowQuery, longWaitsAt string) (domain.FlowMetrics, error)
@@ -419,6 +420,10 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 
 	out.Touches = s.itemTouchesOf(touches)
 
+	if err := s.assemblyOf(ctx, it, &out); err != nil {
+		return nil, err
+	}
+
 	return gen.GetItem200JSONResponse(out), nil
 }
 
@@ -674,7 +679,7 @@ func (s *server) ref(ctx context.Context, factory domain.FactoryID, number int64
 func (s *server) itemOf(ctx context.Context, it domain.Item) gen.Item {
 	out := gen.Item{
 		Id: string(it.ID), Ref: s.ref(ctx, it.FactoryID, it.Number), FactoryId: string(it.FactoryID), Number: it.Number,
-		ParentId: optional(string(it.ParentID)), Type: it.Type, Lane: optional(it.Lane), Title: it.Title, Body: it.Body,
+		ParentId: optional(string(it.ParentID)), PartKey: optional(it.PartKey), Type: it.Type, Lane: optional(it.Lane), Title: it.Title, Body: it.Body,
 		Station: it.Station, State: gen.ItemState(it.State), ClassOfService: gen.ClassOfService(it.Class), Priority: it.Priority,
 		ReworkCount: it.ReworkCount, CostUsd: it.CostUSD, Outputs: map[string]any{},
 		CreatedAt: it.CreatedAt, UpdatedAt: it.UpdatedAt,
@@ -686,6 +691,10 @@ func (s *server) itemOf(ctx context.Context, it domain.Item) gen.Item {
 
 	if !it.DoneAt.IsZero() {
 		out.DoneAt = &it.DoneAt
+	}
+
+	if len(it.PartPaths) > 0 {
+		out.PartPaths = &it.PartPaths
 	}
 
 	return out

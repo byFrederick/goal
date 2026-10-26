@@ -2590,8 +2590,11 @@ export interface components {
          * @enum {string}
          */
         StationAction: "merge";
-        /** @enum {string} */
-        ItemState: "queued" | "ready" | "in_progress" | "waiting_human" | "blocked" | "done" | "cancelled";
+        /**
+         * @description Where an item stands; assembly is an item split into parts (ADR 0012): it is never claimed and closes done, or cancelled, when its last open part closes
+         * @enum {string}
+         */
+        ItemState: "queued" | "ready" | "in_progress" | "waiting_human" | "blocked" | "done" | "cancelled" | "assembly";
         /** @enum {string} */
         ClassOfService: "standard" | "expedite";
         NewItem: {
@@ -2656,6 +2659,36 @@ export interface components {
             flow?: components["schemas"]["ItemFlow"];
             /** @description The item's human touches; getItem only */
             touches?: components["schemas"]["ItemTouches"];
+            /** @description A part's key in its assembly's plan; absent for any other item */
+            part_key?: string;
+            /** @description The files a part's plan says it changes; absent for any other item */
+            part_paths?: string[];
+            /** @description For a part, the assembly it is a part of and its place among the parts in plan order; getItem only, absent or null for any other item */
+            assembly?: components["schemas"]["PartOf"] | null;
+            /** @description For an assembly, its parts in plan order and how many are done; getItem only, absent or null for any other item */
+            parts?: components["schemas"]["ItemParts"] | null;
+        };
+        /** @description An assembly's parts ("4 of 6 done") */
+        ItemParts: {
+            /** @description Parts done */
+            done: number;
+            /** @description Parts in all */
+            total: number;
+            /** @description The parts in plan order */
+            list: components["schemas"]["ItemPart"][];
+        };
+        /** @description One part of an assembly as its item read lists it */
+        ItemPart: {
+            id: string;
+            /** @description <factory name>#<number> */
+            ref: string;
+            /** Format: int64 */
+            number: number;
+            title: string;
+            /** @description The part's key in the plan */
+            part_key: string;
+            station: string;
+            state: components["schemas"]["ItemState"];
         };
         ItemTouches: {
             count: number;

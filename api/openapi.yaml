@@ -3302,7 +3302,10 @@ components:
       enum: [merge]
     ItemState:
       type: string
-      enum: [queued, ready, in_progress, waiting_human, blocked, done, cancelled]
+      description: >-
+        Where an item stands; assembly is an item split into parts (ADR 0012): it is never
+        claimed and closes done, or cancelled, when its last open part closes
+      enum: [queued, ready, in_progress, waiting_human, blocked, done, cancelled, assembly]
     ClassOfService:
       type: string
       enum: [standard, expedite]
@@ -3368,6 +3371,46 @@ components:
         touches:
           description: The item's human touches; getItem only
           allOf: [{ $ref: "#/components/schemas/ItemTouches" }]
+        part_key:
+          type: string
+          description: A part's key in its assembly's plan; absent for any other item
+        part_paths:
+          type: array
+          items: { type: string }
+          description: The files a part's plan says it changes; absent for any other item
+        assembly:
+          description: >-
+            For a part, the assembly it is a part of and its place among the parts in plan order;
+            getItem only, absent or null for any other item
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/PartOf" }]
+        parts:
+          description: For an assembly, its parts in plan order and how many are done; getItem only, absent or null for any other item
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/ItemParts" }]
+    ItemParts:
+      type: object
+      description: An assembly's parts ("4 of 6 done")
+      required: [done, total, list]
+      properties:
+        done: { type: integer, description: Parts done }
+        total: { type: integer, description: Parts in all, cancelled ones included }
+        list:
+          type: array
+          description: The parts in plan order
+          items: { $ref: "#/components/schemas/ItemPart" }
+    ItemPart:
+      type: object
+      description: One part of an assembly as its item read lists it
+      required: [id, ref, number, title, part_key, station, state]
+      properties:
+        id: { type: string }
+        ref: { type: string, description: "<factory name>#<number>" }
+        number: { type: integer, format: int64 }
+        title: { type: string }
+        part_key: { type: string, description: The part's key in the plan }
+        station: { type: string }
+        state: { $ref: "#/components/schemas/ItemState" }
     ItemTouches:
       type: object
       required: [count, planned, unplanned, list]

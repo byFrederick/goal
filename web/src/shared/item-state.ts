@@ -46,6 +46,8 @@ export function describeState(
       return { text: 'Done', tone: 'ok' };
     case 'cancelled':
       return { text: 'Cancelled', tone: 'muted' };
+    case 'assembly':
+      return { text: 'Assembly', tone: 'muted' };
   }
 }
 
@@ -57,6 +59,7 @@ export const stateNames: Record<ItemState, string> = {
   blocked: 'Blocked',
   done: 'Done',
   cancelled: 'Cancelled',
+  assembly: 'Assembly',
 };
 
 export interface Decisions {

@@ -12,6 +12,7 @@ const stateTone: Record<ItemState, HatchTone> = {
   ready: 'target',
   done: 'target',
   cancelled: 'target',
+  assembly: 'target',
 };
 
 /** The tones in the order the legend lists them. */
