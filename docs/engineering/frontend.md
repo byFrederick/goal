@@ -22,7 +22,7 @@ goal/
     contracts/                 generated: TS types from contracts/api/openapi.yaml and contracts/definitions/*.json
     api-client/                typed fetch client (openapi-fetch), errors as Problem, SSE subscription
     ui/                        design system: tokens from docs/design/MASTER.md + shadcn/Radix components
-    config/                    shared tsconfig, Biome config, Vitest preset
+    config/                    shared Biome config and tsconfig bases (Node, browser, Workers); no Vitest preset
 ```
 
 Rules:
@@ -362,6 +362,7 @@ The UI holds no secrets. With sign-in on it signs in through goald's `/api/auth`
 ## Quality gates
 
 - Biome for lint and format; `tsc --noEmit` for types; dependency-cruiser for boundaries (with `packages/`).
+- The Biome config and the tsconfig bases come from `packages/config` (`@goal/config`). Each project's `biome.json` and `tsconfig.json` extends one of them and keeps only its own settings: `web`, `auth`, `worker`, `cloudflare` and `api-client` each extend the variant that matches their runtime. `api-client` has no Biome config, so it extends only the tsconfig base.
 - Vitest for logic with real behavior (the trace built from events, which decisions an item allows); Testing Library for components when they carry such logic. No snapshot tests of markup.
 - Playwright for the critical flows at 375, 768 and 1440 px, with axe accessibility checks.
 - Budgets: initial JS under 250 KB gzipped; routes are code-split. Views loaded on first use go through `lazyRetrying` (`apps/web/src/shared/lazy.ts`), not bare `React.lazy`, which keeps a chunk that failed to arrive failed until the page reloads.

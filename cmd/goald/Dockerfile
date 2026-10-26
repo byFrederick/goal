@@ -18,9 +18,11 @@ WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/
 COPY packages/api-client/package.json packages/api-client/
+COPY packages/config/package.json packages/config/
 RUN pnpm install --frozen-lockfile --filter "@goal/web..."
 COPY contracts/definitions/ contracts/definitions/
 COPY packages/api-client/ packages/api-client/
+COPY packages/config/ packages/config/
 COPY apps/web/ apps/web/
 RUN pnpm --filter @goal/web run build
 

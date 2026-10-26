@@ -104,6 +104,8 @@ var rules = []rule{
 	{under("apps/auth"), []part{partAuth, partEnv}, ""},
 	// web depends on @goal/api-client.
 	{under("packages/api-client"), []part{partAPIClient, partWeb}, ""},
+	// packages/config holds the Biome config and tsconfig bases every TypeScript part extends.
+	{under("packages/config"), []part{partWorker, partAuth, partAPIClient, partWeb, partCloudflare}, "shared by every TypeScript part"},
 	{under("apps/web"), []part{partWeb}, ""},
 	{under("deploy/cloudflare"), []part{partCloudflare, partEnv}, ""},
 	{under("deploy/terraform"), []part{partTerraform}, ""},

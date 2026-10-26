@@ -16,7 +16,9 @@ RUN npm install --global --no-fund --no-audit "pnpm@${PNPM_VERSION}"
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/auth/package.json apps/auth/
+COPY packages/config/package.json packages/config/
 RUN pnpm install --frozen-lockfile --filter @goal/auth
+COPY packages/config/ packages/config/
 COPY apps/auth/ apps/auth/
 # .modules.yaml records when pnpm ran, the one file of /out that differs between two builds.
 RUN pnpm --filter @goal/auth build \

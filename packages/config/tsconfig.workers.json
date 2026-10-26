@@ -1,0 +1,10 @@
+{
+  // The Cloudflare Workers runtime: no DOM, bundled by Wrangler, so never emitted (noEmit).
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true
+  }
+}
