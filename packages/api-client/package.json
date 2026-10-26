@@ -2,14 +2,14 @@
   "name": "@goal/api-client",
   "version": "0.2.0",
   "private": true,
-  "description": "Typed client for goald's HTTP API (api/openapi.yaml): openapi-fetch over generated types, errors as Problem, and the event stream subscription",
+  "description": "Typed client for goald's HTTP API (contracts/api/openapi.yaml): openapi-fetch over generated types, errors as Problem, and the event stream subscription",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
-    "gen": "openapi-typescript ../../api/openapi.yaml --default-non-nullable=false --output src/schema.ts",
-    "check:gen": "openapi-typescript ../../api/openapi.yaml --default-non-nullable=false --output .schema.check.ts && node --eval \"const fs=require('node:fs');const a=fs.readFileSync('.schema.check.ts','utf8');fs.rmSync('.schema.check.ts');if(a!==fs.readFileSync('src/schema.ts','utf8')){console.error('src/schema.ts is stale: run task api:gen');process.exit(1)}\"",
+    "gen": "openapi-typescript ../../contracts/api/openapi.yaml --default-non-nullable=false --output src/schema.ts",
+    "check:gen": "openapi-typescript ../../contracts/api/openapi.yaml --default-non-nullable=false --output .schema.check.ts && node --eval \"const fs=require('node:fs');const a=fs.readFileSync('.schema.check.ts','utf8');fs.rmSync('.schema.check.ts');if(a!==fs.readFileSync('src/schema.ts','utf8')){console.error('src/schema.ts is stale: run task api:gen');process.exit(1)}\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

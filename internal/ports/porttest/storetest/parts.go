@@ -24,7 +24,7 @@ const (
 // plan is three parts: api first, then store and web, web also needing store.
 func plan() []domain.NewPart {
 	return []domain.NewPart{
-		{Key: keyAPI, Title: "API", Lane: laneBackend, Brief: "the contract", Paths: []string{"api/openapi.yaml"}},
+		{Key: keyAPI, Title: "API", Lane: laneBackend, Brief: "the contract", Paths: []string{"contracts/api/openapi.yaml"}},
 		{Key: keyStore, Title: "Store", Brief: "the rows", Paths: []string{"queries/a.sql", "migrations/x.sql"}, Needs: []string{keyAPI}},
 		{Key: keyWeb, Title: "Web", Brief: "the page", Needs: []string{keyAPI, keyStore}},
 	}

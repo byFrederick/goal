@@ -1,5 +1,5 @@
 // What an API key can do, in the New key dialog's words (spec 3 §10.2 "Api-Keys"): the
-// permissions keys may carry (api/permissions.yaml `keys: true`), grouped Read / Work / Build,
+// permissions keys may carry (contracts/api/permissions.yaml `keys: true`), grouped Read / Work / Build,
 // the lowest factory role each factory permission needs (the key's ceiling must hold it), and the
 // presets. High-impact scopes (editing and publishing definitions, creating and archiving factories) are never
 // in a preset but "Publish definitions", which names them.

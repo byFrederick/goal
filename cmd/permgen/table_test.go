@@ -57,7 +57,7 @@ func TestLoad_RefusesATableThatDoesNotHoldTogether(t *testing.T) {
 		want        string
 	}{
 		{name: "operation without a scope", openapi: "paths:\n  /v1/health:\n    get: {operationId: getHealth}\n", want: "getHealth has no x-goal-scope"},
-		{name: "unknown scope", openapi: "paths:\n  /v1/health:\n    get: {operationId: getHealth, x-goal-scope: everything}\n", want: `"everything" is not in api/permissions.yaml`},
+		{name: "unknown scope", openapi: "paths:\n  /v1/health:\n    get: {operationId: getHealth, x-goal-scope: everything}\n", want: `"everything" is not in contracts/api/permissions.yaml`},
 		{name: "operation without an id", openapi: "paths:\n  /v1/health:\n    get: {x-goal-scope: public}\n", want: "no operationId"},
 		{name: "operationId twice", openapi: "paths:\n  /a:\n    get: {operationId: x, x-goal-scope: public}\n  /b:\n    get: {operationId: x, x-goal-scope: public}\n", want: "used twice"},
 		{name: "misspelt field", permissions: "  - {name: public, level: install, freshh: true}", want: "freshh"},

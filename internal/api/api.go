@@ -1,4 +1,4 @@
-// Package api serves goald's HTTP API, the contract in api/openapi.yaml: health, the install's
+// Package api serves goald's HTTP API, the contract in contracts/api/openapi.yaml: health, the install's
 // organizations and, under /v1/orgs/{org}, each organization's factories, their boards and flow
 // metrics, submitting and listing work items, reading items, their history and runs, human decisions
 // (approve, reject, retry, merge) and controls (move, pause; control.go), factory definition authoring (definitions.go: drafts,

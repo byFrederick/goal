@@ -84,7 +84,7 @@ tasks:
   build:
     desc: Build the web UI, then every binary in cmd/ into bin/ with the UI embedded in goald
     deps: [web:build]
-    sources: ["**/*.go", go.mod, go.sum, schema/*.json, web/dist/**/*]
+    sources: ["**/*.go", go.mod, go.sum, contracts/definitions/*.json, web/dist/**/*]
     generates: [bin/goal, bin/goald]
     cmds:
       # -tags webui embeds web/dist; without it goald serves a page saying the UI is not built.
@@ -175,15 +175,15 @@ tasks:
       - sqlc generate
 
   api:gen:
-    desc: Regenerate from api/openapi.yaml and api/permissions.yaml, the permission table (internal/api/permissions_gen.go), the Go server and client (internal/api/gen) and the TypeScript types (packages/api-client)
+    desc: Regenerate from contracts/api/openapi.yaml and contracts/api/permissions.yaml, the permission table (internal/api/permissions_gen.go), the Go server and client (internal/api/gen) and the TypeScript types (packages/api-client)
     deps: [worker:install]
     cmds:
       - go run ./cmd/permgen
-      - go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@{{.OAPI_CODEGEN_VERSION}} -config internal/api/gen/oapi-codegen.yaml api/openapi.yaml
+      - go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@{{.OAPI_CODEGEN_VERSION}} -config internal/api/gen/oapi-codegen.yaml contracts/api/openapi.yaml
       - pnpm --filter @goal/api-client run --silent gen
 
   api:permissions-check:
-    desc: The generated permission table matches api/permissions.yaml and every operation's x-goal-scope (cmd/permgen -check)
+    desc: The generated permission table matches contracts/api/permissions.yaml and every operation's x-goal-scope (cmd/permgen -check)
     cmds:
       - go run ./cmd/permgen -check
 
@@ -639,7 +639,7 @@ tasks:
         echo "auth:schema-check: Better Auth's schema matches migrations/"
 
   api-client:check:
-    desc: TypeScript API client typecheck and Vitest unit tests, and its generated types match api/openapi.yaml
+    desc: TypeScript API client typecheck and Vitest unit tests, and its generated types match contracts/api/openapi.yaml
     deps: [worker:install]
     dir: packages/api-client
     cmds:

@@ -18,7 +18,7 @@ A factory's behavior is its definition: `factory.yaml`, agent prompts, skills, c
      knowledge/<collection>/   the knowledge base
    ```
 
-   This repository keeps only the JSON Schemas (`schema/`) and small, neutral test fixtures (`internal/config/testdata`, sample org `acme`). No factory definition is committed here.
+   This repository keeps only the JSON Schemas (`contracts/definitions/`) and small, neutral test fixtures (`internal/config/testdata`, sample org `acme`). No factory definition is committed here.
 2. **Versioning is on, and it is the rollback mechanism.** Every write creates a new object version. A push reports the version of every file it wrote; a reader loads a factory at the versions it listed, so it never mixes two pushes and can record exactly what it ran. Rolling back means restoring (pinning) the previous object versions. Old versions expire only after the lifecycle window.
 3. **One port, two backends.** `ports.ObjectStore` (`Get`, `Put`, `List`, `Delete`, with object version ids) is implemented by `internal/adapters/s3store` on the AWS SDK for Go v2: Amazon S3 on AWS through the standard credential chain, and locally **RustFS** (`rustfs/rustfs`, Apache-2.0, pinned to an exact tag in `compose.yaml`) through a custom endpoint with path-style addressing. MinIO no longer publishes images, so it is not used.
 4. **`internal/config` loads from an `fs.FS`.** The same loader and cross-reference validation read a local working copy (`LoadDir`) or a bucket prefix (`internal/factorystore` snapshot). A path in `factory.yaml` resolves inside the factory's tree only.

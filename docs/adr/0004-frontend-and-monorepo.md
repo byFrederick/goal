@@ -5,7 +5,7 @@ Status: accepted · 2026-10-23
 ## Decision
 
 1. **One repository**: a Go module at the root plus a pnpm workspace (`web`, `worker`, `packages/*`) orchestrated by Turborepo. `task check` runs Go and TypeScript checks together.
-2. **Contract first**: `api/openapi.yaml` is the single API contract. Go server interfaces (oapi-codegen) and TypeScript types and client (openapi-typescript, openapi-fetch) are generated from it; CI fails on drift.
+2. **Contract first**: `contracts/api/openapi.yaml` is the single API contract. Go server interfaces (oapi-codegen) and TypeScript types and client (openapi-typescript, openapi-fetch) are generated from it; CI fails on drift.
 3. **Static React SPA**: React 19, Vite, TypeScript strict, TanStack Router and Query, Tailwind v4 with tokens generated from `design-system/goal/MASTER.md`, shadcn/ui on Radix in `packages/ui`.
 4. **Realtime by SSE** from goald, mapped to query invalidation.
 5. **Feature folders with enforced boundaries** (dependency-cruiser), mirroring the Go side's depguard rules.
@@ -22,6 +22,6 @@ Status: accepted · 2026-10-23
 
 ## Consequences
 
-- The UI cannot call an endpoint that is not in the contract; adding one starts with `api/openapi.yaml`.
+- The UI cannot call an endpoint that is not in the contract; adding one starts with `contracts/api/openapi.yaml`.
 - The worker shares contract types with goald and the UI.
 - Phase 2 scaffolds `web/` and `packages/` as goal-factory work items following this ADR.

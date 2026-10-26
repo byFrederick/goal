@@ -1,5 +1,5 @@
-// Package schema embeds the JSON Schemas so the CLI and daemon validate against the same files editors use.
-package schema
+// Package definitions embeds the JSON Schemas so the CLI and daemon validate against the same files editors use.
+package definitions
 
 import _ "embed"
 

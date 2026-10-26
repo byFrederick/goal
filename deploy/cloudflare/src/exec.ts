@@ -1,4 +1,4 @@
-// One command in a box, as api/sandbox.yaml streams it: standard output as it is written, then how
+// One command in a box, as contracts/api/sandbox.yaml streams it: standard output as it is written, then how
 // the command ended.
 
 /** The last bytes of standard error kept (ports.MaxStderrTail). */
@@ -48,7 +48,7 @@ interface Piece {
 }
 
 /**
- * Exec is one command in a box, as api/sandbox.yaml streams it: its output, read as it is written
+ * Exec is one command in a box, as contracts/api/sandbox.yaml streams it: its output, read as it is written
  * and kept for the last maxReplayBytes, and its outcome. One reader at a time attaches at a byte
  * offset of the output, the newest; done runs keepMs after the command ended.
  */

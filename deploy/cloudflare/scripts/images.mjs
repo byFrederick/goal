@@ -19,7 +19,7 @@ export const inputs = {
     'cmd/goald/',
     'internal/',
     'migrations/',
-    'schema/',
+    'contracts/definitions/',
     'web/',
     'packages/api-client/',
     'go.mod',

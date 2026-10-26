@@ -732,7 +732,7 @@ func duration(s string) (time.Duration, error) {
 	return d, err
 }
 
-// modelID is the shape of runtime.model and agents[].model in schema/factory.schema.json.
+// modelID is the shape of runtime.model and agents[].model in contracts/definitions/factory.schema.json.
 var modelID = regexp.MustCompile(`^claude-[a-z0-9-]+$`)
 
 // models parses GOAL_MODELS: comma-separated model ids, each optionally followed by =Label. A

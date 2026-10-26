@@ -11,7 +11,7 @@
 # /v1/orgs/{org}; an unknown or deleted organization, and one the caller is not a member of, is
 # 404. Requests that change something from a browser must be same-origin (cross-origin protection).
 #
-# Every operation names the permission it needs in `x-goal-scope`, one of api/permissions.yaml
+# Every operation names the permission it needs in `x-goal-scope`, one of contracts/api/permissions.yaml
 # (phase 3). cmd/permgen (`task api:gen`) generates goald's table from both files and `task
 # check` fails when an operation lacks a scope, names an unknown one, or the table is stale.
 openapi: 3.0.3
@@ -2340,7 +2340,7 @@ paths:
       tags: [connections]
       summary: Create or replace one of the organization's connection kinds
       description: >-
-        The body is a kind file (schema/connection-kind.schema.json) as JSON, whose metadata.name
+        The body is a kind file (contracts/definitions/connection-kind.schema.json) as JSON, whose metadata.name
         is the path's kind. A kind has no versions: replacing it changes every connection of it
         from the next run on. A kind that breaks the schema or the kind rules is 400
         connection-kind-invalid, whose detail names every broken rule; a new kind with a platform
@@ -3262,7 +3262,7 @@ components:
       enum: [viewer, approver, editor]
     Permission:
       type: string
-      description: One permission of api/permissions.yaml, such as org:read or item:decide
+      description: One permission of contracts/api/permissions.yaml, such as org:read or item:decide
       pattern: "^[a-z_]+(:[a-z_]+)?$"
     FactoryRoleGrant:
       type: object
@@ -5738,7 +5738,7 @@ components:
       type: object
       description: >-
         A connection kind file (apiVersion goal/v1, kind ConnectionKind, metadata, spec) as JSON,
-        checked against schema/connection-kind.schema.json
+        checked against contracts/definitions/connection-kind.schema.json
       additionalProperties: true
     ConnectionList:
       type: object

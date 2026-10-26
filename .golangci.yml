@@ -288,7 +288,7 @@ linters:
           files: ["**/cmd/permgen/**"]
           deny:
             - pkg: github.com/byFrederick/goal/internal
-              desc: the permission generator reads api/permissions.yaml and api/openapi.yaml with the standard library and yaml only (spec 3, §5.4)
+              desc: the permission generator reads contracts/api/permissions.yaml and contracts/api/openapi.yaml with the standard library and yaml only (spec 3, §5.4)
         sqlc:
           files: ["**/internal/**", "**/cmd/**", "!**/internal/adapters/postgres/**"]
           deny:

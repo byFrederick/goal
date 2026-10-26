@@ -148,7 +148,7 @@ export function seedPeople(now: number, { acme, labs, factories }: SeedOrgs): Mo
   };
 }
 
-/** An organization's permissions by role (api/permissions.yaml), sorted, as goald answers Org.can. */
+/** An organization's permissions by role (contracts/api/permissions.yaml), sorted, as goald answers Org.can. */
 export function orgCanOf(role: OrgRole, every: readonly string[]): string[] {
   if (role === 'owner') return [...every];
   if (role === 'admin') return every.filter((p) => p !== 'org:delete' && p !== 'org:transfer');

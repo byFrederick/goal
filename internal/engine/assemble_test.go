@@ -21,7 +21,7 @@ const (
 	// plan is a station output that splits its item in three: api and web both need store.
 	plan = `{"lane":"data","plan":[
 		{"key":"store","title":"Store","lane":"backend","brief":"Add the table.","paths":["migrations/"]},
-		{"key":"api","title":"API","lane":"backend","brief":"Expose it.","paths":["api/"],"needs":["store"]},
+		{"key":"api","title":"API","lane":"backend","brief":"Expose it.","paths":["contracts/api/"],"needs":["store"]},
 		{"key":"web","title":"Web","lane":"frontend","brief":"Show it.","paths":["web/"],"needs":["store"]}
 	]}`
 	approvedPlan = `{"decision":"approve","plan":[{"key":"store","title":"Store","brief":"Add the table."}]}`

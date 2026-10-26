@@ -1,5 +1,5 @@
 // Typed client for goald's HTTP API. The types in ./schema.ts are generated from
-// api/openapi.yaml (`task api:gen`); never edit them by hand.
+// contracts/api/openapi.yaml (`task api:gen`); never edit them by hand.
 //
 //   const goal = createGoalClient("http://127.0.0.1:8080");
 //   const board = await unwrap(

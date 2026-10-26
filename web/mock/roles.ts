@@ -5,8 +5,8 @@
 // act as editors everywhere. Without a role the mock is the local user of GOAL_AUTH=none: every
 // permission, no roles named.
 //
-// Both tables are goald's own sources, read once: api/permissions.yaml says who holds what, and
-// api/openapi.yaml's x-goal-scope which permission each operation needs. The mock refuses an
+// Both tables are goald's own sources, read once: contracts/api/permissions.yaml says who holds what, and
+// contracts/api/openapi.yaml's x-goal-scope which permission each operation needs. The mock refuses an
 // operation the caller lacks as goald does (403 forbidden), so a screen that offered it anyway
 // meets the same refusal it would meet against goald.
 import { readFileSync } from 'node:fs';
@@ -33,7 +33,7 @@ export interface PermissionTable {
   factoryRoles: readonly FactoryRole[];
 }
 
-/** api/permissions.yaml's text as the table. */
+/** contracts/api/permissions.yaml's text as the table. */
 export function permissionTable(text: string): PermissionTable {
   const doc = parse(text) as { factory_roles: FactoryRole[]; permissions: Rule[] };
   return { rules: doc.permissions, factoryRoles: doc.factory_roles };
@@ -69,7 +69,7 @@ export interface Scope {
   permission: string;
 }
 
-/** Each operation of api/openapi.yaml's text: its method, path and x-goal-scope. */
+/** Each operation of contracts/api/openapi.yaml's text: its method, path and x-goal-scope. */
 export function scopesFrom(text: string): Scope[] {
   const doc = parse(text) as { paths: Record<string, Record<string, { 'x-goal-scope'?: string }>> };
   const scopes: Scope[] = [];
@@ -116,6 +116,6 @@ export function levelsOf(table: PermissionTable): ReadonlyMap<string, Rule['leve
 
 /** goald's two sources, read from the repository the mock runs in. */
 export function readSources(): { table: PermissionTable; scopes: Scope[] } {
-  const read = (file: string) => readFileSync(new URL(`../../api/${file}`, import.meta.url), 'utf8');
+  const read = (file: string) => readFileSync(new URL(`../../contracts/api/${file}`, import.meta.url), 'utf8');
   return { table: permissionTable(read('permissions.yaml')), scopes: scopesFrom(read('openapi.yaml')) };
 }

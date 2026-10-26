@@ -12,14 +12,14 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// The levels a permission may have (api/permissions.yaml).
+// The levels a permission may have (contracts/api/permissions.yaml).
 const (
 	levelInstall = "install"
 	levelOrg     = "org"
 	levelFactory = "factory"
 )
 
-// table is api/permissions.yaml checked against itself and against the operations that name its
+// table is contracts/api/permissions.yaml checked against itself and against the operations that name its
 // permissions.
 type table struct {
 	OrgRoles     []string
@@ -29,7 +29,7 @@ type table struct {
 	Scopes map[string]string
 }
 
-// permission is one entry of api/permissions.yaml.
+// permission is one entry of contracts/api/permissions.yaml.
 type permission struct {
 	Name          string              `yaml:"name"`
 	Level         string              `yaml:"level"`
@@ -246,9 +246,9 @@ func operationScopes(openapi []byte, known map[string]bool) (map[string]string, 
 			case scopes[op.ID] != "":
 				return nil, fmt.Errorf("openapi: operationId %s used twice", op.ID)
 			case op.Scope == "":
-				return nil, fmt.Errorf("operation %s has no x-goal-scope: give it one of api/permissions.yaml", op.ID)
+				return nil, fmt.Errorf("operation %s has no x-goal-scope: give it one of contracts/api/permissions.yaml", op.ID)
 			case !known[op.Scope]:
-				return nil, fmt.Errorf("operation %s: x-goal-scope %q is not in api/permissions.yaml", op.ID, op.Scope)
+				return nil, fmt.Errorf("operation %s: x-goal-scope %q is not in contracts/api/permissions.yaml", op.ID, op.Scope)
 			}
 
 			scopes[op.ID] = op.Scope

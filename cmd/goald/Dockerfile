@@ -19,7 +19,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY web/package.json web/
 COPY packages/api-client/package.json packages/api-client/
 RUN pnpm install --frozen-lockfile --filter "@goal/web..."
-COPY schema/ schema/
+COPY contracts/definitions/ contracts/definitions/
 COPY packages/api-client/ packages/api-client/
 COPY web/ web/
 RUN pnpm --filter @goal/web run build
@@ -31,7 +31,7 @@ RUN go mod download
 COPY cmd/goald/ cmd/goald/
 COPY internal/ internal/
 COPY migrations/ migrations/
-COPY schema/ schema/
+COPY contracts/definitions/ contracts/definitions/
 COPY web/ web/
 COPY --from=web /src/web/dist/ web/dist/
 RUN CGO_ENABLED=0 go build -trimpath -tags webui -ldflags="-s -w" -o /out/goald ./cmd/goald

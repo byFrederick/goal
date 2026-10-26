@@ -31,7 +31,7 @@ type ConnectionKind struct {
 // values may also hold ${NAME}, one of Env's variables, which goald leaves for Claude Code to
 // expand in the box, so no secret is in the run's bundle. Nothing else is evaluated. A value that names an optional field without a value is left out, with the env
 // variable or header it belongs to; a git login, MCP url or MCP command with such a value is.
-// The JSON names are the kind file's (schema/connection-kind.schema.json).
+// The JSON names are the kind file's (contracts/definitions/connection-kind.schema.json).
 type KindSpec struct {
 	Fields []KindField `json:"fields"`
 	// Env is what a run's box gets as environment variables: API and CLI use, stdio MCP servers.

@@ -14,7 +14,7 @@ var (
 	// ErrUnauthenticated means a request has no credential, or a malformed, unknown, expired or
 	// revoked one. The API answers 401 with one body, whatever the path.
 	ErrUnauthenticated = errors.New("unauthenticated")
-	// ErrReauthRequired means a sensitive operation (fresh: true in api/permissions.yaml) came
+	// ErrReauthRequired means a sensitive operation (fresh: true in contracts/api/permissions.yaml) came
 	// with a session signed in longer ago than FreshFor. The API answers 403 reauth-required.
 	ErrReauthRequired = errors.New("a recent sign-in is required")
 )
@@ -65,7 +65,7 @@ const (
 	FactoryEditor   FactoryRole = "editor"
 )
 
-// factoryLadder is the factory roles, lowest first (api/permissions.yaml factory_roles).
+// factoryLadder is the factory roles, lowest first (contracts/api/permissions.yaml factory_roles).
 var factoryLadder = []FactoryRole{FactoryViewer, FactoryApprover, FactoryEditor}
 
 // Includes reports whether r grants everything other grants (editor ⊇ approver ⊇ viewer). An
@@ -76,7 +76,7 @@ func (r FactoryRole) Includes(other FactoryRole) bool {
 	return ri >= 0 && oi >= 0 && ri >= oi
 }
 
-// Permission is one permission of api/permissions.yaml, such as "org:read" or "item:decide".
+// Permission is one permission of contracts/api/permissions.yaml, such as "org:read" or "item:decide".
 type Permission string
 
 // PrincipalKind is what a principal is.

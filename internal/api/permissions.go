@@ -12,7 +12,7 @@ import (
 	"github.com/byFrederick/goal/internal/ports"
 )
 
-// rule is one permission of api/permissions.yaml as cmd/permgen generates it into
+// rule is one permission of contracts/api/permissions.yaml as cmd/permgen generates it into
 // permissionRules (permissions_gen.go); operationScopes names each operation's permission.
 // Change the yaml or an operation's x-goal-scope, then run task api:gen.
 type rule struct {
@@ -28,7 +28,7 @@ type rule struct {
 	keys, pat, fresh, platformAdmin bool
 }
 
-// The levels of api/permissions.yaml.
+// The levels of contracts/api/permissions.yaml.
 const (
 	levelInstall = "install"
 	levelOrg     = "org"
@@ -65,7 +65,7 @@ var errBrowserSessionRequired = errors.New("personal tokens are created in the b
 var errHidden = fmt.Errorf("not visible to the principal: %w", ports.ErrNotFound)
 
 // Permissions is the Authorizer of signed-in installs: it decides every request from the
-// generated table (api/permissions.yaml, spec 3 §8.4) and the principal the request carries,
+// generated table (contracts/api/permissions.yaml, spec 3 §8.4) and the principal the request carries,
 // never from a cache. Its clock dates sessions for the fresh rule.
 type Permissions struct {
 	clock ports.Clock

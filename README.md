@@ -9,14 +9,14 @@ Factory definitions are content, not code. goald keeps them, not this repository
 ```
 cmd/goal/              CLI: goal up, run, follow, item, approve, reject, retry, merge; goal factory pull|validate|push|publish|list [--archived]|versions|restore|archive|delete; goal org list|use|create; goal login|logout|whoami; goal key; goal admin; goal connection; goal status; goal storage init; goal catalog skills|templates; goal db init|migrate|recover-admin|recover-owner
 cmd/goald/             daemon: flow engine, HTTP API (/v1/orgs/{org}/..., with an SSE stream per organization), MCP gateway (/mcp), Docker agent runs
-api/                   openapi.yaml: the HTTP API contract (Go types in internal/api/gen, TypeScript in packages/api-client)
+contracts/api/         openapi.yaml: the HTTP API contract (Go types in internal/api/gen, TypeScript in packages/api-client)
 auth/                  identity service (Better Auth on Hono): sign-in, sessions, members and invitations, behind goald's /api/auth
 internal/engine/       flow engine: pull, WIP, gates, workspaces and command checks per run
 internal/config/       loader and cross-reference validation (reads a folder or a bucket prefix)
 internal/authoring/    definition authoring behind the API: drafts, validation, publish, restore, the template catalog
 internal/adapters/     postgres (store, LISTEN/NOTIFY), s3store (S3 and RustFS), docker (sandboxes), github (merges), envsecrets, sysclock
 packages/api-client/   @goal/api-client: typed TypeScript client of the API (generated types + openapi-fetch) for the UI
-schema/                factory.schema.json, evals.schema.json (editor autocompletion + validation)
+contracts/definitions/ factory.schema.json, evals.schema.json (editor autocompletion + validation)
 migrations/            PostgreSQL schema (goose, forward-only)
 queries/               SQL for sqlc (pgx/v5)
 compose.yaml           local PostgreSQL 18 with pgvector, RustFS (S3-compatible object storage) and Mailpit (the dev inbox)
@@ -122,7 +122,7 @@ Goal then opens from its own icon, full screen, and keeps the phone's status bar
 | `terraform/`, `.sops.yaml` | `tf:check` |
 | `docs/`, `design-system/`, `.claude/`, `.github/`, `.githooks/`, root `*.md`, `skills-lock.json` | nothing |
 
-Shared files run everything and say which file did: `go.mod`, `go.sum`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `Taskfile.yml`, `.golangci.yml`, the mise config, `api/` and `schema/`. So does any path no rule knows, and a `BASE` that is missing or shares no history with `HEAD` (a shallow clone). Any other git failure fails the task: it never passes with an empty plan. When `migrations/` or `auth/` changed it notes that `task migrate-check` also applies; it does not run it. The pre-push hook still runs the whole `task check`.
+Shared files run everything and say which file did: `go.mod`, `go.sum`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `Taskfile.yml`, `.golangci.yml`, the mise config, `contracts/`. So does any path no rule knows, and a `BASE` that is missing or shares no history with `HEAD` (a shallow clone). Any other git failure fails the task: it never passes with an empty plan. When `migrations/` or `auth/` changed it notes that `task migrate-check` also applies; it does not run it. The pre-push hook still runs the whole `task check`.
 
 ## Where factories live
 

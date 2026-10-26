@@ -10,7 +10,7 @@ Files that make up this design:
 | --- | --- |
 | `docs/jonah/README.md` | This plan |
 | `docs/adr/0002-jonah-evals.md` | Key decisions and rejected alternatives |
-| `schema/evals.schema.json` | JSON Schema (2020-12) for `evals.yaml` and case files |
+| `contracts/definitions/evals.schema.json` | JSON Schema (2020-12) for `evals.yaml` and case files |
 | `factories/<id>/evals/` in the definitions bucket (goal, sre) | Starter suites, cases, judges and fixtures ([ADR 0005](../adr/0005-factory-definitions-in-object-storage.md)) |
 | `docs/jonah/schema.sql` | Draft tables, tested on PostgreSQL 18; becomes migrations in J1 |
 
@@ -305,7 +305,7 @@ evals/
   fixtures/             cassettes (*.cassette.jsonl), reference patches, hidden test files
 ```
 
-Both kinds validate against `schema/evals.schema.json` (`kind: Evals` or `kind: EvalCase`), so the YAML editor in the UI and in editors gives autocompletion. `goal factory validate` will also check the cross-references a schema cannot express (J1-2): `metadata.factoryId` equals the factory's id; graders, judges, contracts, agents and stations exist; prompt, cassette, patch and file paths exist; cassette lines parse and name real connections; case ids are unique and file names equal `metadata.name`; every `expect` key is a grader used by a suite that selects the case; every suite selects at least one case.
+Both kinds validate against `contracts/definitions/evals.schema.json` (`kind: Evals` or `kind: EvalCase`), so the YAML editor in the UI and in editors gives autocompletion. `goal factory validate` will also check the cross-references a schema cannot express (J1-2): `metadata.factoryId` equals the factory's id; graders, judges, contracts, agents and stations exist; prompt, cassette, patch and file paths exist; cassette lines parse and name real connections; case ids are unique and file names equal `metadata.name`; every `expect` key is a grader used by a suite that selects the case; every suite selects at least one case.
 
 Excerpt (the `sre` factory's `evals/evals.yaml`):
 
@@ -380,7 +380,7 @@ Jonah follows the repository's hexagonal rules (ADR 0003): the core depends only
 
 ```
                          ┌──────────────────────────────── goald (N instances) ───────────────────────────────┐
-  UI (embedded or Vercel)│ adapters/http  /v1/jonah/*  (api/openapi.yaml)      SSE /v1/events (jonah_events)   │
+  UI (embedded or Vercel)│ adapters/http  /v1/jonah/*  (contracts/api/openapi.yaml)      SSE /v1/events (jonah_events)   │
   goal CLI ─────────────▶│        │                                                                            │
                          │        ▼                                                                            │
                          │  internal/jonah  ── scheduler (advisory locks) · planner · grading · online sampler │
@@ -422,7 +422,7 @@ Stateless and cloud-ready:
 - **Realtime.** `jonah_audit` inserts NOTIFY `jonah_events`; each instance LISTENs and fans out to its own SSE clients. On Vercel the UI is static and talks to goald on AWS; nothing in Jonah runs in a Vercel Function.
 - **Same Runner.** Trials, judges in subscription mode and Jonah tasks are `Runner.Start` calls: Docker on a laptop, ECS `RunTask` on AWS. Containers reach only the gateway and the model endpoint.
 - **Idempotency.** Every step is keyed (trial id, grader name; sample id, grader name; proposal state transitions with optimistic checks), so a crash mid-step is safe to retry.
-- **API contract.** Jonah endpoints and event payloads are added to `api/openapi.yaml` and `api/events.schema.json` first; Go server and TS client are generated.
+- **API contract.** Jonah endpoints and event payloads are added to `contracts/api/openapi.yaml` and `contracts/api/events.schema.json` first; Go server and TS client are generated.
 
 ## 11. Metrics and statistics
 
@@ -574,7 +574,7 @@ Spec-ready titles; lane in brackets; acceptance criteria are checkable.
 **J1**
 
 1. **Store transcripts and config versions for every agent run** [backend] — `factory_definitions`, `transcripts` and `agent_runs.definition_sha256` added by new migrations from `docs/jonah/schema.sql`; a finished run has a zstd transcript row with sha256 and size; the run's `definition_sha256` matches the loaded factory; integration test proves two goald instances storing transcripts concurrently do not conflict.
-2. **Validate evals.yaml and case files in `goal factory validate`** [backend] — embeds `schema/evals.schema.json`; reports every cross-reference error listed in section 8; the starter files for goal and sre pass; a broken fixture set reports each error at once (table test).
+2. **Validate evals.yaml and case files in `goal factory validate`** [backend] — embeds `contracts/definitions/evals.schema.json`; reports every cross-reference error listed in section 8; the starter files for goal and sre pass; a broken fixture set reports each error at once (table test).
 3. **Repository snapshots for eval fixtures** [backend] — tag `evals/base-1` exists; `goal eval snapshot <ref>` produces a single-commit tree with no history or remotes, stored by sha256; the gateway serves it by hash; a test proves `git log` inside the snapshot shows one commit.
 4. **Offline harness MVP: `goal eval run <factory> <suite>`** [backend] — plans trials with interleaved order keys; runs each in a fresh Docker container through the Runner port; records `error` vs `graded`; prints pass@1, pass@k, pass^k with intervals; oracle and null checks run for draft cases.
 5. **Code graders and statistics** [backend] — `contract`, `match`, `transcript`, `tool-calls`; `internal/jonah/stats` with pass@k and pass^k estimators, Wilson and cluster bootstrap; table tests against hand-computed values.
@@ -585,7 +585,7 @@ Spec-ready titles; lane in brackets; acceptance criteria are checkable.
 1. **Eval lane scheduler and quota policy** [backend] — schedules under advisory locks; WIP via the slot index; yield, windows, share and budget checks before enqueue; 429s write `quota_events` and requeue as `error`; engine test with fakes shows production never waits on an eval trial.
 2. **Command, diff-scope and verification graders with hidden tests** [backend] — `failToPass`/`passToPass`; hidden files copied after the agent exits; editing a forbidden or test file fails the trial; `backend-adds-migration-never-edits` passes with its reference patch and fails with an edit to `00001_init.sql`.
 3. **Judge port and adapters with calibration** [backend] — `Judge` port; `anthropic`, `bedrock` and `worker` adapters; structured output with critique first; `goal eval calibrate` computes TPR/TNR per split and refuses a second test run; uncalibrated judges are advisory.
-4. **Jonah API and events in the contract** [backend] — `/v1/jonah/*` and `jonah_events` in `api/openapi.yaml` and `api/events.schema.json`; generated server and client; handler tests.
+4. **Jonah API and events in the contract** [backend] — `/v1/jonah/*` and `jonah_events` in `contracts/api/openapi.yaml` and `contracts/api/events.schema.json`; generated server and client; handler tests.
 5. **Labeling queue screen** [frontend] — section 13 screen 5; keyboard shortcuts; auto-save; judge verdict hidden until labeled; Playwright flow at 375, 768, 1440 px with axe checks.
 6. **Evals overview screen** [frontend] — section 13 screen 1 with suite health and Needs-you list; constraint shown in amber only.
 7. **Eval comparison on definition changes** [backend] — before a push, the regression suites affected by the changed files run against the current object versions and report pass rates, deltas and intervals; pushes that change `evals/` require a human actor.

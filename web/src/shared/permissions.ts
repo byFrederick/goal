@@ -6,7 +6,7 @@
 // what `can` comes from (main.tsx). Under GOAL_AUTH=none `can` lists every permission.
 import type { FactoryRole } from '../api/types';
 
-/** The permissions the screens ask about (api/permissions.yaml). */
+/** The permissions the screens ask about (contracts/api/permissions.yaml). */
 export type OrgPermission =
   | 'org:manage'
   | 'org:delete'

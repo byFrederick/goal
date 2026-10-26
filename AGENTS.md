@@ -10,9 +10,9 @@ This file is an index. Each rule lives in one place and is linked from here; the
 .claude/        rules/ (path-scoped rules), skills/ (vendored skills and our goal-* procedures)
 .githooks/      versioned git hooks (pre-push runs task check)
 .github/        CI, deploy and Terraform workflows
-api/            openapi.yaml, events.schema.json, permissions.yaml: the only contract between goald and TypeScript
 auth/           identity service (Hono + Better Auth), reached only through goald's /api/auth proxy
 cmd/            binaries: goal (CLI), goald (daemon), goal-egress (egress proxy) and code generators
+contracts/      contracts/api/ (openapi.yaml, events.schema.json, permissions.yaml: the only contract between goald and TypeScript), contracts/definitions/ (JSON Schemas for factory, eval and connection kind files)
 deploy/         cloudflare/: the control Worker and wrangler config
 design-system/  goal/MASTER.md: the UI's design system
 docs/           adr/, engineering/, specs/, jonah/
@@ -20,7 +20,6 @@ internal/       the Go packages: domain, engine, ports, adapters, api, gatewayâ€
 migrations/     forward-only SQL (goose)
 packages/       shared TypeScript: contracts (generated), api-client, ui, config
 queries/        SQL for sqlc
-schema/         JSON Schemas for factory, eval and connection kind files
 terraform/      the platform's own infrastructure, one root module
 web/            React SPA, embedded into goald
 worker/         goal-agent, the one agent container image

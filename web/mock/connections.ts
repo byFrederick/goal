@@ -42,7 +42,7 @@ interface MockKind {
   testUrl?: string;
 }
 
-/** A kind file (schema/connection-kind.schema.json) as the mock reads it. */
+/** A kind file (contracts/definitions/connection-kind.schema.json) as the mock reads it. */
 interface KindFile {
   metadata?: { name?: unknown; title?: unknown; description?: unknown };
   spec?: {
@@ -585,7 +585,7 @@ export function createConnections({
       return refuse(
         res,
         400,
-        'connection kind: the file breaks schema/connection-kind.schema.json',
+        'connection kind: the file breaks contracts/definitions/connection-kind.schema.json',
         'connection-kind-invalid',
       );
     if (kind.kind.name !== name) {

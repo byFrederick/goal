@@ -99,7 +99,7 @@ spec:
     FAIL: migration and code are mixed in one commit.
 ```
 
-`schema/evals.schema.json` is replaced by this one kind (the never-used `Evals` kind of ADR 0002 goes; a definition holding one gets a warning `evals-format-old`).
+`contracts/definitions/evals.schema.json` is replaced by this one kind (the never-used `Evals` kind of ADR 0002 goes; a definition holding one gets a warning `evals-format-old`).
 
 **An eval run** compares a candidate version (usually the draft) with a baseline (the current version): every case × each version × `trials`, each an ordinary run through `engine.RunTask` pinned to that version, at the case's station with its agent, prompt, skills, tools and contract. Prepare clones the repository at `repository.ref` on a throwaway branch; the agent gets the model connection only (the repository's connection is in the prepare exec, not the agent's), and the gateway serves it only the knowledge tools (the task token says `eval`), so evals never push, comment or call outside APIs. Then goald grades: contract, checks (exec in the box, runtime exit codes), output and file assertions; then, when the case has a rubric, `goal-agent judge` runs in the same box (no tools; rubric, brief, output and `git diff` in; `{critique, result}` out, critique first) and its verdict is recorded as **advisory**. A run with an infrastructure error is retried once and then counts as `error`, never as a failure.
 
@@ -213,14 +213,14 @@ Additive. Factories without `learning` get the defaults (retro on touch, nothing
 
 ## 15. Work breakdown
 
-Skills: the Go skills on Go PRs; PostgreSQL skills with migrations; UI skills on 5-7; `openapi-spec-generation` and `api-design-principles` with `api/`; the "Agents and evals" skills (llm-evaluation, eval-harness, eval-harness-first, error-analysis, write-judge-prompt, validate-evaluator, agent-evaluation, claude-api) on 5-2 to 5-6.
+Skills: the Go skills on Go PRs; PostgreSQL skills with migrations; UI skills on 5-7; `openapi-spec-generation` and `api-design-principles` with `contracts/api/`; the "Agents and evals" skills (llm-evaluation, eval-harness, eval-harness-first, error-analysis, write-judge-prompt, validate-evaluator, agent-evaluation, claude-api) on 5-2 to 5-6.
 
 | # | Pull request | Acceptance criteria | Verified by |
 | --- | --- | --- | --- |
 | 5-1 | **Learned knowledge**: `00060`, the `learned` source, `PutLearned`, `Learned`, own-entries search, the up-front entries in the bundle, the knowledge-first instruction, the Learned API and its CLI listing | own entries searched by default, `learned` widens; the prompt carries at most five entries | knowledgetest, gateway and worker tests |
 | 5-2 | **Retros**: `learning` policy and quick fixes, `00061`, `engine.RunTask`, `internal/jonah`'s retro loop with leases and the learning budget, `goal-agent retro`, proposals and touch-reason suggestions, `prepared.repository_sha` | §13's retro cases | engine, jonah, worker tests, storetest |
 | 5-3 | **Review**: proposals API, accept and dismiss (facts to Learned; edits and cases to the draft with the base check), inbox `proposal`, stream `learning`, `goal jonah` | draft conflict refused; decisions audited | handler and CLI tests |
-| 5-4 | **Evals**: the `EvalCase` schema replacing `schema/evals.schema.json`, authoring validation, `00062`, the eval loop, grading, `goal-agent judge` (advisory), eval-only tokens, the estimate and budget, `goal eval` | an eval run compares two pinned versions; regressions found; nothing outside the box is called | jonah, engine, gateway tests; e2e on Compose |
+| 5-4 | **Evals**: the `EvalCase` schema replacing `contracts/definitions/evals.schema.json`, authoring validation, `00062`, the eval loop, grading, `goal-agent judge` (advisory), eval-only tokens, the estimate and budget, `goal eval` | an eval run compares two pinned versions; regressions found; nothing outside the box is called | jonah, engine, gateway tests; e2e on Compose |
 | 5-5 | **Decide automation**: auto-accept facts, auto-publish with every refusal of §4.5, the publish dialog's eval report | each refusal path; restore undoes an auto-publish | jonah tests, Playwright |
 | 5-6 | **Check after publish**: `jonah/versions`, the restore hint, repeat-guidance checks in the knowledge loop | the hint at the thresholds; repeats flagged and counted | storetest, knowledgetest |
 | 5-7 | **Web**: Jonah review list, proposal detail with diff and A/B, eval run, Learned, phone layouts | boards of §3 | Playwright 375/768/1440 + axe |

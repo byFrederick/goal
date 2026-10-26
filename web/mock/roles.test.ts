@@ -7,7 +7,7 @@ import { grantsOf, mockRoles, readSources, scopeOf } from './roles.ts';
 
 const { table, scopes } = readSources();
 
-describe('grantsOf (api/permissions.yaml)', () => {
+describe('grantsOf (contracts/api/permissions.yaml)', () => {
   it('gives each role what spec 3 §4.2 says', () => {
     const viewer = grantsOf(table, 'viewer');
     expect(viewer.factory).toEqual(['factory:read']);
@@ -41,7 +41,7 @@ describe('grantsOf (api/permissions.yaml)', () => {
   });
 });
 
-describe('scopeOf (api/openapi.yaml)', () => {
+describe('scopeOf (contracts/api/openapi.yaml)', () => {
   it('names the permission of an operation and its path parameters', () => {
     expect(scopeOf(scopes, 'POST', '/v1/orgs/acme/items/goal%2312/approve')).toEqual({
       permission: 'item:decide',
