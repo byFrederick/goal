@@ -1,6 +1,7 @@
 package definitionstest
 
 import (
+	"errors"
 	"slices"
 	"testing"
 
@@ -36,10 +37,16 @@ func testArchiveRequiresPausedAndIdle(f *fixture) {
 	}
 
 	f.item(t, r.ID, stQA, domain.StateQueued)
+	f.item(t, r.ID, stBuild, domain.StateQueued)
 	it, lease := f.claim(t, r.ID, stQA)
+	other, otherLease := f.claim(t, r.ID, stBuild)
 
 	_, err = f.Definitions.ArchiveFactory(ctx, r.ID, agent)
-	expect(t, "ArchiveFactory while an item holds a lease", err, ports.ErrFactoryBusy)
+	expect(t, "ArchiveFactory while items hold leases", err, ports.ErrFactoryBusy)
+
+	if e, ok := errors.AsType[*ports.FactoryBusyError](err); !ok || e.Items != 2 {
+		t.Errorf("ArchiveFactory while 2 items hold leases = %v; want a *ports.FactoryBusyError of 2 items", err)
+	}
 
 	if rec := f.record(t, r.ID); rec.Archived() {
 		t.Errorf("record after refused archives = %+v; want it not archived", rec)
@@ -50,6 +57,7 @@ func testArchiveRequiresPausedAndIdle(f *fixture) {
 	}
 
 	f.finish(t, it, lease)
+	f.finish(t, other, otherLease)
 
 	got, err := f.Definitions.ArchiveFactory(ctx, r.ID, agent)
 	if err != nil {
@@ -227,8 +235,12 @@ func testDeleteArchivedRefusesALiveOrBusyFactory(f *fixture) {
 
 	f.claim(t, r.ID, stQA)
 
-	expect(t, "DeleteArchivedFactory while an item holds a lease",
-		f.Definitions.DeleteArchivedFactory(ctx, r.ID, local), ports.ErrFactoryBusy)
+	err := f.Definitions.DeleteArchivedFactory(ctx, r.ID, local)
+	expect(t, "DeleteArchivedFactory while an item holds a lease", err, ports.ErrFactoryBusy)
+
+	if e, ok := errors.AsType[*ports.FactoryBusyError](err); !ok || e.Items != 1 {
+		t.Errorf("DeleteArchivedFactory while 1 item holds a lease = %v; want a *ports.FactoryBusyError of 1 item", err)
+	}
 
 	if rec := f.record(t, r.ID); !rec.Archived() {
 		t.Errorf("record after refused deletes = %+v; want it still archived", rec)

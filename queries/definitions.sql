@@ -52,11 +52,11 @@ UPDATE factories SET
   updated_at = now()
 WHERE id = sqlc.arg(id);
 
--- name: FactoryLeased :one
--- Whether one of the factory's items holds a lease. Under the factory's row lock this sees every
+-- name: FactoryLeases :one
+-- How many of the factory's items hold a lease. Under the factory's row lock this sees every
 -- lease committed before it; a claim from a stale cache of a paused factory could still insert
 -- one after it (a lease's foreign key takes FOR KEY SHARE, which the lock does not block).
-SELECT EXISTS (SELECT 1 FROM leases WHERE factory_id = $1);
+SELECT count(*)::integer FROM leases WHERE factory_id = $1;
 
 -- name: PointFactory :exec
 -- Points a factory at a published version, with that version's name and title. A publish raises

@@ -41,6 +41,9 @@ const (
 	permAuthenticated domain.Permission = "authenticated"
 	permFactoryRead   domain.Permission = "factory:read"
 	permItemDecide    domain.Permission = "item:decide"
+	permItemCreate    domain.Permission = "item:create"
+	permItemOperate   domain.Permission = "item:operate"
+	permAndonManage   domain.Permission = "andon:manage"
 	// permTokenCreate creates a personal token: a lasting credential, so only a session signed
 	// in through the browser may (spec 3 §4.5), never a CLI session, whose device approval may have
 	// been phished.

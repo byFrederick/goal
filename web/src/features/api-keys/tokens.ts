@@ -1,7 +1,7 @@
 // What a personal token can do, in the New token dialog's words (spec 3 §4.5, §10.2 "Personal
 // tokens"): the permissions personal tokens may carry (api/permissions.yaml `pat: true`), grouped
 // Read / Work / High impact. High-impact scopes (editing drafts, publishing versions, creating
-// factories) are never in a preset: publishing controls the prompts agents run and the repository
+// and archiving factories) are never in a preset: publishing controls the prompts agents run and the repository
 // they push to. A token acts as its owner, so it can never do more than their role allows, and
 // it has no ceiling or factory restriction of its own.
 import type { NewPersonalToken } from '../../api/types';
@@ -37,6 +37,7 @@ export const tokenScopeGroups: readonly { id: TokenGroupId; label: string; scope
       { id: 'definition:edit', label: 'Edit drafts', needs: 'editor' },
       { id: 'definition:publish', label: 'Publish versions', needs: 'editor' },
       { id: 'factory:create', label: 'Create factories', needs: null },
+      { id: 'factory:archive', label: 'Archive factories', needs: null },
     ],
   },
 ];
