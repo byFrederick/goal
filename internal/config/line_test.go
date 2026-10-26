@@ -26,6 +26,7 @@ func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 		Targets: domain.Targets{ThroughputPerDay: 8, LeadTime: 6 * time.Hour, ExpediteLeadTime: time.Hour},
 		Assemblies: domain.AssemblyPolicy{
 			FreshBase: domain.FreshBaseRebase, OnConflict: domain.ConflictRework, Overlap: domain.OverlapSerialize,
+			Materialize: true,
 		},
 		Retry: domain.RetryPolicy{TransientAttempts: domain.DefaultTransientAttempts},
 	}
@@ -51,7 +52,9 @@ func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 		t.Errorf("flow without release or targets = %+v, want push and no targets", p)
 	}
 
-	set := domain.AssemblyPolicy{FreshBase: domain.FreshBaseMerge, OnConflict: domain.ConflictHuman, Overlap: domain.OverlapSerialize}
+	set := domain.AssemblyPolicy{
+		FreshBase: domain.FreshBaseMerge, OnConflict: domain.ConflictHuman, Overlap: domain.OverlapSerialize, Materialize: true,
+	}
 	if got := plain.Line().Flow.Assemblies; got != set {
 		t.Errorf("assemblies = %+v, want %+v", got, set)
 	}
@@ -64,21 +67,46 @@ func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 
 	if got, want := half.Line().Flow.Assemblies, (domain.AssemblyPolicy{
 		FreshBase: domain.FreshBaseRebase, OnConflict: domain.ConflictHuman, Overlap: domain.OverlapSerialize,
+		Materialize: true,
 	}); got != want {
 		t.Errorf("assemblies with only onConflict = %+v, want %+v", got, want)
 	}
 }
 
-// flow.assemblies takes only its two settings, each one of its values.
+// flow.assemblies takes only its settings, each one of its values.
 func TestLoad_RefusesUnknownAssemblyPolicies(t *testing.T) {
 	t.Parallel()
 
-	for _, assemblies := range []string{"{ freshBase: squash }", "{ onConflict: retry }", "{ parts: 3 }"} {
+	for _, assemblies := range []string{
+		"{ freshBase: squash }", "{ onConflict: retry }", "{ parts: 3 }", "{ materialize: yes please }", "{ materialize: 1 }",
+	} {
 		doc := baseFactory + "    flow:\n      assemblies: " + assemblies + "\n"
 
 		_, problems := Check(checkTree(doc, nil))
 		if !slices.ContainsFunc(problems, func(p domain.DefinitionProblem) bool { return p.Check == checkSchema && p.Blocking() }) {
 			t.Errorf("assemblies %s: problems %+v, want a schema problem", assemblies, problems)
+		}
+	}
+}
+
+// board.flow.assemblies.materialize turns a station's plan into an assembly with its parts; it
+// is on unless a factory sets it to false.
+func TestLine_CarriesAssembliesMaterialize(t *testing.T) {
+	t.Parallel()
+
+	for flow, want := range map[string]bool{
+		"": true,
+		"    flow:\n      assemblies: { overlap: allow }\n":     true,
+		"    flow:\n      assemblies: { materialize: true }\n":  true,
+		"    flow:\n      assemblies: { materialize: false }\n": false,
+	} {
+		f, err := Load(checkTree(baseFactory+flow, nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if got := f.Line().Flow.Assemblies.Materialize; got != want {
+			t.Errorf("flow %q: materialize = %v, want %v", flow, got, want)
 		}
 	}
 }
