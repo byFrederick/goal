@@ -4,7 +4,7 @@
 # - Terraform makes what Goal generates for itself (random_password in database.tf), the
 #   PlanetScale administrator (database.tf), the database URLs (modules/database-urls) and the
 #   Cloudflare tokens (tokens.tf).
-# - secrets/<workspace>.sops.yaml, age-encrypted (.sops.yaml), holds only what comes from outside
+# - secrets/<workspace>.sops.yaml, age-encrypted (deploy/terraform/.sops.yaml), holds only what comes from outside
 #   and the master keys: the Google OAuth client (made in Google's console), the mail provider's
 #   SMTP URL (optional: empty on an install that signs in with Google only, whose auth service runs
 #   with GOAL_AUTH_EMAIL=off and gets no GOAL_SMTP_URL), and GOAL_MASTER_KEYS. The master keys stay in SOPS on purpose: they must have an

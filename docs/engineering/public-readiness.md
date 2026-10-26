@@ -75,7 +75,7 @@ companies are their authors' fiction.
 | Secrets Store id | `deploy/cloudflare/wrangler.jsonc` (every `store_id`) | keep | an address, not a secret: reading a store needs an account token with Secrets Store access, and Workers read it only through their bindings. The deploy item may still turn both ids into deploy-time values so a fork deploys its own account |
 | Public hostname `goal.byfrederick.work`, zone `byfrederick.work`, `goal@byfrederick.work` (an example sender in the runbook) | README, SECURITY.md, the runbook, specs, Terraform | keep | public by design: it is the install's address and in public DNS |
 | Google Cloud project id `goal-byfrederick`, state bucket `goal-terraform-state` | `deploy/terraform/locals.tf`, the runbook | keep | names, useless without the owner's Google and R2 credentials |
-| age recipient in `.sops.yaml` | `.sops.yaml` | keep | an age **public** key: it can only encrypt to the owner |
+| age recipient in `deploy/terraform/.sops.yaml` | `deploy/terraform/.sops.yaml` | keep | an age **public** key: it can only encrypt to the owner |
 | `*.internal` hosts (`gateway.internal`, `sandbox.internal`, `auth.internal`, `host.docker.internal`, …) | the control Worker, compose, tests | keep | names inside Cloudflare's container network and Docker, not the owner's network |
 | Private IPs (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10`, `172.17.0.1`) | egress policy tests, compose, docs | keep | the ranges the egress policy refuses and Docker's default bridge, as test data |
 

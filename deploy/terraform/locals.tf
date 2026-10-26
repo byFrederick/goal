@@ -3,7 +3,7 @@
 # The workspace is the environment. Every per-environment value is a key of local.environments,
 # and a workspace without a key fails the plan at local.settings: only `production` exists, so
 # nothing is ever created by mistake in `default`. Adding an environment is one key here and one
-# SOPS file with its creation rule in .sops.yaml.
+# SOPS file with its creation rule in deploy/terraform/.sops.yaml.
 locals {
   project_name     = "goal"
   environment      = terraform.workspace
