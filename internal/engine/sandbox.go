@@ -22,8 +22,8 @@ import (
 const (
 	envGatewayURL   = "GOAL_GATEWAY_URL"
 	envGatewayToken = "GOAL_GATEWAY_TOKEN"
-	// envFeedback is what goald adds to the brief for one attempt: people's notes, why the
-	// previous attempt was rejected, what the workspace holds.
+	// envFeedback is what goald adds to the brief for one attempt: a part's assembly, people's
+	// notes, why the previous attempt was rejected, what the workspace holds.
 	envFeedback  = "GOAL_FEEDBACK"
 	workspaceDir = "/workspace"
 )

@@ -70,13 +70,20 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 		return
 	}
 
+	// A part's agent hears which assembly it serves, on every attempt.
+	assembly, err := e.assemblyNote(ctx, l, it)
+	if err != nil {
+		e.block(ctx, log, c, err.Error())
+		return
+	}
+
 	var b box
 	defer e.deleteBox(ctx, log, &b)
 
 	rejection, attempt, lost := "", 1, 0
 
 	for {
-		res, chk, err := e.runOnce(ctx, c, &b, feedbackOf(notes, rejection))
+		res, chk, err := e.runOnce(ctx, c, &b, joinParts(assembly, feedbackOf(notes, rejection)))
 
 		if e.cut(ctx, log, c, err) {
 			return

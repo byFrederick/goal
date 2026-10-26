@@ -14,6 +14,7 @@ func (f *Factory) Line() domain.Line {
 	s := f.Spec
 	l := domain.Line{
 		FactoryID: domain.FactoryID(f.Metadata.ID),
+		Name:      f.Metadata.Name,
 		Purpose:   f.Purpose(),
 		Runtime: domain.Runtime{
 			Model: s.Runtime.Model, ModelConnection: s.Runtime.ModelConnection,

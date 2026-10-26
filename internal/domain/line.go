@@ -41,9 +41,11 @@ type Line struct {
 	// definition itself.
 	OrgID     OrgID
 	FactoryID FactoryID
-	Runtime   Runtime
-	Stations  []Station
-	Agents    []AgentSpec
+	// Name is the factory's metadata.name, which item refs (<name>#<number>) are written with.
+	Name     string
+	Runtime  Runtime
+	Stations []Station
+	Agents   []AgentSpec
 	// ExpediteTypes are the work types that enter with class of service expedite.
 	ExpediteTypes []string
 	// Flow is the line's flow policy and targets.

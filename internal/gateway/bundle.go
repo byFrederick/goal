@@ -195,11 +195,8 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 		b.Spec.Skills = append(b.Spec.Skills, sk.Name)
 	}
 
-	// A part never plans an assembly (ADR 0012): its structured output cannot hold a plan.
-	if schema, ok := agentFiles[outputSchemaFile]; ok && it.ParentID != "" {
-		if agentFiles[outputSchemaFile], err = withoutPlan(schema); err != nil {
-			return runBundle{}, fmt.Errorf("agent %s output schema: %w", agent.Name, err)
-		}
+	if err := forPart(it, agentFiles); err != nil {
+		return runBundle{}, fmt.Errorf("agent %s output schema: %w", agent.Name, err)
 	}
 
 	for p, body := range agentFiles {
@@ -219,6 +216,21 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 
 // outputSchemaFile is the agent file that holds the station contract's JSON Schema.
 const outputSchemaFile = "output.schema.json"
+
+// forPart drops the plan from the output schema in files when it is a part's: a part never plans
+// an assembly (ADR 0012), so its structured output cannot hold one.
+func forPart(it domain.Item, files map[string][]byte) error {
+	schema, ok := files[outputSchemaFile]
+	if !ok || it.ParentID == "" {
+		return nil
+	}
+
+	var err error
+
+	files[outputSchemaFile], err = withoutPlan(schema)
+
+	return err
+}
 
 // withoutPlan is schema without its plan property and plan's entry in required; schema as it is
 // when it has no plan property.
