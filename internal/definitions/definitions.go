@@ -14,6 +14,11 @@
 // everything on a resync; Refresh does the same for every organization, as a safety net behind
 // the notices.
 //
+// An archived factory has no line: the notice of its archive takes it out of the lines LoadFunc
+// is told, so the engine claims none of its items, and the notice of its restore puts it back,
+// still paused. Its versions stay readable all the while (Version, Lookup, Factories), for the
+// runs and pages that name them.
+//
 // Every read is scoped to the organization in its context (domain.WithOrg): a factory or a
 // version of another organization is not found, and a read without an organization fails with
 // domain.ErrNoOrg.
@@ -74,11 +79,16 @@ type version struct {
 	size     int64
 }
 
-// current is the version a factory runs and whether the factory is paused.
+// current is the version a factory runs and whether the factory is paused or archived.
 type current struct {
 	*version
 
-	paused bool
+	paused, archived bool
+}
+
+// currentOf is v as the current version of the factory r.
+func currentOf(v *version, r ports.FactoryRecord) current {
+	return current{version: v, paused: r.Paused(), archived: r.Archived()}
 }
 
 // line is the engine's line of the version, in its organization.
@@ -220,7 +230,7 @@ func (c *Cache) reloadOrg(ctx context.Context, org domain.OrgID, next map[domain
 		prev, had := next[r.ID]
 
 		if had && prev.id == r.Current.ID {
-			next[r.ID] = current{version: prev.version, paused: r.Paused()}
+			next[r.ID] = currentOf(prev.version, r)
 			continue
 		}
 
@@ -233,7 +243,7 @@ func (c *Cache) reloadOrg(ctx context.Context, org domain.OrgID, next map[domain
 				slog.Any("error", err))
 
 			if had {
-				next[r.ID] = current{version: prev.version, paused: r.Paused()}
+				next[r.ID] = currentOf(prev.version, r)
 			} else {
 				delete(next, r.ID)
 			}
@@ -243,7 +253,7 @@ func (c *Cache) reloadOrg(ctx context.Context, org domain.OrgID, next map[domain
 
 		log.InfoContext(ctx, "definitions reloaded", slog.Int("files", len(v.files)), slog.Int64("ms", time.Since(start).Milliseconds()))
 
-		next[r.ID] = current{version: v, paused: r.Paused()}
+		next[r.ID] = currentOf(v, r)
 	}
 
 	maps.DeleteFunc(next, func(id domain.FactoryID, cur current) bool { return cur.org == org && !running[id] })
@@ -491,11 +501,17 @@ func sorted(m map[domain.FactoryID]current) []current {
 	return out
 }
 
+// linesOf is the engine's lines of the current versions in m, but for archived factories':
+// an archived factory has no line, so the engine claims none of its items.
 func linesOf(m map[domain.FactoryID]current) []domain.Line {
 	cur := sorted(m)
 	lines := make([]domain.Line, 0, len(cur))
 
 	for _, c := range cur {
+		if c.archived {
+			continue
+		}
+
 		lines = append(lines, c.line())
 	}
 

@@ -144,7 +144,11 @@ func (s *server) ListKnowledgeSources(ctx context.Context, req gen.ListKnowledge
 		return nil, err
 	}
 
-	users := s.sourceUsers(ctx)
+	users, err := s.sourceUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	out := gen.ListKnowledgeSources200JSONResponse{Sources: []gen.KnowledgeSource{}}
 
 	for _, src := range sources {
@@ -186,7 +190,12 @@ func (s *server) GetKnowledgeSource(ctx context.Context, req gen.GetKnowledgeSou
 		return nil, sourceError(err, req.Source)
 	}
 
-	return gen.GetKnowledgeSource200JSONResponse(s.sourceOut(ctx, src, s.sourceUsers(ctx)[src.Name])), nil
+	users, err := s.sourceUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.GetKnowledgeSource200JSONResponse(s.sourceOut(ctx, src, users[src.Name])), nil
 }
 
 func (s *server) UpdateKnowledgeSource(ctx context.Context, req gen.UpdateKnowledgeSourceRequestObject) (gen.UpdateKnowledgeSourceResponseObject, error) {
@@ -215,7 +224,12 @@ func (s *server) UpdateKnowledgeSource(ctx context.Context, req gen.UpdateKnowle
 		return nil, sourceError(err, req.Source)
 	}
 
-	return gen.UpdateKnowledgeSource200JSONResponse(s.sourceOut(ctx, src, s.sourceUsers(ctx)[src.Name])), nil
+	users, err := s.sourceUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.UpdateKnowledgeSource200JSONResponse(s.sourceOut(ctx, src, users[src.Name])), nil
 }
 
 // DeleteKnowledgeSource deletes a source no current version may search, with its documents and
@@ -226,7 +240,12 @@ func (s *server) DeleteKnowledgeSource(ctx context.Context, req gen.DeleteKnowle
 		return nil, errors.New("delete knowledge source: the request has no actor")
 	}
 
-	if users := s.sourceUsers(ctx)[req.Source]; len(users) > 0 {
+	all, err := s.sourceUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if users := all[req.Source]; len(users) > 0 {
 		names := make([]string, 0, len(users))
 		for _, f := range users {
 			names = append(names, f.name)
@@ -512,17 +531,9 @@ func searchable(f *config.Factory) []string {
 }
 
 // sourceUsers are the factories goald runs for the organization, by the knowledge sources their
-// current versions may search.
-func (s *server) sourceUsers(ctx context.Context) map[string][]factoryUse {
-	out := map[string][]factoryUse{}
-
-	for _, f := range s.factories.Factories(ctx) {
-		for _, name := range searchable(f) {
-			out[name] = append(out[name], factoryUse{id: domain.FactoryID(f.Metadata.ID), name: f.Metadata.Name})
-		}
-	}
-
-	return out
+// current versions may search; archived factories search none.
+func (s *server) sourceUsers(ctx context.Context) (map[string][]factoryUse, error) {
+	return s.usersBy(ctx, searchable)
 }
 
 // sourceNames are the organization's source names by id.

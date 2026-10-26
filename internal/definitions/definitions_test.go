@@ -509,6 +509,91 @@ func TestListen_ReloadsAnOrganizationOnItsNoticesAndEverythingOnAResync(t *testi
 	})
 }
 
+// archive pauses factory id of o, which archiving requires, and archives it.
+func (h *harness) archive(t *testing.T, o domain.OrgID, id domain.FactoryID) {
+	t.Helper()
+
+	if _, err := h.store.SetPaused(ctxOf(t, o), id, true, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.store.ArchiveFactory(ctxOf(t, o), id, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRefresh_AnArchivedFactoryLeavesTheLinesAndKeepsItsVersions(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	v1 := h.publish(t, org, acme(acmeName, noteContract))
+	v2 := h.publish(t, org, acme(acmeName, bodyContract))
+	theirs := h.publish(t, other, withID(acme(acmeName, noteContract), otherID))
+	rec := newLoads()
+	c := h.cache(t, rec.record)
+
+	h.archive(t, org, acmeID)
+
+	lines, err := c.Refresh(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := versionsOf(rec.last()); got[acmeID] != "" || got[otherID] != theirs.ID || len(lines) != 1 {
+		t.Fatalf("lines after the archive = %v (returned %+v), want only other's factory", got, lines)
+	}
+
+	for _, id := range []domain.DefinitionVersionID{v1.ID, v2.ID} {
+		if f, err := c.Version(ctxOf(t, org), id); err != nil || f.Metadata.ID != string(acmeID) {
+			t.Errorf("Version(%s) of the archived factory = %v, %v; want acme", id, f, err)
+		}
+	}
+
+	if f, err := c.Lookup(ctxOf(t, org), acmeName); err != nil || f.Metadata.ID != string(acmeID) {
+		t.Errorf("Lookup(%s) of the archived factory = %v, %v; want acme", acmeName, f, err)
+	}
+}
+
+func TestListen_ArchiveAndRestoreMoveTheFactoryOutOfAndBackIntoTheLines(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t) // the store announces nothing: the test sends the notices
+	v1 := h.publish(t, org, acme(acmeName, noteContract))
+	rec := newLoads()
+	c := New(h.store, h.orgs, rec.record, Config{}, nil)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+
+	go func() { done <- c.Listen(ctx, h.notices) }()
+
+	t.Cleanup(func() {
+		cancel()
+
+		if err := <-done; err != nil {
+			t.Error(err)
+		}
+	})
+
+	rec.await(t, "on the first resync", func(l []domain.Line) bool { return versionsOf(l)[acmeID] == v1.ID })
+
+	notice := ports.DefinitionNotice{OrgID: org, FactoryID: acmeID, Kind: ports.NoticeCurrent, VersionID: v1.ID, Number: 1}
+
+	h.archive(t, org, acmeID)
+	h.notices.Publish(notice)
+	rec.await(t, "on the archive", func(l []domain.Line) bool { return l != nil && versionsOf(l)[acmeID] == "" })
+
+	if _, err := h.store.RestoreArchivedFactory(ctxOf(t, org), acmeID, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	h.notices.Publish(notice)
+	rec.await(t, "on the restore", func(l []domain.Line) bool {
+		i := slices.IndexFunc(l, func(l domain.Line) bool { return l.FactoryID == acmeID })
+		return i >= 0 && sameVersion(l[i], domain.Line{OrgID: org, FactoryID: acmeID, VersionID: v1.ID, Number: 1, Paused: true})
+	})
+}
+
 func TestValidate_OutputAgainstTheVersionsContract(t *testing.T) {
 	t.Parallel()
 
