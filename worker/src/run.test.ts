@@ -319,6 +319,16 @@ describe('runTask', () => {
 });
 
 describe('parseSpec', () => {
+  it('starts the prompt with a note to resolve conflicts with the default branch', async () => {
+    const { calls } = await run([success], { spec: { ...spec, base_conflicts: ['go.mod', 'internal/api/server.go'] } });
+    const prompt = calls[0]?.prompt ?? '';
+
+    expect(prompt.startsWith('## First: conflicts with the default branch')).toBe(true);
+    expect(prompt).toContain('- go.mod\n- internal/api/server.go');
+    expect(prompt.indexOf('internal/api/server.go')).toBeLessThan(prompt.indexOf('Add a health endpoint'));
+    expect((await run([success])).calls[0]?.prompt.startsWith('Add a health endpoint')).toBe(true);
+  });
+
   it('rejects a spec without its run id', () => {
     expect(() => parseSpec(JSON.stringify({ ...spec, run_id: undefined }))).toThrow();
   });
