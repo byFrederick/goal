@@ -108,6 +108,7 @@ const metrics: Metrics = {
   throughput: [],
   throughput_per_day: 0,
   lead_time_hours: null,
+  assembly_lead_time_hours: null,
   wip: 0,
   rework_rate: 0,
   spend_usd: 0,

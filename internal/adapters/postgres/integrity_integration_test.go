@@ -170,7 +170,7 @@ func TestFlowReads_UseTheirIndexes(t *testing.T) {
 		{"item_events_verdicts_at_idx", `SELECT station, count(*) FROM item_events
 			WHERE factory_id = $1::uuid AND kind IN ('gate_approved', 'gate_rejected') AND at >= now() - interval '7 days' AND at < now()
 			GROUP BY station`},
-		{"work_items_parent_id_idx", `SELECT count(*) FROM work_items w
+		{"work_items_parent_part_key_idx", `SELECT count(*) FROM work_items w
 			WHERE w.factory_id = $1::uuid AND w.done_at >= now() - interval '7 days' AND w.done_at < now() AND w.state = 'done'
 			  AND EXISTS (SELECT 1 FROM work_items p WHERE p.parent_id = w.id AND p.part_key IS NOT NULL)`},
 	} {

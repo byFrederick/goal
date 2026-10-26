@@ -2910,6 +2910,14 @@ type MergeRequestMethod string
 
 // Metrics defines model for Metrics.
 type Metrics struct {
+	// AssemblyLeadTimeHours Percentiles of created → last part done of the assemblies (items split into parts) done in the window; null when none were. Cancelled assemblies are left out
+	AssemblyLeadTimeHours *struct {
+		// Assemblies How many assemblies were done in the window
+		Assemblies int     `json:"assemblies"`
+		P50        float64 `json:"p50"`
+		P85        float64 `json:"p85"`
+	} `json:"assembly_lead_time_hours"`
+
 	// From The range's first UTC day
 	From      openapi_types.Date `json:"from"`
 	ItemsDone int                `json:"items_done"`
@@ -2963,6 +2971,13 @@ type Metrics struct {
 
 // MetricsSummary The headline metrics of one range, to compare with
 type MetricsSummary struct {
+	// AssemblyLeadTimeHours Percentiles of created → last part done of the assemblies (items split into parts) done in the range; null when none were. Cancelled assemblies are left out
+	AssemblyLeadTimeHours *struct {
+		// Assemblies How many assemblies were done in the range
+		Assemblies int     `json:"assemblies"`
+		P50        float64 `json:"p50"`
+		P85        float64 `json:"p85"`
+	} `json:"assembly_lead_time_hours"`
 	From      openapi_types.Date `json:"from"`
 	ItemsDone int                `json:"items_done"`
 

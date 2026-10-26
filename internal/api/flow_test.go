@@ -696,8 +696,8 @@ func TestAPI_MetricsWithNothingDoneAndBadWindows(t *testing.T) {
 	h := newHarness(t)
 
 	var m gen.Metrics
-	if h.call(t, http.MethodGet, "/v1/orgs/acme/factories/acme/metrics", "", &m); m.Window != "7d" || len(m.Throughput) != 7 || m.LeadTimeHours != nil || m.ReworkRate != 0 {
-		t.Errorf("metrics with nothing done = %+v, want 7 empty days and no lead time", m)
+	if h.call(t, http.MethodGet, "/v1/orgs/acme/factories/acme/metrics", "", &m); m.Window != "7d" || len(m.Throughput) != 7 || m.LeadTimeHours != nil || m.AssemblyLeadTimeHours != nil || m.ReworkRate != 0 {
+		t.Errorf("metrics with nothing done = %+v, want 7 empty days and no lead times", m)
 	}
 
 	for _, w := range []string{"0d", "91d", "7", "1w"} {

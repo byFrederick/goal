@@ -241,6 +241,8 @@ function summary(done: readonly MockDone[], r: DayRange, now: number): MetricsSu
     items_done: inRange.length,
     throughput_per_day: inRange.length / daysOf(r),
     lead_time_hours: lead.length ? { p50: round(percentile(lead, 0.5)), p85: round(percentile(lead, 0.85)) } : null,
+    // The mock seeds no assemblies, so none is ever done.
+    assembly_lead_time_hours: null,
     rework_rate: inRange.length ? inRange.filter((d) => d.reworked).length / inRange.length : 0,
     done: inRange,
   };
@@ -295,6 +297,7 @@ export function metricsOf(input: FlowInput, r: DayRange, compare: boolean): Metr
     throughput_per_day: cur.throughput_per_day,
     items_done: cur.items_done,
     lead_time_hours: cur.lead_time_hours,
+    assembly_lead_time_hours: cur.assembly_lead_time_hours,
     rework_rate: cur.rework_rate,
     wip: open.length,
     spend_usd: round(inRange.reduce((n, d) => n + d.cost_usd, 0)),

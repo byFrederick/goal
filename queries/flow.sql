@@ -113,7 +113,7 @@ WHERE factory_id = sqlc.arg(factory_id) AND done_at >= sqlc.arg(since)::timestam
 -- name: FlowAssemblyStats :one
 -- Assemblies (items with parts) done, and their lead-time (created to last part done)
 -- percentiles in seconds, interpolated between ranks: done items on work_items_done_at_idx,
--- their parts on work_items_parent_id_idx. Cancelled assemblies never reach done.
+-- their parts on work_items_parent_part_key_idx. Cancelled assemblies never reach done.
 SELECT count(*) AS assemblies_done,
        coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM w.done_at - w.created_at)::float8), 0)::float8 AS p50_seconds,
        coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM w.done_at - w.created_at)::float8), 0)::float8 AS p85_seconds

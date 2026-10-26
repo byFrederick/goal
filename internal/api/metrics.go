@@ -323,6 +323,24 @@ func leadTimeOf(fm domain.FlowMetrics) *struct {
 	}{P50: fm.LeadTimeP50.Hours(), P85: fm.LeadTimeP85.Hours()}
 }
 
+// assemblyLeadTimeOf is the assembly lead-time percentiles in hours with how many assemblies
+// were done, or nil when none were.
+func assemblyLeadTimeOf(fm domain.FlowMetrics) *struct {
+	Assemblies int     `json:"assemblies"`
+	P50        float64 `json:"p50"`
+	P85        float64 `json:"p85"`
+} {
+	if fm.AssembliesDone == 0 {
+		return nil
+	}
+
+	return &struct {
+		Assemblies int     `json:"assemblies"`
+		P50        float64 `json:"p50"`
+		P85        float64 `json:"p85"`
+	}{Assemblies: fm.AssembliesDone, P50: fm.AssemblyLeadTimeP50.Hours(), P85: fm.AssemblyLeadTimeP85.Hours()}
+}
+
 // reworkRate is the share of the items done that were sent back at least once.
 func reworkRate(fm domain.FlowMetrics) float64 {
 	if fm.ItemsDone == 0 {
@@ -337,6 +355,7 @@ func metricsOf(r dayRange, fm domain.FlowMetrics) gen.Metrics {
 		Window: r.name(), From: openapi_types.Date{Time: r.from}, To: openapi_types.Date{Time: r.to},
 		Wip: fm.WIP, SpendUsd: fm.SpendUSD, ItemsDone: fm.ItemsDone, Throughput: donePerDay(r, fm),
 		ThroughputPerDay: float64(fm.ItemsDone) / float64(r.days()), LeadTimeHours: leadTimeOf(fm), ReworkRate: reworkRate(fm),
+		AssemblyLeadTimeHours: assemblyLeadTimeOf(fm),
 	}
 }
 
@@ -344,5 +363,6 @@ func summaryOf(r dayRange, fm domain.FlowMetrics) gen.MetricsSummary {
 	return gen.MetricsSummary{
 		From: openapi_types.Date{Time: r.from}, To: openapi_types.Date{Time: r.to}, ItemsDone: fm.ItemsDone,
 		ThroughputPerDay: float64(fm.ItemsDone) / float64(r.days()), LeadTimeHours: leadTimeOf(fm), ReworkRate: reworkRate(fm),
+		AssemblyLeadTimeHours: assemblyLeadTimeOf(fm),
 	}
 }

@@ -307,7 +307,7 @@ type FlowAssemblyStatsRow struct {
 
 // Assemblies (items with parts) done, and their lead-time (created to last part done)
 // percentiles in seconds, interpolated between ranks: done items on work_items_done_at_idx,
-// their parts on work_items_parent_id_idx. Cancelled assemblies never reach done.
+// their parts on work_items_parent_part_key_idx. Cancelled assemblies never reach done.
 func (q *Queries) FlowAssemblyStats(ctx context.Context, arg FlowAssemblyStatsParams) (FlowAssemblyStatsRow, error) {
 	row := q.db.QueryRow(ctx, flowAssemblyStats,
 		arg.FactoryID,

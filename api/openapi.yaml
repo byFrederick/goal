@@ -4098,6 +4098,7 @@ components:
         - throughput
         - throughput_per_day
         - lead_time_hours
+        - assembly_lead_time_hours
         - wip
         - rework_rate
         - spend_usd
@@ -4145,6 +4146,17 @@ components:
           properties:
             p50: { type: number, format: double }
             p85: { type: number, format: double }
+        assembly_lead_time_hours:
+          type: object
+          nullable: true
+          description: >-
+            Percentiles of created → last part done of the assemblies (items split into parts)
+            done in the window; null when none were. Cancelled assemblies are left out
+          required: [p50, p85, assemblies]
+          properties:
+            p50: { type: number, format: double }
+            p85: { type: number, format: double }
+            assemblies: { type: integer, description: How many assemblies were done in the window }
         wip: { type: integer, description: "Items in the line now, neither done nor cancelled" }
         rework_rate:
           type: number
@@ -4155,7 +4167,7 @@ components:
     MetricsSummary:
       type: object
       description: The headline metrics of one range, to compare with
-      required: [from, to, items_done, throughput_per_day, lead_time_hours, rework_rate]
+      required: [from, to, items_done, throughput_per_day, lead_time_hours, assembly_lead_time_hours, rework_rate]
       properties:
         from: { type: string, format: date }
         to: { type: string, format: date }
@@ -4169,6 +4181,17 @@ components:
           properties:
             p50: { type: number, format: double }
             p85: { type: number, format: double }
+        assembly_lead_time_hours:
+          type: object
+          nullable: true
+          description: >-
+            Percentiles of created → last part done of the assemblies (items split into parts)
+            done in the range; null when none were. Cancelled assemblies are left out
+          required: [p50, p85, assemblies]
+          properties:
+            p50: { type: number, format: double }
+            p85: { type: number, format: double }
+            assemblies: { type: integer, description: How many assemblies were done in the range }
         rework_rate: { type: number, format: double }
     Targets:
       type: object
