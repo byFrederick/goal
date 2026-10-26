@@ -1,7 +1,7 @@
-// A router harness for component tests: mounts one screen under the /o/$org/f/$factory/board
-// route with the route context the screens read (the organization and the factory), and with the
-// queries it reads seeded, so no request leaves the test. Used by tests only.
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+// A router harness for component tests: mounts one screen under a factory's route with the route
+// context the screens read (the organization and the factory), and with the queries it reads seeded,
+// so no request leaves the test. Used by tests only.
+import { QueryClient, QueryClientProvider, type QueryKey } from '@tanstack/react-query';
 import {
   createMemoryHistory,
   createRootRoute,
@@ -24,35 +24,36 @@ function polyfillLayout() {
   window.scrollTo = () => {};
 }
 
+/** A query's key and the data the page reads from it, so the page's first render has it. */
+export type Seed = readonly [key: QueryKey, data: unknown];
+
 /**
- * Renders `page` at /o/<org>/f/<factory>/board?station=…, with the board seeded as its query data.
- * Returns what render returns (unmount, and the rest of Testing Library's queries).
+ * Renders `page` at /o/<org>/f/<factory>/<path> (`path` is the factory route's child: 'board',
+ * 'items/', or '/' for the Floor), with `seed` as the query data. Returns what render returns.
  */
-export function renderBoardPage({
+export function renderFactoryPage({
   page,
+  path,
   org,
   factory,
   factories = [factory],
-  board,
-  builderMeta,
+  seed = [],
   station,
 }: {
   page: () => ReactNode;
+  /** The page's route under the factory: 'board', 'items/' or '/' (the Floor). */
+  path: string;
   org: OrgSummary;
   factory: Factory;
   /** The organization's factories, for rows about another factory; `factory` alone by default. */
   factories?: Factory[];
-  /** The board the page reads; left out for a page that does not read it. */
-  board?: Board;
-  /** The install's models the page labels runs with; left out for a page that names no model. */
-  builderMeta?: BuilderMeta;
-  station?: string;
+  seed?: readonly Seed[];
+  station?: string | undefined;
 }) {
   polyfillLayout();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   queryClient.setQueryData(factoriesQuery(org.id).queryKey, factories);
-  if (board) queryClient.setQueryData(boardQuery(org.id, factory.id).queryKey, board);
-  if (builderMeta) queryClient.setQueryData(builderMetaQuery(org.id).queryKey, builderMeta);
+  for (const [key, data] of seed) queryClient.setQueryData(key, data);
 
   const rootRoute = createRootRoute();
   const orgRoute = createRoute({
@@ -67,14 +68,16 @@ export function renderBoardPage({
     beforeLoad: () => ({ factory }),
     component: Outlet,
   });
-  const boardRoute = createRoute({ getParentRoute: () => factoryRoute, path: 'board', component: page });
+  const pageRoute = createRoute({ getParentRoute: () => factoryRoute, path, component: page });
   const itemRoute = createRoute({ getParentRoute: () => factoryRoute, path: 'items/$ref', component: () => null });
-  const routeTree = rootRoute.addChildren([orgRoute.addChildren([factoryRoute.addChildren([boardRoute, itemRoute])])]);
+  const routeTree = rootRoute.addChildren([orgRoute.addChildren([factoryRoute.addChildren([pageRoute, itemRoute])])]);
 
   const query = station ? `?station=${encodeURIComponent(station)}` : '';
   const router = createRouter({
     routeTree,
-    history: createMemoryHistory({ initialEntries: [`/o/${org.slug}/f/${factory.name}/board${query}`] }),
+    history: createMemoryHistory({
+      initialEntries: [`/o/${org.slug}/f/${factory.name}/${path === '/' ? '' : path}${query}`],
+    }),
   });
 
   return render(
@@ -82,4 +85,33 @@ export function renderBoardPage({
       <RouterProvider router={router} />
     </QueryClientProvider>,
   );
+}
+
+/**
+ * Renders a Board screen at /o/<org>/f/<factory>/board?station=…, with the board seeded as its query
+ * data. Returns what render returns (unmount, and the rest of Testing Library's queries).
+ */
+export function renderBoardPage({
+  page,
+  org,
+  factory,
+  factories = [factory],
+  board,
+  builderMeta,
+  station,
+}: {
+  page: () => ReactNode;
+  org: OrgSummary;
+  factory: Factory;
+  factories?: Factory[];
+  /** The board the page reads; left out for a page that does not read it. */
+  board?: Board;
+  /** The install's models the page labels runs with; left out for a page that names no model. */
+  builderMeta?: BuilderMeta;
+  station?: string;
+}) {
+  const seed: Seed[] = [];
+  if (board) seed.push([boardQuery(org.id, factory.id).queryKey, board]);
+  if (builderMeta) seed.push([builderMetaQuery(org.id).queryKey, builderMeta]);
+  return renderFactoryPage({ page, path: 'board', org, factory, factories, seed, station });
 }
