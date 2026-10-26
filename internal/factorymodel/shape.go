@@ -20,6 +20,7 @@ const (
 	keyDescription = "description"
 	keyAgents      = "agents"
 	keySkills      = "skills"
+	keyRules       = "rules"
 	keyTools       = "tools"
 	keyConnector   = "connector"
 	keyStations    = "stations"
@@ -173,6 +174,12 @@ var (
 		identity: agentIdentity, identityOf: agentIdentityOf,
 	}
 
+	// rulesShape is spec.rules: each rule by name, its file in rules/.
+	rulesShape = &shape{
+		elem:     &shape{order: []string{keyName, "source"}},
+		identity: agentIdentity, identityOf: agentIdentityOf,
+	}
+
 	toolRuleShape = &shape{verbatim: true, order: []string{"enabled", keyAgents, "approval", "scope", "access"}}
 
 	connectionShape = &shape{
@@ -222,7 +229,7 @@ var containerOrder = map[string][]string{
 	"":          {"apiVersion", "kind", keyMetadata, keySpec},
 	keyMetadata: {"id", keyName, "title", keyPurpose, keyDescription, "owner"},
 	"spec": {
-		keyRuntime, "knowledgeBase", "secrets", keyConnections, keyKnowledge, keySkills, "contracts", keyAgents, keyBoard, keyLearning,
+		keyRuntime, "knowledgeBase", "secrets", keyConnections, keyKnowledge, keySkills, keyRules, "contracts", keyAgents, keyBoard, keyLearning,
 	},
 	"spec.runtime":            {"runner", keyImage, "auth", "model", "modelConnection", "size", keyTools, "repository", "budget"},
 	"spec.knowledge":          {"sources"},

@@ -57,12 +57,13 @@ const (
 	TargetAgent      = "agent"
 	TargetConnection = "connection"
 	TargetSkill      = "skill"
+	TargetRule       = "rule"
 	TargetContract   = "contract"
 	TargetField      = "field" // a value of a section that is not an item of a list
 	TargetFile       = "file"
 )
 
-// Target is what a change is about: a station by id, an agent, connection or skill by name, a
+// Target is what a change is about: a station by id, an agent, connection, skill or rule by name, a
 // contract by name, a section field by its model key, or a file by path.
 type Target struct {
 	Kind, ID string
@@ -241,6 +242,7 @@ var lists = map[string]list{
 	"stations": {Line, TargetStation, "/line/stations", stationsShape},
 	keyAgents:  {Agents, TargetAgent, "/agents/agents", agentsShape},
 	keySkills:  {Agents, TargetSkill, "/agents/skills", skillsShape},
+	keyRules:   {Agents, TargetRule, "/agents/rules", rulesShape},
 }
 
 // fieldChange compares one section field that is not a list of items.

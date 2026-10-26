@@ -208,3 +208,35 @@ func TestEdited_PointsAtChangedFields(t *testing.T) {
 		t.Errorf("edited = %v, want %v", got, want)
 	}
 }
+
+// Rules compare by name like skills: each added, removed or changed rule is its own change.
+func TestDiff_Rules(t *testing.T) {
+	t.Parallel()
+
+	rules := func(list string) string {
+		return strings.Replace(v8, "  agents:\n", "  rules:\n"+list+"  agents:\n", 1)
+	}
+
+	older := rules("    - { name: secrets, source: ./rules/secrets.md }\n    - { name: tests, source: ./rules/tests.md }\n")
+	newer := rules("    - { name: tests, source: ./rules/testing.md }\n    - { name: style, source: ./rules/style.md }\n")
+
+	got := map[Target]ChangeOp{}
+
+	for _, ch := range Diff(with(older, nil), with(newer, nil)).Changes {
+		if ch.Section != string(Agents) {
+			t.Errorf("change %+v is not in the agents section", ch)
+		}
+
+		got[ch.Target] = ch.Op
+	}
+
+	want := map[Target]ChangeOp{
+		{Kind: TargetRule, ID: "secrets"}: Removed,
+		{Kind: TargetRule, ID: "tests"}:   Changed,
+		{Kind: TargetRule, ID: "style"}:   Added,
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("changes = %v, want %v", got, want)
+	}
+}

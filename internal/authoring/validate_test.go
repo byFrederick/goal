@@ -165,3 +165,26 @@ func TestValidateFiles_AFactorysOwnFilesDoNotTakeItsName(t *testing.T) {
 		t.Errorf("another id with the name is not name-taken: %v", codes(other.Problems))
 	}
 }
+
+// A rule naming an agent the factory does not have is an error of the Agents section, at the rule.
+func TestValidate_RuleUnknownAgent(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	f := h.imported(t, ruleFiles("description: Secrets stay out of logs.\nappliesTo: { agents: [engineer, ghost] }\n"))
+
+	v, err := h.svc.ValidateDraft(h.ctx, f, authoring.ValidateRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p, ok := problem(v.Problems, "unknown-agent")
+	if !ok || v.OK || p.Severity != domain.SeverityError || p.Section != domain.SectionAgents || !strings.HasPrefix(p.Pointer, "/agents/rules/0") {
+		t.Fatalf("validation ok %v, unknown-agent problem %+v (problems %v)", v.OK, p, codes(v.Problems))
+	}
+
+	_, err = h.svc.Publish(h.ctx, f, h.publishRequest(t, f))
+	if authoring.ProblemCode(err) != authoring.CodeDefinitionInvalid {
+		t.Errorf("publish = %v, want %s", err, authoring.CodeDefinitionInvalid)
+	}
+}

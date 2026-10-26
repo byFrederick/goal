@@ -658,6 +658,30 @@ func TestDefinitions_PublishRefusesErrors(t *testing.T) {
 	}
 }
 
+// A rule whose file names an agent acme does not have refuses to publish, with its problem in the
+// agents section.
+func TestDefinitions_PublishRulesProblem(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	current := h.current(t)
+
+	h.openDraft(t)
+	decode[gen.SaveResult](t, h.request(t, http.MethodPut, acmeDraft+"/files/rules%2Fsecrets.md",
+		"---\ndescription: Secrets stay out of logs.\nappliesTo: { agents: [ghost] }\n---\n\nKeep secrets out of outputs.\n",
+		http.Header{"If-None-Match": {"*"}}), http.StatusOK)
+	saved := h.saveYAML(t, strings.Replace(acme, "  agents:\n", "  rules:\n    - { name: secrets, source: ./rules/secrets.md }\n  agents:\n", 1))
+
+	p := refused(t, "rule with an unknown agent", h.request(t, http.MethodPost, acmeDraft+"/publish", body(t, map[string]any{
+		revisionKey: saved.Revision, expectedKey: current,
+	}), nil), http.StatusConflict, authoring.CodeDefinitionInvalid)
+	if p.Problems == nil || !slices.ContainsFunc(*p.Problems, func(p gen.DefinitionProblem) bool {
+		return p.Code == "unknown-agent" && p.Section == domain.SectionAgents && strings.HasPrefix(valueOf(p.Pointer), "/agents/rules/0")
+	}) {
+		t.Errorf("problem %+v, want the rule's unknown-agent problem in the agents section", p)
+	}
+}
+
 func TestDefinitions_PublishMovesItemsOffRemovedStations(t *testing.T) {
 	t.Parallel()
 

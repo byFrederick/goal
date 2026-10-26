@@ -40,7 +40,7 @@ const (
 	// knowledgeBase.
 	Basics      Section = "basics"
 	Line        Section = "line"        // board.stations/intake/flow, learning.librarian.agent
-	Agents      Section = "agents"      // agents, skills, runtime.model
+	Agents      Section = "agents"      // agents, skills, rules, runtime.model
 	Connections Section = "connections" // connections
 	Review      Section = "review"      // runtime.budget
 )
@@ -154,6 +154,7 @@ var sections = map[Section][]binding{
 		{"default_model", []string{keySpec, keyRuntime, "model"}, renamedShape},
 		{keyAgents, []string{keySpec, keyAgents}, agentsShape},
 		{keySkills, []string{keySpec, keySkills}, skillsShape},
+		{keyRules, []string{keySpec, keyRules}, rulesShape},
 	},
 	Connections: {{"", []string{keySpec, keyConnections}, connectionsShape}},
 	Review:      {{"budget", []string{keySpec, keyRuntime, "budget"}, budgetShape}},

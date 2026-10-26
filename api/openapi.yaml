@@ -5646,6 +5646,12 @@ components:
                 type: object
                 description: name, source, origin
                 additionalProperties: {}
+            rules:
+              type: array
+              items:
+                type: object
+                description: name, source (./rules/<name>.md)
+                additionalProperties: {}
         connections:
           type: array
           items:
