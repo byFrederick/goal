@@ -19,10 +19,11 @@ type planCase struct {
 }
 
 const (
-	envCheck = "env:check"
-	genCheck = "gen:check"
-	webCheck = "web:check"
-	cfCheck  = "cloudflare:check"
+	envCheck  = "env:check"
+	genCheck  = "gen:check"
+	webCheck  = "web:check"
+	cfCheck   = "cloudflare:check"
+	docsCheck = "docs:check"
 )
 
 var (
@@ -125,8 +126,17 @@ func TestPlan(t *testing.T) {
 		"terraform":            {[]string{"deploy/terraform/r2.tf"}, []string{"tf:check"}, "terraform (tf:check): deploy/terraform/r2.tf", ""},
 		"sops rules":           {[]string{"deploy/terraform/.sops.yaml"}, []string{"tf:check"}, "terraform (tf:check): deploy/terraform/.sops.yaml", ""},
 		"agents map":           {[]string{"AGENTS.md"}, layoutTasks, "layout (layout:check): AGENTS.md", ""},
-		"layout adr":           {[]string{"docs/adr/0013-repository-layout.md"}, layoutTasks, "layout (layout:check): docs/adr/0013-repository-layout.md", ""},
-		"rule globs":           {[]string{".claude/rules/go.md"}, layoutTasks, "layout (layout:check): .claude/rules/go.md", ""},
+		"layout adr":           {[]string{"docs/adr/0013-repository-layout.md"}, []string{"layout:check", docsCheck}, "layout (layout:check): docs/adr/0013-repository-layout.md", ""},
+		"adr":                  {[]string{"docs/adr/0016-x.md"}, []string{docsCheck}, "docs (docs:check): docs/adr/0016-x.md", ""},
+		"adr index":            {[]string{"docs/adr/README.md"}, []string{docsCheck}, "docs (docs:check): docs/adr/README.md", ""},
+		"change-map entry":     {[]string{"docs/engineering/change-map/160-x.md", "docs/engineering/change-map/_page.md"}, []string{docsCheck}, "docs (docs:check): docs/engineering/change-map/160-x.md and 1 more", ""},
+		"change map":           {[]string{"docs/engineering/change-map.md"}, []string{docsCheck}, "docs (docs:check): docs/engineering/change-map.md", ""},
+		"docs taskfile":        {[]string{"docs/Taskfile.yml"}, tasks, "everything (" + strings.Join(tasks, ", ") + "): docs/Taskfile.yml (shared by every part)", ""},
+		"docs generator": {
+			[]string{"tools/gendocs/main.go", "tools/gendocs/testdata/repo/docs/adr/0001-alpha.md"},
+			append([]string{docsCheck}, goTasks...), "docs (docs:check): tools/gendocs/main.go and 1 more", "",
+		},
+		"rule globs": {[]string{".claude/rules/go.md"}, layoutTasks, "layout (layout:check): .claude/rules/go.md", ""},
 		"layout check": {
 			[]string{"tools/layoutcheck/check.go", "tools/layoutcheck/testdata/x.md"},
 			append(slices.Clone(layoutTasks), goTasks...), "layout (layout:check): tools/layoutcheck/check.go and 1 more", "",
@@ -142,7 +152,7 @@ func TestPlan(t *testing.T) {
 		"env reference":     {[]string{"docs/reference/environment.md"}, envTasks, "env (env:check): docs/reference/environment.md", ""},
 		"wrangler bindings": {[]string{"deploy/cloudflare/wrangler.jsonc"}, []string{envCheck, cfCheck}, "env (env:check): deploy/cloudflare/wrangler.jsonc", ""},
 		"nothing to check": {
-			[]string{"docs/adr/0001.md", "docs/design/MASTER.md", ".claude/skills/x/SKILL.md", ".github/workflows/ci.yml", ".githooks/pre-push", "README.md", "skills-lock.json"},
+			[]string{"docs/engineering/architecture.md", "docs/design/MASTER.md", ".claude/skills/x/SKILL.md", ".github/workflows/ci.yml", ".githooks/pre-push", "README.md", "skills-lock.json"},
 			nil, "", "",
 		},
 		"parts keep task check's order": {
