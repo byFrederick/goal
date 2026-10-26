@@ -1697,7 +1697,7 @@ export interface paths {
         put?: never;
         /**
          * Stop an open item where it is until a retry resumes it
-         * @description The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+         * @description The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). An assembly stays in state assembly and pauses its open parts instead, in one transaction, each with its own paused event (already-blocked when every open part is). 409 item-closed (done or cancelled), already-blocked or item-changed.
          */
         post: operations["pauseItem"];
         delete?: never;
@@ -1720,7 +1720,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Send a blocked item back to its station's queue (409 if it is not blocked) */
+        /**
+         * Send a blocked item back to its station's queue (409 if it is not blocked)
+         * @description An assembly stays in state assembly and sends each of its blocked parts back to its station's queue instead, in one transaction, each with its own retried event; 409 when no part is blocked.
+         */
         post: operations["retryItem"];
         delete?: never;
         options?: never;

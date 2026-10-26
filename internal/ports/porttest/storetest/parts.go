@@ -465,24 +465,32 @@ func testCascadeParts(f *fixture) {
 	events := f.Events(t, it.ID)
 	sameEvents(t, events[len(events)-1:], c.Events)
 
-	cancel := ports.Cascade{Assembly: it.ID}
-	for _, p := range got.Items {
+	f.cancelClosesTheAssembly(it.ID, got)
+}
+
+// cancelClosesTheAssembly cancels every one of parts, the open parts of assembly, in one
+// cascade, which closes the assembly as cancelled, once.
+func (f *fixture) cancelClosesTheAssembly(assembly domain.ItemID, parts domain.Parts) {
+	t := f.t
+	cancel := ports.Cascade{Assembly: assembly}
+
+	for _, p := range parts.Items {
 		cancel.Parts = append(cancel.Parts, ports.Transition{
 			ItemID: p.ID, From: p.Position(), To: domain.Position{Station: stWork, State: domain.StateCancelled}, At: t1,
 		})
 	}
 
-	if got, err = f.Store.CascadeParts(ctx, cancel); err != nil || got.Done != 0 || got.Total != 3 {
+	if got, err := f.Store.CascadeParts(f.ctx(t), cancel); err != nil || got.Done != 0 || got.Total != 3 {
 		t.Fatalf("CascadeParts cancelling every part = %+v, %v; want 0/3", got, err)
 	}
 
-	if a := f.item(t, it.ID); a.State != domain.StateCancelled {
+	if a := f.item(t, assembly); a.State != domain.StateCancelled {
 		t.Errorf("assembly after its parts were cancelled is %q; want cancelled", a.State)
 	}
 
 	closes := 0
 
-	for _, e := range f.Events(t, it.ID) {
+	for _, e := range f.Events(t, assembly) {
 		if e.Kind == domain.EventAssemblyDone {
 			closes++
 		}

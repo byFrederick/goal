@@ -159,24 +159,25 @@ func TestAPI_PauseAndRetryAnAssembly(t *testing.T) {
 	ref := h.partsInFlight(t)
 	item := "/v1/orgs/acme/items/" + url.PathEscape(ref)
 
-	states := func() []string {
-		var out []string
+	states := func() []gen.ItemState {
+		var out []gen.ItemState
 		for _, p := range h.parts(t, ref).Parts {
-			out = append(out, string(p.State))
+			out = append(out, p.State)
 		}
 
 		return out
 	}
 
+	done, blocked, queued := gen.ItemStateDone, gen.ItemStateBlocked, gen.ItemStateQueued
 	steps := []struct {
 		action, body string
 		status       int
-		parts        []string
+		parts        []gen.ItemState
 	}{
-		{"pause", `{"reason":"replanning"}`, http.StatusOK, []string{"done", "blocked", "blocked"}},
-		{"pause", ``, http.StatusConflict, []string{"done", "blocked", "blocked"}},
-		{"retry", ``, http.StatusOK, []string{"done", "queued", "queued"}},
-		{"retry", ``, http.StatusConflict, []string{"done", "queued", "queued"}},
+		{actPause, `{"reason":"replanning"}`, http.StatusOK, []gen.ItemState{done, blocked, blocked}},
+		{actPause, ``, http.StatusConflict, []gen.ItemState{done, blocked, blocked}},
+		{actRetry, ``, http.StatusOK, []gen.ItemState{done, queued, queued}},
+		{actRetry, ``, http.StatusConflict, []gen.ItemState{done, queued, queued}},
 	}
 
 	for _, s := range steps {

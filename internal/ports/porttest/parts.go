@@ -212,32 +212,9 @@ func (s *Store) cascade(org domain.OrgID, c ports.Cascade) (domain.Parts, ports.
 	defer s.changes.signal()
 	defer s.mu.Unlock()
 
-	parts := make([]*domain.Item, len(c.Parts))
-
-	for i, t := range c.Parts {
-		it, ok := s.visible(t.ItemID, org)
-
-		switch {
-		case !ok:
-			return domain.Parts{}, nil, fmt.Errorf("item %s: %w", t.ItemID, ports.ErrNotFound)
-		case it.PartKey == "" || it.ParentID != c.Assembly:
-			return domain.Parts{}, nil, fmt.Errorf("item %s is no part of %s: %w", t.ItemID, c.Assembly, domain.ErrInvalid)
-		case t.To.State == domain.StateAssembly:
-			return domain.Parts{}, nil, fmt.Errorf("item %s: only Assemble makes an assembly: %w", t.ItemID, domain.ErrInvalid)
-		case slices.Contains(parts[:i], it):
-			return domain.Parts{}, nil, fmt.Errorf("item %s is named twice: %w", t.ItemID, domain.ErrInvalid)
-		}
-
-		parts[i] = it
-	}
-
-	a, ok := s.visible(c.Assembly, org)
-	if !ok {
-		return domain.Parts{}, nil, fmt.Errorf("item %s: %w", c.Assembly, ports.ErrNotFound)
-	}
-
-	if a.State != domain.StateAssembly {
-		return domain.Parts{}, nil, fmt.Errorf("item %s is %s, not an open assembly: %w", c.Assembly, a.State, ports.ErrConflict)
+	parts, err := s.cascadeParts(org, c)
+	if err != nil {
+		return domain.Parts{}, nil, err
 	}
 
 	for i, t := range c.Parts {
@@ -256,4 +233,38 @@ func (s *Store) cascade(org domain.OrgID, c ports.Cascade) (domain.Parts, ports.
 	}
 
 	return s.partsOf(c.Assembly), s.audit, nil
+}
+
+// cascadeParts returns the parts c moves, each a part of c.Assembly, which must still be in
+// state assembly. Callers hold s.mu.
+func (s *Store) cascadeParts(org domain.OrgID, c ports.Cascade) ([]*domain.Item, error) {
+	parts := make([]*domain.Item, len(c.Parts))
+
+	for i, t := range c.Parts {
+		it, ok := s.visible(t.ItemID, org)
+
+		switch {
+		case !ok:
+			return nil, fmt.Errorf("item %s: %w", t.ItemID, ports.ErrNotFound)
+		case it.PartKey == "" || it.ParentID != c.Assembly:
+			return nil, fmt.Errorf("item %s is no part of %s: %w", t.ItemID, c.Assembly, domain.ErrInvalid)
+		case t.To.State == domain.StateAssembly:
+			return nil, fmt.Errorf("item %s: only Assemble makes an assembly: %w", t.ItemID, domain.ErrInvalid)
+		case slices.Contains(parts[:i], it):
+			return nil, fmt.Errorf("item %s is named twice: %w", t.ItemID, domain.ErrInvalid)
+		}
+
+		parts[i] = it
+	}
+
+	a, ok := s.visible(c.Assembly, org)
+	if !ok {
+		return nil, fmt.Errorf("item %s: %w", c.Assembly, ports.ErrNotFound)
+	}
+
+	if a.State != domain.StateAssembly {
+		return nil, fmt.Errorf("item %s is %s, not an open assembly: %w", c.Assembly, a.State, ports.ErrConflict)
+	}
+
+	return parts, nil
 }
