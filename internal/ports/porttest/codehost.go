@@ -39,6 +39,14 @@ func (c *CodeHost) Conflict(url string, files ...string) {
 	c.conflict[url] = slices.Clone(files)
 }
 
+// Resolve undoes Conflict: the branch of the pull request at url updates cleanly again.
+func (c *CodeHost) Resolve(url string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	delete(c.conflict, url)
+}
+
 // UpdatedBranches returns the pull requests whose branches were updated, in order.
 func (c *CodeHost) UpdatedBranches() []string {
 	c.mu.Lock()

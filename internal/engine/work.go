@@ -627,6 +627,8 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output
 		t.Events = append(t.Events, event(c.item, domain.EventGateApproved, t.At, c.agent.Name, nil))
 		if err = e.mergeOnApproval(ctx, c, next, &t); err == nil {
 			err = e.advance(next, c.item, c.agent.Name, &t)
+		} else if e.conflictRework(next, c.item, err, &t) {
+			err = nil
 		}
 	default:
 		err = e.advance(next, c.item, c.agent.Name, &t)
