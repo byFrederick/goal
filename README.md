@@ -126,7 +126,7 @@ contracts/*.schema.json
 evals/          evals.yaml, cases/, judges/, fixtures/
 ```
 
-A contract a station names as its `output` becomes the tool `input_schema` the model fills, so its top level must be `"type": "object"` with no `oneOf`, `anyOf`, `allOf`, `not` or `if`/`then`/`else` there (nested under a property is fine). Validate and publish refuse one that is not (`contract-not-tool-schema`): describe the alternatives in one object, or nest the choice under a property, and check the alternatives in Go.
+A contract a station names as its `output` becomes the tool `input_schema` the model fills, so its top level must be `"type": "object"` with no `oneOf`, `anyOf` or `allOf` there (nested under a property is fine). Validate and publish refuse one that is not (`contract-not-tool-schema`): describe the alternatives in one object, or nest the choice under a property, and check the alternatives in Go.
 
 goald stores each file once per organization as a content-addressed blob in the bucket (`orgs/<org-id>/blobs/<sha256>`), and PostgreSQL holds every draft and published version as a manifest (path → sha256) with a pointer to the version each factory runs. Each factory has one shared draft (the builder and the CLI both write it); publishing makes it the next version, every goald reloads within a second, and `goal factory restore` points the factory back at an older version. The bucket is one, versioned: locally `goal-local` on RustFS (`compose.yaml`), on Cloudflare the R2 bucket `goal-production` (`terraform/`). Files written to the bucket directly change nothing goald runs.
 

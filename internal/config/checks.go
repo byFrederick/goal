@@ -182,8 +182,10 @@ func (c *checker) files() {
 	}
 }
 
-// topLevelRefused are the keywords the model API refuses at the top level of a tool's input_schema.
-var topLevelRefused = []string{"oneOf", "anyOf", "allOf", "not", "if", "then", "else"}
+// topLevelRefused are the keywords the model API refuses at the top level of a tool's input_schema,
+// the ones its 400 names ("does not support oneOf, allOf, or anyOf at the top level"); it takes a
+// top-level not or if/then/else.
+var topLevelRefused = []string{"oneOf", "anyOf", "allOf"}
 
 // outputContracts checks each contract a station names as its output once: the worker hands it to
 // the model as a tool's input_schema, which must be a plain object at the top level. A contract

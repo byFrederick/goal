@@ -446,11 +446,14 @@ func TestCheck_OutputContractsAreToolSchemas(t *testing.T) {
 		{name: "top-level oneOf", contract: `{"type": "object", "oneOf": [{"required": ["a"]}, {"required": ["b"]}]}`, keyword: "oneOf"},
 		{name: "top-level anyOf", contract: `{"anyOf": [{"type": "object"}, {"type": "object"}]}`, keyword: "anyOf"},
 		{name: "top-level allOf", contract: `{"type": "object", "allOf": [{"required": ["a"]}]}`, keyword: "allOf"},
-		{name: "top-level not", contract: `{"type": "object", "not": {"required": ["a"]}}`, keyword: "not"},
+		{name: "top-level not", contract: `{"type": "object", "not": {"required": ["a"]}}`},
+		{
+			name:     "top-level if/then, as the software factory's review contract",
+			contract: `{"type": "object", "required": ["decision"], "properties": {"decision": {"type": "string", "enum": ["approve", "reject"]}, "reason": {"type": "string"}}, "if": {"properties": {"decision": {"const": "reject"}}}, "then": {"required": ["decision", "reason"]}}`,
+		},
 		{
 			name:     "top-level if/then/else",
 			contract: `{"type": "object", "if": {"required": ["a"]}, "then": {"required": ["b"]}, "else": {"required": ["c"]}}`,
-			keyword:  "if",
 		},
 		{name: "type array", contract: `{"type": "array", "items": {"type": "string"}}`, keyword: "type"},
 		{name: "type missing", contract: `{"properties": {"a": {"type": "string"}}}`, keyword: "type"},
