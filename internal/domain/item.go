@@ -184,7 +184,7 @@ func (a Assembly) Progress() AssemblyProgress {
 		case StateDone:
 			p.Merged++
 			continue
-		case StateCancelled:
+		case StateCancelled, StateAssembly: // assemblies do not nest: no part is ever an assembly
 			continue
 		case StateInProgress:
 			p.InProgress++
