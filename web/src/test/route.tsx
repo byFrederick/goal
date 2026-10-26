@@ -25,9 +25,10 @@ function polyfillLayout() {
 }
 
 /**
- * Renders `page` at /o/<org>/f/<factory>/<section>?station=…, with the board seeded as its query
- * data. The section is the board by default; the items list renders under `items`.
- * Returns what render returns (unmount, and the rest of Testing Library's queries).
+ * Renders `page` at /o/<org>/f/<factory>/<section>?station=…&<search>, with the board seeded as its
+ * query data. The section is the board by default; the items list renders under `items`.
+ * Returns what render returns (unmount, and the rest of Testing Library's queries) and the router,
+ * whose location a test reads after a control changed the URL.
  */
 export function renderBoardPage({
   page,
@@ -37,6 +38,7 @@ export function renderBoardPage({
   board,
   builderMeta,
   station,
+  search,
   section = 'board',
 }: {
   page: () => ReactNode;
@@ -49,6 +51,8 @@ export function renderBoardPage({
   /** The install's models the page labels runs with; left out for a page that names no model. */
   builderMeta?: BuilderMeta;
   station?: string;
+  /** Further search params the page is at (a filter's choice, a grouping), beside `station`. */
+  search?: Record<string, string>;
   /** The factory's section the page is at: its route path. */
   section?: 'board' | 'items';
 }) {
@@ -86,16 +90,20 @@ export function renderBoardPage({
     orgRoute.addChildren([factoryRoute.addChildren([boardRoute, itemsRoute, itemRoute])]),
   ]);
 
-  const query = station ? `?station=${encodeURIComponent(station)}` : '';
+  const params = new URLSearchParams({ ...(station ? { station } : {}), ...search });
+  const query = params.size > 0 ? `?${params}` : '';
   const at = section === 'items' ? 'items/' : 'board';
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: [`/o/${org.slug}/f/${factory.name}/${at}${query}`] }),
   });
 
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
+  return {
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    ),
+    router,
+  };
 }

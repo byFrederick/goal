@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Board, BoardStation, Factory, ItemCard, OrgSummary } from '../../api/types';
+import type { Board, BoardLane, BoardStation, Factory, ItemCard, OrgSummary } from '../../api/types';
 import { renderBoardPage } from '../../test/route';
 import { BoardPage } from './board-page';
 
@@ -246,5 +246,210 @@ describe('BoardPage', () => {
 
     await screen.findByTitle('Line running, WIP 2 of 3');
     expect(screen.queryByRole('link', { name: 'By station' })).toBeNull();
+  });
+});
+
+describe('board filters and grouping', () => {
+  const ASM1 = 'item-asm1';
+  const ASM1_TITLE = 'Checkout retry rollout';
+  const ADD = 'Add the retry budget';
+  const DRAFT = 'Draft the runbook';
+  const WIRE = 'Wire the retry flag';
+  const TRIAGE = 'Triage the nightly export';
+  const ROTATE = 'Rotate the staging keys';
+  const SHIP = 'Ship the retry fix';
+
+  const lane = (over: Partial<BoardLane>): BoardLane => ({
+    key: 'investigator',
+    kind: 'agent',
+    role: 'Investigator',
+    model: 'claude-opus-5-5',
+    model_label: 'Opus 5.5',
+    slots: 2,
+    busy: 1,
+    ...over,
+  });
+  const part = (id: string, title: string, n: number, parts: number) => ({
+    id,
+    ref: `sre#${id}`,
+    title,
+    part: n,
+    parts,
+  });
+
+  /**
+   * Investigate: the docs assembly's first part, a loose waiting card, the checkout assembly's second
+   * part, its first part working, and a loose card for the triager. Build: a working card of its own.
+   */
+  const filterBoard = (): Board => {
+    const investigate = station({
+      id: 'investigate',
+      lanes: [lane({}), lane({ key: 'triager', role: 'Triager', model_label: 'Haiku 5.5', slots: 1, busy: 0 })],
+      items: [
+        item({
+          id: 'item-30',
+          ref: 'sre#30',
+          title: DRAFT,
+          board_lane: 'investigator',
+          assembly: part('item-asm2', 'Docs refresh', 1, 1),
+        }),
+        item({ id: 'item-23', ref: 'sre#23', title: TRIAGE, board_lane: 'investigator' }),
+        item({
+          id: 'item-22',
+          ref: 'sre#22',
+          title: WIRE,
+          board_lane: 'investigator',
+          assembly: part(ASM1, ASM1_TITLE, 2, 2),
+        }),
+        item({
+          id: 'item-21',
+          ref: 'sre#21',
+          title: ADD,
+          state: 'in_progress',
+          agent: 'investigator',
+          slot: 1,
+          turn: 2,
+          board_lane: 'investigator',
+          assembly: part(ASM1, ASM1_TITLE, 1, 2),
+        }),
+        item({ id: 'item-26', ref: 'sre#26', title: ROTATE, board_lane: 'triager' }),
+      ],
+      in_progress: 1,
+      wip_limit: 2,
+    });
+    const build = station({
+      id: 'build',
+      agents: ['builder'],
+      lanes: [lane({ key: 'builder', role: 'Builder', model_label: 'Sonnet 5.5', slots: 1, busy: 1 })],
+      items: [
+        item({
+          id: 'item-24',
+          ref: 'sre#24',
+          title: SHIP,
+          station: 'build',
+          state: 'in_progress',
+          agent: 'builder',
+          slot: 1,
+          turn: 4,
+          board_lane: 'builder',
+        }),
+      ],
+      in_progress: 1,
+      wip_limit: 1,
+    });
+    return {
+      factory: { id: factory.id, name: factory.name, title: 'SRE' },
+      stations: [investigate, build],
+      constraint: 'build',
+      constraint_source: 'configured',
+      line: {
+        status: 'running',
+        andon: null,
+        wip: { in_progress: 2, limit: 3 },
+        release: { policy: 'push', enforced: false, drum: 'build', buffer: null, in_buffer: 0 },
+        expedite: { limit: 1, in_use: 0 },
+        budget: null,
+        touches: { finished: 0, per_item_mean: 0, per_item_median: 0, touchless_rate: 0 },
+      },
+    };
+  };
+
+  /** The titles of the cards shown in the board's columns, in the order they render. */
+  const shownTitles = (region: HTMLElement = screen.getByRole('region', { name: 'Stations' })) =>
+    within(region)
+      .queryAllByRole('link')
+      .map((link) => link.textContent);
+
+  /** A filter's chosen value: the option's value, '' for Any. */
+  const choice = (name: string) => (screen.getByRole('combobox', { name }) as HTMLSelectElement).value;
+
+  it('filters the cards by assembly, agent role and status, in every station', async () => {
+    renderBoardPage({ page: BoardPage, org, factory, board: filterBoard() });
+    await screen.findByRole('region', { name: 'Stations' });
+    const filter = async (name: string, value: string, titles: string[]) => {
+      fireEvent.change(screen.getByRole('combobox', { name }), { target: { value } });
+      await waitFor(() => expect(shownTitles()).toEqual(titles));
+    };
+    await filter('Assembly', ASM1, [ADD, WIRE]);
+    expect(screen.queryByRole('link', { name: DRAFT })).toBeNull();
+
+    await filter('Assembly', '', [ADD, DRAFT, TRIAGE, WIRE, ROTATE, SHIP]);
+    await filter('Agent role', 'Builder', [SHIP]);
+    await filter('Agent role', '', [ADD, DRAFT, TRIAGE, WIRE, ROTATE, SHIP]);
+    await filter('Status', 'working', [ADD, SHIP]);
+    await filter('Status', 'waiting', [DRAFT, TRIAGE, WIRE, ROTATE]);
+    await filter('Status', 'same-files', []);
+  });
+
+  it('keeps the lane and its header, and says nothing to do where the filter leaves no card', async () => {
+    renderBoardPage({ page: BoardPage, org, factory, board: filterBoard() });
+    await screen.findByRole('region', { name: 'Stations' });
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Agent role' }), { target: { value: 'Triager' } });
+    await waitFor(() =>
+      expect(within(screen.getByRole('region', { name: 'Investigator' })).queryAllByRole('link')).toHaveLength(0),
+    );
+    const investigator = screen.getByRole('region', { name: 'Investigator' });
+    expect(within(investigator).getByRole('heading', { name: 'Investigator' })).toBeTruthy();
+    expect(within(investigator).getByText('Nothing to do')).toBeTruthy();
+    expect(shownTitles(screen.getByRole('region', { name: 'Triager' }))).toEqual([ROTATE]);
+  });
+
+  it('orders a lane’s cards by assembly when grouped, and keeps the order of the board otherwise', async () => {
+    const grouped = renderBoardPage({
+      page: BoardPage,
+      org,
+      factory,
+      board: filterBoard(),
+      search: { group: 'assembly' },
+    });
+    const lane = await screen.findByRole('region', { name: 'Investigator' });
+    expect(shownTitles(lane)).toEqual([ADD, DRAFT, WIRE, TRIAGE]);
+    grouped.unmount();
+
+    renderBoardPage({ page: BoardPage, org, factory, board: filterBoard() });
+    const ungrouped = await screen.findByRole('region', { name: 'Investigator' });
+    expect(shownTitles(ungrouped)).toEqual([ADD, DRAFT, TRIAGE, WIRE]);
+  });
+
+  it('shows the view its search params name, and writes each change back to the URL', async () => {
+    const { router } = renderBoardPage({
+      page: BoardPage,
+      org,
+      factory,
+      board: filterBoard(),
+      search: { assembly: ASM1, group: 'assembly' },
+    });
+    await screen.findByRole('region', { name: 'Stations' });
+    const search = () => router.state.location.search as Record<string, unknown>;
+    expect(choice('Assembly')).toBe(ASM1);
+    expect(shownTitles()).toEqual([ADD, WIRE]);
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), { target: { value: 'waiting' } });
+    await waitFor(() => expect(search().status).toBe('waiting'));
+    expect(search().assembly).toBe(ASM1);
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Assembly' }), { target: { value: '' } });
+    await waitFor(() => expect(search().assembly).toBeUndefined());
+    expect(search().group).toBe('assembly');
+
+    fireEvent.click(screen.getByRole('radio', { name: 'None' }));
+    await waitFor(() => expect(search().group).toBeUndefined());
+  });
+
+  it('drops the search params the board cannot show, so the page shows every card', async () => {
+    renderBoardPage({
+      page: BoardPage,
+      org,
+      factory,
+      board: filterBoard(),
+      search: { assembly: 'item-gone', role: 'Infra engineer', status: 'blocked', group: 'lane' },
+    });
+    await screen.findByRole('region', { name: 'Stations' });
+    expect(choice('Assembly')).toBe('');
+    expect(choice('Agent role')).toBe('');
+    expect(choice('Status')).toBe('');
+    expect(screen.getByRole('radio', { name: 'None' })).toHaveProperty('checked', true);
+    expect(shownTitles()).toEqual([ADD, DRAFT, TRIAGE, WIRE, ROTATE, SHIP]);
   });
 });
