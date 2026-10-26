@@ -211,6 +211,55 @@ describe('buildTrace', () => {
     expect(trace.entries[0]).not.toHaveProperty('turns');
     expect(runRole(trace.entries[0] as RunEntry)).toBe('Builder');
   });
+
+  it('puts the factory rules a run ran with, by name and sha256, on that run', () => {
+    const a = { run_id: 'a', actor: 'builder' };
+    const trace = buildTrace([
+      ev('run_started', {}, a),
+      ev(
+        'rules_applied',
+        {
+          rules: [
+            { name: 'secrets', sha256: 'aaa' },
+            { name: 'delivery', sha256: 'bbb' },
+          ],
+        },
+        a,
+      ),
+    ]);
+    expect(trace.entries[0]).toMatchObject({
+      kind: 'run',
+      rules: [
+        { name: 'secrets', sha256: 'aaa' },
+        { name: 'delivery', sha256: 'bbb' },
+      ],
+    });
+  });
+
+  it('leaves the rules off a run whose event says none applied', () => {
+    const a = { run_id: 'a', actor: 'builder' };
+    const trace = buildTrace([ev('run_started', {}, a), ev('rules_applied', { rules: [] }, a)]);
+    expect(trace.entries[0]).not.toHaveProperty('rules');
+  });
+
+  it('notes a rule a review found broken, by the reviewing agent’s role, with the reason', () => {
+    const trace = buildTrace([
+      ev(
+        'rule_violated',
+        { rule: 'secrets', reason: 'Committed a token.', station: 'review', agent: 'reviewer' },
+        {
+          station: 'review',
+          actor: 'reviewer',
+        },
+      ),
+    ]);
+    expect(trace.entries[0]).toMatchObject({
+      kind: 'note',
+      text: 'Reviewer found the rule secrets broken',
+      detail: 'Committed a token.',
+      tone: 'rework',
+    });
+  });
 });
 
 describe('toolArgument', () => {

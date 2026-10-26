@@ -71,4 +71,36 @@ describe('TraceList: a run', () => {
     expect(within(tools).getByText(/Read/)).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/investigator-\d/);
   });
+
+  it('names the factory rules the run ran with, and shows none for a run without them', async () => {
+    const withRules: Entry = {
+      ...run,
+      rules: [
+        { name: 'secrets', sha256: 'aaa' },
+        { name: 'delivery', sha256: 'bbb' },
+      ],
+    };
+    renderBoardPage({
+      page: () => <TraceList entries={[withRules]} itemState="done" />,
+      org,
+      factory,
+      builderMeta,
+    });
+
+    const line = await screen.findByText('Ran with rules:', { exact: false });
+    expect(line.textContent).toBe('Ran with rules: secrets, delivery');
+    expect(within(line).getByText('secrets').getAttribute('translate')).toBe('no');
+  });
+
+  it('shows no rules line for a run that ran with none', async () => {
+    renderBoardPage({
+      page: () => <TraceList entries={[run]} itemState="done" />,
+      org,
+      factory,
+      builderMeta,
+    });
+
+    expect(await screen.findByText('Investigator')).toBeTruthy();
+    expect(screen.queryByText(/Ran with rules/)).toBeNull();
+  });
 });

@@ -37,9 +37,17 @@ export interface RunEntry {
   tools: ToolCall[];
   /** The agent's last reply: prose, or the output it returned (its final reply is JSON). */
   reply?: Reply;
+  /** The factory rules the run ran with, from its rules_applied event; absent when none applied. */
+  rules?: AppliedRule[];
 }
 
 export type Reply = { kind: 'text'; text: string } | { kind: 'output'; value: unknown };
+
+/** A factory rule a run ran with (ADR 0014): its name, and the hash of its file in the run's version. */
+export interface AppliedRule {
+  name: string;
+  sha256: string;
+}
 
 /**
  * What a reply says: an agent finishes by replying with its output, JSON (whole, or in a fenced
@@ -115,6 +123,17 @@ export function toolArgument(input: unknown): string {
   return text.length > 140 ? `${text.slice(0, 139)}…` : text;
 }
 
+/** The rules of a rules_applied event's data: entries with a name and a sha256, others left out. */
+function appliedRules(value: unknown): AppliedRule[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((v) => {
+    const rule = typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {};
+    const name = str(rule.name);
+    const sha256 = str(rule.sha256);
+    return name && sha256 ? [{ name, sha256 }] : [];
+  });
+}
+
 function note(e: ItemEvent): Omit<NoteEntry, 'kind' | 'key' | 'at' | 'station' | 'actor'> | undefined {
   const reason = str(e.data.reason);
   const withReason = (text: string, tone: Tone) => ({ text, tone, ...(reason ? { detail: reason } : {}) });
@@ -164,6 +183,11 @@ function note(e: ItemEvent): Omit<NoteEntry, 'kind' | 'key' | 'at' | 'station' |
       return withReason('Released back to the queue', 'muted');
     case 'done':
       return { text: 'Done', tone: 'ok' };
+    case 'rule_violated':
+      return withReason(
+        `${humanize(str(e.data.agent) ?? actor)} found the rule ${str(e.data.rule) ?? ''} broken`,
+        'rework',
+      );
     default:
       return { text: humanize(e.kind), tone: 'muted' };
   }
@@ -239,6 +263,11 @@ export function buildTrace(events: readonly ItemEvent[], records: readonly Run[]
             if (summary) call.summary = summary;
             call.isError = e.data.is_error === true;
           }
+          break;
+        }
+        case 'rules_applied': {
+          const rules = appliedRules(e.data.rules);
+          if (rules.length > 0) run.rules = rules;
           break;
         }
         case 'agent_message': {
