@@ -98,6 +98,15 @@ Two gates run the same checks. Locally, the pre-push hook blocks `git push` unle
 
 Read `AGENTS.md` before changing anything.
 
+### Add Goal to a phone's home screen
+
+Open Goal's address on the phone and sign in, then add it to the home screen:
+
+- **iPhone and iPad (Safari):** tap Share › Add to Home Screen, then Open as Web App before you tap Add, so Goal opens full screen like an app.
+- **Android (Chrome):** open the menu (⋮) and tap Install app.
+
+Goal then opens from its own icon, full screen, and keeps the phone's status bar and home indicator clear of the content. The icons and manifest are described in [docs/engineering/frontend.md](docs/engineering/frontend.md#pwa).
+
 ## Development
 
 `task check` runs every part's checks. While working on a branch, `task check:changed` runs only the ones the branch needs: `cmd/checkplan` lists the files changed since the merge base with `BASE` (default `origin/main`; `task check:changed BASE=<ref>`), committed, staged, unstaged and untracked, with renames counted as a deletion and an addition so a file moved out of a part still selects it. It prints each part it runs and the file that selected it, then runs those tasks in `task check`'s order and stops at the first failure.

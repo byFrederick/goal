@@ -24,7 +24,7 @@ export function PhoneTopRow({ org }: { org: OrgSummary }) {
     <nav
       aria-label="Organization and factories"
       onKeyDown={onKeyDown}
-      className="flex min-h-14 items-center gap-1.5 bg-shell px-3 pt-2 md:hidden"
+      className="flex min-h-14 items-center gap-1.5 bg-shell px-3 pt-[calc(8px_+_env(safe-area-inset-top))] md:hidden"
     >
       <OrgMark org={org} size="phone" />
       <span aria-hidden="true" className="mx-0.5 h-[26px] w-px shrink-0 bg-rule" />
