@@ -60,7 +60,7 @@ func pullCord(ctx context.Context, out *printer, c orgClient, factory, reason st
 	}
 
 	if res.JSON201 == nil {
-		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+		return problem(res.HTTPResponse, conflictOr(res.ApplicationproblemJSON409, res.ApplicationproblemJSONDefault))
 	}
 
 	out.printf("✓ andon pulled on %s: the line releases and claims nothing until it is cleared\n", factory)
@@ -75,7 +75,7 @@ func clearCord(ctx context.Context, out *printer, c orgClient, factory, note str
 	}
 
 	if res.JSON200 == nil {
-		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+		return problem(res.HTTPResponse, conflictOr(res.ApplicationproblemJSON409, res.ApplicationproblemJSONDefault))
 	}
 
 	out.printf("✓ andon cleared on %s: the line runs again\n", factory)

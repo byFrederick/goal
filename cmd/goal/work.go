@@ -118,7 +118,7 @@ func runItem(ctx context.Context, out *printer, getenv func(string) string, args
 	}
 
 	if res.JSON201 == nil {
-		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+		return problem(res.HTTPResponse, conflictOr(res.ApplicationproblemJSON409, res.ApplicationproblemJSONDefault))
 	}
 
 	it := res.JSON201
@@ -493,7 +493,7 @@ func noteItem(ctx context.Context, out *printer, getenv func(string) string, arg
 	}
 
 	if res.JSON202 == nil {
-		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+		return problem(res.HTTPResponse, conflictOr(res.ApplicationproblemJSON409, res.ApplicationproblemJSONDefault))
 	}
 
 	out.printf("✓ note left on %s; the next run reads it\n", ref)
@@ -530,7 +530,7 @@ func moveItem(ctx context.Context, out *printer, getenv func(string) string, arg
 		return apiDown(err)
 	}
 
-	it, err := answer(res.JSON200, res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	it, err := answer(res.JSON200, res.HTTPResponse, conflictOr(res.ApplicationproblemJSON409, res.ApplicationproblemJSONDefault))
 	if err != nil {
 		return err
 	}
@@ -568,7 +568,7 @@ func pauseItem(ctx context.Context, out *printer, getenv func(string) string, ar
 		return apiDown(err)
 	}
 
-	it, err := answer(res.JSON200, res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	it, err := answer(res.JSON200, res.HTTPResponse, conflictOr(res.ApplicationproblemJSON409, res.ApplicationproblemJSONDefault))
 	if err != nil {
 		return err
 	}
@@ -599,28 +599,28 @@ func act(ctx context.Context, c orgClient, verb, ref, reason string) (*gen.Item,
 			return nil, apiDown(err)
 		}
 
-		return answer(res.JSON200, res.HTTPResponse, res.ApplicationproblemJSONDefault)
+		return answer(res.JSON200, res.HTTPResponse, conflictOr(res.ApplicationproblemJSON409, res.ApplicationproblemJSONDefault))
 	case verbReject:
 		res, err := c.RejectItemWithResponse(ctx, c.org, ref, gen.Rejection{Reason: reason})
 		if err != nil {
 			return nil, apiDown(err)
 		}
 
-		return answer(res.JSON200, res.HTTPResponse, res.ApplicationproblemJSONDefault)
+		return answer(res.JSON200, res.HTTPResponse, conflictOr(res.ApplicationproblemJSON409, res.ApplicationproblemJSONDefault))
 	case verbRetry:
 		res, err := c.RetryItemWithResponse(ctx, c.org, ref)
 		if err != nil {
 			return nil, apiDown(err)
 		}
 
-		return answer(res.JSON200, res.HTTPResponse, res.ApplicationproblemJSONDefault)
+		return answer(res.JSON200, res.HTTPResponse, conflictOr(res.ApplicationproblemJSON409, res.ApplicationproblemJSONDefault))
 	default:
 		res, err := c.MergeItemWithResponse(ctx, c.org, ref, gen.MergeRequest{})
 		if err != nil {
 			return nil, apiDown(err)
 		}
 
-		return answer(res.JSON200, res.HTTPResponse, res.ApplicationproblemJSONDefault)
+		return answer(res.JSON200, res.HTTPResponse, conflictOr(res.ApplicationproblemJSON409, res.ApplicationproblemJSONDefault))
 	}
 }
 
@@ -631,6 +631,16 @@ func answer(it *gen.Item, res *http.Response, p *gen.Problem) (*gen.Item, error)
 	}
 
 	return it, nil
+}
+
+// conflictOr is goald's problem for an operation that documents its 409 apart from the
+// default response: the client decodes a 409 into the first, anything else into the second.
+func conflictOr(conflict *gen.Conflict, p *gen.Problem) *gen.Problem {
+	if conflict != nil {
+		return conflict
+	}
+
+	return p
 }
 
 // problem is goald's refusal as the CLI says it: a refused credential or permission is an
