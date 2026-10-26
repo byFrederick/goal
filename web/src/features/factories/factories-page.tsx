@@ -95,20 +95,3 @@ export function FactoriesPage() {
     </>
   );
 }
-
-/** While the overview loads: the header and three card skeletons in the cards' grid. */
-export function FactoriesPending() {
-  return (
-    <div aria-busy="true" className="flex flex-col gap-5">
-      <span role="status" className="sr-only">
-        Loading factories
-      </span>
-      <div className="h-[34px] w-56 max-w-full rounded-control bg-control/70 md:h-12" />
-      <ul className={cardGrid}>
-        {['a', 'b', 'c'].map((k) => (
-          <li key={k} className="h-40 rounded-card border border-line bg-card md:h-[23rem]" />
-        ))}
-      </ul>
-    </div>
-  );
-}

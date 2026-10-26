@@ -106,7 +106,7 @@ api/          the only HTTP code: types.ts (generated contract shapes), client.t
 app/          the shell: AppShell and ShellFrame, Rail, PhoneTopRow, PhoneCrumb, TabBar, FactorySidebar,
               OrgSidebar, OrgMark (the organization menu's trigger: OrgMenu on the rail, OrgSheet on
               phones), CreateOrgDialog, account-menu.tsx (AccountProvider, AccountMenu, the sheet's AccountBlock), screens.ts (the screen registry), attention, route focus and titles,
-              loading/error/not-found screens
+              loading/error/not-found screens. The loading screen (PendingScreen, the router's default pending component) is the app background with an sr-only "Loading" and aria-busy: no placeholder shapes, so nothing shifts when the page arrives. After 1 s a thin line fixed to the top of the viewport says the load is still on (animated under motion-safe only).
 features/
   factories/  floor/  board/  items/  members/  org-settings/  sign-in/  connections/  knowledge/   one folder per screen: page, cards, feature-only logic (items/timeline.ts, org-settings/form.ts, connections/words.ts, knowledge/words.ts)
   factory-editor/   the wizard and Definition (D); draft/: the draft session (session.ts, use-draft.ts), merge.ts, ops.ts, pointer.ts;
