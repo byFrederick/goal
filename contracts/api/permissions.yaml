@@ -1,5 +1,5 @@
-# The one source of Goal's permissions. cmd/permgen (task api:gen) generates
-# internal/api/permissions_gen.go and apps/auth/src/access.gen.ts; task check fails on drift.
+# The one source of Goal's permissions. tools/permgen (task api:gen) generates
+# internal/api/permissions.gen.go and apps/auth/src/access.gen.ts; task check fails on drift.
 # Every operation of contracts/api/openapi.yaml names one of these in x-goal-scope.
 version: 1
 org_roles: [owner, admin, member]
@@ -10,7 +10,7 @@ permissions:
   # it (owners and admins hold every factory permission). factory_role: the lowest factory
   # role holding it. keys: API keys may carry it. fresh: needs a session signed in within 10
   # minutes. better_auth: the Better Auth access-control statements it maps to. pat: personal
-  # tokens may carry it (absent: false); cmd/permgen refuses it on a fresh, platform_admin or
+  # tokens may carry it (absent: false); tools/permgen refuses it on a fresh, platform_admin or
   # install permission other than authenticated. "High impact" ones are never in a preset of the
   # New token dialog, which warns about them.
   - {name: public,             level: install}                       # no credential needed

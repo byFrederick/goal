@@ -77,7 +77,7 @@ func (h *harness) partsInFlight(t *testing.T) string {
 	t.Helper()
 
 	assembly := h.assemble(t, []domain.NewPart{
-		{Key: "a", Title: "Contract", Lane: laneAPI, Paths: []string{"contracts/api/openapi.yaml"}},
+		{Key: "a", Title: "Contract", Lane: laneAPI, Paths: []string{openAPIPath}},
 		{Key: "b", Title: "Store", Lane: laneAPI, Paths: []string{"db/queries/a.sql"}, Needs: []string{"a"}},
 		{Key: "c", Title: "Page", Lane: laneAPI, Needs: []string{"a", "b"}},
 	})
@@ -112,7 +112,7 @@ func TestAPI_ItemParts(t *testing.T) {
 
 	a, b := got.Parts[0].Ref, got.Parts[1].Ref
 	want := []assemblyPart{
-		{Index: 1, Wave: 0, Key: "a", State: "done", Needs: []string{}, WaitingOn: []string{}, Paths: []string{"contracts/api/openapi.yaml"}, Done: true},
+		{Index: 1, Wave: 0, Key: "a", State: "done", Needs: []string{}, WaitingOn: []string{}, Paths: []string{openAPIPath}, Done: true},
 		{Index: 2, Wave: 1, Key: "b", State: "in_progress", Needs: []string{a}, WaitingOn: []string{}, Paths: []string{"db/queries/a.sql"}, Agent: agBackend},
 		{Index: 3, Wave: 2, Key: "c", State: "queued", Needs: []string{a, b}, WaitingOn: []string{b}, Paths: []string{}},
 	}

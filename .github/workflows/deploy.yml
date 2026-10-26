@@ -12,7 +12,7 @@
 # (wrangler.deploy.jsonc) that pins the three digests. The registry login is a 60-minute credential
 # wrangler mints with the deploy token, masked, and logged out at exit.
 # "Changed the app" means a file of the app paths below differs between this commit and the one the
-# last successful deploy job deployed (the run name carries it); terraform/-only or docs-only pushes
+# last successful deploy job deployed (the run name carries it); deploy/terraform/-only or docs-only pushes
 # deploy nothing. workflow_run has no paths filter, so the `changes` job decides.
 # Rollback: run this workflow by hand (workflow_dispatch) from main with the sha of an earlier commit
 # of main that ci passed for; it deploys that commit without the paths check (cloudflare-operations.md,

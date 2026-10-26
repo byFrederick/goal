@@ -41,7 +41,7 @@ The same split maps onto `awsvpc` without the proxy knowing ECS: agent tasks and
 
 ## Amendment — phase 4: public internet for agents
 
-Status: accepted · 2026-10-24 · changes decisions 1, 2 and 5; decisions 3, 4 and 6 stay. Specified in [phase 4](../specs/4-connections-runs-and-knowledge.md) §5.10; built in PR 4-6. Follows [ADR 0008](0008-portable-runs-connections-and-knowledge.md).
+Status: accepted · 2026-10-24 · changes decisions 1, 2 and 5; decisions 3, 4 and 6 stay. Specified in [phase 4](../history/specs/4-connections-runs-and-knowledge.md) §5.10; built in PR 4-6. Follows [ADR 0008](0008-portable-runs-connections-and-knowledge.md).
 
 **Context.** A run is now a disposable box that clones repositories, installs toolchains and packages, calls the APIs of its connections and pushes pull requests (ADR 0008). The allow-list of decision 2 (`GOAL_AGENT_EGRESS`, the model API only) made every one of those a configuration change, and the credentials it protected are now in the box by design, bounded by their own scope. What still matters is that no box reaches the host, goald's network or a cloud metadata service. Stdio sidecars and the separate check container are gone, so the agents' and tools' roles collapse into one.
 

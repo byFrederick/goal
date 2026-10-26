@@ -1,4 +1,4 @@
-# Applies terraform/ to production on every push to main that changes it (ADR 0010, runbook:
+# Applies deploy/terraform/ to production on every push to main that changes it (ADR 0010, runbook:
 # docs/engineering/cloudflare-operations.md, Deploys). One job in the GitHub environment
 # `production` (write credentials; shared with the plan workflow, so it has no deployment-branch
 # rule: what keeps a non-main run from applying is this file's push-to-main trigger and the review
@@ -7,9 +7,9 @@
 # file (what the merged commit planned, nothing newer), then plans again with -detailed-exitcode
 # and fails if anything is left: drift or an error fails loudly, never silently. A failed apply
 # is fixed by a new pull request, never by a manual apply.
-# Only terraform/** triggers it: a change to this file alone applies nothing.
+# Only deploy/terraform/** triggers it: a change to this file alone applies nothing.
 # Hardening (github-actions-hardening skill): no permissions but the job's contents: read and
-# id-token: write (Google through Workload Identity Federation, terraform/ci.tf; no key), actions
+# id-token: write (Google through Workload Identity Federation, deploy/terraform/ci.tf; no key), actions
 # pinned to commit SHAs, secrets only through step env: and only to the steps that run Terraform,
 # no ${{ }} expressions inside run scripts, the age key in a mode-0600 file under $RUNNER_TEMP,
 # never echoed, and it and the saved plan deleted at the end (the plan is never uploaded). No step
@@ -20,7 +20,7 @@ name: terraform-apply
 on:
   push:
     branches: [main]
-    paths: ['terraform/**']
+    paths: ['deploy/terraform/**']
 
 permissions: {}
 
@@ -57,7 +57,7 @@ jobs:
           workload_identity_provider: ${{ vars.GOAL_GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GOAL_GCP_SERVICE_ACCOUNT }}
           token_format: access_token
-      - name: Age key for terraform/secrets/
+      - name: Age key for deploy/terraform/secrets/
         env:
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
@@ -114,4 +114,4 @@ jobs:
           esac
       - name: Delete the saved plan and the age key
         if: always()
-        run: rm -f terraform/tfplan "$RUNNER_TEMP/sops-age-key.txt"
+        run: rm -f deploy/terraform/tfplan "$RUNNER_TEMP/sops-age-key.txt"

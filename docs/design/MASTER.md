@@ -1,0 +1,321 @@
+# Design System Master File
+
+> **Goal overrides (user decisions — these take precedence over the generated values below)**
+>
+> - **Palette:** the user's original "control room" palette replaces the generated navy/green one. No pink anywhere.
+>
+> | Token | Hex | Use |
+> |---|---|---|
+> | `--ground` | `#E6E9E7` | Concrete; reserved (no longer the page background) |
+> | `--shell` | `#EEF1EF` | Page background: the app fills the viewport |
+> | `--card` | `#F6F7F5` | Cards |
+> | `--surface` | `#FFFFFF` | Items inside cards, inputs |
+> | `--ink` | `#1D2733` | Text, primary buttons, active nav |
+> | `--muted` | `#556270` | Secondary text (5.6:1 on card) |
+> | `--rule` | `#CBD2CE` | Borders, dividers |
+> | `--run` | `#1F6F8B` | Running / actual / positive data (teal) |
+> | `--amber` | `#F0A202` | The constraint (drum) only |
+> | `--you` | `#5B4BB7` | Waiting on a human |
+> | `--rework` | `#B4441C` | Rework, delays, losses, andon (replaces red/pink) |
+> | `--ok` | `#2E6B4E` | Healthy, done |
+> | `--ok-tint` | `#E3EFE8` | Background behind healthy states |
+> | `--ok-ink` | `#24563E` | Healthy text ("Running", positive deltas) |
+> | `--you-ink` | `#4A3C9E` | Text on the violet tint (waiting-on-you banners) |
+> | `--ink-soft` | `#3A4654` | Rail icons; a count's background on the active nav item |
+> | `--rule-strong` | `#6F7B77` | Dashed "new" squares, hover borders, switch borders |
+>
+> - **Navigation (user decision, 2026-10-23; phases 4–6 update):** a 72px rail on the far left with the organization mark at the top (opens the organization menu: switch organization, then Members and roles, API keys, Connections, Knowledge, Organization settings, and Create organization for platform admins), then one square per factory of that organization only (current one ink-filled; violet count = waiting on you, rust dot = blocked), a dashed + for New factory, and at the bottom Connections, Knowledge and the user (account menu: Edit name, Personal tokens, Connected apps, Sign out, Sign out everywhere). Organization pages use an organization sidebar: Factories, Members and roles, API keys, Connections, Knowledge, Settings. Inside a factory a 232px sidebar groups Work (Floor, Board, Items), Build (Definition, Connections) and Learn (Knowledge, Jonah); its Connections and Knowledge open the organization pages filtered to the factory. On a phone: a top row with the organization mark, factory squares and the user, a bottom tab bar (Floor, Board, Items, Build, Jonah), and the organization and account menus as one bottom sheet. Planned, not built yet: Connections and Knowledge (phase 4), Jonah and Knowledge's Learned view (phase 5), Connected apps and the OAuth consent page (phase 6). The UI canvas is the reference.
+> - **Layout:** the app takes the whole viewport like a normal web app: rail and sidebar pinned to the left edge (full height, right borders), content beside it. No framed, floating or rounded outer shell and no outer margin around the app; the framed box in the reference video was only its presentation. (User override, 2026-10-23.)
+> - **Radii (softer, not pill-shaped):** cards 12px, inner rows 8px, buttons and inputs 8px, chips 6px. No 999px pills except status dots.
+> - **Data marks:** hatched teal = actual, hatched rust = delay/loss, hatched gray = target; every value is signed and labelled, never color alone (charts.csv: waterfall).
+> - **Drag and drop:** every card also has a Move menu (ux-guidelines: Dragging Movements, WCAG 2.2).
+> - **Typography:** Inter with optical sizing (`opsz` 14..32, so large text renders as Inter Display), weights 400 for display and numerals, 500 for headings, 400 body; tracking −0.035em on display sizes; `font-feature-settings: "cv11","ss01"`; tabular numerals. Fira Code only for code, YAML and file paths. (User override: match the reference font.)
+> - **No gradients** on any background or card. Solid fills only.
+> - **Reference look:** the "Margin" dashboard by @nizamdesign: large numerals, insight card, "Needs you" list.
+
+
+> **LOGIC:** When building a specific page, first check `docs/design/pages/[page-name].md`.
+> If that file exists, its rules **override** this Master file.
+> If not, strictly follow the rules below.
+
+---
+
+**Project:** Goal
+**Generated:** 2026-10-23 13:08:32
+**Category:** E-signature / Document Workflow
+**Design Dials:** Variance 4/10 (Balanced / Modern) | Motion 3/10 (Subtle) | Density 8/10 (Dense / Dashboard)
+
+---
+
+## Dark theme (Goal override, 2026-10-25)
+
+The app follows the device's color scheme by default, and a person can choose System, Light or Dark (account menu, Appearance). The dark values below are the same tokens redefined, so no component names a color: `apps/web/src/styles.css` defines them under `:root[data-theme="dark"]` and under `prefers-color-scheme: dark` for `:root:not([data-theme="light"])`. Meaning does not change: teal runs, amber is the constraint only, violet waits on you, rust is rework and loss, green is healthy or done. Every text pair meets 4.5:1 and every UI mark 3:1 (WCAG AA), measured against the surface it sits on.
+
+| Token | Light | Dark | Use and contrast (dark) |
+|---|---|---|---|
+| `--color-white` | `#FFFFFF` | `#0F161D` | Text on an ink fill: 15.2:1 on ink; on the status colors 6.9 to 9.8:1 |
+| `--color-shell` | `#EEF1EF` | `#0F161D` | Page background |
+| `--color-card` | `#F6F7F5` | `#18212A` | Cards |
+| `--color-surface` | `#FFFFFF` | `#1E2A35` | Items in cards, inputs: ink 12.2:1 |
+| `--color-control` | `#E3E7E5` | `#26323E` | Segmented controls: ink 10.9:1 |
+| `--color-control-hover` | `#D8DEDB` | `#2E3B48` | Hover on controls |
+| `--color-nav-hover` | `#E1E6E3` | `#223039` | Hover on rail icons |
+| `--color-ink` | `#1D2733` | `#E6ECEA` | Text, primary buttons, active nav: 13.6:1 on card, 15.2:1 on shell |
+| `--color-ink-soft` | `#3A4654` | `#C2CBC7` | Rail icons, secondary labels: 9.8:1 on card |
+| `--color-muted` | `#556270` | `#B0BBB6` | Secondary text: 8.2:1 on card; 5.7:1 on the run tint, 6.4 to 7.6:1 on the other tints |
+| `--color-faint` | `#9AA5A0` | `#8A9690` | Disabled text, scrollbars: 4.8:1 on surface |
+| `--color-rule` | `#CBD2CE` | `#75838C` | Input borders, dashed new squares: 4.2:1 on card, 3.7:1 on surface (UI 3:1) |
+| `--color-rule-strong` | `#6F7B77` | `#9AA6AE` | Hover borders, switch borders: 6.5:1 on card |
+| `--color-line` | `#DDE2DF` | `#2C3741` | Dividers (decorative; the text carries the meaning) |
+| `--color-hairline` | `#E3E7E5` | `#242E37` | Hairlines (decorative) |
+| `--color-run` | `#1F6F8B` | `#6CC0DC` | Running, actual, teal text: 7.9:1 on card; teal marks 3:1+ |
+| `--color-run-tint` | `#DCEEF3` | `#173F4D` | Background behind run states; the text on it is ink 9.5:1 |
+| `--color-run-hatch` | `#BFE0EA` | `#3A7A92` | Hatched teal fill (actual): 3.4:1 against card |
+| `--color-amber` | `#F0A202` | `#F5B21A` | The constraint (drum) only: mark 8.7:1 on card |
+| `--color-amber-tint` | `#FFF6E0` | `#3A2D0C` | Background of the constraint callout |
+| `--color-amber-line` | `#F2D58A` | `#6B5216` | Border on the amber tint (decorative) |
+| `--color-amber-ink` | `#8A5D00` | `#F5C75A` | Text on the amber tint: 8.5:1 |
+| `--color-you` | `#5B4BB7` | `#A99BEA` | Waiting on a human: 6.6:1 on card |
+| `--color-you-tint` | `#ECE9F8` | `#2A2647` | Waiting-on-you banners; the text on it is you-ink 9.0:1 |
+| `--color-you-line` | `#C9C1EE` | `#4B4290` | Border on the violet tint (decorative) |
+| `--color-you-ink` | `#4A3C9E` | `#CFC8F5` | Text on the violet tint: 9.0:1 |
+| `--color-rework` | `#B4441C` | `#F07F5C` | Rework, delays, losses, andon: 6.1:1 on card; rust stays apart from amber by hue and by its label |
+| `--color-rework-tint` | `#FBEFE9` | `#3D1F17` | Background of rework callouts |
+| `--color-rework-line` | `#EBC3B2` | `#6E3524` | Border on the rust tint (decorative) |
+| `--color-rework-ink` | `#8A3313` | `#F7A68D` | Text on the rust tint: 7.7:1 |
+| `--color-rework-hatch` | `#F1CDBE` | `#B45A38` | Hatched rust fill (delay, loss): 3.5:1 against card |
+| `--color-ok` | `#2E6B4E` | `#6FCB9C` | Healthy, done: 8.3:1 on card |
+| `--color-ok-tint` | `#E3EFE8` | `#173A2A` | Background behind healthy states |
+| `--color-ok-ink` | `#24563E` | `#8FDDB5` | Healthy text: 7.9:1 on the ok tint |
+| `--color-ok-dot` | `#2E8B5E` | `#4FBF86` | Status dots: 7.1:1 on card |
+| `--color-target` | `#8A958F` | `#8E9B95` | Hatched gray target and its tick: 5.6:1 on card |
+| `--color-shadow` | `#1D2733` | `#000000` | The tint of every shadow (`--shadow-*` mix it at their opacity) |
+
+Rules that go with the table:
+
+- The selection highlight is `run-tint` (ink on it 9.5:1), not `run-hatch`, so selected text meets 4.5:1 in both themes.
+- Native controls and scrollbars follow `color-scheme`, set from the choice by `apps/web/public/theme.js` before first paint and by `apps/web/src/shared/theme.ts` afterwards.
+- `meta theme-color` has a light and a dark variant by the device's scheme (`apps/web/index.html`).
+- No raw color (hex, `rgb()`, `hsl()`) in a component: `apps/web/src/ui/raw-colors.test.ts` fails on one. The Monaco theme is the one allow-listed exception until its own item maps it to these tokens.
+
+---
+
+## Global Rules
+
+### Color Palette
+
+| Role | Hex | CSS Variable |
+|------|-----|--------------|
+| Primary | `#1E3A5F` | `--color-primary` |
+| On Primary | `#FFFFFF` | `--color-on-primary` |
+| Secondary | `#2563EB` | `--color-secondary` |
+| On Secondary | `#FFFFFF` | `--color-on-secondary` |
+| Accent/CTA | `#16A34A` | `--color-accent` |
+| On Accent/CTA | `#000000` | `--color-on-accent` |
+| Background | `#F8FAFC` | `--color-background` |
+| Foreground | `#0F172A` | `--color-foreground` |
+| Card | `#FFFFFF` | `--color-card` |
+| Card Foreground | `#0F172A` | `--color-card-foreground` |
+| Muted | `#E9EEF5` | `--color-muted` |
+| Muted Foreground | `#475569` | `--color-muted-foreground` |
+| Border | `#CBD5E1` | `--color-border` |
+| Destructive | `#DC2626` | `--color-destructive` |
+| On Destructive | `#FFFFFF` | `--color-on-destructive` |
+| Ring | `#1E3A5F` | `--color-ring` |
+
+**Color Notes:** Trust navy + signature green + audit trail
+
+### Typography
+
+- **Heading Font:** Fira Code
+- **Body Font:** Fira Sans
+- **Mood:** dashboard, data, analytics, code, technical, precise
+- **Google Fonts:** [Fira Code + Fira Sans](https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap)
+
+**CSS Import:**
+```css
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
+```
+
+### Spacing Variables
+
+*Density: 8/10 — Dense / Dashboard*
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--space-xs` | `2px` / `0.125rem` | Tight gaps |
+| `--space-sm` | `4px` / `0.25rem` | Icon gaps, inline spacing |
+| `--space-md` | `8px` / `0.5rem` | Standard padding |
+| `--space-lg` | `12px` / `0.75rem` | Section padding |
+| `--space-xl` | `16px` / `1rem` | Large gaps |
+| `--space-2xl` | `24px` / `1.5rem` | Section margins |
+| `--space-3xl` | `32px` / `2rem` | Hero padding |
+
+### Shadow Depths
+
+| Level | Value | Usage |
+|-------|-------|-------|
+| `--shadow-sm` | `0 1px 2px rgba(0,0,0,0.05)` | Subtle lift |
+| `--shadow-md` | `0 4px 6px rgba(0,0,0,0.1)` | Cards, buttons |
+| `--shadow-lg` | `0 10px 15px rgba(0,0,0,0.1)` | Modals, dropdowns |
+| `--shadow-xl` | `0 20px 25px rgba(0,0,0,0.15)` | Hero images, featured cards |
+
+---
+
+## Component Specs
+
+### Buttons
+
+```css
+/* Primary Button */
+.btn-primary {
+  background: #16A34A;
+  color: #000000;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 200ms ease;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+/* Secondary Button */
+.btn-secondary {
+  background: transparent;
+  color: #1E3A5F;
+  border: 2px solid #1E3A5F;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 200ms ease;
+  cursor: pointer;
+}
+```
+
+### Cards
+
+```css
+.card {
+  background: #F8FAFC;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: var(--shadow-md);
+  transition: all 200ms ease;
+  cursor: pointer;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+```
+
+### Inputs
+
+```css
+.input {
+  padding: 12px 16px;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: border-color 200ms ease;
+}
+
+.input:focus {
+  border-color: #1E3A5F;
+  outline: none;
+  box-shadow: 0 0 0 3px #1E3A5F20;
+}
+```
+
+### Modals
+
+```css
+.modal-overlay {
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+.modal {
+  background: white;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: var(--shadow-xl);
+  max-width: 500px;
+  width: 90%;
+}
+```
+
+---
+
+## Style Guidelines
+
+**Style:** Minimalism & Swiss Style
+
+**Keywords:** Clean, simple, spacious, functional, white space, high contrast, geometric, sans-serif, grid-based, essential
+
+**Best For:** Enterprise apps, dashboards, documentation sites, SaaS platforms, professional tools
+
+**Key Effects:** Subtle hover (200-250ms), smooth transitions, sharp shadows if any, clear type hierarchy, fast loading
+
+### Page Pattern
+
+**Pattern Name:** Enterprise Gateway
+
+- **Conversion Strategy:** Path selection (I am a...). Mega menu navigation. Trust signals prominent. Provide pause/stop for video and rotating logos; stop on focus and reduced motion. Logo carousel controls must be keyboard operable; pause moving media offscreen/hidden and render a static final state under reduced motion.
+- **CTA Placement:** Contact Sales (Primary) + Login (Secondary)
+- **Section Order:** Hero (Video/Mission) > Solutions by Industry > Solutions by Role > Client Logos > Contact Sales
+
+---
+
+## Motion
+
+**Scroll Reveal** (Subtle) — Trigger: scroll (viewport enter) | Duration: 300-400ms | Easing: `power1.out`
+
+```js
+gsap.from(el, { opacity: 0, y: 12, duration: 0.35, ease: 'power1.out', scrollTrigger: { trigger: el, start: 'top 90%', toggleActions: 'play none none reverse' } });
+```
+
+**Framework notes:** Requires the ScrollTrigger plugin registered once via gsap.registerPlugin(ScrollTrigger); Use matchMedia('(prefers-reduced-motion: reduce)') to skip non-essential motion and render the final state immediately
+
+- ✅ Keep the y offset small (8-16px) so it reads as a fade, not a slide
+- ❌ Don't reveal below-the-fold content needed for SEO/crawlers as invisible-by-default without a no-JS fallback
+- ⚡ toggleActions 'play none none reverse' avoids re-triggering on every scroll direction change
+
+---
+
+## Anti-Patterns (Do NOT Use)
+
+- ❌ Confusing signing flow
+- ❌ weak audit trail
+- ❌ hidden consent
+
+### Additional Forbidden Patterns
+
+- ❌ **Emojis as icons** — Use SVG icons (Heroicons, Lucide, Simple Icons)
+- ❌ **Missing cursor:pointer** — All clickable elements must have cursor:pointer
+- ❌ **Layout-shifting hovers** — Avoid scale transforms that shift layout
+- ❌ **Low contrast text** — Maintain 4.5:1 minimum contrast ratio
+- ❌ **Instant state changes** — Always use transitions (150-300ms)
+- ❌ **Invisible focus states** — Focus states must be visible for a11y
+
+---
+
+## Pre-Delivery Checklist
+
+Before delivering any UI code, verify:
+
+- [ ] No emojis used as icons (use SVG instead)
+- [ ] All icons from consistent icon set (Heroicons/Lucide)
+- [ ] `cursor-pointer` on all clickable elements
+- [ ] Hover states with smooth transitions (150-300ms)
+- [ ] Light mode: text contrast 4.5:1 minimum
+- [ ] Focus states visible for keyboard navigation
+- [ ] `prefers-reduced-motion` respected
+- [ ] Responsive: 375px, 768px, 1024px, 1440px
+- [ ] No content hidden behind fixed navbars
+- [ ] No horizontal scroll on mobile

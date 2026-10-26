@@ -1,6 +1,0 @@
-# SOPS creation rules: one encrypted file per Terraform workspace (terraform/secrets/), each with its
-# own age recipient. The private key is the operator's (~/.config/sops/age/keys.txt, escrowed
-# offline; docs/engineering/cloudflare-operations.md) and never in this repository.
-creation_rules:
-  - path_regex: (^|/)secrets/production\.sops\.yaml$
-    age: age1kttpj5ev6g08st6s20nezlqjdaa75l30z08nxhudpe2eapcv7fwqsv47mz

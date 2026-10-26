@@ -7,10 +7,10 @@ a public issue. Include what you found, how to reproduce it and what it lets som
 
 ## Threat model
 
-[Spec 3 §11.1](docs/specs/3-identity-and-access.md#111-threat-model) lists every threat to the
+[Spec 3 §11.1](docs/history/specs/3-identity-and-access.md#111-threat-model) lists every threat to the
 install, its control and the test that holds it. Phase 4 (built: connections, runs in their own
 containers with public internet, the knowledge base) adds its threat rows and writes down the risks
-it accepts in [spec 4 §11](docs/specs/4-connections-runs-and-knowledge.md#11-security-and-tenancy).
+it accepts in [spec 4 §11](docs/history/specs/4-connections-runs-and-knowledge.md#11-security-and-tenancy).
 
 On Cloudflare, **the Terraform state is as sensitive as the master key**: it holds every platform
 secret in plain text, the master keys and the database administrator's URL included. The state
@@ -47,7 +47,7 @@ step 9). The install signs in with Google only: it has no mail server, so no sig
 ## Secrets in the repository
 
 No credential is committed, in the tree or in its history: the production secrets are only in the
-age-encrypted `terraform/secrets/production.sops.yaml`, and
+age-encrypted `deploy/terraform/secrets/production.sops.yaml`, and
 `gitleaks git --redact --log-opts=--all .` (gitleaks v8.28.0, `.gitleaks.toml` lists its false
 positives) reports no leaks. The audit and the identifiers kept on purpose (Cloudflare account and
 Secrets Store ids, the public hostname) are in

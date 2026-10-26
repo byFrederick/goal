@@ -5,7 +5,7 @@ paths:
 
 # Auth
 
-The identity service runs sign-in, sessions, members and invitations. Its boundary and why: [ADR 0007](../../docs/adr/0007-identity-better-auth.md). The phase's behavior: [spec 3](../../docs/specs/3-identity-and-access.md).
+The identity service runs sign-in, sessions, members and invitations. Its boundary and why: [ADR 0007](../../docs/adr/0007-identity-better-auth.md). The phase's behavior: [spec 3](../../docs/history/specs/3-identity-and-access.md).
 
 ## Boundary
 

@@ -563,11 +563,15 @@ func (s *server) waiting(ctx context.Context, f domain.FactoryID, items []domain
 	return out, nil
 }
 
-// waitingOf is w as the API shows it, its items written with ref.
+// waitingOf is w as the API shows it, its items written with ref and named in needs.
 func waitingOf(w domain.Waiting, ref func(number int64) string) *gen.ItemWaiting {
-	out := &gen.ItemWaiting{Kind: gen.ItemWaitingKind(w.Kind), Items: make([]string, 0, len(w.Items)), Files: append([]string{}, w.Files...)}
+	out := &gen.ItemWaiting{
+		Kind: gen.ItemWaitingKind(w.Kind), Items: make([]string, 0, len(w.Items)), Files: append([]string{}, w.Files...),
+		Needs: make([]gen.ItemWaitingNeed, 0, len(w.Items)),
+	}
 	for _, n := range w.Items {
 		out.Items = append(out.Items, ref(n.Number))
+		out.Needs = append(out.Needs, gen.ItemWaitingNeed{Ref: ref(n.Number), Title: n.Title, Paths: append([]string{}, n.Paths...)})
 	}
 
 	return out

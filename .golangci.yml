@@ -107,6 +107,8 @@ linters:
 
   exclusions:
     paths:
+      # Generated files (ADR 0013, decision 4): fix their generator or source instead.
+      - \.gen\.go$
       - vendor$
       - third_party$
       - testutils$
@@ -285,12 +287,12 @@ linters:
             - $gostd
             - github.com/byFrederick/goal/internal/egress
         permgen:
-          files: ["**/cmd/permgen/**"]
+          files: ["**/tools/permgen/**"]
           deny:
             - pkg: github.com/byFrederick/goal/internal
               desc: the permission generator reads contracts/api/permissions.yaml and contracts/api/openapi.yaml with the standard library and yaml only (spec 3, §5.4)
         sqlc:
-          files: ["**/internal/**", "**/cmd/**", "!**/internal/adapters/postgres/**"]
+          files: ["**/internal/**", "**/cmd/**", "**/tools/**", "!**/internal/adapters/postgres/**"]
           deny:
             - pkg: github.com/byFrederick/goal/internal/adapters/postgres/db
               desc: the generated queries are private to the postgres adapter; use its Store
@@ -333,6 +335,7 @@ formatters:
   exclusions:
     generated: lax
     paths:
+      - \.gen\.go$
       - third_party$
       - builtin$
       - examples$

@@ -105,15 +105,17 @@ type Store interface {
 	AddEdge(ctx context.Context, e domain.NewEdge) (domain.Edge, error)
 
 	// RemoveEdge removes the edge item → needs and appends an edge_removed event on item by
-	// `by` at at. It returns ErrNotFound when there is no such edge.
-	RemoveEdge(ctx context.Context, item, needs domain.ItemID, by domain.Actor, at time.Time) error
+	// `by` at at, with data reason when reason is not empty. It returns ErrNotFound when there
+	// is no such edge.
+	RemoveEdge(ctx context.Context, item, needs domain.ItemID, by domain.Actor, at time.Time, reason string) error
 
 	// Edges returns what an item needs and what needs it. An unknown item has none.
 	Edges(ctx context.Context, item domain.ItemID) (domain.ItemEdges, error)
 
 	// OpenNeeds returns, by item, the needs of those of ids that are items of the factory whose
 	// needed item is neither done nor cancelled, oldest edge first, each with the needed item's
-	// number and paths: the board's waiting reasons in one read. Items without open needs, ids
+	// number, title and paths (for an assembly, its parts' part paths by part number, each glob
+	// once): the board's waiting reasons in one read. Items without open needs, ids
 	// of another factory's items and ids that are not UUIDs are absent.
 	OpenNeeds(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID][]domain.OpenNeed, error)
 

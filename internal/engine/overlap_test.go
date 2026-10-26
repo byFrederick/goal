@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/ports/porttest"
 )
 
@@ -287,4 +288,156 @@ func TestEngine_OverlapSkipsAnEdgeThatClosesACycle(t *testing.T) {
 	if got := h.item(t, a.ID); got.State != domain.StateDone {
 		t.Errorf("a = %s at %s once b is done, want done", got.State, got.Station)
 	}
+}
+
+// Made-up stations of progressLine.
+const (
+	stDraft   = "draft"
+	stForge   = "forge"
+	stInspect = "inspect"
+)
+
+// progressLine is inbox → draft → forge → inspect → done, two slots per agent station, with
+// fieldPaths mapped to the item's paths.
+func progressLine() domain.Line {
+	l := lineOf(agentStation(stDraft, agWorker, 2, 2), agentStation(stForge, agBackend, 2, 2),
+		agentStation(stInspect, agReviewer, 2, 2))
+	l.Flow.Dependencies.Paths = fieldPaths
+
+	return l
+}
+
+// placed puts an item queued at station with paths, as earlier stations would have.
+func (h *harness) placed(t *testing.T, it domain.Item, station string, paths ...string) domain.Item {
+	t.Helper()
+
+	got, err := h.store.Transition(inOrg(t), ports.Transition{
+		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: station, State: domain.StateQueued},
+		At: h.clock.Now(), Paths: paths,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return got
+}
+
+// expectQueued fails the test unless the item is queued at station.
+func (h *harness) expectQueued(t *testing.T, id domain.ItemID, station string) {
+	t.Helper()
+
+	if got := h.item(t, id); got.Position() != (domain.Position{Station: station, State: domain.StateQueued}) {
+		t.Errorf("item %d at %+v, want queued at %s", got.Number, got.Position(), station)
+	}
+}
+
+// expectOverlapNeeds fails the test unless the item's overlap edges, all by the engine, need
+// exactly want.
+func (h *harness) expectOverlapNeeds(t *testing.T, it domain.Item, want ...domain.ItemID) {
+	t.Helper()
+
+	var got []domain.ItemID
+
+	for _, e := range h.edgesOf(t, it.ID, domain.EdgeOverlap) {
+		if e.By != domain.EngineActor.Ref() {
+			t.Errorf("item %d's overlap edge on %s by %s, want by the engine", it.Number, e.Needs, e.By)
+		}
+
+		got = append(got, e.Needs)
+	}
+
+	if !slices.Equal(got, want) {
+		t.Errorf("item %d's overlap needs = %v, want %v", it.Number, got, want)
+	}
+}
+
+// twoPlaced places two items with overlapping paths, the first at station a and the second at
+// station b, and runs one step.
+func twoPlaced(t *testing.T, a, b string) (*harness, domain.Item, domain.Item) {
+	t.Helper()
+
+	h := newHarness(t, progressLine(), newScripted().agent)
+
+	first := h.placed(t, h.submit(t, domain.NewItem{Title: "lower"}), a, "internal/x/**")
+	second := h.placed(t, h.submit(t, domain.NewItem{Title: "higher"}), b, "internal/x/y.go")
+
+	h.step(t)
+
+	return h, first, second
+}
+
+// A started item further along the line is not held by a lower-numbered item that has not
+// started: the queued item waits for the started one instead.
+func TestEngine_OverlapStartedItemGoesFirst(t *testing.T) {
+	t.Parallel()
+
+	h, queued, started := twoPlaced(t, stDraft, stForge)
+
+	h.expectOverlapNeeds(t, started)
+	h.expectQueued(t, started.ID, stInspect)
+	h.expectOverlapNeeds(t, queued, started.ID)
+	h.expectQueued(t, queued.ID, stDraft)
+}
+
+// Of two items that have not started, the higher-numbered one waits for the lower.
+func TestEngine_OverlapQueuedItemsKeepNumberOrder(t *testing.T) {
+	t.Parallel()
+
+	h, a, b := twoPlaced(t, stDraft, stDraft)
+
+	h.expectOverlapNeeds(t, a)
+	h.expectQueued(t, a.ID, stForge)
+	h.expectOverlapNeeds(t, b, a.ID)
+	h.expectQueued(t, b.ID, stDraft)
+}
+
+// An overlap edge whose reason no longer holds is removed on the next turn, with the reason in
+// edge_removed's data, and its item is claimed; a linked edge stays.
+func TestEngine_OverlapRemovesAStaleEdge(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, progressLine(), newScripted().agent)
+
+	a := h.placed(t, h.submit(t, domain.NewItem{Title: "a"}), stDraft, "internal/x/**")
+	b := h.placed(t, h.submit(t, domain.NewItem{Title: "b"}), stForge, "internal/x/y.go")
+	c := h.placed(t, h.submit(t, domain.NewItem{Title: "c"}), stDraft, "docs/**")
+	d := h.placed(t, h.submit(t, domain.NewItem{Title: "d"}), stDraft, "api/**")
+	e := h.placed(t, h.submit(t, domain.NewItem{Title: "e"}), stInspect, "web/**")
+
+	// b, already at forge, was held by a, which has not started; d's paths no longer overlap c's.
+	for _, edge := range [][2]domain.ItemID{{b.ID, a.ID}, {d.ID, c.ID}} {
+		if _, err := h.store.AddEdge(inOrg(t), domain.NewEdge{
+			Item: edge[0], Needs: edge[1], Kind: domain.EdgeOverlap, By: domain.EngineActor, At: h.clock.Now(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := h.e.Link(inOrg(t), e.ID, a.ID, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	h.step(t)
+
+	for _, it := range []domain.Item{b, d} {
+		h.expectOverlapNeeds(t, it)
+
+		removed := h.eventsOf(it.ID, domain.EventEdgeRemoved)
+		if len(removed) != 1 || removed[0].Actor != domain.EngineActor.Name {
+			t.Fatalf("item %d's edge_removed events = %+v, want one by the engine", it.Number, removed)
+		}
+
+		if reason, _ := removed[0].Data["reason"].(string); reason == "" {
+			t.Errorf("item %d's edge_removed data = %v, want a reason", it.Number, removed[0].Data)
+		}
+	}
+
+	h.expectQueued(t, b.ID, stInspect)
+	h.expectQueued(t, d.ID, stForge)
+
+	if got := h.edgesOf(t, e.ID, domain.EdgeLinked); len(got) != 1 || got[0].Needs != a.ID {
+		t.Errorf("e's linked edges = %+v, want the one on a kept", got)
+	}
+
+	h.expectQueued(t, e.ID, stInspect)
 }

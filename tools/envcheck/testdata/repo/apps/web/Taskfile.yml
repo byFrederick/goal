@@ -1,0 +1,6 @@
+version: "3"
+
+tasks:
+  web:dev:
+    cmds:
+      - vite --port "${GOAL_WEB_PORT}"

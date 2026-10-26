@@ -12,8 +12,8 @@ import (
 	"github.com/byFrederick/goal/internal/ports"
 )
 
-// rule is one permission of contracts/api/permissions.yaml as cmd/permgen generates it into
-// permissionRules (permissions_gen.go); operationScopes names each operation's permission.
+// rule is one permission of contracts/api/permissions.yaml as tools/permgen generates it into
+// permissionRules (permissions.gen.go); operationScopes names each operation's permission.
 // Change the yaml or an operation's x-goal-scope, then run task api:gen.
 type rule struct {
 	// level is levelInstall (held outside an organization), levelOrg or levelFactory.

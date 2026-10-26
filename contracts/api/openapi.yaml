@@ -12,7 +12,7 @@
 # 404. Requests that change something from a browser must be same-origin (cross-origin protection).
 #
 # Every operation names the permission it needs in `x-goal-scope`, one of contracts/api/permissions.yaml
-# (phase 3). cmd/permgen (`task api:gen`) generates goald's table from both files and `task
+# (phase 3). tools/permgen (`task api:gen`) generates goald's table from both files and `task
 # check` fails when an operation lacks a scope, names an unknown one, or the table is stale.
 openapi: 3.0.3
 info:
@@ -3624,7 +3624,7 @@ components:
         Why a queued or ready item is not claimed yet, derived from its open needs (those neither
         done nor cancelled) on every read and never stored. Planned and linked needs win over
         overlap ones
-      required: [kind, items, files]
+      required: [kind, items, files, needs]
       properties:
         kind:
           type: string
@@ -3638,6 +3638,21 @@ components:
         files:
           type: array
           description: "For kind files, the item's own paths that overlap those items' paths, in the item's order; empty for kind after"
+          items: { type: string }
+        needs:
+          type: array
+          description: The open needs of that kind, oldest edge first, the same ones as items
+          items: { $ref: "#/components/schemas/ItemWaitingNeed" }
+    ItemWaitingNeed:
+      type: object
+      description: One open need that holds a waiting item
+      required: [ref, title, paths]
+      properties:
+        ref: { type: string, description: "The needed item's <factory name>#<number>" }
+        title: { type: string, description: The needed item's title }
+        paths:
+          type: array
+          description: "The needed item's file globs, or for an assembly its parts' planned paths (part_paths) by part number, each glob once; empty when none are known"
           items: { type: string }
     NewLink:
       type: object

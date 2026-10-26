@@ -1,0 +1,46 @@
+# The pnpm workspace install and the goal-agent image's tasks (apps/worker).
+# Included by the root Taskfile.yml with flatten: true and dir set to the repository root, so these
+# tasks keep their full names, run from the root (a task's dir: is relative to it) and see the
+# root's dotenv, env and vars. Run them from the root: `task <name>`.
+version: "3"
+
+tasks:
+  worker:install:
+    desc: Install the pnpm workspace's dependencies from the lockfile
+    sources: [package.json, pnpm-lock.yaml, pnpm-workspace.yaml, apps/worker/package.json, apps/auth/package.json, deploy/cloudflare/package.json, packages/*/package.json]
+    cmds:
+      - pnpm install --frozen-lockfile
+
+  worker:check:
+    desc: Worker typecheck, Biome lint and Vitest unit tests (no image build)
+    deps: [worker:install]
+    dir: apps/worker
+    cmds:
+      - pnpm run --silent typecheck
+      - pnpm run --silent lint
+      - pnpm run --silent test
+
+  worker:image:
+    desc: Build the goal-agent image locally (WORKER_IMAGE), then smoke it; never pushes
+    cmds:
+      - docker build -f apps/worker/Dockerfile --target runtime -t {{.WORKER_IMAGE}} .
+      - task: worker:smoke
+
+  # Every task that starts goald runs this first: runs start from the image of this checkout's
+  # worker, never an older one that drops what the run bundle gained since. A second or so when
+  # nothing in the image changed (Docker's layer cache).
+  worker:image:build:
+    desc: Build the goal-agent image locally (WORKER_IMAGE) without output or the smoke, as task up does; never pushes
+    cmds:
+      - docker build -q -f apps/worker/Dockerfile --target runtime -t {{.WORKER_IMAGE}} . >/dev/null
+
+  worker:smoke:
+    desc: Smoke the goal-agent image (WORKER_IMAGE) - its toolchains run as the sandbox's user, and goal-agent answers
+    cmds:
+      - >-
+        docker run --rm -v "$PWD/.mise.toml:/workspace/.mise.toml:ro" {{.WORKER_IMAGE}} sh -ec 'test "$(id -u)" = 1000; touch /workspace/.w /goal/.w;
+        git --version; gh --version | head -1; mise --version; go version; node --version; python --version;
+        gcc --version | head -1; postgres --version; initdb -D /tmp/pg >/dev/null 2>&1; echo "initdb: ok";
+        cd /workspace; mise install -q npm:pnpm; p=$(mise which pnpm); v=$(python3 -c "import os, sys; os.execv(sys.argv[1], sys.argv[1:])" "$p" --version);
+        echo "pnpm from this repository mise.toml, exec without a shell as task does: $v"; cd /;
+        ! goal-agent prepare 2>/tmp/err; grep -q "GOAL_GATEWAY_URL is not set" /tmp/err; echo "goal-agent: ok"'

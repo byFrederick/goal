@@ -1,0 +1,74 @@
+# The auth service's tasks (apps/auth).
+# Included by the root Taskfile.yml with flatten: true and dir set to the repository root, so these
+# tasks keep their full names, run from the root (a task's dir: is relative to it) and see the
+# root's dotenv, env and vars. Run them from the root: `task <name>`.
+version: "3"
+
+tasks:
+  auth:check:
+    desc: Auth service typecheck, Biome lint, Vitest unit tests (no database) and pnpm audit of its production dependencies
+    deps: [worker:install]
+    dir: apps/auth
+    cmds:
+      - pnpm run --silent typecheck
+      - pnpm run --silent lint
+      - pnpm run --silent test
+      - pnpm audit --prod --filter @goal/auth
+
+  auth:build:
+    desc: Build the auth service into apps/auth/dist (Better Auth on Hono; from 3-9 goal up runs node apps/auth/dist/server.js under GOAL_AUTH=session)
+    deps: [worker:install]
+    dir: apps/auth
+    sources: [src/**/*.ts, package.json, tsconfig.json, tsconfig.build.json, ../../pnpm-lock.yaml]
+    generates: [dist/server.js]
+    cmds:
+      - pnpm run --silent build
+
+  auth:dev:
+    desc: Run the auth service from apps/auth/src, rebuilt and restarted on change, with only its own variables from .env, mailing to Mailpit (needs goal db init, goal db migrate and BETTER_AUTH_SECRET)
+    deps: [auth:build, mailpit:auth]
+    dir: apps/auth
+    cmds:
+      - docker compose up -d --wait mailpit
+      - |
+        pnpm exec tsc -p tsconfig.build.json --watch --preserveWatchOutput >/dev/null &
+        trap 'kill $! 2>/dev/null' EXIT
+        set --
+        for v in {{.AUTH_VARIABLES}}; do
+          eval "x=\${$v+set}"
+          if [ "$x" = set ]; then eval "set -- \"\$@\" \"$v=\${$v}\""; fi
+        done
+        env -i "$@" node --watch dist/server.js
+
+  auth:schema-check:
+    desc: Better Auth's schema drift check, part of migrate-check - auth generate against a scratch database at the goose head must find nothing to change
+    cmds:
+      - task: migrate-check
+
+  auth:schema-diff:
+    desc: Compare Better Auth's schema with the database at DATABASE_URL (a scratch one at the goose head; migrate-check passes it)
+    requires:
+      vars: [DATABASE_URL]
+    deps: [worker:install]
+    dir: apps/auth
+    vars:
+      OUT:
+        sh: mktemp -d
+    cmds:
+      - defer: rm -rf "{{.OUT}}"
+      # The pinned CLI writes a migration only when the database differs from apps/auth/src/auth.ts;
+      # `auth migrate` is never run.
+      - GOAL_AUTH_DATABASE_URL='{{.DATABASE_URL}}' BETTER_AUTH_TELEMETRY=0 pnpm exec auth generate --config src/generate.ts --output "{{.OUT}}/drift.sql" --yes >/dev/null
+      - |
+        if [ -s "{{.OUT}}/drift.sql" ]; then
+          echo "auth:schema-check: Better Auth's schema differs from db/migrations/; add a goose migration (spec 3 §6.2) for:" >&2
+          cat "{{.OUT}}/drift.sql" >&2
+          echo >&2
+          exit 1
+        fi
+        echo "auth:schema-check: Better Auth's schema matches db/migrations/"
+
+  auth:image:
+    desc: Build the auth service's sidecar image locally (AUTH_IMAGE); never pushes
+    cmds:
+      - docker build -f apps/auth/Dockerfile --target runtime -t {{.AUTH_IMAGE}} .

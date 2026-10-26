@@ -23,29 +23,42 @@ The owner wants a small root, one home for each kind of file, rules that load on
    packages/                                             shared TypeScript packages (unchanged)
    contracts/api/                                        openapi.yaml, permissions.yaml, sandbox.yaml, and events.schema.json once it exists
    contracts/definitions/                                the factory, eval and connection-kind JSON Schemas
+   contracts/env.yaml contracts/env.schema.json          the environment registry and its schema
    db/migrations/ db/queries/ db/sqlc.yaml               the database
    deploy/cloudflare/ deploy/terraform/                  how the platform is deployed (cloudflare/ unchanged)
-   docs/adr/ docs/specs/ docs/engineering/               decisions, specs, engineering guides
-   docs/design/ docs/jonah/                              the design system (MASTER.md), Jonah
+   docs/adr/ docs/engineering/                           decisions, engineering guides
+   docs/reference/                                       the glossary and references generated from the contracts
+   docs/design/                                          the design system (MASTER.md)
+   docs/history/                                         earlier plans the code has replaced (specs/, jonah/)
    .claude/rules/ .claude/skills/ .claude/settings.json  agent rules, skills and settings
    .github/ .githooks/                                   CI workflows and versioned git hooks
    ```
 
    `.claude/rules/` holds our rules, each scoped to the paths it governs. `.claude/skills/` holds our own skills and the vendored skills we actually use.
 
+   *Amended 2026-10-26: one Taskfile per area.* The root `Taskfile.yml` keeps the cross-cutting tasks (`default`, `build`, `up`, `check`, `check:changed`, `test`, `lint`, `fmt`, `gen`, `gen:check`, `layout:check`, `env:check`, `hooks:install`, `clean`, the egress and goald images, storage, connections and factories), and also `dotenv`, the global `env:` and `vars:`, because an included Taskfile cannot have its own dotenv and reads the root's vars. Each area's tasks live in its own `Taskfile.yml` next to its code: `apps/web/`, `apps/auth/`, `apps/worker/`, `db/`, `deploy/cloudflare/`, `deploy/terraform/`, `contracts/` and `packages/api-client/`. The root includes each with `flatten: true` and `dir: "{{.ROOT_DIR}}"`. Flattening keeps every task's full name (`web:check`, `tf:plan`, `migrate-check`), so CI, the git hooks, the docs, the rules and the skills keep calling the same names. A namespace would rename tasks such as `migrate-check` and `deploy:production`. Setting the include's dir to the root means each task runs where it did before, and its own `dir:` and `sources:` stay relative to the root. Run `task` from the repository root: from inside an area directory, Task would find that area's Taskfile first. `tools/layoutcheck/tasks.txt` lists every name `task --list-all` shows, and `task layout:check` fails when the Taskfiles and the list differ, so a name changes only on purpose. `tools/envcheck` scans every `Taskfile.yml` for `${NAME}` reads, and `tools/checkplan` treats any of them as shared by every part.
+
 2. **A new top-level directory needs an amendment to this ADR.** It names the directory, the kind of file it holds and why no existing home fits.
 
    *Amended 2026-10-26: `tools/`.* It holds repository tooling that is not a shipped binary: programs that check or generate the repository's own files and that only the Taskfile and CI run, starting with `tools/layoutcheck` (`task layout:check`). `cmd/` does not fit because it holds the binaries Goal ships (`goal`, `goald`, `goal-egress`), and mixing in tooling makes it harder to tell what is deployed. `task layout:check` checks that this layout, the AGENTS.md map and the `paths:` globs of `.claude/rules` still match the tracked files.
 
+   *Amended 2026-10-26: `contracts/env.yaml` and `docs/reference/`.* Neither is a new top-level directory, but both are new kinds of file, so they are recorded here. `contracts/env.yaml` is the environment registry: every environment variable a Goal process reads, with the processes that read it, its class (public, config or secret), whether it is required and what it means, never a value. Its shape is `contracts/env.schema.json`. It sits in `contracts/` because it is a contract between the code and whoever runs it, like the API. `docs/reference/` holds reference pages generated from a contract and never edited by hand, starting with `docs/reference/environment.md`. `tools/envcheck` (`task env:check`, part of `task check`) fails when a read is not declared, a declared variable is never read, `.env.example` names an undeclared variable or shows a real-looking secret, or the generated page differs from the committed one.
+
 3. **No process output is committed.** Run artifacts, reports, metrics, screenshots and generated evidence stay out of the repository. Work state lives in Goal (items, runs, events), not in files here.
 
 4. **Generated code stays where it is generated and is never edited by hand.** That is `internal/api/gen` and the generated TypeScript contracts (`packages/contracts` once it exists; today the types in `packages/api-client`), along with the other generated files the Taskfile names. A change to generated code is a change to its source followed by its task.
+
+   *Amended 2026-10-26: one name rule and one check.* Every generated file has `.gen.` before its extension (`api.gen.go`, `permissions.gen.go`, `schema.gen.ts`, `access.gen.ts`, `routeTree.gen.ts`, and sqlc's `db.gen.go`, `models.gen.go`, `batch.gen.go` and `<query>.sql.gen.go`), so lint configs, rules and tools find generated files with one glob, `*.gen.*`, and a reader knows from the name alone not to edit it. The one exception is `docs/reference/environment.md`: it is a reference page that other docs link to, and its first line says it is generated. `task gen` runs every generator, and `task gen:check`, part of `task check` and so of CI and the pre-push hook, fails when a generated file differs from the commit or is untracked, both before it runs `task gen` (so an uncommitted hand edit is reported, not overwritten) and after. The generated files, their generators, sources and tasks are listed in one place: the [change map](../engineering/change-map.md)'s "Generated files" table.
 
 5. **Executable source and manifests win over prose.** When a doc, rule or skill disagrees with the code, the Taskfile, a workflow or a manifest, the executable side is what happens. An agent that finds the two disagreeing says so in its pull request instead of guessing which one is meant, and fixes the prose when the change is in its scope.
 
 6. **Rules and procedures.** Rules live in `.claude/rules/*.md`, each with `paths:` frontmatter naming the globs it applies to, and each rule in exactly one place: a rule is never repeated in another rule, a skill or AGENTS.md, which links to it instead. Our procedures (how to verify, deliver, add a migration and the like) are skills named `.claude/skills/goal-*`.
 
 7. **The moves, one kind per pull request, in this order:** `contracts/`, `db/`, `apps/`, `deploy/terraform/`, `docs/design/`. Each move updates every path that names the old location in the same pull request ([the change map](../engineering/change-map.md)'s row for moving a directory). Until a move merges, the old path is current: docs, rules and code keep using it, and nothing refers to the new path as if it existed.
+
+   *Amended 2026-10-26: the `deploy/terraform/` move is complete.* `terraform/` moved first; the SOPS creation rules followed, from the root `.sops.yaml` to `deploy/terraform/.sops.yaml`, next to the only file they govern (`deploy/terraform/secrets/production.sops.yaml`). sops finds its config only from the current directory up, so every sops call in the Taskfile passes `--config`, and `task tf:sops-test` (part of `task tf:check`) proves with a throwaway age key that the creation rule still matches the secrets file.
+
+   *Amended 2026-10-26: the repository tools and old plans.* `cmd/checkplan` and `cmd/permgen` are repository tooling, not shipped binaries, so they moved to `tools/checkplan` and `tools/permgen`; `cmd/` now holds only `goal`, `goald` and `goal-egress`. The phase specs and the Jonah plan were plans that the code has since replaced, so they moved to `docs/history/` (`docs/history/specs/`, `docs/history/jonah/`), which is a record and is not updated. The living parts of the specs' README (the migration rules and the tenancy convention) moved to `docs/engineering/architecture.md`, "Migrations and tenancy". The Jonah draft `schema.sql`, which no migration applies, was deleted; it stays in git history. `docs/reference/glossary.md` defines the domain terms.
 
 ## Consequences
 
@@ -70,4 +83,9 @@ The old path of each directory or file that moves. Once the moves are done, this
 | `auth/` | `apps/auth/` |
 | `worker/` | `apps/worker/` |
 | `terraform/` | `deploy/terraform/` |
+| `.sops.yaml` | `deploy/terraform/.sops.yaml` |
 | `design-system/goal/MASTER.md` | `docs/design/MASTER.md` |
+| `cmd/checkplan/` | `tools/checkplan/` |
+| `cmd/permgen/` | `tools/permgen/` |
+| `docs/specs/` | `docs/history/specs/` |
+| `docs/jonah/` | `docs/history/jonah/` (`schema.sql` deleted) |

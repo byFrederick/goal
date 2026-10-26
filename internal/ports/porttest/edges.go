@@ -61,7 +61,7 @@ func (s *Store) AddEdge(ctx context.Context, n domain.NewEdge) (domain.Edge, err
 }
 
 // RemoveEdge implements ports.Store.
-func (s *Store) RemoveEdge(ctx context.Context, item, needs domain.ItemID, by domain.Actor, at time.Time) error {
+func (s *Store) RemoveEdge(ctx context.Context, item, needs domain.ItemID, by domain.Actor, at time.Time, reason string) error {
 	org, err := orgOf(ctx)
 	if err != nil {
 		return err
@@ -80,7 +80,13 @@ func (s *Store) RemoveEdge(ctx context.Context, item, needs domain.ItemID, by do
 
 	e := s.edges[i]
 	s.edges = slices.Delete(s.edges, i, i+1)
-	s.append(edgeEvent(domain.EventEdgeRemoved, it, e, by, at))
+
+	ev := edgeEvent(domain.EventEdgeRemoved, it, e, by, at)
+	if reason != "" {
+		ev.Data["reason"] = reason
+	}
+
+	s.append(ev)
 
 	return nil
 }
@@ -145,11 +151,41 @@ func (s *Store) OpenNeeds(ctx context.Context, factory domain.FactoryID, ids []d
 
 		for _, e := range edges {
 			need := s.items[e.Needs]
-			out[id] = append(out[id], domain.OpenNeed{Kind: e.Kind, Item: need.ID, Number: need.Number, Paths: slices.Clone(need.Paths)})
+			out[id] = append(out[id], domain.OpenNeed{Kind: e.Kind, Item: need.ID, Number: need.Number, Title: need.Title, Paths: s.needPaths(need)})
 		}
 	}
 
 	return out, nil
+}
+
+// needPaths are need's paths, or for an assembly its parts' part paths by part number, each
+// glob once (nil when there are none). Callers hold s.mu.
+func (s *Store) needPaths(need *domain.Item) []string {
+	if need.State != domain.StateAssembly {
+		return slices.Clone(need.Paths)
+	}
+
+	var parts []*domain.Item
+
+	for _, it := range s.items {
+		if it.OrgID == need.OrgID && it.ParentID == need.ID && it.PartKey != "" {
+			parts = append(parts, it)
+		}
+	}
+
+	slices.SortFunc(parts, func(a, b *domain.Item) int { return cmp.Compare(a.Number, b.Number) })
+
+	var out []string
+
+	for _, p := range parts {
+		for _, g := range p.PartPaths {
+			if !slices.Contains(out, g) {
+				out = append(out, g)
+			}
+		}
+	}
+
+	return out
 }
 
 // reaches reports whether from needs to, directly or through other items. Callers hold s.mu.

@@ -5,7 +5,7 @@ paths:
 
 # Worker
 
-The worker is the one agent image every run uses. It is a box contract: the platform calls `goal-agent prepare` and then `goal-agent run`, and nothing else. The decisions behind it: [ADR 0008](../../docs/adr/0008-portable-runs-connections-and-knowledge.md). The run's flow: [spec 4](../../docs/specs/4-connections-runs-and-knowledge.md).
+The worker is the one agent image every run uses. It is a box contract: the platform calls `goal-agent prepare` and then `goal-agent run`, and nothing else. The decisions behind it: [ADR 0008](../../docs/adr/0008-portable-runs-connections-and-knowledge.md). The run's flow: [spec 4](../../docs/history/specs/4-connections-runs-and-knowledge.md).
 
 ## The box contract
 

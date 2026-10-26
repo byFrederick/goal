@@ -1,7 +1,7 @@
 # auth — Goal's identity service
 
 Better Auth on Hono (`@hono/node-server`): sign-in by email code or Google, sessions, organization
-members, invitations and the CLI's device sign-in ([spec 3](../../docs/specs/3-identity-and-access.md),
+members, invitations and the CLI's device sign-in ([spec 3](../../docs/history/specs/3-identity-and-access.md),
 [ADR 0007](../../docs/adr/0007-identity-better-auth.md)). It listens on loopback only and is reached
 only through goald's `/api/auth` proxy, which forwards an allowlist of its endpoints; goald alone
 creates, renames and deletes organizations.

@@ -1,0 +1,4 @@
+services:
+  goald:
+    group_add: ["${GOAL_DOCKER_GID:-999}"]
+    # ${GOAL_COMMENTED} is not a read.
