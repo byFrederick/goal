@@ -12,7 +12,7 @@ var readerTitles = []struct{ reader, title string }{
 	{readerCLI, "The goal CLI (`cmd/goal`)"},
 	{readerAuth, "The auth service (`apps/auth`)"},
 	{readerWorker, "The agent worker (`apps/worker`)"},
-	{readerControlWorker, "The control Worker (`deploy/cloudflare`, its vars and Secrets Store bindings in `wrangler.jsonc`)"},
+	{readerControlWorker, "The control Worker (`apps/control-worker`, its vars and Secrets Store bindings in `deploy/cloudflare/wrangler.jsonc`)"},
 	{readerCompose, "Docker Compose (`compose.yaml`)"},
 	{readerTaskfile, "The Taskfiles (`Taskfile.yml` and the area Taskfiles it includes)"},
 }

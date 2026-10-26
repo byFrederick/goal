@@ -13,6 +13,9 @@
 # :buildcache tag beside each image in Cloudflare's registry), gha (the GitHub Actions cache), or
 # none (the default, locally). A cache that fails to export never fails the deploy.
 #
+# wrangler is apps/control-worker's (deploy/cloudflare has no package of its own); it runs here, so
+# wrangler.jsonc's paths stay relative to this folder.
+#
 # Needs CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, Docker with buildx, and the full git
 # history. Prints only repository names, commits, epochs and digests; the registry password is a
 # masked, 60-minute credential that wrangler mints and docker logout drops at exit.
@@ -23,6 +26,11 @@ cd "$(dirname "$0")/.."
 root=$(git rev-parse --show-toplevel)
 if [ "$(git rev-parse --is-shallow-repository)" != false ]; then
   echo "deploy.sh: a shallow clone dates every image by HEAD; fetch the full history (fetch-depth: 0)" >&2
+  exit 1
+fi
+wrangler="$root/apps/control-worker/node_modules/.bin/wrangler"
+if [ ! -x "$wrangler" ]; then
+  echo "deploy.sh: no wrangler in apps/control-worker: run pnpm install (task worker:install)" >&2
   exit 1
 fi
 registry=registry.cloudflare.com
@@ -45,7 +53,7 @@ if [ "$(docker buildx inspect | sed -n 's/^Driver: *//p' | head -n 1)" = docker 
 fi
 
 login() {
-  creds=$(WRANGLER_HIDE_BANNER=true pnpm exec wrangler containers registries credentials "$registry" \
+  creds=$(WRANGLER_HIDE_BANNER=true "$wrangler" containers registries credentials "$registry" \
     --push --pull --json --expiration-minutes 60)
   user=$(printf %s "$creds" | node scripts/images.mjs field username)
   password=$(printf %s "$creds" | node scripts/images.mjs field password)
@@ -96,11 +104,11 @@ if [ -n "${GOAL_BOOTSTRAP_OWNER_EMAIL:-}" ]; then
 fi
 # Streams wrangler's output and keeps a copy to look for the one transient failure retried.
 log="$work/wrangler-deploy.log"
-{ code=0; pnpm exec wrangler "$@" 2>&1 || code=$?; echo "$code" > "$work/status"; } | tee "$log"
+{ code=0; "$wrangler" "$@" 2>&1 || code=$?; echo "$code" > "$work/status"; } | tee "$log"
 status=$(cat "$work/status")
 if [ "$status" -ne 0 ] && grep -qF "Timed out while preparing the container image on Cloudflare's network" "$log"; then
   echo "wrangler deploy timed out preparing an image on Cloudflare's network: retrying once"
-  { code=0; pnpm exec wrangler "$@" 2>&1 || code=$?; echo "$code" > "$work/status"; } | tee "$log"
+  { code=0; "$wrangler" "$@" 2>&1 || code=$?; echo "$code" > "$work/status"; } | tee "$log"
   status=$(cat "$work/status")
 fi
 exit "$status"

@@ -156,7 +156,7 @@ func TestCheck_UndeclaredRead(t *testing.T) {
 		"ts process.env":      {"AUTH_URL", "apps/auth/src/settings.ts:3: AUTH_URL is read but not declared in contracts/env.yaml"},
 		"ts required":         {"WORKER_TOKEN", "apps/worker/src/run.ts:1: WORKER_TOKEN is read but not declared in contracts/env.yaml"},
 		"ts env index":        {"WORKER_DIR", "apps/worker/src/run.ts:2: WORKER_DIR is read but not declared in contracts/env.yaml"},
-		"ts env field":        {"CF_LOG", "deploy/cloudflare/src/env.ts:2: CF_LOG is read but not declared in contracts/env.yaml"},
+		"ts env field":        {"CF_LOG", "apps/control-worker/src/env.ts:2: CF_LOG is read but not declared in contracts/env.yaml"},
 		"wrangler secret":     {"CF_SECRET", "deploy/cloudflare/wrangler.jsonc secrets_store_secrets: CF_SECRET is read but not declared in contracts/env.yaml"},
 		"compose":             {"GOAL_DOCKER_GID", "compose.yaml:3: GOAL_DOCKER_GID is read but not declared in contracts/env.yaml"},
 		"taskfile":            {"GOAL_FACTORIES_DIR", "Taskfile.yml:4: GOAL_FACTORIES_DIR is read but not declared in contracts/env.yaml"},
@@ -184,7 +184,7 @@ func TestCheck_UndeclaredRead(t *testing.T) {
 
 		got := checkFixture(t, func(m fstest.MapFS) {
 			undeclare(t, m, "CF_LOG")
-			replace(t, m, "deploy/cloudflare/src/env.ts", "log: env.CF_LOG, ", "")
+			replace(t, m, "apps/control-worker/src/env.ts", "log: env.CF_LOG, ", "")
 		}, false)
 
 		wantProblems(t, got, []string{"deploy/cloudflare/wrangler.jsonc vars: CF_LOG is read but not declared in contracts/env.yaml"})
@@ -223,9 +223,9 @@ func TestCheck_UnreadDeclared(t *testing.T) {
 			func(t *testing.T, m fstest.MapFS) {
 				t.Helper()
 
-				replace(t, m, "deploy/cloudflare/src/env.ts", "['CF_INDIRECT']", "[]")
+				replace(t, m, "apps/control-worker/src/env.ts", "['CF_INDIRECT']", "[]")
 			},
-			"contracts/env.yaml: CF_INDIRECT is declared but nothing reads it (its name does not appear quoted in deploy/cloudflare/src/env.ts)",
+			"contracts/env.yaml: CF_INDIRECT is declared but nothing reads it (its name does not appear quoted in apps/control-worker/src/env.ts)",
 		},
 		"a compose variable gone": {
 			func(t *testing.T, m fstest.MapFS) {

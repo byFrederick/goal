@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import config from '../wrangler.jsonc?raw';
+import config from '../../../deploy/cloudflare/wrangler.jsonc?raw';
 
 describe('the deployed wrangler config', () => {
   // Terraform owns the one route; a workers.dev or preview URL would be a second public origin

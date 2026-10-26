@@ -1,12 +1,12 @@
 packages:
   - apps/auth
+  - apps/control-worker
   - apps/web
   - apps/worker
-  - deploy/cloudflare
   - packages/*
 
-# The only dependencies whose install scripts run (deploy/cloudflare's wrangler and its test
-# plugin): each checks its platform binary from the optional dependency, or fetches that same
+# The only dependencies whose install scripts run (apps/control-worker's wrangler and its
+# test plugin): each checks its platform binary from the optional dependency, or fetches that same
 # package from the npm registry.
 allowBuilds:
   esbuild: true

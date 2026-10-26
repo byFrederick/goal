@@ -1,9 +1,11 @@
 #!/bin/sh
 # sandboxtest against the sandbox API in wrangler dev (task cloudflare:sandboxtest): the Worker's
-# own code, its boxes local Docker containers built from test/sandboxtest/box.Dockerfile.
+# own code, its boxes local Docker containers built from
+# apps/control-worker/test/sandboxtest/box.Dockerfile.
 # PORT (default 18787) is the Worker's port.
 set -eu
-cd "$(dirname "$0")"
+# wrangler dev runs from apps/control-worker, the Worker's package, with its node_modules.
+cd "$(dirname "$0")/../../apps/control-worker"
 . ./test/dev.sh
 dev test/sandboxtest/wrangler.jsonc "${PORT:-18787}"
 

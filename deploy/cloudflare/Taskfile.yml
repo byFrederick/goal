@@ -1,4 +1,5 @@
-# The control Worker's checks and the production deploy (deploy/cloudflare).
+# The control Worker's checks (its code in apps/control-worker) and the production deploy (deploy/cloudflare:
+# wrangler.jsonc and the deploy scripts).
 # Included by the root Taskfile.yml with flatten: true and dir set to the repository root, so these
 # tasks keep their full names, run from the root (a task's dir: is relative to it) and see the
 # root's dotenv, env and vars. Run them from the root: `task <name>`.
@@ -6,14 +7,16 @@ version: "3"
 
 tasks:
   cloudflare:check:
-    desc: The control Worker's typecheck, Biome lint and Vitest in the Workers runtime, its containers stand-ins (deploy/cloudflare)
+    desc: The control Worker's typecheck, Biome lint and Vitest in the Workers runtime, its containers stand-ins (apps/control-worker), and the deploy scripts (deploy/cloudflare/scripts)
     deps: [worker:install]
-    dir: deploy/cloudflare
+    dir: apps/control-worker
     cmds:
       - pnpm run --silent typecheck
       - pnpm run --silent lint
+      # The deploy scripts, outside this package's Biome config: linted with the shared one.
+      - pnpm exec biome check --config-path ../../packages/config/biome.json ../../deploy/cloudflare/scripts
       # The deploy's image list and generated config (scripts/images.mjs), without Docker.
-      - node --test 'scripts/*.test.mjs'
+      - node --test '../../deploy/cloudflare/scripts/*.test.mjs'
       # Locally only: no Cloudflare credentials from .env reach the Workers runtime.
       - env -u CLOUDFLARE_API_TOKEN -u CLOUDFLARE_ACCOUNT_ID pnpm run --silent test
 
