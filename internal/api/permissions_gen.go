@@ -39,6 +39,7 @@ var permissionRules = map[string]rule{
 
 // operationScopes is the x-goal-scope of every operation of api/openapi.yaml, by operationId.
 var operationScopes = map[string]string{
+	"addItemPart":                 "item:create",
 	"addPlatformAdmin":            "platform:manage",
 	"approveItem":                 "item:decide",
 	"cancelItem":                  "item:decide",

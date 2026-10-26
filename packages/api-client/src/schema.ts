@@ -1506,7 +1506,11 @@ export interface paths {
          */
         get: operations["listItemParts"];
         put?: never;
-        post?: never;
+        /**
+         * Add one part to an open assembly
+         * @description The part is queued at the assembly's own station, with the assembly's type, priority and class of service, the brief as its body and a planned edge to each part it needs. Its key is a slug of its title, made unique among the assembly's parts with -2, -3. Answers the assembly's parts, as listItemParts does. 400 part-invalid for an empty title or brief or an unknown need; 409 not-an-assembly for an item that is not an assembly, item-closed for a done or cancelled one, edge-cycle when the needs would close a cycle and item-changed when the assembly changed meanwhile.
+         */
+        post: operations["addItemPart"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2829,6 +2833,16 @@ export interface components {
             lead_time_seconds: number;
             /** @description In plan order */
             parts: components["schemas"]["AssemblyPart"][];
+        };
+        NewPartRequest: {
+            /** @description The part's title; its key is derived from it (surrounding space is trimmed) */
+            title: string;
+            /** @description The lane of the station's agents that should work the part */
+            lane?: string;
+            /** @description What the part must do */
+            brief: string;
+            /** @description The keys of the assembly's parts this one waits for */
+            needs?: string[];
         };
         AssemblyPart: {
             id: string;
@@ -6963,6 +6977,36 @@ export interface operations {
         responses: {
             /** @description The parts */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssemblyParts"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    addItemPart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewPartRequest"];
+            };
+        };
+        responses: {
+            /** @description The part is added; the assembly's parts, the new one last */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
