@@ -24,21 +24,9 @@ Tests exist to stop real regressions. A test that would still pass if the behavi
 | UI | Playwright on critical flows at 375, 768, 1440 px; accessibility checks | approve an item; move a card without dragging |
 | Agents and factories | Jonah eval suites, not unit tests | see `docs/jonah/` |
 
-## What not to test
-
-- Constructors, getters, struct literals, generated sqlc code, wiring in `cmd/`.
-- The standard library, pgx, the Docker SDK or the Agent SDK themselves.
-- Implementation details that a refactor would change without changing behavior.
-- Anything by mocking a type we own; use the port fakes.
-
 ## Rules
 
-- A bug fix starts with a failing test that reproduces it.
-- Test names describe behavior: `TestClaim_ExpediteBeforePriority`, not `TestClaim2`.
-- No sleeps for synchronization; use the fake `Clock` and channels.
-- Integration tests create their own schema in a fresh database and clean up; they never depend on order.
-- Flaky tests are fixed or deleted within a day; they are never retried silently.
-- Coverage is reported, never gated. Review asks "which behavior does this protect?"
+The rules for writing tests (what not to test, fakes instead of mocks, failing test first, bounded runs, no timing ratios) are in [`.claude/rules/tests.md`](../../.claude/rules/tests.md), which Claude Code loads whenever a test file is touched.
 
 ## Commands
 
