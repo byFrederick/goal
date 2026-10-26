@@ -240,11 +240,19 @@ function connectionsSection(connections: Connection[]): string {
 }
 
 /**
- * The user prompt: the brief, then what goald adds for this attempt (GOAL_FEEDBACK: people's
+ * The user prompt: a note to resolve conflicts with the default branch when prepare found some,
+ * the brief, then what goald adds for this attempt (GOAL_FEEDBACK: people's
  * notes, why a previous attempt was rejected), earlier stations' outputs and how to finish.
  */
 export function taskPrompt(spec: TaskSpec, feedback?: string): string {
   const parts = feedback ? [spec.brief, feedback] : [spec.brief];
+  const conflicts = spec.base_conflicts ?? [];
+  if (conflicts.length > 0) {
+    const list = conflicts.map((f) => `- ${f}`).join('\n');
+    parts.unshift(
+      `## First: conflicts with the default branch\n\nYour branch could not be brought up to date with the repository's default branch (origin/HEAD): these files conflict. It is checked out as it was pushed. Before the task below, rebase or merge the default branch, resolve the conflicts in these files, and push:\n\n${list}`,
+    );
+  }
   const inputs = Object.entries(spec.inputs ?? {});
   if (inputs.length > 0) {
     parts.push('## Outputs of earlier stations');
