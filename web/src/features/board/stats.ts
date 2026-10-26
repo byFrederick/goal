@@ -4,6 +4,7 @@ import type { Board, BoardLine, BoardStation, ItemCard } from '../../api/types';
 import { formatDuration, formatPercent, formatUsd, formatUsdCompact, humanize, plural } from '../../shared/format';
 import { describeState, type StateLabel, waitingOnYou } from '../../shared/item-state';
 import type { HatchTone } from '../../ui/hatch';
+import type { StatusKind } from '../../ui/status-icon';
 
 /** "3 of 3, 2 ready", "2 of 5", "7 waiting", "4 today": a station's load. */
 export function stationStat(s: BoardStation): string {
@@ -144,9 +145,16 @@ export function budgetNote(line: BoardLine): string | null {
   return `Weekly budget used up: ${formatUsd(b.spent_usd)} of ${formatUsdCompact(b.weekly_usd)}. No new agent work starts until the week’s spend falls below it.`;
 }
 
-/** "investigator-2": the agent copy working an item (no number when its station runs one). */
-export function agentCopy(item: Pick<ItemCard, 'agent' | 'slot'>): string {
-  return `${item.agent ?? ''}${item.slot !== null ? `-${item.slot}` : ''}`;
+/** A working item's doing line: "Working", with its turn once the agent has taken one. */
+export function doingText(item: Pick<ItemCard, 'turn'>): string {
+  return item.turn ? `Working, turn ${item.turn}` : 'Working';
+}
+
+/** The status icon of a waiting row: a check when the item is ready, a clock while it waits; none when blocked. */
+export function waitStatus(item: Pick<ItemCard, 'state' | 'in_buffer'>): StatusKind | null {
+  if (item.state === 'ready' && !item.in_buffer) return 'ready';
+  if (item.state === 'queued' || item.state === 'ready') return 'waiting';
+  return null;
 }
 
 const times = ['once', 'twice'];
@@ -184,18 +192,17 @@ export function summaryExcerpt(summary: string): string | null {
 }
 
 /**
- * A card's state line: the agent copy and its turn while worked, "Needs your OK", work waiting in
- * the drum's buffer or held back by the rope, how often work was sent back, what a done item
- * became (an excerpt of its summary); otherwise the item's state.
+ * A card's state line: the doing line while worked, "Needs your OK", work waiting in the drum's
+ * buffer or held back by the rope, how often work was sent back, what a done item became (an
+ * excerpt of its summary); otherwise the item's state.
  */
 export function cardState(
-  item: Pick<ItemCard, 'state' | 'agent' | 'slot' | 'turn' | 'rework_count' | 'summary' | 'in_buffer' | 'rope_held'>,
+  item: Pick<ItemCard, 'state' | 'agent' | 'turn' | 'rework_count' | 'summary' | 'in_buffer' | 'rope_held'>,
   decides = true,
 ): StateLabel {
   switch (item.state) {
     case 'in_progress':
-      if (!item.agent) break;
-      return { text: `${agentCopy(item)}${item.turn ? `, turn ${item.turn}` : ''}`, tone: 'run' };
+      return { text: doingText(item), tone: 'run' };
     case 'waiting_human':
       return decides ? { text: 'Needs your OK', tone: 'you' } : { text: 'Waiting on an approver', tone: 'muted' };
     case 'done':

@@ -13,6 +13,7 @@ export type {
   AuthConfig,
   AuthMode,
   Board,
+  BoardLane,
   BoardLine,
   BoardStation,
   BridgeStep,

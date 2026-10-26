@@ -19,8 +19,8 @@ import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { Meter } from '../../ui/hatch';
-import { BoardCard } from './board-card';
-import { CardDnd, DraggableCard, DropColumn } from './board-dnd';
+import { CardDnd, DropColumn } from './board-dnd';
+import { StationBody } from './board-lane';
 import {
   budgetNote,
   columnCount,
@@ -37,9 +37,6 @@ import {
 
 /** Opens the Move menu for a card, with the station a drop chose; undefined: the caller may not move work. */
 type OnMove = ((item: ItemCard, to?: string) => void) | undefined;
-
-/** A card's Move, bound to the card. */
-const moveOf = (onMove: OnMove, item: ItemCard) => (onMove ? () => onMove(item) : undefined);
 
 const constraintRing = 'border-amber shadow-[inset_0_3px_0_var(--color-amber)]';
 
@@ -207,7 +204,6 @@ function ColumnGrid({ board, onMove }: { board: Board; onMove: OnMove }) {
       >
         {board.stations.map((s) => {
           const drum = s.id === board.constraint;
-          const { items } = s;
           return (
             <DropColumn
               key={s.id}
@@ -228,16 +224,10 @@ function ColumnGrid({ board, onMove }: { board: Board; onMove: OnMove }) {
                   {columnCount(s)}
                 </span>
               </div>
-              {items.length === 0 ? <p className="m-0 px-1 pb-1 text-[13px] text-muted">Empty</p> : null}
-              {items.map((it) =>
-                onMove ? (
-                  <DraggableCard key={it.id} item={it}>
-                    {(drag) => <BoardCard item={it} onMove={() => onMove(it)} drag={drag} />}
-                  </DraggableCard>
-                ) : (
-                  <BoardCard key={it.id} item={it} />
-                ),
-              )}
+              {!s.lanes?.length && s.items.length === 0 ? (
+                <p className="m-0 px-1 pb-1 text-[13px] text-muted">Empty</p>
+              ) : null}
+              <StationBody station={s} onMove={onMove} draggable={Boolean(onMove)} />
             </DropColumn>
           );
         })}
@@ -297,7 +287,6 @@ function StationTabs({
       <PhoneTouches touches={board.line.touches} />
       {board.stations.map((s) => {
         const drum = s.id === board.constraint;
-        const { items } = s;
         return (
           <Tabs.Content key={s.id} value={s.id} className="outline-none">
             <section
@@ -314,10 +303,10 @@ function StationTabs({
                 <span className="text-[13px] text-muted">{stationStat(s)}</span>
               </div>
               <StationNote station={s} drum={drum} rateOf={rateOf} />
-              {items.length === 0 ? <p className="m-0 text-sm text-muted">Nothing here right now.</p> : null}
-              {items.map((it) => (
-                <BoardCard key={it.id} item={it} onMove={moveOf(onMove, it)} compact />
-              ))}
+              {!s.lanes?.length && s.items.length === 0 ? (
+                <p className="m-0 text-sm text-muted">Nothing here right now.</p>
+              ) : null}
+              <StationBody station={s} onMove={onMove} draggable={false} compact />
             </section>
           </Tabs.Content>
         );
