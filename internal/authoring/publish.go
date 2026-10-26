@@ -264,6 +264,41 @@ func (s *Service) setPaused(ctx context.Context, f domain.FactoryID, paused bool
 	return rec, nil
 }
 
+// Archive retires a paused factory none of whose items is being worked: ErrFactoryRunning
+// otherwise, or a *ports.FactoryBusyError. Archiving an archived factory changes nothing.
+func (s *Service) Archive(ctx context.Context, f domain.FactoryID) (ports.FactoryRecord, error) {
+	return s.setArchived(ctx, f, true)
+}
+
+// Unarchive restores an archived factory, undoing Archive; it stays paused. Unarchiving a
+// factory that is not archived changes nothing.
+func (s *Service) Unarchive(ctx context.Context, f domain.FactoryID) (ports.FactoryRecord, error) {
+	return s.setArchived(ctx, f, false)
+}
+
+func (s *Service) setArchived(ctx context.Context, f domain.FactoryID, archive bool) (ports.FactoryRecord, error) {
+	by, err := actor(ctx)
+	if err != nil {
+		return ports.FactoryRecord{}, err
+	}
+
+	set, what := s.store.RestoreArchivedFactory, "restore"
+	if archive {
+		set, what = s.store.ArchiveFactory, "archive"
+	}
+
+	rec, err := set(ctx, f, by)
+	if errors.Is(err, ports.ErrNotFound) {
+		return ports.FactoryRecord{}, fmt.Errorf("factory %s: %w", f, ErrFactoryNotFound)
+	}
+
+	if err != nil {
+		return ports.FactoryRecord{}, fmt.Errorf("%s factory %s: %w", what, f, err)
+	}
+
+	return rec, nil
+}
+
 // DeleteFactory deletes a factory that was never published, with its drafts (the wizard's
 // Cancel): ErrFactoryPublished once it was.
 func (s *Service) DeleteFactory(ctx context.Context, f domain.FactoryID) error {

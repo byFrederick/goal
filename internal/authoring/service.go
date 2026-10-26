@@ -84,6 +84,11 @@ var (
 	// ErrItemsAtRemovedStation: publish or restore would drop stations open items sit at; the
 	// error is a *ports.ItemsAtRemovedStationError [409].
 	ErrItemsAtRemovedStation = ports.ErrItemsAtRemovedStation
+	// ErrFactoryRunning: archiving a factory that is not paused [409].
+	ErrFactoryRunning = ports.ErrFactoryRunning
+	// ErrFactoryBusy: archiving a factory whose items hold leases; the error is a
+	// *ports.FactoryBusyError [409].
+	ErrFactoryBusy = ports.ErrFactoryBusy
 	// ErrModelInvalid: a section value of the wrong shape [422].
 	ErrModelInvalid = factorymodel.ErrModelInvalid
 	// ErrImportInvalid: imported files without a factory.yaml that parses [422].
@@ -110,6 +115,8 @@ const (
 	CodeFactoryPublished  = "factory-published"
 	CodeDefinitionInvalid = "definition-invalid"
 	CodeItemsAtRemoved    = "items-at-removed-station"
+	CodeFactoryRunning    = "factory-running"
+	CodeFactoryBusy       = "factory-busy"
 	CodeYAMLInvalid       = "yaml-invalid"
 	CodeModelInvalid      = "model-invalid"
 	CodeImportInvalid     = "import-invalid"
@@ -135,6 +142,8 @@ var problemCodes = []struct {
 	{ErrFactoryPublished, CodeFactoryPublished},
 	{ErrDefinitionInvalid, CodeDefinitionInvalid},
 	{ErrItemsAtRemovedStation, CodeItemsAtRemoved},
+	{ErrFactoryRunning, CodeFactoryRunning},
+	{ErrFactoryBusy, CodeFactoryBusy},
 	{ErrModelInvalid, CodeModelInvalid},
 	{ErrImportInvalid, CodeImportInvalid},
 	{ErrBadPath, CodeBadPath},

@@ -2083,6 +2083,12 @@ type EventPage struct {
 
 // Factory defines model for Factory.
 type Factory struct {
+	// ArchivedAt When the factory was archived; absent unless it is
+	ArchivedAt *time.Time `json:"archived_at,omitempty"`
+
+	// ArchivedBy Who archived the factory; absent unless it is archived
+	ArchivedBy *Actor `json:"archived_by,omitempty"`
+
 	// Can The factory permissions the caller holds, sorted (as Org.can)
 	Can       []Permission `json:"can"`
 	CreatedAt time.Time    `json:"created_at"`
@@ -4162,6 +4168,12 @@ type ListConnectionsParams struct {
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty"`
 }
 
+// ListFactoriesParams defines parameters for ListFactories.
+type ListFactoriesParams struct {
+	// Archived true lists only the archived factories; absent or false, only the others
+	Archived *bool `form:"archived,omitempty" json:"archived,omitempty"`
+}
+
 // GetAgentStatsParams defines parameters for GetAgentStats.
 type GetAgentStatsParams struct {
 	// From The first UTC day of the range; 6 days before `to` when absent
@@ -5064,10 +5076,10 @@ type ClientInterface interface {
 
 	// ListFactories The organization's factories, published or not
 	//
-	// Every factory of the organization by name, with its current version, its open draft and whether it is paused. stations and work_types are those of the version goald runs (empty for a factory never published).
+	// Every factory of the organization by name, with its current version, its open draft and whether it is paused. stations and work_types are those of the version goald runs (empty for a factory never published). Archived factories are left out unless archived is true, which lists only the archived ones.
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories (the `ListFactories` operationId).
-	ListFactories(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ListFactories(ctx context.Context, org OrgRef, params *ListFactoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateFactoryWithBody Create a factory with its first draft
 	//
@@ -5146,6 +5158,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/andon/clear (the `ClearAndon` operationId).
 	ClearAndon(ctx context.Context, org OrgRef, factory FactoryRef, body ClearAndonJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ArchiveFactory Archive a paused, idle factory
+	//
+	// Retires a factory no longer used without deleting its history: it stays readable, its items stay where they are, and listFactories leaves it out unless archived is true. Only a paused factory none of whose items is being worked is archived: 409 factory-running ("Pause the factory first") for a running one, 409 factory-busy ("N items are being worked", N the items holding a lease) while runs still work its items. Idempotent: archiving an archived factory changes nothing and answers it. Audited as factory.archived.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/archive (the `ArchiveFactory` operationId).
+	ArchiveFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetBoard The factory's board, station by station in line order
 	//
@@ -5381,6 +5400,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/resume (the `ResumeFactory` operationId).
 	ResumeFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RestoreFactory Restore an archived factory, still paused
+	//
+	// Undoes archiveFactory: the factory is listed again and stays paused (resumeFactory starts it), its items where they were. Idempotent: restoring a factory that is not archived changes nothing and answers it. Audited as factory.restored.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/unarchive (the `RestoreFactory` operationId).
+	RestoreFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListVersions One page of the factory's published versions, newest first
 	//
@@ -6548,11 +6574,11 @@ func (c *Client) ValidateDefinition(ctx context.Context, org OrgRef, body Valida
 
 // ListFactories The organization's factories, published or not
 //
-// Every factory of the organization by name, with its current version, its open draft and whether it is paused. stations and work_types are those of the version goald runs (empty for a factory never published).
+// Every factory of the organization by name, with its current version, its open draft and whether it is paused. stations and work_types are those of the version goald runs (empty for a factory never published). Archived factories are left out unless archived is true, which lists only the archived ones.
 //
 // Corresponds with GET /v1/orgs/{org}/factories (the `ListFactories` operationId).
-func (c *Client) ListFactories(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListFactoriesRequest(c.Server, org)
+func (c *Client) ListFactories(ctx context.Context, org OrgRef, params *ListFactoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListFactoriesRequest(c.Server, org, params)
 	if err != nil {
 		return nil, err
 	}
@@ -6731,6 +6757,23 @@ func (c *Client) ClearAndonWithBody(ctx context.Context, org OrgRef, factory Fac
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/andon/clear (the `ClearAndon` operationId).
 func (c *Client) ClearAndon(ctx context.Context, org OrgRef, factory FactoryRef, body ClearAndonJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewClearAndonRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ArchiveFactory Archive a paused, idle factory
+//
+// Retires a factory no longer used without deleting its history: it stays readable, its items stay where they are, and listFactories leaves it out unless archived is true. Only a paused factory none of whose items is being worked is archived: 409 factory-running ("Pause the factory first") for a running one, 409 factory-busy ("N items are being worked", N the items holding a lease) while runs still work its items. Idempotent: archiving an archived factory changes nothing and answers it. Audited as factory.archived.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/archive (the `ArchiveFactory` operationId).
+func (c *Client) ArchiveFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewArchiveFactoryRequest(c.Server, org, factory)
 	if err != nil {
 		return nil, err
 	}
@@ -7276,6 +7319,23 @@ func (c *Client) PauseFactory(ctx context.Context, org OrgRef, factory FactoryRe
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/resume (the `ResumeFactory` operationId).
 func (c *Client) ResumeFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewResumeFactoryRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RestoreFactory Restore an archived factory, still paused
+//
+// Undoes archiveFactory: the factory is listed again and stays paused (resumeFactory starts it), its items where they were. Idempotent: restoring a factory that is not archived changes nothing and answers it. Audited as factory.restored.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/unarchive (the `RestoreFactory` operationId).
+func (c *Client) RestoreFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRestoreFactoryRequest(c.Server, org, factory)
 	if err != nil {
 		return nil, err
 	}
@@ -9803,7 +9863,7 @@ func NewValidateDefinitionRequestWithBody(server string, org OrgRef, contentType
 }
 
 // NewListFactoriesRequest constructs an http.Request for the ListFactories method
-func NewListFactoriesRequest(server string, org OrgRef) (*http.Request, error) {
+func NewListFactoriesRequest(server string, org OrgRef, params *ListFactoriesParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -9826,6 +9886,33 @@ func NewListFactoriesRequest(server string, org OrgRef) (*http.Request, error) {
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Archived != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "archived", *params.Archived, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
@@ -10224,6 +10311,47 @@ func NewClearAndonRequestWithBody(server string, org OrgRef, factory FactoryRef,
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewArchiveFactoryRequest constructs an http.Request for the ArchiveFactory method
+func NewArchiveFactoryRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/archive", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -11829,6 +11957,47 @@ func NewResumeFactoryRequest(server string, org OrgRef, factory FactoryRef) (*ht
 	}
 
 	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/resume", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRestoreFactoryRequest constructs an http.Request for the RestoreFactory method
+func NewRestoreFactoryRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/unarchive", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -15012,12 +15181,12 @@ type ClientWithResponsesInterface interface {
 
 	// ListFactoriesWithResponse The organization's factories, published or not
 	//
-	// Every factory of the organization by name, with its current version, its open draft and whether it is paused. stations and work_types are those of the version goald runs (empty for a factory never published).
+	// Every factory of the organization by name, with its current version, its open draft and whether it is paused. stations and work_types are those of the version goald runs (empty for a factory never published). Archived factories are left out unless archived is true, which lists only the archived ones.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories (the `ListFactories` operationId).
-	ListFactoriesWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListFactoriesResponse, error)
+	ListFactoriesWithResponse(ctx context.Context, org OrgRef, params *ListFactoriesParams, reqEditors ...RequestEditorFn) (*ListFactoriesResponse, error)
 
 	// CreateFactoryWithBodyWithResponse Create a factory with its first draft
 	//
@@ -15104,6 +15273,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/andon/clear (the `ClearAndon` operationId).
 	ClearAndonWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body ClearAndonJSONRequestBody, reqEditors ...RequestEditorFn) (*ClearAndonResponse, error)
+
+	// ArchiveFactoryWithResponse Archive a paused, idle factory
+	//
+	// Retires a factory no longer used without deleting its history: it stays readable, its items stay where they are, and listFactories leaves it out unless archived is true. Only a paused factory none of whose items is being worked is archived: 409 factory-running ("Pause the factory first") for a running one, 409 factory-busy ("N items are being worked", N the items holding a lease) while runs still work its items. Idempotent: archiving an archived factory changes nothing and answers it. Audited as factory.archived.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/archive (the `ArchiveFactory` operationId).
+	ArchiveFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ArchiveFactoryResponse, error)
 
 	// GetBoardWithResponse The factory's board, station by station in line order
 	//
@@ -15371,6 +15549,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/resume (the `ResumeFactory` operationId).
 	ResumeFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ResumeFactoryResponse, error)
+
+	// RestoreFactoryWithResponse Restore an archived factory, still paused
+	//
+	// Undoes archiveFactory: the factory is listed again and stays paused (resumeFactory starts it), its items where they were. Idempotent: restoring a factory that is not archived changes nothing and answers it. Audited as factory.restored.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/unarchive (the `RestoreFactory` operationId).
+	RestoreFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*RestoreFactoryResponse, error)
 
 	// ListVersionsWithResponse One page of the factory's published versions, newest first
 	//
@@ -17664,6 +17851,54 @@ func (r ClearAndonResponse) ContentType() string {
 	return ""
 }
 
+type ArchiveFactoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Factory
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ArchiveFactoryResponse) GetJSON200() *Factory {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ArchiveFactoryResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ArchiveFactoryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ArchiveFactoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ArchiveFactoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ArchiveFactoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetBoardResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -18810,6 +19045,54 @@ func (r ResumeFactoryResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ResumeFactoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RestoreFactoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Factory
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RestoreFactoryResponse) GetJSON200() *Factory {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RestoreFactoryResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RestoreFactoryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RestoreFactoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RestoreFactoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RestoreFactoryResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -21947,13 +22230,13 @@ func (c *ClientWithResponses) ValidateDefinitionWithResponse(ctx context.Context
 
 // ListFactoriesWithResponse The organization's factories, published or not
 //
-// Every factory of the organization by name, with its current version, its open draft and whether it is paused. stations and work_types are those of the version goald runs (empty for a factory never published).
+// Every factory of the organization by name, with its current version, its open draft and whether it is paused. stations and work_types are those of the version goald runs (empty for a factory never published). Archived factories are left out unless archived is true, which lists only the archived ones.
 //
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /v1/orgs/{org}/factories (the `ListFactories` operationId).
-func (c *ClientWithResponses) ListFactoriesWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListFactoriesResponse, error) {
-	rsp, err := c.ListFactories(ctx, org, reqEditors...)
+func (c *ClientWithResponses) ListFactoriesWithResponse(ctx context.Context, org OrgRef, params *ListFactoriesParams, reqEditors ...RequestEditorFn) (*ListFactoriesResponse, error) {
+	rsp, err := c.ListFactories(ctx, org, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -22104,6 +22387,21 @@ func (c *ClientWithResponses) ClearAndonWithResponse(ctx context.Context, org Or
 		return nil, err
 	}
 	return ParseClearAndonResponse(rsp)
+}
+
+// ArchiveFactoryWithResponse Archive a paused, idle factory
+//
+// Retires a factory no longer used without deleting its history: it stays readable, its items stay where they are, and listFactories leaves it out unless archived is true. Only a paused factory none of whose items is being worked is archived: 409 factory-running ("Pause the factory first") for a running one, 409 factory-busy ("N items are being worked", N the items holding a lease) while runs still work its items. Idempotent: archiving an archived factory changes nothing and answers it. Audited as factory.archived.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/archive (the `ArchiveFactory` operationId).
+func (c *ClientWithResponses) ArchiveFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ArchiveFactoryResponse, error) {
+	rsp, err := c.ArchiveFactory(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseArchiveFactoryResponse(rsp)
 }
 
 // GetBoardWithResponse The factory's board, station by station in line order
@@ -22557,6 +22855,21 @@ func (c *ClientWithResponses) ResumeFactoryWithResponse(ctx context.Context, org
 		return nil, err
 	}
 	return ParseResumeFactoryResponse(rsp)
+}
+
+// RestoreFactoryWithResponse Restore an archived factory, still paused
+//
+// Undoes archiveFactory: the factory is listed again and stays paused (resumeFactory starts it), its items where they were. Idempotent: restoring a factory that is not archived changes nothing and answers it. Audited as factory.restored.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/unarchive (the `RestoreFactory` operationId).
+func (c *ClientWithResponses) RestoreFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*RestoreFactoryResponse, error) {
+	rsp, err := c.RestoreFactory(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRestoreFactoryResponse(rsp)
 }
 
 // ListVersionsWithResponse One page of the factory's published versions, newest first
@@ -24787,6 +25100,39 @@ func ParseClearAndonResponse(rsp *http.Response) (*ClearAndonResponse, error) {
 	return response, nil
 }
 
+// ParseArchiveFactoryResponse parses an HTTP response from a ArchiveFactoryWithResponse call
+func ParseArchiveFactoryResponse(rsp *http.Response) (*ArchiveFactoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ArchiveFactoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Factory
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetBoardResponse parses an HTTP response from a GetBoardWithResponse call
 func ParseGetBoardResponse(rsp *http.Response) (*GetBoardResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -25570,6 +25916,39 @@ func ParseResumeFactoryResponse(rsp *http.Response) (*ResumeFactoryResponse, err
 	}
 
 	response := &ResumeFactoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Factory
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRestoreFactoryResponse parses an HTTP response from a RestoreFactoryWithResponse call
+func ParseRestoreFactoryResponse(rsp *http.Response) (*RestoreFactoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RestoreFactoryResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -27523,7 +27902,7 @@ type ServerInterface interface {
 	ValidateDefinition(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// ListFactories The organization's factories, published or not
 	// (GET /v1/orgs/{org}/factories)
-	ListFactories(w http.ResponseWriter, r *http.Request, org OrgRef)
+	ListFactories(w http.ResponseWriter, r *http.Request, org OrgRef, params ListFactoriesParams)
 	// CreateFactory Create a factory with its first draft
 	// (POST /v1/orgs/{org}/factories)
 	CreateFactory(w http.ResponseWriter, r *http.Request, org OrgRef)
@@ -27545,6 +27924,9 @@ type ServerInterface interface {
 	// ClearAndon Clear the andon cord, restarting the factory's line
 	// (POST /v1/orgs/{org}/factories/{factory}/andon/clear)
 	ClearAndon(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// ArchiveFactory Archive a paused, idle factory
+	// (POST /v1/orgs/{org}/factories/{factory}/archive)
+	ArchiveFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
 	// GetBoard The factory's board, station by station in line order
 	// (GET /v1/orgs/{org}/factories/{factory}/board)
 	GetBoard(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetBoardParams)
@@ -27617,6 +27999,9 @@ type ServerInterface interface {
 	// ResumeFactory Start a paused factory again
 	// (POST /v1/orgs/{org}/factories/{factory}/resume)
 	ResumeFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// RestoreFactory Restore an archived factory, still paused
+	// (POST /v1/orgs/{org}/factories/{factory}/unarchive)
+	RestoreFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
 	// ListVersions One page of the factory's published versions, newest first
 	// (GET /v1/orgs/{org}/factories/{factory}/versions)
 	ListVersions(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params ListVersionsParams)
@@ -28695,8 +29080,24 @@ func (siw *ServerInterfaceWrapper) ListFactories(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListFactoriesParams
+
+	// ------------- Optional query parameter "archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "archived", r.URL.Query(), &params.Archived, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "archived", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListFactories(w, r, org)
+		siw.Handler.ListFactories(w, r, org, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -28987,6 +29388,41 @@ func (siw *ServerInterfaceWrapper) ClearAndon(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ClearAndon(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveFactory operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveFactory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveFactory(w, r, org, factory)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -30360,6 +30796,41 @@ func (siw *ServerInterfaceWrapper) ResumeFactory(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ResumeFactory(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RestoreFactory operation middleware
+func (siw *ServerInterfaceWrapper) RestoreFactory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RestoreFactory(w, r, org, factory)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -32648,6 +33119,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}", wrapper.GetFactory)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/pause", wrapper.PauseFactory)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/resume", wrapper.ResumeFactory)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/archive", wrapper.ArchiveFactory)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/unarchive", wrapper.RestoreFactory)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft", wrapper.DiscardDraft)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft", wrapper.GetDraft)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft", wrapper.OpenDraft)
@@ -33763,7 +34236,8 @@ func (response ValidateDefinitiondefaultApplicationProblemPlusJSONResponse) Visi
 }
 
 type ListFactoriesRequestObject struct {
-	Org OrgRef `json:"org"`
+	Org    OrgRef `json:"org"`
+	Params ListFactoriesParams
 }
 
 type ListFactoriesResponseObject interface {
@@ -34077,6 +34551,46 @@ type ClearAndondefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ClearAndondefaultApplicationProblemPlusJSONResponse) VisitClearAndonResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchiveFactoryRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type ArchiveFactoryResponseObject interface {
+	VisitArchiveFactoryResponse(w http.ResponseWriter) error
+}
+
+type ArchiveFactory200JSONResponse Factory
+
+func (response ArchiveFactory200JSONResponse) VisitArchiveFactoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchiveFactorydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ArchiveFactorydefaultApplicationProblemPlusJSONResponse) VisitArchiveFactoryResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -35074,6 +35588,46 @@ type ResumeFactorydefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ResumeFactorydefaultApplicationProblemPlusJSONResponse) VisitResumeFactoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RestoreFactoryRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type RestoreFactoryResponseObject interface {
+	VisitRestoreFactoryResponse(w http.ResponseWriter) error
+}
+
+type RestoreFactory200JSONResponse Factory
+
+func (response RestoreFactory200JSONResponse) VisitRestoreFactoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RestoreFactorydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RestoreFactorydefaultApplicationProblemPlusJSONResponse) VisitRestoreFactoryResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -37458,6 +38012,9 @@ type StrictServerInterface interface {
 	// ClearAndon Clear the andon cord, restarting the factory's line
 	// (POST /v1/orgs/{org}/factories/{factory}/andon/clear)
 	ClearAndon(ctx context.Context, request ClearAndonRequestObject) (ClearAndonResponseObject, error)
+	// ArchiveFactory Archive a paused, idle factory
+	// (POST /v1/orgs/{org}/factories/{factory}/archive)
+	ArchiveFactory(ctx context.Context, request ArchiveFactoryRequestObject) (ArchiveFactoryResponseObject, error)
 	// GetBoard The factory's board, station by station in line order
 	// (GET /v1/orgs/{org}/factories/{factory}/board)
 	GetBoard(ctx context.Context, request GetBoardRequestObject) (GetBoardResponseObject, error)
@@ -37530,6 +38087,9 @@ type StrictServerInterface interface {
 	// ResumeFactory Start a paused factory again
 	// (POST /v1/orgs/{org}/factories/{factory}/resume)
 	ResumeFactory(ctx context.Context, request ResumeFactoryRequestObject) (ResumeFactoryResponseObject, error)
+	// RestoreFactory Restore an archived factory, still paused
+	// (POST /v1/orgs/{org}/factories/{factory}/unarchive)
+	RestoreFactory(ctx context.Context, request RestoreFactoryRequestObject) (RestoreFactoryResponseObject, error)
 	// ListVersions One page of the factory's published versions, newest first
 	// (GET /v1/orgs/{org}/factories/{factory}/versions)
 	ListVersions(ctx context.Context, request ListVersionsRequestObject) (ListVersionsResponseObject, error)
@@ -38496,10 +39056,11 @@ func (sh *strictHandler) ValidateDefinition(w http.ResponseWriter, r *http.Reque
 }
 
 // ListFactories operation middleware
-func (sh *strictHandler) ListFactories(w http.ResponseWriter, r *http.Request, org OrgRef) {
+func (sh *strictHandler) ListFactories(w http.ResponseWriter, r *http.Request, org OrgRef, params ListFactoriesParams) {
 	var request ListFactoriesRequestObject
 
 	request.Org = org
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListFactories(ctx, request.(ListFactoriesRequestObject))
@@ -38729,6 +39290,33 @@ func (sh *strictHandler) ClearAndon(w http.ResponseWriter, r *http.Request, org 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ClearAndonResponseObject); ok {
 		if err := validResponse.VisitClearAndonResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ArchiveFactory operation middleware
+func (sh *strictHandler) ArchiveFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request ArchiveFactoryRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ArchiveFactory(ctx, request.(ArchiveFactoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ArchiveFactory")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ArchiveFactoryResponseObject); ok {
+		if err := validResponse.VisitArchiveFactoryResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -39452,6 +40040,33 @@ func (sh *strictHandler) ResumeFactory(w http.ResponseWriter, r *http.Request, o
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ResumeFactoryResponseObject); ok {
 		if err := validResponse.VisitResumeFactoryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RestoreFactory operation middleware
+func (sh *strictHandler) RestoreFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request RestoreFactoryRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RestoreFactory(ctx, request.(RestoreFactoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RestoreFactory")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RestoreFactoryResponseObject); ok {
+		if err := validResponse.VisitRestoreFactoryResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

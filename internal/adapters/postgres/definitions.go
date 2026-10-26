@@ -202,7 +202,7 @@ func (d *Definitions) SetPaused(ctx context.Context, id domain.FactoryID, paused
 }
 
 // ArchiveFactory implements ports.DefinitionStore. Paused and leases are checked under the
-// factory's row lock (see FactoryLeased for the one claim it cannot see).
+// factory's row lock (see FactoryLeases for the one claim it cannot see).
 func (d *Definitions) ArchiveFactory(ctx context.Context, id domain.FactoryID, by domain.Actor) (ports.FactoryRecord, error) {
 	rec, err := d.setArchived(ctx, id, true, by)
 	if err != nil {
@@ -270,13 +270,13 @@ func archivable(ctx context.Context, q *db.Queries, f db.LockFactoryRow) error {
 		return ports.ErrFactoryRunning
 	}
 
-	leased, err := q.FactoryLeased(ctx, f.ID)
+	leased, err := q.FactoryLeases(ctx, f.ID)
 	if err != nil {
 		return fmt.Errorf("leases: %w", err)
 	}
 
-	if leased {
-		return ports.ErrFactoryBusy
+	if leased > 0 {
+		return &ports.FactoryBusyError{Items: int(leased)}
 	}
 
 	return nil

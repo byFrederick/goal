@@ -49,7 +49,7 @@ func listKeys(ctx context.Context, c orgClient) ([]gen.ApiKey, error) {
 
 // factoryNames maps the organization's factory ids to their names, for a key's factories.
 func factoryNames(ctx context.Context, c orgClient) (map[string]string, error) {
-	res, err := c.ListFactoriesWithResponse(ctx, c.org)
+	res, err := c.ListFactoriesWithResponse(ctx, c.org, nil)
 	if err != nil {
 		return nil, apiDown(err)
 	}

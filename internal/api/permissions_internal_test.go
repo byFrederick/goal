@@ -191,8 +191,8 @@ func TestPermissions_PersonalTokensCarryExactlyThese(t *testing.T) {
 	t.Parallel()
 
 	want := []string{
-		"andon:manage", "authenticated", "connection:read", "definition:edit", "definition:publish", "factory:create", string(permFactoryRead),
-		"item:create", "item:decide", "item:operate", "knowledge:read", "org:read",
+		"andon:manage", "authenticated", "connection:read", "definition:edit", "definition:publish", "factory:archive",
+		"factory:create", string(permFactoryRead), "item:create", "item:decide", "item:operate", "knowledge:read", "org:read",
 	}
 
 	var got []string

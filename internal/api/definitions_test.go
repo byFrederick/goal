@@ -7,10 +7,12 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/ports"
 )
 
 // The definitions routes (B §8) on the harness's authoring service: acme (inbox → approve →
@@ -813,5 +815,115 @@ func TestDefinitions_StreamSendsDefinitionEvents(t *testing.T) {
 	if e.OrgId != string(testOrg) || e.FactoryId != acmeID || e.Kind != gen.DefinitionEventKindDraft || valueOf(e.VersionId) != d.Id ||
 		valueOf(e.Revision) != 1 || valueOf(e.By) != "user:local" {
 		t.Errorf("definition event %+v, want acme's draft at revision 1 by the local user", e)
+	}
+}
+
+// linePath is the line factory's address; line (build has two agent slots) is the one archived.
+const linePath = factoriesPath + "/line"
+
+// pauseLine pauses the line factory, as archiving requires.
+func (h *harness) pauseLine(t *testing.T) gen.Factory {
+	t.Helper()
+
+	return decode[gen.Factory](t, h.request(t, http.MethodPost, linePath+"/pause", "", nil), http.StatusOK)
+}
+
+func TestDefinitions_ArchiveAndRestore(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.pauseLine(t)
+
+	archived := decode[gen.Factory](t, h.request(t, http.MethodPost, linePath+"/archive", "", nil), http.StatusOK)
+	if archived.ArchivedAt == nil || archived.ArchivedBy == nil || archived.ArchivedBy.Id != "local" || !archived.Paused {
+		t.Errorf("archive = %s, want line archived by the local user, still paused", body(t, archived))
+	}
+
+	restored := decode[gen.Factory](t, h.request(t, http.MethodPost, linePath+"/unarchive", "", nil), http.StatusOK)
+	if restored.ArchivedAt != nil || restored.ArchivedBy != nil || !restored.Paused {
+		t.Errorf("restore = %s, want line not archived and still paused", body(t, restored))
+	}
+
+	for _, op := range []string{"/archive", "/unarchive"} {
+		refused(t, op+" of an unknown factory", h.request(t, http.MethodPost, factoriesPath+"/nope"+op, "", nil),
+			http.StatusNotFound, authoring.CodeFactoryNotFound)
+	}
+}
+
+func TestDefinitions_ArchiveIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	paused := h.pauseLine(t)
+
+	if same := decode[gen.Factory](t, h.request(t, http.MethodPost, linePath+"/unarchive", "", nil), http.StatusOK); same.ArchivedAt != nil ||
+		!same.Paused || same.Id != paused.Id {
+		t.Errorf("restore of a live factory = %s, want it unchanged", body(t, same))
+	}
+
+	first := decode[gen.Factory](t, h.request(t, http.MethodPost, linePath+"/archive", "", nil), http.StatusOK)
+
+	h.clock.Advance(time.Minute)
+
+	again := decode[gen.Factory](t, h.request(t, http.MethodPost, linePath+"/archive", "", nil), http.StatusOK)
+	if again.ArchivedAt == nil || !again.ArchivedAt.Equal(*first.ArchivedAt) {
+		t.Errorf("archive again = %s, want it still archived since %v", body(t, again), first.ArchivedAt)
+	}
+}
+
+func TestDefinitions_ArchiveRefusals(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	p := refused(t, "archive of a running factory", h.request(t, http.MethodPost, linePath+"/archive", "", nil),
+		http.StatusConflict, authoring.CodeFactoryRunning)
+	if valueOf(p.Detail) != "Pause the factory first" {
+		t.Errorf("detail %q, want \"Pause the factory first\"", valueOf(p.Detail))
+	}
+
+	h.pauseLine(t)
+
+	for slot := range 2 {
+		h.seed(t, stBuild, domain.StateQueued, t0)
+
+		if _, _, err := h.store.ClaimNext(inOrg(t), ports.Claim{
+			FactoryID: lineID, Station: build, Slot: slot, Now: t0, ExpiresAt: t0.Add(time.Hour),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	p = refused(t, "archive while 2 items hold leases", h.request(t, http.MethodPost, linePath+"/archive", "", nil),
+		http.StatusConflict, authoring.CodeFactoryBusy)
+	if valueOf(p.Detail) != "2 items are being worked" {
+		t.Errorf("detail %q, want \"2 items are being worked\"", valueOf(p.Detail))
+	}
+
+	if got := decode[gen.Factory](t, h.request(t, http.MethodGet, linePath, "", nil), http.StatusOK); got.ArchivedAt != nil {
+		t.Errorf("line after refused archives = %s, want it not archived", body(t, got))
+	}
+}
+
+func TestDefinitions_ListFactoriesHidesArchived(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.pauseLine(t)
+	decode[gen.Factory](t, h.request(t, http.MethodPost, linePath+"/archive", "", nil), http.StatusOK)
+
+	for query, want := range map[string][]string{
+		"": {acmeSlug}, "?archived=false": {acmeSlug}, "?archived=true": {"line"},
+	} {
+		list := decode[gen.FactoryList](t, h.request(t, http.MethodGet, factoriesPath+query, "", nil), http.StatusOK)
+
+		var got []string
+		for _, f := range list.Factories {
+			got = append(got, f.Name)
+		}
+
+		if !slices.Equal(got, want) {
+			t.Errorf("factories%s = %v, want %v", query, got, want)
+		}
 	}
 }

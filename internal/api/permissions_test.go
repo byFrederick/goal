@@ -139,6 +139,12 @@ func TestPermissions_RoleGrants(t *testing.T) {
 		{name: "editor pauses the factory", p: editor, operation: "pauseFactory", org: grantsOrg, factory: grantsF, want: wantAllow},
 		{name: "editor includes approver", p: editor, operation: "rejectItem", org: grantsOrg, factory: grantsF, want: wantAllow},
 		{name: "admin edits every factory", p: admin, operation: opPublish, org: grantsOrg, factory: grantsG, want: wantAllow},
+		{name: "owner archives a factory", p: owner, operation: "archiveFactory", org: grantsOrg, factory: grantsF, want: wantAllow},
+		{name: "owner restores a factory", p: owner, operation: "restoreFactory", org: grantsOrg, factory: grantsF, want: wantAllow},
+		{name: "admin archives a factory", p: admin, operation: "archiveFactory", org: grantsOrg, factory: grantsF, want: wantAllow},
+		{name: "admin restores a factory", p: admin, operation: "restoreFactory", org: grantsOrg, factory: grantsF, want: wantAllow},
+		{name: "editor cannot archive the factory", p: editor, operation: "archiveFactory", org: grantsOrg, factory: grantsF, want: wantForbidden},
+		{name: "editor cannot restore the factory", p: editor, operation: "restoreFactory", org: grantsOrg, factory: grantsF, want: wantForbidden},
 
 		{name: "a member of another org does not see this one", p: owner, operation: opGetOrg, org: grantsOther, want: wantHidden},
 		{name: "a platform admin is no member", p: platformAdmin, operation: opGetOrg, org: grantsOrg, want: wantHidden},
