@@ -41,6 +41,7 @@ var permissionRules = map[string]rule{
 var operationScopes = map[string]string{
 	"addPlatformAdmin":            "platform:manage",
 	"approveItem":                 "item:decide",
+	"cancelItem":                  "item:decide",
 	"clearAndon":                  "andon:manage",
 	"compareVersions":             "factory:read",
 	"createAPIKey":                "api_key:manage",

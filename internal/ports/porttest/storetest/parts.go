@@ -14,10 +14,11 @@ import (
 
 // Part keys and the planning item's title the cases use.
 const (
-	keyAPI   = "api"
-	keyStore = "store"
-	keyWeb   = "web"
-	titleBig = "big request"
+	keyAPI    = "api"
+	keyStore  = "store"
+	keyWeb    = "web"
+	titleBig  = "big request"
+	dataParts = "parts"
 )
 
 // plan is three parts: api first, then store and web, web also needing store.
@@ -154,7 +155,7 @@ func testAssembleCreatesParts(f *fixture) {
 	events := f.Events(t, it.ID)
 	sameEvents(t, events[len(events)-2:], []domain.Event{
 		a.Transition.Events[0],
-		{FactoryID: f.factory, ItemID: it.ID, At: t1, Kind: domain.EventAssembled, Station: stWork, Actor: domain.ActorEngine, Data: map[string]any{"parts": 3}},
+		{FactoryID: f.factory, ItemID: it.ID, At: t1, Kind: domain.EventAssembled, Station: stWork, Actor: domain.ActorEngine, Data: map[string]any{dataParts: 3}},
 	})
 
 	for _, s := range f.spans(t, it.ID) {
@@ -339,7 +340,7 @@ func testAssemblyClosesWithItsLastPart(f *fixture) {
 	events := f.Events(t, it.ID)
 	sameEvents(t, events[len(events)-1:], []domain.Event{{
 		FactoryID: f.factory, ItemID: it.ID, At: t3, Kind: domain.EventAssemblyDone, Station: stWork, Actor: domain.ActorEngine,
-		Data: map[string]any{"state": string(domain.StateDone), "parts_done": 2, "parts": 3},
+		Data: map[string]any{"state": string(domain.StateDone), "parts_done": 2, dataParts: 3},
 	}})
 }
 
@@ -407,7 +408,7 @@ func (f *fixture) pauseAll(assembly domain.ItemID, parts ...domain.Item) ports.C
 		Assembly: assembly,
 		Events: []domain.Event{{
 			FactoryID: f.factory, ItemID: assembly, At: t1, Kind: domain.EventPaused, Station: stWork, Actor: domain.ActorEngine,
-			Data: map[string]any{"parts": len(parts)},
+			Data: map[string]any{dataParts: len(parts)},
 		}},
 	}
 
@@ -540,7 +541,7 @@ func testCancelCascadeClosesTheAssemblyCancelled(f *fixture) {
 	events := f.Events(t, it.ID)
 	sameEvents(t, events[len(events)-1:], []domain.Event{{
 		FactoryID: f.factory, ItemID: it.ID, At: t2, Kind: domain.EventAssemblyDone, Station: stWork, Actor: domain.ActorEngine,
-		Data: map[string]any{"state": string(domain.StateCancelled), "parts_done": 1, "parts": 3},
+		Data: map[string]any{"state": string(domain.StateCancelled), "parts_done": 1, dataParts: 3},
 	}})
 }
 

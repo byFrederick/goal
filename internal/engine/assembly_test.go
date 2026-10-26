@@ -248,6 +248,26 @@ func TestEngine_CancelAssemblyCancelsOnlyItsOpenParts(t *testing.T) {
 		partBuilding: cancelled, partQueued: cancelled, partStuck: cancelled, partShipped: {Station: stDone, State: domain.StateDone},
 	})
 
+	h.partsCancelledOnce(t, a, parts, shipped)
+
+	if events := h.eventsOf(a.ID, domain.EventCancelled); len(events) != 1 || events[0].Data["parts"] != 3 {
+		t.Errorf("cancelled events of the assembly = %+v; want one, with parts 3", events)
+	}
+
+	if audited := h.audited(t, domain.AuditItemCancelled); len(audited) != 3 {
+		t.Errorf("item.cancelled audit entries = %+v; want one per cancelled part", audited)
+	}
+
+	if _, err := h.e.Cancel(inOrg(t), a.ID, human, ""); !errors.Is(err, engine.ErrItemClosed) {
+		t.Errorf("Cancel of a cancelled assembly: err = %v; want ErrItemClosed", err)
+	}
+}
+
+// partsCancelledOnce checks that the cascade gave each open part one cancelled event naming the
+// assembly, took the building part's lease and left the done part's events as they were.
+func (h *harness) partsCancelledOnce(t *testing.T, a domain.Item, parts map[string]domain.Item, shipped []domain.EventKind) {
+	t.Helper()
+
 	for _, key := range []string{partBuilding, partQueued, partStuck} {
 		events := h.eventsOf(parts[key].ID, domain.EventCancelled)
 		if len(events) != 1 || events[0].Data["assembly"] != string(a.ID) || events[0].Data["reason"] != reasonVendor {
@@ -265,18 +285,6 @@ func TestEngine_CancelAssemblyCancelsOnlyItsOpenParts(t *testing.T) {
 
 	if ls, _ := h.store.Leases(inOrg(t), factoryID, stWork); len(ls) != 0 {
 		t.Errorf("leases at work after the cancel = %+v; want the building part's taken", ls)
-	}
-
-	if events := h.eventsOf(a.ID, domain.EventCancelled); len(events) != 1 || events[0].Data["parts"] != 3 {
-		t.Errorf("cancelled events of the assembly = %+v; want one, with parts 3", events)
-	}
-
-	if audited := h.audited(t, domain.AuditItemCancelled); len(audited) != 3 {
-		t.Errorf("item.cancelled audit entries = %+v; want one per cancelled part", audited)
-	}
-
-	if _, err := h.e.Cancel(inOrg(t), a.ID, human, ""); !errors.Is(err, engine.ErrItemClosed) {
-		t.Errorf("Cancel of a cancelled assembly: err = %v; want ErrItemClosed", err)
 	}
 }
 

@@ -15,6 +15,9 @@ import (
 // person acted on.
 const keyAssembly = "assembly"
 
+// keyParts is the data key of an assembly's event that counts the parts a person's act moved.
+const keyParts = "parts"
+
 // pauseAssembly pauses the open parts of assembly a that are not blocked yet, each as Pause
 // would one item, in one store transaction (ADR 0012 §9); a stays an assembly with one paused
 // event counting them. ErrAlreadyBlocked when there is none.
@@ -50,7 +53,7 @@ func (e *Engine) pauseAssembly(ctx context.Context, a domain.Item, by domain.Act
 		return domain.Item{}, fmt.Errorf("pause %s: every open part: %w", a.ID, ErrAlreadyBlocked)
 	}
 
-	c.Events = []domain.Event{decision(a, domain.EventPaused, now, by, withReason(map[string]any{"parts": len(c.Parts)}, reason))}
+	c.Events = []domain.Event{decision(a, domain.EventPaused, now, by, withReason(map[string]any{keyParts: len(c.Parts)}, reason))}
 
 	return e.cascade(ctx, "pause", a, by, now, c, taken)
 }
@@ -84,10 +87,10 @@ func (e *Engine) cancelAssembly(ctx context.Context, a domain.Item, by domain.Ac
 	}
 
 	if len(c.Parts) == 0 {
-		return e.control(ctx, "cancel", a, by, cancelOf(a, now, by, reason, map[string]any{"parts": 0}))
+		return e.control(ctx, "cancel", a, by, cancelOf(a, now, by, reason, map[string]any{keyParts: 0}))
 	}
 
-	c.Events = []domain.Event{decision(a, domain.EventCancelled, now, by, withReason(map[string]any{"parts": len(c.Parts)}, reason))}
+	c.Events = []domain.Event{decision(a, domain.EventCancelled, now, by, withReason(map[string]any{keyParts: len(c.Parts)}, reason))}
 
 	if _, err := e.cascade(ctx, "cancel", a, by, now, c, taken); err != nil {
 		return domain.Item{}, err
@@ -133,7 +136,7 @@ func (e *Engine) retryAssembly(ctx context.Context, a domain.Item, l domain.Line
 		return domain.Item{}, fmt.Errorf("retry %s: no part is blocked: %w", a.ID, ErrNotBlocked)
 	}
 
-	c.Events = []domain.Event{decision(a, domain.EventRetried, now, by, map[string]any{"parts": len(c.Parts)})}
+	c.Events = []domain.Event{decision(a, domain.EventRetried, now, by, map[string]any{keyParts: len(c.Parts)})}
 
 	return e.cascade(ctx, "retry", a, by, now, c, nil)
 }
