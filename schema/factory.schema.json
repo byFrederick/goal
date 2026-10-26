@@ -443,6 +443,25 @@
                   "description": "serialize (the default): an item whose files overlap those of an item in flight waits for it; allow: build them in parallel."
                 }
               }
+            },
+            "retry": {
+              "type": "object",
+              "description": "How often a claim runs an item again after a failure that is not the item's fault. Omitted keys take their defaults.",
+              "additionalProperties": false,
+              "properties": {
+                "transient": {
+                  "type": "object",
+                  "description": "Runs whose sandbox was lost to its infrastructure (a redeploy, a box restart, a network blip): each runs again in a new box after a backoff that doubles with each loss.",
+                  "additionalProperties": false,
+                  "properties": {
+                    "attempts": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "description": "The most runs one claim makes when its sandbox is lost; the loss that reaches it blocks the item. Default 3."
+                    }
+                  }
+                }
+              }
             }
           }
         }

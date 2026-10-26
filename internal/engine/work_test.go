@@ -629,7 +629,7 @@ func (h *harness) expectRetriedOnce(t *testing.T, it domain.Item, checked bool) 
 	h.noSandboxes(t)
 }
 
-// A box lost on every attempt blocks the item after the cap, with the last reason.
+// A box lost on every attempt blocks the item after the default cap of 3, with the last reason.
 func TestRun_LostSandboxBlocksAfterTheCap(t *testing.T) {
 	t.Parallel()
 
@@ -654,6 +654,40 @@ func TestRun_LostSandboxBlocksAfterTheCap(t *testing.T) {
 
 	if runs := h.runs(t, testOrg, it.ID); len(runs) != 3 || len(h.worker.Runs()) != 3 {
 		t.Errorf("%d runs, %d agent runs; want 3 of each", len(runs), len(h.worker.Runs()))
+	}
+
+	h.expectOutcomes(t, it.ID, domain.LeaseBlocked)
+	h.noSandboxes(t)
+}
+
+// The cap comes from the line's flow.retry.transient.attempts: with 2, the second loss blocks.
+func TestRun_LostSandboxBlocksAfterTheConfiguredAttempts(t *testing.T) {
+	t.Parallel()
+
+	line := repoLine()
+	line.Flow.Retry.TransientAttempts = 2
+	h := newHarness(t, line, porttest.Succeed(`{}`))
+	h.sandboxes.Lose("goal-agent run", 5, lostBox)
+	it := h.submit(t, domain.NewItem{})
+
+	h.stepThroughBackoff(t)
+
+	if got := h.item(t, it.ID); got.State != domain.StateBlocked {
+		t.Fatalf("item is %s, want blocked (events %v)", got.State, h.kinds(it.ID))
+	}
+
+	reason, _ := h.eventsOf(it.ID, domain.EventBlocked)[0].Data["reason"].(string)
+	if !strings.HasPrefix(reason, "the sandbox was lost 2 times: ") || !lostScrubbed(reason) {
+		t.Errorf("blocked reason %q, want the configured cap and the last reason, scrubbed", reason)
+	}
+
+	retried := h.eventsOf(it.ID, domain.EventRunRetried)
+	if len(retried) != 1 || retried[0].Data["attempt"] != 1 || retried[0].Data["max"] != 2 {
+		t.Errorf("run_retried %+v, want one, attempt 1 of 2", retried)
+	}
+
+	if runs := h.runs(t, testOrg, it.ID); len(runs) != 2 || len(h.worker.Runs()) != 2 {
+		t.Errorf("%d runs, %d agent runs; want 2 of each", len(runs), len(h.worker.Runs()))
 	}
 
 	h.expectOutcomes(t, it.ID, domain.LeaseBlocked)
