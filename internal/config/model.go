@@ -26,8 +26,9 @@ func ModelPointer(path []string) (section, pointer string) {
 
 // Keys that appear in several of the mappings below.
 const (
-	keyName   = "name"
-	keyAgents = "agents"
+	keyName     = "name"
+	keyAgents   = "agents"
+	keyStations = "stations"
 )
 
 func modelPath(p []string) (string, []string) {
@@ -49,8 +50,8 @@ func specPath(key string, rest []string) (string, []string) {
 		return boardPath(rest)
 	case keyAgents:
 		return domain.SectionAgents, append([]string{domain.SectionAgents, keyAgents}, agentPath(rest)...)
-	case "skills":
-		return domain.SectionAgents, append([]string{domain.SectionAgents, "skills"}, rest...)
+	case "skills", "rules":
+		return domain.SectionAgents, append([]string{domain.SectionAgents, key}, rest...)
 	case "connections":
 		return domain.SectionConnections, append([]string{domain.SectionConnections}, connectionPath(rest)...)
 	case "knowledge", "secrets", "knowledgeBase":
@@ -119,8 +120,8 @@ func boardPath(rest []string) (string, []string) {
 	switch rest[0] {
 	case "workTypes":
 		return domain.SectionBasics, append([]string{domain.SectionBasics, "work_types"}, rest[1:]...)
-	case "stations":
-		return domain.SectionLine, append([]string{domain.SectionLine, "stations"}, stationPath(rest[1:])...)
+	case keyStations:
+		return domain.SectionLine, append([]string{domain.SectionLine, keyStations}, stationPath(rest[1:])...)
 	case "intake", "flow":
 		return domain.SectionLine, append([]string{domain.SectionLine}, snakeAll(rest)...)
 	}

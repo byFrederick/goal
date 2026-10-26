@@ -60,6 +60,11 @@
           }
         },
         "skills": { "type": "array", "items": { "$ref": "#/$defs/skill" } },
+        "rules": {
+          "type": "array",
+          "description": "Factory rules (ADR 0014): always-on guidance for the agents each rule's appliesTo targets. Each is a markdown file under rules/ with frontmatter (description, appliesTo, paths).",
+          "items": { "$ref": "#/$defs/rule" }
+        },
         "contracts": {
           "type": "object",
           "description": "Named JSON Schemas that station outputs must satisfy. An output contract becomes the model's tool input_schema, so its top level must be \"type\": \"object\" with no oneOf, anyOf or allOf there (nested under a property is fine).",
@@ -245,6 +250,19 @@
           "type": "string",
           "description": "Where a vendored skill came from: the skills.sh skill and the commit it was copied at. The source stays the local folder (./skills/<name>) it was copied into. Written by the builder; read-only in the UI.",
           "pattern": "^skills\\.sh:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+#[0-9a-f]{40}$"
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "required": ["name", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/slug" },
+        "source": {
+          "type": "string",
+          "description": "The rule's markdown file inside the definition, under rules/ (./rules/secrets.md).",
+          "pattern": "^\\./rules/.+\\.md$"
         }
       }
     },
