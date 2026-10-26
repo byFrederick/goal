@@ -113,7 +113,8 @@ type Store interface {
 
 	// OpenNeeds returns, by item, the needs of those of ids that are items of the factory whose
 	// needed item is neither done nor cancelled, oldest edge first, each with the needed item's
-	// number and paths: the board's waiting reasons in one read. Items without open needs, ids
+	// number, title and paths (for an assembly, its parts' part paths by part number, each glob
+	// once): the board's waiting reasons in one read. Items without open needs, ids
 	// of another factory's items and ids that are not UUIDs are absent.
 	OpenNeeds(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID][]domain.OpenNeed, error)
 

@@ -2878,6 +2878,17 @@ export interface components {
             items: string[];
             /** @description For kind files, the item's own paths that overlap those items' paths, in the item's order; empty for kind after */
             files: string[];
+            /** @description The open needs of that kind, oldest edge first, the same ones as items */
+            needs: components["schemas"]["ItemWaitingNeed"][];
+        };
+        /** @description One open need that holds a waiting item */
+        ItemWaitingNeed: {
+            /** @description The needed item's <factory name>#<number> */
+            ref: string;
+            /** @description The needed item's title */
+            title: string;
+            /** @description The needed item's file globs, or for an assembly its parts' planned paths (part_paths) by part number, each glob once; empty when none are known */
+            paths: string[];
         };
         NewLink: {
             /** @description The needed item's id (a UUID) or <factory>#<number>, as in goal#2; an item of the same factory */

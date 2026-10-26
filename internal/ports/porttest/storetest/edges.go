@@ -275,12 +275,23 @@ func testClaimSkipsOpenNeeds(f *fixture) {
 	}
 }
 
+// webGlob is a glob both an overlapping item and an assembly's parts change.
+const webGlob = "web/**"
+
 // OpenNeeds reads the open needs of many items at once, oldest edge first, with each needed
-// item's number and paths; needs that are done or cancelled, items without open needs, another
+// item's number, title and paths, for an assembly its parts' part paths in part order, each
+// glob once; needs that are done or cancelled, items without open needs, another
 // factory's items and ids that are not UUIDs are left out.
 func testOpenNeeds(f *fixture) {
 	t := f.t
 	ctx := f.ctx(t)
+
+	planning, l := f.planning(t, domain.NewItem{Title: "assembled"})
+	asm, _ := f.assemble(t, assembly(planning, l, []domain.NewPart{
+		{Key: keyAPI, Title: "API", Paths: []string{"contracts/api/openapi.yaml", webGlob}},
+		{Key: keyWeb, Title: "Web", Paths: []string{webGlob, "docs/web.md"}, Needs: []string{keyAPI}},
+		{Key: keyStore, Title: "Store"},
+	}))
 
 	held := f.create(t, domain.NewItem{Title: "held"})
 	free := f.create(t, domain.NewItem{Title: "free"})
@@ -290,7 +301,7 @@ func testOpenNeeds(f *fixture) {
 	cancelled := f.create(t, domain.NewItem{Title: "cancelled need", Station: stNext})
 
 	queued := domain.Position{Station: stNext, State: domain.StateQueued}
-	globs := []string{"db/queries/*.sql", "web/**"}
+	globs := []string{"db/queries/*.sql", webGlob}
 
 	if _, err := f.Store.Transition(ctx, ports.Transition{ItemID: overlap.ID, From: queued, To: queued, Paths: globs, At: t1}); err != nil {
 		t.Fatal(err)
@@ -308,6 +319,7 @@ func testOpenNeeds(f *fixture) {
 	add(held.ID, planned.ID, domain.EdgePlanned, t0)
 	add(held.ID, done.ID, domain.EdgeLinked, t0)
 	add(held.ID, cancelled.ID, domain.EdgeLinked, t0)
+	add(held.ID, asm.ID, domain.EdgeLinked, t1.Add(time.Minute))
 	add(free.ID, done.ID, domain.EdgePlanned, t0)
 
 	for _, it := range []domain.Item{done, cancelled} {
@@ -334,8 +346,12 @@ func testOpenNeeds(f *fixture) {
 	}
 
 	want := map[domain.ItemID][]domain.OpenNeed{held.ID: {
-		{Kind: domain.EdgePlanned, Item: planned.ID, Number: planned.Number},
-		{Kind: domain.EdgeOverlap, Item: overlap.ID, Number: overlap.Number, Paths: globs},
+		{Kind: domain.EdgePlanned, Item: planned.ID, Number: planned.Number, Title: "planned"},
+		{Kind: domain.EdgeOverlap, Item: overlap.ID, Number: overlap.Number, Title: "overlap", Paths: globs},
+		{
+			Kind: domain.EdgeLinked, Item: asm.ID, Number: asm.Number, Title: "assembled",
+			Paths: []string{"contracts/api/openapi.yaml", webGlob, "docs/web.md"},
+		},
 	}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("OpenNeeds =\n  %+v\nwant\n  %+v", got, want)

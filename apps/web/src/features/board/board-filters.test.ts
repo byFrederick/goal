@@ -202,9 +202,13 @@ describe('arrangeBoard', () => {
     const shared = item({
       ref: 'sre#40',
       state: 'queued',
-      waiting: { kind: 'files', items: ['sre#3'], files: ['web/src/**'] },
+      waiting: { kind: 'files', items: ['sre#3'], files: ['web/src/**'], needs: [] },
     });
-    const starts = item({ ref: 'sre#41', state: 'ready', waiting: { kind: 'after', items: ['sre#3'], files: [] } });
+    const starts = item({
+      ref: 'sre#41',
+      state: 'ready',
+      waiting: { kind: 'after', items: ['sre#3'], files: [], needs: [] },
+    });
     const shelf = board([station({ id: 'build', items: [shared, starts] })]);
     expect(refs(arrangeBoard(shelf, { status: 'same-files' }), 'build')).toEqual(['sre#40']);
     expect(refs(arrangeBoard(shelf, { status: 'waiting' }), 'build')).toEqual(['sre#41']);
