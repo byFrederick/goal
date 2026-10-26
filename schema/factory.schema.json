@@ -433,7 +433,7 @@
             },
             "assemblies": {
               "type": "object",
-              "description": "How runs keep item branches fresh, what a merge conflict does and whether items that edit the same files are built together. Omitted keys take their defaults.",
+              "description": "How runs keep item branches fresh, what a merge conflict does, whether items that edit the same files are built together and whether a station's plan becomes an assembly. Omitted keys take their defaults.",
               "additionalProperties": false,
               "properties": {
                 "freshBase": { "enum": ["rebase", "merge"], "description": "How a run brings an existing item branch up to date with the default branch; default rebase." },
@@ -441,6 +441,10 @@
                 "overlap": {
                   "enum": ["serialize", "allow"],
                   "description": "serialize (the default): an item whose files overlap those of an item in flight waits for it; allow: build them in parallel."
+                },
+                "materialize": {
+                  "type": "boolean",
+                  "description": "true (the default): a station whose output has a non-empty plan ([{key, title, lane, brief, paths, needs}]) makes the item an assembly, its parts queued at that station; false: the plan is ignored and the item moves on."
                 }
               }
             },

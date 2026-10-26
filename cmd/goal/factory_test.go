@@ -127,12 +127,17 @@ func newDefGoald(t *testing.T) *defGoald {
 	kb := porttest.NewKnowledge(conns, tenancy)
 	uploads := knowledge.NewUploads(kb, porttest.NewObjectStore(), 0)
 
+	// Its own transport: parallel tests closing their httptest servers call CloseIdleConnections on
+	// http.DefaultTransport, which breaks a connection test's request in flight.
+	transport := &http.Transport{}
+	t.Cleanup(transport.CloseIdleConnections)
+
 	handler, err := api.New(api.Deps{
 		Engine: e, Items: store, Factories: cache, Definitions: authors, Versions: defs, Orgs: tenancy, Audit: tenancy,
 		Access: keys, OrgRetention: time.Hour, Authorizer: api.AllowAll{}, Auth: api.AuthConfig{Mode: api.AuthNone},
 		Platform: porttest.NewPlatform(porttest.NewIdentity(clock.Now)), Feed: api.NewFeed(porttest.NewItemNotices(), defNotices, nil),
 		Builder: builder.New(objects, clock, builder.Config{}), Connections: conns, ParseKind: connkind.Parse,
-		ConnectionTransport: http.DefaultTransport, Knowledge: kb, KnowledgeUploads: uploads, KnowledgeSearch: knowledge.NewSearcher(kb, nil, nil),
+		ConnectionTransport: transport, Knowledge: kb, KnowledgeUploads: uploads, KnowledgeSearch: knowledge.NewSearcher(kb, nil, nil),
 		UploadMaxBytes: domain.DefaultMaxUpload, Clock: clock,
 	})
 	if err != nil {
