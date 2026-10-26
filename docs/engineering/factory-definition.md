@@ -120,3 +120,12 @@ With `inflight`, the run's feedback gets an `## In flight` section, read once pe
 - It is ranked from the factory's 500 newest open items; older ones are not listed.
 - It states what it lists and nothing else: how agents use it (naming an overlapping item in `after`, declaring overlapping paths) belongs in the factory's prompts and rules.
 - A store error while reading the open items blocks the item; it never runs without the section.
+
+### Changed since your plan
+
+With `board.flow.assemblies.changedSince: true` (default false), plans bind late ([ADR 0015](../adr/0015-overlapping-in-flight-work.md) decision 5):
+
+- When a station with `context: [inflight]` finishes an item, goald records the head commit of the default branch of `runtime.repository` as the item's base commit, through the line's code host connection for the repository's host. A plan's parts inherit their assembly's. Nothing is recorded without a repository or such a connection.
+- Every later run of an item with a base commit and paths, a rework after a merge conflict included, gets a `## Changed since your plan` section in its feedback when the default branch has commits since then that changed files the item's paths match. Each line names the item that merged the commit (`<factory>#<number>` and title, matched by its `merged` event's sha) or else the commit's short sha and subject, and lists the matching files (at most 20). Commits that change none of the item's files add nothing; a comparison over 100 commits says it was truncated.
+- It states what it lists and nothing else: telling agents to re-derive the brief's paths against current main belongs in the factory's prompts and rules.
+- A code-host error is logged: the item finishes without a base commit, or runs without the section.
