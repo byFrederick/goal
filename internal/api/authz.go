@@ -115,7 +115,7 @@ const archivedDetail = "This factory is archived; restore it first"
 // itemWrites are the permissions of the operations an archived factory refuses: new items and
 // parts, decisions, item operations and andon calls. Reads ask about none of them.
 var itemWrites = map[string]bool{
-	"item:create": true, string(permItemDecide): true, "item:operate": true, "andon:manage": true,
+	string(permItemCreate): true, string(permItemDecide): true, string(permItemOperate): true, string(permAndonManage): true,
 }
 
 // writable refuses the request in ctx with errFactoryArchived when its operation writes items or

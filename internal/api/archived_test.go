@@ -43,8 +43,8 @@ func TestArchivedFactory_RefusesItemWrites(t *testing.T) {
 	h.submit(t) // acme#1, queued at the first station
 
 	assembly := h.assemble(t, []domain.NewPart{
-		{Key: "a", Title: "Contract", Lane: laneAPI},
-		{Key: "b", Title: "Store", Lane: laneAPI, Needs: []string{"a"}},
+		{Key: "a", Title: "Schema", Lane: laneAPI},
+		{Key: "b", Title: "Queries", Lane: laneAPI, Needs: []string{"a"}},
 	})
 	assemblyRef := "line#" + strconv.FormatInt(assembly.Number, 10)
 	partsBefore := h.parts(t, assemblyRef)
@@ -54,6 +54,8 @@ func TestArchivedFactory_RefusesItemWrites(t *testing.T) {
 	h.archive(t, lineID)
 
 	t.Run("submit", func(t *testing.T) {
+		t.Parallel()
+
 		var p gen.Problem
 
 		code := h.call(t, http.MethodPost, acmeItems, `{"title":"Add a version command","type":"feature"}`, &p)
@@ -65,6 +67,8 @@ func TestArchivedFactory_RefusesItemWrites(t *testing.T) {
 	})
 
 	t.Run("move", func(t *testing.T) {
+		t.Parallel()
+
 		var p gen.Problem
 
 		code := h.call(t, http.MethodPost, acmeItem1+"/move", `{"to":"approve"}`, &p)
@@ -72,6 +76,8 @@ func TestArchivedFactory_RefusesItemWrites(t *testing.T) {
 	})
 
 	t.Run("decide", func(t *testing.T) {
+		t.Parallel()
+
 		var p gen.Problem
 
 		code := h.call(t, http.MethodPost, acmeItem1+"/reject", `{"reason":"not this way"}`, &p)
@@ -83,6 +89,8 @@ func TestArchivedFactory_RefusesItemWrites(t *testing.T) {
 	})
 
 	t.Run("add-part", func(t *testing.T) {
+		t.Parallel()
+
 		code, _, p := h.addPart(t, assemblyRef, `{"title":"Docs page","lane":"api","brief":"Document it"}`)
 		wantArchived(t, "addItemPart", code, p)
 
@@ -92,7 +100,9 @@ func TestArchivedFactory_RefusesItemWrites(t *testing.T) {
 	})
 
 	t.Run("reads", func(t *testing.T) {
-		for _, path := range []string{acmeItem1, "/v1/orgs/acme/factories/acme/board"} {
+		t.Parallel()
+
+		for _, path := range []string{acmeItem1, "/v1/orgs/acme/factories/" + acmeID + "/board"} {
 			if code := h.call(t, http.MethodGet, path, "", nil); code != http.StatusOK {
 				t.Errorf("GET %s on an archived factory = %d; want 200", path, code)
 			}
@@ -108,7 +118,7 @@ func TestArchivedFactory_RefusesItemWrites_Hidden(t *testing.T) {
 	h.archive(t, lineID)
 
 	res := h.as(t, viewerToken, http.MethodPost, "/v1/orgs/acme/factories/line/items", `{"title":"t","type":"fix"}`)
-	if p := problem(t, res); res.status != http.StatusNotFound || deref(p.Code) != "factory-not-found" {
-		t.Errorf("submit to a hidden archived factory = %d %+v; want 404 factory-not-found", res.status, p)
+	if p := problem(t, res); res.status != http.StatusNotFound || p.Title != "Factory not found" {
+		t.Errorf("submit to a hidden archived factory = %d %+v; want the fixed 404 Factory not found", res.status, p)
 	}
 }
