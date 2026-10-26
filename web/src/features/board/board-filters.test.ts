@@ -58,6 +58,7 @@ const station = (over: Partial<BoardStation>): BoardStation => ({
 const board = (stations: BoardStation[]): Board => ({
   factory: { id: 'factory-1', name: 'sre', title: 'SRE' },
   stations,
+  assemblies: [],
   constraint: null,
   constraint_source: 'configured',
   line: {

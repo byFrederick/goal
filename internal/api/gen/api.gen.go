@@ -1369,6 +1369,9 @@ type BlankStartKind string
 
 // Board defines model for Board.
 type Board struct {
+	// Assemblies The factory's open assemblies (state assembly), each with its parts summary. An open assembly stays at the station that planned it but is no work there: it is in no station's items and in none of its counts, WIP or statistics; its parts are. A done assembly is a card in the done station's items, like a finished item (ADR 0012).
+	Assemblies []ItemCard `json:"assemblies"`
+
 	// Constraint The station that holds the line back (see constraint_source), or null when none does
 	Constraint *string `json:"constraint"`
 

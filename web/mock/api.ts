@@ -983,7 +983,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const items = state.items.filter((it) => it.factory === factory.name);
     const stations: BoardStation[] = factory.stations.map((s) => {
       const here = items
-        .filter((it) => it.station === s.id)
+        .filter((it) => it.station === s.id && it.state !== 'assembly')
         .sort((a, b) =>
           a.class_of_service === b.class_of_service ? a.number - b.number : a.class_of_service === 'expedite' ? -1 : 1,
         );
@@ -1003,6 +1003,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     return {
       factory: { id: factory.id, name: factory.name, ...(factory.title ? { title: factory.title } : {}) },
       stations,
+      // Open assemblies are on no station's column (ADR 0012).
+      assemblies: items.filter((it) => it.state === 'assembly').map(card),
       constraint: state.constraint[factory.name] ?? null,
       constraint_source: constraintSourceOf(factory),
       line: lineOf(factory, stations, items),

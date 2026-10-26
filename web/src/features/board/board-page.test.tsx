@@ -110,6 +110,7 @@ const board = (
     station({ id: 'investigate', items: investigateItems, in_progress: 1, wip_limit: 2 }),
     station({ id: 'build', agents: ['builder'], items: [buildItem], in_progress: 1, wip_limit: 1 }),
   ],
+  assemblies: [],
   constraint: 'build',
   constraint_source: 'configured',
   line: {
@@ -398,6 +399,7 @@ describe('board filters and grouping', () => {
     return {
       factory: { id: factory.id, name: factory.name, title: 'SRE' },
       stations: [investigate, build],
+      assemblies: [],
       constraint: 'build',
       constraint_source: 'configured',
       line: {

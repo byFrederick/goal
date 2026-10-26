@@ -473,7 +473,9 @@ func partsFrom(rows []db.WorkItem) (domain.Parts, error) {
 
 // closeAssembly closes the assembly of row, a part just moved, when row closed its last open
 // part: cancelled when cancel is set (a person cancelled the assembly), else done when any part
-// is done, cancelled otherwise. The assembly's row is locked after the part's, so of two last
+// is done, cancelled otherwise. Done, it moves to the station of its most recently done part, the
+// line's done station, where a finished single item lands; cancelled, it keeps its own, as a
+// cancelled single item does. The assembly's row is locked after the part's, so of two last
 // parts closing at once the second sees the first committed and closes it.
 func closeAssembly(ctx context.Context, q *db.Queries, row db.WorkItem, at time.Time, cancel bool) error {
 	state := domain.ItemState(row.State)
@@ -499,13 +501,17 @@ func closeAssembly(ctx context.Context, q *db.Queries, row db.WorkItem, at time.
 		return nil
 	}
 
-	closed := domain.StateCancelled
+	closed, station := domain.StateCancelled, parent.Station
 	if c.Done > 0 && !cancel {
 		closed = domain.StateDone
+
+		if station, err = q.LastDonePartStation(ctx, parent.ID); err != nil {
+			return fmt.Errorf("done station of the assembly: %w", err)
+		}
 	}
 
 	if _, err := q.MoveItem(ctx, db.MoveItemParams{
-		ID: parent.ID, Station: parent.Station, State: string(closed), UpdatedAt: at,
+		ID: parent.ID, Station: station, State: string(closed), UpdatedAt: at,
 		SetDoneAt: closed == domain.StateDone, DoneAt: &at,
 	}); err != nil {
 		return fmt.Errorf("close assembly: %w", err)
@@ -513,7 +519,7 @@ func closeAssembly(ctx context.Context, q *db.Queries, row db.WorkItem, at time.
 
 	return appendEvents(ctx, q, []domain.Event{{
 		FactoryID: domain.FactoryID(parent.FactoryID.String()), ItemID: domain.ItemID(parent.ID.String()), At: at,
-		Kind: domain.EventAssemblyDone, Station: parent.Station, Actor: domain.ActorEngine,
+		Kind: domain.EventAssemblyDone, Station: station, Actor: domain.ActorEngine,
 		Data: map[string]any{"state": string(closed), "parts_done": c.Done, "parts": c.Total},
 	}})
 }

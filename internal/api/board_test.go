@@ -198,6 +198,67 @@ func TestAPI_ItemCardsCarryAssemblyAndParts(t *testing.T) {
 	}
 }
 
+// An open assembly is in the board's assemblies with its parts summary, in no station's items
+// or counts; a done one is a done card at the done station, where its parts finished.
+func TestAPI_BoardListsOpenAssemblies(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	done, solo := h.assembled(t, "solo")
+	h.move(t, solo[0], domain.Position{Station: stDone, State: domain.StateDone}, func(tr *ports.Transition) { tr.DoneAt = t0 })
+
+	open, parts := h.assembled(t, "one", "two")
+	h.move(t, parts[0], domain.Position{Station: stMerge, State: domain.StateWaitingHuman}, nil)
+
+	var board gen.Board
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/board", "", &board); code != http.StatusOK {
+		t.Fatalf("GET board = %d", code)
+	}
+
+	wantParts := &gen.PartsSummary{Total: 2, Waiting: 2, Stations: []string{stMerge, stBuild}}
+	if len(board.Assemblies) != 1 || board.Assemblies[0].Id != string(open.ID) || !reflect.DeepEqual(board.Assemblies[0].Parts, wantParts) {
+		t.Fatalf("board assemblies = %+v; want only %d with parts %+v", board.Assemblies, open.Number, *wantParts)
+	}
+
+	cards := cardsOf(board)
+	if _, ok := cards[open.Number]; ok {
+		t.Errorf("an open assembly is on a station's column; want it only in assemblies")
+	}
+
+	for _, st := range board.Stations {
+		if st.Id == stBuild && (st.Waiting != 1 || st.InProgress != 0) {
+			t.Errorf("%s waiting %d, in progress %d; want only the queued part waiting", st.Id, st.Waiting, st.InProgress)
+		}
+	}
+
+	wantDoneCardAt(t, board, done, stDone)
+}
+
+// wantDoneCardAt checks that item is a done card in station's items and in no other station's.
+func wantDoneCardAt(t *testing.T, board gen.Board, item domain.Item, station string) {
+	t.Helper()
+
+	found := false
+
+	for _, st := range board.Stations {
+		for _, c := range st.Items {
+			if c.Id != string(item.ID) {
+				continue
+			}
+
+			found = found || st.Id == station
+
+			if st.Id != station || c.State != gen.ItemState(domain.StateDone) {
+				t.Errorf("item %d is a %s card at %s; want done at %s", item.Number, c.State, st.Id, station)
+			}
+		}
+	}
+
+	if !found {
+		t.Errorf("item %d is no card at %s", item.Number, station)
+	}
+}
+
 // getReadingOnce GETs path into out and checks it made the store read named read once.
 func (h *harness) getReadingOnce(t *testing.T, read, path string, out any) {
 	t.Helper()

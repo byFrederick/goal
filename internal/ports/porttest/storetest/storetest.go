@@ -92,6 +92,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"ListItems_NewestFirstFilteredAndPaged", testListItems},
 		{"Assemblies_PartsInNumberOrder", testAssembliesPartsInNumberOrder},
 		{"StationLoads_CountWaitingAndInProgress", testStationLoads},
+		{"StationLoads_CountNoOpenAssembly", testStationLoadsCountNoOpenAssembly},
 		{"FlowMetrics_DoneLeadTimeReworkWIPAndSpend", testFlowMetrics},
 		{"SpendSince_WindowBoundsAndFactoryIsolation", testSpendSince},
 		{"Attention_CountsWaitingBlockedAndTheOpenAndon", testAttention},
