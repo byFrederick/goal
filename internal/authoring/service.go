@@ -86,9 +86,11 @@ var (
 	ErrItemsAtRemovedStation = ports.ErrItemsAtRemovedStation
 	// ErrFactoryRunning: archiving a factory that is not paused [409].
 	ErrFactoryRunning = ports.ErrFactoryRunning
-	// ErrFactoryBusy: archiving a factory whose items hold leases; the error is a
+	// ErrFactoryBusy: archiving or purging a factory whose items hold leases; the error is a
 	// *ports.FactoryBusyError [409].
 	ErrFactoryBusy = ports.ErrFactoryBusy
+	// ErrFactoryNotArchived: purging a factory that is not archived [409].
+	ErrFactoryNotArchived = ports.ErrFactoryNotArchived
 	// ErrModelInvalid: a section value of the wrong shape [422].
 	ErrModelInvalid = factorymodel.ErrModelInvalid
 	// ErrImportInvalid: imported files without a factory.yaml that parses [422].
@@ -101,27 +103,28 @@ var (
 
 // Problem codes of the refusals.
 const (
-	CodeFactoryNotFound   = "factory-not-found"
-	CodeNoDraft           = "no-draft"
-	CodeVersionNotFound   = "version-not-found"
-	CodeFileNotFound      = "file-not-found"
-	CodeTemplateNotFound  = "template-not-found"
-	CodeInvalidRequest    = "invalid-request"
-	CodeDraftExists       = "draft-exists"
-	CodeDraftConflict     = "draft-conflict"
-	CodeBaseMoved         = "draft-base-moved"
-	CodeNameTaken         = "name-taken"
-	CodeFactoryExists     = "factory-exists"
-	CodeFactoryPublished  = "factory-published"
-	CodeDefinitionInvalid = "definition-invalid"
-	CodeItemsAtRemoved    = "items-at-removed-station"
-	CodeFactoryRunning    = "factory-running"
-	CodeFactoryBusy       = "factory-busy"
-	CodeYAMLInvalid       = "yaml-invalid"
-	CodeModelInvalid      = "model-invalid"
-	CodeImportInvalid     = "import-invalid"
-	CodeBadPath           = "bad-path"
-	CodeTooLarge          = "too-large"
+	CodeFactoryNotFound    = "factory-not-found"
+	CodeNoDraft            = "no-draft"
+	CodeVersionNotFound    = "version-not-found"
+	CodeFileNotFound       = "file-not-found"
+	CodeTemplateNotFound   = "template-not-found"
+	CodeInvalidRequest     = "invalid-request"
+	CodeDraftExists        = "draft-exists"
+	CodeDraftConflict      = "draft-conflict"
+	CodeBaseMoved          = "draft-base-moved"
+	CodeNameTaken          = "name-taken"
+	CodeFactoryExists      = "factory-exists"
+	CodeFactoryPublished   = "factory-published"
+	CodeDefinitionInvalid  = "definition-invalid"
+	CodeItemsAtRemoved     = "items-at-removed-station"
+	CodeFactoryRunning     = "factory-running"
+	CodeFactoryBusy        = "factory-busy"
+	CodeFactoryNotArchived = "factory-not-archived"
+	CodeYAMLInvalid        = "yaml-invalid"
+	CodeModelInvalid       = "model-invalid"
+	CodeImportInvalid      = "import-invalid"
+	CodeBadPath            = "bad-path"
+	CodeTooLarge           = "too-large"
 )
 
 var problemCodes = []struct {
@@ -144,6 +147,7 @@ var problemCodes = []struct {
 	{ErrItemsAtRemovedStation, CodeItemsAtRemoved},
 	{ErrFactoryRunning, CodeFactoryRunning},
 	{ErrFactoryBusy, CodeFactoryBusy},
+	{ErrFactoryNotArchived, CodeFactoryNotArchived},
 	{ErrModelInvalid, CodeModelInvalid},
 	{ErrImportInvalid, CodeImportInvalid},
 	{ErrBadPath, CodeBadPath},

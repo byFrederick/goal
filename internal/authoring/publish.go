@@ -299,6 +299,26 @@ func (s *Service) setArchived(ctx context.Context, f domain.FactoryID, archive b
 	return rec, nil
 }
 
+// Purge deletes an archived factory none of whose items is being worked, for good:
+// ErrFactoryNotArchived for a live one, or a *ports.FactoryBusyError.
+func (s *Service) Purge(ctx context.Context, f domain.FactoryID) error {
+	by, err := actor(ctx)
+	if err != nil {
+		return err
+	}
+
+	err = s.store.DeleteArchivedFactory(ctx, f, by)
+	if errors.Is(err, ports.ErrNotFound) {
+		return fmt.Errorf("factory %s: %w", f, ErrFactoryNotFound)
+	}
+
+	if err != nil {
+		return fmt.Errorf("purge factory %s: %w", f, err)
+	}
+
+	return nil
+}
+
 // DeleteFactory deletes a factory that was never published, with its drafts (the wizard's
 // Cancel): ErrFactoryPublished once it was.
 func (s *Service) DeleteFactory(ctx context.Context, f domain.FactoryID) error {

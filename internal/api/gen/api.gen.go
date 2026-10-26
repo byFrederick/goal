@@ -5104,7 +5104,7 @@ type ClientInterface interface {
 
 	// DeleteFactory Delete a factory that was never published, with its draft (the wizard's Cancel)
 	//
-	// 409 factory-published once a version was published.
+	// 409 factory-published once a version was published: a published factory is archived (archiveFactory) and then deleted for good (purgeFactory).
 	//
 	// Corresponds with DELETE /v1/orgs/{org}/factories/{factory} (the `DeleteFactory` operationId).
 	DeleteFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5398,6 +5398,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/pause (the `PauseFactory` operationId).
 	PauseFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PurgeFactory Delete an archived, idle factory for good
+	//
+	// Deletes an archived factory none of whose items holds a lease, together with its items, runs, events and definition versions; its audit history stays. 409 factory-not-archived ("Archive the factory first") for a factory that is not archived, 409 factory-busy ("N items are being worked", N the items holding a lease) while runs still work its items. Audited as factory.deleted.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/purge (the `PurgeFactory` operationId).
+	PurgeFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ResumeFactory Start a paused factory again
 	//
@@ -6632,7 +6639,7 @@ func (c *Client) CreateFactory(ctx context.Context, org OrgRef, body CreateFacto
 
 // DeleteFactory Delete a factory that was never published, with its draft (the wizard's Cancel)
 //
-// 409 factory-published once a version was published.
+// 409 factory-published once a version was published: a published factory is archived (archiveFactory) and then deleted for good (purgeFactory).
 //
 // Corresponds with DELETE /v1/orgs/{org}/factories/{factory} (the `DeleteFactory` operationId).
 func (c *Client) DeleteFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -7307,6 +7314,23 @@ func (c *Client) GetWeeklyThroughput(ctx context.Context, org OrgRef, factory Fa
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/pause (the `PauseFactory` operationId).
 func (c *Client) PauseFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPauseFactoryRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PurgeFactory Delete an archived, idle factory for good
+//
+// Deletes an archived factory none of whose items holds a lease, together with its items, runs, events and definition versions; its audit history stays. 409 factory-not-archived ("Archive the factory first") for a factory that is not archived, 409 factory-busy ("N items are being worked", N the items holding a lease) while runs still work its items. Audited as factory.deleted.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/purge (the `PurgeFactory` operationId).
+func (c *Client) PurgeFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPurgeFactoryRequest(c.Server, org, factory)
 	if err != nil {
 		return nil, err
 	}
@@ -11936,6 +11960,47 @@ func NewPauseFactoryRequest(server string, org OrgRef, factory FactoryRef) (*htt
 	return req, nil
 }
 
+// NewPurgeFactoryRequest constructs an http.Request for the PurgeFactory method
+func NewPurgeFactoryRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/purge", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewResumeFactoryRequest constructs an http.Request for the ResumeFactory method
 func NewResumeFactoryRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
 	var err error
@@ -15211,7 +15276,7 @@ type ClientWithResponsesInterface interface {
 
 	// DeleteFactoryWithResponse Delete a factory that was never published, with its draft (the wizard's Cancel)
 	//
-	// 409 factory-published once a version was published.
+	// 409 factory-published once a version was published: a published factory is archived (archiveFactory) and then deleted for good (purgeFactory).
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -15545,6 +15610,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/pause (the `PauseFactory` operationId).
 	PauseFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*PauseFactoryResponse, error)
+
+	// PurgeFactoryWithResponse Delete an archived, idle factory for good
+	//
+	// Deletes an archived factory none of whose items holds a lease, together with its items, runs, events and definition versions; its audit history stays. 409 factory-not-archived ("Archive the factory first") for a factory that is not archived, 409 factory-busy ("N items are being worked", N the items holding a lease) while runs still work its items. Audited as factory.deleted.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/purge (the `PurgeFactory` operationId).
+	PurgeFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*PurgeFactoryResponse, error)
 
 	// ResumeFactoryWithResponse Start a paused factory again
 	//
@@ -19027,6 +19101,47 @@ func (r PauseFactoryResponse) ContentType() string {
 	return ""
 }
 
+type PurgeFactoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PurgeFactoryResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PurgeFactoryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PurgeFactoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PurgeFactoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PurgeFactoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ResumeFactoryResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -22383,7 +22498,7 @@ func (c *ClientWithResponses) CreateFactoryWithResponse(ctx context.Context, org
 
 // DeleteFactoryWithResponse Delete a factory that was never published, with its draft (the wizard's Cancel)
 //
-// 409 factory-published once a version was published.
+// 409 factory-published once a version was published: a published factory is archived (archiveFactory) and then deleted for good (purgeFactory).
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -22950,6 +23065,21 @@ func (c *ClientWithResponses) PauseFactoryWithResponse(ctx context.Context, org 
 		return nil, err
 	}
 	return ParsePauseFactoryResponse(rsp)
+}
+
+// PurgeFactoryWithResponse Delete an archived, idle factory for good
+//
+// Deletes an archived factory none of whose items holds a lease, together with its items, runs, events and definition versions; its audit history stays. 409 factory-not-archived ("Archive the factory first") for a factory that is not archived, 409 factory-busy ("N items are being worked", N the items holding a lease) while runs still work its items. Audited as factory.deleted.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/purge (the `PurgeFactory` operationId).
+func (c *ClientWithResponses) PurgeFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*PurgeFactoryResponse, error) {
+	rsp, err := c.PurgeFactory(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePurgeFactoryResponse(rsp)
 }
 
 // ResumeFactoryWithResponse Start a paused factory again
@@ -26036,6 +26166,35 @@ func ParsePauseFactoryResponse(rsp *http.Response) (*PauseFactoryResponse, error
 	return response, nil
 }
 
+// ParsePurgeFactoryResponse parses an HTTP response from a PurgeFactoryWithResponse call
+func ParsePurgeFactoryResponse(rsp *http.Response) (*PurgeFactoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PurgeFactoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseResumeFactoryResponse parses an HTTP response from a ResumeFactoryWithResponse call
 func ParseResumeFactoryResponse(rsp *http.Response) (*ResumeFactoryResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -28209,6 +28368,9 @@ type ServerInterface interface {
 	// PauseFactory Stop the factory taking work; runs in progress finish
 	// (POST /v1/orgs/{org}/factories/{factory}/pause)
 	PauseFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// PurgeFactory Delete an archived, idle factory for good
+	// (POST /v1/orgs/{org}/factories/{factory}/purge)
+	PurgeFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
 	// ResumeFactory Start a paused factory again
 	// (POST /v1/orgs/{org}/factories/{factory}/resume)
 	ResumeFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
@@ -30983,6 +31145,41 @@ func (siw *ServerInterfaceWrapper) PauseFactory(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// PurgeFactory operation middleware
+func (siw *ServerInterfaceWrapper) PurgeFactory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PurgeFactory(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ResumeFactory operation middleware
 func (siw *ServerInterfaceWrapper) ResumeFactory(w http.ResponseWriter, r *http.Request) {
 
@@ -33334,6 +33531,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/resume", wrapper.ResumeFactory)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/archive", wrapper.ArchiveFactory)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/unarchive", wrapper.RestoreFactory)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/purge", wrapper.PurgeFactory)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft", wrapper.DiscardDraft)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft", wrapper.GetDraft)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft", wrapper.OpenDraft)
@@ -35811,6 +36009,40 @@ type PauseFactorydefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PauseFactorydefaultApplicationProblemPlusJSONResponse) VisitPauseFactoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PurgeFactoryRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type PurgeFactoryResponseObject interface {
+	VisitPurgeFactoryResponse(w http.ResponseWriter) error
+}
+
+type PurgeFactory204Response struct {
+}
+
+func (response PurgeFactory204Response) VisitPurgeFactoryResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type PurgeFactorydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response PurgeFactorydefaultApplicationProblemPlusJSONResponse) VisitPurgeFactoryResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -38539,6 +38771,9 @@ type StrictServerInterface interface {
 	// PauseFactory Stop the factory taking work; runs in progress finish
 	// (POST /v1/orgs/{org}/factories/{factory}/pause)
 	PauseFactory(ctx context.Context, request PauseFactoryRequestObject) (PauseFactoryResponseObject, error)
+	// PurgeFactory Delete an archived, idle factory for good
+	// (POST /v1/orgs/{org}/factories/{factory}/purge)
+	PurgeFactory(ctx context.Context, request PurgeFactoryRequestObject) (PurgeFactoryResponseObject, error)
 	// ResumeFactory Start a paused factory again
 	// (POST /v1/orgs/{org}/factories/{factory}/resume)
 	ResumeFactory(ctx context.Context, request ResumeFactoryRequestObject) (ResumeFactoryResponseObject, error)
@@ -40468,6 +40703,33 @@ func (sh *strictHandler) PauseFactory(w http.ResponseWriter, r *http.Request, or
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PauseFactoryResponseObject); ok {
 		if err := validResponse.VisitPauseFactoryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PurgeFactory operation middleware
+func (sh *strictHandler) PurgeFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request PurgeFactoryRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PurgeFactory(ctx, request.(PurgeFactoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PurgeFactory")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PurgeFactoryResponseObject); ok {
+		if err := validResponse.VisitPurgeFactoryResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

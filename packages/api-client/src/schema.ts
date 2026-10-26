@@ -626,7 +626,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a factory that was never published, with its draft (the wizard's Cancel)
-         * @description 409 factory-published once a version was published.
+         * @description 409 factory-published once a version was published: a published factory is archived (archiveFactory) and then deleted for good (purgeFactory).
          */
         delete: operations["deleteFactory"];
         options?: never;
@@ -722,6 +722,31 @@ export interface paths {
          * @description Undoes archiveFactory: the factory is listed again and stays paused (resumeFactory starts it), its items where they were. Idempotent: restoring a factory that is not archived changes nothing and answers it. Audited as factory.restored.
          */
         post: operations["restoreFactory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/purge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete an archived, idle factory for good
+         * @description Deletes an archived factory none of whose items holds a lease, together with its items, runs, events and definition versions; its audit history stays. 409 factory-not-archived ("Archive the factory first") for a factory that is not archived, 409 factory-busy ("N items are being worked", N the items holding a lease) while runs still work its items. Audited as factory.deleted.
+         */
+        post: operations["purgeFactory"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5919,6 +5944,30 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Factory"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    purgeFactory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };

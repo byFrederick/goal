@@ -31,6 +31,7 @@ type Definitions interface {
 	Resume(ctx context.Context, f domain.FactoryID) (ports.FactoryRecord, error)
 	Archive(ctx context.Context, f domain.FactoryID) (ports.FactoryRecord, error)
 	Unarchive(ctx context.Context, f domain.FactoryID) (ports.FactoryRecord, error)
+	Purge(ctx context.Context, f domain.FactoryID) error
 
 	Templates(ctx context.Context) ([]authoring.TemplateSummary, error)
 	Template(ctx context.Context, name string, version int) (authoring.Template, error)
@@ -213,6 +214,19 @@ func (s *server) RestoreFactory(ctx context.Context, req gen.RestoreFactoryReque
 	return gen.RestoreFactory200JSONResponse(s.factoryOut(ctx, rec)), nil
 }
 
+func (s *server) PurgeFactory(ctx context.Context, req gen.PurgeFactoryRequestObject) (gen.PurgeFactoryResponseObject, error) {
+	rec, err := s.definition(ctx, req.Factory)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.defs.Purge(ctx, rec.ID); err != nil {
+		return nil, err
+	}
+
+	return gen.PurgeFactory204Response{}, nil
+}
+
 func (s *server) ListTemplates(ctx context.Context, _ gen.ListTemplatesRequestObject) (gen.ListTemplatesResponseObject, error) {
 	list, err := s.defs.Templates(ctx)
 	if err != nil {
@@ -392,27 +406,28 @@ var (
 
 // definitionStatus is the status of each problem code authoring.ProblemCode gives.
 var definitionStatus = map[string]int{
-	authoring.CodeFactoryNotFound:   http.StatusNotFound,
-	authoring.CodeNoDraft:           http.StatusNotFound,
-	authoring.CodeVersionNotFound:   http.StatusNotFound,
-	authoring.CodeFileNotFound:      http.StatusNotFound,
-	authoring.CodeTemplateNotFound:  http.StatusNotFound,
-	authoring.CodeInvalidRequest:    http.StatusBadRequest,
-	authoring.CodeDraftExists:       http.StatusConflict,
-	authoring.CodeBaseMoved:         http.StatusConflict,
-	authoring.CodeNameTaken:         http.StatusConflict,
-	authoring.CodeFactoryExists:     http.StatusConflict,
-	authoring.CodeFactoryPublished:  http.StatusConflict,
-	authoring.CodeDefinitionInvalid: http.StatusConflict,
-	authoring.CodeItemsAtRemoved:    http.StatusConflict,
-	authoring.CodeFactoryRunning:    http.StatusConflict,
-	authoring.CodeFactoryBusy:       http.StatusConflict,
-	authoring.CodeYAMLInvalid:       http.StatusConflict,
-	authoring.CodeDraftConflict:     http.StatusPreconditionFailed,
-	authoring.CodeModelInvalid:      http.StatusUnprocessableEntity,
-	authoring.CodeImportInvalid:     http.StatusUnprocessableEntity,
-	authoring.CodeBadPath:           http.StatusUnprocessableEntity,
-	authoring.CodeTooLarge:          http.StatusRequestEntityTooLarge,
+	authoring.CodeFactoryNotFound:    http.StatusNotFound,
+	authoring.CodeNoDraft:            http.StatusNotFound,
+	authoring.CodeVersionNotFound:    http.StatusNotFound,
+	authoring.CodeFileNotFound:       http.StatusNotFound,
+	authoring.CodeTemplateNotFound:   http.StatusNotFound,
+	authoring.CodeInvalidRequest:     http.StatusBadRequest,
+	authoring.CodeDraftExists:        http.StatusConflict,
+	authoring.CodeBaseMoved:          http.StatusConflict,
+	authoring.CodeNameTaken:          http.StatusConflict,
+	authoring.CodeFactoryExists:      http.StatusConflict,
+	authoring.CodeFactoryPublished:   http.StatusConflict,
+	authoring.CodeDefinitionInvalid:  http.StatusConflict,
+	authoring.CodeItemsAtRemoved:     http.StatusConflict,
+	authoring.CodeFactoryRunning:     http.StatusConflict,
+	authoring.CodeFactoryBusy:        http.StatusConflict,
+	authoring.CodeFactoryNotArchived: http.StatusConflict,
+	authoring.CodeYAMLInvalid:        http.StatusConflict,
+	authoring.CodeDraftConflict:      http.StatusPreconditionFailed,
+	authoring.CodeModelInvalid:       http.StatusUnprocessableEntity,
+	authoring.CodeImportInvalid:      http.StatusUnprocessableEntity,
+	authoring.CodeBadPath:            http.StatusUnprocessableEntity,
+	authoring.CodeTooLarge:           http.StatusRequestEntityTooLarge,
 }
 
 // definitionProblem is the problem of a definition refusal, with what the client needs to act on
@@ -458,6 +473,8 @@ func definitionProblem(err error) (gen.Problem, bool) {
 	switch code {
 	case authoring.CodeFactoryRunning:
 		p.Detail = optional("Pause the factory first")
+	case authoring.CodeFactoryNotArchived:
+		p.Detail = optional("Archive the factory first")
 	case authoring.CodeFactoryBusy:
 		if e, ok := errors.AsType[*ports.FactoryBusyError](err); ok {
 			p.Detail = optional(e.Error())

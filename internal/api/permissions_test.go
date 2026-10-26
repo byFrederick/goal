@@ -81,6 +81,8 @@ const (
 	opListAudit = "listAudit"
 	opArchive   = "archiveFactory"
 	opUnarchive = "restoreFactory"
+	opPurge     = "purgeFactory"
+	opDelete    = "deleteFactory"
 )
 
 // Permissions the grants ask about more than once.
@@ -147,6 +149,10 @@ func TestPermissions_RoleGrants(t *testing.T) {
 		{name: "admin restores a factory", p: admin, operation: opUnarchive, org: grantsOrg, factory: grantsF, want: wantAllow},
 		{name: "editor cannot archive the factory", p: editor, operation: opArchive, org: grantsOrg, factory: grantsF, want: wantForbidden},
 		{name: "editor cannot restore the factory", p: editor, operation: opUnarchive, org: grantsOrg, factory: grantsF, want: wantForbidden},
+		{name: "owner purges a factory", p: owner, operation: opPurge, org: grantsOrg, factory: grantsF, want: wantAllow},
+		{name: "admin purges a factory", p: admin, operation: opPurge, org: grantsOrg, factory: grantsF, want: wantAllow},
+		{name: "editor cannot purge the factory", p: editor, operation: opPurge, org: grantsOrg, factory: grantsF, want: wantForbidden},
+		{name: "editor deletes a factory never published", p: editor, operation: opDelete, org: grantsOrg, factory: grantsF, want: wantAllow},
 
 		{name: "a member of another org does not see this one", p: owner, operation: opGetOrg, org: grantsOther, want: wantHidden},
 		{name: "a platform admin is no member", p: platformAdmin, operation: opGetOrg, org: grantsOrg, want: wantHidden},

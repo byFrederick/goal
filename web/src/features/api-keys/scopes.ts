@@ -44,6 +44,7 @@ export const scopeGroups: readonly { id: 'read' | 'work' | 'build'; label: strin
       { id: 'factory:manage', label: 'Pause factories', needs: 'editor' },
       { id: 'factory:create', label: 'Create factories', needs: null },
       { id: 'factory:archive', label: 'Archive factories', needs: null },
+      { id: 'factory:delete', label: 'Delete factories', needs: null },
       { id: 'knowledge:manage', label: 'Manage the knowledge base', needs: null },
     ],
   },
