@@ -14,7 +14,7 @@ apps/           auth/ (identity service, Hono + Better Auth, reached only throug
 cmd/            binaries: goal (CLI), goald (daemon), goal-egress (egress proxy) and code generators
 contracts/      contracts/api/ (openapi.yaml, events.schema.json, permissions.yaml: the only contract between goald and TypeScript), contracts/definitions/ (JSON Schemas for factory, eval and connection kind files)
 db/             the database: db/migrations/ (forward-only SQL, goose), db/queries/ (SQL for sqlc) and db/sqlc.yaml
-deploy/         cloudflare/ (the control Worker and wrangler config), terraform/ (the platform's own infrastructure, one root module)
+deploy/         deploy/cloudflare/ (the control Worker and wrangler config), deploy/terraform/ (the platform's own infrastructure, one root module)
 design-system/  goal/MASTER.md: the UI's design system
 docs/           adr/, engineering/, specs/, jonah/
 internal/       the Go packages: domain, engine, ports, adapters, api, gateway… (docs/engineering/architecture.md)
