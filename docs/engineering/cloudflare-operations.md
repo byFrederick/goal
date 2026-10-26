@@ -1,6 +1,6 @@
 # Cloudflare operations
 
-The runbook of Goal's Cloudflare install (ADR 0008, spec 4 §5.12, §14 step 7): what `terraform/` owns, the credentials it needs, the first install, routine deploys, the master key's escrow and rotation, and restores. Only the owner applies, or the coordinating agent the owner explicitly authorizes for that change; every other agent stops at `task tf:plan` (AGENTS.md rule 8).
+The runbook of Goal's Cloudflare install (ADR 0008, spec 4 §5.12, §14 step 7): what `terraform/` owns, the credentials it needs, the first install, routine deploys, the master key's escrow and rotation, and restores. Who may apply is in [infra.md](../../.claude/rules/infra.md).
 
 ## What lives where
 

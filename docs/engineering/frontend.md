@@ -364,8 +364,3 @@ The UI holds no secrets. With sign-in on it signs in through goald's `/api/auth`
 - Vitest for logic with real behavior (the trace built from events, which decisions an item allows); Testing Library for components when they carry such logic. No snapshot tests of markup.
 - Playwright for the critical flows at 375, 768 and 1440 px, with axe accessibility checks.
 - Budgets: initial JS under 250 KB gzipped; routes are code-split. Views loaded on first use go through `lazyRetrying` (`web/src/shared/lazy.ts`), not bare `React.lazy`, which keeps a chunk that failed to arrive failed until the page reloads.
-- Every UI change follows ui-ux-pro-max's pre-delivery checklist and attaches screenshots at the three widths.
-
-## Skills
-
-ui-ux-pro-max (strictly), frontend-design, web-design-guidelines, impeccable, shadcn, tailwind-design-system, vercel-react-best-practices, vercel-composition-patterns, accessibility, typescript-advanced-types, tanstack-query-best-practices, tanstack-router-best-practices, vite, vitest, playwright-best-practices, webapp-testing, openapi-spec-generation, turborepo, pnpm, monorepo-management, deploy-to-vercel.
