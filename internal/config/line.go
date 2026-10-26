@@ -1,7 +1,6 @@
 package config
 
 import (
-	"maps"
 	"slices"
 	"time"
 
@@ -124,8 +123,24 @@ func flowPolicy(fl Flow) domain.FlowPolicy {
 
 func station(st Station) domain.Station {
 	out := domain.Station{
-		ID: st.ID, Kind: domain.StationKind(st.Kind), Agent: st.Agent, Route: maps.Clone(st.Route),
+		ID: st.ID, Kind: domain.StationKind(st.Kind), Agent: st.Agent,
 		Agents: st.Agents, WIP: st.WIP, Buffer: st.Buffer, Output: st.Output, Action: domain.StationAction(st.Action),
+	}
+
+	for lane, r := range st.Route {
+		if out.Route == nil {
+			out.Route = map[string]string{}
+		}
+
+		out.Route[lane] = r.Agent
+
+		if r.Agents > 0 {
+			if out.RouteAgents == nil {
+				out.RouteAgents = map[string]int{}
+			}
+
+			out.RouteAgents[lane] = r.Agents
+		}
 	}
 
 	for _, c := range st.Checks { // shorthand command lines decode as command checks

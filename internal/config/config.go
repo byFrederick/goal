@@ -234,20 +234,52 @@ type Intake struct {
 type Station struct {
 	ID string `json:"id"`
 	// Name and Description are for display; ID is what everything references.
-	Name        string            `json:"name,omitempty"`
-	Description string            `json:"description,omitempty"`
-	Kind        string            `json:"kind"`
-	Agent       string            `json:"agent,omitempty"`
-	Route       map[string]string `json:"route,omitempty"` // item lane → agent
-	Agents      int               `json:"agents,omitempty"`
-	WIP         int               `json:"wip,omitempty"`
-	Buffer      int               `json:"buffer,omitempty"`
-	Output      string            `json:"output,omitempty"`
-	Checks      []StationCheck    `json:"checks,omitempty"`
-	Gate        *Gate             `json:"gate,omitempty"`
+	Name        string                `json:"name,omitempty"`
+	Description string                `json:"description,omitempty"`
+	Kind        string                `json:"kind"`
+	Agent       string                `json:"agent,omitempty"`
+	Route       map[string]RouteEntry `json:"route,omitempty"` // item lane → agent
+	Agents      int                   `json:"agents,omitempty"`
+	WIP         int                   `json:"wip,omitempty"`
+	Buffer      int                   `json:"buffer,omitempty"`
+	Output      string                `json:"output,omitempty"`
+	Checks      []StationCheck        `json:"checks,omitempty"`
+	Gate        *Gate                 `json:"gate,omitempty"`
 	// Action makes goald act when the item is approved at this station, a human station or an
 	// agent station with a gate: "merge" merges the item's pull requests first.
 	Action string `json:"action,omitempty"`
+}
+
+// RouteEntry is the agent a station's route picks for a lane and, when Agents is set, the
+// station's slots kept for that lane.
+type RouteEntry struct {
+	Agent  string `json:"agent"`
+	Agents int    `json:"agents,omitempty"`
+}
+
+// UnmarshalJSON reads a route entry object or its shorthand, the agent's name.
+func (r *RouteEntry) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		*r = RouteEntry{Agent: s}
+
+		return nil
+	}
+
+	type plain RouteEntry
+
+	return json.Unmarshal(data, (*plain)(r))
+}
+
+// MarshalJSON writes the shorthand when the entry sets no count.
+func (r RouteEntry) MarshalJSON() ([]byte, error) {
+	if r.Agents == 0 {
+		return json.Marshal(r.Agent)
+	}
+
+	type plain RouteEntry
+
+	return json.Marshal(plain(r))
 }
 
 // ActionMerge is the station action that merges the item's pull request on approval.

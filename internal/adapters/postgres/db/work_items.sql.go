@@ -26,6 +26,61 @@ func (q *Queries) AddItemCost(ctx context.Context, arg AddItemCostParams) error 
 	return err
 }
 
+const assemblyParts = `-- name: AssemblyParts :many
+SELECT a.id AS assembly_id, a.number AS assembly_number, a.title AS assembly_title,
+       p.id, p.number, p.station, p.state
+FROM work_items p
+JOIN work_items a ON a.id = p.parent_id
+WHERE p.parent_id = ANY ($1::uuid[]) AND p.part_key IS NOT NULL AND a.factory_id = $2
+ORDER BY a.number, p.number
+`
+
+type AssemblyPartsParams struct {
+	Ids       []uuid.UUID
+	FactoryID uuid.UUID
+}
+
+type AssemblyPartsRow struct {
+	AssemblyID     uuid.UUID
+	AssemblyNumber int64
+	AssemblyTitle  string
+	ID             uuid.UUID
+	Number         int64
+	Station        string
+	State          string
+}
+
+// The parts of those of the factory's items among ids that have any (work_items_parent_id_idx),
+// each with its assembly's number and title, by assembly then part number. A part is a child
+// with a part_key, as Parts counts them (ADR 0012).
+func (q *Queries) AssemblyParts(ctx context.Context, arg AssemblyPartsParams) ([]AssemblyPartsRow, error) {
+	rows, err := q.db.Query(ctx, assemblyParts, arg.Ids, arg.FactoryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AssemblyPartsRow
+	for rows.Next() {
+		var i AssemblyPartsRow
+		if err := rows.Scan(
+			&i.AssemblyID,
+			&i.AssemblyNumber,
+			&i.AssemblyTitle,
+			&i.ID,
+			&i.Number,
+			&i.Station,
+			&i.State,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getItem = `-- name: GetItem :one
 SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths FROM work_items WHERE id = $1
 `

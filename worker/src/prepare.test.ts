@@ -1,9 +1,9 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { credentialHelper, type Exec, type PrepareDeps, prepare } from './prepare.js';
+import { credentialHelper, type Exec, type Output, type PrepareDeps, prepare } from './prepare.js';
 
 const gateway = 'http://goal-egress:3128/mcp';
 const token = 'task-token-123';
@@ -41,7 +41,18 @@ afterEach(async () => {
 
 /** git with the test's own home and no system config, so the developer's config is never read or written. */
 function gitEnv(): NodeJS.ProcessEnv {
-  return { PATH: process.env.PATH, HOME: home, GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' };
+  // The box's /etc/gitconfig gives git its identity; here the environment does.
+  return {
+    PATH: process.env.PATH,
+    HOME: home,
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_TERMINAL_PROMPT: '0',
+    LC_ALL: 'C',
+    GIT_AUTHOR_NAME: 'Goal agent',
+    GIT_AUTHOR_EMAIL: 'goal-agent@example.com',
+    GIT_COMMITTER_NAME: 'Goal agent',
+    GIT_COMMITTER_EMAIL: 'goal-agent@example.com',
+  };
 }
 
 function git(cwd: string, ...args: string[]): string {
@@ -52,8 +63,14 @@ function git(cwd: string, ...args: string[]): string {
   }).trim();
 }
 
-/** A bare repository with a commit on main and, when given, one on branch. */
-async function origin(branch?: string): Promise<string> {
+/**
+ * A bare repository with a commit on main and, when given, one on branch writing changed (path to content).
+ * moved, when given, is committed to main after the branch was pushed: path to content.
+ */
+async function origin(
+  branch?: string,
+  opts: { changed?: Record<string, string>; moved?: Record<string, string> } = {},
+): Promise<string> {
   const bare = join(root, 'origin.git');
   const work = join(root, 'seed');
   execFileSync('git', ['init', '--quiet', '--bare', '--initial-branch=main', bare], { env: gitEnv() });
@@ -63,8 +80,18 @@ async function origin(branch?: string): Promise<string> {
   git(work, 'push', '--quiet', 'origin', 'HEAD:main');
   if (branch) {
     git(work, 'checkout', '--quiet', '-b', branch);
-    git(work, 'commit', '--quiet', '--allow-empty', '-m', 'earlier run');
+    const changed = opts.changed ?? { 'branch.txt': 'from the branch\n' };
+    for (const [path, content] of Object.entries(changed)) await writeFile(join(work, path), content);
+    git(work, 'add', '--all');
+    git(work, 'commit', '--quiet', '-m', 'earlier run');
     git(work, 'push', '--quiet', 'origin', branch);
+  }
+  if (opts.moved) {
+    git(work, 'checkout', '--quiet', 'main');
+    for (const [path, content] of Object.entries(opts.moved)) await writeFile(join(work, path), content);
+    git(work, 'add', '--all');
+    git(work, 'commit', '--quiet', '-m', 'main moved on');
+    git(work, 'push', '--quiet', 'origin', 'main');
   }
   return `file://${bare}`;
 }
@@ -83,6 +110,10 @@ function recorder(mise = 0) {
   return { exec, calls };
 }
 
+/** Runs git for real (isolated) and returns its stdout. */
+const output: Output = async (command, args, opts = {}) =>
+  execFileSync(command, args, { cwd: opts.cwd, env: gitEnv(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+
 /** A gateway that answers GET /run with body (or status) and records the requests. */
 function gatewayServing(body: unknown, status = 200) {
   const requests: { url: string; auth: string | null }[] = [];
@@ -98,6 +129,7 @@ function depsWith(fake: typeof fetch, exec: Exec, env: NodeJS.ProcessEnv = {}): 
   return {
     fetch: fake,
     exec,
+    output,
     env: { GOAL_GATEWAY_URL: gateway, GOAL_GATEWAY_TOKEN: token, ...env },
     now: () => times.shift() ?? later,
     dirs,
@@ -197,8 +229,76 @@ describe('prepare', () => {
     const prepared = await prepare(depsWith(fake, exec));
 
     expect(prepared).toMatchObject({ branch: 'goal/8-new-work', branch_existed: false });
+    expect(prepared).not.toHaveProperty('fresh_base');
     expect(git(dirs.workspace, 'branch', '--show-current')).toBe('goal/8-new-work');
     expect(git(dirs.workspace, 'log', '-1', '--format=%s')).toBe('first');
+  });
+
+  it('rebases an existing branch on the default branch', async () => {
+    const branch = 'goal/10-rebase';
+    const url = await origin(branch, { moved: { 'main.txt': 'from main\n' } });
+    const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch } });
+    const { exec, calls } = recorder();
+
+    const prepared = await prepare(depsWith(fake, exec));
+
+    expect(prepared).toMatchObject({ branch, branch_existed: true, fresh_base: 'rebase' });
+    expect(prepared).not.toHaveProperty('conflicts');
+    expect(calls).toContainEqual({ command: 'git', args: ['rebase', '--quiet', 'origin/main'], cwd: dirs.workspace });
+    const ws = dirs.workspace;
+    expect(git(ws, 'branch', '--show-current')).toBe(branch);
+    expect(git(ws, 'merge-base', '--is-ancestor', 'origin/main', 'HEAD')).toBe('');
+    expect(git(ws, 'log', '--format=%s', 'origin/main..HEAD')).toBe('earlier run');
+    expect(git(ws, 'rev-list', '--parents', '-1', 'HEAD').split(' ')).toHaveLength(2);
+    expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8'))).not.toHaveProperty('base_conflicts');
+  });
+
+  it('merges the default branch when fresh_base is merge', async () => {
+    const branch = 'goal/11-merge';
+    const url = await origin(branch, { moved: { 'main.txt': 'from main\n' } });
+    const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch, fresh_base: 'merge' } });
+    const { exec } = recorder();
+
+    const prepared = await prepare(depsWith(fake, exec));
+
+    expect(prepared).toMatchObject({ branch, branch_existed: true, fresh_base: 'merge' });
+    const ws = dirs.workspace;
+    const [, ...parents] = git(ws, 'rev-list', '--parents', '-1', 'HEAD').split(' ');
+    expect(parents).toEqual([git(ws, 'rev-parse', `origin/${branch}`), git(ws, 'rev-parse', 'origin/main')]);
+  });
+
+  for (const fresh_base of ['rebase', 'merge'] as const) {
+    it(`reports conflicting files and leaves the branch as pushed (${fresh_base})`, async () => {
+      const branch = `goal/12-conflict-${fresh_base}`;
+      const url = await origin(branch, {
+        changed: { 'z.txt': 'from the branch\n', 'b.txt': 'from the branch\n' },
+        moved: { 'z.txt': 'from main\n', 'b.txt': 'from main\n', 'a.txt': 'no conflict\n' },
+      });
+      const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch, fresh_base } });
+      const { exec } = recorder();
+
+      const prepared = await prepare(depsWith(fake, exec));
+
+      expect(prepared).toMatchObject({ branch, branch_existed: true, fresh_base, conflicts: ['b.txt', 'z.txt'] });
+      const ws = dirs.workspace;
+      expect(git(ws, 'branch', '--show-current')).toBe(branch);
+      expect(git(ws, 'rev-parse', 'HEAD')).toBe(git(ws, 'rev-parse', `origin/${branch}`));
+      expect(git(ws, 'status', '--porcelain')).toBe('');
+      expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8'))).toMatchObject({
+        base_conflicts: ['b.txt', 'z.txt'],
+      });
+    });
+  }
+
+  it('fails when bringing the branch up to date fails for another reason than a conflict', async () => {
+    const branch = 'goal/13-fails';
+    const url = await origin(branch, { moved: { 'main.txt': 'from main\n' } });
+    const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch } });
+    const { exec: real } = recorder();
+    const exec: Exec = (command, args, opts) =>
+      args[0] === 'rebase' ? Promise.resolve(128) : real(command, args, opts);
+
+    await expect(prepare(depsWith(fake, exec))).rejects.toThrow('git rebase exited 128');
   });
 
   it("installs the repository's tools with mise, then the definition's runtime.tools", async () => {

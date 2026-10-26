@@ -137,6 +137,9 @@ type Station struct {
 	Agent string
 	// Route maps an item lane to an agent; used when Agent is empty.
 	Route map[string]string
+	// RouteAgents maps a routed lane to the station's slots kept for it; that lane uses no others.
+	// Lanes without a count share the remaining slots. Nil when no route entry sets a count.
+	RouteAgents map[string]int
 	// Agents is how many agent slots the station runs; WIP caps items in progress there.
 	Agents int
 	WIP    int
