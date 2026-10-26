@@ -24,13 +24,7 @@ const (
 func TestKnowledge_SourceInUseByAFactory(t *testing.T) {
 	t.Parallel()
 
-	tenancy := porttest.NewTenancy(porttest.NewClock(mxNow).Now)
-
-	org, err := tenancy.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: "acme-builders", Name: "Acme Builders"})
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	tenancy, ctx := builderOrg(t)
 	kb := porttest.NewKnowledge(porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy), tenancy)
 
 	f := &config.Factory{}
@@ -38,10 +32,9 @@ func TestKnowledge_SourceInUseByAFactory(t *testing.T) {
 	f.Spec.Knowledge = &config.Knowledge{Sources: []string{kbHandbook}}
 
 	s := &server{
-		factories: oneFactory{f}, knowledge: kb, uploads: knowledge.NewUploads(kb, porttest.NewObjectStore(), 0), authz: AllowAll{},
-		clock: porttest.NewClock(mxNow),
+		factories: oneFactory{f}, defs: definitionsOf(ctx, t, f, false), knowledge: kb, uploads: knowledge.NewUploads(kb, porttest.NewObjectStore(), 0),
+		authz: AllowAll{}, clock: porttest.NewClock(mxNow),
 	}
-	ctx := domain.WithActor(domain.WithPrincipal(domain.WithOrg(t.Context(), org.ID), domain.LocalPrincipal), domain.LocalUser)
 
 	for _, n := range []string{kbHandbook, "archive"} {
 		if _, err := kb.CreateSource(ctx, domain.NewKnowledgeSource{Name: n, Title: n, Kind: domain.SourceUpload}, domain.LocalUser); err != nil {
@@ -62,6 +55,37 @@ func TestKnowledge_SourceInUseByAFactory(t *testing.T) {
 
 	if _, err := s.DeleteKnowledgeSource(ctx, gen.DeleteKnowledgeSourceRequestObject{Source: "archive"}); err != nil {
 		t.Errorf("delete of a source no factory searches = %v", err)
+	}
+}
+
+// An archived factory may search no source: a source only it names is listed as used by no
+// factory and is deleted.
+func TestKnowledge_AnArchivedFactoryUsesNoSource(t *testing.T) {
+	t.Parallel()
+
+	tenancy, ctx := builderOrg(t)
+	kb := porttest.NewKnowledge(porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy), tenancy)
+
+	f := &config.Factory{}
+	f.Metadata.ID, f.Metadata.Name = string(mxF), factoryBuilder
+	f.Spec.Knowledge = &config.Knowledge{Sources: []string{kbHandbook}}
+
+	s := &server{
+		factories: oneFactory{f}, defs: definitionsOf(ctx, t, f, true), knowledge: kb, uploads: knowledge.NewUploads(kb, porttest.NewObjectStore(), 0),
+		authz: AllowAll{}, clock: porttest.NewClock(mxNow),
+	}
+
+	if _, err := kb.CreateSource(ctx, domain.NewKnowledgeSource{Name: kbHandbook, Title: kbHandbook, Kind: domain.SourceUpload}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	list, err := s.ListKnowledgeSources(ctx, gen.ListKnowledgeSourcesRequestObject{})
+	if got, ok := list.(gen.ListKnowledgeSources200JSONResponse); err != nil || !ok || len(got.Sources) != 1 || len(got.Sources[0].UsedBy.Factories) != 0 {
+		t.Errorf("sources = %+v, %v; want handbook, used by no factory", list, err)
+	}
+
+	if _, err := s.DeleteKnowledgeSource(ctx, gen.DeleteKnowledgeSourceRequestObject{Source: kbHandbook}); err != nil {
+		t.Errorf("delete of a source only an archived factory searches = %v; want it deleted", err)
 	}
 }
 
