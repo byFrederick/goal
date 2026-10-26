@@ -265,3 +265,40 @@ func (s *Store) blocker(id domain.ItemID) (string, bool) {
 
 	return "", false
 }
+
+// Assemblies implements ports.Store.
+func (s *Store) Assemblies(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID]domain.Assembly, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := map[domain.ItemID]domain.Assembly{}
+
+	for _, id := range ids {
+		a, ok := s.items[id]
+		if !ok || a.OrgID != org || a.FactoryID != factory {
+			continue
+		}
+
+		var parts []domain.Part
+
+		for _, it := range s.items {
+			if it.OrgID == org && it.ParentID == id && it.PartKey != "" {
+				parts = append(parts, domain.Part{ID: it.ID, Number: it.Number, Station: it.Station, State: it.State})
+			}
+		}
+
+		if len(parts) == 0 {
+			continue
+		}
+
+		slices.SortFunc(parts, func(a, b domain.Part) int { return cmp.Compare(a.Number, b.Number) })
+		out[id] = domain.Assembly{ID: a.ID, Number: a.Number, Title: a.Title, Parts: parts}
+	}
+
+	return out, nil
+}
