@@ -12,7 +12,7 @@ Goal starts on a laptop but must be deployable to AWS (ECS Fargate and managed P
 2. **Manual constructor injection.** Wiring lives only in `cmd/*/main.go`. No DI framework.
 3. **Stateless `goald`.** All state in PostgreSQL; `SKIP LOCKED` leases for work, advisory locks for singleton jobs, `LISTEN/NOTIFY` for realtime fan-out per instance.
 4. **Runner port with Docker and ECS adapters.** Agent runs are containers, never serverless functions.
-5. **Deployment targets:** laptop (compose + Docker), AWS (ECS service + RDS/Aurora PostgreSQL + ECS RunTask runners + Secrets Manager), UI optionally on Vercel as a static site. Infrastructure for each target lives in `terraform/`.
+5. **Deployment targets:** laptop (compose + Docker), AWS (ECS service + RDS/Aurora PostgreSQL + ECS RunTask runners + Secrets Manager), UI optionally on Vercel as a static site. Infrastructure for each target lives in `deploy/terraform/`.
 6. **IDs generated in Go as UUIDv7** so the schema runs on managed PostgreSQL versions that lack `uuidv7()`.
 7. **Model auth per factory:** subscription token only on a personal laptop; API key or Bedrock anywhere hosted or shared.
 

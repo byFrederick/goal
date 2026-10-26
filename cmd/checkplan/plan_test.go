@@ -40,14 +40,14 @@ func TestPlan(t *testing.T) {
 		"generated roles":  {[]string{"apps/auth/src/access.gen.ts"}, append(slices.Clone(goTasks[:3]), "auth:check", "validate"), "auth (auth:check): apps/auth/src/access.gen.ts", "migrate-check"},
 		"api client":       {[]string{"packages/api-client/src/client.ts"}, []string{"api-client:check", "web:check"}, "web (web:check): packages/api-client/src/client.ts", ""},
 		"control worker":   {[]string{"deploy/cloudflare/src/index.ts"}, []string{"cloudflare:check"}, "cloudflare (cloudflare:check): deploy/cloudflare/src/index.ts", ""},
-		"terraform":        {[]string{"terraform/r2.tf"}, []string{"tf:check"}, "terraform (tf:check): terraform/r2.tf", ""},
+		"terraform":        {[]string{"deploy/terraform/r2.tf"}, []string{"tf:check"}, "terraform (tf:check): deploy/terraform/r2.tf", ""},
 		"sops rules":       {[]string{".sops.yaml"}, []string{"tf:check"}, ".sops.yaml", ""},
 		"nothing to check": {
 			[]string{"docs/adr/0001.md", "design-system/goal/MASTER.md", ".claude/skills/x/SKILL.md", ".github/workflows/ci.yml", ".githooks/pre-push", "README.md", "skills-lock.json"},
 			nil, "", "",
 		},
 		"parts keep task check's order": {
-			[]string{"terraform/r2.tf", "apps/web/src/a.tsx", "internal/api/org.go", "apps/worker/src/a.ts"},
+			[]string{"deploy/terraform/r2.tf", "apps/web/src/a.tsx", "internal/api/org.go", "apps/worker/src/a.ts"},
 			[]string{"lint", "test", "api:permissions-check", "worker:check", "web:check", "validate", "tf:check"},
 			"worker (worker:check)", "",
 		},
