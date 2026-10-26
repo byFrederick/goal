@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/byFrederick/goal/internal/api/gen"
@@ -135,4 +136,99 @@ func lanesString(lanes []gen.BoardLane) string {
 	}
 
 	return string(b)
+}
+
+// An assembly's card says where its parts stand and each part's card which part of which
+// assembly it is, on the list and the board, even when the page holds the part alone, read once a
+// page; a plain item's card has neither.
+func TestAPI_ItemCardsCarryAssemblyAndParts(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	asm := h.seed(t, stInbox, domain.StateQueued, t0)
+	h.seedPart(t, asm, stDone, domain.StateDone)
+	second := h.seedPart(t, asm, stBuild, domain.StateInProgress)
+	h.seedPart(t, asm, stMerge, domain.StateWaitingHuman)
+	plain := h.seed(t, stBuild, domain.StateQueued, t0)
+
+	wantParts := &gen.AssemblyParts{Total: 3, Merged: 1, InProgress: 1, Waiting: 1, Stations: []string{stBuild, stMerge}}
+	wantOf := &gen.PartOf{Id: string(asm.ID), Ref: "line#" + strconv.FormatInt(asm.Number, 10), Title: asm.Title, Part: 2, Parts: 3}
+
+	var (
+		list, alone gen.ItemPage
+		board       gen.Board
+	)
+
+	h.getReadingAssembliesOnce(t, "/v1/orgs/acme/factories/line/items", &list)
+	h.getReadingAssembliesOnce(t, "/v1/orgs/acme/factories/line/board", &board)
+	h.getReadingAssembliesOnce(t, "/v1/orgs/acme/factories/line/items?state=in_progress", &alone)
+
+	for from, cards := range map[string]map[int64]gen.ItemCard{"items": byNumber(list.Items), "board": cardsOf(board)} {
+		for _, tt := range []struct {
+			name  string
+			it    domain.Item
+			of    *gen.PartOf
+			parts *gen.AssemblyParts
+		}{
+			{"assembly", asm, nil, wantParts},
+			{"second part", second, wantOf, nil},
+			{"plain item", plain, nil, nil},
+		} {
+			c, ok := cards[tt.it.Number]
+			if !ok || !reflect.DeepEqual(c.Assembly, tt.of) || !reflect.DeepEqual(c.Parts, tt.parts) {
+				t.Errorf("%s: %s card assembly = %+v, parts = %+v (on it: %t); want %+v and %+v", from, tt.name, c.Assembly, c.Parts, ok, tt.of, tt.parts)
+			}
+		}
+	}
+
+	if len(alone.Items) != 1 || !reflect.DeepEqual(alone.Items[0].Assembly, wantOf) {
+		t.Errorf("in-progress page = %+v; want only the second part, of its assembly %+v", alone.Items, wantOf)
+	}
+}
+
+// getReadingAssembliesOnce GETs path into out and checks it read the assemblies once.
+func (h *harness) getReadingAssembliesOnce(t *testing.T, path string, out any) {
+	t.Helper()
+
+	h.seam.steps()
+
+	if code := h.call(t, http.MethodGet, path, "", out); code != http.StatusOK {
+		t.Fatalf("GET %s = %d", path, code)
+	}
+
+	reads := 0
+
+	for _, s := range h.seam.steps() {
+		if s.read == "Assemblies" {
+			reads++
+		}
+	}
+
+	if reads != 1 {
+		t.Errorf("GET %s read assemblies %d times, want once", path, reads)
+	}
+}
+
+func byNumber(cards []gen.ItemCard) map[int64]gen.ItemCard {
+	out := map[int64]gen.ItemCard{}
+	for _, c := range cards {
+		out[c.Number] = c
+	}
+
+	return out
+}
+
+// seedPart seeds a part of assembly asm at station in state.
+func (h *harness) seedPart(t *testing.T, asm domain.Item, station string, state domain.ItemState) domain.Item {
+	t.Helper()
+
+	it, err := h.store.CreateItem(inOrg(t), domain.NewItem{
+		FactoryID: lineID, ParentID: asm.ID, Type: typeFeature, Title: "part at " + station, Station: station,
+		State: state, Class: domain.ClassStandard, CreatedAt: t0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return it
 }

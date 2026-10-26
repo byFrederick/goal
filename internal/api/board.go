@@ -383,19 +383,21 @@ func (s *server) listCards(ctx context.Context, f *config.Factory, items []domai
 // cards renders items of factory f as cards: for every item in progress the agent working it, the
 // copy (1-based) when its station runs several, and the turns of its running run; for every item
 // the pull request and the summary its outputs name, its human touches, and whether it waits in the buffer of drum
-// (none when drum is ""). Nothing is held by the rope until drum-buffer-rope is enforced.
+// (none when drum is ""), and for an assembly where its parts stand, for a part its assembly and
+// which part it is, read for the whole page at once. Nothing is held by the rope until
+// drum-buffer-rope is enforced.
 func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, drum string, items []domain.Item) ([]gen.ItemCard, error) {
 	leases, turns, err := s.inProgress(ctx, l, items)
 	if err != nil {
 		return nil, err
 	}
 
-	ids := make([]domain.ItemID, 0, len(items))
-	for _, it := range items {
-		ids = append(ids, it.ID)
+	touches, err := s.touchCounts(ctx, items)
+	if err != nil {
+		return nil, err
 	}
 
-	touches, err := s.items.TouchCounts(ctx, ids)
+	asms, err := s.assemblies(ctx, l.FactoryID, items)
 	if err != nil {
 		return nil, err
 	}
@@ -441,10 +443,68 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, dr
 			c.Turn = &n
 		}
 
+		c.Assembly, c.Parts = assemblyFields(f, it, asms)
+
 		out = append(out, c)
 	}
 
 	return out, nil
+}
+
+// touchCounts counts the touches of each of items that has any, by item.
+func (s *server) touchCounts(ctx context.Context, items []domain.Item) (map[domain.ItemID]int, error) {
+	ids := make([]domain.ItemID, 0, len(items))
+	for _, it := range items {
+		ids = append(ids, it.ID)
+	}
+
+	return s.items.TouchCounts(ctx, ids)
+}
+
+// assemblyFields are an item's card's assembly, when it is a part of one of asms, and parts,
+// when it is one of asms.
+func assemblyFields(f *config.Factory, it domain.Item, asms map[domain.ItemID]domain.Assembly) (*gen.PartOf, *gen.AssemblyParts) {
+	var (
+		of    *gen.PartOf
+		parts *gen.AssemblyParts
+	)
+
+	if a, ok := asms[it.ParentID]; ok && it.ParentID != "" {
+		of = &gen.PartOf{
+			Id: string(a.ID), Ref: domain.ItemRef{Factory: f.Metadata.Name, Number: a.Number}.String(), Title: a.Title,
+			Part: a.PartNumber(it.ID), Parts: len(a.Parts),
+		}
+	}
+
+	if a, ok := asms[it.ID]; ok {
+		p := a.Progress()
+		parts = &gen.AssemblyParts{Total: p.Total, Merged: p.Merged, InProgress: p.InProgress, Waiting: p.Waiting, Stations: p.Stations}
+	}
+
+	return of, parts
+}
+
+// assemblies reads, in one call, the assemblies among items and those items' parents are, with
+// all their parts.
+func (s *server) assemblies(ctx context.Context, f domain.FactoryID, items []domain.Item) (map[domain.ItemID]domain.Assembly, error) {
+	ids := make([]domain.ItemID, 0, len(items))
+	seen := map[domain.ItemID]bool{}
+
+	for _, it := range items {
+		for _, id := range []domain.ItemID{it.ID, it.ParentID} {
+			if id != "" && !seen[id] {
+				seen[id] = true
+				ids = append(ids, id)
+			}
+		}
+	}
+
+	asms, err := s.items.Assemblies(ctx, f, ids)
+	if err != nil {
+		return nil, fmt.Errorf("assemblies of the cards: %w", err)
+	}
+
+	return asms, nil
 }
 
 // inProgress reads the leases of the stations where items are in progress, by item, and the
