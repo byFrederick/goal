@@ -286,8 +286,8 @@ func testOpenNeeds(f *fixture) {
 	free := f.create(t, domain.NewItem{Title: "free"})
 	planned := f.create(t, domain.NewItem{Title: "planned", Station: stNext})
 	overlap := f.create(t, domain.NewItem{Title: "overlap", Station: stNext})
-	done := f.create(t, domain.NewItem{Title: "done", Station: stNext})
-	cancelled := f.create(t, domain.NewItem{Title: "cancelled", Station: stNext})
+	done := f.create(t, domain.NewItem{Title: "done need", Station: stNext})
+	cancelled := f.create(t, domain.NewItem{Title: "cancelled need", Station: stNext})
 
 	queued := domain.Position{Station: stNext, State: domain.StateQueued}
 	globs := []string{"queries/*.sql", "web/**"}
