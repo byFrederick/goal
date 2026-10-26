@@ -49,7 +49,7 @@
 
 ## Dark theme (Goal override, 2026-10-25)
 
-The app follows the device's color scheme by default, and a person can choose System, Light or Dark (account menu, Appearance). The dark values below are the same tokens redefined, so no component names a color: `web/src/styles.css` defines them under `:root[data-theme="dark"]` and under `prefers-color-scheme: dark` for `:root:not([data-theme="light"])`. Meaning does not change: teal runs, amber is the constraint only, violet waits on you, rust is rework and loss, green is healthy or done. Every text pair meets 4.5:1 and every UI mark 3:1 (WCAG AA), measured against the surface it sits on.
+The app follows the device's color scheme by default, and a person can choose System, Light or Dark (account menu, Appearance). The dark values below are the same tokens redefined, so no component names a color: `apps/web/src/styles.css` defines them under `:root[data-theme="dark"]` and under `prefers-color-scheme: dark` for `:root:not([data-theme="light"])`. Meaning does not change: teal runs, amber is the constraint only, violet waits on you, rust is rework and loss, green is healthy or done. Every text pair meets 4.5:1 and every UI mark 3:1 (WCAG AA), measured against the surface it sits on.
 
 | Token | Light | Dark | Use and contrast (dark) |
 |---|---|---|---|
@@ -94,9 +94,9 @@ The app follows the device's color scheme by default, and a person can choose Sy
 Rules that go with the table:
 
 - The selection highlight is `run-tint` (ink on it 9.5:1), not `run-hatch`, so selected text meets 4.5:1 in both themes.
-- Native controls and scrollbars follow `color-scheme`, set from the choice by `web/public/theme.js` before first paint and by `web/src/shared/theme.ts` afterwards.
-- `meta theme-color` has a light and a dark variant by the device's scheme (`web/index.html`).
-- No raw color (hex, `rgb()`, `hsl()`) in a component: `web/src/ui/raw-colors.test.ts` fails on one. The Monaco theme is the one allow-listed exception until its own item maps it to these tokens.
+- Native controls and scrollbars follow `color-scheme`, set from the choice by `apps/web/public/theme.js` before first paint and by `apps/web/src/shared/theme.ts` afterwards.
+- `meta theme-color` has a light and a dark variant by the device's scheme (`apps/web/index.html`).
+- No raw color (hex, `rgb()`, `hsl()`) in a component: `apps/web/src/ui/raw-colors.test.ts` fails on one. The Monaco theme is the one allow-listed exception until its own item maps it to these tokens.
 
 ---
 

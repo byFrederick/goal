@@ -10,7 +10,7 @@ Factory definitions are content, not code. goald keeps them, not this repository
 cmd/goal/              CLI: goal up, run, follow, item, approve, reject, retry, merge; goal factory pull|validate|push|publish|list [--archived]|versions|restore|archive|delete; goal org list|use|create; goal login|logout|whoami; goal key; goal admin; goal connection; goal status; goal storage init; goal catalog skills|templates; goal db init|migrate|recover-admin|recover-owner
 cmd/goald/             daemon: flow engine, HTTP API (/v1/orgs/{org}/..., with an SSE stream per organization), MCP gateway (/mcp), Docker agent runs
 contracts/api/         openapi.yaml: the HTTP API contract (Go types in internal/api/gen, TypeScript in packages/api-client)
-auth/                  identity service (Better Auth on Hono): sign-in, sessions, members and invitations, behind goald's /api/auth
+apps/auth/             identity service (Better Auth on Hono): sign-in, sessions, members and invitations, behind goald's /api/auth
 internal/engine/       flow engine: pull, WIP, gates, workspaces and command checks per run
 internal/config/       loader and cross-reference validation (reads a folder or a bucket prefix)
 internal/authoring/    definition authoring behind the API: drafts, validation, publish, restore, the template catalog
@@ -20,8 +20,8 @@ contracts/definitions/ factory.schema.json, evals.schema.json (editor autocomple
 db/migrations/         PostgreSQL schema (goose, forward-only)
 db/queries/            SQL for sqlc (pgx/v5); db/sqlc.yaml compiles them
 compose.yaml           local PostgreSQL 18 with pgvector, RustFS (S3-compatible object storage) and Mailpit (the dev inbox)
-worker/                agent container images (TypeScript, Claude Agent SDK): runtime and dev (Go, task, Terraform, PostgreSQL)
-web/                   UI (React)
+apps/worker/           agent container images (TypeScript, Claude Agent SDK): runtime and dev (Go, task, Terraform, PostgreSQL)
+apps/web/              UI (React)
 terraform/             the platform's own Cloudflare infrastructure: R2 bucket, DNS, Worker route, Secrets Store secrets
 design-system/         UI rules generated with ui-ux-pro-max, plus the user's overrides (MASTER.md)
 docs/adr/              decisions (0001 stack, 0002 Jonah evals, 0003 hexagonal architecture, 0004 frontend, 0005 definitions in object storage, 0006 workspaces and command checks)
@@ -29,7 +29,7 @@ docs/engineering/      architecture and testing rules
 docs/jonah/            evaluation and self-remediation plan
 AGENTS.md              the index of rules for every agent and human (CLAUDE.md imports it)
 Taskfile.yml           task check = everything the pre-push hook and CI run
-.githooks/             pre-push hook: task check (+ task migrate-check when db/migrations/ or auth/ changed)
+.githooks/             pre-push hook: task check (+ task migrate-check when db/migrations/ or apps/auth/ changed)
 .github/               CI workflow (ci.yml): the pre-push gate on every pull request and push to main
 .claude/rules/         path-scoped rules, one home per rule, each naming its area's skills
 .claude/skills/        vendored skills (pinned in skills-lock.json) and our goal-* procedures
@@ -53,7 +53,7 @@ task test-integration      # adapters against PostgreSQL 18 and RustFS
 
 ```bash
 # .env: GOAL_GATEWAY_KEY (openssl rand -hex 32) and GOAL_MASTER_KEYS=k1:<openssl rand -base64 32> (keep a copy offline)
-task up                                            # the agent image (goal-agent, worker/README.md) and the egress proxy's, PostgreSQL + RustFS, bucket, then goald in the foreground
+task up                                            # the agent image (goal-agent, apps/worker/README.md) and the egress proxy's, PostgreSQL + RustFS, bucket, then goald in the foreground
 # in another terminal, once: the organization's connections a factory runs on (or the Connections page);
 # each reads its secret from stdin: paste it, then Ctrl-D (task connection:import-env upgrades an older .env)
 bin/goal connection create claude --kind claude-subscription --secret token=-   # the output of claude setup-token
@@ -70,13 +70,13 @@ bin/goal retry goal#2                              # a blocked item goes back to
 
 ### Sign in
 
-People sign in (`GOAL_AUTH=session`, the default): by a six-digit code mailed to them, or with Google. The identity service (`auth/`, Better Auth) runs beside goald and is reached only through goald's `/api/auth`.
+People sign in (`GOAL_AUTH=session`, the default): by a six-digit code mailed to them, or with Google. The identity service (`apps/auth/`, Better Auth) runs beside goald and is reached only through goald's `/api/auth`.
 
 ```bash
 # .env: BETTER_AUTH_SECRET (openssl rand -hex 32, not GOAL_GATEWAY_KEY),
 #       GOAL_BOOTSTRAP_OWNER_EMAIL (the first owner's address) and database passwords of your own
 #       (GOAL_PG_*_PASSWORD; goal up refuses the published dev ones); .env.example lists every sign-in variable
-task up                    # also builds auth/ and starts it and Mailpit (codes at http://127.0.0.1:8025,
+task up                    # also builds apps/auth/ and starts it and Mailpit (codes at http://127.0.0.1:8025,
                            # user goal, password in ~/.config/goal/mailpit-ui-auth, which goal up generates)
 open http://127.0.0.1:8080 # sign in as the bootstrap owner with the code Mailpit received
 bin/goal login             # the CLI: approve the code it shows in the browser; kept in the OS keychain
@@ -95,7 +95,7 @@ An item is `<factory>#<number>` (`goal#2`), its id, or a bare number when only o
 
 `goal up --compose` (`task up:compose`) runs goald and the auth service as compose services too (the `stack` profile, images built from this checkout, goald holding the Docker socket: one's own laptop only), with `.env`'s settings and the addresses of compose's network, and returns once everything is healthy; `docker compose logs -f goald` follows it and `docker compose stop goald auth` stops it. It needs `GOAL_AUTH=session`. Plain `goal up` keeps goald on this machine.
 
-Two gates run the same checks. Locally, the pre-push hook blocks `git push` unless `task check` passes (and `task migrate-check` when the pushed commits touch `db/migrations/` or `auth/`). On GitHub, CI (`.github/workflows/ci.yml`) runs on every pull request and every push to main: `task check`, `task migrate-check` when the pull request changes `db/migrations/` or `auth/` (always on main), and `task test-integration` on compose.yaml's services, with the tools at `.mise.toml`'s versions. It needs no secrets, so pull requests from forks run it as well. It went unused while the private repository had no Actions minutes; if GitHub shows it as disabled once the repository is public, a person re-enables it with `gh workflow enable ci.yml`.
+Two gates run the same checks. Locally, the pre-push hook blocks `git push` unless `task check` passes (and `task migrate-check` when the pushed commits touch `db/migrations/` or `apps/auth/`). On GitHub, CI (`.github/workflows/ci.yml`) runs on every pull request and every push to main: `task check`, `task migrate-check` when the pull request changes `db/migrations/` or `apps/auth/` (always on main), and `task test-integration` on compose.yaml's services, with the tools at `.mise.toml`'s versions. It needs no secrets, so pull requests from forks run it as well. It went unused while the private repository had no Actions minutes; if GitHub shows it as disabled once the repository is public, a person re-enables it with `gh workflow enable ci.yml`.
 
 Read `AGENTS.md` before changing anything.
 
@@ -114,15 +114,15 @@ Goal then opens from its own icon, full screen, and keeps the phone's status bar
 
 | Changed | Runs |
 | --- | --- |
-| `*.go` anywhere, `cmd/`, `internal/`, `db/queries/`, `db/sqlc.yaml`, `db/migrations/`; what Go embeds or its tests read: `web/csp.txt`, `web/placeholder/`, `compose.yaml`, `.env.example` | `lint`, `test`, `api:permissions-check`, `validate` |
-| `auth/src/access.gen.ts` (compared by `api:permissions-check`) | the Go checks and `auth:check` |
-| `worker/`, `auth/`, `deploy/cloudflare/` | `worker:check`, `auth:check`, `cloudflare:check` |
+| `*.go` anywhere, `cmd/`, `internal/`, `db/queries/`, `db/sqlc.yaml`, `db/migrations/`; what Go embeds or its tests read: `apps/web/csp.txt`, `apps/web/placeholder/`, `compose.yaml`, `.env.example` | `lint`, `test`, `api:permissions-check`, `validate` |
+| `apps/auth/src/access.gen.ts` (compared by `api:permissions-check`) | the Go checks and `auth:check` |
+| `apps/worker/`, `apps/auth/`, `deploy/cloudflare/` | `worker:check`, `auth:check`, `cloudflare:check` |
 | `packages/api-client/` | `api-client:check` and `web:check` (web uses it) |
-| the rest of `web/` | `web:check` |
+| the rest of `apps/web/` | `web:check` |
 | `terraform/`, `.sops.yaml` | `tf:check` |
 | `docs/`, `design-system/`, `.claude/`, `.github/`, `.githooks/`, root `*.md`, `skills-lock.json` | nothing |
 
-Shared files run everything and say which file did: `go.mod`, `go.sum`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `Taskfile.yml`, `.golangci.yml`, the mise config, `contracts/`. So does any path no rule knows, and a `BASE` that is missing or shares no history with `HEAD` (a shallow clone). Any other git failure fails the task: it never passes with an empty plan. When `db/migrations/` or `auth/` changed it notes that `task migrate-check` also applies; it does not run it. The pre-push hook still runs the whole `task check`.
+Shared files run everything and say which file did: `go.mod`, `go.sum`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `Taskfile.yml`, `.golangci.yml`, the mise config, `contracts/`. So does any path no rule knows, and a `BASE` that is missing or shares no history with `HEAD` (a shallow clone). Any other git failure fails the task: it never passes with an empty plan. When `db/migrations/` or `apps/auth/` changed it notes that `task migrate-check` also applies; it does not run it. The pre-push hook still runs the whole `task check`.
 
 ## Where factories live
 

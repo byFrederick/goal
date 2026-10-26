@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-/** Where things live in a run's sandbox (worker/README.md, "Sandbox contract"). */
+/** Where things live in a run's sandbox (apps/worker/README.md, "Sandbox contract"). */
 export const paths = {
   /** What goal-agent prepare writes from the run bundle. */
   goal: '/goal',

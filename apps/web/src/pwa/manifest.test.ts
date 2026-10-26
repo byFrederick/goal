@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 // The install metadata of the home-screen app (docs/engineering/frontend.md, PWA): goald serves
-// web/public as it is, so these files are what a phone reads when Goal is added to its home screen.
+// apps/web/public as it is, so these files are what a phone reads when Goal is added to its home screen.
 const publicDir = fileURLToPath(new URL('../../public/', import.meta.url));
 const indexHtml = readFileSync(fileURLToPath(new URL('../../index.html', import.meta.url)), 'utf8');
 

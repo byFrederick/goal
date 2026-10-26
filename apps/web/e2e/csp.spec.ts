@@ -1,4 +1,4 @@
-// The built app under the Content-Security-Policy goald serves it with (web/csp.txt; vite preview
+// The built app under the Content-Security-Policy goald serves it with (apps/web/csp.txt; vite preview
 // sends the same): no violations on the work screens or the YAML view, whose Monaco loads its
 // workers, fonts and styles from the app's own origin.
 import { expect, test } from '@playwright/test';

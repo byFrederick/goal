@@ -1,5 +1,5 @@
 // The one module that calls the identity service, /api/auth/* on goald's origin (spec 3 §8.1,
-// ADR 0007): Better Auth's own browser client and contract, at the version auth/ pins (the pnpm
+// ADR 0007): Better Auth's own browser client and contract, at the version apps/auth/ pins (the pnpm
 // catalog), with the plugins of the paths goald's proxy allows (email codes, organizations,
 // device sign-in). It is loaded only where someone signs in or out (the sign-in pages, the re-auth
 // dialog, the account menu's actions, the keep-alive), never in the app's first bundle.
@@ -57,7 +57,7 @@ export class AuthFailure extends Error {
 
 /**
  * The service's error codes: Better Auth's of the email-code sign-in (better-auth/plugins/email-otp;
- * TOO_MANY_ATTEMPTS is the 4th try of one code) and Goal's hooks' (auth/src: SIGN_UP_NOT_ALLOWED,
+ * TOO_MANY_ATTEMPTS is the 4th try of one code) and Goal's hooks' (apps/auth/src: SIGN_UP_NOT_ALLOWED,
  * REAUTH_REQUIRED, NAME_ONLY).
  */
 const codeFailures: Record<string, AuthFailureKind> = {

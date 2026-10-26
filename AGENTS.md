@@ -10,7 +10,7 @@ This file is an index. Each rule lives in one place and is linked from here; the
 .claude/        rules/ (path-scoped rules), skills/ (vendored skills and our goal-* procedures)
 .githooks/      versioned git hooks (pre-push runs task check)
 .github/        CI, deploy and Terraform workflows
-auth/           identity service (Hono + Better Auth), reached only through goald's /api/auth proxy
+apps/           auth/ (identity service, Hono + Better Auth, reached only through goald's /api/auth proxy), web/ (React SPA, embedded into goald), worker/ (goal-agent, the one agent container image)
 cmd/            binaries: goal (CLI), goald (daemon), goal-egress (egress proxy) and code generators
 contracts/      contracts/api/ (openapi.yaml, events.schema.json, permissions.yaml: the only contract between goald and TypeScript), contracts/definitions/ (JSON Schemas for factory, eval and connection kind files)
 db/             the database: db/migrations/ (forward-only SQL, goose), db/queries/ (SQL for sqlc) and db/sqlc.yaml
@@ -20,8 +20,6 @@ docs/           adr/, engineering/, specs/, jonah/
 internal/       the Go packages: domain, engine, ports, adapters, api, gateway… (docs/engineering/architecture.md)
 packages/       shared TypeScript: contracts (generated), api-client, ui, config
 terraform/      the platform's own infrastructure, one root module
-web/            React SPA, embedded into goald
-worker/         goal-agent, the one agent container image
 ```
 
 Root files: the entry docs, `Taskfile.yml`, `compose.yaml`, the Go and pnpm manifests, and `skills-lock.json`. Factory definitions are not in this tree; they live in the bucket and PostgreSQL ([factory-definition.md](docs/engineering/factory-definition.md)).
@@ -59,6 +57,6 @@ Other docs cite these as "AGENTS.md rule N", so the numbers stay fixed.
 
 - Run `task hooks:install` once per clone. The pre-push hook then runs `task check` before every push.
 - When you change SQL or an adapter, `task test-integration` passes too.
-- When you change `db/migrations/` or `auth/`, `task migrate-check` passes too.
+- When you change `db/migrations/` or `apps/auth/`, `task migrate-check` passes too.
 - CI (`.github/workflows/ci.yml`) gates every pull request the same way. Never push with `--no-verify` without saying so in the pull request.
 - A pull request states which acceptance criteria it meets and how each was verified.

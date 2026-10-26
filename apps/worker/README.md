@@ -4,7 +4,7 @@
 
 ```bash
 task worker:check   # typecheck, Biome, Vitest (part of task check)
-task worker:image   # docker build -f worker/Dockerfile --target runtime -t ghcr.io/byfrederick/goal-agent:0.2.0 ., then task worker:smoke
+task worker:image   # docker build -f apps/worker/Dockerfile --target runtime -t ghcr.io/byfrederick/goal-agent:0.2.0 ., then task worker:smoke
 task worker:smoke   # the image's toolchains run as uid 1000 and goal-agent answers
 ```
 
@@ -12,7 +12,7 @@ Locally the image is built and never pushed; only the production deploy pushes i
 
 ## Image
 
-Debian 13 (trixie, slim) with, every version pinned in `worker/Dockerfile` and every download checked against its project's published checksums:
+Debian 13 (trixie, slim) with, every version pinned in `apps/worker/Dockerfile` and every download checked against its project's published checksums:
 
 - the worker, `goal-agent` on `PATH` (Node from mise below, whatever Node a repository pins);
 - git (identity `Goal agent <goal-agent@example.com>` in `/etc/gitconfig`, `GIT_TERMINAL_PROMPT=0`), gh, ripgrep, jq, curl, openssh-client, gcc, libc headers and make (cgo, `go test -race`, native modules);

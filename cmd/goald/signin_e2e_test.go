@@ -363,7 +363,7 @@ func startE2EStack(t *testing.T) *e2eStack {
 
 	// goald first: it migrates the database, whose schema the auth service checks at its start.
 	s.start(t, "goald", e2eListen, "/v1/health", []string{"../../bin/goald"}, goaldEnv)
-	s.start(t, "auth service", e2eAuthListen, "/api/auth/ok", []string{"node", "../../auth/dist/server.js"}, []string{
+	s.start(t, "auth service", e2eAuthListen, "/api/auth/ok", []string{"node", "../../apps/auth/dist/server.js"}, []string{
 		"PATH=" + os.Getenv("PATH"), "HOME=" + home, "GOAL_PUBLIC_URL=" + e2ePublicURL, "GOAL_AUTH_LISTEN=" + e2eAuthListen,
 		"GOAL_AUTH_DATABASE_URL=" + roleURL(t, database, postgres.AuthRole), "BETTER_AUTH_SECRET=" + authKey,
 		"GOAL_BOOTSTRAP_OWNER_EMAIL=" + s.owner, "GOAL_AUTH_PROXY_SECRET=" + proxySecret,
@@ -571,7 +571,7 @@ func (s *e2eStack) webFlow(t *testing.T) {
 	t.Helper()
 
 	cmd := osexec.CommandContext(t.Context(), "pnpm", "exec", "playwright", "test", "--config", "playwright.auth.config.ts") //nolint:gosec // fixed arguments
-	cmd.Dir = "../../web"
+	cmd.Dir = "../../apps/web"
 
 	cmd.Env = append(os.Environ(), "GOAL_E2E_AUTH_URL="+e2ePublicURL, "GOAL_MAILPIT_URL="+e2eMailpit, "GOAL_BOOTSTRAP_OWNER_EMAIL="+s.owner,
 		"GOAL_MAILPIT_AUTH="+mailpitCredentials(t))

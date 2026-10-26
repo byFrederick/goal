@@ -1,6 +1,6 @@
 ---
 paths:
-  - "worker/**"
+  - "apps/worker/**"
 ---
 
 # Worker

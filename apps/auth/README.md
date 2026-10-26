@@ -8,7 +8,7 @@ creates, renames and deletes organizations.
 
 ## Running it
 
-- `goal up` runs `node auth/dist/server.js` under `GOAL_AUTH=session` (the default), with its own
+- `goal up` runs `node apps/auth/dist/server.js` under `GOAL_AUTH=session` (the default), with its own
   variables only (`.env.example`, "Sign-in"), and Mailpit for the codes, once `goal db migrate` has
   created its tables (it refuses a schema it does not expect), and starts it again should it stop.
 - `task auth:build` builds `dist/`; `task auth:dev` runs it from `src/`, rebuilt on change, mailing to

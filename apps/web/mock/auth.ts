@@ -14,7 +14,7 @@
 // the organizations are the person's (people.ts): f.cruz@example.com (F. Cruz, platform admin
 // unless the reset says platform_admin: false)
 // owns every one, acme has an admin and members, j.doe@example.com is a user in none. As the
-// identity service does (auth/, spec 3 §8.7), a send answers the same for every address but codes
+// identity service does (apps/auth/, spec 3 §8.7), a send answers the same for every address but codes
 // go only to people and pending invitees (the code is always 000000, valid 5 minutes; the 4th try
 // of one code is TOO_MANY_ATTEMPTS), Google refuses an account without an invitation
 // (SIGN_UP_NOT_ALLOWED) and update-user takes a name only (NAME_ONLY). The organization endpoints
@@ -360,7 +360,7 @@ export function createMockAuth(clock: () => number, dir: MockDirectory): MockAut
   };
 
   /**
-   * The device authorization grant (Better Auth's device-authorization plugin, as auth/ sets it
+   * The device authorization grant (Better Auth's device-authorization plugin, as apps/auth/ sets it
    * up): codes for goal-cli only, 10 minutes; GET /device binds a code to the person who opens it;
    * approving needs a session from the last 10 minutes (Goal's hook: REAUTH_REQUIRED); the CLI's
    * poll answers authorization_pending until then. An X-Mock-Client-Ip header on /device/code
