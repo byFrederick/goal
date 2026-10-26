@@ -454,6 +454,50 @@ func TestLine_PlainRoutesKeepNoSlots(t *testing.T) {
 	}
 }
 
+// A station's context names what goald preloads into its runs' feedback; a station without it
+// preloads nothing.
+func TestLine_CarriesStationContext(t *testing.T) {
+	t.Parallel()
+
+	for doc, want := range map[string]bool{
+		baseFactory: false,
+		strings.Replace(baseFactory, workAgentLine, workAgentLine+"        context: []\n", 1):         false,
+		strings.Replace(baseFactory, workAgentLine, workAgentLine+"        context: [inflight]\n", 1): true,
+	} {
+		f, err := Load(checkTree(doc, nil))
+		if err != nil {
+			t.Fatalf("load %q: %v", doc, err)
+		}
+
+		st, ok := f.Line().Station("work")
+		if !ok {
+			t.Fatalf("load %q: no station work", doc)
+		}
+
+		if got := st.Preloads(domain.ContextInFlight); got != want {
+			t.Errorf("station work of %q preloads in-flight = %v, want %v", doc, got, want)
+		}
+	}
+}
+
+// goald refuses a station context other than inflight, and one that is not a list.
+func TestLoad_RefusesUnknownStationContext(t *testing.T) {
+	t.Parallel()
+
+	for _, context := range []string{"[history]", "[inflight, inflight]", "['']", "inflight", "[1]"} {
+		doc := strings.Replace(baseFactory, workAgentLine, workAgentLine+"        context: "+context+"\n", 1)
+
+		_, problems := Check(checkTree(doc, nil))
+		if !slices.ContainsFunc(problems, func(p domain.DefinitionProblem) bool { return p.Check == checkSchema && p.Blocking() }) {
+			t.Errorf("context %s: problems %+v, want a schema problem", context, problems)
+		}
+
+		if _, err := Load(checkTree(doc, nil)); err == nil {
+			t.Errorf("context %s loaded, want it refused", context)
+		}
+	}
+}
+
 // board.flow.dependencies.paths names the output field whose globs replace an item's paths; a
 // definition without it maps no field.
 func TestLine_CarriesDependenciesPaths(t *testing.T) {
