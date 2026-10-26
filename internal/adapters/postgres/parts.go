@@ -1,8 +1,10 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -153,6 +155,103 @@ func insertPart(ctx context.Context, q *db.Queries, parent db.WorkItem, p domain
 	}
 
 	return row, nil
+}
+
+// CascadeParts implements ports.Store. Parts are locked by id, then the assembly: the order
+// closeAssembly takes them in after a part's own lock, so a cascade and a closing part never
+// wait on each other in a cycle.
+func (s *Store) CascadeParts(ctx context.Context, c ports.Cascade) (domain.Parts, error) {
+	if len(c.Parts) == 0 {
+		return domain.Parts{}, fmt.Errorf("cascade to the parts of %s: a cascade names no part: %w", c.Assembly, domain.ErrInvalid)
+	}
+
+	assembly, err := parseID("item", string(c.Assembly))
+	if err != nil {
+		return domain.Parts{}, err
+	}
+
+	type step struct {
+		id uuid.UUID
+		t  ports.Transition
+	}
+
+	steps := make([]step, len(c.Parts))
+
+	for i, t := range c.Parts {
+		if t.To.State == domain.StateAssembly {
+			return domain.Parts{}, fmt.Errorf("cascade: item %s: only Assemble makes an assembly: %w", t.ItemID, domain.ErrInvalid)
+		}
+
+		id, err := parseID("item", string(t.ItemID))
+		if err != nil {
+			return domain.Parts{}, err
+		}
+
+		steps[i] = step{id: id, t: t}
+	}
+
+	slices.SortFunc(steps, func(a, b step) int { return bytes.Compare(a.id[:], b.id[:]) })
+
+	var parts domain.Parts
+
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		locked := make([]db.WorkItem, len(steps))
+
+		for i, st := range steps {
+			if i > 0 && steps[i-1].id == st.id {
+				return fmt.Errorf("item %s is named twice: %w", st.t.ItemID, domain.ErrInvalid)
+			}
+
+			cur, err := lockItem(ctx, q, st.id, st.t.ItemID)
+			if err != nil {
+				return err
+			}
+
+			if cur.PartKey == nil || cur.ParentID == nil || *cur.ParentID != assembly {
+				return fmt.Errorf("item %s is no part of %s: %w", st.t.ItemID, c.Assembly, domain.ErrInvalid)
+			}
+
+			locked[i] = cur
+		}
+
+		a, err := lockItem(ctx, q, assembly, c.Assembly)
+		if err != nil {
+			return err
+		}
+
+		if domain.ItemState(a.State) != domain.StateAssembly {
+			return fmt.Errorf("item %s is %s, not an open assembly: %w", c.Assembly, a.State, ports.ErrConflict)
+		}
+
+		for i, st := range steps {
+			row, err := transition(ctx, q, locked[i], st.t)
+			if err != nil {
+				return err
+			}
+
+			if err := closeAssembly(ctx, q, row, st.t.At); err != nil {
+				return err
+			}
+		}
+
+		if err := appendEvents(ctx, q, c.Events); err != nil {
+			return err
+		}
+
+		rows, err := q.ItemParts(ctx, assembly)
+		if err != nil {
+			return fmt.Errorf("parts: %w", err)
+		}
+
+		parts, err = partsFrom(rows)
+
+		return err
+	})
+	if err != nil {
+		return domain.Parts{}, fmt.Errorf("cascade to the parts of %s: %w", c.Assembly, err)
+	}
+
+	return parts, nil
 }
 
 // Parts implements ports.Store.

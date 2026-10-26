@@ -171,3 +171,89 @@ func (s *Store) closeAssembly(part *domain.Item, at time.Time) {
 		Actor: domain.ActorEngine, Data: map[string]any{"state": string(parent.State), "parts_done": parts.Done, "parts": parts.Total},
 	})
 }
+
+// CascadeParts implements ports.Store. It checks every part's transition before it moves any,
+// so a refused cascade writes nothing; the audit entries go to the linked Tenancy, if any, after
+// the change, as Transition's do.
+func (s *Store) CascadeParts(ctx context.Context, c ports.Cascade) (domain.Parts, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.Parts{}, err
+	}
+
+	parts, audit, err := s.cascade(org, c)
+	if err != nil {
+		return domain.Parts{}, fmt.Errorf("cascade to the parts of %s: %w", c.Assembly, err)
+	}
+
+	if audit == nil {
+		return parts, nil
+	}
+
+	for _, t := range c.Parts {
+		if t.Audit == nil {
+			continue
+		}
+
+		if err := audit.Append(ctx, *t.Audit); err != nil {
+			return domain.Parts{}, fmt.Errorf("audit cascade: %w", err)
+		}
+	}
+
+	return parts, nil
+}
+
+func (s *Store) cascade(org domain.OrgID, c ports.Cascade) (domain.Parts, ports.Audit, error) {
+	if len(c.Parts) == 0 {
+		return domain.Parts{}, nil, fmt.Errorf("a cascade names no part: %w", domain.ErrInvalid)
+	}
+
+	s.mu.Lock()
+	defer s.changes.signal()
+	defer s.mu.Unlock()
+
+	parts := make([]*domain.Item, len(c.Parts))
+
+	for i, t := range c.Parts {
+		it, ok := s.visible(t.ItemID, org)
+
+		switch {
+		case !ok:
+			return domain.Parts{}, nil, fmt.Errorf("item %s: %w", t.ItemID, ports.ErrNotFound)
+		case it.PartKey == "" || it.ParentID != c.Assembly:
+			return domain.Parts{}, nil, fmt.Errorf("item %s is no part of %s: %w", t.ItemID, c.Assembly, domain.ErrInvalid)
+		case t.To.State == domain.StateAssembly:
+			return domain.Parts{}, nil, fmt.Errorf("item %s: only Assemble makes an assembly: %w", t.ItemID, domain.ErrInvalid)
+		case slices.Contains(parts[:i], it):
+			return domain.Parts{}, nil, fmt.Errorf("item %s is named twice: %w", t.ItemID, domain.ErrInvalid)
+		}
+
+		parts[i] = it
+	}
+
+	a, ok := s.visible(c.Assembly, org)
+	if !ok {
+		return domain.Parts{}, nil, fmt.Errorf("item %s: %w", c.Assembly, ports.ErrNotFound)
+	}
+
+	if a.State != domain.StateAssembly {
+		return domain.Parts{}, nil, fmt.Errorf("item %s is %s, not an open assembly: %w", c.Assembly, a.State, ports.ErrConflict)
+	}
+
+	for i, t := range c.Parts {
+		if err := s.checkTransition(parts[i], t); err != nil {
+			return domain.Parts{}, nil, err
+		}
+	}
+
+	for i, t := range c.Parts {
+		s.move(parts[i], t)
+		s.closeAssembly(parts[i], t.At)
+	}
+
+	for _, e := range c.Events {
+		s.append(e)
+	}
+
+	return s.partsOf(c.Assembly), s.audit, nil
+}
