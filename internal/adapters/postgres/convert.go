@@ -54,6 +54,10 @@ func itemFrom(w db.WorkItem) (domain.Item, error) {
 		it.PartPaths = w.PartPaths
 	}
 
+	if len(w.Paths) > 0 {
+		it.Paths = w.Paths
+	}
+
 	if w.DoneAt != nil {
 		it.DoneAt = w.DoneAt.UTC()
 	}

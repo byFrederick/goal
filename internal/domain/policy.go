@@ -27,6 +27,29 @@ type FlowPolicy struct {
 	// Assemblies says how runs keep item branches fresh, what a merge conflict does and how
 	// the line treats items that edit the same files.
 	Assemblies AssemblyPolicy
+	// Retry caps the runs again of a claim whose sandbox is lost.
+	Retry RetryPolicy
+}
+
+// DefaultTransientAttempts is board.flow.retry.transient.attempts when a definition leaves it out.
+const DefaultTransientAttempts = 3
+
+// RetryPolicy is board.flow.retry, with its defaults applied.
+type RetryPolicy struct {
+	// TransientAttempts is the most runs one claim makes when its sandbox is lost (a redeploy,
+	// a box restart, a network blip); the loss that reaches it blocks the item. Below 1, as in
+	// a line built without config, it is DefaultTransientAttempts.
+	TransientAttempts int
+}
+
+// Transient is the cap on a claim's runs whose sandbox is lost: TransientAttempts, or
+// DefaultTransientAttempts when that is unset.
+func (p RetryPolicy) Transient() int {
+	if p.TransientAttempts < 1 {
+		return DefaultTransientAttempts
+	}
+
+	return p.TransientAttempts
 }
 
 // FreshBase says how a run brings an existing item branch up to date with the default branch.

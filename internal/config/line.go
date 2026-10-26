@@ -71,7 +71,7 @@ func (f *Factory) Line() domain.Line {
 }
 
 // flowPolicy maps board.flow; an unset release is push, unset assembly settings rebase,
-// rework, serialize and materialize.
+// rework, serialize and materialize, an unset transient retry cap domain.DefaultTransientAttempts.
 func flowPolicy(fl Flow) domain.FlowPolicy {
 	p := domain.FlowPolicy{
 		Release: domain.ReleasePush, Constraint: fl.Constraint,
@@ -79,7 +79,12 @@ func flowPolicy(fl Flow) domain.FlowPolicy {
 			FreshBase: domain.FreshBaseRebase, OnConflict: domain.ConflictRework,
 			Overlap: domain.OverlapSerialize, Materialize: true,
 		},
+		Retry: domain.RetryPolicy{TransientAttempts: domain.DefaultTransientAttempts},
 	}
+	if r := fl.Retry; r != nil && r.Transient != nil && r.Transient.Attempts > 0 {
+		p.Retry.TransientAttempts = r.Transient.Attempts
+	}
+
 	if a := fl.Assemblies; a != nil {
 		if a.FreshBase != "" {
 			p.Assemblies.FreshBase = domain.FreshBase(a.FreshBase)

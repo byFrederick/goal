@@ -447,6 +447,25 @@
                   "description": "true (the default): a station whose output has a non-empty plan ([{key, title, lane, brief, paths, needs}]) makes the item an assembly, its parts queued at that station; false: the plan is ignored and the item moves on."
                 }
               }
+            },
+            "retry": {
+              "type": "object",
+              "description": "How often a claim runs an item again after a failure that is not the item's fault. Omitted keys take their defaults.",
+              "additionalProperties": false,
+              "properties": {
+                "transient": {
+                  "type": "object",
+                  "description": "Runs whose sandbox was lost to its infrastructure (a redeploy, a box restart, a network blip): each runs again in a new box after a backoff that doubles with each loss.",
+                  "additionalProperties": false,
+                  "properties": {
+                    "attempts": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "description": "The most runs one claim makes when its sandbox is lost; the loss that reaches it blocks the item. Default 3."
+                    }
+                  }
+                }
+              }
             }
           }
         }

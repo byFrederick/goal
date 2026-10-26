@@ -135,20 +135,18 @@ func (e *Engine) cut(ctx context.Context, log *slog.Logger, c claimed, err error
 	return false
 }
 
-// maxLostBoxes caps the runs of one claim whose sandbox is lost: the third loss blocks the item.
-const maxLostBoxes = 3
-
 // retryLost follows the lost-th run of a claim whose sandbox was lost (err, scrubbed): a
 // redeploy, a box restart or a network blip, not the item's fault. It deletes the box, so the
-// next run creates a new one (the branch keeps what was pushed), and below maxLostBoxes records
-// run_retried and waits TransientBackoff, doubled with each loss, while heartbeating the lease.
-// It reports whether to run again; when not, the item is blocked with err, released at shutdown
+// next run creates a new one (the branch keeps what was pushed), and below the line's
+// flow.retry.transient.attempts records run_retried and waits TransientBackoff, doubled with
+// each loss, while heartbeating the lease. It reports whether to run again; when not, the item is blocked with err, released at shutdown
 // or no longer this instance's.
 func (e *Engine) retryLost(ctx context.Context, log *slog.Logger, c claimed, b *box, lost int, err error) bool {
 	e.deleteBox(ctx, log, b)
 	*b = box{}
 
-	if lost >= maxLostBoxes {
+	limit := c.line.Flow.Retry.Transient()
+	if lost >= limit {
 		e.block(ctx, log, c, fmt.Sprintf("the sandbox was lost %d times: %v", lost, err))
 		return false
 	}
@@ -156,7 +154,7 @@ func (e *Engine) retryLost(ctx context.Context, log *slog.Logger, c claimed, b *
 	log.WarnContext(ctx, "sandbox lost; running the item again in a new one", slog.Int("attempt", lost), slog.Any("error", err))
 
 	ev := event(c.item, domain.EventRunRetried, e.clock.Now(), domain.ActorEngine,
-		map[string]any{keyReason: err.Error(), "attempt": lost, "max": maxLostBoxes})
+		map[string]any{keyReason: err.Error(), "attempt": lost, "max": limit})
 	if aerr := e.store.AppendEvents(ctx, ev); aerr != nil {
 		log.ErrorContext(ctx, "append run_retried event", slog.Any("error", aerr))
 	}
