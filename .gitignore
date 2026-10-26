@@ -22,8 +22,9 @@ coverage.out
 coverage.html
 .vercel/
 .task/
-# wrangler dev's bundles (deploy/cloudflare)
+# wrangler dev's bundles, and the deploy's generated config (deploy/cloudflare/scripts/deploy.sh)
 .wrangler/
+deploy/cloudflare/wrangler.deploy.jsonc
 
 # Agent worktrees (Claude Code)
 .claude/worktrees/

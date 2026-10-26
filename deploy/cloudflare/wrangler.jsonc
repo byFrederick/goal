@@ -2,7 +2,12 @@
 // on Workers Paid, after terraform/ has made the bucket, DNS, the PlanetScale branch and the
 // Secrets Store secrets (docs/engineering/cloudflare-operations.md, bootstrap step 8); Terraform
 // owns the Workers route, so none is declared here. It creates nothing per organization. Images
-// build for linux/amd64 from this repository.
+// build for linux/amd64 from this repository. `image` and `images` name Dockerfiles, which
+// `wrangler dev` builds; the production deploy (scripts/deploy.sh, task deploy:worker) builds them
+// itself with docker buildx, reproducibly and with a layer cache in CI, pushes them to Cloudflare's
+// registry and deploys a generated, git-ignored wrangler.deploy.jsonc: this file with each
+// Dockerfile replaced by its registry.cloudflare.com/<account>/<repository>@sha256:<digest>.
+// A Dockerfile added here needs its inputs in scripts/images.mjs.
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "goal",
