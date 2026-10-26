@@ -73,6 +73,18 @@ type CurrentRun struct {
 	Turns int
 }
 
+// LiveRun is what the board's card shows of an item's run in progress.
+type LiveRun struct {
+	// Turns counts the turns the run has reported so far (its usage events).
+	Turns int
+	// LastToolCall is the data of the run's newest tool_call event (CardActivity reads it); nil
+	// when it has called no tool yet.
+	LastToolCall map[string]any
+	// LastPlan is the data of the run's newest TodoWrite tool_call (PlanSteps reads it); nil when
+	// it has made none.
+	LastPlan map[string]any
+}
+
 // StationTimes measures one station of a factory over a window [since, until), for the board's
 // station statistics and the constraint report.
 type StationTimes struct {
