@@ -578,7 +578,7 @@ func TestBundle_RulesSelectedByAgentStationLaneAndWorkType(t *testing.T) {
 		name, station, agent string
 		want                 []bundleRule
 	}{
-		{name: "engineer", station: "build", agent: "engineer", want: []bundleRule{bundleRuleOf("secrets"), bundleRuleOf("backend", "**/*.go")}},
+		{name: agentEngineer, station: "build", agent: agentEngineer, want: []bundleRule{bundleRuleOf("secrets"), bundleRuleOf("backend", "**/*.go")}},
 		{name: "reviewer", station: "review", agent: "reviewer", want: []bundleRule{
 			bundleRuleOf("secrets"), bundleRuleOf("reviewing"), bundleRuleOf("backend", "**/*.go"), bundleRuleOf("backend-features"),
 		}},
@@ -620,7 +620,7 @@ func TestBundle_RulesAppliedEventWrittenOncePerRun(t *testing.T) {
 	}
 
 	e := applied[0]
-	if e.RunID != c.RunID || e.Station != "build" || e.Actor != "engineer" || e.FactoryID != factoryID {
+	if e.RunID != c.RunID || e.Station != "build" || e.Actor != agentEngineer || e.FactoryID != factoryID {
 		t.Errorf("event %+v; want run %s at build by engineer", e, c.RunID)
 	}
 

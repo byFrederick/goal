@@ -175,23 +175,14 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 		return runBundle{}, fmt.Errorf("%w: station %q is not in factory %s", errForbidden, c.Station, c.FactoryID)
 	}
 
-	it, err := g.items.Item(ctx, c.ItemID)
+	it, err := g.item(ctx, c)
 	if err != nil {
-		return runBundle{}, fmt.Errorf("item %s: %w", c.ItemID, err)
-	}
-
-	if it.FactoryID != c.FactoryID {
-		return runBundle{}, fmt.Errorf("%w: item %s is not in factory %s", errForbidden, c.ItemID, c.FactoryID)
+		return runBundle{}, err
 	}
 
 	agentFiles, err := g.defs.AgentFiles(ctx, c.VersionID, agent, station.Output)
 	if err != nil {
 		return runBundle{}, fmt.Errorf("agent %s files: %w", agent.Name, err)
-	}
-
-	rules, err := g.defs.Rules(ctx, c.VersionID, domain.RuleTarget{Agent: agent.Name, Station: station.ID, Lane: it.Lane, WorkType: it.Type})
-	if err != nil {
-		return runBundle{}, fmt.Errorf("rules of agent %s: %w", agent.Name, err)
 	}
 
 	maxTurns, maxUSD := agent.Limits(line.Runtime)
@@ -203,7 +194,7 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 			Brief: it.Work(), Inputs: it.Outputs, Output: station.Output, MaxTurns: maxTurns, MaxUSD: maxUSD,
 			Connections:      []bundleConnection{},
 			KnowledgeSources: g.searchable(line),
-			Rules:            make([]bundleRule, 0, len(rules)),
+			Rules:            []bundleRule{},
 		},
 		Files: make(map[string][]byte, len(agentFiles)),
 		Git:   []gitCredential{},
@@ -212,10 +203,6 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 
 	for _, sk := range agent.Skills {
 		b.Spec.Skills = append(b.Spec.Skills, sk.Name)
-	}
-
-	for _, r := range rules {
-		b.Spec.Rules = append(b.Spec.Rules, bundleRule{Name: r.Name, SHA256: r.SHA256, Paths: r.Paths, Content: r.Content})
 	}
 
 	if err := forPart(it, agentFiles); err != nil {
@@ -234,11 +221,26 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 		return runBundle{}, err
 	}
 
-	if err := g.recordRules(ctx, c, rules); err != nil {
+	if err := g.addRules(ctx, c, it, &b); err != nil {
 		return runBundle{}, err
 	}
 
 	return b, nil
+}
+
+// addRules puts the factory rules that apply to the run in b, matched by its agent, station and
+// item's lane and work type, and records them.
+func (g *Gateway) addRules(ctx context.Context, c domain.TaskClaims, it domain.Item, b *runBundle) error {
+	rules, err := g.defs.Rules(ctx, c.VersionID, domain.RuleTarget{Agent: c.Agent, Station: c.Station, Lane: it.Lane, WorkType: it.Type})
+	if err != nil {
+		return fmt.Errorf("rules of agent %s: %w", c.Agent, err)
+	}
+
+	for _, r := range rules {
+		b.Spec.Rules = append(b.Spec.Rules, bundleRule{Name: r.Name, SHA256: r.SHA256, Paths: r.Paths, Content: r.Content})
+	}
+
+	return g.recordRules(ctx, c, rules)
 }
 
 // eventPage is how many of an item's events recordRules reads at a time.
@@ -282,6 +284,20 @@ func (g *Gateway) recordRules(ctx context.Context, c domain.TaskClaims, rules []
 	}
 
 	return nil
+}
+
+// item is the item the run works on, which must be of the run's factory.
+func (g *Gateway) item(ctx context.Context, c domain.TaskClaims) (domain.Item, error) {
+	it, err := g.items.Item(ctx, c.ItemID)
+	if err != nil {
+		return domain.Item{}, fmt.Errorf("item %s: %w", c.ItemID, err)
+	}
+
+	if it.FactoryID != c.FactoryID {
+		return domain.Item{}, fmt.Errorf("%w: item %s is not in factory %s", errForbidden, c.ItemID, c.FactoryID)
+	}
+
+	return it, nil
 }
 
 // outputSchemaFile is the agent file that holds the station contract's JSON Schema.

@@ -24,7 +24,11 @@
 // variables (${NAME}, expanded by Claude Code in the box), git logins, CLI tools and docs. The
 // bundle holds no secret, and it proxies nothing: everything it describes is used from the box.
 // Its knowledge_sources name what Goal's knowledge tools search, which the worker's prompt
-// mentions.
+// mentions. Its rules are the factory rules of the run's version that apply to its agent,
+// station and item's lane and work type (ADR 0014; Definitions.Rules), each with the hash of its
+// rule file and the file the worker writes; the first bundle served to a run that any rule
+// applies to appends domain.EventRulesApplied with their names and hashes, and a bundle fetched
+// again appends none.
 //
 // # Goal's tools
 //

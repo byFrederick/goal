@@ -29,6 +29,8 @@ const (
 	factoryID domain.FactoryID = "8d4f2b1a-3c5e-4f60-9a7b-1c2d3e4f5a6b"
 	otherID   domain.FactoryID = "5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a01"
 	itemID    domain.ItemID    = "item-1"
+	// agentEngineer is the agent of the tasks' runs.
+	agentEngineer = "engineer"
 )
 
 // version is the definition version the tasks' runs started on; otherVersion is a version of
@@ -204,7 +206,7 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 
 func (h *harness) claims() domain.TaskClaims {
 	return domain.TaskClaims{
-		OrgID: h.org, FactoryID: factoryID, VersionID: version, ItemID: itemID, Station: "build", Agent: "engineer", RunID: "run-1",
+		OrgID: h.org, FactoryID: factoryID, VersionID: version, ItemID: itemID, Station: "build", Agent: agentEngineer, RunID: "run-1",
 		Connections: []string{"docs"}, ExpiresAt: h.clock.Now().Add(time.Hour).Unix(),
 	}
 }
@@ -333,7 +335,7 @@ func TestGateway_RefusesToolsItDoesNotServe(t *testing.T) {
 	}
 
 	for _, e := range events {
-		if e.Kind != EventToolCall || e.RunID != "run-1" || e.Actor != "engineer" || e.Data["outcome"] != outcomeDenied ||
+		if e.Kind != EventToolCall || e.RunID != "run-1" || e.Actor != agentEngineer || e.Data["outcome"] != outcomeDenied ||
 			strings.Contains(fmt.Sprint(e.Data), "hello") {
 			t.Errorf("event %+v, want a denied audit event of the run without its arguments", e)
 		}
