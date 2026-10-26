@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Board, BoardLane, BoardStation, Factory, ItemCard, OrgSummary } from '../../api/types';
+import type { Board, BoardLane, BoardStation, Factory, ItemCard, ItemWaiting, OrgSummary } from '../../api/types';
 import { renderBoardPage } from '../../test/route';
 import { StationBody } from './board-lane';
 import { BoardPage } from './board-page';
@@ -519,5 +519,52 @@ describe('board lanes', () => {
     const lines = await screen.findAllByRole('link', { name: 'Part 4 of 6 of Migrate billing' });
     expect(lines).toHaveLength(2);
     for (const line of lines) expect(line.getAttribute('href')).toBe('/o/acme/f/sre/items/40');
+  });
+});
+
+describe('board waiting rows', () => {
+  const waitingRow = (waiting: ItemWaiting | null) =>
+    board({}, [item({ id: 'item-7', ref: 'sre#7', number: 7, title: QUEUED, board_lane: 'investigator', waiting })]);
+
+  it('says which open need a same-files wait holds the row for, the ref linked to that item', async () => {
+    renderBoardPage({
+      page: BoardPage,
+      org,
+      factory,
+      board: waitingRow({
+        kind: 'files',
+        items: ['sre#3'],
+        files: ['terraform/main.tf'],
+        needs: [{ ref: 'sre#3', title: 'Move the state bucket', paths: ['terraform/**', 'terraform/main.tf'] }],
+      }),
+    });
+
+    expect((await screen.findAllByTitle('waits for the same files as sre#3 (terraform/)'))[0]).toBeTruthy();
+    const link = screen.getAllByRole('link', { name: 'sre#3' })[0];
+    expect(link?.getAttribute('href')).toBe('/o/acme/f/sre/items/3');
+  });
+
+  it('says which need a wait for another item holds the row for, with the title when the need names no paths', async () => {
+    renderBoardPage({
+      page: BoardPage,
+      org,
+      factory,
+      board: waitingRow({
+        kind: 'after',
+        items: ['sre#2'],
+        files: [],
+        needs: [{ ref: 'sre#2', title: 'Set up the drum', paths: [] }],
+      }),
+    });
+
+    expect((await screen.findAllByTitle('waits for sre#2 (moves Set up the drum)'))[0]).toBeTruthy();
+    expect(screen.getAllByRole('link', { name: 'sre#2' })[0]?.getAttribute('href')).toBe('/o/acme/f/sre/items/2');
+  });
+
+  it('adds no need line to a row that does not wait on an item', async () => {
+    renderBoardPage({ page: BoardPage, org, factory, board: waitingRow(null) });
+
+    expect((await screen.findAllByText(QUEUED))[0]).toBeTruthy();
+    expect(screen.queryByTitle(/^waits for/)).toBeNull();
   });
 });

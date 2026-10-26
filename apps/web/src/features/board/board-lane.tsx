@@ -10,6 +10,7 @@ import { formatAge } from '../../shared/format';
 import { itemStatus, toneText } from '../../shared/item-state';
 import { MoveButton } from '../../shared/move-menu';
 import { holds } from '../../shared/permissions';
+import { WaitingFor } from '../../shared/waiting-for';
 import { cn } from '../../ui/cn';
 import { StatusIcon } from '../../ui/status-icon';
 import {
@@ -399,6 +400,7 @@ function WaitingRow({
           {status ? <StatusIcon status={status} /> : null}
           <span className="truncate">{reason.text}</span>
         </span>
+        <WaitingFor waiting={item.waiting} />
       </div>
       {onMove ? <MoveButton item={item} onMove={onMove} size={compact ? 'lg' : 'sm'} /> : null}
     </article>

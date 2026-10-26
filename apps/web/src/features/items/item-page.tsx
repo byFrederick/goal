@@ -10,6 +10,7 @@ import { type ItemControls, ItemDecisions } from '../../shared/item-actions';
 import { describeState, pausedNow, pullRequestsOf } from '../../shared/item-state';
 import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
+import { WaitingFor } from '../../shared/waiting-for';
 import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
@@ -152,12 +153,13 @@ export function ItemPage() {
               <li aria-current="page">{item.ref}</li>
             </ol>
           </nav>
+          <WaitingFor waiting={item.waiting} />
           <div className="flex flex-wrap gap-1.5 md:order-last">
             {item.class_of_service === 'expedite' ? <Chip tone="rework">Expedite</Chip> : null}
             {item.type ? <Chip tone="plain">{humanize(item.type)}</Chip> : null}
             {item.lane ? <Chip tone="plain">{item.lane}</Chip> : null}
             <Chip tone="plain">At {humanize(item.station)}</Chip>
-            <ItemStateChip state={item.state} label={state} />
+            <ItemStateChip state={item.state} label={state} waiting={item.waiting ?? null} />
             {item.touches && item.touches.count > 0 ? (
               <Chip tone="you" className="max-md:hidden">
                 {plural(item.touches.count, 'human touch', 'human touches')}

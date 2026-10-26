@@ -54,3 +54,23 @@ describe('ItemStateChip', () => {
     expect(iconClass(container)).toBeNull();
   });
 });
+
+describe('ItemStateChip for a waiting item', () => {
+  it('shows the same-files icon for a queued item that waits for the same files, as the board does', () => {
+    const { container } = render(
+      <ItemStateChip
+        state="queued"
+        label={describeState({ state: 'queued', agent: null, rework_count: 0 })}
+        waiting={{
+          kind: 'files',
+          items: ['sre#3'],
+          files: ['terraform/main.tf'],
+          needs: [{ ref: 'sre#3', title: 'Move the state bucket', paths: ['terraform/**'] }],
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Waiting')).toBeTruthy();
+    expect(iconClass(container)).toContain('text-rework');
+  });
+});
