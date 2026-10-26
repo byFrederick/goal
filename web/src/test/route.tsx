@@ -12,8 +12,8 @@ import {
 } from '@tanstack/react-router';
 import { render } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { boardQuery, factoriesQuery } from '../api/queries';
-import type { Board, Factory, OrgSummary } from '../api/types';
+import { boardQuery, builderMetaQuery, factoriesQuery } from '../api/queries';
+import type { Board, BuilderMeta, Factory, OrgSummary } from '../api/types';
 
 /** jsdom has no CSS.escape, scrollIntoView or scrollTo, which the board's picker and the router call. */
 function polyfillLayout() {
@@ -34,6 +34,7 @@ export function renderBoardPage({
   factory,
   factories = [factory],
   board,
+  builderMeta,
   station,
 }: {
   page: () => ReactNode;
@@ -43,12 +44,15 @@ export function renderBoardPage({
   factories?: Factory[];
   /** The board the page reads; left out for a page that does not read it. */
   board?: Board;
+  /** The install's models the page labels runs with; left out for a page that names no model. */
+  builderMeta?: BuilderMeta;
   station?: string;
 }) {
   polyfillLayout();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   queryClient.setQueryData(factoriesQuery(org.id).queryKey, factories);
   if (board) queryClient.setQueryData(boardQuery(org.id, factory.id).queryKey, board);
+  if (builderMeta) queryClient.setQueryData(builderMetaQuery(org.id).queryKey, builderMeta);
 
   const rootRoute = createRootRoute();
   const orgRoute = createRoute({
