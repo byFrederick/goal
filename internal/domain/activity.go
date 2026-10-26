@@ -10,6 +10,19 @@ import (
 // call is the run's plan (PlanSteps).
 const ToolTodoWrite = "TodoWrite"
 
+// The fields of a tool_call event's data that name the tool and hold its input as JSON.
+const (
+	ToolCallTool  = "tool"
+	ToolCallInput = "input"
+)
+
+// What a card says the agent is doing, and the input field most tools name it by.
+const (
+	verbEditing   = "Editing"
+	verbSearching = "Searching"
+	fieldFilePath = "file_path"
+)
+
 // maxActivity caps a card's activity line, in runes, the ellipsis included.
 const maxActivity = 80
 
@@ -22,14 +35,14 @@ type PlanProgress struct {
 // activityVerbs maps the Claude Agent SDK's tools to what a card says the agent is doing and the
 // input field that names what it does it to. The tool names are the SDK's, not configuration.
 var activityVerbs = map[string]struct{ verb, field string }{
-	"Edit":         {"Editing", "file_path"},
-	"Write":        {"Editing", "file_path"},
-	"MultiEdit":    {"Editing", "file_path"},
-	"NotebookEdit": {"Editing", "notebook_path"},
+	"Edit":         {verbEditing, fieldFilePath},
+	"Write":        {verbEditing, fieldFilePath},
+	"MultiEdit":    {verbEditing, fieldFilePath},
+	"NotebookEdit": {verbEditing, "notebook_path"},
 	"Bash":         {"Running", "command"},
-	"Read":         {"Reading", "file_path"},
-	"Grep":         {"Searching", "pattern"},
-	"Glob":         {"Searching", "pattern"},
+	"Read":         {"Reading", fieldFilePath},
+	"Grep":         {verbSearching, "pattern"},
+	"Glob":         {verbSearching, "pattern"},
 }
 
 // secretShapes are strings that look like credentials, each with what replaces it. They match a
@@ -52,7 +65,7 @@ var secretShapes = []struct {
 // Credential-shaped strings become *** before the line is capped at 80 runes. It is "" when the
 // data names no tool.
 func CardActivity(data map[string]any) string {
-	tool, _ := data["tool"].(string)
+	tool, _ := data[ToolCallTool].(string)
 	if tool == "" {
 		return ""
 	}
@@ -71,11 +84,11 @@ func CardActivity(data map[string]any) string {
 // PlanSteps reads a TodoWrite call's data as the run's plan progress. It is false for another
 // tool, for input that does not parse (the worker cut it short) and for an empty list.
 func PlanSteps(data map[string]any) (PlanProgress, bool) {
-	if tool, _ := data["tool"].(string); tool != ToolTodoWrite {
+	if tool, _ := data[ToolCallTool].(string); tool != ToolTodoWrite {
 		return PlanProgress{}, false
 	}
 
-	input, _ := data["input"].(string)
+	input, _ := data[ToolCallInput].(string)
 
 	var plan struct {
 		Todos []struct {
@@ -101,7 +114,7 @@ func PlanSteps(data map[string]any) (PlanProgress, bool) {
 // inputField is the first line of field in a tool call's JSON input, trimmed; "" when the input
 // does not parse or has no such string.
 func inputField(data map[string]any, field string) string {
-	input, _ := data["input"].(string)
+	input, _ := data[ToolCallInput].(string)
 
 	var fields map[string]any
 	if err := json.Unmarshal([]byte(input), &fields); err != nil {

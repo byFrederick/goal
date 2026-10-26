@@ -8,7 +8,9 @@ import (
 func TestCardActivity(t *testing.T) {
 	t.Parallel()
 
-	call := func(tool, input string) map[string]any { return map[string]any{"tool": tool, "input": input} }
+	call := func(tool, input string) map[string]any {
+		return map[string]any{ToolCallTool: tool, ToolCallInput: input}
+	}
 	long := strings.Repeat("a", 100)
 
 	tests := []struct {
@@ -29,7 +31,7 @@ func TestCardActivity(t *testing.T) {
 		{"input cut short", call("Edit", `{"file_path":"internal/x.go","old_string":"aaa…`), "Using Edit"},
 		{"input not json", call("Bash", "ls"), "Using Bash"},
 		{"missing field", call("Edit", `{"content":"x"}`), "Using Edit"},
-		{"no tool", map[string]any{"input": `{}`}, ""},
+		{"no tool", map[string]any{ToolCallInput: `{}`}, ""},
 		{"nil data", nil, ""},
 		{"github token", call("Bash", `{"command":"gh auth login --with-token ghp_abcdefABCDEF0123456789"}`), "Running gh auth login --with-token ***"},
 		{"github pat", call("Bash", `{"command":"echo github_pat_11AB_cdef"}`), "Running echo ***"},
@@ -64,7 +66,9 @@ func TestCardActivity(t *testing.T) {
 func TestPlanSteps(t *testing.T) {
 	t.Parallel()
 
-	call := func(tool, input string) map[string]any { return map[string]any{"tool": tool, "input": input} }
+	call := func(tool, input string) map[string]any {
+		return map[string]any{ToolCallTool: tool, ToolCallInput: input}
+	}
 
 	tests := []struct {
 		name string
@@ -75,14 +79,15 @@ func TestPlanSteps(t *testing.T) {
 		{
 			"two of three done",
 			call(ToolTodoWrite, `{"todos":[{"content":"a","status":"completed"},{"content":"b","status":"in_progress"},{"content":"c","status":"completed"}]}`),
-			PlanProgress{Done: 2, Total: 3}, true,
+			PlanProgress{Done: 2, Total: 3},
+			true,
 		},
 		{"none done", call(ToolTodoWrite, `{"todos":[{"status":"pending"}]}`), PlanProgress{Done: 0, Total: 1}, true},
 		{"empty list", call(ToolTodoWrite, `{"todos":[]}`), PlanProgress{}, false},
 		{"no todos", call(ToolTodoWrite, `{}`), PlanProgress{}, false},
 		{"cut short", call(ToolTodoWrite, `{"todos":[{"status":"completed"},{"sta…`), PlanProgress{}, false},
 		{"another tool", call("Edit", `{"todos":[{"status":"completed"}]}`), PlanProgress{}, false},
-		{"input not a string", map[string]any{"tool": ToolTodoWrite, "input": 3.0}, PlanProgress{}, false},
+		{"input not a string", map[string]any{ToolCallTool: ToolTodoWrite, ToolCallInput: 3.0}, PlanProgress{}, false},
 		{"nil data", nil, PlanProgress{}, false},
 	}
 

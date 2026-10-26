@@ -290,7 +290,7 @@ func TestAPI_BoardCardsSayWhatTheRunIsDoing(t *testing.T) {
 	call := func(tool, input string) domain.Event {
 		return domain.Event{
 			FactoryID: lineID, ItemID: working.ID, RunID: run, At: t0, Kind: domain.EventToolCall, Station: stBuild,
-			Data: map[string]any{"id": tool, "tool": tool, "input": input},
+			Data: map[string]any{"id": tool, domain.ToolCallTool: tool, domain.ToolCallInput: input},
 		}
 	}
 

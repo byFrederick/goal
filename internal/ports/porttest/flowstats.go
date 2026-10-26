@@ -89,12 +89,13 @@ func (s *Store) LiveRuns(ctx context.Context, factory domain.FactoryID) (map[dom
 				continue
 			}
 
-			switch e.Kind {
-			case domain.EventUsage:
+			if e.Kind == domain.EventUsage {
 				live.Turns++
-			case domain.EventToolCall:
+			}
+
+			if e.Kind == domain.EventToolCall {
 				live.LastToolCall = e.Data
-				if tool, _ := e.Data["tool"].(string); tool == domain.ToolTodoWrite {
+				if tool, _ := e.Data[domain.ToolCallTool].(string); tool == domain.ToolTodoWrite {
 					live.LastPlan = e.Data
 				}
 			}

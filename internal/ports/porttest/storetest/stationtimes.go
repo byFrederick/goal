@@ -121,7 +121,9 @@ func testLiveRuns(f *fixture) {
 	event := func(it domain.Item, run domain.RunID, kind domain.EventKind, data map[string]any) domain.Event {
 		return domain.Event{FactoryID: it.FactoryID, ItemID: it.ID, RunID: run, At: t1, Kind: kind, Station: stWork, Actor: agWorker, Data: data}
 	}
-	call := func(tool, input string) map[string]any { return map[string]any{"id": tool, "tool": tool, "input": input} }
+	call := func(tool, input string) map[string]any {
+		return map[string]any{"id": tool, domain.ToolCallTool: tool, domain.ToolCallInput: input}
+	}
 
 	plan := call(domain.ToolTodoWrite, `{"todos":[{"status":"completed"}]}`)
 	edit := call("Edit", `{"file_path":"x.go"}`)
