@@ -37,7 +37,7 @@ Taskfile.yml           task check = everything the pre-push hook and CI run
 
 ## Quick start
 
-Tools: Go, [Task](https://taskfile.dev), Docker, Terraform, tflint, sops and golangci-lint v2 (`mise install` reads `.mise.toml`).
+Tools: Go, [Task](https://taskfile.dev), Docker, Terraform, tflint, sops, age (`age-keygen`, for `task tf:sops-test`) and golangci-lint v2 (`mise install` reads `.mise.toml`).
 
 ```bash
 task hooks:install         # once per clone: pushes run task check first
@@ -120,7 +120,7 @@ Goal then opens from its own icon, full screen, and keeps the phone's status bar
 | what may read the environment: `*.go` (outside `tools/layoutcheck/`), `apps/worker/`, `apps/auth/`, `deploy/cloudflare/`, `compose.yaml`, `.env.example`; and `tools/envcheck/` (with the Go checks), `docs/reference/environment.md` | `env:check` as well |
 | `packages/api-client/` | `api-client:check` and `web:check` (web uses it) |
 | the rest of `apps/web/` | `web:check` |
-| `deploy/terraform/`, `.sops.yaml` | `tf:check` |
+| `deploy/terraform/` | `tf:check` |
 | `tools/layoutcheck/` | the Go checks and `layout:check` |
 | `AGENTS.md`, `docs/adr/0013-repository-layout.md`, `.claude/rules/` (what `tools/layoutcheck` compares with the tracked files) | `layout:check` |
 | the rest of `docs/`, the rest of `.claude/`, `.github/`, `.githooks/`, other root `*.md`, `skills-lock.json` | nothing |
