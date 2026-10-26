@@ -61,6 +61,10 @@ func TestPlan(t *testing.T) {
 			[]string{"tools/envcheck/check.go", "tools/envcheck/testdata/repo/compose.yaml"},
 			goEnvTasks, "env (env:check): tools/envcheck/check.go and 1 more", "",
 		},
+		"repository tools": {
+			[]string{"tools/permgen/table.go", "tools/checkplan/testdata/x.txt"},
+			goEnvTasks, "env (env:check): tools/permgen/table.go", "",
+		},
 		"env reference":     {[]string{"docs/reference/environment.md"}, envTasks, "env (env:check): docs/reference/environment.md", ""},
 		"wrangler bindings": {[]string{"deploy/cloudflare/wrangler.jsonc"}, []string{envCheck, "cloudflare:check"}, "env (env:check): deploy/cloudflare/wrangler.jsonc", ""},
 		"nothing to check": {

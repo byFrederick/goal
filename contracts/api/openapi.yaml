@@ -12,7 +12,7 @@
 # 404. Requests that change something from a browser must be same-origin (cross-origin protection).
 #
 # Every operation names the permission it needs in `x-goal-scope`, one of contracts/api/permissions.yaml
-# (phase 3). cmd/permgen (`task api:gen`) generates goald's table from both files and `task
+# (phase 3). tools/permgen (`task api:gen`) generates goald's table from both files and `task
 # check` fails when an operation lacks a scope, names an unknown one, or the table is stale.
 openapi: 3.0.3
 info:

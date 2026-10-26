@@ -22,7 +22,7 @@ Tests exist to stop real regressions. A test that would still pass if the behavi
 | CLIs (`cmd/`) | Unit tests on argument parsing, settings and the follow loop against a stub API | flags after positionals; unsafe settings refused; each event printed once until a human must act |
 | Worker (TypeScript) | Vitest on the policy hook and envelope parsing; one smoke test with a recorded SDK stream | deny rules block; contract violations fail |
 | UI | Playwright on critical flows at 375, 768, 1440 px; accessibility checks | approve an item; move a card without dragging |
-| Agents and factories | Jonah eval suites, not unit tests | see `docs/jonah/` |
+| Agents and factories | Jonah eval suites, not unit tests | see `docs/history/jonah/` (the design phase 5 replaced) |
 
 ## Rules
 

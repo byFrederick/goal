@@ -11,14 +11,14 @@ This file is an index. Each rule lives in one place and is linked from here; the
 .githooks/      versioned git hooks (pre-push runs task check)
 .github/        CI, deploy and Terraform workflows
 apps/           auth/ (identity service, Hono + Better Auth, reached only through goald's /api/auth proxy), web/ (React SPA, embedded into goald), worker/ (goal-agent, the one agent container image)
-cmd/            binaries: goal (CLI), goald (daemon), goal-egress (egress proxy) and code generators
+cmd/            binaries: goal (CLI), goald (daemon), goal-egress (egress proxy)
 contracts/      contracts/api/ (openapi.yaml, permissions.yaml, sandbox.yaml: the only contract between goald and TypeScript), contracts/definitions/ (JSON Schemas for factory, eval and connection kind files), env.yaml (every environment variable a process reads, with env.schema.json)
 db/             the database: db/migrations/ (forward-only SQL, goose), db/queries/ (SQL for sqlc) and db/sqlc.yaml
 deploy/         deploy/cloudflare/ (the control Worker and wrangler config), deploy/terraform/ (the platform's own infrastructure, one root module)
-docs/           adr/, design/ (MASTER.md: the UI's design system), engineering/, specs/, jonah/, reference/ (generated from the contracts: environment.md)
+docs/           adr/, design/ (MASTER.md: the UI's design system), engineering/, history/ (history/specs/ and history/jonah/: earlier plans), reference/ (glossary.md, and environment.md generated from the contracts)
 internal/       the Go packages: domain, engine, ports, adapters, api, gateway… (docs/engineering/architecture.md)
 packages/       shared TypeScript: api-client/ (the API client and its generated types)
-tools/          repository tooling that is not a shipped binary: layoutcheck/ (task layout:check), envcheck/ (task env:check)
+tools/          repository tooling that is not a shipped binary: layoutcheck/ (task layout:check), envcheck/ (task env:check), checkplan/ (task check:changed), permgen/ (task api:gen's permission tables)
 ```
 
 Root files: the entry docs, `Taskfile.yml`, `compose.yaml`, the Go and pnpm manifests, and `skills-lock.json`. Factory definitions are not in this tree; they live in the bucket and PostgreSQL ([factory-definition.md](docs/engineering/factory-definition.md)).
@@ -44,6 +44,7 @@ Other docs cite these as "AGENTS.md rule N", so the numbers stay fixed.
 - Each rule's "Skills" section names the vendored skills for its area. Vendored skills live in `.claude/skills`, pinned in `skills-lock.json`; add, update or remove them only with `npx skills`, in their own pull request, and review the diff: skills run with full agent permissions.
 - Our own procedures are the `goal-*` skills in `.claude/skills` (an adapter, an ADR, an API change, a migration, a UI screen, delivering a change).
 - A run box offers only the skills its factory definition lists, taken by name from the checkout's `.claude/skills`.
+- The [glossary](docs/reference/glossary.md) defines each domain term (factory, station, item, run, andon…) and names the package where it lives.
 - When you change one file, the [change map](docs/engineering/change-map.md) says what else changes with it and what to run.
 
 ## Changes

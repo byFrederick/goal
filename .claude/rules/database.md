@@ -8,13 +8,13 @@ paths:
 
 # Database
 
-The data model and its reasons: [docs/specs/README.md](../../docs/specs/README.md) ("Migration ranges" and the tenancy bullet), [architecture.md](../../docs/engineering/architecture.md) ("Ports", "Scale and failure") and [testing.md](../../docs/engineering/testing.md).
+The data model and its reasons: [architecture.md](../../docs/engineering/architecture.md) ("Migrations and tenancy", "Ports", "Scale and failure") and [testing.md](../../docs/engineering/testing.md).
 
 ## Migrations
 
 - Write migrations for goose, forward-only, as a new numbered file in `db/migrations/`, because goose applies them in order and refuses a number below one already applied.
 - Never edit an applied migration; fix it with the next file, because every database that ran it keeps the old one.
-- Take the next free number in your phase's range from docs/specs/README.md, so parallel work does not collide.
+- Take the highest number in `db/migrations/` plus one, and never a retired number below it, because goose refuses a number below one already applied ([architecture.md](../../docs/engineering/architecture.md), "Migrations and tenancy").
 - Keep each migration safe in one transaction, and add a large table's new constraint `NOT VALID` then validate it, so deploys do not lock tables.
 - Run `task migrate-check` after a change to `db/migrations/`, because it applies every file to a fresh PostgreSQL 18 with pgvector.
 

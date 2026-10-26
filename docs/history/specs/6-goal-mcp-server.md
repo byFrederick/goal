@@ -1,6 +1,6 @@
 # Phase 6 — Goal MCP server
 
-Status: owner-approved design (2026-10-24; one server for agents and clients, 2026-10-25), not built · follows phase 5 (needs only phase 3 and phase 4) · migrations `00070–00079` (`00070–00072` planned) · OpenAPI tag `mcp` · PRs `6-1…6-8` · decision records [ADR 0007](../adr/0007-identity-better-auth.md), [ADR 0008](../adr/0008-portable-runs-connections-and-knowledge.md) (amended for this phase)
+Status: owner-approved design (2026-10-24; one server for agents and clients, 2026-10-25), not built · follows phase 5 (needs only phase 3 and phase 4) · migrations `00070–00079` (`00070–00072` planned) · OpenAPI tag `mcp` · PRs `6-1…6-8` · decision records [ADR 0007](../../adr/0007-identity-better-auth.md), [ADR 0008](../../adr/0008-portable-runs-connections-and-knowledge.md) (amended for this phase)
 
 (roadmap) This was phase 5 (`5-goal-mcp-server.md`, PRs `5-n`, migrations from `00060`) until the owner put continuous learning ([phase 5](5-continuous-learning.md)) before it on 2026-10-24. Earlier specs that say "phase 5" for the MCP server, OAuth or `/v1/mcp` mean this phase.
 

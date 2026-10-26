@@ -1,6 +1,6 @@
 # Phase 5 — Continuous learning (Jonah)
 
-Status: owner-approved direction (2026-10-24), not built · follows phase 4 · migrations `00060–00069` (`00060–00062` planned) · OpenAPI tag `learning` · PRs `5-1…5-8` · decision records [ADR 0002](../adr/0002-jonah-evals.md) (amended for this phase), [ADR 0008](../adr/0008-portable-runs-connections-and-knowledge.md)
+Status: owner-approved direction (2026-10-24), not built · follows phase 4 · migrations `00060–00069` (`00060–00062` planned) · OpenAPI tag `learning` · PRs `5-1…5-8` · decision records [ADR 0002](../../adr/0002-jonah-evals.md) (amended for this phase), [ADR 0008](../../adr/0008-portable-runs-connections-and-knowledge.md)
 
 In *The Goal*, Jonah never fixes the plant; he asks questions until Alex sees the constraint and changes it himself. Here Jonah is each factory's improvement coach. It turns what people had to tell a factory into knowledge, standard work and tests, proves a change before it ships, and shows afterwards whether it helped. A person decides, unless a factory opts in to narrow automation. There is no new service: everything is agent runs, item events, definition drafts and versions, and the knowledge port.
 
