@@ -36,11 +36,12 @@ const (
 )
 
 // processDirs maps a directory to the process whose code it holds: a read there must list that
-// reader. Reads anywhere else (internal/) only need an entry.
+// reader. Reads anywhere else in internal/ only need an entry.
 var processDirs = []struct{ dir, reader string }{
 	{"cmd/goald/", readerGoald},
 	{"cmd/goal-egress/", readerEgress},
 	{"cmd/goal/", readerCLI},
+	{"internal/cli/", readerCLI},
 	{"apps/auth/", readerAuth},
 	{"apps/worker/", readerWorker},
 	{"deploy/cloudflare/", readerControlWorker},

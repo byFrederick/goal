@@ -319,6 +319,23 @@ func TestCheck_Order(t *testing.T) {
 	})
 }
 
+func TestReaderOf(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		"cmd/goald/settings.go":   readerGoald,
+		"cmd/goal/main.go":        readerCLI,
+		"internal/cli/catalog.go": readerCLI,
+		"cmd/goal-egress/main.go": readerEgress,
+		"internal/engine/pull.go": "",
+	}
+	for p, want := range tests {
+		if got := readerOf(p); got != want {
+			t.Errorf("readerOf(%q) = %q, want %q", p, got, want)
+		}
+	}
+}
+
 func TestScanGo_ReaderFuncsAndConsts(t *testing.T) {
 	t.Parallel()
 
