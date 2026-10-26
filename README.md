@@ -117,6 +117,7 @@ Goal then opens from its own icon, full screen, and keeps the phone's status bar
 | `*.go` anywhere, `cmd/`, `internal/`, `db/queries/`, `db/sqlc.yaml`, `db/migrations/`; what Go embeds or its tests read: `apps/web/csp.txt`, `apps/web/placeholder/`, `compose.yaml`, `.env.example` | `lint`, `test`, `api:permissions-check`, `validate` |
 | `apps/auth/src/access.gen.ts` (compared by `api:permissions-check`) | the Go checks and `auth:check` |
 | `apps/worker/`, `apps/auth/`, `deploy/cloudflare/` | `worker:check`, `auth:check`, `cloudflare:check` |
+| what may read the environment: `*.go` (outside `tools/layoutcheck/`), `apps/worker/`, `apps/auth/`, `deploy/cloudflare/`, `compose.yaml`, `.env.example`; and `tools/envcheck/` (with the Go checks), `docs/reference/environment.md` | `env:check` as well |
 | `packages/api-client/` | `api-client:check` and `web:check` (web uses it) |
 | the rest of `apps/web/` | `web:check` |
 | `deploy/terraform/`, `.sops.yaml` | `tf:check` |

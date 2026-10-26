@@ -386,10 +386,18 @@ tasks:
     cmds:
       - go run ./tools/layoutcheck
 
+  env:check:
+    desc: >-
+      Check contracts/env.yaml against every environment read in the Go, TypeScript, wrangler.jsonc, compose.yaml
+      and Taskfile.yml, check .env.example against it and docs/reference/environment.md (-- -write rewrites it)
+    cmds:
+      - go run ./tools/envcheck {{.CLI_ARGS}}
+
   check:
     desc: Everything the pre-push hook and CI check except migrations and integration tests
     cmds:
       - task: layout:check
+      - task: env:check
       - task: lint
       - task: test
       - task: api:permissions-check
