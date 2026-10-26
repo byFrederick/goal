@@ -1,3 +1,5 @@
+import { realpath } from 'node:fs/promises';
+import { posix } from 'node:path';
 import type { CanUseTool, McpServerConfig, Options, Settings } from '@anthropic-ai/claude-agent-sdk';
 import { type AgentFiles, type Connection, paths, type TaskSpec } from './spec.js';
 
@@ -129,10 +131,14 @@ function isConnectionRule(rule: string): boolean {
  * The permission check of calls nothing pre-approved. A tool of a connection's MCP server
  * (mcp__<connection>__<tool>) is allowed by the agent's rules for it, as the gateway applies them
  * to its tools: deny wins, a malformed deny pattern denies the connection's every tool, and a
- * connection with allow rules allows only the tools they match. Every other call is denied, as
- * Claude Code's dontAsk mode would.
+ * connection with allow rules allows only the tools they match. A built-in write Claude Code
+ * escalates is decided by guidanceWrite. Every other call is denied, as Claude Code's dontAsk
+ * mode would.
  */
-export function connectionPermission(spec: Pick<TaskSpec, 'tools_allow' | 'tools_deny' | 'connections'>): CanUseTool {
+export function connectionPermission(
+  spec: Pick<TaskSpec, 'tools_allow' | 'tools_deny' | 'connections'>,
+  workspace: string = paths.workspace,
+): CanUseTool {
   const servers = new Set(spec.connections.filter((c) => c.mcp).map((c) => c.name));
   const rules = (list: string[], conn: string) =>
     list
@@ -140,6 +146,10 @@ export function connectionPermission(spec: Pick<TaskSpec, 'tools_allow' | 'tools
       .flatMap((rule) => (rule.startsWith(`${conn}__`) ? [rule.slice(conn.length + 2)] : []));
 
   return async (toolName, input) => {
+    if (writeTools.has(toolName) || toolName === 'Bash') {
+      if (await guidanceWrite(spec, workspace, toolName, input)) return { behavior: 'allow', updatedInput: input };
+      return { behavior: 'deny', message: `${toolName} may write only the workspace's guidance files: ${guidance}.` };
+    }
     const [, conn = '', tool = ''] = /^mcp__([a-z0-9-]+)__(.+)$/.exec(toolName) ?? [];
     if (!servers.has(conn))
       return { behavior: 'deny', message: `${toolName} is not allowed by the agent's tool rules.` };
@@ -151,6 +161,110 @@ export function connectionPermission(spec: Pick<TaskSpec, 'tools_allow' | 'tools
     }
     return { behavior: 'allow', updatedInput: input };
   };
+}
+
+/** Built-in tools that write the file named by their file_path. */
+const writeTools = new Set(['Write', 'Edit', 'MultiEdit']);
+
+/** The workspace's guidance files: the only paths an escalated built-in write may reach. */
+const guidanceDirs = ['.claude/rules/', '.claude/skills/', '.claude/agents/', '.claude/commands/'];
+const guidanceFiles = ['CLAUDE.md', 'AGENTS.md'];
+const guidance = [...guidanceDirs, ...guidanceFiles].join(', ');
+
+/**
+ * Whether an escalated built-in write may run. Claude Code treats .claude/ as protected and asks
+ * about every write there even when an allow rule covers it; nobody is there to answer, so this
+ * check does. The call must be granted by the agent's tools_allow and matched by no tools_deny
+ * rule (as Claude Code matches them), and it must write only guidance files of the workspace:
+ * .claude/{rules,skills,agents,commands}/ and the root CLAUDE.md and AGENTS.md. Everything else
+ * stays denied, above all .claude/settings*.json, .claude/hooks and .git/, which would change the
+ * agent's own permissions, hooks or history for later runs, and anything outside the workspace.
+ */
+async function guidanceWrite(
+  spec: Pick<TaskSpec, 'tools_allow' | 'tools_deny'>,
+  workspace: string,
+  tool: string,
+  input: Record<string, unknown>,
+): Promise<boolean> {
+  const target = tool === 'Bash' ? input.command : input.file_path;
+  if (typeof target !== 'string' || target === '') return false;
+  const builtin = (list: string[]) => list.filter((rule) => !isConnectionRule(rule));
+  const ruleMatches = (rule: string) => builtinRuleMatches(rule, tool, target, workspace);
+  if (builtin(spec.tools_deny).some(ruleMatches) || !builtin(spec.tools_allow).some(ruleMatches)) return false;
+
+  // Bash: a command's targets cannot be parsed reliably (variables, cd, eval, redirections,
+  // subshells), so this is a mention-based decision, not a path check. The command must mention a
+  // guidance path and nothing protected: settings*.json, .git, any other .claude/ path, a parent
+  // (..), the home directory or Claude Code's config dir. Indirection can still hide a target;
+  // tools_deny and the box's isolation remain the backstop.
+  if (tool === 'Bash') return guidanceMention.test(target) && !protectedMention.test(target);
+
+  const lexical = posix.resolve(workspace, target);
+  if (!isGuidance(posix.relative(workspace, lexical))) return false;
+  // A committed symlink (.claude/rules -> ../.git) would pass the lexical check: the real path of
+  // the target's nearest existing ancestor must be guidance of the workspace's real path too.
+  const real = await realTarget(lexical);
+  return isGuidance(posix.relative(await realpath(workspace), real));
+}
+
+const guidanceMention = /(^|[\s'"=/])(\.claude\/(rules|skills|agents|commands)\/|CLAUDE\.md|AGENTS\.md)/;
+const protectedMention =
+  /settings[\w.-]*\.json|\.git(?![\w-])|\.claude(?!\/(rules|skills|agents|commands)(\/|(?![\w.-])))|\.\.|~|\$\{?HOME|CLAUDE_CONFIG_DIR|\/home\//;
+
+/** Whether rel, a path relative to the workspace, is one of its guidance files. */
+function isGuidance(rel: string): boolean {
+  if (rel.startsWith('..') || posix.isAbsolute(rel)) return false;
+  return guidanceFiles.includes(rel) || guidanceDirs.some((dir) => rel.startsWith(dir) && rel.length > dir.length);
+}
+
+/** The absolute path with its nearest existing ancestor's symlinks resolved. */
+async function realTarget(path: string): Promise<string> {
+  const rest: string[] = [];
+  for (let dir = path; ; dir = posix.dirname(dir)) {
+    try {
+      return posix.join(await realpath(dir), ...rest.reverse());
+    } catch {
+      if (dir === '/') return path;
+      rest.push(posix.basename(dir));
+    }
+  }
+}
+
+/**
+ * Whether a built-in tool rule in Claude Code's syntax covers the call: a bare tool name covers
+ * every call of it; Bash(spec) covers commands matching spec ("*" any run, "prefix:*" a prefix);
+ * Write(spec), Edit(spec) and MultiEdit(spec) cover file paths matching spec as a gitignore-style
+ * path ("//abs" absolute, "~/" the home directory, which holds no guidance, otherwise relative to
+ * the workspace; "**" any run of directories, "*" any run within one).
+ */
+function builtinRuleMatches(rule: string, tool: string, target: string, workspace: string): boolean {
+  const [, name = rule, specifier] = /^([^(]+)\((.*)\)$/s.exec(rule) ?? [];
+  if (name !== tool) return false;
+  if (specifier === undefined || specifier === '' || specifier === '*') return true;
+  if (tool === 'Bash') {
+    if (specifier.endsWith(':*')) return target.startsWith(specifier.slice(0, -2));
+    return wildcard(specifier, '.*').test(target);
+  }
+  let pattern = specifier;
+  if (pattern.startsWith('//')) pattern = pattern.slice(1);
+  else if (pattern.startsWith('~/'))
+    return false; // the home directory: never the workspace
+  else pattern = posix.join(workspace, pattern);
+  return wildcard(pattern, '[^/]*').test(posix.resolve(workspace, target));
+}
+
+/** A regular expression of a pattern whose only metacharacters are "**" (any run) and "*" (star). */
+function wildcard(pattern: string, star: string): RegExp {
+  const re = pattern
+    .split('**')
+    .map((part) =>
+      part
+        .split('*')
+        .map((s) => s.replace(/[.*+?^${}()|[\]\\/-]/g, '\\$&'))
+        .join(star),
+    )
+    .join('.*');
+  return new RegExp(`^${re}$`, 's');
 }
 
 /**

@@ -1,6 +1,9 @@
+import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { CanUseTool, Options } from '@anthropic-ai/claude-agent-sdk';
 import { describe, expect, it } from 'vitest';
-import { agentQuery, taskPrompt } from './agent.js';
+import { agentQuery, connectionPermission, taskPrompt } from './agent.js';
 import { type Connection, parseSpec, type TaskSpec } from './spec.js';
 
 const base = {
@@ -59,13 +62,13 @@ function systemPromptOf(spec: Partial<TaskSpec>): string {
 }
 
 /** Asks options' permission check about one call, as Claude Code does for a call nothing pre-approved. */
-async function decide(options: Options, tool: string): Promise<'allow' | 'deny'> {
+async function decide(
+  options: Pick<Options, 'canUseTool'>,
+  tool: string,
+  input: Record<string, unknown> = { q: 'x' },
+): Promise<'allow' | 'deny'> {
   const check = options.canUseTool as CanUseTool;
-  const result = await check(
-    tool,
-    { q: 'x' },
-    { signal: new AbortController().signal, toolUseID: 't1', requestId: 'q1' },
-  );
+  const result = await check(tool, input, { signal: new AbortController().signal, toolUseID: 't1', requestId: 'q1' });
   if (!result) throw new Error(`no decision on ${tool}`);
   return result.behavior;
 }
@@ -177,6 +180,118 @@ describe('agentQuery', () => {
         'mcp__goal__knowledge__search; mcp__goal__knowledge__read returns a whole document by the id a search gave.',
     );
     expect(systemPromptOf({ knowledge_sources: ['handbook'] })).not.toContain('Knowledge');
+  });
+});
+
+describe('the permission check of escalated built-in writes', () => {
+  const write = (file_path: string) => ({ file_path, content: '# Rules' });
+  const bash = (command: string) => ({ command });
+
+  it('allows a granted Write, Edit or MultiEdit to the guidance files of the workspace', async () => {
+    const guidance = [
+      '/workspace/.claude/rules/x.md',
+      '/workspace/.claude/skills/s/SKILL.md',
+      '/workspace/.claude/agents/a.md',
+      '/workspace/.claude/commands/c.md',
+      '/workspace/CLAUDE.md',
+      '/workspace/AGENTS.md',
+      '.claude/rules/y.md', // relative to the workspace
+    ];
+    for (const tool of ['Write', 'Edit', 'MultiEdit']) {
+      const options = optionsOf({ tools_allow: ['Read', tool] });
+      for (const path of guidance) {
+        expect([tool, path, await decide(options, tool, write(path))]).toEqual([tool, path, 'allow']);
+      }
+    }
+    const scoped = optionsOf({ tools_allow: ['Write(/.claude/**)'] });
+    expect(await decide(scoped, 'Write', write('/workspace/.claude/rules/x.md'))).toBe('allow');
+  });
+
+  it('denies a write the tool rules do not grant', async () => {
+    const path = write('/workspace/.claude/rules/x.md');
+    expect(await decide(optionsOf({ tools_allow: ['Read', 'Edit'] }), 'Write', path)).toBe('deny');
+    expect(await decide(optionsOf({ tools_allow: ['Write(/docs/**)'] }), 'Write', path)).toBe('deny');
+    expect(await decide(optionsOf({ tools_allow: ['Bash(git *)'] }), 'Bash', bash('cat > .claude/rules/x.md'))).toBe(
+      'deny',
+    );
+  });
+
+  it('denies settings, hooks, .git, escapes and anything outside the workspace', async () => {
+    const options = optionsOf({ tools_allow: ['Write', 'Edit', 'MultiEdit'] });
+    const denied = [
+      '/workspace/.claude/settings.json',
+      '/workspace/.claude/settings.local.json',
+      '/workspace/.git/config',
+      '/workspace/.claude/rules/../settings.json',
+      '/workspace/.claude/hooks/x.sh',
+      '/workspace/.claude/rules',
+      '/workspace/src/main.ts',
+      '/etc/x',
+      '/home/node/.claude/rules/x.md',
+      '../outside/CLAUDE.md',
+    ];
+    for (const path of denied) {
+      for (const tool of ['Write', 'Edit', 'MultiEdit']) {
+        expect([tool, path, await decide(options, tool, write(path))]).toEqual([tool, path, 'deny']);
+      }
+    }
+    expect(await decide(options, 'Write', { content: 'x' })).toBe('deny'); // no file_path
+    expect(await decide(options, 'NotebookEdit', write('/workspace/.claude/rules/x.md'))).toBe('deny');
+  });
+
+  it('decides Bash by what the command mentions: a guidance path and nothing protected', async () => {
+    const options = optionsOf({ tools_allow: ['Bash'] });
+    const calls: [string, 'allow' | 'deny'][] = [
+      ['mkdir -p .claude/rules && cat > .claude/rules/go.md', 'allow'],
+      ['cp /tmp/skill.md /workspace/.claude/skills/s/SKILL.md', 'allow'],
+      ["printf '# Rules' >> AGENTS.md", 'allow'],
+      ['echo {} > .claude/settings.json', 'deny'],
+      ['cp x .claude/settings.local.json && echo CLAUDE.md', 'deny'],
+      ['cp x .git/hooks/pre-push', 'deny'],
+      ['cp .claude/rules/x.md .claude/hooks/x.sh', 'deny'],
+      ['cp x ~/.claude/rules/x.md', 'deny'],
+      ['cp x $HOME/.claude/rules/x.md', 'deny'],
+      ['cp x .claude/rules/../../escape.md', 'deny'],
+      ['rm -rf src', 'deny'], // no guidance path
+    ];
+    for (const [command, want] of calls) {
+      expect([command, await decide(options, 'Bash', bash(command))]).toEqual([command, want]);
+    }
+    expect(await decide(options, 'Bash', {})).toBe('deny');
+  });
+
+  it('lets tools_deny win, in Claude Code rule syntax', async () => {
+    const rules = '/workspace/.claude/rules/x.md';
+    expect(await decide(optionsOf({ tools_allow: ['Write'], tools_deny: ['Write'] }), 'Write', write(rules))).toBe(
+      'deny',
+    );
+    expect(
+      await decide(
+        optionsOf({ tools_allow: ['Write'], tools_deny: ['Write(/.claude/rules/**)'] }),
+        'Write',
+        write(rules),
+      ),
+    ).toBe('deny');
+    const bashDenied = optionsOf({ tools_allow: ['Bash'], tools_deny: ['Bash(cat*)'] });
+    expect(await decide(bashDenied, 'Bash', bash('cat > .claude/rules/go.md'))).toBe('deny');
+    expect(await decide(bashDenied, 'Bash', bash('tee .claude/rules/go.md'))).toBe('allow');
+  });
+
+  it('denies a write whose guidance path is a symlink out of it', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'goal-workspace-'));
+    try {
+      await mkdir(join(workspace, '.git/hooks'), { recursive: true });
+      await mkdir(join(workspace, '.claude/skills'), { recursive: true });
+      await symlink('../.git', join(workspace, '.claude/rules'));
+      const check = {
+        canUseTool: connectionPermission({ tools_allow: ['Write'], tools_deny: [], connections }, workspace),
+      };
+
+      expect(await decide(check, 'Write', write(join(workspace, '.claude/rules/hooks/pre-push')))).toBe('deny');
+      expect(await decide(check, 'Write', write(join(workspace, '.claude/skills/s/SKILL.md')))).toBe('allow');
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
   });
 });
 
