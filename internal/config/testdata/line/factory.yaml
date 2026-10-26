@@ -1,5 +1,6 @@
-# Test fixture for config.Line: a small line exercising every station kind, a route, a gate
-# and an expedite lane. Self-contained: tests never read factory definitions from outside testdata.
+# Test fixture for config.Line: a small line exercising every station kind, a route, a gate,
+# an expedite lane and factory rules. Self-contained: tests never read factory definitions from
+# outside testdata.
 apiVersion: goal/v1
 kind: Factory
 metadata:
@@ -19,6 +20,9 @@ spec:
   skills:
     - { name: acme-conventions, source: ./skills/acme-conventions }
     - { name: golang-testing, source: "skills.sh:samber/cc-skills-golang@golang-testing" }
+  rules:
+    - { name: secrets, source: ./rules/secrets.md }
+    - { name: go-errors, source: ./rules/go-errors.md }
   contracts:
     spec: ./contracts/spec.schema.json
   agents:
