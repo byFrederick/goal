@@ -7,14 +7,23 @@ import type { ReactNode } from 'react';
 import type { BoardLane, BoardStation, ItemCard } from '../../api/types';
 import { useFactory } from '../../shared/factory';
 import { formatAge } from '../../shared/format';
-import { toneText } from '../../shared/item-state';
+import { itemStatus, toneText } from '../../shared/item-state';
 import { MoveButton } from '../../shared/move-menu';
 import { holds } from '../../shared/permissions';
 import { cn } from '../../ui/cn';
 import { StatusIcon } from '../../ui/status-icon';
-import { BoardCard, type CardDrag, CardTitle, ExpediteMark, moveKeys, PrLink, TouchCount } from './board-card';
+import {
+  AssemblyLine,
+  BoardCard,
+  type CardDrag,
+  CardTitle,
+  ExpediteMark,
+  moveKeys,
+  PrLink,
+  TouchCount,
+} from './board-card';
 import { DraggableCard } from './board-dnd';
-import { cardState, isExpedite, waitStatus } from './stats';
+import { cardState, isExpedite } from './stats';
 
 /** Opens the Move menu for an item. */
 type OnMove = ((item: ItemCard) => void) | undefined;
@@ -220,6 +229,7 @@ function WorkCard({
         <span>{item.ref}</span>
         <span className="whitespace-nowrap">{formatAge(item.age_seconds)}</span>
       </div>
+      <AssemblyLine item={item} />
       <CardTitle item={item} compact={compact} describedBy={drag?.describedBy} movable={Boolean(onMove)} />
       <div className="flex items-end gap-2">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -260,7 +270,7 @@ function WaitingRow({
   compact: boolean;
 }) {
   const reason = cardState(item, decides);
-  const status = waitStatus(item);
+  const status = itemStatus(item);
   const expedite = isExpedite(item);
   return (
     <article
@@ -283,6 +293,7 @@ function WaitingRow({
       {expedite ? <ExpediteMark /> : null}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-xs text-muted tabular-nums">{item.ref}</span>
+        <AssemblyLine item={item} />
         <CardTitle item={item} compact={compact} describedBy={drag?.describedBy} movable={Boolean(onMove)} />
         <span className={cn('flex min-w-0 items-center gap-1.5 text-xs', toneText[reason.tone])} title={reason.text}>
           {status ? <StatusIcon status={status} /> : null}

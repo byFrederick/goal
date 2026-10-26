@@ -25,7 +25,8 @@ function polyfillLayout() {
 }
 
 /**
- * Renders `page` at /o/<org>/f/<factory>/board?station=…, with the board seeded as its query data.
+ * Renders `page` at /o/<org>/f/<factory>/<section>?station=…, with the board seeded as its query
+ * data. The section is the board by default; the items list renders under `items`.
  * Returns what render returns (unmount, and the rest of Testing Library's queries).
  */
 export function renderBoardPage({
@@ -36,6 +37,7 @@ export function renderBoardPage({
   board,
   builderMeta,
   station,
+  section = 'board',
 }: {
   page: () => ReactNode;
   org: OrgSummary;
@@ -47,6 +49,8 @@ export function renderBoardPage({
   /** The install's models the page labels runs with; left out for a page that names no model. */
   builderMeta?: BuilderMeta;
   station?: string;
+  /** The factory's section the page is at: its route path. */
+  section?: 'board' | 'items';
 }) {
   polyfillLayout();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
@@ -67,14 +71,26 @@ export function renderBoardPage({
     beforeLoad: () => ({ factory }),
     component: Outlet,
   });
-  const boardRoute = createRoute({ getParentRoute: () => factoryRoute, path: 'board', component: page });
+  const boardRoute = createRoute({
+    getParentRoute: () => factoryRoute,
+    path: 'board',
+    component: section === 'board' ? page : () => null,
+  });
+  const itemsRoute = createRoute({
+    getParentRoute: () => factoryRoute,
+    path: 'items/',
+    component: section === 'items' ? page : () => null,
+  });
   const itemRoute = createRoute({ getParentRoute: () => factoryRoute, path: 'items/$ref', component: () => null });
-  const routeTree = rootRoute.addChildren([orgRoute.addChildren([factoryRoute.addChildren([boardRoute, itemRoute])])]);
+  const routeTree = rootRoute.addChildren([
+    orgRoute.addChildren([factoryRoute.addChildren([boardRoute, itemsRoute, itemRoute])]),
+  ]);
 
   const query = station ? `?station=${encodeURIComponent(station)}` : '';
+  const at = section === 'items' ? 'items/' : 'board';
   const router = createRouter({
     routeTree,
-    history: createMemoryHistory({ initialEntries: [`/o/${org.slug}/f/${factory.name}/board${query}`] }),
+    history: createMemoryHistory({ initialEntries: [`/o/${org.slug}/f/${factory.name}/${at}${query}`] }),
   });
 
   return render(

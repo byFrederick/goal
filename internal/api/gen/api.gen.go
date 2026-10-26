@@ -2436,6 +2436,9 @@ type ItemBudget struct {
 
 // ItemCard An item as boards and lists show it
 type ItemCard struct {
+	// Activity While its run runs, one short line (at most 80 characters) from the run's latest tool call, credential-shaped text replaced by ***: "Editing <path>", "Running <command>", "Reading <path>", "Searching <pattern>" or "Using <tool>"; absent or null when no run runs or it has called no tool yet
+	Activity *string `json:"activity,omitempty"`
+
 	// AgeSeconds Seconds since the item was created; for a done item, from created to done
 	AgeSeconds int64 `json:"age_seconds"`
 
@@ -2459,6 +2462,9 @@ type ItemCard struct {
 
 	// Parts For an assembly (an item with parts), where its parts stand; absent or null for any other item
 	Parts *PartsSummary `json:"parts,omitempty"`
+
+	// PlanSteps While its run runs, how far it is through its latest todo list (its latest TodoWrite call); absent or null when no run runs, it has listed no todos or the list did not parse (the worker cuts long tool input)
+	PlanSteps *PlanSteps `json:"plan_steps,omitempty"`
 
 	// PrUrl The pull request the item's latest station output names, else null
 	PrUrl *string `json:"pr_url"`
@@ -3297,6 +3303,15 @@ type PersonalToken struct {
 // PersonalTokenList defines model for PersonalTokenList.
 type PersonalTokenList struct {
 	Tokens []PersonalToken `json:"tokens"`
+}
+
+// PlanSteps The todos a running run completed of all it listed ("2 of 5 steps")
+type PlanSteps struct {
+	// Done Todos completed
+	Done int `json:"done"`
+
+	// Total Todos listed
+	Total int `json:"total"`
 }
 
 // PlatformAdmin defines model for PlatformAdmin.

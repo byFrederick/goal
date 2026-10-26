@@ -576,37 +576,57 @@ func (q *Queries) LeaseHistoryStart(ctx context.Context, factoryID uuid.UUID) (t
 	return acquired_at, err
 }
 
-const liveTurns = `-- name: LiveTurns :many
+const liveRuns = `-- name: LiveRuns :many
 SELECT DISTINCT ON (r.item_id) r.item_id,
-       (SELECT count(*) FROM item_events e WHERE e.run_id = r.id AND e.kind = $1::text) AS usage_turns
+       (SELECT count(*) FROM item_events e WHERE e.run_id = r.id AND e.kind = $1::text) AS usage_turns,
+       (SELECT e.data FROM item_events e WHERE e.run_id = r.id AND e.kind = $2::text
+        ORDER BY e.id DESC LIMIT 1)::jsonb AS last_tool_call,
+       (SELECT e.data FROM item_events e WHERE e.run_id = r.id AND e.kind = $2::text
+          AND e.data->>'tool' = $3::text
+        ORDER BY e.id DESC LIMIT 1)::jsonb AS last_plan
 FROM leases l
 JOIN agent_runs r ON r.item_id = l.item_id
-WHERE l.factory_id = $2 AND r.status = 'running'
+WHERE l.factory_id = $4 AND r.status = 'running'
 ORDER BY r.item_id, r.started_at DESC, r.id DESC
 `
 
-type LiveTurnsParams struct {
-	UsageKind string
-	FactoryID uuid.UUID
+type LiveRunsParams struct {
+	UsageKind    string
+	ToolCallKind string
+	TodoTool     string
+	FactoryID    uuid.UUID
 }
 
-type LiveTurnsRow struct {
-	ItemID     uuid.UUID
-	UsageTurns int64
+type LiveRunsRow struct {
+	ItemID       uuid.UUID
+	UsageTurns   int64
+	LastToolCall []byte
+	LastPlan     []byte
 }
 
-// The usage events of each item's newest running run under its live lease, for the board's
-// cards (leases_pkey on item_id, item_events_run_id_idx).
-func (q *Queries) LiveTurns(ctx context.Context, arg LiveTurnsParams) ([]LiveTurnsRow, error) {
-	rows, err := q.db.Query(ctx, liveTurns, arg.UsageKind, arg.FactoryID)
+// The usage events of each item's newest running run under its live lease, the data of its
+// newest tool call and of its newest call of the todo tool, for the board's cards (leases_pkey
+// on item_id, item_events_run_id_idx).
+func (q *Queries) LiveRuns(ctx context.Context, arg LiveRunsParams) ([]LiveRunsRow, error) {
+	rows, err := q.db.Query(ctx, liveRuns,
+		arg.UsageKind,
+		arg.ToolCallKind,
+		arg.TodoTool,
+		arg.FactoryID,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []LiveTurnsRow
+	var items []LiveRunsRow
 	for rows.Next() {
-		var i LiveTurnsRow
-		if err := rows.Scan(&i.ItemID, &i.UsageTurns); err != nil {
+		var i LiveRunsRow
+		if err := rows.Scan(
+			&i.ItemID,
+			&i.UsageTurns,
+			&i.LastToolCall,
+			&i.LastPlan,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -105,7 +105,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Transition_RecordsTheLeaseSpanWithItsOutcome", testLeaseSpansOnTransition},
 		{"RequeueExpiredLeases_RecordsExpiredLeaseSpans", testLeaseSpansOnRequeue},
 		{"StationTimes_LeasesWaitingAndVerdictsInTheWindow", testStationTimes},
-		{"LiveTurns_UsageOfEachRunningRun", testLiveTurns},
+		{"LiveRuns_TurnsAndLatestToolCallsOfEachRunningRun", testLiveRuns},
 		{"FlowMetrics_ByTypeWithLongWaits", testFlowMetricsByTypeWithLongWaits},
 		{"DoneByBucket_EqualBucketsEndingAtUntil", testDoneByBucket},
 		{"AgentStats_TasksSendBacksRunsAndDenials", testAgentStats},
