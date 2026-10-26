@@ -453,3 +453,38 @@ func TestLine_PlainRoutesKeepNoSlots(t *testing.T) {
 		t.Errorf("station = %+v, want %+v", got, want)
 	}
 }
+
+// board.flow.dependencies.paths names the output field whose globs replace an item's paths; a
+// definition without it maps no field.
+func TestLine_CarriesDependenciesPaths(t *testing.T) {
+	t.Parallel()
+
+	for doc, want := range map[string]string{
+		baseFactory: "",
+		baseFactory + "    flow:\n      dependencies: {}\n":                 "",
+		baseFactory + "    flow:\n      dependencies: { paths: touches }\n": "touches",
+	} {
+		f, err := Load(checkTree(doc, nil))
+		if err != nil {
+			t.Fatalf("load %q: %v", doc, err)
+		}
+
+		if got := f.Line().Flow.Dependencies.Paths; got != want {
+			t.Errorf("dependencies.paths of %q = %q, want %q", doc, got, want)
+		}
+	}
+}
+
+// flow.dependencies takes only its fields, each one a field name.
+func TestLoad_RefusesUnknownDependencyKeys(t *testing.T) {
+	t.Parallel()
+
+	for _, deps := range []string{"{ files: touches }", "{ paths: 3 }", `{ paths: "" }`, "{ paths: [touches] }", "touches"} {
+		doc := baseFactory + "    flow:\n      dependencies: " + deps + "\n"
+
+		_, problems := Check(checkTree(doc, nil))
+		if !slices.ContainsFunc(problems, func(p domain.DefinitionProblem) bool { return p.Check == checkSchema && p.Blocking() }) {
+			t.Errorf("dependencies %s: problems %+v, want a schema problem", deps, problems)
+		}
+	}
+}
