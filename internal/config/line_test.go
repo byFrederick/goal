@@ -27,6 +27,7 @@ func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 		Assemblies: domain.AssemblyPolicy{
 			FreshBase: domain.FreshBaseRebase, OnConflict: domain.ConflictRework, Overlap: domain.OverlapSerialize,
 		},
+		Retry: domain.RetryPolicy{TransientAttempts: domain.DefaultTransientAttempts},
 	}
 
 	if !reflect.DeepEqual(l.Flow, want) {
@@ -156,6 +157,51 @@ func TestLine_CarriesAssembliesOverlapPolicy(t *testing.T) {
 
 		if got := f.Line().Flow.Assemblies.Overlap; got != want {
 			t.Errorf("overlap of %q = %q, want %q", doc, got, want)
+		}
+	}
+}
+
+// board.flow.retry.transient.attempts caps the runs of a claim whose sandbox is lost; a
+// definition without it, as every one published before the key, keeps 3.
+func TestLine_CarriesTransientRetryAttempts(t *testing.T) {
+	t.Parallel()
+
+	for doc, want := range map[string]int{
+		baseFactory: 3,
+		baseFactory + "    flow:\n      release: push\n":                         3,
+		baseFactory + "    flow:\n      retry: {}\n":                             3,
+		baseFactory + "    flow:\n      retry: { transient: {} }\n":              3,
+		baseFactory + "    flow:\n      retry: { transient: { attempts: 1 } }\n": 1,
+		baseFactory + "    flow:\n      retry: { transient: { attempts: 5 } }\n": 5,
+	} {
+		f, err := Load(checkTree(doc, nil))
+		if err != nil {
+			t.Fatalf("load %q: %v", doc, err)
+		}
+
+		if got := f.Line().Flow.Retry.TransientAttempts; got != want {
+			t.Errorf("transient attempts of %q = %d, want %d", doc, got, want)
+		}
+	}
+}
+
+// goald refuses a transient retry cap below one, a non-integer and unknown keys.
+func TestLoad_RefusesTransientAttemptsBelowOne(t *testing.T) {
+	t.Parallel()
+
+	for _, retry := range []string{
+		"{ transient: { attempts: 0 } }", "{ transient: { attempts: -1 } }", "{ transient: { attempts: 1.5 } }",
+		"{ transient: { attempts: three } }", "{ transient: { backoff: 15s } }", "{ contract: 2 }", "{ transient: 3 }",
+	} {
+		doc := baseFactory + "    flow:\n      retry: " + retry + "\n"
+
+		_, problems := Check(checkTree(doc, nil))
+		if !slices.ContainsFunc(problems, func(p domain.DefinitionProblem) bool { return p.Check == checkSchema && p.Blocking() }) {
+			t.Errorf("retry %s: problems %+v, want a schema problem", retry, problems)
+		}
+
+		if _, err := Load(checkTree(doc, nil)); err == nil {
+			t.Errorf("retry %s loaded, want it refused", retry)
 		}
 	}
 }

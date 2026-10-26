@@ -695,6 +695,13 @@ func (s *Store) move(it *domain.Item, t ports.Transition) {
 		it.Lane = t.Lane
 	}
 
+	if t.Paths != nil {
+		it.Paths = nil
+		if len(t.Paths) > 0 {
+			it.Paths = slices.Clone(t.Paths)
+		}
+	}
+
 	if t.Output != nil {
 		it.Outputs[t.OutputStation] = t.Output
 	}
@@ -911,6 +918,7 @@ func clone(it *domain.Item) domain.Item {
 	c := *it
 	c.Outputs = maps.Clone(it.Outputs)
 	c.PartPaths = slices.Clone(it.PartPaths)
+	c.Paths = slices.Clone(it.Paths)
 
 	return c
 }
