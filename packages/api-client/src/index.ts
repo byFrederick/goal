@@ -159,6 +159,7 @@ export type SkillFiles = Schemas["SkillFiles"];
 export type TextFile = Schemas["TextFile"];
 export type Base64File = Schemas["Base64File"];
 export type Board = Schemas["Board"];
+export type BoardLane = Schemas["BoardLane"];
 export type BoardLine = Schemas["BoardLine"];
 export type BoardStation = Schemas["BoardStation"];
 export type Metrics = Schemas["Metrics"];

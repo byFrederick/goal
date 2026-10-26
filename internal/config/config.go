@@ -314,11 +314,13 @@ type Flow struct {
 	Assemblies *Assemblies `json:"assemblies,omitempty"`
 }
 
-// Assemblies says how runs keep item branches fresh (rebase or merge) and what a merge
-// conflict does (rework or human); an unset key takes its default, rebase and rework.
+// Assemblies says how runs keep item branches fresh (rebase or merge), what a merge conflict
+// does (rework or human) and whether items whose files overlap wait for each other (serialize
+// or allow); an unset key takes its default, rebase, rework and serialize.
 type Assemblies struct {
 	FreshBase  string `json:"freshBase,omitempty"`
 	OnConflict string `json:"onConflict,omitempty"`
+	Overlap    string `json:"overlap,omitempty"`
 }
 
 // Targets are what the line aims for; an unset target is zero.

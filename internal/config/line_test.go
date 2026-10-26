@@ -22,9 +22,11 @@ func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 	l := f.Line()
 	want := domain.FlowPolicy{
 		Release: domain.ReleaseDBR, Constraint: "respond", ExpediteWIP: 1,
-		Andon:      &domain.AndonPolicy{ReworkRate: 0.5, Window: 10},
-		Targets:    domain.Targets{ThroughputPerDay: 8, LeadTime: 6 * time.Hour, ExpediteLeadTime: time.Hour},
-		Assemblies: domain.AssemblyPolicy{FreshBase: domain.FreshBaseRebase, OnConflict: domain.ConflictRework},
+		Andon:   &domain.AndonPolicy{ReworkRate: 0.5, Window: 10},
+		Targets: domain.Targets{ThroughputPerDay: 8, LeadTime: 6 * time.Hour, ExpediteLeadTime: time.Hour},
+		Assemblies: domain.AssemblyPolicy{
+			FreshBase: domain.FreshBaseRebase, OnConflict: domain.ConflictRework, Overlap: domain.OverlapSerialize,
+		},
 	}
 
 	if !reflect.DeepEqual(l.Flow, want) {
@@ -48,7 +50,7 @@ func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 		t.Errorf("flow without release or targets = %+v, want push and no targets", p)
 	}
 
-	set := domain.AssemblyPolicy{FreshBase: domain.FreshBaseMerge, OnConflict: domain.ConflictHuman}
+	set := domain.AssemblyPolicy{FreshBase: domain.FreshBaseMerge, OnConflict: domain.ConflictHuman, Overlap: domain.OverlapSerialize}
 	if got := plain.Line().Flow.Assemblies; got != set {
 		t.Errorf("assemblies = %+v, want %+v", got, set)
 	}
@@ -59,7 +61,9 @@ func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got, want := half.Line().Flow.Assemblies, (domain.AssemblyPolicy{FreshBase: domain.FreshBaseRebase, OnConflict: domain.ConflictHuman}); got != want {
+	if got, want := half.Line().Flow.Assemblies, (domain.AssemblyPolicy{
+		FreshBase: domain.FreshBaseRebase, OnConflict: domain.ConflictHuman, Overlap: domain.OverlapSerialize,
+	}); got != want {
 		t.Errorf("assemblies with only onConflict = %+v, want %+v", got, want)
 	}
 }
@@ -133,6 +137,42 @@ func TestLine_WeeklyBudgetMapsToTheRuntime(t *testing.T) {
 }
 
 // A target is a positive number; zero or less is no target and is refused.
+// board.flow.assemblies.overlap says whether goald holds items whose files overlap; it
+// serializes them unless a factory allows it.
+func TestLine_CarriesAssembliesOverlapPolicy(t *testing.T) {
+	t.Parallel()
+
+	for doc, want := range map[string]domain.OverlapPolicy{
+		baseFactory: domain.OverlapSerialize,
+		baseFactory + "    flow:\n      release: push\n":                      domain.OverlapSerialize,
+		baseFactory + "    flow:\n      assemblies: {}\n":                     domain.OverlapSerialize,
+		baseFactory + "    flow:\n      assemblies: { overlap: serialize }\n": domain.OverlapSerialize,
+		baseFactory + "    flow:\n      assemblies: { overlap: allow }\n":     domain.OverlapAllow,
+	} {
+		f, err := Load(checkTree(doc, nil))
+		if err != nil {
+			t.Fatalf("load %q: %v", doc, err)
+		}
+
+		if got := f.Line().Flow.Assemblies.Overlap; got != want {
+			t.Errorf("overlap of %q = %q, want %q", doc, got, want)
+		}
+	}
+}
+
+func TestLoad_RefusesUnknownOverlapPolicy(t *testing.T) {
+	t.Parallel()
+
+	for _, assemblies := range []string{"{ overlap: parallel }", "{ overlap: '' }", "{ overlap: 1 }", "{ wip: 2 }", "allow"} {
+		doc := baseFactory + "    flow:\n      assemblies: " + assemblies + "\n"
+
+		_, problems := Check(checkTree(doc, nil))
+		if !slices.ContainsFunc(problems, func(p domain.DefinitionProblem) bool { return p.Check == checkSchema && p.Blocking() }) {
+			t.Errorf("assemblies %s: problems %+v, want a schema problem", assemblies, problems)
+		}
+	}
+}
+
 func TestLoad_RefusesTargetsThatAreNotPositive(t *testing.T) {
 	t.Parallel()
 

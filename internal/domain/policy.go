@@ -24,7 +24,8 @@ type FlowPolicy struct {
 	// Andon, when set, pulls the cord automatically on a high rework rate (later work).
 	Andon   *AndonPolicy
 	Targets Targets
-	// Assemblies says how runs keep item branches fresh and what a merge conflict does.
+	// Assemblies says how runs keep item branches fresh, what a merge conflict does and how
+	// the line treats items that edit the same files.
 	Assemblies AssemblyPolicy
 }
 
@@ -48,10 +49,23 @@ const (
 	ConflictHuman ConflictPolicy = "human"
 )
 
+// OverlapPolicy says whether items whose file globs overlap may be built at the same time.
+type OverlapPolicy string
+
+// Overlap policies, as written in factory.yaml's flow.assemblies.overlap.
+const (
+	// OverlapSerialize is the default: an item whose files overlap those of an item in flight
+	// waits for it.
+	OverlapSerialize OverlapPolicy = "serialize"
+	// OverlapAllow builds items in parallel whatever files they share.
+	OverlapAllow OverlapPolicy = "allow"
+)
+
 // AssemblyPolicy is board.flow.assemblies, with its defaults applied.
 type AssemblyPolicy struct {
 	FreshBase  FreshBase
 	OnConflict ConflictPolicy
+	Overlap    OverlapPolicy
 }
 
 // AndonPolicy pulls the andon cord when too many gate verdicts reject.
