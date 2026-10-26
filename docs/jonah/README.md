@@ -503,7 +503,7 @@ Starter estimate for the `goal` factory: architect regression (30 cases × 3 tri
 
 ## 13. UI
 
-Screens live in `apps/web/src/features/jonah/` and follow `design-system/goal/MASTER.md`: Inter with optical sizing and tabular numerals, the user palette, radii 8–16 px, solid fills only (no gradients), no pink. Color carries meaning, never alone: every state also has an icon and a label.
+Screens live in `apps/web/src/features/jonah/` and follow `docs/design/MASTER.md`: Inter with optical sizing and tabular numerals, the user palette, radii 8–16 px, solid fills only (no gradients), no pink. Color carries meaning, never alone: every state also has an icon and a label.
 
 | Token | Use in Jonah |
 | --- | --- |
