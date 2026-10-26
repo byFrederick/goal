@@ -78,7 +78,7 @@ func (s *Store) assemble(org domain.OrgID, a ports.Assembly) (domain.Item, domai
 		s.numbers[it.FactoryID]++
 		part := &domain.Item{
 			ID: domain.ItemID(s.newID()), OrgID: org, FactoryID: it.FactoryID, Number: s.numbers[it.FactoryID],
-			ParentID: it.ID, PartKey: p.Key, PartPaths: slices.Clone(p.Paths), Paths: slices.Clone(p.Paths), Type: it.Type, Lane: p.Lane,
+			ParentID: it.ID, PartKey: p.Key, PartPaths: slices.Clone(p.Paths), Paths: slices.Clone(p.Paths), BaseCommit: it.BaseCommit, Type: it.Type, Lane: p.Lane,
 			Title: p.Title, Body: p.Brief, Station: t.From.Station, State: domain.StateQueued, Class: it.Class,
 			Priority: it.Priority, Outputs: map[string]json.RawMessage{}, CreatedAt: t.At, UpdatedAt: t.At,
 		}
@@ -212,7 +212,7 @@ func (s *Store) addPart(org domain.OrgID, n ports.NewAssemblyPart) (domain.Item,
 	s.numbers[it.FactoryID]++
 	part := &domain.Item{
 		ID: domain.ItemID(s.newID()), OrgID: org, FactoryID: it.FactoryID, Number: s.numbers[it.FactoryID],
-		ParentID: it.ID, PartKey: p.Key, PartPaths: slices.Clone(p.Paths), Paths: slices.Clone(p.Paths), Type: it.Type, Lane: p.Lane,
+		ParentID: it.ID, PartKey: p.Key, PartPaths: slices.Clone(p.Paths), Paths: slices.Clone(p.Paths), BaseCommit: it.BaseCommit, Type: it.Type, Lane: p.Lane,
 		Title: p.Title, Body: p.Brief, Station: it.Station, State: domain.StateQueued, Class: it.Class,
 		Priority: it.Priority, Outputs: map[string]json.RawMessage{}, CreatedAt: n.At, UpdatedAt: n.At,
 	}

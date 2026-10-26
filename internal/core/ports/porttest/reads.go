@@ -32,6 +32,32 @@ func (s *Store) ItemByNumber(ctx context.Context, factory domain.FactoryID, numb
 	return domain.Item{}, fmt.Errorf("item %d of factory %s: %w", number, factory, ports.ErrNotFound)
 }
 
+// MergedItems implements ports.Store.
+func (s *Store) MergedItems(ctx context.Context, factory domain.FactoryID, shas []string) (map[string]domain.Item, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := map[string]domain.Item{}
+
+	for _, e := range s.events {
+		sha, _ := e.Data["sha"].(string)
+		if e.Kind != domain.EventMerged || e.FactoryID != factory || !slices.Contains(shas, sha) {
+			continue
+		}
+
+		if it, ok := s.visible(e.ItemID, org); ok {
+			out[sha] = clone(it)
+		}
+	}
+
+	return out, nil
+}
+
 // ListItems implements ports.Store.
 func (s *Store) ListItems(ctx context.Context, q ports.ItemQuery) ([]domain.Item, error) {
 	org, err := orgOf(ctx)

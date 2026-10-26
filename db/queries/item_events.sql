@@ -25,3 +25,12 @@ WHERE n.item_id = sqlc.arg(item_id) AND n.kind = 'note'
   AND n.id > coalesce((SELECT max(r.id) FROM item_events r
                        WHERE r.item_id = sqlc.arg(item_id) AND r.kind = 'run_started'), 0)
 ORDER BY n.id;
+
+-- name: MergedItems :many
+-- The factory's items by the sha of their merged events (item_events_merged_sha_idx); the latest
+-- event wins a sha two items name.
+SELECT DISTINCT ON (e.data->>'sha') (e.data->>'sha')::text AS sha, sqlc.embed(w)
+FROM item_events e
+JOIN work_items w ON w.id = e.item_id
+WHERE e.factory_id = sqlc.arg(factory_id) AND e.kind = 'merged' AND e.data->>'sha' = ANY (sqlc.arg(shas)::text[])
+ORDER BY e.data->>'sha', e.id DESC;

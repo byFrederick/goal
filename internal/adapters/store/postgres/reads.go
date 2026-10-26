@@ -36,6 +36,37 @@ func (s *Store) ItemByNumber(ctx context.Context, factory domain.FactoryID, numb
 	return itemFrom(row)
 }
 
+// MergedItems implements ports.Store.
+func (s *Store) MergedItems(ctx context.Context, factory domain.FactoryID, shas []string) (map[string]domain.Item, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	out := map[string]domain.Item{}
+	if len(shas) == 0 {
+		return out, nil
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.MergedItemsRow, error) {
+		return q.MergedItems(ctx, db.MergedItemsParams{FactoryID: fid, Shas: shas})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("merged items of factory %s: %w", factory, err)
+	}
+
+	for _, r := range rows {
+		it, err := itemFrom(r.WorkItem)
+		if err != nil {
+			return nil, err
+		}
+
+		out[r.Sha] = it
+	}
+
+	return out, nil
+}
+
 // ListItems implements ports.Store.
 func (s *Store) ListItems(ctx context.Context, q ports.ItemQuery) ([]domain.Item, error) {
 	fid, err := parseID("factory", string(q.FactoryID))

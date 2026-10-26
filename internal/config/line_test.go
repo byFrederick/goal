@@ -79,6 +79,7 @@ func TestLoad_RefusesUnknownAssemblyPolicies(t *testing.T) {
 
 	for _, assemblies := range []string{
 		"{ freshBase: squash }", "{ onConflict: retry }", "{ parts: 3 }", "{ materialize: yes please }", "{ materialize: 1 }",
+		"{ changedSince: yes please }",
 	} {
 		doc := baseFactory + "    flow:\n      assemblies: " + assemblies + "\n"
 
@@ -137,6 +138,28 @@ func TestLine_CarriesAssembliesMaterialize(t *testing.T) {
 
 		if got := f.Line().Flow.Assemblies.Materialize; got != want {
 			t.Errorf("flow %q: materialize = %v, want %v", flow, got, want)
+		}
+	}
+}
+
+// board.flow.assemblies.changedSince records base commits and gives later claims a Changed
+// since your plan section; it is off unless a factory sets it to true.
+func TestLine_CarriesAssembliesChangedSince(t *testing.T) {
+	t.Parallel()
+
+	for flow, want := range map[string]bool{
+		"": false,
+		"    flow:\n      assemblies: { overlap: allow }\n":      false,
+		"    flow:\n      assemblies: { changedSince: true }\n":  true,
+		"    flow:\n      assemblies: { changedSince: false }\n": false,
+	} {
+		f, err := Load(checkTree(baseFactory+flow, nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if got := f.Line().Flow.Assemblies.ChangedSince; got != want {
+			t.Errorf("flow %q: changedSince = %v, want %v", flow, got, want)
 		}
 	}
 }

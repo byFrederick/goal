@@ -110,6 +110,10 @@ type AssemblyPolicy struct {
 	// Materialize makes a station's plan (PlanFrom) an assembly with its parts when the station
 	// finishes; off, the plan is ignored and the item moves on. On by default.
 	Materialize bool
+	// ChangedSince records the default branch's head as an item's base commit when a station
+	// with context: [inflight] finishes it, and gives every later claim of the item a Changed
+	// since your plan section (ChangedSinceSection). Off by default.
+	ChangedSince bool
 }
 
 // AndonPolicy pulls the andon cord when too many gate verdicts reject.
