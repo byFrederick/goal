@@ -1,6 +1,7 @@
 // What an item's state means to the person looking at it, and which decisions they can take.
 // Derived only from the API's kinds and states, never from station or factory names.
 import type { ItemCard, ItemState, Station } from '../api/types';
+import type { StatusKind } from '../ui/status-icon';
 import { humanize } from './format';
 
 export type Tone = 'run' | 'you' | 'rework' | 'muted' | 'ok';
@@ -50,6 +51,29 @@ export function describeState(
       return { text: 'Cancelled', tone: 'muted' };
     case 'assembly':
       return { text: 'Assembly', tone: 'muted' };
+  }
+}
+
+/**
+ * The status icon of an item, the same on the board, the inbox, the Items list and the item page:
+ * working while in progress, waiting for a person or for another item (a queue, or the drum's
+ * buffer), ready or done as a check. None for blocked, cancelled and assemblies, which the words say.
+ */
+export function itemStatus(item: { state: ItemState; in_buffer?: boolean }): StatusKind | null {
+  switch (item.state) {
+    case 'in_progress':
+      return 'working';
+    case 'queued':
+    case 'waiting_human':
+      return 'waiting';
+    case 'ready':
+      return item.in_buffer ? 'waiting' : 'ready';
+    case 'done':
+      return 'ready';
+    case 'blocked':
+    case 'cancelled':
+    case 'assembly':
+      return null;
   }
 }
 

@@ -7,14 +7,14 @@ import type { ReactNode } from 'react';
 import type { BoardLane, BoardStation, ItemCard } from '../../api/types';
 import { useFactory } from '../../shared/factory';
 import { formatAge } from '../../shared/format';
-import { toneText } from '../../shared/item-state';
+import { itemStatus, toneText } from '../../shared/item-state';
 import { MoveButton } from '../../shared/move-menu';
 import { holds } from '../../shared/permissions';
 import { cn } from '../../ui/cn';
 import { StatusIcon } from '../../ui/status-icon';
 import { BoardCard, type CardDrag, CardTitle, ExpediteMark, moveKeys, PrLink, TouchCount } from './board-card';
 import { DraggableCard } from './board-dnd';
-import { cardState, isExpedite, waitStatus } from './stats';
+import { cardState, isExpedite } from './stats';
 
 /** Opens the Move menu for an item. */
 type OnMove = ((item: ItemCard) => void) | undefined;
@@ -260,7 +260,7 @@ function WaitingRow({
   compact: boolean;
 }) {
   const reason = cardState(item, decides);
-  const status = waitStatus(item);
+  const status = itemStatus(item);
   const expedite = isExpedite(item);
   return (
     <article
