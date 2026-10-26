@@ -4,7 +4,6 @@ import type { Board, BoardLine, BoardStation, ItemCard } from '../../api/types';
 import { formatDuration, formatPercent, formatUsd, formatUsdCompact, humanize, plural } from '../../shared/format';
 import { describeState, type StateLabel, waitingOnYou } from '../../shared/item-state';
 import type { HatchTone } from '../../ui/hatch';
-import type { StatusKind } from '../../ui/status-icon';
 
 /** "3 of 3, 2 ready", "2 of 5", "7 waiting", "4 today": a station's load. */
 export function stationStat(s: BoardStation): string {
@@ -147,13 +146,6 @@ export function budgetNote(line: BoardLine): string | null {
 /** A working item's doing line: "Working", with its turn once the agent has taken one. */
 export function doingText(item: Pick<ItemCard, 'turn'>): string {
   return item.turn ? `Working, turn ${item.turn}` : 'Working';
-}
-
-/** The status icon of a waiting row: a check when the item is ready, a clock while it waits; none when blocked. */
-export function waitStatus(item: Pick<ItemCard, 'state' | 'in_buffer'>): StatusKind | null {
-  if (item.state === 'ready' && !item.in_buffer) return 'ready';
-  if (item.state === 'queued' || item.state === 'ready') return 'waiting';
-  return null;
 }
 
 const times = ['once', 'twice'];

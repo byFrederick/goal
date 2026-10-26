@@ -7,14 +7,15 @@ import type { Item, Station } from '../../api/types';
 import { factoryTitle, itemKey, useFactory, useFactoryParams } from '../../shared/factory';
 import { humanize, plural } from '../../shared/format';
 import { type ItemControls, ItemDecisions } from '../../shared/item-actions';
-import { describeState, pausedNow, pullRequestsOf, type Tone } from '../../shared/item-state';
+import { describeState, pausedNow, pullRequestsOf } from '../../shared/item-state';
 import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
-import { Chip, type ChipTone } from '../../ui/chip';
+import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { PathCard, TimeCard } from './flow-cards';
+import { ItemStateChip } from './item-state-chip';
 import { NoteComposer } from './note-composer';
 import { OutputsCard } from './outputs';
 import { activeRun, buildTrace, latestToolCalls, noteRecipient, runRole, type Trace } from './timeline';
@@ -26,8 +27,6 @@ function roleOf(trace: Trace): string | null {
   const run = activeRun(trace);
   return run ? runRole(run) : null;
 }
-
-const chipTone: Record<Tone, ChipTone> = { run: 'run', you: 'you', rework: 'rework', muted: 'plain', ok: 'ok' };
 
 function TraceCard({
   item,
@@ -158,7 +157,7 @@ export function ItemPage() {
             {item.type ? <Chip tone="plain">{humanize(item.type)}</Chip> : null}
             {item.lane ? <Chip tone="plain">{item.lane}</Chip> : null}
             <Chip tone="plain">At {humanize(item.station)}</Chip>
-            <Chip tone={chipTone[state.tone]}>{state.text}</Chip>
+            <ItemStateChip state={item.state} label={state} />
             {item.touches && item.touches.count > 0 ? (
               <Chip tone="you" className="max-md:hidden">
                 {plural(item.touches.count, 'human touch', 'human touches')}

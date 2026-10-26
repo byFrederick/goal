@@ -72,7 +72,7 @@ type Engine interface {
 }
 
 // Items reads items, their history and runs, the leases on them, a factory's flow and its
-// stations' times, an item's spans and run in progress, the turns of the runs in progress, the
+// stations' times, an item's spans and run in progress, what the runs in progress have done so far, the
 // human touches, and what the organization's factories need from people, and sets a touch's
 // reason; a store that implements ports.Store and ports.FlowStats satisfies it.
 type Items interface {
@@ -93,7 +93,7 @@ type Items interface {
 	InboxItems(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.AttentionItem, error)
 	ItemSpans(ctx context.Context, id domain.ItemID) ([]domain.Span, error)
 	CurrentRun(ctx context.Context, id domain.ItemID) (*domain.CurrentRun, error)
-	LiveTurns(ctx context.Context, factory domain.FactoryID) (map[domain.ItemID]int, error)
+	LiveRuns(ctx context.Context, factory domain.FactoryID) (map[domain.ItemID]domain.LiveRun, error)
 	StationTimes(ctx context.Context, factory domain.FactoryID, since, until time.Time) ([]domain.StationTimes, time.Time, error)
 	OpenAndon(ctx context.Context, factory domain.FactoryID) (*domain.AndonPull, error)
 	AndonPulls(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.AndonPull, error)
