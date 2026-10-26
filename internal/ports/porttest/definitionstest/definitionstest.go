@@ -73,6 +73,9 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Archive_RestoreKeepsItemsAndPause", testArchiveRestoreKeepsItemsAndPause},
 		{"Archive_Idempotent", testArchiveIdempotent},
 		{"Archive_ListedWithItsStamp", testArchiveListedWithItsStamp},
+		{"DeleteArchived_RemovesTheFactoryAndItsRows", testDeleteArchivedRemovesTheFactoryAndItsRows},
+		{"DeleteArchived_RefusesALiveOrBusyFactory", testDeleteArchivedRefusesALiveOrBusyFactory},
+		{"DeleteArchived_AuditsOnceAndNotifies", testDeleteArchivedAuditsOnceAndNotifies},
 		{"Notices_AfterEveryCommit", testNotices},
 		{"Tenancy_NoOrgIsAnError", testNoOrg},
 		{"Tenancy_OtherOrgSeesNothing", testOtherOrg},
@@ -94,6 +97,7 @@ const (
 	promptPath  = "agents/engineer.md"
 	notesPath   = "notes.md"
 	acme        = "acme"
+	zeta        = "zeta"
 	acmeTitle   = "Acme"
 	stQA        = "qa"
 	stReview    = "review"

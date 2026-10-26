@@ -68,7 +68,7 @@ func testOpenDraftBase(f *fixture) {
 	checkEntry(t, f.audited(t, r.ID, domain.AuditDraftDiscarded), local, domain.AuditTargetVersion, string(open.ID),
 		map[string]any{"revision": open.Revision})
 
-	other, _ := f.create(t, "zeta")
+	other, _ := f.create(t, zeta)
 	otherV1 := f.publish(t, other.ID, "first")
 
 	for _, base := range []domain.DefinitionVersionID{d.ID, open.ID, otherV1.ID, "00000000-0000-7000-8000-ffffffffffff"} {

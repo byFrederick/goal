@@ -43,7 +43,7 @@ func testCreateFactory(f *fixture) {
 
 func testCreateFactoryTaken(f *fixture) {
 	t := f.t
-	r, _ := f.create(t, "zeta")
+	r, _ := f.create(t, zeta)
 	f.create(t, acme)
 
 	_, _, err := f.Definitions.CreateFactory(f.ctx(t), ports.NewFactory{
@@ -66,7 +66,7 @@ func testCreateFactoryTaken(f *fixture) {
 	})
 	expect(t, "CreateFactory with another org's id", err, ports.ErrConflict)
 
-	if got := names(f.records(t)); !slices.Equal(got, []string{acme, "zeta"}) {
+	if got := names(f.records(t)); !slices.Equal(got, []string{acme, zeta}) {
 		t.Errorf("FactoryRecords = %v; want acme and zeta, by name", got)
 	}
 }
@@ -234,7 +234,7 @@ func testDeleteUnpublished(f *fixture) {
 	t := f.t
 	ctx := f.ctx(t)
 	never, d := f.create(t, acme)
-	published, _ := f.create(t, "zeta")
+	published, _ := f.create(t, zeta)
 	f.publish(t, published.ID, "first")
 
 	if err := f.Definitions.DeleteUnpublished(ctx, never.ID, local); err != nil {

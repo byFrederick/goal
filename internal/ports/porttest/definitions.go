@@ -315,6 +315,50 @@ func (d *Definitions) setArchived(ctx context.Context, id domain.FactoryID, arch
 	})
 }
 
+// DeleteArchivedFactory implements ports.DefinitionStore. Leases are checked and the items'
+// rows dropped in Items under this store's mutex, as the adapter does both under the factory's
+// row lock.
+func (d *Definitions) DeleteArchivedFactory(ctx context.Context, id domain.FactoryID, by domain.Actor) error {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return err
+	}
+
+	_, err = change(d, func() (struct{}, []ports.DefinitionNotice, error) {
+		f, err := d.factoryLocked(org, id)
+		if err != nil {
+			return struct{}{}, nil, err
+		}
+
+		if f.archivedAt.IsZero() {
+			return struct{}{}, nil, fmt.Errorf("factory %s: %w", id, ports.ErrFactoryNotArchived)
+		}
+
+		if n := d.items.leased(org, id); n > 0 {
+			return struct{}{}, nil, fmt.Errorf("factory %s: %w", id, &ports.FactoryBusyError{Items: n})
+		}
+
+		err = d.auditLocked(ctx, by, domain.AuditFactoryDeleted, domain.AuditTargetFactory, string(id), id,
+			map[string]any{auditName: f.name})
+		if err != nil {
+			return struct{}{}, nil, err
+		}
+
+		maps.DeleteFunc(d.versions, func(_ domain.DefinitionVersionID, v *domain.DefinitionVersion) bool {
+			return v.FactoryID == id
+		})
+		delete(d.factories, id)
+
+		if d.items != nil {
+			d.items.deleteFactory(id)
+		}
+
+		return struct{}{}, []ports.DefinitionNotice{factoryNotice(f)}, nil
+	})
+
+	return err
+}
+
 // PutBlobs implements ports.DefinitionStore.
 func (d *Definitions) PutBlobs(ctx context.Context, files map[string][]byte) (domain.Manifest, error) {
 	org, err := orgOf(ctx)
@@ -1056,6 +1100,36 @@ func (s *Store) forgetFactory(id domain.FactoryID) {
 	defer s.mu.Unlock()
 
 	delete(s.factories, id)
+}
+
+// deleteFactory drops a deleted factory's registration and every row of it: items, leases, runs,
+// events and their touch labels, spans, andon pulls and the needs of its items.
+func (s *Store) deleteFactory(id domain.FactoryID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	gone := map[domain.ItemID]bool{}
+
+	maps.DeleteFunc(s.items, func(item domain.ItemID, it *domain.Item) bool {
+		gone[item] = it.FactoryID == id
+		return gone[item]
+	})
+	maps.DeleteFunc(s.leases, func(item domain.ItemID, _ domain.Lease) bool { return gone[item] })
+	maps.DeleteFunc(s.spans, func(item domain.ItemID, _ []domain.Span) bool { return gone[item] })
+	maps.DeleteFunc(s.leaseLog, func(item domain.ItemID, _ []domain.LeaseSpan) bool { return gone[item] })
+	maps.DeleteFunc(s.runs, func(_ domain.RunID, r *domain.Run) bool { return r.FactoryID == id })
+	s.events = slices.DeleteFunc(s.events, func(e domain.Event) bool {
+		if e.FactoryID == id {
+			delete(s.labels, e.ID)
+		}
+
+		return e.FactoryID == id
+	})
+	s.andon = slices.DeleteFunc(s.andon, func(a andonRecord) bool { return a.pull.FactoryID == id })
+	s.edges = slices.DeleteFunc(s.edges, func(e domain.Edge) bool { return gone[e.Item] || gone[e.Needs] })
+	delete(s.factories, id)
+	delete(s.numbers, id)
+	delete(s.factCaps, id)
 }
 
 func closed(st domain.ItemState) bool { return st == domain.StateDone || st == domain.StateCancelled }
