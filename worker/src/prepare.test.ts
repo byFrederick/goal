@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -32,7 +33,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'goal-prepare-'));
   home = join(root, 'home');
   await mkdir(home);
-  dirs = { goal: join(root, 'goal'), workspace: join(root, 'workspace') };
+  dirs = { goal: join(root, 'goal'), workspace: join(root, 'workspace'), claude: join(home, '.claude') };
 });
 
 afterEach(async () => {
@@ -207,6 +208,48 @@ describe('prepare', () => {
     expect(prepared).toEqual({ type: 'prepared', at: later.toISOString(), seconds: 12.3, tools: 0 });
     // No repository: nothing cloned, no repository tools.
     expect(calls).toEqual([]);
+  });
+
+  it("writes the factory's rules to the user-level rules, never into the workspace", async () => {
+    const url = await origin();
+    const goErrors = '---\npaths:\n  - "**/*.go"\n---\nWrap with %w.\n';
+    const tone = 'Say what you did.\n';
+    const rules = [
+      { name: 'go-errors', sha256: 'a'.repeat(64), paths: ['**/*.go'], content: goErrors },
+      { name: 'tone', sha256: 'b'.repeat(64), content: tone },
+    ];
+    const { fake } = gatewayServing({
+      spec: { ...spec, rules },
+      files: {},
+      repository: { url, branch: 'goal/9-rules' },
+    });
+
+    await prepare(depsWith(fake, recorder().exec));
+
+    expect(await readFile(join(dirs.claude, 'rules/go-errors.md'), 'utf8')).toBe(goErrors);
+    expect(await readFile(join(dirs.claude, 'rules/tone.md'), 'utf8')).toBe(tone);
+    // Nothing of the rules lands in the checkout, so nothing of them can be committed.
+    expect(existsSync(join(dirs.workspace, '.claude'))).toBe(false);
+    expect(git(dirs.workspace, 'status', '--porcelain')).toBe('');
+  });
+
+  it('writes no rules directory for a bundle without rules', async () => {
+    const { fake } = gatewayServing({ spec, files: {} });
+
+    await prepare(depsWith(fake, recorder().exec));
+
+    expect(existsSync(join(dirs.claude, 'rules'))).toBe(false);
+  });
+
+  it.each(['../escape', 'nested/rule', 'Upper'])('refuses a rule named %s before anything is written', async (name) => {
+    const rules = [{ name, sha256: 'a'.repeat(64), content: 'x\n' }];
+    const { fake } = gatewayServing({ spec: { ...spec, rules }, files: {} });
+
+    await expect(prepare(depsWith(fake, recorder().exec))).rejects.toThrow();
+
+    expect(existsSync(join(dirs.claude, 'rules'))).toBe(false);
+    expect(existsSync(join(root, 'escape.md'))).toBe(false);
+    expect(existsSync(join(dirs.goal, 'spec.json'))).toBe(false);
   });
 
   it("clones the repository on the item's branch when earlier runs pushed it", async () => {
