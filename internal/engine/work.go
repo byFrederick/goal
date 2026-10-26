@@ -37,7 +37,9 @@ func (o *outputError) Unwrap() error { return o.err }
 type checked struct {
 	verdict *domain.Verdict
 	plan    []domain.NewPart
-	next    domain.Line
+	// after are the open items the output says the work must follow (followed).
+	after []domain.Item
+	next  domain.Line
 }
 
 // claimed is an item this instance holds a lease on at an agent station.
@@ -106,8 +108,15 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 			e.block(ctx, log, c, fmt.Sprintf("run %s: %s", res.Status, res.Error))
 			return
 		default:
-			e.finish(ctx, log, c, res.Output, chk)
-			return
+			if err = e.follow(ctx, c, chk); err == nil {
+				e.finish(ctx, log, c, res.Output, chk)
+				return
+			}
+
+			if !errors.As(err, &rejected) {
+				e.block(ctx, log, c, err.Error())
+				return
+			}
 		}
 
 		if !e.outputFailed(ctx, log, c, attempt, rejected.err) {
@@ -220,7 +229,7 @@ func agentFor(l domain.Line, st domain.Station, lane string) (domain.AgentSpec, 
 // when not, it has blocked the item.
 func (e *Engine) outputFailed(ctx context.Context, log *slog.Logger, c claimed, attempt int, err error) bool {
 	retryable := errors.Is(err, ports.ErrContractViolation) || errors.Is(err, domain.ErrBadVerdict) ||
-		errors.Is(err, domain.ErrBadPlan) || errors.Is(err, errCheckFailed)
+		errors.Is(err, domain.ErrBadPlan) || errors.Is(err, domain.ErrBadAfter) || errors.Is(err, errCheckFailed)
 	if !retryable {
 		e.block(ctx, log, c, "check output: "+err.Error())
 		return false
@@ -244,9 +253,10 @@ func (e *Engine) outputFailed(ctx context.Context, log *slog.Logger, c claimed, 
 }
 
 // check validates an output against the station's contract (of the version the run started
-// on), at a gate reads its verdict and, when the current line materializes plans and the output
-// is not a rejection, reads its plan. The current line is read once here and finish moves the
-// item along the same one, so a plan is assembled only by a line that parsed it.
+// on), at a gate reads its verdict and, when the output is not a rejection, the items it says
+// the work follows (followed) and, when the current line materializes plans, its plan. The
+// current line is read once here and finish moves the item along the same one, so a plan is
+// assembled only by a line that parsed it.
 func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (checked, error) {
 	if c.station.Output != "" {
 		if err := e.contracts.Validate(ctx, c.line.VersionID, c.station.Output, output); err != nil {
@@ -265,7 +275,18 @@ func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (
 		chk.verdict = &v
 	}
 
-	if !chk.next.Flow.Assemblies.Materialize || (chk.verdict != nil && chk.verdict.Decision == domain.Reject) {
+	if chk.verdict != nil && chk.verdict.Decision == domain.Reject {
+		return chk, nil
+	}
+
+	after, err := e.followed(ctx, c, output, chk.next.Flow.Dependencies.After)
+	if err != nil {
+		return checked{}, err
+	}
+
+	chk.after = after
+
+	if !chk.next.Flow.Assemblies.Materialize {
 		return chk, nil
 	}
 
@@ -629,7 +650,7 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output
 			t.Events = append(t.Events, event(c.item, domain.EventGateApproved, t.At, c.agent.Name, nil))
 		}
 
-		e.assemble(ctx, log, c, ports.Assembly{Transition: t, Parts: chk.plan})
+		e.assemble(ctx, log, c, ports.Assembly{Transition: t, Parts: chk.plan, After: itemIDs(chk.after), AfterBy: agentActor(c)})
 
 		return
 	case v != nil:
