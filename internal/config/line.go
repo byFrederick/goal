@@ -78,7 +78,8 @@ func (f *Factory) Line() domain.Line {
 }
 
 // flowPolicy maps board.flow; an unset release is push, unset assembly settings rebase,
-// rework, serialize and materialize, an unset transient retry cap domain.DefaultTransientAttempts.
+// rework, serialize and materialize, an unset transient retry cap domain.DefaultTransientAttempts
+// and unset dependency fields map no output field.
 func flowPolicy(fl Flow) domain.FlowPolicy {
 	p := domain.FlowPolicy{
 		Release: domain.ReleasePush, Constraint: fl.Constraint,
@@ -108,6 +109,10 @@ func flowPolicy(fl Flow) domain.FlowPolicy {
 		if a.Materialize != nil {
 			p.Assemblies.Materialize = *a.Materialize
 		}
+	}
+
+	if d := fl.Dependencies; d != nil {
+		p.Dependencies.Paths = d.Paths
 	}
 
 	if fl.Release != "" {

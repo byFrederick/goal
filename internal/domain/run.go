@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -140,4 +141,30 @@ func LaneFrom(output json.RawMessage) string {
 	}
 
 	return v.Lane
+}
+
+// PathsFrom returns the file globs an output lists in field, the output field a definition maps
+// to the item's paths (flow.dependencies.paths), without blank entries. It returns nil when field
+// is "", or the output has no such list of strings or it is empty.
+func PathsFrom(output json.RawMessage, field string) []string {
+	if field == "" {
+		return nil
+	}
+
+	var v map[string]json.RawMessage
+	if json.Unmarshal(output, &v) != nil {
+		return nil
+	}
+
+	var paths []string
+	if json.Unmarshal(v[field], &paths) != nil {
+		return nil
+	}
+
+	paths = slices.DeleteFunc(paths, func(p string) bool { return p == "" })
+	if len(paths) == 0 {
+		return nil
+	}
+
+	return paths
 }
