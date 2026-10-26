@@ -117,6 +117,7 @@ const sheetRow =
 function MoreSheet({ org, factory }: { org: OrgSummary; factory: Factory }) {
   const [open, setOpen] = useState(false);
   const learn = factoryScreens.filter((s) => s.group === 'learn');
+  const settings = factoryScreens.find((s) => s.id === 'settings');
   const Factories = factoriesScreen.icon;
 
   return (
@@ -153,6 +154,26 @@ function MoreSheet({ org, factory }: { org: OrgSummary; factory: Factory }) {
           )}
         </ul>
         <div aria-hidden="true" className="my-2 h-px bg-line" />
+        {settings?.available && 'to' in settings ? (
+          <>
+            <SheetLabel id="more-factory">{factory.name}</SheetLabel>
+            <ul aria-labelledby="more-factory" className="m-0 flex list-none flex-col gap-0.5 p-0">
+              <li>
+                <Link
+                  to={settings.to}
+                  params={{ org: org.slug, factory: factory.name }}
+                  onClick={() => setOpen(false)}
+                  className={cn(sheetRow, 'hover:bg-shell')}
+                >
+                  <settings.icon size={18} strokeWidth={1.5} aria-hidden="true" />
+                  {settings.label}
+                  <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" className="ml-auto text-muted" />
+                </Link>
+              </li>
+            </ul>
+            <div aria-hidden="true" className="my-2 h-px bg-line" />
+          </>
+        ) : null}
         <SheetLabel id="more-org">{org.name}</SheetLabel>
         <ul aria-labelledby="more-org" className="m-0 flex list-none flex-col gap-0.5 p-0">
           <li>

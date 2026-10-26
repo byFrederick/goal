@@ -32,6 +32,7 @@ import { Route as OOrgOrgKnowledgeNewRouteImport } from './routes/o.$org._org.kn
 import { Route as OOrgFFactoryIndexRouteImport } from './routes/o.$org.f.$factory.index'
 import { Route as OOrgFFactoryBoardRouteImport } from './routes/o.$org.f.$factory.board'
 import { Route as OOrgFFactoryDefinitionRouteImport } from './routes/o.$org.f.$factory.definition'
+import { Route as OOrgFFactorySettingsRouteImport } from './routes/o.$org.f.$factory.settings'
 import { Route as OOrgFFactoryAgentsAgentRouteImport } from './routes/o.$org.f.$factory.agents.$agent'
 import { Route as OOrgFFactoryDefinitionIndexRouteImport } from './routes/o.$org.f.$factory.definition.index'
 import { Route as OOrgFFactoryDefinitionSectionRouteImport } from './routes/o.$org.f.$factory.definition.$section'
@@ -153,6 +154,11 @@ const OOrgFFactoryDefinitionRoute = OOrgFFactoryDefinitionRouteImport.update({
   path: '/definition',
   getParentRoute: () => OOrgFFactoryRoute,
 } as any)
+const OOrgFFactorySettingsRoute = OOrgFFactorySettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => OOrgFFactoryRoute,
+} as any)
 const OOrgFFactoryAgentsAgentRoute = OOrgFFactoryAgentsAgentRouteImport.update({
   id: '/agents/$agent',
   path: '/agents/$agent',
@@ -201,6 +207,7 @@ export interface FileRoutesByFullPath {
   '/o/$org/knowledge/new': typeof OOrgOrgKnowledgeNewRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
   '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionRouteWithChildren
+  '/o/$org/f/$factory/settings': typeof OOrgFFactorySettingsRoute
   '/o/$org/connections/': typeof OOrgOrgConnectionsIndexRoute
   '/o/$org/knowledge/': typeof OOrgOrgKnowledgeIndexRoute
   '/o/$org/f/$factory/': typeof OOrgFFactoryIndexRoute
@@ -227,6 +234,7 @@ export interface FileRoutesByTo {
   '/o/$org/knowledge/$source': typeof OOrgOrgKnowledgeSourceRoute
   '/o/$org/knowledge/new': typeof OOrgOrgKnowledgeNewRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
+  '/o/$org/f/$factory/settings': typeof OOrgFFactorySettingsRoute
   '/o/$org/connections': typeof OOrgOrgConnectionsIndexRoute
   '/o/$org/knowledge': typeof OOrgOrgKnowledgeIndexRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryIndexRoute
@@ -258,6 +266,7 @@ export interface FileRoutesById {
   '/o/$org/_org/knowledge/new': typeof OOrgOrgKnowledgeNewRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
   '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionRouteWithChildren
+  '/o/$org/f/$factory/settings': typeof OOrgFFactorySettingsRoute
   '/o/$org/_org/connections/': typeof OOrgOrgConnectionsIndexRoute
   '/o/$org/_org/knowledge/': typeof OOrgOrgKnowledgeIndexRoute
   '/o/$org/f/$factory/': typeof OOrgFFactoryIndexRoute
@@ -289,6 +298,7 @@ export interface FileRouteTypes {
     | '/o/$org/knowledge/new'
     | '/o/$org/f/$factory/board'
     | '/o/$org/f/$factory/definition'
+    | '/o/$org/f/$factory/settings'
     | '/o/$org/connections/'
     | '/o/$org/knowledge/'
     | '/o/$org/f/$factory/'
@@ -315,6 +325,7 @@ export interface FileRouteTypes {
     | '/o/$org/knowledge/$source'
     | '/o/$org/knowledge/new'
     | '/o/$org/f/$factory/board'
+    | '/o/$org/f/$factory/settings'
     | '/o/$org/connections'
     | '/o/$org/knowledge'
     | '/o/$org/f/$factory'
@@ -345,6 +356,7 @@ export interface FileRouteTypes {
     | '/o/$org/_org/knowledge/new'
     | '/o/$org/f/$factory/board'
     | '/o/$org/f/$factory/definition'
+    | '/o/$org/f/$factory/settings'
     | '/o/$org/_org/connections/'
     | '/o/$org/_org/knowledge/'
     | '/o/$org/f/$factory/'
@@ -528,6 +540,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OOrgFFactoryDefinitionRouteImport
       parentRoute: typeof OOrgFFactoryRoute
     }
+    '/o/$org/f/$factory/settings': {
+      id: '/o/$org/f/$factory/settings'
+      path: '/settings'
+      fullPath: '/o/$org/f/$factory/settings'
+      preLoaderRoute: typeof OOrgFFactorySettingsRouteImport
+      parentRoute: typeof OOrgFFactoryRoute
+    }
     '/o/$org/f/$factory/agents/$agent': {
       id: '/o/$org/f/$factory/agents/$agent'
       path: '/agents/$agent'
@@ -614,6 +633,7 @@ const OOrgFFactoryDefinitionRouteWithChildren =
 interface OOrgFFactoryRouteChildren {
   OOrgFFactoryBoardRoute: typeof OOrgFFactoryBoardRoute
   OOrgFFactoryDefinitionRoute: typeof OOrgFFactoryDefinitionRouteWithChildren
+  OOrgFFactorySettingsRoute: typeof OOrgFFactorySettingsRoute
   OOrgFFactoryIndexRoute: typeof OOrgFFactoryIndexRoute
   OOrgFFactoryAgentsAgentRoute: typeof OOrgFFactoryAgentsAgentRoute
   OOrgFFactoryItemsRefRoute: typeof OOrgFFactoryItemsRefRoute
@@ -623,6 +643,7 @@ interface OOrgFFactoryRouteChildren {
 const OOrgFFactoryRouteChildren: OOrgFFactoryRouteChildren = {
   OOrgFFactoryBoardRoute: OOrgFFactoryBoardRoute,
   OOrgFFactoryDefinitionRoute: OOrgFFactoryDefinitionRouteWithChildren,
+  OOrgFFactorySettingsRoute: OOrgFFactorySettingsRoute,
   OOrgFFactoryIndexRoute: OOrgFFactoryIndexRoute,
   OOrgFFactoryAgentsAgentRoute: OOrgFFactoryAgentsAgentRoute,
   OOrgFFactoryItemsRefRoute: OOrgFFactoryItemsRefRoute,
