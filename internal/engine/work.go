@@ -603,7 +603,8 @@ func (e *Engine) finishRun(ctx context.Context, id domain.RunID, res domain.RunR
 	}
 }
 
-// finish moves an item whose output passed its checks: through the gate's verdict when the
+// finish moves an item whose output passed its checks, with an event for each declared rule the
+// output says was broken (violations): through the gate's verdict when the
 // station has one, into state assembly when its output has a plan (assemble), otherwise to the
 // next station. The run was checked against the version it started on; where the item goes
 // next is the current line's say (chk.next), so an item finishing on v1 after v2 was published
@@ -616,6 +617,7 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output
 		Lease: &c.lease, Outcome: domain.LeaseAdvanced, Lane: domain.LaneFrom(output), OutputStation: c.station.ID,
 		Output: output, At: e.clock.Now(),
 	}
+	t.Events = e.violations(ctx, log, c, output, t.At)
 
 	var err error
 
@@ -647,6 +649,29 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output
 	}
 
 	e.transition(ctx, log, t)
+}
+
+// violations are the rule_violated events of an accepted output, one per entry of its
+// violations that names a rule of the version the run started on. They go in the transition
+// that accepts the output, so they are written once with it and never for an output that is
+// not. An entry naming no declared rule is logged and not counted.
+func (e *Engine) violations(ctx context.Context, log *slog.Logger, c claimed, output json.RawMessage, at time.Time) []domain.Event {
+	var events []domain.Event
+
+	for _, v := range domain.ViolationsFrom(output) {
+		if !slices.ContainsFunc(c.line.Rules, func(r domain.Rule) bool { return r.Name == v.Rule }) {
+			log.WarnContext(ctx, "unknown rule violated", slog.String("rule", cut(v.Rule, maxRuleLog)),
+				slog.String("agent", c.agent.Name))
+
+			continue
+		}
+
+		events = append(events, event(c.item, domain.EventRuleViolated, at, c.agent.Name, map[string]any{
+			keyRule: v.Rule, keyReason: v.Reason, "station": c.station.ID, "agent": c.agent.Name,
+		}))
+	}
+
+	return events
 }
 
 // assemble makes the claimed item an assembly with the parts of its plan, queued at the station

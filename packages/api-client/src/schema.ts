@@ -4575,6 +4575,9 @@ export interface components {
                 skills?: {
                     [key: string]: unknown;
                 }[];
+                rules?: {
+                    [key: string]: unknown;
+                }[];
             };
             connections: {
                 [key: string]: unknown;

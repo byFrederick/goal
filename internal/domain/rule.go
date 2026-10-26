@@ -1,6 +1,9 @@
 package domain
 
-import "slices"
+import (
+	"encoding/json"
+	"slices"
+)
 
 // Rule is a factory rule (ADR 0014): always-on guidance the factory gives the agents its
 // AppliesTo targets, a rules/<name>.md file of the definition declared in spec.rules.
@@ -66,4 +69,35 @@ type RunRule struct {
 	SHA256  BlobHash
 	Paths   []string
 	Content string
+}
+
+// Violation is one factory rule an output says was broken: a review contract's violations
+// entry, {rule: <rule name>, reason: <one line>} (ADR 0014 §6).
+type Violation struct {
+	Rule   string `json:"rule"`
+	Reason string `json:"reason"`
+}
+
+// ViolationsFrom reads the optional violations of any output, in order. Like LaneFrom it never
+// fails: an output without violations, or whose violations is not a list, has none, and an
+// entry that is not an object is skipped.
+func ViolationsFrom(output json.RawMessage) []Violation {
+	var v struct {
+		Violations []json.RawMessage `json:"violations"`
+	}
+
+	if json.Unmarshal(output, &v) != nil {
+		return nil
+	}
+
+	var out []Violation
+
+	for _, raw := range v.Violations {
+		var one Violation
+		if json.Unmarshal(raw, &one) == nil {
+			out = append(out, one)
+		}
+	}
+
+	return out
 }

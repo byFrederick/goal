@@ -398,3 +398,47 @@ func TestPauseResumeAndDelete(t *testing.T) {
 		t.Errorf("draft of a deleted factory = %v", err)
 	}
 }
+
+// ruleYAML is acmeYAML declaring one factory rule, rules/secrets.md.
+var ruleYAML = strings.Replace(acmeYAML, "  agents:\n", "  rules:\n    - { name: secrets, source: ./rules/secrets.md }\n  agents:\n", 1)
+
+const ruleFile = "rules/secrets.md"
+
+// ruleFiles is the acme definition with ruleYAML and rules/secrets.md written with front, its
+// frontmatter.
+func ruleFiles(front string) map[string][]byte {
+	files := acmeFiles(ruleYAML)
+	files[ruleFile] = []byte("---\n" + front + "---\n\nKeep secrets out of outputs.\n")
+
+	return files
+}
+
+// A rule's file is a blob of the draft like any other: it validates and publishes in the manifest.
+func TestPublish_RulesFiles(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	files := ruleFiles("description: Secrets stay out of logs and outputs.\n")
+	f := h.imported(t, files)
+
+	val, err := h.svc.ValidateDraft(h.ctx, f, authoring.ValidateRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !val.OK {
+		t.Fatalf("validation problems %v", codes(val.Problems))
+	}
+
+	v := h.publish(t, f)
+
+	detail, err := h.svc.Version(h.ctx, f, authoring.VersionSelector{Kind: authoring.SelectNumber, Number: v.Number})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	i := slices.IndexFunc(detail.Files, func(fi authoring.FileInfo) bool { return fi.Path == ruleFile })
+	if i < 0 || detail.Files[i].SHA256 != domain.HashBlob(files[ruleFile]) {
+		t.Errorf("v%d files = %+v, want %s with its hash", v.Number, detail.Files, ruleFile)
+	}
+}

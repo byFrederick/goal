@@ -134,6 +134,28 @@ func TestLine_PurposeFallsBackToDescription(t *testing.T) {
 
 // runtime.budget's weekly cap and policy reach the line the engine enforces; drain is the
 // default and dailyUsd stays display-only.
+func TestLine_CarriesTheVersionsRules(t *testing.T) {
+	t.Parallel()
+
+	f, err := LoadDir("testdata/line")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var names []string
+	for _, r := range f.Line().Rules {
+		names = append(names, r.Name)
+	}
+
+	if want := []string{"secrets", "go-errors"}; !slices.Equal(names, want) {
+		t.Errorf("line rules = %v, want the declared %v in order", names, want)
+	}
+
+	if r := f.Line().Rules[1]; r.Description == "" || r.Body == "" || len(r.AppliesTo.Agents) == 0 || len(r.Paths) == 0 {
+		t.Errorf("line rule %s = %+v, want its description, body, scope and paths", r.Name, r)
+	}
+}
+
 func TestLine_WeeklyBudgetMapsToTheRuntime(t *testing.T) {
 	t.Parallel()
 

@@ -654,7 +654,7 @@ Spec-ready titles; lane in brackets; acceptance criteria are checkable.
 ## 19. Sources
 
 - Anthropic, *Demystifying evals for AI agents*, 2026-01-09. <https://www.anthropic.com/research/demystifying-evals-for-ai-agents>
-- Skills in `.claude/skills/`: llm-evaluation, eval-harness, eval-harness-first (with references/judge-calibration.md), eval-audit, error-analysis, write-judge-prompt, validate-evaluator, generate-synthetic-data, build-review-interface, agent-evaluation, langfuse (references/judge-calibration.md, error-analysis.md), skill-creator (agents/comparator.md, analyzer.md, scripts/run_loop.py), claude-api (shared/evals/*).
+- Skills vendored in `.claude/skills/` when this plan was written (most since removed; skills-lock.json lists the current set): llm-evaluation, eval-harness, eval-harness-first (with references/judge-calibration.md), eval-audit, error-analysis, write-judge-prompt, validate-evaluator, generate-synthetic-data, build-review-interface, agent-evaluation, langfuse (references/judge-calibration.md, error-analysis.md), skill-creator (agents/comparator.md, analyzer.md, scripts/run_loop.py), claude-api (shared/evals/*).
 - M. Chen et al., *Evaluating Large Language Models Trained on Code*, 2021 (unbiased pass@k estimator).
 - W. J. Rogan and B. Gladen, *Estimating prevalence from the results of a screening test*, 1978.
 - E. B. Wilson, *Probable inference, the law of succession, and statistical inference*, 1927.

@@ -28,12 +28,16 @@ const (
 	EventMoved          EventKind = "moved"
 	EventGateApproved   EventKind = "gate_approved"
 	EventGateRejected   EventKind = "gate_rejected"
-	EventWaitingHuman   EventKind = "waiting_human"
-	EventApproved       EventKind = "approved"
-	EventRejected       EventKind = "rejected"
-	EventBlocked        EventKind = "blocked"
-	EventLeaseExpired   EventKind = "lease_expired"
-	EventReleased       EventKind = "released"
+	// EventRuleViolated is one factory rule an accepted output says was broken (its violations,
+	// ADR 0014 §6), written with the transition that accepts it: data rule, reason, station and
+	// agent. Counting them by rule shows which rules break most.
+	EventRuleViolated EventKind = "rule_violated"
+	EventWaitingHuman EventKind = "waiting_human"
+	EventApproved     EventKind = "approved"
+	EventRejected     EventKind = "rejected"
+	EventBlocked      EventKind = "blocked"
+	EventLeaseExpired EventKind = "lease_expired"
+	EventReleased     EventKind = "released"
 	// EventAgentCancelled is an agent run the engine stopped; its item went back to its queue.
 	// Data reason says why ("budget": the factory's weekly budget is used up, policy stop).
 	EventAgentCancelled EventKind = "agent_cancelled"
