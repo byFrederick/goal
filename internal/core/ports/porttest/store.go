@@ -702,6 +702,10 @@ func (s *Store) move(it *domain.Item, t ports.Transition) {
 		}
 	}
 
+	if t.BaseCommit != "" {
+		it.BaseCommit = t.BaseCommit
+	}
+
 	if t.Output != nil {
 		it.Outputs[t.OutputStation] = t.Output
 	}

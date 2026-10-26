@@ -188,4 +188,5 @@ type WorkItem struct {
 	PartKey        *string
 	PartPaths      []string
 	Paths          []string
+	BaseCommit     *string
 }

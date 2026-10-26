@@ -67,7 +67,11 @@ type Item struct {
 	// Paths are the file globs the item is expected to change, nil when none are known: a part's
 	// are its plan's (ADR 0012).
 	Paths []string
-	Type  string
+	// BaseCommit is the default branch's head when a station with context: [inflight] last
+	// finished the item, or its assembly's for a part; empty when none was recorded (ADR 0015
+	// decision 5).
+	BaseCommit string
+	Type       string
 	// Lane picks the agent at stations that route by lane. Empty until intake or an output sets it.
 	Lane     string
 	Title    string

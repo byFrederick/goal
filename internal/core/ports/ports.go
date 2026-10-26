@@ -121,8 +121,8 @@ type Store interface {
 
 	// Assemble makes a planning item an assembly, in one transaction: a.Transition moves it to
 	// state assembly (fenced as Transition is, its lease recorded as a lease span), each of
-	// a.Parts becomes an item with the parent's type, priority and class of service, its brief
-	// as body, queued at a.Transition.From.Station (the station that planned it), each need a
+	// a.Parts becomes an item with the parent's type, priority, class of service and base commit
+	// (as a.Transition leaves it), its brief as body, queued at a.Transition.From.Station (the station that planned it), each need a
 	// planned edge, and each part without needs a linked edge by a.AfterBy to each of a.After (with
 	// an edge_added event; new parts have no dependents, so these close no cycle). It appends
 	// assembled on the parent and part_created on each part. An item of a.After that is missing
@@ -135,7 +135,8 @@ type Store interface {
 
 	// AddPart adds one part to an open assembly, in one transaction, under the factory's lock and
 	// then the assembly's (AddEdge's order): n.Part becomes an item as each of Assemble's parts
-	// does, with the assembly's type, priority and class of service, its brief as body, its paths,
+	// does, with the assembly's type, priority, class of service and base commit, its brief as
+	// body, its paths,
 	// queued at the assembly's own station (the station that planned it), and each need, the key
 	// of one of the assembly's parts, a planned edge by n.By (checked for cycles as AddEdge's
 	// are). It appends part_created on the part and part_added on the assembly, writes n.Audit
@@ -230,6 +231,11 @@ type Store interface {
 
 	// ItemByNumber returns a factory's item by its per-factory number, or ErrNotFound.
 	ItemByNumber(ctx context.Context, factory domain.FactoryID, number int64) (domain.Item, error)
+
+	// MergedItems returns the factory's items whose merged event has one of shas as its sha,
+	// keyed by that sha; a sha no item merged is absent. When two items name the same sha, the
+	// latest event's item is the one returned.
+	MergedItems(ctx context.Context, factory domain.FactoryID, shas []string) (map[string]domain.Item, error)
 
 	// ListItems returns up to q.Limit of a factory's items that match q, newest (highest
 	// number) first.
@@ -633,6 +639,8 @@ type Transition struct {
 	// Paths, when non-nil, replaces the item's paths (the file globs it is expected to change);
 	// an empty non-nil slice clears them and nil keeps them.
 	Paths []string
+	// BaseCommit, when non-empty, replaces the item's base commit; empty keeps it.
+	BaseCommit string
 	// Output, when set, is stored as the item's output for OutputStation.
 	OutputStation string
 	Output        json.RawMessage

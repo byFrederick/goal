@@ -219,7 +219,7 @@ func insertPart(ctx context.Context, q *db.Queries, parent db.WorkItem, p domain
 	row, err := q.InsertPart(ctx, db.InsertPartParams{
 		ID: id, FactoryID: parent.FactoryID, Number: number, ParentID: parent.ID, PartKey: p.Key, PartPaths: paths,
 		Type: parent.Type, Lane: optional(p.Lane), Title: p.Title, Body: p.Brief, Station: station,
-		ClassOfService: parent.ClassOfService, Priority: int64(parent.Priority), CreatedAt: at,
+		ClassOfService: parent.ClassOfService, Priority: int64(parent.Priority), BaseCommit: parent.BaseCommit, CreatedAt: at,
 	})
 	if violates(err, partKeyIndex) {
 		return db.WorkItem{}, fmt.Errorf("part key %q is taken: %w", p.Key, ports.ErrConflict)

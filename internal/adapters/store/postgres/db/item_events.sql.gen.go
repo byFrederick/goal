@@ -102,6 +102,72 @@ func (q *Queries) ItemEvents(ctx context.Context, arg ItemEventsParams) ([]ItemE
 	return items, nil
 }
 
+const mergedItems = `-- name: MergedItems :many
+SELECT DISTINCT ON (e.data->>'sha') (e.data->>'sha')::text AS sha, w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit
+FROM item_events e
+JOIN work_items w ON w.id = e.item_id
+WHERE e.factory_id = $1 AND e.kind = 'merged' AND e.data->>'sha' = ANY ($2::text[])
+ORDER BY e.data->>'sha', e.id DESC
+`
+
+type MergedItemsParams struct {
+	FactoryID uuid.UUID
+	Shas      []string
+}
+
+type MergedItemsRow struct {
+	Sha      string
+	WorkItem WorkItem
+}
+
+// The factory's items by the sha of their merged events (item_events_merged_sha_idx); the latest
+// event wins a sha two items name.
+func (q *Queries) MergedItems(ctx context.Context, arg MergedItemsParams) ([]MergedItemsRow, error) {
+	rows, err := q.db.Query(ctx, mergedItems, arg.FactoryID, arg.Shas)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MergedItemsRow
+	for rows.Next() {
+		var i MergedItemsRow
+		if err := rows.Scan(
+			&i.Sha,
+			&i.WorkItem.ID,
+			&i.WorkItem.FactoryID,
+			&i.WorkItem.Number,
+			&i.WorkItem.ParentID,
+			&i.WorkItem.Type,
+			&i.WorkItem.Lane,
+			&i.WorkItem.Title,
+			&i.WorkItem.Body,
+			&i.WorkItem.Station,
+			&i.WorkItem.State,
+			&i.WorkItem.ClassOfService,
+			&i.WorkItem.Priority,
+			&i.WorkItem.Size,
+			&i.WorkItem.ReworkCount,
+			&i.WorkItem.CostUsd,
+			&i.WorkItem.Outputs,
+			&i.WorkItem.CreatedAt,
+			&i.WorkItem.UpdatedAt,
+			&i.WorkItem.DoneAt,
+			&i.WorkItem.OrgID,
+			&i.WorkItem.PartKey,
+			&i.WorkItem.PartPaths,
+			&i.WorkItem.Paths,
+			&i.WorkItem.BaseCommit,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const notesSinceLastRun = `-- name: NotesSinceLastRun :many
 SELECT n.id, n.factory_id, n.item_id, n.run_id, n.at, n.kind, n.station, n.actor, n.data, n.org_id FROM item_events n
 WHERE n.item_id = $1 AND n.kind = 'note'

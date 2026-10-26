@@ -16,14 +16,14 @@ const insertPart = `-- name: InsertPart :one
 
 INSERT INTO work_items (
   id, factory_id, number, parent_id, part_key, part_paths, paths, type, lane, title, body, station,
-  state, class_of_service, priority, created_at, updated_at
+  state, class_of_service, priority, base_commit, created_at, updated_at
 ) VALUES (
   $1, $2, $3, $4::uuid, $5::text,
   $6::text[], $6::text[], $7, $8,
   $9, $10, $11, 'queued', $12,
-  $13::bigint, $14, $14
+  $13::bigint, $14::text, $15, $15
 )
-RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths
+RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit
 `
 
 type InsertPartParams struct {
@@ -40,6 +40,7 @@ type InsertPartParams struct {
 	Station        string
 	ClassOfService string
 	Priority       int64
+	BaseCommit     *string
 	CreatedAt      time.Time
 }
 
@@ -63,6 +64,7 @@ func (q *Queries) InsertPart(ctx context.Context, arg InsertPartParams) (WorkIte
 		arg.Station,
 		arg.ClassOfService,
 		arg.Priority,
+		arg.BaseCommit,
 		arg.CreatedAt,
 	)
 	var i WorkItem
@@ -90,12 +92,13 @@ func (q *Queries) InsertPart(ctx context.Context, arg InsertPartParams) (WorkIte
 		&i.PartKey,
 		&i.PartPaths,
 		&i.Paths,
+		&i.BaseCommit,
 	)
 	return i, err
 }
 
 const itemParts = `-- name: ItemParts :many
-SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths FROM work_items WHERE parent_id = $1::uuid AND part_key IS NOT NULL ORDER BY number
+SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit FROM work_items WHERE parent_id = $1::uuid AND part_key IS NOT NULL ORDER BY number
 `
 
 // An assembly's parts in plan order: they are numbered in that order (work_items_parent_part_key_idx).
@@ -132,6 +135,7 @@ func (q *Queries) ItemParts(ctx context.Context, parentID uuid.UUID) ([]WorkItem
 			&i.PartKey,
 			&i.PartPaths,
 			&i.Paths,
+			&i.BaseCommit,
 		); err != nil {
 			return nil, err
 		}
