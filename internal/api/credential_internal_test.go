@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // Fabricated credentials of the right shapes.

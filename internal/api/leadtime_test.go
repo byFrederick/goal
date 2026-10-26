@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 const leadTimePath = "/v1/orgs/acme/factories/line/metrics/lead-time?from=2026-10-17&to=2026-10-23"

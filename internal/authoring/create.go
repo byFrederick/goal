@@ -10,9 +10,9 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/byFrederick/goal/internal/config"
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/factorymodel"
-	"github.com/byFrederick/goal/internal/ports"
 )
 
 // StartKind is how a new factory starts.

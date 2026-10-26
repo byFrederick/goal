@@ -10,8 +10,8 @@ import (
 	"slices"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // Personal tokens (spec 3 §4.5, PR 3-12b): a member's own credential in one organization, for the

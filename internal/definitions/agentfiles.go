@@ -9,7 +9,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // AgentFiles returns one agent's files from definition version id, by slash-separated path

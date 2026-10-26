@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"github.com/byFrederick/goal/internal/config"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // Authorizer decides whether the request's principal may run an operation. GOAL_AUTH=none wires

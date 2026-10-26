@@ -29,8 +29,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/byFrederick/goal/internal/adapters/postgres"
-	"github.com/byFrederick/goal/internal/adapters/s3store"
+	s3store "github.com/byFrederick/goal/internal/adapters/objectstore/s3"
+	"github.com/byFrederick/goal/internal/adapters/store/postgres"
 )
 
 // The throwaway stack of the sign-in end-to-end test (task e2e:auth): goald and the auth service

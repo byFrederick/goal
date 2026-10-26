@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/byFrederick/goal/internal/authoring"
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // noBuildYAML is acmeYAML with the build station replaced by a code station.

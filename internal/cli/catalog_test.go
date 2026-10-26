@@ -11,8 +11,8 @@ import (
 
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
-	"github.com/byFrederick/goal/internal/ports"
-	"github.com/byFrederick/goal/internal/ports/porttest"
+	"github.com/byFrederick/goal/internal/core/ports"
+	"github.com/byFrederick/goal/internal/core/ports/porttest"
 )
 
 func sourcesFile(t *testing.T, body string) string {

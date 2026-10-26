@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports/porttest"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports/porttest"
 )
 
 // The two-org matrix's personal tokens and the owner's CLI session (spec 3 §13, 3-12b).

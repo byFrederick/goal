@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/engine"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/engine"
 )
 
 // MoveItem puts an item at another station of its line (engine.Move): the request's actor moves

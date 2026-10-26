@@ -11,9 +11,9 @@ import (
 
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/connkind"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
-	"github.com/byFrederick/goal/internal/ports/porttest"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
+	"github.com/byFrederick/goal/internal/core/ports/porttest"
 )
 
 // acmeYAML is a small valid definition: a queue, an agent station, a human station and done,

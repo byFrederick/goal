@@ -9,9 +9,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/byFrederick/goal/internal/adapters/masterkey"
-	"github.com/byFrederick/goal/internal/adapters/postgres"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/adapters/masterkey/masterkey"
+	"github.com/byFrederick/goal/internal/adapters/store/postgres"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // dbSettings is what goal db init and goal db migrate need: an admin connection, the roles'

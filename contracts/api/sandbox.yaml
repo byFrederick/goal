@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   summary: The control Worker's sandboxes, one container per agent run (spec 4 §5.1, ADR 0008)
   description: |
-    The Cloudflare adapter of `ports.Sandboxes` (`internal/adapters/cloudflare`) is this API's
+    The Cloudflare adapter of `ports.Sandboxes` (`internal/adapters/sandboxes/cloudflare`) is this API's
     only client, and the control Worker (`apps/control-worker/`) its only server. goald reaches it
     at `GOAL_SANDBOX_URL` (`http://sandbox.internal` from goald's container, a name only goald's
     container resolves: the Worker's outbound handler answers it), with `GOAL_SANDBOX_KEY` as a

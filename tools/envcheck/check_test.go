@@ -323,11 +323,11 @@ func TestReaderOf(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]string{
-		"cmd/goald/settings.go":   readerGoald,
-		"cmd/goal/main.go":        readerCLI,
-		"internal/cli/catalog.go": readerCLI,
-		"cmd/goal-egress/main.go": readerEgress,
-		"internal/engine/pull.go": "",
+		"cmd/goald/settings.go":        readerGoald,
+		"cmd/goal/main.go":             readerCLI,
+		"internal/cli/catalog.go":      readerCLI,
+		"cmd/goal-egress/main.go":      readerEgress,
+		"internal/core/engine/pull.go": "",
 	}
 	for p, want := range tests {
 		if got := readerOf(p); got != want {

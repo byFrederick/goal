@@ -14,13 +14,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/byFrederick/goal/internal/adapters/cloudflare"
-	"github.com/byFrederick/goal/internal/adapters/docker"
-	"github.com/byFrederick/goal/internal/adapters/openaiembed"
-	"github.com/byFrederick/goal/internal/adapters/postgres"
+	"github.com/byFrederick/goal/internal/adapters/embedder/openai"
+	"github.com/byFrederick/goal/internal/adapters/sandboxes/cloudflare"
+	"github.com/byFrederick/goal/internal/adapters/sandboxes/docker"
+	"github.com/byFrederick/goal/internal/adapters/store/postgres"
 	"github.com/byFrederick/goal/internal/builder"
+	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/definitions"
-	"github.com/byFrederick/goal/internal/domain"
 	"github.com/byFrederick/goal/internal/knowledge"
 )
 
@@ -121,7 +121,7 @@ type settings struct {
 	// Embed is the knowledge base's embedding model (GOAL_EMBED_URL, an OpenAI-compatible API
 	// root; GOAL_EMBED_MODEL, default defaultEmbedModel; GOAL_EMBED_KEY, its bearer key). Without
 	// GOAL_EMBED_URL the knowledge base is searched by keywords only.
-	Embed openaiembed.Config
+	Embed openai.Config
 	// KBWorkers is how many knowledge sources this goald syncs at once (GOAL_KB_WORKERS, default
 	// 2; 0 syncs none here).
 	KBWorkers int
@@ -273,8 +273,8 @@ func knowledgeSettings(s *settings, or func(name, def string) string) []error {
 	var errs []error
 
 	if url := or(embedURLEnv, ""); url != "" {
-		s.Embed = openaiembed.Config{URL: url, Model: or(embedModelEnv, defaultEmbedModel), Key: or(embedKeyEnv, "")}
-		if _, err := openaiembed.New(s.Embed); err != nil {
+		s.Embed = openai.Config{URL: url, Model: or(embedModelEnv, defaultEmbedModel), Key: or(embedKeyEnv, "")}
+		if _, err := openai.New(s.Embed); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", embedURLEnv, err))
 		}
 	}

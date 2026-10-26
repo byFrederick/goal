@@ -42,8 +42,8 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/byFrederick/goal/internal/config"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // Orgs lists the organizations whose factories the cache loads; ports.Tenancy satisfies it.

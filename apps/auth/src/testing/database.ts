@@ -30,7 +30,7 @@ export async function createTestDatabase(upTo?: string): Promise<TestDatabase> {
     return u.toString();
   };
 
-  const roles = await readFile(`${repo}internal/adapters/postgres/roles.sql`, 'utf8');
+  const roles = await readFile(`${repo}internal/adapters/store/postgres/roles.sql`, 'utf8');
   await withClient(base, async (c) => {
     await c.query(`BEGIN; SELECT pg_advisory_xact_lock(hashtext('goal.roles'));\n${roles}\n;\nCOMMIT`);
     await c.query(`CREATE DATABASE ${name}`);

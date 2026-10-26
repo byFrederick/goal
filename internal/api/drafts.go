@@ -11,7 +11,7 @@ import (
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/authoring"
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // The draft routes (B §8.2). Every write carries a precondition, so a writer never overwrites

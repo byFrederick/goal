@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/byFrederick/goal/internal/connkind"
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // Every platform kind that names a code host has its adapter in goald, so its connections merge.

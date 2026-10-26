@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/byFrederick/goal/internal/adapters/masterkey"
-	"github.com/byFrederick/goal/internal/adapters/postgres"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/adapters/masterkey/masterkey"
+	"github.com/byFrederick/goal/internal/adapters/store/postgres"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // masterKeyEntry is GOAL_MASTER_KEYS's entry for id with a secret of 32 bytes b.

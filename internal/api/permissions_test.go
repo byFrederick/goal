@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/api"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
-	"github.com/byFrederick/goal/internal/ports/porttest"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
+	"github.com/byFrederick/goal/internal/core/ports/porttest"
 )
 
 // The outcomes of an authorization, as the API answers them.

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/byFrederick/goal/internal/config"
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // Credentials checks what a definition signs in with, in the organization of ctx: the connections

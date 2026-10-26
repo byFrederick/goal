@@ -18,8 +18,8 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports/porttest"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports/porttest"
 )
 
 var updateGolden = flag.Bool("update", false, "rewrite testdata/access.golden from the current table")

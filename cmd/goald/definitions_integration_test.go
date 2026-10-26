@@ -15,10 +15,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/byFrederick/goal/internal/adapters/postgres"
+	"github.com/byFrederick/goal/internal/adapters/store/postgres"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports/porttest"
 	"github.com/byFrederick/goal/internal/definitions"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports/porttest"
 )
 
 // These tests run goald's definition wiring on PostgreSQL 18 (a fresh schema of the database

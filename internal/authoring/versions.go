@@ -9,9 +9,9 @@ import (
 	"strconv"
 
 	"github.com/byFrederick/goal/internal/config"
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/factorymodel"
-	"github.com/byFrederick/goal/internal/ports"
 )
 
 // SelectorKind says which version a VersionSelector names.

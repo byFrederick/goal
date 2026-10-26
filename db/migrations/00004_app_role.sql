@@ -1,6 +1,6 @@
 -- +goose Up
 -- Phase 2.2 A1: migrations run as goal_owner, which owns every object, and goald runs as goal_app,
--- which owns nothing (internal/adapters/postgres/roles.sql creates both; `goal db init` lets them
+-- which owns nothing (internal/adapters/store/postgres/roles.sql creates both; `goal db init` lets them
 -- log in). There are no default privileges: every migration grants goal_app exactly what goald
 -- needs on the objects it adds, so a forgotten grant fails loudly instead of leaving a table open.
 -- These are the grants for the objects of 00001-00003. SELECT ... FOR UPDATE needs UPDATE.

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // An added part whose needs would close a cycle is 409 edge-cycle, though domain.ErrCycle comes

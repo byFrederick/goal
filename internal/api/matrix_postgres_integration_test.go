@@ -17,9 +17,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/byFrederick/goal/internal/adapters/postgres"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports/porttest"
+	"github.com/byFrederick/goal/internal/adapters/store/postgres"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports/porttest"
 )
 
 // mxDatabase is a throwaway database at goose head in the PostgreSQL of GOAL_TEST_DATABASE_URL
@@ -37,7 +37,7 @@ func newMXDatabase(t *testing.T) mxDatabase {
 		t.Fatal("GOAL_TEST_DATABASE_URL is not set; run task test-integration")
 	}
 
-	roles, err := os.ReadFile("../adapters/postgres/roles.sql")
+	roles, err := os.ReadFile("../adapters/store/postgres/roles.sql")
 	if err != nil {
 		t.Fatal(err)
 	}

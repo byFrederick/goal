@@ -15,8 +15,8 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 var refPattern = regexp.MustCompile(`^(?:skills\.sh:)?([^/@#]+)/([^/@#]+)@([^/@#]+)(?:#([^/@#]+))?$`)

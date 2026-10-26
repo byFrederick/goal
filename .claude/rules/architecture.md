@@ -10,8 +10,8 @@ The design and its reasons are in [architecture.md](../../docs/engineering/archi
 
 ## Ports and adapters
 
-- Make `internal/domain` and `internal/engine` depend only on ports, so the engine runs unchanged on Docker Compose and on Cloudflare.
-- Put every external system (Postgres, Docker, Cloudflare, code hosts, secrets, embedders, HTTP) in an adapter under `internal/adapters/`, because the engine must not know which one runs.
+- Make `internal/core/domain` and `internal/core/engine` depend only on ports, so the engine runs unchanged on Docker Compose and on Cloudflare.
+- Put every external system (Postgres, Docker, Cloudflare, code hosts, secrets, embedders, HTTP) in an adapter under `internal/adapters/<port>/<name>`, grouped by the port it implements, because the engine must not know which one runs.
 - Add a new system as an adapter behind an existing or new port, since a new import in the engine breaks the boundary for every target.
 - Keep each package within its row of the import table in architecture.md ("Hexagonal core"), because depguard checks exactly that table.
 - Treat depguard in `.golangci.yml` as the guard and never silence it with `//nolint`; a depguard finding means the design is wrong, not the linter.

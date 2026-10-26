@@ -8,7 +8,7 @@ Goal starts on a laptop but must be deployable to AWS (ECS Fargate and managed P
 
 ## Decision
 
-1. **Hexagonal architecture** (ports and adapters). `internal/domain` and `internal/engine` depend only on `internal/ports`. Postgres, Docker, ECS, secrets providers (environment now, AWS Secrets Manager, 1Password later), Bedrock knowledge bases, the MCP gateway and HTTP are adapters. `depguard` enforces the boundary in CI.
+1. **Hexagonal architecture** (ports and adapters). `internal/core/domain` and `internal/core/engine` depend only on `internal/core/ports`. Postgres, Docker, ECS, secrets providers (environment now, AWS Secrets Manager, 1Password later), Bedrock knowledge bases, the MCP gateway and HTTP are adapters. `depguard` enforces the boundary in CI.
 2. **Manual constructor injection.** Wiring lives only in `cmd/*/main.go`. No DI framework.
 3. **Stateless `goald`.** All state in PostgreSQL; `SKIP LOCKED` leases for work, advisory locks for singleton jobs, `LISTEN/NOTIFY` for realtime fan-out per instance.
 4. **Runner port with Docker and ECS adapters.** Agent runs are containers, never serverless functions.

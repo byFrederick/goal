@@ -18,7 +18,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/byFrederick/goal/internal/adapters/postgres"
+	"github.com/byFrederick/goal/internal/adapters/store/postgres"
 )
 
 // Variables the tests set.

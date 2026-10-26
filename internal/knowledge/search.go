@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"slices"
 
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // Searcher answers searches of a knowledge base: by keywords and, with an embedding model, by

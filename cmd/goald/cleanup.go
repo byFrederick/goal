@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // The sign-in clean-up (spec 3 §12): expired sessions, verification values, device codes, idle

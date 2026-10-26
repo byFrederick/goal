@@ -11,10 +11,10 @@ internal/cli/          the goal CLI's commands (cmd/goal/main.go only wires them
 cmd/goald/             daemon: flow engine, HTTP API (/v1/orgs/{org}/..., with an SSE stream per organization), MCP gateway (/mcp), Docker agent runs
 contracts/api/         openapi.yaml: the HTTP API contract (Go types in internal/api/gen, TypeScript in packages/api-client)
 apps/auth/             identity service (Better Auth on Hono): sign-in, sessions, members and invitations, behind goald's /api/auth
-internal/engine/       flow engine: pull, WIP, gates, workspaces and command checks per run
+internal/core/engine/  flow engine: pull, WIP, gates, workspaces and command checks per run
 internal/config/       loader and cross-reference validation (reads a folder or a bucket prefix)
 internal/authoring/    definition authoring behind the API: drafts, validation, publish, restore, the template catalog
-internal/adapters/     postgres (store, LISTEN/NOTIFY), s3store (S3 and RustFS), docker (sandboxes), github (merges), envsecrets, sysclock
+internal/adapters/     grouped by port: store/postgres (LISTEN/NOTIFY), objectstore/s3 (S3 and RustFS), sandboxes/docker, codehost/github (merges), secrets/env, clock/sys
 packages/api-client/   @goal/api-client: typed TypeScript client of the API (generated types + openapi-fetch) for the UI
 contracts/definitions/ factory.schema.json, evals.schema.json (editor autocompletion + validation)
 db/migrations/         PostgreSQL schema (goose, forward-only)

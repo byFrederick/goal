@@ -19,7 +19,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/byFrederick/goal/internal/adapters/postgres"
+	"github.com/byFrederick/goal/internal/adapters/store/postgres"
 )
 
 // goaldStopGrace is how long goald gets to release its runs after Ctrl-C before it is killed;

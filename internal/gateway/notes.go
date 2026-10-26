@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // notesAfterParam is the query parameter of GET /run that asks for the run's notes instead of

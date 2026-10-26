@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/builder"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // everySkill is the seeded catalog in search order.

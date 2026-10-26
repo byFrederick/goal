@@ -52,9 +52,9 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/config"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/engine"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/engine"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // Engine moves items; *engine.Engine satisfies it.

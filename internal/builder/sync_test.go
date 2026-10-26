@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/builder"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
-	"github.com/byFrederick/goal/internal/ports/porttest"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
+	"github.com/byFrederick/goal/internal/core/ports/porttest"
 )
 
 var t0 = time.Date(2026, 10, 24, 9, 0, 0, 0, time.UTC)

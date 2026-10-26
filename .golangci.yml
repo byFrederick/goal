@@ -1,5 +1,6 @@
-# golangci-lint v2. Base: samber/cc-skills-golang golang-lint recommended config, plus depguard rules for
-# the hexagonal boundaries in docs/engineering/architecture.md. Do not weaken a rule to make code pass.
+# golangci-lint v2 for Goal's Go code: a broad set of correctness, style, security and complexity
+# linters, and depguard rules that keep the hexagonal boundaries in docs/engineering/architecture.md.
+# Do not weaken a rule to make code pass.
 
 version: "2"
 run:
@@ -72,7 +73,7 @@ linters:
     - exhaustive # switch statements not covering all enum values
     - nolintlint # enforces proper //nolint directive usage
     # architecture
-    - depguard # hexagonal boundaries: domain and engine never import adapters or infrastructure SDKs
+    - depguard # hexagonal boundaries: internal/core imports nothing outside internal/core
 
   disable:
     - lll # line length — handled by gofmt/gofumpt
@@ -117,43 +118,19 @@ linters:
   settings:
     depguard:
       rules:
-        domain:
-          files: ["**/internal/domain/**"]
-          deny:
-            - pkg: github.com/byFrederick/goal/internal/
-              desc: domain imports only the standard library
-        engine:
-          files: ["**/internal/engine/**", "**/internal/ports/**"]
-          deny:
-            - pkg: github.com/byFrederick/goal/internal/adapters
-              desc: the engine talks to the outside world only through ports
-            - pkg: github.com/byFrederick/goal/internal/config
-              desc: the engine receives domain types, not file loaders
-            - pkg: github.com/jackc/pgx
-              desc: database access belongs in internal/adapters/postgres
-            - pkg: github.com/pressly/goose
-              desc: migrations are applied by internal/adapters/postgres
-            - pkg: github.com/docker
-              desc: container access belongs in internal/adapters/docker
-            - pkg: github.com/moby
-              desc: container access belongs in internal/adapters/docker
-            - pkg: github.com/aws
-              desc: AWS access belongs in internal/adapters
-            - pkg: github.com/modelcontextprotocol
-              desc: MCP belongs in internal/gateway
-        engine-only-ports:
-          # The engine imports the domain and the ports, nothing else of the module (spec 4 §5.11);
-          # its tests use the fakes in internal/ports/porttest under the rule above.
+        core:
+          # The hexagon's core (domain, ports with their fakes, engine) imports nothing outside
+          # internal/core: the outside world reaches it only through the ports it declares.
           list-mode: strict
-          files: ["**/internal/engine/**", "!$test"]
+          files: ["**/internal/core/**"]
           allow:
             - $gostd
-            - github.com/byFrederick/goal/internal/domain
-            - github.com/byFrederick/goal/internal/ports
+            - github.com/byFrederick/goal/internal/core
+            - github.com/google/uuid
         adapters:
           files: ["**/internal/adapters/**"]
           deny:
-            - pkg: github.com/byFrederick/goal/internal/engine
+            - pkg: github.com/byFrederick/goal/internal/core/engine
               desc: adapters implement ports; they never call the engine
             - pkg: github.com/byFrederick/goal/internal/config
               desc: adapters move bytes; loading and validating factories is internal/config's job
@@ -171,25 +148,25 @@ linters:
           deny:
             - pkg: github.com/byFrederick/goal/internal/adapters
               desc: factory definitions reach storage only through ports.ObjectStore
-            - pkg: github.com/byFrederick/goal/internal/engine
+            - pkg: github.com/byFrederick/goal/internal/core/engine
               desc: the engine receives domain types; definitions never call it
             - pkg: github.com/aws
               desc: AWS access belongs in internal/adapters
             - pkg: github.com/jackc/pgx
-              desc: database access belongs in internal/adapters/postgres
+              desc: database access belongs in internal/adapters/store/postgres
         retention:
           files: ["**/internal/retention/**"]
           deny:
             - pkg: github.com/byFrederick/goal/internal/adapters
               desc: the purge reaches the database and the bucket only through ports
-            - pkg: github.com/byFrederick/goal/internal/engine
+            - pkg: github.com/byFrederick/goal/internal/core/engine
               desc: the purge is a sibling job of the engine
             - pkg: github.com/byFrederick/goal/internal/api
               desc: the purge is a background job; the HTTP API never calls it
             - pkg: github.com/aws
               desc: AWS access belongs in internal/adapters
             - pkg: github.com/jackc/pgx
-              desc: database access belongs in internal/adapters/postgres
+              desc: database access belongs in internal/adapters/store/postgres
         authoring:
           files: ["**/internal/authoring/**"]
           deny:
@@ -206,12 +183,12 @@ linters:
               desc: the gateway reads published versions; it never edits definitions
             - pkg: github.com/byFrederick/goal/internal/adapters
               desc: the gateway reaches secrets and events through ports and its own interfaces
-            - pkg: github.com/byFrederick/goal/internal/engine
+            - pkg: github.com/byFrederick/goal/internal/core/engine
               desc: the gateway serves tools; it never drives the engine
             - pkg: github.com/aws
               desc: AWS access belongs in internal/adapters
             - pkg: github.com/jackc/pgx
-              desc: database access belongs in internal/adapters/postgres
+              desc: database access belongs in internal/adapters/store/postgres
         api:
           files: ["**/internal/api/**", "!$test"]
           deny:
@@ -228,9 +205,9 @@ linters:
             - pkg: github.com/aws
               desc: AWS access belongs in internal/adapters
             - pkg: github.com/jackc/pgx
-              desc: database access belongs in internal/adapters/postgres
+              desc: database access belongs in internal/adapters/store/postgres
             - pkg: github.com/moby
-              desc: container access belongs in internal/adapters/docker
+              desc: container access belongs in internal/adapters/sandboxes/docker
             - pkg: github.com/byFrederick/goal/internal/connkind
               desc: handlers reach connection kinds through an interface declared in internal/api; cmd/goald wires connkind
             - pkg: github.com/byFrederick/goal/internal/knowledge
@@ -240,7 +217,7 @@ linters:
           deny:
             - pkg: github.com/byFrederick/goal/internal/adapters
               desc: connection kinds are data; they are stored through ports.Connections
-            - pkg: github.com/byFrederick/goal/internal/engine
+            - pkg: github.com/byFrederick/goal/internal/core/engine
               desc: the engine receives domain kinds; connkind never calls it
             - pkg: github.com/byFrederick/goal/internal/api
               desc: the HTTP API calls connkind, never the reverse
@@ -251,15 +228,15 @@ linters:
           files: ["**/internal/knowledge/**", "!$test"]
           allow:
             - $gostd
-            - github.com/byFrederick/goal/internal/domain
-            - github.com/byFrederick/goal/internal/ports
+            - github.com/byFrederick/goal/internal/core/domain
+            - github.com/byFrederick/goal/internal/core/ports
             - golang.org/x/net/html
         builder:
           files: ["**/internal/builder/**"]
           deny:
             - pkg: github.com/byFrederick/goal/internal/adapters
               desc: the builder reads the bucket through ports.ObjectStore and skills.sh through ports.SkillSource
-            - pkg: github.com/byFrederick/goal/internal/engine
+            - pkg: github.com/byFrederick/goal/internal/core/engine
               desc: the builder serves the editor; it never drives the engine
             - pkg: github.com/byFrederick/goal/internal/api
               desc: the HTTP API calls the builder through api.Builder, never the reverse
@@ -274,11 +251,11 @@ linters:
             - pkg: github.com/aws
               desc: AWS access belongs in internal/adapters
             - pkg: github.com/jackc/pgx
-              desc: database access belongs in internal/adapters/postgres
+              desc: database access belongs in internal/adapters/store/postgres
             - pkg: github.com/docker
-              desc: container access belongs in internal/adapters/docker
+              desc: container access belongs in internal/adapters/sandboxes/docker
             - pkg: github.com/moby
-              desc: container access belongs in internal/adapters/docker
+              desc: container access belongs in internal/adapters/sandboxes/docker
         egress:
           # The proxy is its own small image: cmd/goal-egress/Dockerfile copies internal/egress only.
           list-mode: strict
@@ -298,9 +275,9 @@ linters:
             - pkg: github.com/byFrederick/goal/internal/cli
               desc: the goal CLI's commands are wired only by cmd/goal
         sqlc:
-          files: ["**/internal/**", "**/cmd/**", "**/tools/**", "!**/internal/adapters/postgres/**"]
+          files: ["**/internal/**", "**/cmd/**", "**/tools/**", "!**/internal/adapters/store/postgres/**"]
           deny:
-            - pkg: github.com/byFrederick/goal/internal/adapters/postgres/db
+            - pkg: github.com/byFrederick/goal/internal/adapters/store/postgres/db
               desc: the generated queries are private to the postgres adapter; use its Store
     dupl:
       threshold: 100 # lower => stricter (tokens)

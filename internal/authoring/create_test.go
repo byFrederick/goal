@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/byFrederick/goal/internal/authoring"
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // blankName names the factories the blank-start tests create.

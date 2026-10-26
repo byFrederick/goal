@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/byFrederick/goal/internal/connkind"
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // The platform kinds of spec 4 §4.2 parse, pass their rules and are marked as the platform's.

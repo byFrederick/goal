@@ -4,7 +4,7 @@ import (
 	"container/list"
 	"sync"
 
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // lru keeps the versions used most recently whose files fit in max bytes; the newest is kept

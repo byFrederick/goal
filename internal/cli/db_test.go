@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/byFrederick/goal/internal/adapters/postgres"
+	"github.com/byFrederick/goal/internal/adapters/store/postgres"
 )
 
 func TestDBSettings_DefaultsMatchGoald(t *testing.T) {

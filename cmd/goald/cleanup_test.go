@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/byFrederick/goal/internal/ports"
-	"github.com/byFrederick/goal/internal/ports/porttest"
+	"github.com/byFrederick/goal/internal/core/ports"
+	"github.com/byFrederick/goal/internal/core/ports/porttest"
 )
 
 // scriptedCleanUp answers each clean-up with the next of its results and tells calls about it.

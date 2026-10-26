@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // oct is a time on a day of October 2026; the harness's clock reads Oct 23, 09:00 UTC.

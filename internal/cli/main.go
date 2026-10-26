@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/byFrederick/goal/internal/adapters/s3store"
+	"github.com/byFrederick/goal/internal/adapters/objectstore/s3"
 )
 
 const usage = `usage:
@@ -270,13 +270,13 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 	}
 }
 
-func newStore(ctx context.Context, getenv func(string) string) (*s3store.Store, error) {
-	cfg, err := s3store.ConfigFromEnv(getenv)
+func newStore(ctx context.Context, getenv func(string) string) (*s3.Store, error) {
+	cfg, err := s3.ConfigFromEnv(getenv)
 	if err != nil {
 		return nil, err
 	}
 
-	return s3store.New(ctx, cfg)
+	return s3.New(ctx, cfg)
 }
 
 // printer writes command output to stdout and keeps the first write error, so a closed pipe

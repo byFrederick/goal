@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/byFrederick/goal/internal/authoring"
-	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/internal/ports"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // stations is the line section with the given stations (JSON objects).

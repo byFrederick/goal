@@ -4,7 +4,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // Line converts a validated factory into the line the engine runs. It reads only the parsed

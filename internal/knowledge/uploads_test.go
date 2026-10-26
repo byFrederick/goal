@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/knowledge"
-	"github.com/byFrederick/goal/internal/ports"
 )
 
 // Check refuses what Upload would, before anything is stored, so a request of several files can
