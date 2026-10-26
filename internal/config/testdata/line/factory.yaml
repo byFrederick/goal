@@ -42,7 +42,7 @@ spec:
       - { id: approve-spec, kind: human, wip: 3 }
       - id: build
         kind: agent
-        route: { backend: engineer, frontend: engineer }
+        route: { backend: { agent: engineer, agents: 1 }, frontend: engineer }
         agents: 2
         wip: 2
         checks: [{ kind: schema }, { kind: command, run: make test }]
