@@ -168,7 +168,12 @@ func (e *Engine) mergeTargets(ctx context.Context, l domain.Line, urls []string,
 		return nil, fmt.Errorf("the code host connections: %w", err)
 	}
 
-	picked := make([]codeHostConnection, 0, len(urls))
+	type pick struct {
+		url string
+		codeHostConnection
+	}
+
+	picked := make([]pick, 0, len(urls))
 
 	for _, raw := range urls {
 		u, err := url.Parse(raw)
@@ -188,7 +193,7 @@ func (e *Engine) mergeTargets(ctx context.Context, l domain.Line, urls []string,
 			return nil, err
 		}
 
-		picked = append(picked, hosts[i])
+		picked = append(picked, pick{url: raw, codeHostConnection: hosts[i]})
 	}
 
 	names := make([]string, 0, len(picked))
@@ -205,13 +210,13 @@ func (e *Engine) mergeTargets(ctx context.Context, l domain.Line, urls []string,
 
 	out := make([]mergeTarget, 0, len(urls))
 
-	for i, c := range picked {
+	for _, c := range picked {
 		j := slices.IndexFunc(resolved, func(r domain.ResolvedConnection) bool { return r.Connection.Name == c.name })
 		if j < 0 {
 			return nil, fmt.Errorf("connection %s was not opened", c.name)
 		}
 
-		out = append(out, mergeTarget{url: urls[i], conn: resolved[j], host: c.ch})
+		out = append(out, mergeTarget{url: c.url, conn: resolved[j], host: c.ch})
 	}
 
 	return out, nil

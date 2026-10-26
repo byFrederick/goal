@@ -92,7 +92,9 @@ func (h *harness) changedSinceOf(i int) string {
 }
 
 // ref is the item's <factory>#<number>.
-func ref(it domain.Item) string { return domain.ItemRef{Factory: testFactory, Number: it.Number}.String() }
+func ref(it domain.Item) string {
+	return domain.ItemRef{Factory: testFactory, Number: it.Number}.String()
+}
 
 // A station with context: [inflight] records the default branch's head as the item's base
 // commit when it finishes it, while changedSince is on and the line has a repository; a later
@@ -190,7 +192,7 @@ func TestEngine_ClaimGetsChangedSinceYourPlan(t *testing.T) {
 	h := newHarness(t, changedSinceLine(), porttest.Succeed(storePlan))
 	h.codehost.SetBranchHead(appRepo, "", base)
 
-	it := h.submit(t, domain.NewItem{Title: "Plan the export"})
+	it := h.submit(t, domain.NewItem{Title: "Plan the items export"})
 	h.step(t) // it plans its part at base
 
 	other := h.mergedBy(t, "Rename the items table", "c0ffee000002")

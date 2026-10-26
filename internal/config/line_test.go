@@ -149,7 +149,7 @@ func TestLine_CarriesAssembliesChangedSince(t *testing.T) {
 
 	for flow, want := range map[string]bool{
 		"": false,
-		"    flow:\n      assemblies: { overlap: allow }\n":       false,
+		"    flow:\n      assemblies: { overlap: allow }\n":      false,
 		"    flow:\n      assemblies: { changedSince: true }\n":  true,
 		"    flow:\n      assemblies: { changedSince: false }\n": false,
 	} {

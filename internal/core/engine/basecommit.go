@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // repositoryHost is the line's code host connection for its repository (runtime.repository),
@@ -111,22 +112,7 @@ func (e *Engine) changedSince(ctx context.Context, l domain.Line, it domain.Item
 		return "", fmt.Errorf("compare %s with the default branch: %w", it.BaseCommit, err)
 	}
 
-	entries := make([]domain.ChangedSinceEntry, 0, len(cmp.Commits))
-
-	for _, cm := range cmp.Commits {
-		var changed []string
-
-		for _, f := range cm.Files {
-			if len(domain.PathsOverlap([]string{f}, paths)) > 0 {
-				changed = append(changed, f)
-			}
-		}
-
-		if len(changed) > 0 {
-			entries = append(entries, domain.ChangedSinceEntry{SHA: cm.SHA, Subject: cm.Subject, Paths: changed})
-		}
-	}
-
+	entries := overlapping(cmp.Commits, paths)
 	if len(entries) == 0 {
 		return "", nil
 	}
@@ -148,4 +134,26 @@ func (e *Engine) changedSince(ctx context.Context, l domain.Line, it domain.Item
 	}
 
 	return domain.ChangedSinceSection(it.BaseCommit, entries, cmp.Truncated), nil
+}
+
+// overlapping are the entries of the commits that changed files paths match, each with only
+// those files.
+func overlapping(commits []ports.Commit, paths []string) []domain.ChangedSinceEntry {
+	var entries []domain.ChangedSinceEntry
+
+	for _, cm := range commits {
+		var changed []string
+
+		for _, f := range cm.Files {
+			if len(domain.PathsOverlap([]string{f}, paths)) > 0 {
+				changed = append(changed, f)
+			}
+		}
+
+		if len(changed) > 0 {
+			entries = append(entries, domain.ChangedSinceEntry{SHA: cm.SHA, Subject: cm.Subject, Paths: changed})
+		}
+	}
+
+	return entries
 }
