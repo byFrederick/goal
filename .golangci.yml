@@ -291,6 +291,12 @@ linters:
           deny:
             - pkg: github.com/byFrederick/goal/internal
               desc: the permission generator reads contracts/api/permissions.yaml and contracts/api/openapi.yaml with the standard library and yaml only (spec 3, §5.4)
+        cli:
+          # The goal CLI's commands are a leaf: only cmd/goal wires them.
+          files: ["**/internal/**", "!**/internal/cli/**"]
+          deny:
+            - pkg: github.com/byFrederick/goal/internal/cli
+              desc: the goal CLI's commands are wired only by cmd/goal
         sqlc:
           files: ["**/internal/**", "**/cmd/**", "**/tools/**", "!**/internal/adapters/postgres/**"]
           deny:
