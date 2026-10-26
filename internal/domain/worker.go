@@ -9,7 +9,7 @@ import (
 )
 
 // The worker (goal-agent) writes one JSON object per line to stdout; every line has "type" and
-// "at" (RFC 3339). worker/README.md documents the fields of each type. Progress lines become
+// "at" (RFC 3339). apps/worker/README.md documents the fields of each type. Progress lines become
 // item events of these kinds; the finished line becomes the run's result.
 const (
 	EventAgentStarted EventKind = "agent_started"

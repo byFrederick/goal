@@ -27,7 +27,7 @@ import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
 import { configureMonacoYaml } from 'monaco-yaml';
 import { type ReactNode, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import schema from '../../../../../contracts/definitions/factory.schema.json';
+import schema from '../../../../../../contracts/definitions/factory.schema.json';
 import type { CodeEditorProps } from './code-editor';
 import './monaco-editor.css';
 import YamlWorker from './yaml.worker.ts?worker';

@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
 # Goal's auth service image, the sidecar container in goald's ECS task (spec 3 §5.5). Build from
 # the repository root (task auth:image):
-#   docker build -f auth/Dockerfile -t ghcr.io/byfrederick/goal-auth:0.1.0 .
+#   docker build -f apps/auth/Dockerfile -t ghcr.io/byfrederick/goal-auth:0.1.0 .
 # The production deploy builds and pushes it reproducibly (deploy/cloudflare/scripts/deploy.sh):
-# keep pnpm install from the manifests before COPY auth/, and nothing dated in /out.
+# keep pnpm install from the manifests before COPY apps/auth/, and nothing dated in /out.
 # It listens on loopback only (GOAL_AUTH_LISTEN, default 127.0.0.1:8081), which goald's container
 # shares in the task; goald proxies /api/auth to it. Its settings and secrets come from the task's
 # environment (Secrets Manager in the cloud), never from the image.
@@ -15,9 +15,9 @@ ARG PNPM_VERSION=12.15.0
 RUN npm install --global --no-fund --no-audit "pnpm@${PNPM_VERSION}"
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY auth/package.json auth/
+COPY apps/auth/package.json apps/auth/
 RUN pnpm install --frozen-lockfile --filter @goal/auth
-COPY auth/ auth/
+COPY apps/auth/ apps/auth/
 # .modules.yaml records when pnpm ran, the one file of /out that differs between two builds.
 RUN pnpm --filter @goal/auth build \
  && pnpm --filter @goal/auth deploy --prod /out \

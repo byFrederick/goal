@@ -1,7 +1,7 @@
-// Package web serves the built single-page app (web/dist) from files embedded in goald.
+// Package web serves the built single-page app (apps/web/dist) from files embedded in goald.
 //
-// goald built with `-tags webui` (task build does this after task web:build) embeds web/dist.
-// Without the tag it embeds web/placeholder, a page that says how to build the UI, so
+// goald built with `-tags webui` (task build does this after task web:build) embeds apps/web/dist.
+// Without the tag it embeds apps/web/placeholder, a page that says how to build the UI, so
 // `go build ./...` works on a fresh clone with no Node toolchain.
 package web
 

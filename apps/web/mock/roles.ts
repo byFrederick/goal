@@ -116,6 +116,6 @@ export function levelsOf(table: PermissionTable): ReadonlyMap<string, Rule['leve
 
 /** goald's two sources, read from the repository the mock runs in. */
 export function readSources(): { table: PermissionTable; scopes: Scope[] } {
-  const read = (file: string) => readFileSync(new URL(`../../contracts/api/${file}`, import.meta.url), 'utf8');
+  const read = (file: string) => readFileSync(new URL(`../../../contracts/api/${file}`, import.meta.url), 'utf8');
   return { table: permissionTable(read('permissions.yaml')), scopes: scopesFrom(read('openapi.yaml')) };
 }

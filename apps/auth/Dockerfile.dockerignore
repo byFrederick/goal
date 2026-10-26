@@ -1,0 +1,10 @@
+# The image builds from the repository root and needs only the workspace manifests and apps/auth/.
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!apps/auth/
+apps/auth/node_modules/
+apps/auth/dist/
+apps/auth/**/*.test.ts
+apps/auth/src/testing/

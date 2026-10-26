@@ -23,8 +23,8 @@ describe('images', () => {
       images(config, configDir, rootDir).map((i) => [i.repository, i.dockerfile, i.context]),
       [
         ['goal-goald', '../../cmd/goald/Dockerfile', '../..'],
-        ['goal-auth', '../../auth/Dockerfile', '../..'],
-        ['goal-runbox-goal-agent', '../../worker/Dockerfile', '../..'],
+        ['goal-auth', '../../apps/auth/Dockerfile', '../..'],
+        ['goal-runbox-goal-agent', '../../apps/worker/Dockerfile', '../..'],
       ],
     );
   });

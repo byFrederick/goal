@@ -140,7 +140,7 @@ function depsWith(fake: typeof fetch, exec: Exec, env: NodeJS.ProcessEnv = {}): 
 describe('prepare', () => {
   it("sets the sandbox up from the bundle goald's gateway serves (internal/gateway/testdata)", async () => {
     const served = JSON.parse(
-      await readFile(new URL('../../internal/gateway/testdata/run-bundle.json', import.meta.url), 'utf8'),
+      await readFile(new URL('../../../internal/gateway/testdata/run-bundle.json', import.meta.url), 'utf8'),
     );
     const { fake } = gatewayServing(served);
     const calls: { command: string; args: string[] }[] = [];

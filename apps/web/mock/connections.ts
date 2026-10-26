@@ -132,7 +132,7 @@ function testHostRefusal(kind: MockKind, fields: Record<string, string>): string
 
 /** goald's platform kinds, from internal/connkind/kinds. */
 function platformKinds(): MockKind[] {
-  const dir = new URL('../../internal/connkind/kinds/', import.meta.url);
+  const dir = new URL('../../../internal/connkind/kinds/', import.meta.url);
   return readdirSync(dir)
     .filter((f) => f.endsWith('.yaml'))
     .sort()

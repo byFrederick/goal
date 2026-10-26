@@ -8,7 +8,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 
-const repo = fileURLToPath(new URL('../../../', import.meta.url));
+const repo = fileURLToPath(new URL('../../../../', import.meta.url));
 
 export interface TestDatabase {
   name: string;

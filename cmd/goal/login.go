@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	// cliClientID is the one client the identity service's device grant serves (auth/src/auth.ts).
+	// cliClientID is the one client the identity service's device grant serves (apps/auth/src/auth.ts).
 	cliClientID = "goal-cli"
 	deviceGrant = "urn:ietf:params:oauth:grant-type:device_code"
 	// defaultPollEvery is RFC 8628's polling interval when the service names none; slowDownStep

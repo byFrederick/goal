@@ -176,7 +176,7 @@ services:
       start_period: 20s
       start_interval: 1s
 
-  # The auth service (auth/, profile stack) in goald's network namespace, as beside goald in any
+  # The auth service (apps/auth/, profile stack) in goald's network namespace, as beside goald in any
   # deployment: it listens on loopback and goald's /api/auth proxy is the only way in. Only its
   # own variables reach it. It mails Mailpit, which speaks no TLS, across this network:
   # GOAL_SMTP_PLAINTEXT=on allows that for the name mailpit and nothing else.
@@ -185,7 +185,7 @@ services:
     image: ghcr.io/byfrederick/goal-auth:0.1.0
     build:
       context: .
-      dockerfile: auth/Dockerfile
+      dockerfile: apps/auth/Dockerfile
       target: runtime
     network_mode: service:goald
     environment:

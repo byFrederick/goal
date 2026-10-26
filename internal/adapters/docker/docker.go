@@ -2,7 +2,7 @@
 // OrbStack or Docker Engine on Linux): one dev box per run (sandboxes.go), into which goald execs
 // the agent image's commands; a run's stdio MCP servers run inside its box. Nothing is mounted
 // from the host: a run's box gets everything it needs from the gateway's run bundle.
-// worker/README.md describes the contract from the box's side.
+// apps/worker/README.md describes the contract from the box's side.
 //
 // Networking (network.go, ADR 0009 and its phase 4 amendment): boxes run on compose.yaml's agents
 // network (GOAL_SANDBOX_NETWORK), which has no route to the host, to other networks or to the

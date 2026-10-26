@@ -53,7 +53,7 @@ import (
 	"github.com/byFrederick/goal/internal/knowledge"
 	"github.com/byFrederick/goal/internal/ports"
 	"github.com/byFrederick/goal/internal/retention"
-	"github.com/byFrederick/goal/web"
+	"github.com/byFrederick/goal/apps/web"
 )
 
 // minKeyBytes is the shortest gateway key goald accepts (openssl rand -hex 32 gives 64).

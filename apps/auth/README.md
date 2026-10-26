@@ -1,8 +1,8 @@
 # auth — Goal's identity service
 
 Better Auth on Hono (`@hono/node-server`): sign-in by email code or Google, sessions, organization
-members, invitations and the CLI's device sign-in ([spec 3](../docs/specs/3-identity-and-access.md),
-[ADR 0007](../docs/adr/0007-identity-better-auth.md)). It listens on loopback only and is reached
+members, invitations and the CLI's device sign-in ([spec 3](../../docs/specs/3-identity-and-access.md),
+[ADR 0007](../../docs/adr/0007-identity-better-auth.md)). It listens on loopback only and is reached
 only through goald's `/api/auth` proxy, which forwards an allowlist of its endpoints; goald alone
 creates, renames and deletes organizations.
 
@@ -38,7 +38,7 @@ from `compose.yaml`.
   and every other dependency are pinned exactly; four Better Auth plugins only (email OTP,
   organization, device authorization, bearer); no install scripts.
 - `pnpm audit --prod` runs in `task check` for this service and the web UI; an advisory fails the
-  check until it is fixed or recorded as an exception in [SECURITY.md](../SECURITY.md).
+  check until it is fixed or recorded as an exception in [SECURITY.md](../../SECURITY.md).
 - **Patch SLA** for advisories in Better Auth or any other production dependency of this service:
   **critical within 48 hours, high within 7 days**, moderate and low with the next release. The
   fix is an exact-version upgrade (or a `pnpm-workspace.yaml` override of a transitive

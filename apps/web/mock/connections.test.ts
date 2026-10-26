@@ -55,7 +55,7 @@ async function call<T>(
 
 describe('the mock connections', () => {
   it("serves goald's own platform kinds", async () => {
-    const files = readdirSync(new URL('../../internal/connkind/kinds/', import.meta.url)).filter((f) =>
+    const files = readdirSync(new URL('../../../internal/connkind/kinds/', import.meta.url)).filter((f) =>
       f.endsWith('.yaml'),
     );
     const { body } = await call<ConnectionKindList>('/v1/orgs/acme/connection-kinds');

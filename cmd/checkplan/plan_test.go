@@ -20,14 +20,14 @@ func TestPlan(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]planCase{
-		"web only":                {[]string{"web/src/routes/board.tsx", "web/package.json"}, []string{"web:check"}, "web (web:check): web/src/routes/board.tsx and 1 more", ""},
+		"web only":                {[]string{"apps/web/src/routes/board.tsx", "apps/web/package.json"}, []string{"web:check"}, "web (web:check): apps/web/src/routes/board.tsx and 1 more", ""},
 		"go file":                 {[]string{"internal/engine/pull.go"}, goTasks, "go (lint, test, api:permissions-check, validate): internal/engine/pull.go", ""},
-		"go file outside go dirs": {[]string{"web/webui.go"}, goTasks, "web/webui.go", ""},
+		"go file outside go dirs": {[]string{"apps/web/webui.go"}, goTasks, "apps/web/webui.go", ""},
 		"go fixture":              {[]string{"internal/config/testdata/acme/factory.yaml"}, goTasks, "go (", ""},
 		"queries":                 {[]string{"db/queries/items.sql"}, goTasks, "db/queries/items.sql", ""},
 		"sqlc config":             {[]string{"db/sqlc.yaml"}, goTasks, "db/sqlc.yaml", ""},
-		"embedded csp":            {[]string{"web/csp.txt"}, goTasks, "web/csp.txt", ""},
-		"embedded placeholder":    {[]string{"web/placeholder/index.html"}, goTasks, "web/placeholder/index.html", ""},
+		"embedded csp":            {[]string{"apps/web/csp.txt"}, goTasks, "apps/web/csp.txt", ""},
+		"embedded placeholder":    {[]string{"apps/web/placeholder/index.html"}, goTasks, "apps/web/placeholder/index.html", ""},
 		"embedded connection kind": {
 			[]string{"internal/connkind/kinds/github.yaml"}, goTasks, "internal/connkind/kinds/github.yaml", "",
 		},
@@ -35,9 +35,9 @@ func TestPlan(t *testing.T) {
 		"migration":        {[]string{"db/migrations/00060_x.sql"}, goTasks, "db/migrations/00060_x.sql", "db/migrations/00060_x.sql changed: task migrate-check also applies"},
 		"compose read":     {[]string{"compose.yaml"}, goTasks, "compose.yaml", ""},
 		"env example read": {[]string{".env.example"}, goTasks, ".env.example", ""},
-		"worker":           {[]string{"worker/src/run.ts", "worker/Dockerfile"}, []string{"worker:check"}, "worker (worker:check): worker/src/run.ts and 1 more", ""},
-		"auth":             {[]string{"auth/src/server.ts"}, []string{"auth:check"}, "auth (auth:check): auth/src/server.ts", "auth/src/server.ts changed: task migrate-check also applies"},
-		"generated roles":  {[]string{"auth/src/access.gen.ts"}, append(slices.Clone(goTasks[:3]), "auth:check", "validate"), "auth (auth:check): auth/src/access.gen.ts", "migrate-check"},
+		"worker":           {[]string{"apps/worker/src/run.ts", "apps/worker/Dockerfile"}, []string{"worker:check"}, "worker (worker:check): apps/worker/src/run.ts and 1 more", ""},
+		"auth":             {[]string{"apps/auth/src/server.ts"}, []string{"auth:check"}, "auth (auth:check): apps/auth/src/server.ts", "apps/auth/src/server.ts changed: task migrate-check also applies"},
+		"generated roles":  {[]string{"apps/auth/src/access.gen.ts"}, append(slices.Clone(goTasks[:3]), "auth:check", "validate"), "auth (auth:check): apps/auth/src/access.gen.ts", "migrate-check"},
 		"api client":       {[]string{"packages/api-client/src/client.ts"}, []string{"api-client:check", "web:check"}, "web (web:check): packages/api-client/src/client.ts", ""},
 		"control worker":   {[]string{"deploy/cloudflare/src/index.ts"}, []string{"cloudflare:check"}, "cloudflare (cloudflare:check): deploy/cloudflare/src/index.ts", ""},
 		"terraform":        {[]string{"terraform/r2.tf"}, []string{"tf:check"}, "terraform (tf:check): terraform/r2.tf", ""},
@@ -47,14 +47,14 @@ func TestPlan(t *testing.T) {
 			nil, "", "",
 		},
 		"parts keep task check's order": {
-			[]string{"terraform/r2.tf", "web/src/a.tsx", "internal/api/org.go", "worker/src/a.ts"},
+			[]string{"terraform/r2.tf", "apps/web/src/a.tsx", "internal/api/org.go", "apps/worker/src/a.ts"},
 			[]string{"lint", "test", "api:permissions-check", "worker:check", "web:check", "validate", "tf:check"},
 			"worker (worker:check)", "",
 		},
 	}
 
 	for _, shared := range []string{"go.mod", "go.sum", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "Taskfile.yml", ".golangci.yml", ".mise.toml"} {
-		tests["shared "+shared] = planCase{[]string{"web/src/a.tsx", shared}, tasks, "everything (" + strings.Join(tasks, ", ") + "): " + shared + " (shared by every part)", ""}
+		tests["shared "+shared] = planCase{[]string{"apps/web/src/a.tsx", shared}, tasks, "everything (" + strings.Join(tasks, ", ") + "): " + shared + " (shared by every part)", ""}
 	}
 
 	tests["contract api"] = struct {

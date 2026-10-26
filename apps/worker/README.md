@@ -102,7 +102,7 @@ After a rebase the local branch has diverged from `origin/<branch>`, so the agen
 }
 ```
 
-`connections` are the agent's organization connections its token grants (the model and repository connections are not among them unless the agent names them): the names of the variables each sets in `goal-agent run`'s env, never a value, its MCP server and its kind's docs. `rules` are the factory rules that apply to the run ([ADR 0014](../docs/adr/0014-factory-rules.md)), from the definition version it started on: each rule's name, the sha256 of its rule file, its `paths` (omitted when it has none) and `content`, the markdown file to write to the agent's rules; prepare writes each to `$CLAUDE_CONFIG_DIR/rules/<name>.md` (step 2). `base_conflicts` (only after a conflict in prepare's step 4) names the files that conflict with the default branch.
+`connections` are the agent's organization connections its token grants (the model and repository connections are not among them unless the agent names them): the names of the variables each sets in `goal-agent run`'s env, never a value, its MCP server and its kind's docs. `rules` are the factory rules that apply to the run ([ADR 0014](../../docs/adr/0014-factory-rules.md)), from the definition version it started on: each rule's name, the sha256 of its rule file, its `paths` (omitted when it has none) and `content`, the markdown file to write to the agent's rules; prepare writes each to `$CLAUDE_CONFIG_DIR/rules/<name>.md` (step 2). `base_conflicts` (only after a conflict in prepare's step 4) names the files that conflict with the default branch.
 
 ## How the agent runs
 

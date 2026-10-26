@@ -54,7 +54,7 @@ const (
 	// proxySecretEnv is the secret goald and the auth service share (withProxySecret).
 	proxySecretEnv = "GOAL_AUTH_PROXY_SECRET" //nolint:gosec // a variable name, not a credential
 	// authServer is the auth service's build (task auth:build), from the repository root.
-	authServer = "auth/dist/server.js"
+	authServer = "apps/auth/dist/server.js"
 	// mailpitInbox is compose.yaml's Mailpit, where sign-in codes arrive locally; its UI and API
 	// take mailpitUser and the password in mailpitAuthName, beside the CLI's config.
 	mailpitInbox    = "http://127.0.0.1:8025"
@@ -91,7 +91,7 @@ var authOnly = []string{
 // healthy), the database roles (goal db init, so an existing database is handed to goal_owner
 // before it is migrated), the migrations (goal db migrate), the bucket, then goald in the
 // foreground until Ctrl-C. Under GOAL_AUTH=session, the default, it also starts Mailpit (compose)
-// and the auth service (node auth/dist/server.js) beside goald, once its tables exist, restarting
+// and the auth service (node apps/auth/dist/server.js) beside goald, once its tables exist, restarting
 // it with a backoff should it stop by itself, each process with only its own variables, and refuses to
 // start (before anything when it can tell, before the roles otherwise) without a usable
 // BETTER_AUTH_SECRET, the auth service's build, or GOAL_BOOTSTRAP_OWNER_EMAIL while nobody has
@@ -547,7 +547,7 @@ func (p platform) superviseAuth(ctx context.Context, out *printer, env []string,
 	}
 }
 
-// startNode starts node auth/dist/server.js with env; ending ctx stops it (SIGTERM, then a kill
+// startNode starts node apps/auth/dist/server.js with env; ending ctx stops it (SIGTERM, then a kill
 // after authStopGrace). It logs to this terminal.
 func startNode(ctx context.Context, env []string) (func() error, error) {
 	node := exec.CommandContext(ctx, "node", authServer)

@@ -1,14 +1,14 @@
 # syntax=docker/dockerfile:1
 # goal-agent: the one image every run's sandbox starts from (spec 4 §4.1, ADR 0008). Build from
 # the repository root (task worker:image):
-#   docker build -f worker/Dockerfile -t ghcr.io/byfrederick/goal-agent:0.2.0 .
+#   docker build -f apps/worker/Dockerfile -t ghcr.io/byfrederick/goal-agent:0.2.0 .
 # A sandbox idles in it until goald execs `goal-agent prepare`, `goal-agent run` and the station's
-# checks; worker/README.md has the contract. It carries the worker (Claude Code through the Agent
+# checks; apps/worker/README.md has the contract. It carries the worker (Claude Code through the Agent
 # SDK), git, gh, mise with Go, Node and Python, a C compiler and PostgreSQL 18's server binaries with pgvector;
 # a repository's other tools come from its mise config at prepare. Every version is pinned and
 # every download checked against the checksums its project publishes. The production deploy builds
 # and pushes it reproducibly (deploy/cloudflare/scripts/deploy.sh): the slow stages (apt, mise,
-# pnpm install from the manifests) come before COPY worker/, and no layer keeps apt's lists or logs,
+# pnpm install from the manifests) come before COPY apps/worker/, and no layer keeps apt's lists or logs,
 # a package manager's cache or pnpm's dated .modules.yaml.
 
 ARG DEBIAN_IMAGE=debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
@@ -86,9 +86,9 @@ ARG PNPM_VERSION=12.15.0
 WORKDIR /home/node/src
 RUN npm install --global --no-fund --no-audit "pnpm@${PNPM_VERSION}" && mise reshim
 COPY --chown=1000:1000 package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY --chown=1000:1000 worker/package.json worker/
+COPY --chown=1000:1000 apps/worker/package.json apps/worker/
 RUN pnpm install --frozen-lockfile --filter @goal/worker
-COPY --chown=1000:1000 worker/ worker/
+COPY --chown=1000:1000 apps/worker/ apps/worker/
 RUN pnpm --filter @goal/worker build \
  && pnpm --filter @goal/worker deploy --prod /home/node/out \
  && rm -f /home/node/out/node_modules/.modules.yaml

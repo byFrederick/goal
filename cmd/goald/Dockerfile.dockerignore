@@ -7,13 +7,13 @@
 !internal/
 !db/migrations/
 !contracts/definitions/
-!web/
+!apps/web/
 !packages/api-client/
 !package.json
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
 **/node_modules/
-web/dist/
-web/e2e/
-web/e2e-auth/
+apps/web/dist/
+apps/web/e2e/
+apps/web/e2e-auth/
 **/*_test.go

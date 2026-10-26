@@ -84,10 +84,10 @@ tasks:
   build:
     desc: Build the web UI, then every binary in cmd/ into bin/ with the UI embedded in goald
     deps: [web:build]
-    sources: ["**/*.go", go.mod, go.sum, contracts/definitions/*.json, web/dist/**/*]
+    sources: ["**/*.go", go.mod, go.sum, contracts/definitions/*.json, apps/web/dist/**/*]
     generates: [bin/goal, bin/goald]
     cmds:
-      # -tags webui embeds web/dist; without it goald serves a page saying the UI is not built.
+      # -tags webui embeds apps/web/dist; without it goald serves a page saying the UI is not built.
       - go build -trimpath -tags webui -o bin/ ./cmd/...
 
   up:
@@ -417,28 +417,28 @@ tasks:
 
   worker:install:
     desc: Install the pnpm workspace's dependencies from the lockfile
-    sources: [package.json, pnpm-lock.yaml, pnpm-workspace.yaml, worker/package.json, auth/package.json, deploy/cloudflare/package.json, packages/*/package.json]
+    sources: [package.json, pnpm-lock.yaml, pnpm-workspace.yaml, apps/worker/package.json, apps/auth/package.json, deploy/cloudflare/package.json, packages/*/package.json]
     cmds:
       - pnpm install --frozen-lockfile
 
   web:install:
     desc: Install the pnpm workspace's dependencies from the lockfile (web and worker share one)
-    sources: [package.json, pnpm-lock.yaml, pnpm-workspace.yaml, web/package.json]
+    sources: [package.json, pnpm-lock.yaml, pnpm-workspace.yaml, apps/web/package.json]
     cmds:
       - pnpm install --frozen-lockfile
 
   web:dev:
     desc: Vite dev server on :5173 proxying /v1 to goald (GOAL_API_URL, default http://127.0.0.1:8080); GOAL_API=mock uses the mock API
     deps: [web:install]
-    dir: web
+    dir: apps/web
     cmds:
       - pnpm run dev
 
   web:build:
-    desc: Build the web UI into web/dist (embedded into goald by task build)
+    desc: Build the web UI into apps/web/dist (embedded into goald by task build)
     deps: [web:install]
-    dir: web
-    sources: [src/**/*, public/**/*, index.html, vite.config.ts, package.json, ../pnpm-lock.yaml, ../packages/api-client/src/**/*]
+    dir: apps/web
+    sources: [src/**/*, public/**/*, index.html, vite.config.ts, package.json, ../../pnpm-lock.yaml, ../../packages/api-client/src/**/*]
     generates: [dist/index.html]
     cmds:
       - pnpm run --silent build
@@ -446,7 +446,7 @@ tasks:
   web:check:
     desc: Web typecheck, Biome lint, Vitest unit tests (no browser) and pnpm audit of its production dependencies (SECURITY.md)
     deps: [web:install]
-    dir: web
+    dir: apps/web
     cmds:
       - pnpm run --silent typecheck
       - pnpm run --silent lint
@@ -456,7 +456,7 @@ tasks:
   web:e2e:
     desc: Playwright on the critical flows at 375, 768 and 1440 px with axe, against vite preview and the mock API (Chromium)
     deps: [web:install]
-    dir: web
+    dir: apps/web
     cmds:
       - pnpm exec playwright install chromium
       - pnpm run --silent e2e
@@ -481,7 +481,7 @@ tasks:
       Mailpit (start them first; GOAL_E2E_AUTH_URL, GOAL_MAILPIT_URL, GOAL_MAILPIT_AUTH (user:password), GOAL_BOOTSTRAP_OWNER_EMAIL).
       Not part of task check: it needs the running stack
     deps: [web:install]
-    dir: web
+    dir: apps/web
     cmds:
       - pnpm exec playwright install chromium
       - pnpm exec playwright test --config playwright.auth.config.ts
@@ -489,7 +489,7 @@ tasks:
   worker:check:
     desc: Worker typecheck, Biome lint and Vitest unit tests (no image build)
     deps: [worker:install]
-    dir: worker
+    dir: apps/worker
     cmds:
       - pnpm run --silent typecheck
       - pnpm run --silent lint
@@ -578,7 +578,7 @@ tasks:
   auth:check:
     desc: Auth service typecheck, Biome lint, Vitest unit tests (no database) and pnpm audit of its production dependencies
     deps: [worker:install]
-    dir: auth
+    dir: apps/auth
     cmds:
       - pnpm run --silent typecheck
       - pnpm run --silent lint
@@ -586,18 +586,18 @@ tasks:
       - pnpm audit --prod --filter @goal/auth
 
   auth:build:
-    desc: Build the auth service into auth/dist (Better Auth on Hono; from 3-9 goal up runs node auth/dist/server.js under GOAL_AUTH=session)
+    desc: Build the auth service into apps/auth/dist (Better Auth on Hono; from 3-9 goal up runs node apps/auth/dist/server.js under GOAL_AUTH=session)
     deps: [worker:install]
-    dir: auth
-    sources: [src/**/*.ts, package.json, tsconfig.json, tsconfig.build.json, ../pnpm-lock.yaml]
+    dir: apps/auth
+    sources: [src/**/*.ts, package.json, tsconfig.json, tsconfig.build.json, ../../pnpm-lock.yaml]
     generates: [dist/server.js]
     cmds:
       - pnpm run --silent build
 
   auth:dev:
-    desc: Run the auth service from auth/src, rebuilt and restarted on change, with only its own variables from .env, mailing to Mailpit (needs goal db init, goal db migrate and BETTER_AUTH_SECRET)
+    desc: Run the auth service from apps/auth/src, rebuilt and restarted on change, with only its own variables from .env, mailing to Mailpit (needs goal db init, goal db migrate and BETTER_AUTH_SECRET)
     deps: [auth:build, mailpit:auth]
-    dir: auth
+    dir: apps/auth
     cmds:
       - docker compose up -d --wait mailpit
       - |
@@ -620,13 +620,13 @@ tasks:
     requires:
       vars: [DATABASE_URL]
     deps: [worker:install]
-    dir: auth
+    dir: apps/auth
     vars:
       OUT:
         sh: mktemp -d
     cmds:
       - defer: rm -rf "{{.OUT}}"
-      # The pinned CLI writes a migration only when the database differs from auth/src/auth.ts;
+      # The pinned CLI writes a migration only when the database differs from apps/auth/src/auth.ts;
       # `auth migrate` is never run.
       - GOAL_AUTH_DATABASE_URL='{{.DATABASE_URL}}' BETTER_AUTH_TELEMETRY=0 pnpm exec auth generate --config src/generate.ts --output "{{.OUT}}/drift.sql" --yes >/dev/null
       - |
@@ -650,7 +650,7 @@ tasks:
   worker:image:
     desc: Build the goal-agent image locally (WORKER_IMAGE), then smoke it; never pushes
     cmds:
-      - docker build -f worker/Dockerfile --target runtime -t {{.WORKER_IMAGE}} .
+      - docker build -f apps/worker/Dockerfile --target runtime -t {{.WORKER_IMAGE}} .
       - task: worker:smoke
 
   # Every task that starts goald runs this first: runs start from the image of this checkout's
@@ -659,7 +659,7 @@ tasks:
   worker:image:build:
     desc: Build the goal-agent image locally (WORKER_IMAGE) without output or the smoke, as task up does; never pushes
     cmds:
-      - docker build -q -f worker/Dockerfile --target runtime -t {{.WORKER_IMAGE}} . >/dev/null
+      - docker build -q -f apps/worker/Dockerfile --target runtime -t {{.WORKER_IMAGE}} . >/dev/null
 
   worker:smoke:
     desc: Smoke the goal-agent image (WORKER_IMAGE) - its toolchains run as the sandbox's user, and goal-agent answers
@@ -685,7 +685,7 @@ tasks:
   auth:image:
     desc: Build the auth service's sidecar image locally (AUTH_IMAGE); never pushes
     cmds:
-      - docker build -f auth/Dockerfile --target runtime -t {{.AUTH_IMAGE}} .
+      - docker build -f apps/auth/Dockerfile --target runtime -t {{.AUTH_IMAGE}} .
 
   hooks:install:
     desc: Use the versioned git hooks in .githooks (pre-push runs task check)
