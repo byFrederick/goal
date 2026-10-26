@@ -1612,6 +1612,32 @@ listItemEvents       pat-demoted      404 item-not-found       404 org-not-found
 listItemEvents       pat-removed      401 unauthenticated      401 unauthenticated
 listItemEvents       pat-platform     200                      404 org-not-found
 listItemEvents       pat-deleted-org  401 unauthenticated      401 unauthenticated
+listItemParts        anonymous        401 unauthenticated      401 unauthenticated
+listItemParts        owner            200                      404 org-not-found
+listItemParts        admin            200                      404 org-not-found
+listItemParts        viewer           200                      404 org-not-found
+listItemParts        approver         200                      404 org-not-found
+listItemParts        editor           200                      404 org-not-found
+listItemParts        member-no-roles  404 item-not-found       404 org-not-found
+listItemParts        other-org-owner  404 org-not-found        200
+listItemParts        platform-admin   404 org-not-found        404 org-not-found
+listItemParts        stale-owner      200                      404 org-not-found
+listItemParts        key-scoped       200                      404 org-not-found
+listItemParts        key-restricted   404 item-not-found       404 org-not-found
+listItemParts        key-other-org    404 org-not-found        200
+listItemParts        key-expired      401 unauthenticated      401 unauthenticated
+listItemParts        key-revoked      401 unauthenticated      401 unauthenticated
+listItemParts        bearer-owner     200                      404 org-not-found
+listItemParts        pat-approver     200                      404 org-not-found
+listItemParts        pat-owner        200                      404 org-not-found
+listItemParts        pat-viewer       200                      404 org-not-found
+listItemParts        pat-other-org    404 org-not-found        200
+listItemParts        pat-expired      401 unauthenticated      401 unauthenticated
+listItemParts        pat-revoked      401 unauthenticated      401 unauthenticated
+listItemParts        pat-demoted      404 item-not-found       404 org-not-found
+listItemParts        pat-removed      401 unauthenticated      401 unauthenticated
+listItemParts        pat-platform     200                      404 org-not-found
+listItemParts        pat-deleted-org  401 unauthenticated      401 unauthenticated
 listItemRuns         anonymous        401 unauthenticated      401 unauthenticated
 listItemRuns         owner            200                      404 org-not-found
 listItemRuns         admin            200                      404 org-not-found
