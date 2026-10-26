@@ -25,6 +25,8 @@ export type WorkerEvent =
       cache_read_input_tokens: number;
       cache_creation_input_tokens: number;
     }
+  /** A note a person left on the item during the run, handed to the agent as a user message. */
+  | { type: 'note_delivered'; at: string; note_id: number }
   | Finished;
 
 export interface Finished {

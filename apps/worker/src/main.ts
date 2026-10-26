@@ -80,7 +80,7 @@ async function runAgent(): Promise<number> {
     const spec = parseSpec(await readFile(paths.spec, 'utf8'));
     const files = await readAgentFiles();
     await installSkills();
-    return await runTask(spec, files, { query, emit, now, env: process.env, abortController });
+    return await runTask(spec, files, { query, emit, now, env: process.env, abortController, fetch });
   } catch (err) {
     emit(failed(now, `worker setup: ${err instanceof Error ? err.message : String(err)}`));
     return 1;
