@@ -317,7 +317,7 @@ tasks:
     deps: [tf:credentials]
     cmds:
       - |
-        cd terraform
+        cd deploy/terraform
         {{.TF_ONLINE}}
         out() { terraform output -raw "$1"; }
         GOAL_DATABASE_ADMIN_URL="$(out goal_database_admin_url)"
@@ -327,7 +327,7 @@ tasks:
         GOAL_PG_AUTH_PASSWORD="$(out goal_pg_auth_password)"
         GOAL_MASTER_KEYS="$(sops decrypt --extract '["master_key"]["GOAL_MASTER_KEYS"]' secrets/{{.TF_WORKSPACE_NAME}}.sops.yaml)" # rekey
         export GOAL_DATABASE_ADMIN_URL GOAL_MIGRATE_DATABASE_URL GOAL_PG_OWNER_PASSWORD GOAL_PG_APP_PASSWORD GOAL_PG_AUTH_PASSWORD GOAL_MASTER_KEYS
-        cd ..
+        cd ../..
         go run ./cmd/goal db {{.CLI_ARGS}}
 
   migrate-check:
