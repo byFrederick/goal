@@ -45,7 +45,7 @@ The UI is one product, so its look comes from one design system: [MASTER.md](../
 
 - Test what a person sees and does with Vitest and Testing Library. Tests of markup or internals break on every refactor.
 - Write or update the Playwright specs when a flow changes. They cannot run in the box, so the pull request says so.
-- Run `pnpm --dir web run typecheck`, `lint` and `test` after the last edit.
+- Run `pnpm --dir apps/web run typecheck`, `lint` and `test` after the last edit.
 
 ## Skills
 
