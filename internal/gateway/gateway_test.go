@@ -106,6 +106,23 @@ func newHarness(t *testing.T, cfg Config) *harness {
 type harnessDeps struct {
 	yaml  string
 	files map[string]string
+	// schema, when set, is the output.schema.json of every agent with a contract.
+	schema string
+}
+
+// withSchema is definitions whose agents with a contract get schema as their output schema.
+type withSchema struct {
+	definitions
+	schema []byte
+}
+
+func (d withSchema) AgentFiles(ctx context.Context, id domain.DefinitionVersionID, agent domain.AgentSpec, output string) (map[string][]byte, error) {
+	files, err := d.definitions.AgentFiles(ctx, id, agent, output)
+	if err == nil && output != "" {
+		files["output.schema.json"] = d.schema
+	}
+
+	return files, err
 }
 
 func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
@@ -135,10 +152,19 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 
 	cfg.Key = h.key
 
-	var err error
+	base := definitions{version: load(factoryID), otherVersion: load(otherID)}
+
+	var (
+		defs Definitions = base
+		err  error
+	)
+
+	if d.schema != "" {
+		defs = withSchema{definitions: base, schema: []byte(d.schema)}
+	}
 
 	h.gw, err = New(Deps{
-		Definitions: definitions{version: load(factoryID), otherVersion: load(otherID)},
+		Definitions: defs,
 		Items:       h.store,
 		Connections: h.connections,
 		Events:      h.store,

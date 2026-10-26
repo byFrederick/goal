@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -282,6 +283,75 @@ func TestServeRun_OneGitLoginPerCredential(t *testing.T) {
 
 	if len(got.Git) != 1 || len(got.Spec.Connections) != 2 || got.Spec.Connections[0].Name != "code" {
 		t.Errorf("git credentials %+v and connections %+v; want one login and the agent's two connections in its order", got.Git, got.Spec.Connections)
+	}
+}
+
+// A part never plans an assembly, so its output schema has no plan for structured output to
+// produce; an item that is not a part, and a contract without a plan, get the contract as is.
+func TestServeRun_PartsOutputSchemaHasNoPlan(t *testing.T) {
+	t.Parallel()
+
+	const (
+		withPlan    = `{"type":"object","required":["lane","plan"],"properties":{"lane":{"type":"string"},"plan":{"type":"array"}},"additionalProperties":false}`
+		withoutPlan = `{"type":"object","required":["lane"],"properties":{"lane":{"type":"string"}},"additionalProperties":false}`
+	)
+
+	tests := []struct {
+		name     string
+		contract string
+		part     bool
+		want     string
+	}{
+		{name: "part", contract: withPlan, part: true, want: withoutPlan},
+		{name: "item", contract: withPlan, want: withPlan},
+		{name: "part without a plan", contract: withoutPlan, part: true, want: withoutPlan},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarnessWith(t, Config{}, harnessDeps{yaml: bundleYAML, files: bundleFiles, schema: tt.contract})
+			it := h.submit(t, factoryID, "Add a health endpoint", "")
+			c := h.claims()
+
+			if tt.part {
+				part, err := h.store.CreateItem(domain.WithOrg(t.Context(), c.OrgID), domain.NewItem{
+					FactoryID: factoryID, ParentID: it.ID, Title: "Store", Body: "Add the table.",
+					Station: c.Station, State: domain.StateQueued, CreatedAt: h.clock.Now(),
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				it = part
+			}
+
+			c.ItemID = it.ID
+
+			status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, c))
+			if status != http.StatusOK {
+				t.Fatalf("status = %d, want 200 (%s)", status, body)
+			}
+
+			var got runBundle
+			if err := json.Unmarshal(body, &got); err != nil {
+				t.Fatal(err)
+			}
+
+			var g, w any
+			if err := json.Unmarshal(got.Files["agent/output.schema.json"], &g); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := json.Unmarshal([]byte(tt.want), &w); err != nil {
+				t.Fatal(err)
+			}
+
+			if !reflect.DeepEqual(g, w) {
+				t.Errorf("output schema %s, want %s", got.Files["agent/output.schema.json"], tt.want)
+			}
+		})
 	}
 }
 

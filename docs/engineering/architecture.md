@@ -289,8 +289,8 @@ goal run goal "Add a goal version subcommand"
                            clone and checkout goal/<N>-<slug> (remote branch if it exists, else
                            new), mise install                       → sandbox_started, prepared
       exec goal-agent run  env the model connection's CLAUDE_CODE_OAUTH_TOKEN, the agent's connections'
-                           (GH_TOKEN, …) + GOAL_GATEWAY_TOKEN + GOAL_FEEDBACK (notes, a rejection, the
-                           workspace note); MCP: GitHub's server from the box with ${GH_TOKEN}, Goal's
+                           (GH_TOKEN, …) + GOAL_GATEWAY_TOKEN + GOAL_FEEDBACK (a part's assembly, notes, a
+                           rejection, the workspace note); MCP: GitHub's server from the box with ${GH_TOKEN}, Goal's
                            tools at the gateway via the proxy (task token; gateway_tool_call)
       worker stdout       → events (tool_call, agent_message, …, scrubbed) and the result
       FinishRun           cost and turns on the run and the item

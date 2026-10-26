@@ -371,6 +371,7 @@ func lineOf(stations ...domain.Station) domain.Line {
 	return domain.Line{
 		OrgID:         testOrg,
 		FactoryID:     factoryID,
+		Name:          testFactory,
 		VersionID:     v1,
 		Number:        1,
 		Runtime:       domain.Runtime{Model: "claude-sonnet-5-5", ModelConnection: connModel, MaxTurnsPerTask: 40, PerItemUSD: 3},

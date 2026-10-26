@@ -195,6 +195,10 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 		b.Spec.Skills = append(b.Spec.Skills, sk.Name)
 	}
 
+	if err := forPart(it, agentFiles); err != nil {
+		return runBundle{}, fmt.Errorf("agent %s output schema: %w", agent.Name, err)
+	}
+
 	for p, body := range agentFiles {
 		b.Files[path.Join("agent", p)] = body
 	}
@@ -208,6 +212,67 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 	}
 
 	return b, nil
+}
+
+// outputSchemaFile is the agent file that holds the station contract's JSON Schema.
+const outputSchemaFile = "output.schema.json"
+
+// forPart drops the plan from the output schema in files when it is a part's: a part never plans
+// an assembly (ADR 0012), so its structured output cannot hold one.
+func forPart(it domain.Item, files map[string][]byte) error {
+	schema, ok := files[outputSchemaFile]
+	if !ok || it.ParentID == "" {
+		return nil
+	}
+
+	var err error
+
+	files[outputSchemaFile], err = withoutPlan(schema)
+
+	return err
+}
+
+// withoutPlan is schema without its plan property and plan's entry in required; schema as it is
+// when it has no plan property.
+func withoutPlan(schema []byte) ([]byte, error) {
+	var s map[string]json.RawMessage
+	if err := json.Unmarshal(schema, &s); err != nil {
+		return nil, fmt.Errorf("not a JSON object: %w", err)
+	}
+
+	raw, ok := s["properties"]
+	if !ok {
+		return schema, nil
+	}
+
+	var props map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &props); err != nil {
+		return nil, fmt.Errorf("properties: %w", err)
+	}
+
+	if _, ok := props[domain.PlanField]; !ok {
+		return schema, nil
+	}
+
+	delete(props, domain.PlanField)
+
+	var err error
+	if s["properties"], err = json.Marshal(props); err != nil {
+		return nil, err
+	}
+
+	if raw, ok := s["required"]; ok {
+		var required []string
+		if err := json.Unmarshal(raw, &required); err != nil {
+			return nil, fmt.Errorf("required: %w", err)
+		}
+
+		if s["required"], err = json.Marshal(slices.DeleteFunc(required, func(r string) bool { return r == domain.PlanField })); err != nil {
+			return nil, err
+		}
+	}
+
+	return json.Marshal(s)
 }
 
 // addRepository puts the repository in b with the git login of its connection, which clones it;
