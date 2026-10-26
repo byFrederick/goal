@@ -2631,10 +2631,25 @@ type ItemWaiting struct {
 
 	// Kind after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap)
 	Kind ItemWaitingKind `json:"kind"`
+
+	// Needs The open needs of that kind, oldest edge first, the same ones as items
+	Needs []ItemWaitingNeed `json:"needs"`
 }
 
 // ItemWaitingKind after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap)
 type ItemWaitingKind string
+
+// ItemWaitingNeed One open need that holds a waiting item
+type ItemWaitingNeed struct {
+	// Paths The needed item's file globs, or for an assembly its parts' planned paths (part_paths) by part number, each glob once; empty when none are known
+	Paths []string `json:"paths"`
+
+	// Ref The needed item's <factory name>#<number>
+	Ref string `json:"ref"`
+
+	// Title The needed item's title
+	Title string `json:"title"`
+}
 
 // ItemsAtRemovedStations The open items that keep a publish or restore from dropping stations
 type ItemsAtRemovedStations struct {
