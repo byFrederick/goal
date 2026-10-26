@@ -533,7 +533,8 @@ tasks:
   deploy:worker:
     desc: >-
       wrangler deploy from deploy/cloudflare: builds the goald, auth and goal-agent images with Docker, pushes them to
-      Cloudflare's registry and deploys the control Worker; passes GOAL_BOOTSTRAP_OWNER_EMAIL as a --var when it is set
+      Cloudflare's registry and deploys the control Worker; passes GOAL_BOOTSTRAP_OWNER_EMAIL as a --var when it is set;
+      retries once, only when wrangler timed out preparing the container image on Cloudflare's network
     deps: [worker:install]
     dir: deploy/cloudflare
     preconditions:
@@ -543,12 +544,21 @@ tasks:
         msg: "Docker is not running: wrangler builds the container images with it"
     cmds:
       - |
-        set -eu
+        set -eu -o pipefail
+        set -- deploy
         if [ -n "${GOAL_BOOTSTRAP_OWNER_EMAIL:-}" ]; then
-          pnpm exec wrangler deploy --var "GOAL_BOOTSTRAP_OWNER_EMAIL:$GOAL_BOOTSTRAP_OWNER_EMAIL"
-        else
-          pnpm exec wrangler deploy
+          set -- "$@" --var "GOAL_BOOTSTRAP_OWNER_EMAIL:$GOAL_BOOTSTRAP_OWNER_EMAIL"
         fi
+        # Streams wrangler's output and keeps a copy to look for the one transient failure retried.
+        log=$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/wrangler-deploy.XXXXXX")
+        trap 'rm -f "$log"' EXIT
+        status=0
+        pnpm exec wrangler "$@" 2>&1 | tee "$log" || status=$?
+        if [ "$status" -ne 0 ] && grep -qF "Timed out while preparing the container image on Cloudflare's network" "$log"; then
+          status=0
+          pnpm exec wrangler "$@" 2>&1 | tee "$log" || status=$?
+        fi
+        exit "$status"
 
   deploy:health:
     desc: >-
