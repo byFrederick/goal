@@ -287,7 +287,7 @@ func (s *Store) Assemblies(ctx context.Context, factory domain.FactoryID, ids []
 		var parts []domain.Part
 
 		for _, it := range s.items {
-			if it.OrgID == org && it.ParentID == id {
+			if it.OrgID == org && it.ParentID == id && it.PartKey != "" {
 				parts = append(parts, domain.Part{ID: it.ID, Number: it.Number, Station: it.Station, State: it.State})
 			}
 		}

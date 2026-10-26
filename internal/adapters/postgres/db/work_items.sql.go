@@ -31,7 +31,7 @@ SELECT a.id AS assembly_id, a.number AS assembly_number, a.title AS assembly_tit
        p.id, p.number, p.station, p.state
 FROM work_items p
 JOIN work_items a ON a.id = p.parent_id
-WHERE p.parent_id = ANY ($1::uuid[]) AND a.factory_id = $2
+WHERE p.parent_id = ANY ($1::uuid[]) AND p.part_key IS NOT NULL AND a.factory_id = $2
 ORDER BY a.number, p.number
 `
 
@@ -51,7 +51,8 @@ type AssemblyPartsRow struct {
 }
 
 // The parts of those of the factory's items among ids that have any (work_items_parent_id_idx),
-// each with its assembly's number and title, by assembly then part number.
+// each with its assembly's number and title, by assembly then part number. A part is a child
+// with a part_key, as Parts counts them (ADR 0012).
 func (q *Queries) AssemblyParts(ctx context.Context, arg AssemblyPartsParams) ([]AssemblyPartsRow, error) {
 	rows, err := q.db.Query(ctx, assemblyParts, arg.Ids, arg.FactoryID)
 	if err != nil {
