@@ -1,7 +1,8 @@
 -- Assemblies and their parts (ports.Store Assemble, Parts; migration 00059). Lock order: the
 -- assembly's row before its parts' inserts in Assemble; a part's row before its assembly's when
 -- a part closes (Transition), and parts are created only under their assembly's lock, so the two
--- never wait on each other's rows in opposite orders.
+-- never wait on each other's rows in opposite orders. AddPart locks the factory's row, then the
+-- assembly's, the order of AddEdge (item_edges.sql).
 
 -- name: InsertPart :one
 INSERT INTO work_items (

@@ -34,6 +34,8 @@ type Harness struct {
 	LeaseSpans func(t *testing.T, org domain.OrgID, id domain.ItemID) []domain.LeaseSpan
 	// NewVersion returns a new published definition version of factory of org, for runs to run on.
 	NewVersion func(t *testing.T, org domain.OrgID, factory domain.FactoryID) domain.DefinitionVersionID
+	// Audit reads the audit entries the store writes with its changes.
+	Audit ports.Audit
 }
 
 // Run runs the suite. Tests run in parallel and call newHarness once each; every harness must
@@ -66,6 +68,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Parts_AssemblyClosesOnceWhenTwoLastPartsFinish", testAssemblyClosesOnce},
 		{"Parts_CascadeMovesEveryPartInOneTransaction", testCascadeParts},
 		{"Parts_CascadeRefusedWritesNothing", testCascadeRefused},
+		{"Parts_AddPartQueuedAtTheAssemblysStation", testAddPart},
+		{"Parts_AddPartRefusedWritesNothing", testAddPartRefused},
 		{"Parts_CancelCascadeClosesTheAssemblyCancelled", testCancelCascadeClosesTheAssemblyCancelled},
 		{"HeartbeatLease_FencedByAcquiredAt", testHeartbeat},
 		{"Transition_MovesAndReleases", testTransition},
