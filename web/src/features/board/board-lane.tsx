@@ -46,6 +46,7 @@ export function StationBody({
   onMove: OnMove;
   /** Cards can be dragged (the desktop columns); the phone moves by the Move button only. */
   draggable: boolean;
+  /** The phone's layout: 44 px Move buttons and the list rows, in lanes and without them. */
   compact?: boolean;
 }) {
   const lanes = station.lanes ?? [];
@@ -68,9 +69,10 @@ export function StationBody({
           items={station.items.filter((it) => it.board_lane === lane.key)}
           onMove={onMove}
           draggable={draggable}
+          compact={compact}
         />
       ))}
-      {unclaimed.length > 0 ? <Lane items={unclaimed} onMove={onMove} draggable={draggable} /> : null}
+      {unclaimed.length > 0 ? <Lane items={unclaimed} onMove={onMove} draggable={draggable} compact={compact} /> : null}
     </>
   );
 }
@@ -81,12 +83,14 @@ function Lane({
   items,
   onMove,
   draggable,
+  compact,
 }: {
   /** Undefined for the untitled lane of cards no lane claims. */
   lane?: BoardLane;
   items: ItemCard[];
   onMove: OnMove;
   draggable: boolean;
+  compact: boolean;
 }) {
   const decides = holds(useFactory(), 'item:decide');
   const working = items.filter(
@@ -102,12 +106,22 @@ function Lane({
       {items.length === 0 ? <p className="m-0 px-1 pb-1 text-[13px] text-muted">Nothing to do</p> : null}
       {working.map((it) => (
         <Movable key={it.id} item={it} draggable={draggable}>
-          {(drag) => <WorkCard item={it} decides={decides} onMove={onMove && (() => onMove(it))} drag={drag} />}
+          {(drag) => (
+            <WorkCard item={it} decides={decides} onMove={onMove && (() => onMove(it))} drag={drag} compact={compact} />
+          )}
         </Movable>
       ))}
       {waiting.map((it) => (
         <Movable key={it.id} item={it} draggable={draggable}>
-          {(drag) => <WaitingRow item={it} decides={decides} onMove={onMove && (() => onMove(it))} drag={drag} />}
+          {(drag) => (
+            <WaitingRow
+              item={it}
+              decides={decides}
+              onMove={onMove && (() => onMove(it))}
+              drag={drag}
+              compact={compact}
+            />
+          )}
         </Movable>
       ))}
     </section>
@@ -177,11 +191,13 @@ function WorkCard({
   decides,
   onMove,
   drag,
+  compact,
 }: {
   item: ItemCard;
   decides: boolean;
   onMove: (() => void) | undefined;
   drag: CardDrag | undefined;
+  compact: boolean;
 }) {
   const expedite = isExpedite(item);
   const doing = cardState(item, decides);
@@ -204,7 +220,7 @@ function WorkCard({
         <span>{item.ref}</span>
         <span className="whitespace-nowrap">{formatAge(item.age_seconds)}</span>
       </div>
-      <CardTitle item={item} describedBy={drag?.describedBy} movable={Boolean(onMove)} />
+      <CardTitle item={item} compact={compact} describedBy={drag?.describedBy} movable={Boolean(onMove)} />
       <div className="flex items-end gap-2">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <span className={cn('flex min-w-0 items-center gap-1.5 text-xs', toneText[doing.tone])} title={doing.text}>
@@ -216,7 +232,14 @@ function WorkCard({
             <TouchCount item={item} />
           </div>
         </div>
-        {onMove ? <MoveButton item={item} onMove={onMove} className="-mr-1 -mb-1" /> : null}
+        {onMove ? (
+          <MoveButton
+            item={item}
+            onMove={onMove}
+            size={compact ? 'lg' : 'sm'}
+            className={compact ? '' : '-mr-1 -mb-1'}
+          />
+        ) : null}
       </div>
     </article>
   );
@@ -228,11 +251,13 @@ function WaitingRow({
   decides,
   onMove,
   drag,
+  compact,
 }: {
   item: ItemCard;
   decides: boolean;
   onMove: (() => void) | undefined;
   drag: CardDrag | undefined;
+  compact: boolean;
 }) {
   const reason = cardState(item, decides);
   const status = waitStatus(item);
@@ -258,13 +283,13 @@ function WaitingRow({
       {expedite ? <ExpediteMark /> : null}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-xs text-muted tabular-nums">{item.ref}</span>
-        <CardTitle item={item} describedBy={drag?.describedBy} movable={Boolean(onMove)} />
+        <CardTitle item={item} compact={compact} describedBy={drag?.describedBy} movable={Boolean(onMove)} />
         <span className={cn('flex min-w-0 items-center gap-1.5 text-xs', toneText[reason.tone])} title={reason.text}>
           {status ? <StatusIcon status={status} /> : null}
           <span className="truncate">{reason.text}</span>
         </span>
       </div>
-      {onMove ? <MoveButton item={item} onMove={onMove} /> : null}
+      {onMove ? <MoveButton item={item} onMove={onMove} size={compact ? 'lg' : 'sm'} /> : null}
     </article>
   );
 }

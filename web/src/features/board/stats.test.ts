@@ -4,7 +4,7 @@ import {
   budgetNote,
   cardState,
   columnCount,
-  constraintNote,
+  constraintSentence,
   doingText,
   expediteHeader,
   expediteUse,
@@ -193,12 +193,17 @@ describe('budgetNote', () => {
   });
 });
 
-describe('constraintNote', () => {
-  it('describes the constraint by its busy share and queue, else by what waits in front of it', () => {
-    expect(constraintNote(station({ busy_ratio: 0.94, queue_trend: 'growing' }))).toBe(
-      'The constraint: busy 94%, queue growing',
+describe('constraintSentence', () => {
+  it('names the station and its slots in use against its limit, and what waits', () => {
+    expect(constraintSentence(station({ id: 'build', wip_limit: 6, in_progress: 2, waiting: 3 }))).toBe(
+      'Build is the constraint: 2 of 6 busy, 3 waiting',
     );
-    expect(constraintNote(station({ waiting: 2 }))).toBe('The constraint: 2 items waiting in front of it');
+  });
+
+  it('says busy without a limit', () => {
+    expect(constraintSentence(station({ id: 'build', wip_limit: null, in_progress: 2, waiting: 0 }))).toBe(
+      'Build is the constraint: 2 busy, 0 waiting',
+    );
   });
 });
 

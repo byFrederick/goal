@@ -80,11 +80,10 @@ export function stationNote(s: BoardStation, decides = true): string {
   }
 }
 
-/** The constraint's line on a phone: "The constraint: busy 94%, queue growing". */
-export function constraintNote(s: BoardStation): string {
-  return s.busy_ratio !== null
-    ? `The constraint: busy ${formatPercent(s.busy_ratio)}${trend(s)}`
-    : `The constraint: ${plural(s.waiting, 'item')} waiting in front of it`;
+/** The phone's sentence under the tabs for the constraint: "Build is the constraint: 2 of 6 busy, 3 waiting". */
+export function constraintSentence(s: BoardStation): string {
+  const busy = s.wip_limit !== null ? `${s.in_progress} of ${s.wip_limit} busy` : `${s.in_progress} busy`;
+  return `${humanize(s.id)} is the constraint: ${busy}, ${s.waiting} waiting`;
 }
 
 /**

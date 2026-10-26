@@ -27,20 +27,21 @@ const maxNote = 2000;
 
 /**
  * "Line running" or "Line stopped: <reason>", with a dot that is never the only signal; while the
- * live stream is not connected it says so, since the state shown may be behind. One line (a chip)
- * cuts a long reason; `wrap` lets it take two.
+ * live stream is not connected it says so, since the state shown may be behind. One line: a long
+ * reason is cut, with the full text in `title` (the reason by default).
  */
 export function LineStatus({
   andon,
   suffix,
-  wrap,
+  title,
   className,
 }: {
   /** The line's open pull, or null while it runs. */
   andon: AndonPull | null;
   /** After the status, on the same line when it fits: ", WIP 1 of 2" (keep a phrase whole with a nowrap span). */
   suffix?: ReactNode;
-  wrap?: boolean;
+  /** The full text of the line, for a title attribute; the reason when the line is stopped. */
+  title?: string;
   className?: string;
 }) {
   const stream = useStreamStatus();
@@ -49,10 +50,7 @@ export function LineStatus({
   return (
     <p role="status" className={cn('m-0 flex min-w-0 items-center gap-2', className)}>
       <span aria-hidden="true" className={cn('size-2 shrink-0 rounded-full', andon ? 'bg-rework' : 'bg-ok-dot')} />
-      <span
-        className={cn('min-w-0', wrap ? 'line-clamp-2' : 'truncate', andon && 'text-rework-ink')}
-        title={andon?.reason}
-      >
+      <span className={cn('min-w-0 truncate', andon && 'text-rework-ink')} title={title ?? andon?.reason}>
         {andon ? `Line stopped: ${andon.reason}` : 'Line running'}
         {suffix}
         {stale}
