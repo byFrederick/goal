@@ -1,19 +1,21 @@
-// The Assembly page's header actions (ADR 0012): Pause and Resume act on the assembly's open parts
-// (pauseItem; retryItem sends the blocked parts back), and Cancel assembly cancels them all. Pause
-// asks nothing, as the item page's pause only stops a run; Cancel assembly asks first, since it closes
-// every open part. What the caller may do comes from the factory's `can`: Pause needs item:operate,
+// The Assembly page's header actions (ADR 0012): Add a part opens the dialog that adds one part to
+// the assembly (AddPartDialog). Pause and Resume act on the assembly's open parts (pauseItem; retryItem
+// sends the blocked parts back), and Cancel assembly cancels them all. Pause asks nothing, as the item
+// page's pause only stops a run; Cancel assembly asks first, since it closes every open part. What the
+// caller may do comes from the factory's `can`: Add a part needs item:create, Pause needs item:operate,
 // Resume and Cancel assembly need item:decide (goald refuses the rest).
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Ban, Pause, Play } from 'lucide-react';
+import { Ban, Pause, Play, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError, cancelItem } from '../../api/client';
-import type { AssemblyPart, Factory, Item } from '../../api/types';
+import type { AssemblyPart, BoardLane, Factory, Item } from '../../api/types';
 import { itemChangeInvalidations, useDecision } from '../../shared/item-actions';
 import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { Dialog, DialogClose, DialogContent } from '../../ui/dialog';
+import { AddPartDialog } from './add-part-dialog';
 import { openPartCount, pauseAction } from './assembly-plan';
 
 interface Props {
@@ -22,16 +24,19 @@ interface Props {
   itemKey: string;
   parts: readonly AssemblyPart[];
   factory: Factory;
+  /** The board's lanes of the assembly's station, for the Add a part dialog. */
+  stationLanes: readonly BoardLane[];
 }
 
-/** Pause or Resume, and Cancel assembly, in the page's header; nothing when the caller may do none. */
-export function AssemblyActions({ item, itemKey, parts, factory }: Props) {
+/** Add a part, Pause or Resume, and Cancel assembly, in the page's header; nothing when the caller may do none. */
+export function AssemblyActions({ item, itemKey, parts, factory, stationLanes }: Props) {
   const org = useOrg();
   const client = useQueryClient();
   const decide = useDecision(
     { key: itemKey, ref: item.ref, title: item.title, state: item.state, pull_requests: [] },
     factory.id,
   );
+  const [addOpen, setAddOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const cancel = useMutation({
     mutationFn: () => cancelItem(org.id, itemKey),
@@ -52,10 +57,11 @@ export function AssemblyActions({ item, itemKey, parts, factory }: Props) {
 
   const open = item.state !== 'done' && item.state !== 'cancelled';
   const action = open ? pauseAction(parts) : null;
+  const showAdd = open && holds(factory, 'item:create');
   const showPause = action === 'pause' && holds(factory, 'item:operate');
   const showResume = action === 'resume' && holds(factory, 'item:decide');
   const showCancel = open && holds(factory, 'item:decide');
-  if (!showPause && !showResume && !showCancel) return null;
+  if (!showAdd && !showPause && !showResume && !showCancel) return null;
 
   const pending = decide.isPending ? decide.variables?.kind : undefined;
   const refusal =
@@ -65,6 +71,22 @@ export function AssemblyActions({ item, itemKey, parts, factory }: Props) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      {showAdd ? (
+        <>
+          <Button variant="white" onClick={() => setAddOpen(true)}>
+            <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
+            Add a part
+          </Button>
+          <AddPartDialog
+            open={addOpen}
+            onOpenChange={setAddOpen}
+            factoryId={factory.id}
+            itemKey={itemKey}
+            parts={parts}
+            stationLanes={stationLanes}
+          />
+        </>
+      ) : null}
       {showPause ? (
         <Button
           variant="white"

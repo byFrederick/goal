@@ -23,6 +23,7 @@ import type {
   AndonPull,
   AndonState,
   ApprovalBrief,
+  AssemblyParts,
   AuditPage,
   Board,
   BoardStation,
@@ -1526,7 +1527,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return res.end();
     }
 
-    m = rest.match(/^\/items\/([^/]+)(?:\/(events|runs|notes|approve|reject|merge|retry|move|pause|cancel))?$/);
+    m = rest.match(/^\/items\/([^/]+)(?:\/(events|runs|parts|notes|approve|reject|merge|retry|move|pause|cancel))?$/);
     if (!m) return problem(res, 404, 'Not found', path);
 
     const it = findItem(decodeURIComponent(m[1] ?? ''), org.id);
@@ -1546,6 +1547,11 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       const body: RunList = { runs: runs.slice(0, 200), truncated: runs.length > 200 };
       return json(res, 200, body);
     }
+    // The mock has no assemblies: an item has no parts, and adding one is refused as the API refuses it.
+    if (action === 'parts' && method === 'GET') {
+      const body: AssemblyParts = { done: 0, total: 0, lead_time_seconds: 0, parts: [] };
+      return json(res, 200, body);
+    }
     if (method !== 'POST') return problem(res, 405, 'Method not allowed');
 
     const body = await readBody(req);
@@ -1562,6 +1568,16 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       emit(it, 'note', by, { text, actor: 'user:local' });
       const receipt: NoteReceipt = { event_id: state.nextEventId - 1, delivery: 'next_run' };
       return json(res, 202, receipt);
+    }
+
+    if (action === 'parts') {
+      const title = typeof body.title === 'string' ? body.title.trim() : '';
+      const brief = typeof body.brief === 'string' ? body.brief.trim() : '';
+      if (!title || !brief) return problem(res, 400, 'Bad Request', 'a part needs a title and a brief', 'part-invalid');
+      if (it.state === 'done' || it.state === 'cancelled') {
+        return problem(res, 409, 'Conflict', `${ref(it)} is ${it.state}`, 'item-closed');
+      }
+      return problem(res, 409, 'Conflict', `${ref(it)} is not an assembly`, 'not-an-assembly');
     }
 
     if (action === 'retry') {

@@ -143,7 +143,7 @@ async function renderAssembly(over: { item?: Item; parts?: AssemblyParts; factor
 }
 
 describe('AssemblyPage header', () => {
-  it('shows the assembly label, the key, the title and the brief, and no Add a part', async () => {
+  it('shows the assembly label, the key, the title and the brief, and no Add a part without item:create', async () => {
     await renderAssembly();
 
     expect(screen.getByText('Assembly')).toBeTruthy();
@@ -320,5 +320,29 @@ describe('AssemblyPage actions', () => {
 
     expect((await within(dialog).findByRole('alert')).textContent).toBe('goal#40 is done');
     expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+});
+
+describe('AssemblyPage Add a part action', () => {
+  const creator: Factory = { ...factory, can: ['item:create', 'item:operate', 'item:decide'] };
+
+  it('shows Add a part first among the header actions, before Pause', async () => {
+    await renderAssembly({ factory: creator });
+
+    const add = screen.getByRole('button', { name: 'Add a part' });
+    const pause = screen.getByRole('button', { name: 'Pause' });
+    expect(add.compareDocumentPosition(pause) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('hides Add a part from a caller whose factory role cannot create items', async () => {
+    await renderAssembly({ factory: { ...creator, can: ['item:operate', 'item:decide'] } });
+
+    expect(screen.queryByRole('button', { name: 'Add a part' })).toBeNull();
+  });
+
+  it('hides Add a part on a cancelled assembly', async () => {
+    await renderAssembly({ factory: creator, item: { ...assembly, state: 'cancelled' } });
+
+    expect(screen.queryByRole('button', { name: 'Add a part' })).toBeNull();
   });
 });

@@ -100,6 +100,7 @@ export type {
   NewItem,
   NewKnowledgeSource,
   NewOrg,
+  NewPartRequest,
   NewPersonalToken,
   NoteReceipt,
   Org,

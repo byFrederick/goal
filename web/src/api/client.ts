@@ -37,6 +37,7 @@ import type {
   Metrics,
   NewItem,
   NewOrg,
+  NewPartRequest,
   NoteReceipt,
   Org,
   OrgAttention,
@@ -345,6 +346,11 @@ export function getItem(org: string, item: string, signal?: AbortSignal): Promis
 /** An assembly's parts in plan order (an item that is not an assembly has none). */
 export function getItemParts(org: string, item: string, signal?: AbortSignal): Promise<AssemblyParts> {
   return unwrap(goal.GET(orgPath('/items/{item}/parts'), { params: { path: { org, item } }, ...cancel(signal) }));
+}
+
+/** Adds one part to an open assembly, queued at its station; answers the assembly's parts (the new one last). */
+export function addItemPart(org: string, item: string, body: NewPartRequest): Promise<AssemblyParts> {
+  return unwrap(goal.POST(orgPath('/items/{item}/parts'), { params: { path: { org, item } }, body }));
 }
 
 export function listItemEvents(

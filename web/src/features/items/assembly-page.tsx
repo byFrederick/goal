@@ -259,9 +259,9 @@ function PartsTable({
 }
 
 /**
- * An item in state assembly: the request split into parts (ADR 0012). The header offers Pause (Resume
- * once every open part is blocked) and Cancel assembly, both acting on the open parts (AssemblyActions).
- * Add a part is not offered yet: it waits for an add-part operation.
+ * An item in state assembly: the request split into parts (ADR 0012). The header offers Add a part
+ * (AddPartDialog: one more part, queued at the assembly's station), Pause (Resume once every open part
+ * is blocked) and Cancel assembly, the last two acting on the open parts (AssemblyActions).
  */
 export function AssemblyPage() {
   const factory = useFactory();
@@ -275,6 +275,8 @@ export function AssemblyPage() {
   // page does not wait for it, and the agents' names read as words until it is.
   const board = useQuery({ ...boardQuery(org.id, factory.id), enabled: false }).data;
   const lanes = board?.stations.flatMap((s) => s.lanes ?? []) ?? [];
+  // The station the assembly was planned at: the part Add a part queues there names its agents.
+  const stationLanes = board?.stations.find((s) => s.id === item.station)?.lanes ?? [];
   const boardName = `${factoryTitle(factory)} board`;
 
   return (
@@ -312,7 +314,13 @@ export function AssemblyPage() {
         {item.body ? (
           <p className="m-0 max-w-[820px] text-[15px] leading-relaxed whitespace-pre-wrap text-muted">{item.body}</p>
         ) : null}
-        <AssemblyActions item={item} itemKey={key} parts={assembly.parts} factory={factory} />
+        <AssemblyActions
+          item={item}
+          itemKey={key}
+          parts={assembly.parts}
+          factory={factory}
+          stationLanes={stationLanes}
+        />
       </header>
 
       <div className="flex flex-col gap-4 md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] md:items-start">
