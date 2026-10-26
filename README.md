@@ -105,7 +105,7 @@ Open Goal's address on the phone and sign in, then add it to the home screen:
 - **iPhone and iPad (Safari):** tap Share › Add to Home Screen, then Open as Web App before you tap Add, so Goal opens full screen like an app.
 - **Android (Chrome):** open the menu (⋮) and tap Install app.
 
-Goal then opens from its own icon, full screen, and keeps the phone's status bar and home indicator clear of the content. The icons and manifest are described in [docs/engineering/frontend.md](docs/engineering/frontend.md#pwa).
+Goal then opens from its own icon, full screen, and keeps the phone's status bar and home indicator clear of the content. It works as an installed app: it starts from the cached app shell, and when a new version is deployed the app shows "A new version of Goal is ready" with a Reload action; Reload runs the new version. The icons and manifest are described in [docs/engineering/frontend.md](docs/engineering/frontend.md#pwa).
 
 ## Development
 

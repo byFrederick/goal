@@ -21,6 +21,8 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${port}`,
     browserName: 'chromium',
     reducedMotion: 'reduce',
+    // No worker answers the other specs: page.route and the mock see every request. pwa.spec.ts opts in.
+    serviceWorkers: 'block',
     trace: 'retain-on-failure',
   },
   projects: [
