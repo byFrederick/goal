@@ -95,7 +95,7 @@ routes/       file-based route files (TanStack Router plugin; routeTree.gen.ts i
                                                   ?touches=kind|reason|version groups the Touches panel)
                   /o/$org/f/$factory/board      → Board        (?station= picks the station on phones)
                   /o/$org/f/$factory/items      → Items list   (?state= filters; on phones it opens with Needs you)
-                  /o/$org/f/$factory/items/$ref → Item         ($ref: the number, goal#12 or the id)
+                  /o/$org/f/$factory/items/$ref → Item, or the Assembly page for state assembly ($ref: the number, goal#12 or the id)
                   /o/$org/f/$factory/definition → D's editor: frame + draft session; its index → /definition/line
                   /o/$org/f/$factory/definition/$section → basics|line|agents|connections|review|versions (?mode=yaml, ?station=, ?agent=, …)
                   /o/$org/f/$factory/agents/$agent → Agent     (E12: header, the last 7 days, send-back reasons; D12: Skills, Tool policy, Edit in Definition)
@@ -187,6 +187,16 @@ A board card stays compact in every column, so the board scans as flow: a done i
 ### Moving work
 
 Every board card has a Move button (32 px in the columns, the 44 px arrow on phones and in the compact lanes) and, when focused, the `M` shortcut (`aria-keyshortcuts`); both open the Move menu (`shared/move-menu.tsx`), a dialog listing the line's stations but the item's own and done stations (`shared/move-choices.ts`): upstream ones say they count as rework and require a reason, and an item in progress says its run stops. In the columns, dnd-kit drags a card by pointer (6 px before it starts, so clicks still open the item) or by keyboard (Space picks the focused card up, the left and right arrows carry it a column at a time, Space drops, Escape cancels; screen-reader announcements name the station); a drop on another column opens the same menu with that station chosen, so every move is confirmed. The board moves the card optimistically and puts it back with the problem's detail if goald refuses; while a move is in flight (mutation key `keys.move(org, f)`) the stream leaves that factory's board alone (`heldByMove`), and the move refetches it when it settles, so a refetch cannot put the card back meanwhile. The Item page adds Pause (a dialog with an optional reason), Resume (the retry of a paused item: its latest block is a `paused` event), `Send back to <rework_target>` at any state goald allows, and Move.
+
+### The Assembly page
+
+An item in state `assembly` (ADR 0012) opens the Assembly page instead of the item page: the route's component reads the item and switches on its state (`ItemRoute` in `routes/o.$org.f.$factory.items.$ref.tsx`); every other state keeps `ItemPage`. The loader prefetches `partsQuery` (`listItemParts`) without awaiting it. The page (`features/items/assembly-page.tsx`) shows the header (the Assembly label, the key, the title clamped to two lines, the brief), then:
+
+- **Progress**: one segment per part in plan order, toned done, working or waiting (`barSegments`); "N of M parts merged"; lead time from `lead_time_seconds`; spend as the assembly's cost plus its parts' `cost_usd`, with "of $X" only when `flow.budget.per_item_usd` is set (`spend`: the budget is per item times the parts in all); human touches from `touches.count`; time to finish (`timeToFinish`): the mean lead time of the merged parts times the number of waves that still hold an open part, "—" with no merged part, and no cell once none is open.
+- **Plan**: the parts in waves (`planWaves`, cancelled parts left out). A part being worked is a work card (title clamped to two lines, its station and its agent's role and model from the board lane, `agentLabel`; the board is read only when already loaded, else the agent's name as words). Every other part is a one-line row ending in an ellipsis, named by its status icon (`partStatus`): done is ready, open with `waiting_on` is waiting for those refs.
+- **Parts**: a table in plan order (index "N of M", ref, title, station, state, cost, pull request), each title linking to the part's own item page.
+
+Pause, Cancel assembly and Add a part are not offered: Add a part has no API operation, and Pause and Cancel wait for the cascade (software#33). Board cards do not show assembly lines yet.
 
 ### Organization settings
 
