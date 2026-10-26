@@ -3,6 +3,7 @@ package porttest_test
 import (
 	"errors"
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/byFrederick/goal/internal/domain"
@@ -109,5 +110,74 @@ func TestCodeHost_UpdateBranchUpToDate(t *testing.T) {
 
 	if err := h.UpdateBranch(t.Context(), conn, pr, "moved"); !errors.Is(err, ports.ErrNotMergeable) {
 		t.Errorf("UpdateBranch(up to date, moved head) = %v; want ErrNotMergeable", err)
+	}
+}
+
+// The fake must read heads and compare commits by the port's rules, or engine tests built on it
+// prove nothing.
+func TestCodeHost_BranchHeadAndCompare(t *testing.T) {
+	t.Parallel()
+
+	const repo = "https://github.com/acme/app"
+
+	conn := githubConn()
+	h := porttest.NewCodeHost()
+
+	h.SetBranchHead(repo, "", "c3")
+	h.SetBranchHead(repo, "goal/7-add-x", "f1")
+	h.AddCommits(repo,
+		ports.Commit{SHA: "c1", Subject: "first"},
+		ports.Commit{SHA: "c2", Subject: "second", Files: []string{"go.mod"}},
+	)
+	h.AddCommits(repo, ports.Commit{SHA: "c3", Subject: "third", Files: []string{"docs/a.md", "go.mod"}})
+
+	for _, tt := range []struct{ branch, want string }{{"", "c3"}, {"goal/7-add-x", "f1"}} {
+		if got, err := h.BranchHead(t.Context(), conn, repo, tt.branch); err != nil || got != tt.want {
+			t.Errorf("BranchHead(%q) = %q, %v; want %q", tt.branch, got, err, tt.want)
+		}
+	}
+
+	if _, err := h.BranchHead(t.Context(), conn, repo, "gone"); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("BranchHead(gone) = %v; want ErrNotFound", err)
+	}
+
+	got, err := h.Compare(t.Context(), conn, repo, "c1", "c3")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(got.Commits) != 2 || got.Commits[0].SHA != "c2" || got.Commits[1].SHA != "c3" || got.Truncated ||
+		!slices.Equal(got.Commits[1].Files, []string{"docs/a.md", "go.mod"}) {
+		t.Errorf("Compare(c1, c3) = %+v; want c2 then c3 with their files", got)
+	}
+
+	if got, err := h.Compare(t.Context(), conn, repo, "c3", "c1"); err != nil || len(got.Commits) != 0 {
+		t.Errorf("Compare(c3, c1) = %+v, %v; want no commits", got, err)
+	}
+
+	for _, tt := range []struct{ repo, base, head string }{
+		{repo, "gone", "c3"},
+		{repo, "c1", "gone"},
+		{"https://github.com/acme/other", "c1", "c3"},
+	} {
+		if _, err := h.Compare(t.Context(), conn, tt.repo, tt.base, tt.head); !errors.Is(err, ports.ErrNotFound) {
+			t.Errorf("Compare(%s, %s, %s) = %v; want ErrNotFound", tt.repo, tt.base, tt.head, err)
+		}
+	}
+
+	if _, err := h.BranchHead(t.Context(), conn, "https://gitlab.example.com/acme/app", ""); err == nil {
+		t.Error("BranchHead off the connection's host succeeded; want refused")
+	}
+
+	// Past the cap: the oldest MaxCompareCommits, truncated.
+	const long = "https://github.com/acme/long"
+
+	for i := range ports.MaxCompareCommits + 5 {
+		h.AddCommits(long, ports.Commit{SHA: "l" + strconv.Itoa(i)})
+	}
+
+	got, err = h.Compare(t.Context(), conn, long, "l0", "l"+strconv.Itoa(ports.MaxCompareCommits+4))
+	if err != nil || !got.Truncated || len(got.Commits) != ports.MaxCompareCommits || got.Commits[0].SHA != "l1" {
+		t.Errorf("Compare past the cap = %d commits, truncated %v, %v; want %d from l1, truncated", len(got.Commits), got.Truncated, err, ports.MaxCompareCommits)
 	}
 }

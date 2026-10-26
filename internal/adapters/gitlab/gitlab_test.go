@@ -466,3 +466,23 @@ func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
 		t.Errorf("PullRequest via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", err, leaked)
 	}
 }
+
+// GitLab does not read branch heads or compare commits yet: both say so and send nothing.
+func TestBranchHeadAndCompare_Unsupported(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitLab(t)
+	repo := "https://gitlab.com/acme/platform/app"
+
+	if _, err := c.BranchHead(t.Context(), dotComConn(t), repo, ""); !errors.Is(err, errors.ErrUnsupported) {
+		t.Errorf("BranchHead = %v; want ErrUnsupported", err)
+	}
+
+	if _, err := c.Compare(t.Context(), dotComConn(t), repo, "a1", "b2"); !errors.Is(err, errors.ErrUnsupported) {
+		t.Errorf("Compare = %v; want ErrUnsupported", err)
+	}
+
+	if got := f.sent(); len(got) != 0 {
+		t.Errorf("requests %v; want none", got)
+	}
+}
