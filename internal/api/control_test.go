@@ -13,6 +13,7 @@ const acmeItem1 = "/v1/orgs/acme/items/acme%231"
 const (
 	actMove  = "move"
 	actPause = "pause"
+	actRetry = "retry"
 )
 
 func TestAPI_MoveAndPause(t *testing.T) {
@@ -38,7 +39,7 @@ func TestAPI_MoveAndPause(t *testing.T) {
 		{name: "upstream with a reason", action: actMove, body: `{"to":"inbox","reason":"needs triage"}`, status: http.StatusOK, state: gen.ItemStateQueued},
 		{name: "pause without a body", action: actPause, status: http.StatusOK, state: gen.ItemStateBlocked},
 		{name: "pause again", action: actPause, body: `{"reason":"still"}`, status: http.StatusConflict, code: "already-blocked"},
-		{name: "retry resumes", action: "retry", status: http.StatusOK, state: gen.ItemStateQueued},
+		{name: "retry resumes", action: actRetry, status: http.StatusOK, state: gen.ItemStateQueued},
 	}
 
 	for _, s := range steps {

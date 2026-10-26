@@ -5462,7 +5462,7 @@ type ClientInterface interface {
 
 	// PauseItemWithBody Stop an open item where it is until a retry resumes it
 	//
-	// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+	// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). An assembly stays in state assembly and pauses its open parts instead, in one transaction, each with its own paused event (already-blocked when every open part is). 409 item-closed (done or cancelled), already-blocked or item-changed.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -5471,7 +5471,7 @@ type ClientInterface interface {
 
 	// PauseItem Stop an open item where it is until a retry resumes it
 	//
-	// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+	// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). An assembly stays in state assembly and pauses its open parts instead, in one transaction, each with its own paused event (already-blocked when every open part is). 409 item-closed (done or cancelled), already-blocked or item-changed.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -5497,6 +5497,8 @@ type ClientInterface interface {
 	RejectItem(ctx context.Context, org OrgRef, item ItemRef, body RejectItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RetryItem Send a blocked item back to its station's queue (409 if it is not blocked)
+	//
+	// An assembly stays in state assembly and sends each of its blocked parts back to its station's queue instead, in one transaction, each with its own retried event; 409 when no part is blocked.
 	//
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/retry (the `RetryItem` operationId).
 	RetryItem(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -7538,7 +7540,7 @@ func (c *Client) ListItemParts(ctx context.Context, org OrgRef, item ItemRef, re
 
 // PauseItemWithBody Stop an open item where it is until a retry resumes it
 //
-// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). An assembly stays in state assembly and pauses its open parts instead, in one transaction, each with its own paused event (already-blocked when every open part is). 409 item-closed (done or cancelled), already-blocked or item-changed.
 //
 // Takes any type of body and a specified content type.
 //
@@ -7557,7 +7559,7 @@ func (c *Client) PauseItemWithBody(ctx context.Context, org OrgRef, item ItemRef
 
 // PauseItem Stop an open item where it is until a retry resumes it
 //
-// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). An assembly stays in state assembly and pauses its open parts instead, in one transaction, each with its own paused event (already-blocked when every open part is). 409 item-closed (done or cancelled), already-blocked or item-changed.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -7613,6 +7615,8 @@ func (c *Client) RejectItem(ctx context.Context, org OrgRef, item ItemRef, body 
 }
 
 // RetryItem Send a blocked item back to its station's queue (409 if it is not blocked)
+//
+// An assembly stays in state assembly and sends each of its blocked parts back to its station's queue instead, in one transaction, each with its own retried event; 409 when no part is blocked.
 //
 // Corresponds with POST /v1/orgs/{org}/items/{item}/retry (the `RetryItem` operationId).
 func (c *Client) RetryItem(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -15250,7 +15254,7 @@ type ClientWithResponsesInterface interface {
 
 	// PauseItemWithBodyWithResponse Stop an open item where it is until a retry resumes it
 	//
-	// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+	// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). An assembly stays in state assembly and pauses its open parts instead, in one transaction, each with its own paused event (already-blocked when every open part is). 409 item-closed (done or cancelled), already-blocked or item-changed.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -15259,7 +15263,7 @@ type ClientWithResponsesInterface interface {
 
 	// PauseItemWithResponse Stop an open item where it is until a retry resumes it
 	//
-	// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+	// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). An assembly stays in state assembly and pauses its open parts instead, in one transaction, each with its own paused event (already-blocked when every open part is). 409 item-closed (done or cancelled), already-blocked or item-changed.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -15285,6 +15289,8 @@ type ClientWithResponsesInterface interface {
 	RejectItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body RejectItemJSONRequestBody, reqEditors ...RequestEditorFn) (*RejectItemResponse, error)
 
 	// RetryItemWithResponse Send a blocked item back to its station's queue (409 if it is not blocked)
+	//
+	// An assembly stays in state assembly and sends each of its blocked parts back to its station's queue instead, in one transaction, each with its own retried event; 409 when no part is blocked.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -22429,7 +22435,7 @@ func (c *ClientWithResponses) ListItemPartsWithResponse(ctx context.Context, org
 
 // PauseItemWithBodyWithResponse Stop an open item where it is until a retry resumes it
 //
-// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). An assembly stays in state assembly and pauses its open parts instead, in one transaction, each with its own paused event (already-blocked when every open part is). 409 item-closed (done or cancelled), already-blocked or item-changed.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -22444,7 +22450,7 @@ func (c *ClientWithResponses) PauseItemWithBodyWithResponse(ctx context.Context,
 
 // PauseItemWithResponse Stop an open item where it is until a retry resumes it
 //
-// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). An assembly stays in state assembly and pauses its open parts instead, in one transaction, each with its own paused event (already-blocked when every open part is). 409 item-closed (done or cancelled), already-blocked or item-changed.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -22488,6 +22494,8 @@ func (c *ClientWithResponses) RejectItemWithResponse(ctx context.Context, org Or
 }
 
 // RetryItemWithResponse Send a blocked item back to its station's queue (409 if it is not blocked)
+//
+// An assembly stays in state assembly and sends each of its blocked parts back to its station's queue instead, in one transaction, each with its own retried event; 409 when no part is blocked.
 //
 // Returns a wrapper object for the known response body format(s).
 //

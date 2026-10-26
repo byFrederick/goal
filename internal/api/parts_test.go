@@ -149,6 +149,51 @@ func (h *harness) partItems(t *testing.T, ref, b string) {
 	}
 }
 
+// TestAPI_PauseAndRetryAnAssembly: pausing an assembly blocks its open parts and leaves it an
+// assembly; retrying it sends them back to their queue, the done part untouched. With nothing
+// left to pause or retry, both are conflicts.
+func TestAPI_PauseAndRetryAnAssembly(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	ref := h.partsInFlight(t)
+	item := "/v1/orgs/acme/items/" + url.PathEscape(ref)
+
+	states := func() []gen.ItemState {
+		var out []gen.ItemState
+		for _, p := range h.parts(t, ref).Parts {
+			out = append(out, p.State)
+		}
+
+		return out
+	}
+
+	done, blocked, queued := gen.ItemStateDone, gen.ItemStateBlocked, gen.ItemStateQueued
+	steps := []struct {
+		action, body string
+		status       int
+		parts        []gen.ItemState
+	}{
+		{actPause, `{"reason":"replanning"}`, http.StatusOK, []gen.ItemState{done, blocked, blocked}},
+		{actPause, ``, http.StatusConflict, []gen.ItemState{done, blocked, blocked}},
+		{actRetry, ``, http.StatusOK, []gen.ItemState{done, queued, queued}},
+		{actRetry, ``, http.StatusConflict, []gen.ItemState{done, queued, queued}},
+	}
+
+	for _, s := range steps {
+		var it gen.Item
+
+		code := h.call(t, http.MethodPost, item+"/"+s.action, s.body, &it)
+		if code != s.status || (code == http.StatusOK && it.State != gen.ItemStateAssembly) {
+			t.Fatalf("%s of the assembly = %d, state %q; want %d and assembly", s.action, code, it.State, s.status)
+		}
+
+		if got := states(); !reflect.DeepEqual(got, s.parts) {
+			t.Errorf("parts after %s (%d) = %v; want %v", s.action, s.status, got, s.parts)
+		}
+	}
+}
+
 // A part's item read names its assembly with its place among the parts in plan order, from one
 // read of the parts; a mutation's answer names its key without reading them, and neither a plain
 // item nor an assembly is part of one.

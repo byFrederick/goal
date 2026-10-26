@@ -23,6 +23,7 @@ import {
   getFactoryOverview,
   getInbox,
   getItem,
+  getItemParts,
   getLeadTime,
   getMe,
   getMetrics,
@@ -185,6 +186,7 @@ export const keys = {
   item: (org: string, item: string) => ['org', org, 'item', item] as const,
   events: (org: string, item: string) => ['org', org, 'item', item, 'events'] as const,
   runs: (org: string, item: string) => ['org', org, 'item', item, 'runs'] as const,
+  parts: (org: string, item: string) => ['org', org, 'item', item, 'parts'] as const,
 };
 
 /** Fixed while the app runs: goald's GOAL_AUTH changes only with a restart. */
@@ -425,6 +427,10 @@ export const itemsQuery = (org: string, factory: string, filter: ItemFilter) =>
 
 export const itemQuery = (org: string, item: string) =>
   queryOptions({ queryKey: keys.item(org, item), queryFn: ({ signal }) => getItem(org, item, signal) });
+
+/** An assembly's parts: under the item's key, so the stream's item events refresh them. */
+export const partsQuery = (org: string, item: string) =>
+  queryOptions({ queryKey: keys.parts(org, item), queryFn: ({ signal }) => getItemParts(org, item, signal) });
 
 /**
  * The definitions keys (B §10): under the factory's prefix (by id), beside its work keys, which

@@ -16,6 +16,7 @@ import { sessionHandlers, withSession } from './session';
 import type {
   AgentStats,
   AndonPull,
+  AssemblyParts,
   AuthConfig,
   Board,
   ConstraintReport,
@@ -339,6 +340,11 @@ export function listItems(org: string, factory: string, filter: ItemFilter, sign
 /** `item` is an id or a `<factory>#<number>` ref. */
 export function getItem(org: string, item: string, signal?: AbortSignal): Promise<Item> {
   return unwrap(goal.GET(orgPath('/items/{item}'), { params: { path: { org, item } }, ...cancel(signal) }));
+}
+
+/** An assembly's parts in plan order (an item that is not an assembly has none). */
+export function getItemParts(org: string, item: string, signal?: AbortSignal): Promise<AssemblyParts> {
+  return unwrap(goal.GET(orgPath('/items/{item}/parts'), { params: { path: { org, item } }, ...cancel(signal) }));
 }
 
 export function listItemEvents(
