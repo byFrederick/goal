@@ -537,6 +537,27 @@ func (e InboxEntryKind) Valid() bool {
 	}
 }
 
+// Defines values for ItemLinkKind.
+const (
+	Linked  ItemLinkKind = "linked"
+	Overlap ItemLinkKind = "overlap"
+	Planned ItemLinkKind = "planned"
+)
+
+// Valid indicates whether the value is a known member of the ItemLinkKind enum.
+func (e ItemLinkKind) Valid() bool {
+	switch e {
+	case Linked:
+		return true
+	case Overlap:
+		return true
+	case Planned:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ItemState.
 const (
 	ItemStateAssembly     ItemState = "assembly"
@@ -2356,14 +2377,20 @@ type Item struct {
 	ClassOfService ClassOfService `json:"class_of_service"`
 	CostUsd        float64        `json:"cost_usd"`
 	CreatedAt      time.Time      `json:"created_at"`
-	DoneAt         *time.Time     `json:"done_at,omitempty"`
-	FactoryId      string         `json:"factory_id"`
+
+	// Dependents The items that need this item, oldest edge first; getItem only
+	Dependents *[]ItemLink `json:"dependents,omitempty"`
+	DoneAt     *time.Time  `json:"done_at,omitempty"`
+	FactoryId  string      `json:"factory_id"`
 
 	// Flow How the item flows, on GET of one item only
-	Flow   *ItemFlow `json:"flow,omitempty"`
-	Id     string    `json:"id"`
-	Lane   *string   `json:"lane,omitempty"`
-	Number int64     `json:"number"`
+	Flow *ItemFlow `json:"flow,omitempty"`
+	Id   string    `json:"id"`
+	Lane *string   `json:"lane,omitempty"`
+
+	// Needs The items this item needs, oldest edge first; getItem only
+	Needs  *[]ItemLink `json:"needs,omitempty"`
+	Number int64       `json:"number"`
 
 	// Outputs Each station's output, by station id
 	Outputs  map[string]interface{} `json:"outputs"`
@@ -2409,6 +2436,9 @@ type ItemBudget struct {
 
 // ItemCard An item as boards and lists show it
 type ItemCard struct {
+	// Activity While its run runs, one short line (at most 80 characters) from the run's latest tool call, credential-shaped text replaced by ***: "Editing <path>", "Running <command>", "Reading <path>", "Searching <pattern>" or "Using <tool>"; absent or null when no run runs or it has called no tool yet
+	Activity *string `json:"activity,omitempty"`
+
 	// AgeSeconds Seconds since the item was created; for a done item, from created to done
 	AgeSeconds int64 `json:"age_seconds"`
 
@@ -2432,6 +2462,9 @@ type ItemCard struct {
 
 	// Parts For an assembly (an item with parts), where its parts stand; absent or null for any other item
 	Parts *PartsSummary `json:"parts,omitempty"`
+
+	// PlanSteps While its run runs, how far it is through its latest todo list (its latest TodoWrite call); absent or null when no run runs, it has listed no todos or the list did not parse (the worker cuts long tool input)
+	PlanSteps *PlanSteps `json:"plan_steps,omitempty"`
 
 	// PrUrl The pull request the item's latest station output names, else null
 	PrUrl *string `json:"pr_url"`
@@ -2483,6 +2516,30 @@ type ItemFlow struct {
 	// TargetSeconds The lead time the item is measured against (the expedite target for expedite items, the line's lead-time target otherwise), or null without one
 	TargetSeconds *int64 `json:"target_seconds"`
 }
+
+// ItemLink One end of a dependency between two items, seen from the other end
+type ItemLink struct {
+	// At When the edge was added
+	At time.Time `json:"at"`
+
+	// By The edge's author, as an actor ref (<kind>:<id>, as in user:<id> or agent:<id>)
+	By string `json:"by"`
+
+	// Id The other item's id
+	Id string `json:"id"`
+
+	// Kind planned by whoever split the work, linked by a person, or overlap (their files overlap)
+	Kind ItemLinkKind `json:"kind"`
+
+	// Ref The other item's <factory name>#<number>
+	Ref string `json:"ref"`
+
+	// State assembly: the item was split into parts (its children) and closes when they are; never claimed (ADR 0012)
+	State ItemState `json:"state"`
+}
+
+// ItemLinkKind planned by whoever split the work, linked by a person, or overlap (their files overlap)
+type ItemLinkKind string
 
 // ItemPage defines model for ItemPage.
 type ItemPage struct {
@@ -3001,6 +3058,12 @@ type NewKnowledgeSource struct {
 	Title            string `json:"title"`
 }
 
+// NewLink defines model for NewLink.
+type NewLink struct {
+	// Needs The needed item's id (a UUID) or <factory>#<number>, as in goal#2; an item of the same factory
+	Needs string `json:"needs"`
+}
+
 // NewNote defines model for NewNote.
 type NewNote struct {
 	// Text What the agent should know, 1 to 2000 characters (surrounding space is trimmed)
@@ -3240,6 +3303,15 @@ type PersonalToken struct {
 // PersonalTokenList defines model for PersonalTokenList.
 type PersonalTokenList struct {
 	Tokens []PersonalToken `json:"tokens"`
+}
+
+// PlanSteps The todos a running run completed of all it listed ("2 of 5 steps")
+type PlanSteps struct {
+	// Done Todos completed
+	Done int `json:"done"`
+
+	// Total Todos listed
+	Total int `json:"total"`
 }
 
 // PlatformAdmin defines model for PlatformAdmin.
@@ -4301,6 +4373,9 @@ type MergeItemJSONRequestBody = MergeRequest
 // MoveItemJSONRequestBody defines body for MoveItem for application/json ContentType.
 type MoveItemJSONRequestBody = MoveRequest
 
+// LinkItemJSONRequestBody defines body for LinkItem for application/json ContentType.
+type LinkItemJSONRequestBody = NewLink
+
 // NoteItemJSONRequestBody defines body for NoteItem for application/json ContentType.
 type NoteItemJSONRequestBody = NewNote
 
@@ -5335,6 +5410,31 @@ type ClientInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/move (the `MoveItem` operationId).
 	MoveItem(ctx context.Context, org OrgRef, item ItemRef, body MoveItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// LinkItemWithBody Say that an item needs another, so it is not claimed until that one is done or cancelled
+	//
+	// Adds a dependency of kind linked by the caller (ADR 0012) and records an edge_added event on the item; people cannot add planned or overlap edges. Problems: 404 item-not-found for either item when it is unknown or the caller cannot read it; 400 edge-invalid for an item that needs itself or an item of another factory; 409 edge-cycle when the needed item already needs this one, directly or through others; 409 edge-exists when the item already needs it; 409 item-closed for a done or cancelled item.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/needs (the `LinkItem` operationId).
+	LinkItemWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// LinkItem Say that an item needs another, so it is not claimed until that one is done or cancelled
+	//
+	// Adds a dependency of kind linked by the caller (ADR 0012) and records an edge_added event on the item; people cannot add planned or overlap edges. Problems: 404 item-not-found for either item when it is unknown or the caller cannot read it; 400 edge-invalid for an item that needs itself or an item of another factory; 409 edge-cycle when the needed item already needs this one, directly or through others; 409 edge-exists when the item already needs it; 409 item-closed for a done or cancelled item.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/needs (the `LinkItem` operationId).
+	LinkItem(ctx context.Context, org OrgRef, item ItemRef, body LinkItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UnlinkItem Say that an item no longer needs another
+	//
+	// Removes the dependency, whatever its kind, and records an edge_removed event on the item. Problems: 404 item-not-found for either item when it is unknown or the caller cannot read it; 404 edge-not-found when the item does not need it; 409 item-closed for a done or cancelled item.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/items/{item}/needs/{need} (the `UnlinkItem` operationId).
+	UnlinkItem(ctx context.Context, org OrgRef, item ItemRef, need string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// NoteItemWithBody Leave a note for the agents working an item
 	//
 	// The note is recorded as the item's event (kind note) and carried by the brief of the item's next run, at whatever station, under "Notes from people". A note on a done or cancelled item is refused with 409 item-closed.
@@ -5362,7 +5462,7 @@ type ClientInterface interface {
 
 	// PauseItemWithBody Stop an open item where it is until a retry resumes it
 	//
-	// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+	// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). An assembly stays in state assembly and pauses its open parts instead, in one transaction, each with its own paused event (already-blocked when every open part is). 409 item-closed (done or cancelled), already-blocked or item-changed.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -5371,7 +5471,7 @@ type ClientInterface interface {
 
 	// PauseItem Stop an open item where it is until a retry resumes it
 	//
-	// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+	// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). An assembly stays in state assembly and pauses its open parts instead, in one transaction, each with its own paused event (already-blocked when every open part is). 409 item-closed (done or cancelled), already-blocked or item-changed.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -5397,6 +5497,8 @@ type ClientInterface interface {
 	RejectItem(ctx context.Context, org OrgRef, item ItemRef, body RejectItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RetryItem Send a blocked item back to its station's queue (409 if it is not blocked)
+	//
+	// An assembly stays in state assembly and sends each of its blocked parts back to its station's queue instead, in one transaction, each with its own retried event; 409 when no part is blocked.
 	//
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/retry (the `RetryItem` operationId).
 	RetryItem(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -7326,6 +7428,61 @@ func (c *Client) MoveItem(ctx context.Context, org OrgRef, item ItemRef, body Mo
 	return c.Client.Do(req)
 }
 
+// LinkItemWithBody Say that an item needs another, so it is not claimed until that one is done or cancelled
+//
+// Adds a dependency of kind linked by the caller (ADR 0012) and records an edge_added event on the item; people cannot add planned or overlap edges. Problems: 404 item-not-found for either item when it is unknown or the caller cannot read it; 400 edge-invalid for an item that needs itself or an item of another factory; 409 edge-cycle when the needed item already needs this one, directly or through others; 409 edge-exists when the item already needs it; 409 item-closed for a done or cancelled item.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/needs (the `LinkItem` operationId).
+func (c *Client) LinkItemWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewLinkItemRequestWithBody(c.Server, org, item, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// LinkItem Say that an item needs another, so it is not claimed until that one is done or cancelled
+//
+// Adds a dependency of kind linked by the caller (ADR 0012) and records an edge_added event on the item; people cannot add planned or overlap edges. Problems: 404 item-not-found for either item when it is unknown or the caller cannot read it; 400 edge-invalid for an item that needs itself or an item of another factory; 409 edge-cycle when the needed item already needs this one, directly or through others; 409 edge-exists when the item already needs it; 409 item-closed for a done or cancelled item.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/needs (the `LinkItem` operationId).
+func (c *Client) LinkItem(ctx context.Context, org OrgRef, item ItemRef, body LinkItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewLinkItemRequest(c.Server, org, item, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UnlinkItem Say that an item no longer needs another
+//
+// Removes the dependency, whatever its kind, and records an edge_removed event on the item. Problems: 404 item-not-found for either item when it is unknown or the caller cannot read it; 404 edge-not-found when the item does not need it; 409 item-closed for a done or cancelled item.
+//
+// Corresponds with DELETE /v1/orgs/{org}/items/{item}/needs/{need} (the `UnlinkItem` operationId).
+func (c *Client) UnlinkItem(ctx context.Context, org OrgRef, item ItemRef, need string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUnlinkItemRequest(c.Server, org, item, need)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // NoteItemWithBody Leave a note for the agents working an item
 //
 // The note is recorded as the item's event (kind note) and carried by the brief of the item's next run, at whatever station, under "Notes from people". A note on a done or cancelled item is refused with 409 item-closed.
@@ -7383,7 +7540,7 @@ func (c *Client) ListItemParts(ctx context.Context, org OrgRef, item ItemRef, re
 
 // PauseItemWithBody Stop an open item where it is until a retry resumes it
 //
-// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). An assembly stays in state assembly and pauses its open parts instead, in one transaction, each with its own paused event (already-blocked when every open part is). 409 item-closed (done or cancelled), already-blocked or item-changed.
 //
 // Takes any type of body and a specified content type.
 //
@@ -7402,7 +7559,7 @@ func (c *Client) PauseItemWithBody(ctx context.Context, org OrgRef, item ItemRef
 
 // PauseItem Stop an open item where it is until a retry resumes it
 //
-// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). An assembly stays in state assembly and pauses its open parts instead, in one transaction, each with its own paused event (already-blocked when every open part is). 409 item-closed (done or cancelled), already-blocked or item-changed.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -7458,6 +7615,8 @@ func (c *Client) RejectItem(ctx context.Context, org OrgRef, item ItemRef, body 
 }
 
 // RetryItem Send a blocked item back to its station's queue (409 if it is not blocked)
+//
+// An assembly stays in state assembly and sends each of its blocked parts back to its station's queue instead, in one transaction, each with its own retried event; 409 when no part is blocked.
 //
 // Corresponds with POST /v1/orgs/{org}/items/{item}/retry (the `RetryItem` operationId).
 func (c *Client) RetryItem(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -12163,6 +12322,108 @@ func NewMoveItemRequestWithBody(server string, org OrgRef, item ItemRef, content
 	return req, nil
 }
 
+// NewLinkItemRequest calls the generic LinkItem builder with application/json body
+func NewLinkItemRequest(server string, org OrgRef, item ItemRef, body LinkItemJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewLinkItemRequestWithBody(server, org, item, "application/json", bodyReader)
+}
+
+// NewLinkItemRequestWithBody constructs an http.Request for the LinkItem method, with any body, and a specified content type
+func NewLinkItemRequestWithBody(server string, org OrgRef, item ItemRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/needs", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewUnlinkItemRequest constructs an http.Request for the UnlinkItem method
+func NewUnlinkItemRequest(server string, org OrgRef, item ItemRef, need string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "need", need, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/needs/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewNoteItemRequest calls the generic NoteItem builder with application/json body
 func NewNoteItemRequest(server string, org OrgRef, item ItemRef, body NoteItemJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -14937,6 +15198,33 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/move (the `MoveItem` operationId).
 	MoveItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body MoveItemJSONRequestBody, reqEditors ...RequestEditorFn) (*MoveItemResponse, error)
 
+	// LinkItemWithBodyWithResponse Say that an item needs another, so it is not claimed until that one is done or cancelled
+	//
+	// Adds a dependency of kind linked by the caller (ADR 0012) and records an edge_added event on the item; people cannot add planned or overlap edges. Problems: 404 item-not-found for either item when it is unknown or the caller cannot read it; 400 edge-invalid for an item that needs itself or an item of another factory; 409 edge-cycle when the needed item already needs this one, directly or through others; 409 edge-exists when the item already needs it; 409 item-closed for a done or cancelled item.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/needs (the `LinkItem` operationId).
+	LinkItemWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*LinkItemResponse, error)
+
+	// LinkItemWithResponse Say that an item needs another, so it is not claimed until that one is done or cancelled
+	//
+	// Adds a dependency of kind linked by the caller (ADR 0012) and records an edge_added event on the item; people cannot add planned or overlap edges. Problems: 404 item-not-found for either item when it is unknown or the caller cannot read it; 400 edge-invalid for an item that needs itself or an item of another factory; 409 edge-cycle when the needed item already needs this one, directly or through others; 409 edge-exists when the item already needs it; 409 item-closed for a done or cancelled item.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/needs (the `LinkItem` operationId).
+	LinkItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body LinkItemJSONRequestBody, reqEditors ...RequestEditorFn) (*LinkItemResponse, error)
+
+	// UnlinkItemWithResponse Say that an item no longer needs another
+	//
+	// Removes the dependency, whatever its kind, and records an edge_removed event on the item. Problems: 404 item-not-found for either item when it is unknown or the caller cannot read it; 404 edge-not-found when the item does not need it; 409 item-closed for a done or cancelled item.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/items/{item}/needs/{need} (the `UnlinkItem` operationId).
+	UnlinkItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, need string, reqEditors ...RequestEditorFn) (*UnlinkItemResponse, error)
+
 	// NoteItemWithBodyWithResponse Leave a note for the agents working an item
 	//
 	// The note is recorded as the item's event (kind note) and carried by the brief of the item's next run, at whatever station, under "Notes from people". A note on a done or cancelled item is refused with 409 item-closed.
@@ -14966,7 +15254,7 @@ type ClientWithResponsesInterface interface {
 
 	// PauseItemWithBodyWithResponse Stop an open item where it is until a retry resumes it
 	//
-	// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+	// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). An assembly stays in state assembly and pauses its open parts instead, in one transaction, each with its own paused event (already-blocked when every open part is). 409 item-closed (done or cancelled), already-blocked or item-changed.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -14975,7 +15263,7 @@ type ClientWithResponsesInterface interface {
 
 	// PauseItemWithResponse Stop an open item where it is until a retry resumes it
 	//
-	// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+	// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). An assembly stays in state assembly and pauses its open parts instead, in one transaction, each with its own paused event (already-blocked when every open part is). 409 item-closed (done or cancelled), already-blocked or item-changed.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -15001,6 +15289,8 @@ type ClientWithResponsesInterface interface {
 	RejectItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body RejectItemJSONRequestBody, reqEditors ...RequestEditorFn) (*RejectItemResponse, error)
 
 	// RetryItemWithResponse Send a blocked item back to its station's queue (409 if it is not blocked)
+	//
+	// An assembly stays in state assembly and sends each of its blocked parts back to its station's queue instead, in one transaction, each with its own retried event; 409 when no part is blocked.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -18766,6 +19056,95 @@ func (r MoveItemResponse) ContentType() string {
 	return ""
 }
 
+type LinkItemResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *ItemLink
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r LinkItemResponse) GetJSON201() *ItemLink {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r LinkItemResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r LinkItemResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r LinkItemResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r LinkItemResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r LinkItemResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UnlinkItemResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r UnlinkItemResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r UnlinkItemResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UnlinkItemResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UnlinkItemResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UnlinkItemResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type NoteItemResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -21964,6 +22343,51 @@ func (c *ClientWithResponses) MoveItemWithResponse(ctx context.Context, org OrgR
 	return ParseMoveItemResponse(rsp)
 }
 
+// LinkItemWithBodyWithResponse Say that an item needs another, so it is not claimed until that one is done or cancelled
+//
+// Adds a dependency of kind linked by the caller (ADR 0012) and records an edge_added event on the item; people cannot add planned or overlap edges. Problems: 404 item-not-found for either item when it is unknown or the caller cannot read it; 400 edge-invalid for an item that needs itself or an item of another factory; 409 edge-cycle when the needed item already needs this one, directly or through others; 409 edge-exists when the item already needs it; 409 item-closed for a done or cancelled item.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/needs (the `LinkItem` operationId).
+func (c *ClientWithResponses) LinkItemWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*LinkItemResponse, error) {
+	rsp, err := c.LinkItemWithBody(ctx, org, item, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseLinkItemResponse(rsp)
+}
+
+// LinkItemWithResponse Say that an item needs another, so it is not claimed until that one is done or cancelled
+//
+// Adds a dependency of kind linked by the caller (ADR 0012) and records an edge_added event on the item; people cannot add planned or overlap edges. Problems: 404 item-not-found for either item when it is unknown or the caller cannot read it; 400 edge-invalid for an item that needs itself or an item of another factory; 409 edge-cycle when the needed item already needs this one, directly or through others; 409 edge-exists when the item already needs it; 409 item-closed for a done or cancelled item.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/needs (the `LinkItem` operationId).
+func (c *ClientWithResponses) LinkItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body LinkItemJSONRequestBody, reqEditors ...RequestEditorFn) (*LinkItemResponse, error) {
+	rsp, err := c.LinkItem(ctx, org, item, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseLinkItemResponse(rsp)
+}
+
+// UnlinkItemWithResponse Say that an item no longer needs another
+//
+// Removes the dependency, whatever its kind, and records an edge_removed event on the item. Problems: 404 item-not-found for either item when it is unknown or the caller cannot read it; 404 edge-not-found when the item does not need it; 409 item-closed for a done or cancelled item.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/items/{item}/needs/{need} (the `UnlinkItem` operationId).
+func (c *ClientWithResponses) UnlinkItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, need string, reqEditors ...RequestEditorFn) (*UnlinkItemResponse, error) {
+	rsp, err := c.UnlinkItem(ctx, org, item, need, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUnlinkItemResponse(rsp)
+}
+
 // NoteItemWithBodyWithResponse Leave a note for the agents working an item
 //
 // The note is recorded as the item's event (kind note) and carried by the brief of the item's next run, at whatever station, under "Notes from people". A note on a done or cancelled item is refused with 409 item-closed.
@@ -22011,7 +22435,7 @@ func (c *ClientWithResponses) ListItemPartsWithResponse(ctx context.Context, org
 
 // PauseItemWithBodyWithResponse Stop an open item where it is until a retry resumes it
 //
-// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). An assembly stays in state assembly and pauses its open parts instead, in one transaction, each with its own paused event (already-blocked when every open part is). 409 item-closed (done or cancelled), already-blocked or item-changed.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -22026,7 +22450,7 @@ func (c *ClientWithResponses) PauseItemWithBodyWithResponse(ctx context.Context,
 
 // PauseItemWithResponse Stop an open item where it is until a retry resumes it
 //
-// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+// The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). An assembly stays in state assembly and pauses its open parts instead, in one transaction, each with its own paused event (already-blocked when every open part is). 409 item-closed (done or cancelled), already-blocked or item-changed.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -22070,6 +22494,8 @@ func (c *ClientWithResponses) RejectItemWithResponse(ctx context.Context, org Or
 }
 
 // RetryItemWithResponse Send a blocked item back to its station's queue (409 if it is not blocked)
+//
+// An assembly stays in state assembly and sends each of its blocked parts back to its station's queue instead, in one transaction, each with its own retried event; 409 when no part is blocked.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -25084,6 +25510,68 @@ func ParseMoveItemResponse(rsp *http.Response) (*MoveItemResponse, error) {
 	return response, nil
 }
 
+// ParseLinkItemResponse parses an HTTP response from a LinkItemWithResponse call
+func ParseLinkItemResponse(rsp *http.Response) (*LinkItemResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &LinkItemResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest ItemLink
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUnlinkItemResponse parses an HTTP response from a UnlinkItemWithResponse call
+func ParseUnlinkItemResponse(rsp *http.Response) (*UnlinkItemResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UnlinkItemResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseNoteItemResponse parses an HTTP response from a NoteItemWithResponse call
 func ParseNoteItemResponse(rsp *http.Response) (*NoteItemResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -26606,6 +27094,12 @@ type ServerInterface interface {
 	// MoveItem Put an item at another station of its line
 	// (POST /v1/orgs/{org}/items/{item}/move)
 	MoveItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
+	// LinkItem Say that an item needs another, so it is not claimed until that one is done or cancelled
+	// (POST /v1/orgs/{org}/items/{item}/needs)
+	LinkItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
+	// UnlinkItem Say that an item no longer needs another
+	// (DELETE /v1/orgs/{org}/items/{item}/needs/{need})
+	UnlinkItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef, need string)
 	// NoteItem Leave a note for the agents working an item
 	// (POST /v1/orgs/{org}/items/{item}/notes)
 	NoteItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
@@ -29844,6 +30338,85 @@ func (siw *ServerInterfaceWrapper) MoveItem(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// LinkItem operation middleware
+func (siw *ServerInterfaceWrapper) LinkItem(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item" -------------
+	var item ItemRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item", r.PathValue("item"), &item, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.LinkItem(w, r, org, item)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UnlinkItem operation middleware
+func (siw *ServerInterfaceWrapper) UnlinkItem(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item" -------------
+	var item ItemRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item", r.PathValue("item"), &item, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "need" -------------
+	var need string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "need", r.PathValue("need"), &need, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "need", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UnlinkItem(w, r, org, item, need)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // NoteItem operation middleware
 func (siw *ServerInterfaceWrapper) NoteItem(w http.ResponseWriter, r *http.Request) {
 
@@ -31481,6 +32054,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/parts", wrapper.ListItemParts)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/runs", wrapper.ListItemRuns)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/notes", wrapper.NoteItem)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/needs", wrapper.LinkItem)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/needs/{need}", wrapper.UnlinkItem)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/touches/{event}/reason", wrapper.SetTouchReason)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs/{run}", wrapper.GetRun)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/approve", wrapper.ApproveItem)
@@ -34376,6 +34951,82 @@ func (response MoveItemdefaultApplicationProblemPlusJSONResponse) VisitMoveItemR
 	return err
 }
 
+type LinkItemRequestObject struct {
+	Org  OrgRef  `json:"org"`
+	Item ItemRef `json:"item"`
+	Body *LinkItemJSONRequestBody
+}
+
+type LinkItemResponseObject interface {
+	VisitLinkItemResponse(w http.ResponseWriter) error
+}
+
+type LinkItem201JSONResponse ItemLink
+
+func (response LinkItem201JSONResponse) VisitLinkItemResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkItemdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response LinkItemdefaultApplicationProblemPlusJSONResponse) VisitLinkItemResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnlinkItemRequestObject struct {
+	Org  OrgRef  `json:"org"`
+	Item ItemRef `json:"item"`
+	Need string  `json:"need"`
+}
+
+type UnlinkItemResponseObject interface {
+	VisitUnlinkItemResponse(w http.ResponseWriter) error
+}
+
+type UnlinkItem204Response struct {
+}
+
+func (response UnlinkItem204Response) VisitUnlinkItemResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type UnlinkItemdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UnlinkItemdefaultApplicationProblemPlusJSONResponse) VisitUnlinkItemResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type NoteItemRequestObject struct {
 	Org  OrgRef  `json:"org"`
 	Item ItemRef `json:"item"`
@@ -36196,6 +36847,12 @@ type StrictServerInterface interface {
 	// MoveItem Put an item at another station of its line
 	// (POST /v1/orgs/{org}/items/{item}/move)
 	MoveItem(ctx context.Context, request MoveItemRequestObject) (MoveItemResponseObject, error)
+	// LinkItem Say that an item needs another, so it is not claimed until that one is done or cancelled
+	// (POST /v1/orgs/{org}/items/{item}/needs)
+	LinkItem(ctx context.Context, request LinkItemRequestObject) (LinkItemResponseObject, error)
+	// UnlinkItem Say that an item no longer needs another
+	// (DELETE /v1/orgs/{org}/items/{item}/needs/{need})
+	UnlinkItem(ctx context.Context, request UnlinkItemRequestObject) (UnlinkItemResponseObject, error)
 	// NoteItem Leave a note for the agents working an item
 	// (POST /v1/orgs/{org}/items/{item}/notes)
 	NoteItem(ctx context.Context, request NoteItemRequestObject) (NoteItemResponseObject, error)
@@ -38424,6 +39081,68 @@ func (sh *strictHandler) MoveItem(w http.ResponseWriter, r *http.Request, org Or
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(MoveItemResponseObject); ok {
 		if err := validResponse.VisitMoveItemResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// LinkItem operation middleware
+func (sh *strictHandler) LinkItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
+	var request LinkItemRequestObject
+
+	request.Org = org
+	request.Item = item
+
+	var body LinkItemJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.LinkItem(ctx, request.(LinkItemRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "LinkItem")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(LinkItemResponseObject); ok {
+		if err := validResponse.VisitLinkItemResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UnlinkItem operation middleware
+func (sh *strictHandler) UnlinkItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef, need string) {
+	var request UnlinkItemRequestObject
+
+	request.Org = org
+	request.Item = item
+	request.Need = need
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UnlinkItem(ctx, request.(UnlinkItemRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UnlinkItem")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UnlinkItemResponseObject); ok {
+		if err := validResponse.VisitUnlinkItemResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

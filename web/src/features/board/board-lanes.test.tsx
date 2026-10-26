@@ -222,6 +222,65 @@ describe('board lanes', () => {
     expect(within(card).queryByText(/touch/)).toBeNull();
   });
 
+  it('says what the run is doing now on a work card, its working icon and one truncated line', async () => {
+    const doing = item({ ...workItem, activity: 'Editing src/checkout/handler.ts' });
+    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [doing]) });
+
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const card = within(columns).getByRole('link', { name: WORKING }).closest('article') as HTMLElement;
+    const line = within(card).getByText('Editing src/checkout/handler.ts');
+    expect(line.classList).toContain('truncate');
+    expect(line.parentElement?.getAttribute('title')).toBe('Editing src/checkout/handler.ts');
+    expect(within(card).queryByText('Working, turn 3')).toBeNull();
+  });
+
+  it('truncates a long doing line on one line with the full text in a title', async () => {
+    const activity = `Running ${'the full integration suite against the staging cluster '.repeat(4)}`.trimEnd();
+    const doing = item({ ...workItem, activity });
+    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [doing]) });
+
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const card = within(columns).getByRole('link', { name: WORKING }).closest('article') as HTMLElement;
+    const line = within(card).getByText(activity);
+    expect(line.classList).toContain('truncate');
+    expect(line.parentElement?.getAttribute('title')).toBe(activity);
+  });
+
+  it('shows a plan bar of one segment per todo, done, the one in hand, then to do, with its count', async () => {
+    const planned = item({ ...workItem, plan_steps: { done: 2, total: 5 } });
+    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [planned]) });
+
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const bar = within(columns).getByRole('img', { name: '2 of 5 steps' });
+    const states = Array.from(bar.querySelectorAll('[data-state]')).map((el) => el.getAttribute('data-state'));
+    expect(states).toEqual(['done', 'done', 'current', 'todo', 'todo']);
+  });
+
+  it('shows no plan bar on a card whose run has no plan steps', async () => {
+    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [{ ...workItem, plan_steps: null }]) });
+
+    await screen.findByRole('region', { name: 'Stations' });
+    expect(screen.queryByRole('img', { name: /steps/ })).toBeNull();
+  });
+
+  it('shows the doing line and the plan bar on the phone’s compact lane cards too', async () => {
+    const planned = item({
+      ...workItem,
+      activity: 'Searching for retry handlers',
+      plan_steps: { done: 1, total: 3 },
+    });
+    const stationOf = board({}, [planned]).stations[0] as BoardStation;
+    renderBoardPage({
+      page: () => <StationBody station={stationOf} onMove={vi.fn()} draggable={false} compact />,
+      org,
+      factory,
+    });
+
+    expect(await screen.findByText('Searching for retry handlers')).toBeTruthy();
+    expect(screen.getByRole('img', { name: '1 of 3 steps' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Move sre#12/ }).classList).toContain('size-11');
+  });
+
   it('never shows a numbered agent copy on a card, row or lane', async () => {
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [workItem, queuedItem]) });
 
@@ -333,5 +392,73 @@ describe('board lanes', () => {
     const panel = await screen.findByRole('tabpanel');
     const triager = within(panel).getByRole('region', { name: 'Triager' });
     expect(within(triager).getByText('Nothing to do')).toBeTruthy();
+  });
+
+  it('shows a work card’s and a waiting row’s assembly line, linking to the assembly’s item page', async () => {
+    const assembly = { id: 'item-40', ref: 'sre#40', title: 'Migrate billing', part: 4, parts: 6 };
+    renderBoardPage({
+      page: BoardPage,
+      org,
+      factory,
+      board: board({}, [
+        { ...workItem, assembly },
+        { ...queuedItem, assembly },
+      ]),
+    });
+
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const work = within(columns).getByRole('link', { name: WORKING }).closest('article') as HTMLElement;
+    const row = within(columns).getByRole('link', { name: QUEUED }).closest('article') as HTMLElement;
+    for (const card of [work, row]) {
+      const line = within(card).getByRole('link', { name: 'Part 4 of 6 of Migrate billing' });
+      expect(line.getAttribute('href')).toBe('/o/acme/f/sre/items/40');
+      expect(within(line).getByText('Migrate billing').getAttribute('title')).toBe('Migrate billing');
+      expect(within(line).getByText('› 4 of 6').classList).toContain('whitespace-nowrap');
+      expect(within(line).getByText('Migrate billing').classList).toContain('truncate');
+    }
+  });
+
+  it('keeps the assembly title to one line with an ellipsis, and the part count whole', async () => {
+    const longTitle = `Migrate ${'the billing ledger '.repeat(10)}end`;
+    const assembly = { id: 'item-41', ref: 'sre#41', title: longTitle, part: 12, parts: 14 };
+    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [{ ...workItem, assembly }]) });
+
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const line = within(columns).getByRole('link', { name: `Part 12 of 14 of ${longTitle}` });
+    expect(within(line).getByText(longTitle).classList).toContain('truncate');
+    expect(within(line).getByText('› 12 of 14').classList).toContain('shrink-0');
+    expect(line.classList).toContain('relative');
+    expect(line.classList).toContain('z-10');
+  });
+
+  it('shows no assembly line on a card or a row whose item is no part', async () => {
+    renderBoardPage({
+      page: BoardPage,
+      org,
+      factory,
+      board: board({}, [{ ...workItem, assembly: null }, { ...queuedItem }]),
+    });
+
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    expect(within(columns).queryByRole('link', { name: /^Part \d+ of/ })).toBeNull();
+    expect(within(columns).getByRole('link', { name: WORKING })).toBeTruthy();
+    expect(within(columns).getByRole('link', { name: QUEUED })).toBeTruthy();
+  });
+
+  it('shows the assembly line on the phone’s compact lanes too', async () => {
+    const assembly = { id: 'item-40', ref: 'sre#40', title: 'Migrate billing', part: 4, parts: 6 };
+    const stationOf = board({}, [
+      { ...workItem, assembly },
+      { ...queuedItem, assembly },
+    ]).stations[0] as BoardStation;
+    renderBoardPage({
+      page: () => <StationBody station={stationOf} onMove={vi.fn()} draggable={false} compact />,
+      org,
+      factory,
+    });
+
+    const lines = await screen.findAllByRole('link', { name: 'Part 4 of 6 of Migrate billing' });
+    expect(lines).toHaveLength(2);
+    for (const line of lines) expect(line.getAttribute('href')).toBe('/o/acme/f/sre/items/40');
   });
 });

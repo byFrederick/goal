@@ -4,7 +4,6 @@ import type { Board, BoardLine, BoardStation, ItemCard } from '../../api/types';
 import { formatDuration, formatPercent, formatUsd, formatUsdCompact, humanize, plural } from '../../shared/format';
 import { describeState, type StateLabel, waitingOnYou } from '../../shared/item-state';
 import type { HatchTone } from '../../ui/hatch';
-import type { StatusKind } from '../../ui/status-icon';
 
 /** "3 of 3, 2 ready", "2 of 5", "7 waiting", "4 today": a station's load. */
 export function stationStat(s: BoardStation): string {
@@ -149,11 +148,20 @@ export function doingText(item: Pick<ItemCard, 'turn'>): string {
   return item.turn ? `Working, turn ${item.turn}` : 'Working';
 }
 
-/** The status icon of a waiting row: a check when the item is ready, a clock while it waits; none when blocked. */
-export function waitStatus(item: Pick<ItemCard, 'state' | 'in_buffer'>): StatusKind | null {
-  if (item.state === 'ready' && !item.in_buffer) return 'ready';
-  if (item.state === 'queued' || item.state === 'ready') return 'waiting';
-  return null;
+/** One segment of a plan bar: a todo done, the one in hand, or a todo still to do. */
+export type PlanSegment = 'done' | 'current' | 'todo';
+
+/**
+ * A plan bar's segments, one per todo: the first `done` are done (`done` clamped to the total), the
+ * next is current while the plan has one left, the rest are todo. No segments when the plan lists none.
+ */
+export function planSegments(plan: NonNullable<ItemCard['plan_steps']>): PlanSegment[] {
+  const total = Math.max(0, plan.total);
+  const done = Math.min(Math.max(0, plan.done), total);
+  return Array.from({ length: total }, (_, i): PlanSegment => {
+    if (i < done) return 'done';
+    return i === done ? 'current' : 'todo';
+  });
 }
 
 const times = ['once', 'twice'];
@@ -191,17 +199,20 @@ export function summaryExcerpt(summary: string): string | null {
 }
 
 /**
- * A card's state line: the doing line while worked, "Needs your OK", work waiting in the drum's
- * buffer or held back by the rope, how often work was sent back, what a done item became (an
- * excerpt of its summary); otherwise the item's state.
+ * A card's state line: the doing line while worked (what the run is doing now, else "Working", with
+ * its turn), "Needs your OK", work waiting in the drum's buffer or held back by the rope, how often
+ * work was sent back, what a done item became (an excerpt of its summary); otherwise the item's state.
  */
 export function cardState(
-  item: Pick<ItemCard, 'state' | 'agent' | 'turn' | 'rework_count' | 'summary' | 'in_buffer' | 'rope_held'>,
+  item: Pick<
+    ItemCard,
+    'state' | 'agent' | 'turn' | 'rework_count' | 'summary' | 'in_buffer' | 'rope_held' | 'activity'
+  >,
   decides = true,
 ): StateLabel {
   switch (item.state) {
     case 'in_progress':
-      return { text: doingText(item), tone: 'run' };
+      return { text: item.activity || doingText(item), tone: 'run' };
     case 'waiting_human':
       return decides ? { text: 'Needs your OK', tone: 'you' } : { text: 'Waiting on an approver', tone: 'muted' };
     case 'done':

@@ -11,10 +11,10 @@ import {
   firstStation,
   isExpedite,
   lineSentence,
+  planSegments,
   stationMeter,
   stationNote,
   stationStat,
-  waitStatus,
   wipText,
 } from './stats';
 
@@ -242,6 +242,14 @@ describe('cardState', () => {
     expect(cardState(card({ state: 'in_progress', agent: 'triager', turn: 0 })).text).toBe('Working');
   });
 
+  it('says what the run is doing now while it has an activity, and falls back to the turn without one', () => {
+    expect(cardState(card({ state: 'in_progress', turn: 4, activity: 'Editing src/app.ts' }))).toEqual({
+      text: 'Editing src/app.ts',
+      tone: 'run',
+    });
+    expect(cardState(card({ state: 'in_progress', turn: 4, activity: null })).text).toBe('Working, turn 4');
+  });
+
   it('asks for your OK, says how often work was sent back, and what a done item became', () => {
     expect(cardState(card({ state: 'waiting_human' }))).toEqual({ text: 'Needs your OK', tone: 'you' });
     expect(cardState(card({ state: 'waiting_human' }), false)).toEqual({
@@ -332,14 +340,29 @@ describe('firstStation', () => {
   });
 });
 
-describe('waitStatus and doingText', () => {
-  it('shows a check for a ready item and a clock for one that waits', () => {
-    expect(waitStatus(card({ state: 'ready' }))).toBe('ready');
-    expect(waitStatus(card({ state: 'ready', in_buffer: true }))).toBe('waiting');
-    expect(waitStatus(card({ state: 'queued' }))).toBe('waiting');
-    expect(waitStatus(card({ state: 'blocked' }))).toBeNull();
+describe('planSegments', () => {
+  const segs = (done: number, total: number) => planSegments({ done, total });
+
+  it('fills the done segments, marks the one in hand current and leaves the rest to do', () => {
+    expect(segs(0, 3)).toEqual(['current', 'todo', 'todo']);
+    expect(segs(2, 5)).toEqual(['done', 'done', 'current', 'todo', 'todo']);
   });
 
+  it('has no current segment once every todo is done', () => {
+    expect(segs(3, 3)).toEqual(['done', 'done', 'done']);
+  });
+
+  it('clamps a done count above the total, and a negative one, to the total and to none', () => {
+    expect(segs(7, 3)).toEqual(['done', 'done', 'done']);
+    expect(segs(-1, 2)).toEqual(['current', 'todo']);
+  });
+
+  it('has no segments for a plan that lists no todos', () => {
+    expect(segs(0, 0)).toEqual([]);
+  });
+});
+
+describe('doingText', () => {
   it('says the doing line with the turn, never a numbered agent', () => {
     expect(doingText({ turn: 4 })).toBe('Working, turn 4');
     expect(doingText({ turn: null })).toBe('Working');

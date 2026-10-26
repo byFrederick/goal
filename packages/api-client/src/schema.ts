@@ -1560,6 +1560,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/items/{item}/needs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Say that an item needs another, so it is not claimed until that one is done or cancelled
+         * @description Adds a dependency of kind linked by the caller (ADR 0012) and records an edge_added event on the item; people cannot add planned or overlap edges. Problems: 404 item-not-found for either item when it is unknown or the caller cannot read it; 400 edge-invalid for an item that needs itself or an item of another factory; 409 edge-cycle when the needed item already needs this one, directly or through others; 409 edge-exists when the item already needs it; 409 item-closed for a done or cancelled item.
+         */
+        post: operations["linkItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/items/{item}/needs/{need}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+                /** @description The needed item's id (a UUID) or <factory>#<number>, as in goal#2 (percent-encode the # as %23) */
+                need: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Say that an item no longer needs another
+         * @description Removes the dependency, whatever its kind, and records an edge_removed event on the item. Problems: 404 item-not-found for either item when it is unknown or the caller cannot read it; 404 edge-not-found when the item does not need it; 409 item-closed for a done or cancelled item.
+         */
+        delete: operations["unlinkItem"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/items/{item}/touches/{event}/reason": {
         parameters: {
             query?: never;
@@ -1697,7 +1749,7 @@ export interface paths {
         put?: never;
         /**
          * Stop an open item where it is until a retry resumes it
-         * @description The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
+         * @description The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). An assembly stays in state assembly and pauses its open parts instead, in one transaction, each with its own paused event (already-blocked when every open part is). 409 item-closed (done or cancelled), already-blocked or item-changed.
          */
         post: operations["pauseItem"];
         delete?: never;
@@ -1720,7 +1772,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Send a blocked item back to its station's queue (409 if it is not blocked) */
+        /**
+         * Send a blocked item back to its station's queue (409 if it is not blocked)
+         * @description An assembly stays in state assembly and sends each of its blocked parts back to its station's queue instead, in one transaction, each with its own retried event; 409 when no part is blocked.
+         */
         post: operations["retryItem"];
         delete?: never;
         options?: never;
@@ -2690,6 +2745,34 @@ export interface components {
             flow?: components["schemas"]["ItemFlow"];
             /** @description The item's human touches; getItem only */
             touches?: components["schemas"]["ItemTouches"];
+            /** @description The items this item needs, oldest edge first; getItem only */
+            needs?: components["schemas"]["ItemLink"][];
+            /** @description The items that need this item, oldest edge first; getItem only */
+            dependents?: components["schemas"]["ItemLink"][];
+        };
+        NewLink: {
+            /** @description The needed item's id (a UUID) or <factory>#<number>, as in goal#2; an item of the same factory */
+            needs: string;
+        };
+        /** @description One end of a dependency between two items, seen from the other end */
+        ItemLink: {
+            /** @description The other item's id */
+            id: string;
+            /** @description The other item's <factory name>#<number> */
+            ref: string;
+            /**
+             * @description planned by whoever split the work, linked by a person, or overlap (their files overlap)
+             * @enum {string}
+             */
+            kind: "planned" | "linked" | "overlap";
+            state: components["schemas"]["ItemState"];
+            /** @description The edge's author, as an actor ref (<kind>:<id>, as in user:<id> or agent:<id>) */
+            by: string;
+            /**
+             * Format: date-time
+             * @description When the edge was added
+             */
+            at: string;
         };
         AssemblyParts: {
             /** @description Parts done */
@@ -2996,6 +3079,17 @@ export interface components {
             assembly?: components["schemas"]["PartOf"] | null;
             /** @description For an assembly (an item with parts), where its parts stand; absent or null for any other item */
             parts?: components["schemas"]["PartsSummary"] | null;
+            /** @description While its run runs, one short line (at most 80 characters) from the run's latest tool call, credential-shaped text replaced by ***: "Editing <path>", "Running <command>", "Reading <path>", "Searching <pattern>" or "Using <tool>"; absent or null when no run runs or it has called no tool yet */
+            activity?: string | null;
+            /** @description While its run runs, how far it is through its latest todo list (its latest TodoWrite call); absent or null when no run runs, it has listed no todos or the list did not parse (the worker cuts long tool input) */
+            plan_steps?: components["schemas"]["PlanSteps"] | null;
+        };
+        /** @description The todos a running run completed of all it listed ("2 of 5 steps") */
+        PlanSteps: {
+            /** @description Todos completed */
+            done: number;
+            /** @description Todos listed */
+            total: number;
         };
         /** @description The assembly an item is a part of, and which part ("3 of 6") */
         PartOf: {
@@ -6868,6 +6962,62 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["NoteReceipt"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    linkItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewLink"];
+            };
+        };
+        responses: {
+            /** @description The new edge */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemLink"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    unlinkItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+                /** @description The needed item's id (a UUID) or <factory>#<number>, as in goal#2 (percent-encode the # as %23) */
+                need: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The edge is removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };

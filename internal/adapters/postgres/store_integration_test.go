@@ -68,15 +68,20 @@ func TestStore_Conformance(t *testing.T) {
 func TestMigrate_RepeatableAndSafeToRunConcurrently(t *testing.T) {
 	t.Parallel()
 
+	// More callers than the pool has connections, on a database none has migrated yet: a
+	// migration that needed a pool connection while it held the lock would deadlock here, and
+	// the deadline turns that into a failure instead of a hung run.
 	db := newTestDB(t, OwnerRole)
-	migrate(t, db.owner)
-	pool := openPool(t, db.owner)
+	pool := openPool(t, withPoolSize(t, db.owner, 2))
+
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
 
 	var wg sync.WaitGroup
 
 	for range 4 {
 		wg.Go(func() {
-			if err := Migrate(t.Context(), pool); err != nil {
+			if err := Migrate(ctx, pool); err != nil {
 				t.Error(err)
 			}
 		})
@@ -85,13 +90,29 @@ func TestMigrate_RepeatableAndSafeToRunConcurrently(t *testing.T) {
 	wg.Wait()
 
 	var version int64
-	if err := pool.QueryRow(t.Context(), "SELECT max(version_id) FROM goose_db_version").Scan(&version); err != nil {
+	if err := pool.QueryRow(ctx, "SELECT max(version_id) FROM goose_db_version").Scan(&version); err != nil {
 		t.Fatal(err)
 	}
 
 	if want := latestMigration(t); version != want {
 		t.Errorf("schema version = %d; want %d", version, want)
 	}
+}
+
+// withPoolSize is dbURL with a pool of at most size connections.
+func withPoolSize(t *testing.T, dbURL string, size int) string {
+	t.Helper()
+
+	u, err := url.Parse(dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	q := u.Query()
+	q.Set("pool_max_conns", strconv.Itoa(size))
+	u.RawQuery = q.Encode()
+
+	return u.String()
 }
 
 // latestMigration is the number of the newest file in migrations/.

@@ -63,7 +63,7 @@ var mxBodies = map[string]string{
 	"addItemNote": `{"text":"a note"}`, "pullAndon": `{"reason":"stop"}`, "clearAndon": `{"note":"fixed"}`,
 	"submitItem": `{"title":"An item"}`, "deleteOrg": `{"confirm":"Acme"}`, "saveDraftSection": `{"value":{}}`,
 	"setFactoryRole": `{"role":"viewer"}`, "transferOwnership": `{"to":"x","confirm":"Acme"}`,
-	"setTouchReason": `{"reason":"other"}`,
+	"setTouchReason": `{"reason":"other"}`, "linkItem": `{"needs":"i1"}`,
 }
 
 // mxRequests builds every operation of api/openapi.yaml as a request: path parameters filled

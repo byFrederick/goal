@@ -187,4 +187,5 @@ type WorkItem struct {
 	OrgID          uuid.UUID
 	PartKey        *string
 	PartPaths      []string
+	Paths          []string
 }

@@ -3,6 +3,7 @@ import {
   controlsFor,
   decisionsFor,
   describeState,
+  itemStatus,
   pausedNow,
   pullRequestLabel,
   pullRequestsOf,
@@ -90,6 +91,27 @@ describe('describeState', () => {
     const waiting = { state: 'waiting_human', agent: null, rework_count: 0 } as const;
     expect(describeState(waiting, { decides: true })).toEqual({ text: 'Waiting on you', tone: 'you' });
     expect(describeState(waiting, { decides: false })).toEqual({ text: 'Waiting on an approver', tone: 'muted' });
+  });
+});
+
+describe('itemStatus', () => {
+  it('shows working for an item in progress and a check for one that is ready or done', () => {
+    expect(itemStatus({ state: 'in_progress' })).toBe('working');
+    expect(itemStatus({ state: 'ready' })).toBe('ready');
+    expect(itemStatus({ state: 'ready', in_buffer: false })).toBe('ready');
+    expect(itemStatus({ state: 'done' })).toBe('ready');
+  });
+
+  it('shows a clock for an item that waits for another item or on a person', () => {
+    expect(itemStatus({ state: 'queued' })).toBe('waiting');
+    expect(itemStatus({ state: 'ready', in_buffer: true })).toBe('waiting');
+    expect(itemStatus({ state: 'waiting_human' })).toBe('waiting');
+  });
+
+  it('shows no icon for a blocked, cancelled or assembly item, which its words say', () => {
+    expect(itemStatus({ state: 'blocked' })).toBeNull();
+    expect(itemStatus({ state: 'cancelled' })).toBeNull();
+    expect(itemStatus({ state: 'assembly' })).toBeNull();
   });
 });
 

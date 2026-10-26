@@ -7,14 +7,23 @@ import type { ReactNode } from 'react';
 import type { BoardLane, BoardStation, ItemCard } from '../../api/types';
 import { useFactory } from '../../shared/factory';
 import { formatAge } from '../../shared/format';
-import { toneText } from '../../shared/item-state';
+import { itemStatus, toneText } from '../../shared/item-state';
 import { MoveButton } from '../../shared/move-menu';
 import { holds } from '../../shared/permissions';
 import { cn } from '../../ui/cn';
 import { StatusIcon } from '../../ui/status-icon';
-import { BoardCard, type CardDrag, CardTitle, ExpediteMark, moveKeys, PrLink, TouchCount } from './board-card';
+import {
+  AssemblyLine,
+  BoardCard,
+  type CardDrag,
+  CardTitle,
+  ExpediteMark,
+  moveKeys,
+  PrLink,
+  TouchCount,
+} from './board-card';
 import { DraggableCard } from './board-dnd';
-import { cardState, isExpedite, waitStatus } from './stats';
+import { cardState, isExpedite, type PlanSegment, planSegments } from './stats';
 
 /** Opens the Move menu for an item. */
 type OnMove = ((item: ItemCard) => void) | undefined;
@@ -220,6 +229,7 @@ function WorkCard({
         <span>{item.ref}</span>
         <span className="whitespace-nowrap">{formatAge(item.age_seconds)}</span>
       </div>
+      <AssemblyLine item={item} />
       <CardTitle item={item} compact={compact} describedBy={drag?.describedBy} movable={Boolean(onMove)} />
       <div className="flex items-end gap-2">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -227,6 +237,7 @@ function WorkCard({
             <StatusIcon status="working" />
             <span className="truncate">{doing.text}</span>
           </span>
+          <PlanBar plan={item.plan_steps} />
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <PrLink item={item} />
             <TouchCount item={item} />
@@ -245,6 +256,35 @@ function WorkCard({
   );
 }
 
+/**
+ * A run's plan as one segment per todo, the way its slot boxes read: done segments filled, the one
+ * in hand hatched, the rest outlined. Nothing when the run has listed no todos (the API sends null).
+ */
+function PlanBar({ plan }: { plan: ItemCard['plan_steps'] }) {
+  if (!plan) return null;
+  const segments = planSegments(plan);
+  if (segments.length === 0) return null;
+  const done = segments.filter((s) => s === 'done').length;
+  return (
+    <div role="img" aria-label={`${done} of ${segments.length} steps`} className="flex min-w-0 gap-0.5">
+      {segments.map((state, i) => (
+        <span
+          // biome-ignore lint/suspicious/noArrayIndexKey: the segments are fixed by the todo count and never reorder
+          key={i}
+          data-state={state}
+          className={cn('h-1.5 min-w-0 flex-1 rounded-[2px] border', planTones[state])}
+        />
+      ))}
+    </div>
+  );
+}
+
+const planTones: Record<PlanSegment, string> = {
+  done: 'border-run bg-run',
+  current: 'border-run bg-run-hatch',
+  todo: 'border-rule-strong bg-surface',
+};
+
 /** A waiting row: an item queued for the lane, its title and the reason it waits, with its status icon. */
 function WaitingRow({
   item,
@@ -260,7 +300,7 @@ function WaitingRow({
   compact: boolean;
 }) {
   const reason = cardState(item, decides);
-  const status = waitStatus(item);
+  const status = itemStatus(item);
   const expedite = isExpedite(item);
   return (
     <article
@@ -283,6 +323,7 @@ function WaitingRow({
       {expedite ? <ExpediteMark /> : null}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-xs text-muted tabular-nums">{item.ref}</span>
+        <AssemblyLine item={item} />
         <CardTitle item={item} compact={compact} describedBy={drag?.describedBy} movable={Boolean(onMove)} />
         <span className={cn('flex min-w-0 items-center gap-1.5 text-xs', toneText[reason.tone])} title={reason.text}>
           {status ? <StatusIcon status={status} /> : null}

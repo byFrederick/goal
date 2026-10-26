@@ -126,6 +126,16 @@ type Store interface {
 	// none.
 	Parts(ctx context.Context, parent domain.ItemID) (domain.Parts, error)
 
+	// CascadeParts applies a person's change of an assembly to its parts, in one transaction: it
+	// locks the parts c.Parts move in ascending id order, then the assembly (the order a closing
+	// part takes them in, so the two never deadlock), applies each part's transition as
+	// Transition does (fenced, its lease taken or released, its events and audit entry, closing
+	// the assembly with its last open part), appends c.Events and returns the assembly's parts.
+	// A cascade naming no part, a part twice, a part of another assembly or a move to state
+	// assembly is refused with domain.ErrInvalid; an assembly no longer in state assembly, or any
+	// part's failed guard, with ErrConflict (or ErrLeaseLost). A refused cascade writes nothing.
+	CascadeParts(ctx context.Context, c Cascade) (domain.Parts, error)
+
 	// HeartbeatLease extends a held lease to expiresAt. It returns ErrLeaseLost when no lease
 	// with the same item and AcquiredAt exists any more.
 	HeartbeatLease(ctx context.Context, l domain.Lease, now, expiresAt time.Time) (domain.Lease, error)
@@ -261,9 +271,10 @@ type FlowStats interface {
 	// so far, or nil when the item has none (no running run under a live lease).
 	CurrentRun(ctx context.Context, id domain.ItemID) (*domain.CurrentRun, error)
 
-	// LiveTurns counts, for every item of the factory with a running run under a live lease, the
-	// turns its newest running run has reported so far (its usage events), by item.
-	LiveTurns(ctx context.Context, factory domain.FactoryID) (map[domain.ItemID]int, error)
+	// LiveRuns returns, for every item of the factory with a running run under a live lease, what
+	// its newest running run has done so far, by item: the turns it reported (its usage events),
+	// its newest tool call and its newest call of domain.ToolTodoWrite.
+	LiveRuns(ctx context.Context, factory domain.FactoryID) (map[domain.ItemID]domain.LiveRun, error)
 
 	// StationTimes measures every station of the factory over [since, until) (see
 	// domain.StationTimes); a station appears when it has a lease, a waiting item or a verdict to
@@ -550,6 +561,14 @@ type Assembly struct {
 	Parts      []domain.NewPart
 }
 
+// Cascade is a change of an assembly applied to its parts: one transition per part it moves,
+// and the events of the assembly itself (which stays in state assembly).
+type Cascade struct {
+	Assembly domain.ItemID
+	Parts    []Transition
+	Events   []domain.Event
+}
+
 // Transition is one atomic change to an item.
 type Transition struct {
 	ItemID domain.ItemID
@@ -569,6 +588,9 @@ type Transition struct {
 	Audit *domain.AuditEntry
 	// Lane, when non-empty, replaces the item's lane.
 	Lane string
+	// Paths, when non-nil, replaces the item's paths (the file globs it is expected to change);
+	// an empty non-nil slice clears them and nil keeps them.
+	Paths []string
 	// Output, when set, is stored as the item's output for OutputStation.
 	OutputStation string
 	Output        json.RawMessage
