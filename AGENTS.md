@@ -15,10 +15,10 @@ cmd/            binaries: goal (CLI), goald (daemon), goal-egress (egress proxy)
 contracts/      contracts/api/ (openapi.yaml, permissions.yaml, sandbox.yaml: the only contract between goald and TypeScript), contracts/definitions/ (JSON Schemas for factory, eval and connection kind files), env.yaml (every environment variable a process reads, with env.schema.json); the API generators' tasks in Taskfile.yml
 db/             the database: db/migrations/ (forward-only SQL, goose), db/queries/ (SQL for sqlc), db/sqlc.yaml and Taskfile.yml (sqlc, migrate-check)
 deploy/         deploy/cloudflare/ (the control Worker's wrangler config and deploy scripts), deploy/terraform/ (the platform's own infrastructure, one root module), each with the Taskfile.yml of its tasks
-docs/           adr/, design/ (MASTER.md: the UI's design system), engineering/, history/ (history/specs/ and history/jonah/: earlier plans), reference/ (glossary.md, and environment.md generated from the contracts)
+docs/           adr/ (one file per ADR; README.md, the index, is generated), design/ (MASTER.md: the UI's design system), engineering/ (change-map.md is generated from one entry file per row), history/ (history/specs/ and history/jonah/: earlier plans), reference/ (glossary.md, and environment.md generated from the contracts)
 internal/       the Go packages: core/ (domain, ports, engine), adapters/ (grouped by the port each implements), api, gateway, cli (the goal CLI's commands, which cmd/goal only wires)… (docs/engineering/architecture.md)
 packages/       shared TypeScript: api-client/ (the API client and its generated types, its tasks in Taskfile.yml), config/ (the shared Biome config and the tsconfig bases for Node, the browser and Workers)
-tools/          repository tooling that is not a shipped binary: layoutcheck/ (task layout:check), envcheck/ (task env:check), checkplan/ (task check:changed), permgen/ (task api:gen's permission tables)
+tools/          repository tooling that is not a shipped binary: layoutcheck/ (task layout:check), envcheck/ (task env:check), checkplan/ (task check:changed), permgen/ (task api:gen's permission tables), gendocs/ (task docs:gen)
 ```
 
 Root files: the entry docs, `Taskfile.yml` (the cross-cutting tasks, dotenv, env and vars; it includes each area's `Taskfile.yml` flattened, so every task keeps its name, and `tools/layoutcheck/tasks.txt` lists the names: [ADR 0013](docs/adr/0013-repository-layout.md)), `compose.yaml`, the Go and pnpm manifests, and `skills-lock.json`. Factory definitions are not in this tree; they live in the bucket and PostgreSQL ([factory-definition.md](docs/engineering/factory-definition.md)).
@@ -51,6 +51,7 @@ Other docs cite these as "AGENTS.md rule N", so the numbers stay fixed.
 
 - One work item, one branch (`goal/<item>`), one small pull request; refactors and features go in separate ones ([goal-deliver](.claude/skills/goal-deliver/SKILL.md)).
 - Decisions that others must follow get an ADR in `docs/adr/` ([goal-adr](.claude/skills/goal-adr/SKILL.md)).
+- A new change-map row is a new entry file in `docs/engineering/change-map/`, and a new ADR is a new file in `docs/adr/`; then run `task docs:gen`. Never edit `docs/engineering/change-map.md` or `docs/adr/README.md`: `task docs:gen` writes them, and `task check` fails when they differ from their sources ([ADR 0015](docs/adr/0015-overlapping-in-flight-work.md), decision 6).
 - Executable source and manifests (code, `Taskfile.yml`, workflows, `.golangci.yml`, schemas, lock files) win over prose. An agent that finds them disagreeing says so in its pull request.
 
 ## Done means verified

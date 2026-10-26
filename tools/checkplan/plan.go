@@ -9,7 +9,7 @@ import (
 
 // tasks is the order task check runs its tasks in; a plan keeps it.
 var tasks = []string{
-	"layout:check", "env:check", "lint", "test", "gen:check", "worker:check", "auth:check",
+	"layout:check", "env:check", "docs:check", "lint", "test", "gen:check", "worker:check", "auth:check",
 	"api-client:check", "web:check", "cloudflare:check", "validate", "tf:check",
 }
 
@@ -30,11 +30,12 @@ var (
 	partTerraform  = part{"terraform", []string{"tf:check"}}
 	partLayout     = part{"layout", []string{"layout:check"}}
 	partEnv        = part{"env", []string{"env:check"}}
+	partDocs       = part{"docs", []string{"docs:check"}}
 	partEverything = part{"everything", tasks}
 )
 
 // parts lists every part in report order; everything comes first since it covers the rest.
-var parts = []part{partEverything, partGo, partGen, partWorker, partAuth, partAPIClient, partWeb, partCloudflare, partTerraform, partLayout, partEnv}
+var parts = []part{partEverything, partGo, partGen, partWorker, partAuth, partAPIClient, partWeb, partCloudflare, partTerraform, partLayout, partEnv, partDocs}
 
 // A rule maps the paths it matches to the parts they select; no parts means nothing to check.
 type rule struct {
@@ -89,8 +90,12 @@ var rules = []rule{
 	// The files tools/envcheck compares with contracts/env.yaml, besides the code below.
 	{exact("docs/reference/environment.md"), []part{partEnv}, ""},
 	{exact("deploy/cloudflare/wrangler.jsonc"), []part{partCloudflare, partEnv}, ""},
+	// tools/gendocs is Go, and the check of the docs it generates.
+	{under("tools/gendocs"), []part{partGo, partDocs}, ""},
+	// ADR 0013 is also a source of the ADR index that tools/gendocs generates.
+	{exact("docs/adr/0013-repository-layout.md"), []part{partLayout, partDocs}, ""},
 	// The descriptions of the layout that tools/layoutcheck compares with the tracked files.
-	{exact("AGENTS.md", "docs/adr/0013-repository-layout.md"), []part{partLayout}, ""},
+	{exact("AGENTS.md"), []part{partLayout}, ""},
 	{under(".claude/rules"), []part{partLayout}, ""},
 	// Go code anywhere, and the files Go embeds (go:embed) or its tests read. Go code may read
 	// the environment, which tools/envcheck checks.
@@ -110,6 +115,9 @@ var rules = []rule{
 	// The control Worker's code, and its wrangler config and deploy scripts.
 	{under("apps/control-worker", "deploy/cloudflare"), []part{partCloudflare, partEnv}, ""},
 	{under("deploy/terraform"), []part{partTerraform}, ""},
+	// The generated change map and ADR index, and their sources (tools/gendocs).
+	{exact("docs/engineering/change-map.md"), []part{partDocs}, ""},
+	{under("docs/engineering/change-map", "docs/adr"), []part{partDocs}, ""},
 	{under("docs", ".claude", ".github", ".githooks"), nil, ""},
 	{exact("skills-lock.json"), nil, ""},
 	{rootMarkdown, nil, ""},

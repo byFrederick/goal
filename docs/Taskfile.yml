@@ -1,0 +1,18 @@
+# The generated docs: docs/engineering/change-map.md and docs/adr/README.md (tools/gendocs).
+# Included by the root Taskfile.yml with flatten: true and dir set to the repository root, so these
+# tasks keep their full names, run from the root and see the root's dotenv, env and vars. Run them
+# from the root: `task <name>`.
+version: "3"
+
+tasks:
+  docs:gen:
+    desc: >-
+      Regenerate docs/engineering/change-map.md from docs/engineering/change-map/ (its _page.md and one entry file per
+      row) and docs/adr/README.md from the ADRs (tools/gendocs)
+    cmds:
+      - go run ./tools/gendocs
+
+  docs:check:
+    desc: The generated change map and ADR index match a fresh render of their sources (tools/gendocs -check)
+    cmds:
+      - go run ./tools/gendocs -check

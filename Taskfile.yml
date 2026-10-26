@@ -118,6 +118,10 @@ includes:
     taskfile: packages/api-client/Taskfile.yml
     flatten: true
     dir: "{{.ROOT_DIR}}"
+  docs:
+    taskfile: docs/Taskfile.yml
+    flatten: true
+    dir: "{{.ROOT_DIR}}"
 
 tasks:
   default:
@@ -274,6 +278,7 @@ tasks:
     cmds:
       - task: layout:check
       - task: env:check
+      - task: docs:check
       - task: lint
       - task: test
       - task: gen:check

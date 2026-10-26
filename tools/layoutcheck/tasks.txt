@@ -21,6 +21,8 @@ default
 deploy:health
 deploy:production
 deploy:worker
+docs:check
+docs:gen
 e2e:auth
 egress:image
 env:check
