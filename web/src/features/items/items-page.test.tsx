@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { cleanup, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Board, Factory, ItemCard, OrgSummary } from '../../api/types';
-import { renderBoardPage } from '../../test/route';
+import { boardQuery, inboxQuery } from '../../api/queries';
+import type { Board, Factory, InboxEntry, ItemCard, OrgSummary } from '../../api/types';
+import { renderFactoryPage } from '../../test/route';
 import { ItemsPage } from './items-page';
 
-// The list reads the items and the phone's Needs you reads the inbox: the tests seed both.
+// The list reads the items; the Inbox button and drawer read the inbox, which the tests seed.
 const shown = vi.hoisted(() => ({ items: [] as ItemCard[] }));
 vi.mock(import('../../api/client'), async (original) => ({
   ...(await original()),
@@ -83,10 +84,53 @@ async function rowOf(title: string): Promise<HTMLElement> {
   return (await screen.findByText(title)).closest('a') as HTMLElement;
 }
 
-function renderItems(items: ItemCard[]) {
+function renderItems(items: ItemCard[], entries: InboxEntry[] = []) {
   shown.items = items;
-  return renderBoardPage({ page: ItemsPage, org, factory, board, section: 'items' });
+  return renderFactoryPage({
+    page: ItemsPage,
+    path: 'items/',
+    org,
+    factory,
+    seed: [
+      [boardQuery(org.id, factory.id).queryKey, board],
+      [inboxQuery(org.id, factory.id).queryKey, { entries, truncated: false }],
+    ],
+  });
 }
+
+const ship: InboxEntry = {
+  id: 'decision:item-3',
+  kind: 'decision',
+  factory: { id: factory.id, name: factory.name, title: factory.title ?? null },
+  since: '2026-10-25T09:00:00Z',
+  station: 'merge',
+  action: 'merge',
+  item: item({ id: 'item-3', ref: 'sre#3', number: 3, title: 'Ship the retry fix', station: 'merge' }),
+  approval: null,
+  blocked: null,
+  andon: null,
+  rework: null,
+};
+
+describe('ItemsPage inbox', () => {
+  it('has no Needs you section on the phone', async () => {
+    renderItems([item({ title: 'Ship the retry fix' })], [ship]);
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'SRE items' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Needs you' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Needs you' })).toBeNull();
+  });
+
+  it('the header Inbox button opens the inbox drawer, with its count', async () => {
+    renderItems([item({ title: 'Ship the retry fix' })], [ship]);
+
+    const button = await screen.findByRole('button', { name: /^Inbox/ });
+    expect(button.textContent).toContain('1');
+    fireEvent.click(button);
+    const drawer = await screen.findByRole('dialog', { name: 'Inbox' });
+    expect(within(drawer).getByText('Ready to merge')).toBeTruthy();
+  });
+});
 
 describe('Items list status icons', () => {
   it('shows the working icon for an item in progress', async () => {
