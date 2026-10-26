@@ -163,7 +163,8 @@ func (e *Engine) Move(ctx context.Context, id domain.ItemID, to string, by domai
 }
 
 // Pause stops an open item where it is: it becomes blocked with a paused event (the reason is
-// optional) until Retry resumes it. In progress, its lease is taken and its run stopped.
+// optional) until Retry resumes it. In progress, its lease is taken and its run stopped. An
+// assembly stays one and pauses its open parts instead (pauseAssembly).
 func (e *Engine) Pause(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error) {
 	reason = strings.TrimSpace(reason)
 
@@ -175,6 +176,8 @@ func (e *Engine) Pause(ctx context.Context, id domain.ItemID, by domain.Actor, r
 	switch {
 	case closed(it):
 		return domain.Item{}, fmt.Errorf("pause %s: %w", id, ErrItemClosed)
+	case it.State == domain.StateAssembly:
+		return e.pauseAssembly(ctx, it, by, reason)
 	case it.State == domain.StateBlocked:
 		return domain.Item{}, fmt.Errorf("pause %s: %w", id, ErrAlreadyBlocked)
 	}
@@ -192,11 +195,7 @@ func (e *Engine) Pause(ctx context.Context, id domain.ItemID, by domain.Actor, r
 // (lease_taken) and, when this instance runs it, its run stopped at once; another instance
 // running it learns through Interrupt or at its next heartbeat.
 func (e *Engine) control(ctx context.Context, verb string, it domain.Item, by domain.Actor, t ports.Transition) (domain.Item, error) {
-	taking := it.State == domain.StateInProgress
-	if taking {
-		t.TakeLease, t.Outcome = true, domain.LeaseTaken
-		t.Events = append([]domain.Event{decision(it, domain.EventLeaseTaken, t.At, by, map[string]any{"action": verb})}, t.Events...)
-	}
+	taking := takeLease(verb, it, by, &t)
 
 	got, err := e.store.Transition(ctx, t)
 	if errors.Is(err, ports.ErrConflict) {
@@ -216,6 +215,19 @@ func (e *Engine) control(ctx context.Context, verb string, it domain.Item, by do
 	}
 
 	return got, nil
+}
+
+// takeLease makes t, a person's transition of it, take its lease when it is in progress, with a
+// lease_taken event first. It reports whether it did.
+func takeLease(verb string, it domain.Item, by domain.Actor, t *ports.Transition) bool {
+	if it.State != domain.StateInProgress {
+		return false
+	}
+
+	t.TakeLease, t.Outcome = true, domain.LeaseTaken
+	t.Events = append([]domain.Event{decision(it, domain.EventLeaseTaken, t.At, by, map[string]any{"action": verb})}, t.Events...)
+
+	return true
 }
 
 // Interrupt is told every committed item notice (goald wires it to the API's feed). A
@@ -328,20 +340,25 @@ func (e *Engine) decide(ctx context.Context, verb string, t ports.Transition) (d
 }
 
 // Retry sends a blocked item back to its station's queue, so a slot pulls it again. Its
-// rework count is unchanged: nobody rejected the work.
+// rework count is unchanged: nobody rejected the work. An assembly stays one and resumes its
+// blocked parts instead (retryAssembly).
 func (e *Engine) Retry(ctx context.Context, id domain.ItemID, by domain.Actor) (domain.Item, error) {
 	it, err := e.store.Item(ctx, id)
 	if err != nil {
 		return domain.Item{}, fmt.Errorf("retry %s: %w", id, err)
 	}
 
-	if it.State != domain.StateBlocked {
+	if it.State != domain.StateBlocked && it.State != domain.StateAssembly {
 		return domain.Item{}, fmt.Errorf("retry %s: item is %s: %w", id, it.State, ErrNotBlocked)
 	}
 
 	l, err := e.lineIn(ctx, it.FactoryID)
 	if err != nil {
 		return domain.Item{}, fmt.Errorf("retry %s: %w", id, err)
+	}
+
+	if it.State == domain.StateAssembly {
+		return e.retryAssembly(ctx, it, l, by)
 	}
 
 	st, ok := l.Station(it.Station)
