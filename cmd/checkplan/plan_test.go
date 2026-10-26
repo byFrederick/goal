@@ -14,7 +14,10 @@ type planCase struct {
 	note    string // a part of one note, or "" for none
 }
 
-var goTasks = []string{"lint", "test", "api:permissions-check", "validate"}
+var (
+	goTasks     = []string{"lint", "test", "api:permissions-check", "validate"}
+	layoutTasks = []string{"layout:check"}
+)
 
 func TestPlan(t *testing.T) {
 	t.Parallel()
@@ -42,6 +45,13 @@ func TestPlan(t *testing.T) {
 		"control worker":   {[]string{"deploy/cloudflare/src/index.ts"}, []string{"cloudflare:check"}, "cloudflare (cloudflare:check): deploy/cloudflare/src/index.ts", ""},
 		"terraform":        {[]string{"terraform/r2.tf"}, []string{"tf:check"}, "terraform (tf:check): terraform/r2.tf", ""},
 		"sops rules":       {[]string{".sops.yaml"}, []string{"tf:check"}, ".sops.yaml", ""},
+		"agents map":       {[]string{"AGENTS.md"}, layoutTasks, "layout (layout:check): AGENTS.md", ""},
+		"layout adr":       {[]string{"docs/adr/0013-repository-layout.md"}, layoutTasks, "layout (layout:check): docs/adr/0013-repository-layout.md", ""},
+		"rule globs":       {[]string{".claude/rules/go.md"}, layoutTasks, "layout (layout:check): .claude/rules/go.md", ""},
+		"layout check": {
+			[]string{"tools/layoutcheck/check.go", "tools/layoutcheck/testdata/x.md"},
+			append(slices.Clone(layoutTasks), goTasks...), "layout (layout:check): tools/layoutcheck/check.go and 1 more", "",
+		},
 		"nothing to check": {
 			[]string{"docs/adr/0001.md", "design-system/goal/MASTER.md", ".claude/skills/x/SKILL.md", ".github/workflows/ci.yml", ".githooks/pre-push", "README.md", "skills-lock.json"},
 			nil, "", "",
