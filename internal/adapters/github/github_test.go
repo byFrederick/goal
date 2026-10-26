@@ -7,7 +7,9 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -26,6 +28,11 @@ const (
 	message = "message"
 	merged  = "merged"
 	closed  = "closed"
+
+	headBranch = "goal/7-add-x"
+	mainBranch = "main"
+	sharedFile = "docs/shared.md"
+	keySHA     = "sha"
 )
 
 // connection is a connection of the platform's github kind with values (token and host).
@@ -63,6 +70,16 @@ type fakeGitHub struct {
 	// mergeable, when not empty, is what successive reads of the pull request answer for
 	// mergeable, the last one from then on.
 	mergeable []any
+	// heads are acme/app's branches and their head SHAs; main is its default branch.
+	heads map[string]string
+	// history is acme/app's linear history, oldest first.
+	history []fakeCommit
+}
+
+// fakeCommit is one commit of the fake's history.
+type fakeCommit struct {
+	sha, message string
+	files        []string
 }
 
 // fastPolls re-reads a pull request whose mergeability is unknown three times, at once.
@@ -80,13 +97,13 @@ func newFakeGitHubWith(t *testing.T, cfg Config) (*fakeGitHub, *Client) {
 
 	f := &fakeGitHub{pr: map[string]any{
 		"state": "open", merged: false, "mergeable": true, "merge_commit_sha": "test-merge-sha",
-		"head": map[string]any{"sha": headSHA, "ref": "goal/7-add-x", "repo": map[string]any{"full_name": "acme/app"}},
-		"base": map[string]any{"ref": "main", "repo": map[string]any{"full_name": "acme/app"}},
+		"head": map[string]any{keySHA: headSHA, "ref": headBranch, "repo": map[string]any{"full_name": "acme/app"}},
+		"base": map[string]any{"ref": mainBranch, "repo": map[string]any{"full_name": "acme/app"}},
 	}}
 	f.merge = func(map[string]string) (int, any) {
 		f.pr["state"], f.pr[merged] = closed, true
 
-		return http.StatusOK, map[string]any{"sha": "merge-sha", "merged": true, message: "Pull Request successfully merged"}
+		return http.StatusOK, map[string]any{keySHA: "merge-sha", "merged": true, message: "Pull Request successfully merged"}
 	}
 
 	f.update = func(map[string]string) (int, any) {
@@ -130,6 +147,43 @@ func newFakeGitHubWith(t *testing.T, cfg Config) (*fakeGitHub, *Client) {
 
 		f.reply(w, status, res)
 	})
+	mux.HandleFunc("GET /repos/acme/app", func(w http.ResponseWriter, _ *http.Request) {
+		f.reply(w, http.StatusOK, map[string]any{"full_name": "acme/app", "default_branch": mainBranch})
+	})
+	mux.HandleFunc("GET /repos/acme/app/branches/{branch...}", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		sha, ok := f.heads[r.PathValue("branch")]
+		f.mu.Unlock()
+
+		if !ok {
+			f.reply(w, http.StatusNotFound, map[string]any{message: "Branch not found"})
+			return
+		}
+
+		f.reply(w, http.StatusOK, map[string]any{"name": r.PathValue("branch"), "commit": map[string]any{keySHA: sha}})
+	})
+	mux.HandleFunc("GET /repos/acme/app/compare/{spec}", func(w http.ResponseWriter, r *http.Request) {
+		status, res := f.compare(r)
+		f.reply(w, status, res)
+	})
+	mux.HandleFunc("GET /repos/acme/app/commits/{sha}", func(w http.ResponseWriter, r *http.Request) {
+		i := f.index(r.PathValue("sha"))
+		if i < 0 {
+			f.reply(w, http.StatusNotFound, map[string]any{message: "No commit found for SHA: " + r.PathValue("sha")})
+			return
+		}
+
+		f.mu.Lock()
+		fc := f.history[i]
+		f.mu.Unlock()
+
+		files := []map[string]any{}
+		for _, name := range fc.files {
+			files = append(files, map[string]any{"filename": name, "status": "modified", "patch": "@@ -1 +1 @@"})
+		}
+
+		f.reply(w, http.StatusOK, map[string]any{keySHA: fc.sha, "commit": map[string]any{message: fc.message}, "files": files})
+	})
 	mux.HandleFunc("DELETE /repos/acme/app/git/refs/heads/", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		f.deleted = append(f.deleted, strings.TrimPrefix(r.URL.EscapedPath(), "/repos/acme/app/git/refs/heads/"))
@@ -163,6 +217,59 @@ func (f *fakeGitHub) reply(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+// index is the position of sha in the fake's history, or -1.
+func (f *fakeGitHub) index(sha string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return slices.IndexFunc(f.history, func(c fakeCommit) bool { return c.sha == sha })
+}
+
+// compare answers GET compare/{base}...{head} as GitHub does: the commits after base up to head,
+// oldest first, paged by per_page and page, with their total and the files of all of them.
+func (f *fakeGitHub) compare(r *http.Request) (int, any) {
+	base, head, ok := strings.Cut(r.PathValue("spec"), "...")
+	from, to := f.index(base), f.index(head)
+
+	if !ok || from < 0 || to < 0 {
+		return http.StatusNotFound, map[string]any{message: "Not Found"}
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	var all []fakeCommit
+	if to > from {
+		all = f.history[from+1 : to+1]
+	}
+
+	perPage, page := 250, 1
+	if v := r.URL.Query().Get("per_page"); v != "" {
+		perPage, _ = strconv.Atoi(v)
+	}
+
+	if v := r.URL.Query().Get("page"); v != "" {
+		page, _ = strconv.Atoi(v)
+	}
+
+	commits := []map[string]any{}
+	files := []map[string]any{}
+
+	for i, fc := range all {
+		if i >= (page-1)*perPage && i < page*perPage {
+			commits = append(commits, map[string]any{keySHA: fc.sha, "commit": map[string]any{message: fc.message}})
+		}
+
+		for _, name := range fc.files {
+			files = append(files, map[string]any{"filename": name, "patch": strings.Repeat("+", 4096)})
+		}
+	}
+
+	return http.StatusOK, map[string]any{
+		"status": "ahead", "ahead_by": len(all), "behind_by": 0, "total_commits": len(all), "commits": commits, "files": files,
+	}
 }
 
 func (f *fakeGitHub) sent() []string {
@@ -203,7 +310,7 @@ func TestPullRequest_ReadsStateHeadAndBase(t *testing.T) {
 	}
 
 	want := ports.PullRequest{
-		URL: prURL, Open: true, Mergeable: true, HeadSHA: headSHA, HeadBranch: "goal/7-add-x", SameRepository: true, BaseBranch: "main",
+		URL: prURL, Open: true, Mergeable: true, HeadSHA: headSHA, HeadBranch: headBranch, SameRepository: true, BaseBranch: mainBranch,
 	}
 	if pr != want {
 		t.Errorf("pull request = %+v; want %+v", pr, want)
@@ -315,7 +422,7 @@ func TestPullRequest_OnlyOnTheConnectionsHost(t *testing.T) {
 			t.Errorf("PullRequest(%s) = %v; want ErrNotMergeable", tt.url, err)
 		}
 
-		if err := c.DeleteBranch(t.Context(), tt.conn, tt.url, "goal/7-add-x"); !errors.Is(err, ports.ErrNotMergeable) {
+		if err := c.DeleteBranch(t.Context(), tt.conn, tt.url, headBranch); !errors.Is(err, ports.ErrNotMergeable) {
 			t.Errorf("DeleteBranch(%s) = %v; want ErrNotMergeable", tt.url, err)
 		}
 
@@ -344,7 +451,7 @@ func TestMerge_SquashesTheHeadItWasGiven(t *testing.T) {
 	f.merge = func(body map[string]string) (int, any) {
 		asked = body
 
-		return http.StatusOK, map[string]any{"sha": "merge-sha", "merged": true}
+		return http.StatusOK, map[string]any{keySHA: "merge-sha", "merged": true}
 	}
 
 	sha, err := c.Merge(t.Context(), dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
@@ -491,16 +598,187 @@ func TestDeleteBranch_DeletesTheRefAndToleratesAGoneOne(t *testing.T) {
 
 	f, c := newFakeGitHub(t)
 
-	if err := c.DeleteBranch(t.Context(), dotComConn(t), prURL, "goal/7-add-x"); err != nil {
+	if err := c.DeleteBranch(t.Context(), dotComConn(t), prURL, headBranch); err != nil {
 		t.Fatal(err)
 	}
 
-	if len(f.deleted) != 1 || f.deleted[0] != "goal/7-add-x" {
+	if len(f.deleted) != 1 || f.deleted[0] != headBranch {
 		t.Errorf("deleted %v; want goal/7-add-x", f.deleted)
 	}
 
 	if err := c.DeleteBranch(t.Context(), dotComConn(t), prURL, "../main"); err == nil {
 		t.Error("deleting ../main succeeded; want refused")
+	}
+}
+
+const repoURL = "https://github.com/acme/app"
+
+// seedHistory gives the fake acme/app n commits, c1 to cn, each changing its own file and
+// docs/shared.md, with main at the last one.
+func (f *fakeGitHub) seedHistory(n int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.history = nil
+	for i := 1; i <= n; i++ {
+		f.history = append(f.history, fakeCommit{
+			sha:     "c" + strconv.Itoa(i),
+			message: "change " + strconv.Itoa(i) + "\n\nThe body, not the subject.",
+			files:   []string{"internal/f" + strconv.Itoa(i) + ".go", sharedFile},
+		})
+	}
+
+	f.heads = map[string]string{mainBranch: "c" + strconv.Itoa(n), headBranch: headSHA}
+}
+
+func TestBranchHead_NamedAndDefaultBranch(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitHub(t)
+	f.seedHistory(3)
+
+	for _, tt := range []struct{ repo, branch, want string }{
+		{repoURL, "", "c3"},
+		{repoURL + ".git", "", "c3"},
+		{repoURL + "/", mainBranch, "c3"},
+		{repoURL, headBranch, headSHA},
+	} {
+		got, err := c.BranchHead(t.Context(), dotComConn(t), tt.repo, tt.branch)
+		if err != nil || got != tt.want {
+			t.Errorf("BranchHead(%s, %q) = %q, %v; want %q", tt.repo, tt.branch, got, err, tt.want)
+		}
+	}
+
+	if got := f.sent(); !slices.Contains(got, "GET /repos/acme/app") || !slices.Contains(got, "GET /repos/acme/app/branches/goal/7-add-x") {
+		t.Errorf("requests %v; want the repository read for its default branch and the named branch read", got)
+	}
+
+	for _, tt := range []struct{ repo, branch string }{
+		{repoURL, "gone"},
+		{"https://github.com/acme/other", ""},
+	} {
+		if _, err := c.BranchHead(t.Context(), dotComConn(t), tt.repo, tt.branch); !errors.Is(err, ports.ErrNotFound) {
+			t.Errorf("BranchHead(%s, %q) = %v; want ErrNotFound", tt.repo, tt.branch, err)
+		}
+	}
+}
+
+// A repository on another host than the connection's, or a URL that is not a repository's, is
+// refused before anything is sent.
+func TestBranchHead_OnlyOnTheConnectionsHost(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitHub(t)
+	ghe := connection(t, map[string]string{"token": token, "host": "ghe.example.com"})
+
+	for _, tt := range []struct {
+		conn domain.ResolvedConnection
+		repo string
+	}{
+		{dotComConn(t), "https://code.example.com/acme/app"},
+		{ghe, repoURL},
+		{dotComConn(t), "http://github.com/acme/app"},
+		{dotComConn(t), "https://user@github.com/acme/app"},
+		{dotComConn(t), "https://github.com/acme/app?x=1"},
+		{dotComConn(t), "https://github.com/acme/app#x"},
+		{dotComConn(t), "https://github.com/acme"},
+		{dotComConn(t), prURL},
+	} {
+		if _, err := c.BranchHead(t.Context(), tt.conn, tt.repo, ""); err == nil {
+			t.Errorf("BranchHead(%s) succeeded; want refused", tt.repo)
+		}
+
+		if _, err := c.Compare(t.Context(), tt.conn, tt.repo, "c1", "c2"); err == nil {
+			t.Errorf("Compare(%s) succeeded; want refused", tt.repo)
+		}
+	}
+
+	if got := f.sent(); len(got) != 0 {
+		t.Errorf("requests %v; want none", got)
+	}
+}
+
+func TestCompare_CommitsOldestFirstWithFiles(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitHub(t)
+	f.seedHistory(4)
+
+	got, err := c.Compare(t.Context(), dotComConn(t), repoURL, "c1", "c4")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := ports.Comparison{Commits: []ports.Commit{
+		{SHA: "c2", Subject: "change 2", Files: []string{"internal/f2.go", sharedFile}},
+		{SHA: "c3", Subject: "change 3", Files: []string{"internal/f3.go", sharedFile}},
+		{SHA: "c4", Subject: "change 4", Files: []string{"internal/f4.go", sharedFile}},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Compare = %+v; want %+v", got, want)
+	}
+
+	if sent := f.sent(); !slices.Contains(sent, "GET /repos/acme/app/compare/c1...c4") {
+		t.Errorf("requests %v; want the compare API asked", sent)
+	}
+
+	// Nothing since: no commits, not truncated.
+	if got, err := c.Compare(t.Context(), dotComConn(t), repoURL, "c4", "c4"); err != nil || len(got.Commits) != 0 || got.Truncated {
+		t.Errorf("Compare(c4, c4) = %+v, %v; want no commits", got, err)
+	}
+}
+
+func TestCompare_UnknownCommitIsNotFound(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitHub(t)
+	f.seedHistory(2)
+
+	for _, tt := range []struct{ repo, base, head string }{
+		{repoURL, "gone", "c2"},
+		{repoURL, "c1", "gone"},
+		{"https://github.com/acme/other", "c1", "c2"},
+	} {
+		if _, err := c.Compare(t.Context(), dotComConn(t), tt.repo, tt.base, tt.head); !errors.Is(err, ports.ErrNotFound) {
+			t.Errorf("Compare(%s, %s, %s) = %v; want ErrNotFound", tt.repo, tt.base, tt.head, err)
+		}
+	}
+
+	for _, tt := range []struct{ base, head string }{{"", "c2"}, {"c1", ""}, {"c1..c0", "c2"}} {
+		if _, err := c.Compare(t.Context(), dotComConn(t), repoURL, tt.base, tt.head); err == nil {
+			t.Errorf("Compare(%q, %q) succeeded; want refused", tt.base, tt.head)
+		}
+	}
+}
+
+// Past 100 commits, Compare returns the oldest 100 and says it truncated. The compare answer
+// carries every file's patch, far over the 1 MiB other answers are held to.
+func TestCompare_TruncatesPast100(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitHub(t)
+	f.seedHistory(ports.MaxCompareCommits + 30)
+
+	got, err := c.Compare(t.Context(), dotComConn(t), repoURL, "c1", "c"+strconv.Itoa(ports.MaxCompareCommits+30))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !got.Truncated || len(got.Commits) != ports.MaxCompareCommits {
+		t.Fatalf("Compare = %d commits, truncated %v; want %d and truncated", len(got.Commits), got.Truncated, ports.MaxCompareCommits)
+	}
+
+	if first, last := got.Commits[0].SHA, got.Commits[len(got.Commits)-1].SHA; first != "c2" || last != "c101" {
+		t.Errorf("commits %s to %s; want c2 to c101, the oldest", first, last)
+	}
+
+	if sent := f.sent(); !slices.Contains(sent, "GET /repos/acme/app/compare/c1...c130") || len(sent) != 1+ports.MaxCompareCommits {
+		t.Errorf("%d requests, first %v; want the compare API asked, then each of the 100 commits", len(sent), sent[:1])
+	}
+
+	// Exactly 100 is not truncated.
+	if got, err := c.Compare(t.Context(), dotComConn(t), repoURL, "c1", "c101"); err != nil || got.Truncated || len(got.Commits) != 100 {
+		t.Errorf("Compare(c1, c101) = %d commits, truncated %v, %v; want 100, not truncated", len(got.Commits), got.Truncated, err)
 	}
 }
 
@@ -542,11 +820,23 @@ func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
 
 	moved := New(Config{APIURL: redirect.URL})
 
-	if _, err := moved.PullRequest(t.Context(), dotComConn(t), prURL); err == nil || leaked {
-		t.Errorf("PullRequest via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", err, leaked)
-	}
-
-	if err := moved.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA); err == nil || leaked {
-		t.Errorf("UpdateBranch via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", err, leaked)
+	for name, call := range map[string]func() error{
+		"PullRequest": func() error {
+			_, err := moved.PullRequest(t.Context(), dotComConn(t), prURL)
+			return err
+		},
+		"UpdateBranch": func() error { return moved.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA) },
+		"BranchHead": func() error {
+			_, err := moved.BranchHead(t.Context(), dotComConn(t), repoURL, "")
+			return err
+		},
+		"Compare": func() error {
+			_, err := moved.Compare(t.Context(), dotComConn(t), repoURL, "c1", "c2")
+			return err
+		},
+	} {
+		if err := call(); err == nil || leaked {
+			t.Errorf("%s via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", name, err, leaked)
+		}
 	}
 }

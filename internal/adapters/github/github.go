@@ -2,7 +2,8 @@
 // with the credential of a connection whose kind's code host is github (spec 4 §5.5).
 //
 // It reads pull requests, merges them, updates their branches with their base and deletes
-// branches, nothing else. The connection's
+// branches, and reads a repository's branch heads and the commits between two commits, nothing
+// else. The connection's
 // rendered git login says which host it serves and holds the token; a pull request URL on any
 // other host is refused before anything is sent, and the repository is the URL's own. The API is
 // https://api.github.com for github.com, https://api.<host> for a GitHub Enterprise Cloud host
@@ -26,6 +27,7 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,7 +61,10 @@ var defaultMergeabilityPolls = []time.Duration{
 const (
 	apiVersion   = "2022-11-28"
 	maxBodyBytes = 1 << 20
-	dotCom       = "github.com"
+	// maxCommitBytes bounds the answers of the compare and commit APIs, which carry every changed
+	// file's patch.
+	maxCommitBytes = 32 << 20
+	dotCom         = "github.com"
 )
 
 // Client calls GitHub's REST API. It is safe for concurrent use and keeps no state.
@@ -91,7 +96,8 @@ func New(cfg Config) *Client {
 	}
 }
 
-// pull is one pull request, with the API and the token that reach it.
+// pull is one pull request, with the API and the token that reach it; a repository's own reads
+// leave number empty.
 type pull struct {
 	api, token  string
 	owner, repo string
@@ -126,6 +132,32 @@ func (cl *Client) open(c domain.ResolvedConnection, prURL string) (pull, error) 
 	}
 
 	return pull{api: cl.apiFor(host), token: token, owner: m[1], repo: m[2], number: m[3]}, nil
+}
+
+var repoPath = regexp.MustCompile(`^/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$`)
+
+// openRepo checks that repoURL is a repository on the host of c's git login and names it.
+func (cl *Client) openRepo(c domain.ResolvedConnection, repoURL string) (pull, error) {
+	host, token, err := c.GitLogin()
+	if err != nil {
+		return pull{}, err
+	}
+
+	u, err := url.Parse(repoURL)
+	if err != nil {
+		return pull{}, fmt.Errorf("repository %q: %w", repoURL, err)
+	}
+
+	m := repoPath.FindStringSubmatch(u.Path)
+	if u.Scheme != "https" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || m == nil {
+		return pull{}, fmt.Errorf("%q is not a repository URL", repoURL)
+	}
+
+	if !strings.EqualFold(u.Host, host) {
+		return pull{}, fmt.Errorf("%s is not on %s, the host of connection %s", repoURL, host, c.Connection.Name)
+	}
+
+	return pull{api: cl.apiFor(host), token: token, owner: m[1], repo: m[2]}, nil
 }
 
 // apiFor is the REST API root of host.
@@ -354,12 +386,7 @@ func (cl *Client) DeleteBranch(ctx context.Context, c domain.ResolvedConnection,
 		return fmt.Errorf("delete branch %q: not a branch name", branch)
 	}
 
-	segments := strings.Split(branch, "/")
-	for i, s := range segments {
-		segments[i] = url.PathEscape(s)
-	}
-
-	status, msg, err := cl.call(ctx, p, http.MethodDelete, p.repoPath("/git/refs/heads/"+strings.Join(segments, "/")), nil, nil)
+	status, msg, err := cl.call(ctx, p, http.MethodDelete, p.repoPath("/git/refs/heads/"+refPath(branch)), nil, nil)
 
 	switch {
 	case err != nil:
@@ -372,12 +399,146 @@ func (cl *Client) DeleteBranch(ctx context.Context, c domain.ResolvedConnection,
 	}
 }
 
+// BranchHead implements ports.CodeHost. An empty branch is the repository's default_branch.
+func (cl *Client) BranchHead(ctx context.Context, c domain.ResolvedConnection, repoURL, branch string) (string, error) {
+	p, err := cl.openRepo(c, repoURL)
+	if err != nil {
+		return "", err
+	}
+
+	if strings.Contains(branch, "..") {
+		return "", fmt.Errorf("branch head %q: not a branch name", branch)
+	}
+
+	if branch == "" {
+		var repo struct {
+			DefaultBranch string `json:"default_branch"`
+		}
+
+		if err := cl.get(ctx, p, p.repoPath(""), &repo, maxBodyBytes); err != nil {
+			return "", fmt.Errorf("default branch of %s: %w", repoURL, err)
+		}
+
+		branch = repo.DefaultBranch
+	}
+
+	var b struct {
+		Commit struct {
+			SHA string `json:"sha"`
+		} `json:"commit"`
+	}
+
+	if err := cl.get(ctx, p, p.repoPath("/branches/"+refPath(branch)), &b, maxBodyBytes); err != nil {
+		return "", fmt.Errorf("head of %s in %s: %w", branch, repoURL, err)
+	}
+
+	if b.Commit.SHA == "" {
+		return "", fmt.Errorf("head of %s in %s: GitHub named no commit", branch, repoURL)
+	}
+
+	return b.Commit.SHA, nil
+}
+
+// commitJSON is the part of GitHub's commit object goald reads.
+type commitJSON struct {
+	SHA    string `json:"sha"`
+	Commit struct {
+		Message string `json:"message"`
+	} `json:"commit"`
+	Files []struct {
+		Filename string `json:"filename"`
+	} `json:"files"`
+}
+
+// Compare implements ports.CodeHost with the compare API (base...head, from their merge base),
+// whose first page of ports.MaxCompareCommits holds the oldest commits; total_commits says how
+// many there are. The compare answer lists the files of all commits together, so each commit is
+// read once more for its own (up to ports.MaxCompareCommits+1 requests in all); any failure
+// fails the whole call. GitHub lists at most 300 files of one commit, and Compare does not page
+// past them.
+func (cl *Client) Compare(ctx context.Context, c domain.ResolvedConnection, repoURL, base, head string) (ports.Comparison, error) {
+	p, err := cl.openRepo(c, repoURL)
+	if err != nil {
+		return ports.Comparison{}, err
+	}
+
+	for _, ref := range []string{base, head} {
+		if ref == "" || strings.Contains(ref, "..") {
+			return ports.Comparison{}, fmt.Errorf("compare %q...%q in %s: not a commit", base, head, repoURL)
+		}
+	}
+
+	var cmp struct {
+		TotalCommits int          `json:"total_commits"`
+		Commits      []commitJSON `json:"commits"`
+	}
+
+	path := p.repoPath("/compare/"+refPath(base)+"..."+refPath(head)) + "?per_page=" + strconv.Itoa(ports.MaxCompareCommits) + "&page=1"
+	if err := cl.get(ctx, p, path, &cmp, maxCommitBytes); err != nil {
+		return ports.Comparison{}, fmt.Errorf("compare %s...%s in %s: %w", base, head, repoURL, err)
+	}
+
+	commits := cmp.Commits[:min(len(cmp.Commits), ports.MaxCompareCommits)]
+	out := ports.Comparison{
+		Commits:   make([]ports.Commit, 0, len(commits)),
+		Truncated: cmp.TotalCommits > len(commits) || len(cmp.Commits) > len(commits),
+	}
+
+	for _, cj := range commits {
+		var full commitJSON
+		if err := cl.get(ctx, p, p.repoPath("/commits/"+url.PathEscape(cj.SHA)), &full, maxCommitBytes); err != nil {
+			return ports.Comparison{}, fmt.Errorf("compare %s...%s in %s: files of %s: %w", base, head, repoURL, cj.SHA, err)
+		}
+
+		files := make([]string, 0, len(full.Files))
+		for _, f := range full.Files {
+			files = append(files, f.Filename)
+		}
+
+		subject, _, _ := strings.Cut(cj.Commit.Message, "\n")
+		out.Commits = append(out.Commits, ports.Commit{SHA: cj.SHA, Subject: strings.TrimSpace(subject), Files: files})
+	}
+
+	return out, nil
+}
+
+// get reads path into out, its answer bounded by limit: a 404 is ports.ErrNotFound.
+func (cl *Client) get(ctx context.Context, p pull, path string, out any, limit int64) error {
+	status, msg, err := cl.callLimit(ctx, p, http.MethodGet, path, nil, out, limit)
+
+	switch {
+	case err != nil:
+		return err
+	case status == http.StatusNotFound:
+		return fmt.Errorf("GitHub answered 404: %s: %w", msg, ports.ErrNotFound)
+	case status != http.StatusOK:
+		return fmt.Errorf("GitHub answered %d: %s", status, msg)
+	}
+
+	return nil
+}
+
+// refPath is ref as URL path segments, each escaped.
+func refPath(ref string) string {
+	segments := strings.Split(ref, "/")
+	for i, s := range segments {
+		segments[i] = url.PathEscape(s)
+	}
+
+	return strings.Join(segments, "/")
+}
+
 // call sends one API request with the connection's token and decodes a successful JSON answer
 // into out (when out is not nil). It returns the status and GitHub's message, if any; err is
 // only for requests that got no answer or an unreadable one. The token is scrubbed from the
 // message and from errors.
 func (cl *Client) call(ctx context.Context, p pull, method, path string, body, out any) (int, string, error) {
-	status, msg, err := cl.send(ctx, p, method, path, body, out)
+	return cl.callLimit(ctx, p, method, path, body, out, maxBodyBytes)
+}
+
+// callLimit is call with the answer bounded by limit bytes.
+func (cl *Client) callLimit(ctx context.Context, p pull, method, path string, body, out any, limit int64) (int, string, error) {
+	status, msg, err := cl.send(ctx, p, method, path, body, out, limit)
 
 	scrub := func(s string) string { return strings.ReplaceAll(s, p.token, "[redacted]") }
 
@@ -388,7 +549,7 @@ func (cl *Client) call(ctx context.Context, p pull, method, path string, body, o
 	return status, scrub(msg), err
 }
 
-func (cl *Client) send(ctx context.Context, p pull, method, path string, body, out any) (int, string, error) {
+func (cl *Client) send(ctx context.Context, p pull, method, path string, body, out any, limit int64) (int, string, error) {
 	var reader io.Reader
 
 	if body != nil {
@@ -420,7 +581,7 @@ func (cl *Client) send(ctx context.Context, p pull, method, path string, body, o
 	}
 	defer func() { _ = res.Body.Close() }()
 
-	raw, err := io.ReadAll(io.LimitReader(res.Body, maxBodyBytes))
+	raw, err := io.ReadAll(io.LimitReader(res.Body, limit))
 	if err != nil {
 		return 0, "", fmt.Errorf("read answer: %w", err)
 	}
