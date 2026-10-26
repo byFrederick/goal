@@ -19,7 +19,7 @@ tasks:
     desc: Build the auth service into apps/auth/dist (Better Auth on Hono; from 3-9 goal up runs node apps/auth/dist/server.js under GOAL_AUTH=session)
     deps: [worker:install]
     dir: apps/auth
-    sources: [src/**/*.ts, package.json, tsconfig.json, tsconfig.build.json, ../../pnpm-lock.yaml]
+    sources: [src/**/*.ts, package.json, tsconfig.json, tsconfig.build.json, ../../packages/config/*.json, ../../pnpm-lock.yaml]
     generates: [dist/server.js]
     cmds:
       - pnpm run --silent build

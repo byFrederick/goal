@@ -4,6 +4,7 @@
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
 !apps/auth/
+!packages/config/
 apps/auth/node_modules/
 apps/auth/dist/
 apps/auth/**/*.test.ts

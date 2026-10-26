@@ -38,6 +38,7 @@
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
     "@biomejs/biome": "2.6.2",
+    "@goal/config": "workspace:*",
     "@playwright/test": "1.64.1",
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/router-plugin": "1.168.48",

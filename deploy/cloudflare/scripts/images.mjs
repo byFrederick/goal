@@ -22,14 +22,21 @@ export const inputs = {
     'contracts/definitions/',
     'apps/web/',
     'packages/api-client/',
+    'packages/config/',
     'go.mod',
     'go.sum',
     'package.json',
     'pnpm-lock.yaml',
     'pnpm-workspace.yaml',
   ],
-  'apps/auth/Dockerfile': ['apps/auth/', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml'],
-  'apps/worker/Dockerfile': ['apps/worker/', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml'],
+  'apps/auth/Dockerfile': ['apps/auth/', 'packages/config/', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml'],
+  'apps/worker/Dockerfile': [
+    'apps/worker/',
+    'packages/config/',
+    'package.json',
+    'pnpm-lock.yaml',
+    'pnpm-workspace.yaml',
+  ],
 };
 
 const digestReference = /^registry\.cloudflare\.com\/[a-f0-9]{32}\/[a-z0-9][a-z0-9._-]*@sha256:[a-f0-9]{64}$/;

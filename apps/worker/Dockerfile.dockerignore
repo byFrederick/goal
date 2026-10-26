@@ -4,5 +4,6 @@
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
 !apps/worker/
+!packages/config/
 apps/worker/node_modules/
 apps/worker/dist/

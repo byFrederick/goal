@@ -1,0 +1,9 @@
+{
+  // Node services: they run as ES modules under NodeNext. A project sets its own types (types: ["node"]).
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext"
+  }
+}

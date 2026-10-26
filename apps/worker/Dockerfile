@@ -87,7 +87,9 @@ WORKDIR /home/node/src
 RUN npm install --global --no-fund --no-audit "pnpm@${PNPM_VERSION}" && mise reshim
 COPY --chown=1000:1000 package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY --chown=1000:1000 apps/worker/package.json apps/worker/
+COPY --chown=1000:1000 packages/config/package.json packages/config/
 RUN pnpm install --frozen-lockfile --filter @goal/worker
+COPY --chown=1000:1000 packages/config/ packages/config/
 COPY --chown=1000:1000 apps/worker/ apps/worker/
 RUN pnpm --filter @goal/worker build \
  && pnpm --filter @goal/worker deploy --prod /home/node/out \

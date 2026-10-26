@@ -1,0 +1,13 @@
+{
+  "name": "@goal/config",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared Biome config and tsconfig bases for Goal's TypeScript projects: Node, browser and Workers variants",
+  "exports": {
+    "./biome.json": "./biome.json",
+    "./tsconfig.base.json": "./tsconfig.base.json",
+    "./tsconfig.node.json": "./tsconfig.node.json",
+    "./tsconfig.browser.json": "./tsconfig.browser.json",
+    "./tsconfig.workers.json": "./tsconfig.workers.json"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  // Browser code, checked against the DOM libs. Bundled by Vite, so it is never emitted (noEmit).
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true
+  }
+}
