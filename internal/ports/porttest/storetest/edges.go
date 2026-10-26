@@ -108,11 +108,11 @@ func testEdgesAddListRemove(f *fixture) {
 		}
 	}
 
-	if err := f.Store.RemoveEdge(ctx, b.ID, a.ID, domain.LocalUser, t1); err != nil {
+	if err := f.Store.RemoveEdge(ctx, b.ID, a.ID, domain.LocalUser, t1, "paths no longer overlap"); err != nil {
 		t.Fatalf("RemoveEdge: %v", err)
 	}
 
-	if err := f.Store.RemoveEdge(ctx, b.ID, a.ID, domain.LocalUser, t1); !errors.Is(err, ports.ErrNotFound) {
+	if err := f.Store.RemoveEdge(ctx, b.ID, a.ID, domain.LocalUser, t1, ""); !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("RemoveEdge again = %v; want ErrNotFound", err)
 	}
 
@@ -120,10 +120,13 @@ func testEdgesAddListRemove(f *fixture) {
 	sameEdges(t, "a needed by after the removal", f.edges(t, a.ID).NeededBy, []domain.Edge{{Item: c.ID, Needs: a.ID, Kind: domain.EdgeLinked, By: domain.LocalUser.Ref(), At: t1}})
 	sameEdges(t, "unknown item", f.edges(t, missingItem).Needs, nil)
 
+	removed := edgeEvent(domain.EventEdgeRemoved, b, a.ID, domain.EdgePlanned, t1)
+	removed.Data["reason"] = "paths no longer overlap"
+
 	sameEvents(t, f.Events(t, b.ID), []domain.Event{
 		{FactoryID: f.factory, ItemID: b.ID, At: t0, Kind: domain.EventCreated, Station: stWork, Actor: domain.ActorEngine},
 		edgeEvent(domain.EventEdgeAdded, b, a.ID, domain.EdgePlanned, t0),
-		edgeEvent(domain.EventEdgeRemoved, b, a.ID, domain.EdgePlanned, t1),
+		removed,
 	})
 
 	if events := f.Events(t, a.ID); len(events) != 1 {
