@@ -11,7 +11,7 @@ import (
 )
 
 // NoteItem records the request's actor's note for the agents working an item. The next run's
-// brief carries it (live delivery to a running agent is phase 2.2-E14b).
+// brief carries it, and a run in progress reads it from the gateway between its agent's turns.
 func (s *server) NoteItem(ctx context.Context, req gen.NoteItemRequestObject) (gen.NoteItemResponseObject, error) {
 	if req.Body == nil {
 		return nil, fmt.Errorf("%w: a note needs its text", errInvalid)

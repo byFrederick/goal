@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -18,7 +19,7 @@ func (h *harness) appendEvent(t *testing.T, it domain.Item, kind domain.EventKin
 
 	ctx := domain.WithOrg(t.Context(), h.claims().OrgID)
 	if err := h.store.AppendEvents(ctx, domain.Event{
-		FactoryID: it.FactoryID, ItemID: it.ID, RunID: run, At: h.clock.Now(), Kind: kind, Station: "build", Actor: "ada", Data: data,
+		FactoryID: it.FactoryID, ItemID: it.ID, RunID: run, At: h.clock.Now(), Kind: kind, Station: h.claims().Station, Actor: "ada", Data: data,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +146,7 @@ func TestServeRun_NotesAtMostAPage(t *testing.T) {
 
 	var ids []int64
 	for i := range maxNotes + 5 {
-		ids = append(ids, h.note(t, it, fmt.Sprint(i)))
+		ids = append(ids, h.note(t, it, strconv.Itoa(i)))
 	}
 
 	got := h.fetchNotes(t, url, c, 0)
