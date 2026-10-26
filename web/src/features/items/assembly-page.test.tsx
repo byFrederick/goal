@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ApiError, cancelItem, pauseItem, retryItem } from '../../api/client';
 import type {
   AssemblyPart,
   AssemblyParts,
@@ -14,7 +15,17 @@ import type {
 import { renderItemPage } from '../../test/route';
 import { AssemblyPage } from './assembly-page';
 
-afterEach(cleanup);
+vi.mock(import('../../api/client'), async (original) => ({
+  ...(await original()),
+  pauseItem: vi.fn(async () => assembly),
+  retryItem: vi.fn(async () => assembly),
+  cancelItem: vi.fn(async () => ({ ...assembly, state: 'cancelled' as const })),
+}));
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 const org: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'A', factory_count: 1, role: null };
 const factory: Factory = {
@@ -119,11 +130,11 @@ function stat(label: string) {
 }
 
 /** Renders the page once the router has mounted it (the route resolves asynchronously). */
-async function renderAssembly(over: { item?: Item; parts?: AssemblyParts } = {}) {
+async function renderAssembly(over: { item?: Item; parts?: AssemblyParts; factory?: Factory } = {}) {
   renderItemPage({
     page: () => <AssemblyPage />,
     org,
-    factory,
+    factory: over.factory ?? factory,
     item: over.item ?? assembly,
     parts: over.parts ?? parts,
     board,
@@ -132,7 +143,7 @@ async function renderAssembly(over: { item?: Item; parts?: AssemblyParts } = {})
 }
 
 describe('AssemblyPage header', () => {
-  it('shows the assembly label, the key, the title and the brief, and no action', async () => {
+  it('shows the assembly label, the key, the title and the brief, and no Add a part', async () => {
     await renderAssembly();
 
     expect(screen.getByText('Assembly')).toBeTruthy();
@@ -142,8 +153,6 @@ describe('AssemblyPage header', () => {
     expect(screen.getByText('Ship the assembly page.')).toBeTruthy();
 
     expect(screen.queryByRole('button', { name: /add a part/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /pause/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /cancel assembly/i })).toBeNull();
   });
 });
 
@@ -213,5 +222,103 @@ describe('AssemblyPage parts table', () => {
     const third = within(table).getByRole('link', { name: 'Part 3 title' });
     expect(third.getAttribute('href')).toBe('/o/acme/f/goal/items/43');
     expect(third.closest('tr')?.textContent).toContain('3 of 4');
+  });
+});
+
+/** The parts with every open one paused (blocked), as a pause leaves them. */
+const pausedParts: AssemblyParts = {
+  ...parts,
+  parts: parts.parts.map((p) => (p.state === 'done' ? p : { ...p, state: 'blocked' as const })),
+};
+
+describe('AssemblyPage actions', () => {
+  it('Pause calls pause at once, with no dialog', async () => {
+    await renderAssembly();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+
+    await waitFor(() => expect(pauseItem).toHaveBeenCalledWith('org-1', 'goal#40', undefined));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('Resume shows when every open part is paused, and calls retry', async () => {
+    await renderAssembly({ parts: pausedParts });
+
+    expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
+
+    await waitFor(() => expect(retryItem).toHaveBeenCalledWith('org-1', 'goal#40'));
+    expect(pauseItem).not.toHaveBeenCalled();
+  });
+
+  it('hides Pause, Resume and Cancel assembly from a caller who may do none of them', async () => {
+    await renderAssembly({ factory: { ...factory, can: [] } });
+
+    expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cancel assembly' })).toBeNull();
+  });
+
+  it('Resume and Cancel assembly need item:decide, Pause only item:operate', async () => {
+    await renderAssembly({ parts: pausedParts, factory: { ...factory, can: ['item:operate'] } });
+
+    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cancel assembly' })).toBeNull();
+  });
+
+  it('hides both actions on a cancelled assembly', async () => {
+    await renderAssembly({ item: { ...assembly, state: 'cancelled' } });
+
+    expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cancel assembly' })).toBeNull();
+  });
+
+  it('the cancel dialog names the open parts and confirms with cancel', async () => {
+    await renderAssembly();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel assembly' }));
+    const dialog = screen.getByRole('dialog', {
+      name: 'Cancel this assembly? Its 3 open parts are cancelled too.',
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel assembly' }));
+
+    await waitFor(() => expect(cancelItem).toHaveBeenCalledWith('org-1', 'goal#40'));
+  });
+
+  it('names a single open part in the singular', async () => {
+    const oneOpen: AssemblyParts = {
+      ...parts,
+      parts: parts.parts.map((p) => (p.id === 'part-2' ? p : { ...p, state: 'done' as const })),
+    };
+    await renderAssembly({ parts: oneOpen });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel assembly' }));
+
+    expect(
+      screen.getByRole('dialog', { name: 'Cancel this assembly? Its 1 open part is cancelled too.' }),
+    ).toBeTruthy();
+  });
+
+  it('Esc closes the cancel dialog and cancels nothing', async () => {
+    await renderAssembly();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel assembly' }));
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(cancelItem).not.toHaveBeenCalled();
+  });
+
+  it('shows a 409 refusal inline in the dialog and keeps it open', async () => {
+    vi.mocked(cancelItem).mockRejectedValueOnce(
+      new ApiError({ title: 'Conflict', status: 409, code: 'item-closed', detail: 'goal#40 is done' }),
+    );
+    await renderAssembly();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel assembly' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel assembly' }));
+
+    expect((await within(dialog).findByRole('alert')).textContent).toBe('goal#40 is done');
+    expect(screen.getByRole('dialog')).toBeTruthy();
   });
 });
