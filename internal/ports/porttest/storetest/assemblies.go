@@ -12,7 +12,7 @@ func testAssembliesPartsInNumberOrder(f *fixture) {
 	t := f.t
 
 	asm := f.create(t, domain.NewItem{Title: "the assembly"})
-	p1 := f.create(t, domain.NewItem{ParentID: asm.ID, Title: "part one", State: domain.StateDone, Station: "done"})
+	p1 := f.create(t, domain.NewItem{ParentID: asm.ID, Title: "part one", State: domain.StateDone, Station: stDone})
 	plain := f.create(t, domain.NewItem{Title: "a plain item"})
 	p2 := f.create(t, domain.NewItem{ParentID: asm.ID, Title: "part two", State: domain.StateReady, Station: stNext})
 	p3 := f.create(t, domain.NewItem{ParentID: asm.ID, Title: "part three"})
@@ -27,7 +27,7 @@ func testAssembliesPartsInNumberOrder(f *fixture) {
 	}
 
 	want := map[domain.ItemID]domain.Assembly{asm.ID: {ID: asm.ID, Number: asm.Number, Title: asm.Title, Parts: []domain.Part{
-		{ID: p1.ID, Number: p1.Number, Station: "done", State: domain.StateDone},
+		{ID: p1.ID, Number: p1.Number, Station: stDone, State: domain.StateDone},
 		{ID: p2.ID, Number: p2.Number, Station: stNext, State: domain.StateReady},
 		{ID: p3.ID, Number: p3.Number, Station: stWork, State: domain.StateQueued},
 	}}}

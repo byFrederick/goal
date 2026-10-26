@@ -181,7 +181,7 @@ func (a Assembly) Progress() AssemblyProgress {
 			continue
 		case StateInProgress:
 			p.InProgress++
-		default:
+		case StateQueued, StateReady, StateWaitingHuman, StateBlocked:
 			p.Waiting++
 		}
 

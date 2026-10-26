@@ -31,14 +31,14 @@ func TestAssemblyProgress_CountsMergedWorkingAndWaitingParts(t *testing.T) {
 	t.Parallel()
 
 	a := Assembly{ID: "a", Parts: []Part{
-		{ID: "p1", Station: "build", State: StateDone},
-		{ID: "p2", Station: "build", State: StateInProgress},
-		{ID: "p3", Station: "review", State: StateWaitingHuman},
-		{ID: "p4", Station: "build", State: StateQueued},
+		{ID: "p1", Station: stationBuild, State: StateDone},
+		{ID: "p2", Station: stationBuild, State: StateInProgress},
+		{ID: "p3", Station: "check", State: StateWaitingHuman},
+		{ID: "p4", Station: stationBuild, State: StateQueued},
 		{ID: "p5", Station: "triage", State: StateCancelled},
 	}}
 
-	want := AssemblyProgress{Total: 5, Merged: 1, InProgress: 1, Waiting: 2, Stations: []string{"build", "review"}}
+	want := AssemblyProgress{Total: 5, Merged: 1, InProgress: 1, Waiting: 2, Stations: []string{stationBuild, "check"}}
 	if got := a.Progress(); !reflect.DeepEqual(got, want) {
 		t.Errorf("Progress = %+v, want %+v", got, want)
 	}

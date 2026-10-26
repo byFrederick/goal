@@ -392,12 +392,7 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, dr
 		return nil, err
 	}
 
-	ids := make([]domain.ItemID, 0, len(items))
-	for _, it := range items {
-		ids = append(ids, it.ID)
-	}
-
-	touches, err := s.items.TouchCounts(ctx, ids)
+	touches, err := s.touchCounts(ctx, items)
 	if err != nil {
 		return nil, err
 	}
@@ -448,22 +443,45 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, dr
 			c.Turn = &n
 		}
 
-		if a, ok := asms[it.ID]; ok {
-			p := a.Progress()
-			c.Parts = &gen.AssemblyParts{Total: p.Total, Merged: p.Merged, InProgress: p.InProgress, Waiting: p.Waiting, Stations: p.Stations}
-		}
-
-		if a, ok := asms[it.ParentID]; ok && it.ParentID != "" {
-			c.Assembly = &gen.PartOf{
-				Id: string(a.ID), Ref: domain.ItemRef{Factory: f.Metadata.Name, Number: a.Number}.String(), Title: a.Title,
-				Part: a.PartNumber(it.ID), Parts: len(a.Parts),
-			}
-		}
+		c.Assembly, c.Parts = assemblyFields(f, it, asms)
 
 		out = append(out, c)
 	}
 
 	return out, nil
+}
+
+// touchCounts counts the touches of each of items that has any, by item.
+func (s *server) touchCounts(ctx context.Context, items []domain.Item) (map[domain.ItemID]int, error) {
+	ids := make([]domain.ItemID, 0, len(items))
+	for _, it := range items {
+		ids = append(ids, it.ID)
+	}
+
+	return s.items.TouchCounts(ctx, ids)
+}
+
+// assemblyFields are an item's card's assembly, when it is a part of one of asms, and parts,
+// when it is one of asms.
+func assemblyFields(f *config.Factory, it domain.Item, asms map[domain.ItemID]domain.Assembly) (*gen.PartOf, *gen.AssemblyParts) {
+	var (
+		of    *gen.PartOf
+		parts *gen.AssemblyParts
+	)
+
+	if a, ok := asms[it.ParentID]; ok && it.ParentID != "" {
+		of = &gen.PartOf{
+			Id: string(a.ID), Ref: domain.ItemRef{Factory: f.Metadata.Name, Number: a.Number}.String(), Title: a.Title,
+			Part: a.PartNumber(it.ID), Parts: len(a.Parts),
+		}
+	}
+
+	if a, ok := asms[it.ID]; ok {
+		p := a.Progress()
+		parts = &gen.AssemblyParts{Total: p.Total, Merged: p.Merged, InProgress: p.InProgress, Waiting: p.Waiting, Stations: p.Stations}
+	}
+
+	return of, parts
 }
 
 // assemblies reads, in one call, the assemblies among items and those items' parents are, with
