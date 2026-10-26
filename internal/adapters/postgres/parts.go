@@ -1,8 +1,10 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -153,6 +155,128 @@ func insertPart(ctx context.Context, q *db.Queries, parent db.WorkItem, p domain
 	}
 
 	return row, nil
+}
+
+// CascadeParts implements ports.Store. Parts are locked by id, then the assembly: the order
+// closeAssembly takes them in after a part's own lock, so a cascade and a closing part never
+// wait on each other in a cycle.
+func (s *Store) CascadeParts(ctx context.Context, c ports.Cascade) (domain.Parts, error) {
+	assembly, steps, err := cascadeSteps(c)
+	if err != nil {
+		return domain.Parts{}, fmt.Errorf("cascade to the parts of %s: %w", c.Assembly, err)
+	}
+
+	var parts domain.Parts
+
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		if err := lockCascade(ctx, q, assembly, c.Assembly, steps); err != nil {
+			return err
+		}
+
+		for _, st := range steps {
+			row, err := transition(ctx, q, st.cur, st.t)
+			if err != nil {
+				return err
+			}
+
+			if err := closeAssembly(ctx, q, row, st.t.At); err != nil {
+				return err
+			}
+		}
+
+		if err := appendEvents(ctx, q, c.Events); err != nil {
+			return err
+		}
+
+		rows, err := q.ItemParts(ctx, assembly)
+		if err != nil {
+			return fmt.Errorf("parts: %w", err)
+		}
+
+		parts, err = partsFrom(rows)
+
+		return err
+	})
+	if err != nil {
+		return domain.Parts{}, fmt.Errorf("cascade to the parts of %s: %w", c.Assembly, err)
+	}
+
+	return parts, nil
+}
+
+// cascadeStep is one part's transition of a cascade and, once locked, the part's row.
+type cascadeStep struct {
+	id  uuid.UUID
+	t   ports.Transition
+	cur db.WorkItem
+}
+
+// cascadeSteps checks c and returns the assembly's id and the parts' transitions in lock order,
+// by id.
+func cascadeSteps(c ports.Cascade) (uuid.UUID, []cascadeStep, error) {
+	if len(c.Parts) == 0 {
+		return uuid.UUID{}, nil, fmt.Errorf("a cascade names no part: %w", domain.ErrInvalid)
+	}
+
+	assembly, err := parseID("item", string(c.Assembly))
+	if err != nil {
+		return uuid.UUID{}, nil, err
+	}
+
+	steps := make([]cascadeStep, len(c.Parts))
+
+	for i, t := range c.Parts {
+		if t.To.State == domain.StateAssembly {
+			return uuid.UUID{}, nil, fmt.Errorf("item %s: only Assemble makes an assembly: %w", t.ItemID, domain.ErrInvalid)
+		}
+
+		id, err := parseID("item", string(t.ItemID))
+		if err != nil {
+			return uuid.UUID{}, nil, err
+		}
+
+		steps[i] = cascadeStep{id: id, t: t}
+	}
+
+	slices.SortFunc(steps, func(a, b cascadeStep) int { return bytes.Compare(a.id[:], b.id[:]) })
+
+	for i := 1; i < len(steps); i++ {
+		if steps[i-1].id == steps[i].id {
+			return uuid.UUID{}, nil, fmt.Errorf("item %s is named twice: %w", steps[i].t.ItemID, domain.ErrInvalid)
+		}
+	}
+
+	return assembly, steps, nil
+}
+
+// lockCascade locks the rows of steps, in their order, each a part of the assembly, then the
+// assembly's, which must still be in state assembly.
+func lockCascade(ctx context.Context, q *db.Queries, assembly uuid.UUID, id domain.ItemID, steps []cascadeStep) error {
+	for i := range steps {
+		st := &steps[i]
+
+		cur, err := lockItem(ctx, q, st.id, st.t.ItemID)
+		if err != nil {
+			return err
+		}
+
+		if cur.PartKey == nil || cur.ParentID == nil || *cur.ParentID != assembly {
+			return fmt.Errorf("item %s is no part of %s: %w", st.t.ItemID, id, domain.ErrInvalid)
+		}
+
+		st.cur = cur
+	}
+
+	a, err := lockItem(ctx, q, assembly, id)
+	if err != nil {
+		return err
+	}
+
+	if domain.ItemState(a.State) != domain.StateAssembly {
+		return fmt.Errorf("item %s is %s, not an open assembly: %w", id, a.State, ports.ErrConflict)
+	}
+
+	return nil
 }
 
 // Parts implements ports.Store.
