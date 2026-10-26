@@ -201,6 +201,11 @@ type Store interface {
 	// number) first.
 	ListItems(ctx context.Context, q ItemQuery) ([]domain.Item, error)
 
+	// Assemblies returns, by id, those of ids that are items of the factory with parts (items
+	// whose ParentID they are), each with every one of its parts in number order, wherever they
+	// are. Ids of items without parts or of another factory's items are absent.
+	Assemblies(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID]domain.Assembly, error)
+
 	// StationLoads returns the load of every station of a factory that has open items: how
 	// many wait (queued or ready), how many are in progress and how many wait for a person's
 	// decision. Order is unspecified.

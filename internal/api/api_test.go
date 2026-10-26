@@ -261,6 +261,16 @@ func (r reads) ListItems(ctx context.Context, q ports.ItemQuery) ([]domain.Item,
 	return r.Store.ListItems(ctx, q)
 }
 
+func (r reads) Assemblies(ctx context.Context, f domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID]domain.Assembly, error) {
+	r.seam.record("Assemblies")
+	return r.Store.Assemblies(ctx, f, ids)
+}
+
+func (r reads) Parts(ctx context.Context, parent domain.ItemID) (domain.Parts, error) {
+	r.seam.record("Parts")
+	return r.Store.Parts(ctx, parent)
+}
+
 func (r reads) StationLoads(ctx context.Context, f domain.FactoryID) ([]domain.StationLoad, error) {
 	r.seam.record("StationLoads")
 	return r.Store.StationLoads(ctx, f)

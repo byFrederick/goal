@@ -72,8 +72,8 @@ describe('waitingOnYou', () => {
 
 describe('describeState', () => {
   it('says who is working, who it waits on, and when it was sent back', () => {
-    expect(describeState({ state: 'in_progress', agent: 'builder-1', rework_count: 0 })).toEqual({
-      text: 'builder-1 working',
+    expect(describeState({ state: 'in_progress', agent: 'infra-engineer', rework_count: 0 })).toEqual({
+      text: 'Infra engineer working',
       tone: 'run',
     });
     expect(describeState({ state: 'waiting_human', agent: null, rework_count: 0 }).tone).toBe('you');

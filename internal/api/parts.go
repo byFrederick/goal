@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
@@ -170,4 +171,28 @@ func assemblyLead(it domain.Item, parts domain.Parts, now time.Time) time.Durati
 // closedState reports whether an item in state st is off the line for good.
 func closedState(st domain.ItemState) bool {
 	return st == domain.StateDone || st == domain.StateCancelled
+}
+
+// assemblyOf is the assembly it is a part of, with its place among the parts in plan order; nil
+// unless it is a part. One read of the assembly and one of its parts: getItem only.
+func (s *server) assemblyOf(ctx context.Context, it domain.Item) (*gen.PartOf, error) {
+	if it.PartKey == "" {
+		return nil, nil //nolint:nilnil // an item that is not a part has no assembly
+	}
+
+	asm, err := s.items.Item(ctx, it.ParentID)
+	if err != nil {
+		return nil, fmt.Errorf("assembly of part %s: %w", it.ID, err)
+	}
+
+	parts, err := s.items.Parts(ctx, asm.ID)
+	if err != nil {
+		return nil, fmt.Errorf("parts of %s: %w", asm.ID, err)
+	}
+
+	return &gen.PartOf{
+		Id: string(asm.ID), Ref: s.ref(ctx, asm.FactoryID, asm.Number), Title: asm.Title,
+		Part:  slices.IndexFunc(parts.Items, func(p domain.Item) bool { return p.ID == it.ID }) + 1,
+		Parts: parts.Total,
+	}, nil
 }

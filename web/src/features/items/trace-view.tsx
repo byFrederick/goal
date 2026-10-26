@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { ItemState } from '../../api/types';
 import { formatClock, formatDuration, formatUsd, humanize } from '../../shared/format';
 import { toneText } from '../../shared/item-state';
+import { useModelLabel } from '../../shared/models';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
@@ -13,7 +14,7 @@ import {
   type NoteEntry,
   type Reply,
   type RunEntry,
-  runLabel,
+  runRole,
   type ToolCall,
 } from './timeline';
 
@@ -40,6 +41,7 @@ export function ToolRow({ call }: { call: ToolCall }) {
 
 function RunBlock({ run, itemState }: { run: RunEntry; itemState: ItemState }) {
   const [all, setAll] = useState(false);
+  const modelOf = useModelLabel();
   // A run with no end while the item no longer runs was cut short (a lease expired, goald restarted).
   const status = run.status === 'running' && itemState !== 'in_progress' ? 'ended' : run.status;
   const chip = {
@@ -51,13 +53,14 @@ function RunBlock({ run, itemState }: { run: RunEntry; itemState: ItemState }) {
   }[status];
   const tools = all ? run.tools : run.tools.slice(-shownTools);
   const meta = [
-    run.model,
+    run.model ? modelOf(run.model) : undefined,
     run.turns !== undefined ? `${run.turns} ${run.turns === 1 ? 'turn' : 'turns'}` : undefined,
     run.costUsd !== undefined ? formatUsd(run.costUsd) : undefined,
     run.endedAt ? formatDuration(Date.parse(run.endedAt) - Date.parse(run.at)) : undefined,
     run.version !== undefined ? `ran on v${run.version}` : undefined,
   ].filter(Boolean);
-  const label = runLabel(run);
+  const label = runRole(run);
+  const metaText = meta.join(', ');
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
@@ -67,7 +70,11 @@ function RunBlock({ run, itemState }: { run: RunEntry; itemState: ItemState }) {
         </p>
         {chip}
       </div>
-      {meta.length > 0 ? <p className="m-0 text-[13px] text-muted">{meta.join(', ')}</p> : null}
+      {metaText ? (
+        <p className="m-0 truncate text-[13px] text-muted" title={metaText}>
+          {metaText}
+        </p>
+      ) : null}
       {run.tools.length > 0 ? (
         <ol className="m-0 flex list-none flex-col gap-1.5 p-0" aria-label={`Tool calls by ${label}`}>
           {tools.map((t) => (

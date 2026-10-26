@@ -1,6 +1,6 @@
 import type { CanUseTool, Options } from '@anthropic-ai/claude-agent-sdk';
 import { describe, expect, it } from 'vitest';
-import { agentQuery } from './agent.js';
+import { agentQuery, taskPrompt } from './agent.js';
 import { type Connection, parseSpec, type TaskSpec } from './spec.js';
 
 const base = {
@@ -177,5 +177,16 @@ describe('agentQuery', () => {
         'mcp__goal__knowledge__search; mcp__goal__knowledge__read returns a whole document by the id a search gave.',
     );
     expect(systemPromptOf({ knowledge_sources: ['handbook'] })).not.toContain('Knowledge');
+  });
+});
+
+describe('taskPrompt', () => {
+  it('puts the conflicts with the default branch before the brief and feedback, and nothing without them', () => {
+    const spec = parseSpec(JSON.stringify({ ...base, base_conflicts: ['web/src/app.tsx'] }));
+    const prompt = taskPrompt(spec, 'Rejected: the tests fail.');
+
+    expect(prompt).toMatch(/^## First: conflicts with the default branch\n\n[^\n]*rebase or merge the default branch/);
+    expect(prompt).toContain('- web/src/app.tsx\n\nAdd a health endpoint\n\nRejected: the tests fail.');
+    expect(taskPrompt(parseSpec(JSON.stringify({ ...base, base_conflicts: [] })))).toMatch(/^Add a health endpoint/);
   });
 });

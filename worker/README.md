@@ -54,7 +54,7 @@ goald creates one sandbox per run (`ports.Sandboxes`) and execs, in order:
 {
   "spec": { "…": "spec.json below, without gateway_url" },
   "files": { "agent/prompt.md": "<base64>", "agent/skills/acme-conventions/SKILL.md": "<base64>", "agent/output.schema.json": "<base64>" },
-  "repository": { "url": "https://github.com/acme/api.git", "branch": "goal/7-add-a-health-endpoint" },
+  "repository": { "url": "https://github.com/acme/api.git", "branch": "goal/7-add-a-health-endpoint", "fresh_base": "rebase" },
   "git_credentials": [{ "host": "github.com", "username": "x-access-token", "password_env": "GH_TOKEN" }],
   "tools": ["task@3.46.1", "aqua:cli/cli@2.83.0"]
 }
@@ -62,11 +62,14 @@ goald creates one sandbox per run (`ports.Sandboxes`) and execs, in order:
 
 `git_credentials` are the git logins of the repository's connection and of the agent's own connections (one per host, user and variable); `tools` are the definition's `runtime.tools`, then the CLI tools of the agent's connections. `internal/gateway/testdata/run-bundle.json` is a real one; the Go and the Vitest tests both read it. Then, in order:
 
-1. Each file under `/goal` at its path (relative, no `.` or `..`), and `spec.json` with `gateway_url` set to `GOAL_GATEWAY_URL`.
+1. Each file under `/goal` at its path (relative, no `.` or `..`).
 2. Per git credential, a helper for `https://<host>` added to the global git config (`--add`: git asks each helper of a host in turn) that answers git's `get` with the user name and the value of `password_env`, read when git asks: the password is only ever in the environment of the exec that runs git, so prepare clones with the repository connection's and the agent pushes with one of its own.
-3. With a repository: `git clone` into `/workspace` and the item's branch checked out, the remote one when earlier runs pushed it, otherwise new from the default branch; then `mise install` there for the repository's own tools (`mise.toml`, `.tool-versions`, …).
-4. `mise use --global` for `tools`, so they are on `PATH` wherever the agent works.
-5. One line on stdout: `{"type":"prepared","at":…,"seconds":5.4,"tools":1,"branch":"goal/7-…","branch_existed":true}` (`branch` and `branch_existed` only with a repository). `tools` counts the bundle's `tools` (step 4), not the repository's own from step 3: a repository whose `.mise.toml` names six tools and a definition without `runtime.tools` prepare with `"tools":0`.
+3. With a repository: `git clone` into `/workspace` and the item's branch checked out, the remote one when earlier runs pushed it, otherwise new from the default branch. A branch that existed is then brought up to date with the default branch (`origin/HEAD`, which the clone sets) as `repository.fresh_base` says (the definition's `flow.assemblies.fresh_base`; ADR 0012): `rebase`, the default, runs `git rebase origin/<default>`; `merge` runs `git merge --no-edit origin/<default>`. The box's git identity (`Goal agent`, `/etc/gitconfig`) signs the rebased or merge commits. On a conflict prepare runs `git rebase --abort` or `git merge --abort`, so the branch stays as pushed with a clean tree, and reports the conflicting files (`git diff --name-only --diff-filter=U`, sorted) instead of failing; any other failure fails prepare. A new branch is neither rebased nor merged. Then `mise install` there for the repository's own tools (`mise.toml`, `.tool-versions`, …).
+4. `spec.json` with `gateway_url` set to `GOAL_GATEWAY_URL` and, after a conflict in step 3, `base_conflicts` listing the files.
+5. `mise use --global` for `tools`, so they are on `PATH` wherever the agent works.
+6. One line on stdout: `{"type":"prepared","at":…,"seconds":5.4,"tools":1,"branch":"goal/7-…","branch_existed":true,"fresh_base":"rebase"}` (`branch` and `branch_existed` only with a repository, `fresh_base` only for a branch that existed, and `"conflicts":["go.mod",…]` only after a conflict). `tools` counts the bundle's `tools` (step 5), not the repository's own from step 3: a repository whose `.mise.toml` names six tools and a definition without `runtime.tools` prepare with `"tools":0`.
+
+After a rebase the local branch has diverged from `origin/<branch>`, so the agent's plain `git push` is rejected: it pushes with `git push --force-with-lease`, which its `tools_allow` must allow and its `tools_deny` must not deny (a rule such as `Bash(git push --force*)` denies it). A definition that denies force pushes uses `fresh_base: merge`, whose merge commit pushes plainly.
 
 ### spec.json
 
@@ -89,15 +92,16 @@ goald creates one sandbox per run (`ports.Sandboxes`) and execs, in order:
     { "name": "playwright", "kind": "mcp-server", "title": "MCP server", "env": [],
       "mcp": { "command": ["sh", "-c", "npx -y @playwright/mcp@0.0.41"] } }
   ],
-  "knowledge_sources": ["handbook"]
+  "knowledge_sources": ["handbook"],
+  "base_conflicts": ["go.mod"]
 }
 ```
 
-`connections` are the agent's organization connections its token grants (the model and repository connections are not among them unless the agent names them): the names of the variables each sets in `goal-agent run`'s env, never a value, its MCP server and its kind's docs.
+`connections` are the agent's organization connections its token grants (the model and repository connections are not among them unless the agent names them): the names of the variables each sets in `goal-agent run`'s env, never a value, its MCP server and its kind's docs. `base_conflicts` (only after a conflict in prepare's step 3) names the files that conflict with the default branch.
 
 ## How the agent runs
 
-- Working directory `/workspace`; Claude Code's system prompt with, appended, `## This factory` and the `purpose` (when set), then `prompt.md`, then `## Connections`: each connection's name and kind title, the names of its variables, its MCP server (`mcp__<name>__*`) and its kind's docs, never a value, then `## Knowledge` naming the `knowledge_sources` and the gateway's `knowledge__search` and `knowledge__read` (when the factory lists sources); the brief, earlier outputs and the finishing instruction as the user prompt.
+- Working directory `/workspace`; Claude Code's system prompt with, appended, `## This factory` and the `purpose` (when set), then `prompt.md`, then `## Connections`: each connection's name and kind title, the names of its variables, its MCP server (`mcp__<name>__*`) and its kind's docs, never a value, then `## Knowledge` naming the `knowledge_sources` and the gateway's `knowledge__search` and `knowledge__read` (when the factory lists sources); the brief, earlier outputs and the finishing instruction as the user prompt. With `base_conflicts` the user prompt starts with a note (`## First: conflicts with the default branch`) listing the files and telling the agent to rebase or merge the default branch, resolve them and push before the brief.
 - Tools: the built-in tools named by `tools_allow` (Claude Code permission rules such as `Bash(npm test*)`) are the only ones available, and those rules are pre-approved. `tools_deny` rules are disallowed. An agent that allows no tools gets `Read`, `Grep` and `Glob`. Permission mode `default` with a permission check (`canUseTool`) for every call nothing pre-approved: a tool of a connection's MCP server is allowed by the agent's `<connection>__<pattern>` rules (patterns as Go's `path.Match`; deny wins, a malformed deny pattern denies the connection's every tool, and a connection with allow rules allows only the tools they match), and every other call is denied, since nobody is there to ask (`dontAsk` would deny those calls before the check sees them). Denied calls are the result's `permission_denials`.
 - Skills: copied from `/goal/agent/skills` to `$CLAUDE_CONFIG_DIR/skills`; only the listed names are enabled (the SDK's `skills` option): they are the only skills listed to the model and the only ones the Skill tool accepts, and the only ones the `started` event reports. Claude Code would otherwise also discover the skills bundled with it (loop, schedule, claude-api, …), skills and plugins synced from the claude.ai account behind the token, and the checkout's `.claude/skills`; the worker turns the first two off (`settings`: `disableBundledSkills`, `syncClaudeAiSkills: false`, `syncClaudeAiPlugins: false`, `disableClaudeAiConnectors`) and the filter hides the rest. No plugins are loaded. Settings sources are `user` (those skills) and `project` (the checkout's `CLAUDE.md` and `.claude/`).
 - MCP (`strictMcpConfig`, so `.mcp.json` and other configs are ignored): `goal`, goald's gateway, at `gateway_url` over streamable HTTP with `Authorization: Bearer $GOAL_GATEWAY_TOKEN`, its tools pre-approved (the gateway serves only the agent's allowed tools); and one server per connection with an MCP server, named after the connection and reached from the box like any API: a remote one at its `url` with its `headers`, whose `${NAME}` references Claude Code expands from its env (nothing on disk holds a value), or a stdio one started in the box by its `command`, which inherits the agent's env. A connection with both is reached at its URL; one named `goal` is refused. Every server's tools are always loaded (`alwaysLoad`): Claude Code would otherwise defer them behind tool search, and agents called them by name and failed.
