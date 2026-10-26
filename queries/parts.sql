@@ -5,13 +5,13 @@
 
 -- name: InsertPart :one
 INSERT INTO work_items (
-  id, factory_id, number, parent_id, part_key, part_paths, type, lane, title, body, station, state,
-  class_of_service, priority, created_at, updated_at
+  id, factory_id, number, parent_id, part_key, part_paths, paths, type, lane, title, body, station,
+  state, class_of_service, priority, created_at, updated_at
 ) VALUES (
   sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(number), sqlc.arg(parent_id)::uuid, sqlc.arg(part_key)::text,
-  sqlc.arg(part_paths)::text[], sqlc.arg(type), sqlc.narg(lane), sqlc.arg(title), sqlc.arg(body),
-  sqlc.arg(station), 'queued', sqlc.arg(class_of_service), sqlc.arg(priority)::bigint,
-  sqlc.arg(created_at), sqlc.arg(created_at)
+  sqlc.arg(part_paths)::text[], sqlc.arg(part_paths)::text[], sqlc.arg(type), sqlc.narg(lane),
+  sqlc.arg(title), sqlc.arg(body), sqlc.arg(station), 'queued', sqlc.arg(class_of_service),
+  sqlc.arg(priority)::bigint, sqlc.arg(created_at), sqlc.arg(created_at)
 )
 RETURNING *;
 

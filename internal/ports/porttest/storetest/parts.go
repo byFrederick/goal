@@ -127,7 +127,7 @@ func testAssembleCreatesParts(f *fixture) {
 		got := parts.Items[i]
 		w := domain.Item{
 			ID: got.ID, OrgID: f.org, FactoryID: f.factory, Number: it.Number + int64(i) + 1, ParentID: it.ID,
-			PartKey: p.Key, PartPaths: p.Paths, Type: "feature", Lane: p.Lane, Title: p.Title, Body: p.Brief,
+			PartKey: p.Key, PartPaths: p.Paths, Paths: p.Paths, Type: "feature", Lane: p.Lane, Title: p.Title, Body: p.Brief,
 			Station: stWork, State: domain.StateQueued, Class: domain.ClassExpedite, Priority: 4, Outputs: map[string]json.RawMessage{},
 			CreatedAt: t1, UpdatedAt: t1,
 		}
@@ -198,6 +198,12 @@ func testAssembleRetry(f *fixture) {
 
 	if got := f.parts(t, it.ID); got.Total != 3 {
 		t.Errorf("Parts after a retry = %d; want 3", got.Total)
+	}
+
+	for i, p := range plan() {
+		if got := again.Items[i].Paths; !reflect.DeepEqual(got, p.Paths) {
+			t.Errorf("part %q paths after a retry = %q; want the plan's %q", p.Key, got, p.Paths)
+		}
 	}
 
 	if n := len(f.Events(t, it.ID)); n != before {

@@ -56,6 +56,7 @@ UPDATE work_items SET
   state = sqlc.arg(state),
   updated_at = sqlc.arg(updated_at),
   lane = coalesce(sqlc.narg(lane), lane),
+  paths = coalesce(sqlc.narg(paths)::text[], paths),
   outputs = CASE
     WHEN sqlc.narg(output)::jsonb IS NULL THEN outputs
     ELSE outputs || jsonb_build_object(sqlc.arg(output_station)::text, sqlc.narg(output)::jsonb)

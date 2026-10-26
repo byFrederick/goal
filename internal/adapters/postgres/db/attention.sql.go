@@ -80,7 +80,7 @@ func (q *Queries) FactoryAttention(ctx context.Context) ([]FactoryAttentionRow, 
 }
 
 const inboxItems = `-- name: InboxItems :many
-SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, coalesce(b.kind, '')::text AS blocker_kind, coalesce(b.data, '{}')::jsonb AS blocker_data
+SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, coalesce(b.kind, '')::text AS blocker_kind, coalesce(b.data, '{}')::jsonb AS blocker_data
 FROM work_items w
 LEFT JOIN LATERAL (
   SELECT e.kind, e.data FROM item_events e
@@ -141,6 +141,7 @@ func (q *Queries) InboxItems(ctx context.Context, arg InboxItemsParams) ([]Inbox
 			&i.WorkItem.OrgID,
 			&i.WorkItem.PartKey,
 			&i.WorkItem.PartPaths,
+			&i.WorkItem.Paths,
 			&i.BlockerKind,
 			&i.BlockerData,
 		); err != nil {
