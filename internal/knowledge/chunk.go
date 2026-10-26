@@ -41,6 +41,56 @@ var (
 // with nothing under it but deeper headings joins the next section's first piece. It is pure;
 // text without any heading is one section.
 func Chunk(text string) []Piece {
+	return chunk(text, nil)
+}
+
+// meter counts the bytes Chunk's scans of a section's characters read, so a test can check that
+// its work grows linearly with the text by counting it instead of timing it (timing flaked under
+// load). Every such scan in pack and cut goes through runeCount, runeOffset or lastSpace; a new
+// scan must too, or the test cannot see it. A nil meter counts nothing.
+type meter struct {
+	scanned int
+}
+
+func (m *meter) add(n int) {
+	if m != nil {
+		m.scanned += n
+	}
+}
+
+// runeCount is the number of characters in s.
+func (m *meter) runeCount(s string) int {
+	m.add(len(s))
+
+	return utf8.RuneCountInString(s)
+}
+
+// lastSpace is the byte offset of the last space in s, -1 when it has none.
+func (m *meter) lastSpace(s string) int {
+	m.add(len(s))
+
+	return strings.LastIndexByte(s, ' ')
+}
+
+// runeOffset is the byte offset in s after its first n characters, len(s) when it has no more.
+func (m *meter) runeOffset(s string, n int) int {
+	for i := range s {
+		if n == 0 {
+			m.add(i)
+
+			return i
+		}
+
+		n--
+	}
+
+	m.add(len(s))
+
+	return len(s)
+}
+
+// chunk is Chunk, counting its work in m.
+func chunk(text string, m *meter) []Piece {
 	var (
 		out     []Piece
 		path    []string
@@ -60,7 +110,7 @@ func Chunk(text string) []Piece {
 		}
 
 		heading := truncateRunes(strings.Join(path, " > "), maxHeading)
-		out = append(out, split(heading, strings.TrimSpace(pending+"\n\n"+section))...)
+		out = append(out, split(heading, strings.TrimSpace(pending+"\n\n"+section), m)...)
 		pending = ""
 	}
 
@@ -82,7 +132,7 @@ func Chunk(text string) []Piece {
 	flush()
 
 	if pending != "" {
-		out = append(out, split(truncateRunes(strings.Join(path, " > "), maxHeading), pending)...)
+		out = append(out, split(truncateRunes(strings.Join(path, " > "), maxHeading), pending, m)...)
 	}
 
 	return out
@@ -101,10 +151,10 @@ func isOnlyHeadings(section string) bool {
 
 // split cuts one section into pieces of at most pieceChars characters, each but the first with
 // the end of the one before as its overlap.
-func split(heading, section string) []Piece {
+func split(heading, section string, m *meter) []Piece {
 	var out []Piece
 
-	for i, text := range pack(section) {
+	for i, text := range pack(section, m) {
 		p := Piece{Heading: heading, Text: text}
 		if i > 0 {
 			p.Overlap = tail(out[i-1].Text, overlapChars) + " … "
@@ -118,7 +168,7 @@ func split(heading, section string) []Piece {
 
 // pack groups a section's paragraphs into pieces of at most pieceChars characters, cutting a
 // paragraph that is longer by lines and words.
-func pack(section string) []string {
+func pack(section string, m *meter) []string {
 	var (
 		out   []string
 		cur   strings.Builder
@@ -126,7 +176,7 @@ func pack(section string) []string {
 	)
 
 	add := func(part, sep string) {
-		n := utf8.RuneCountInString(part)
+		n := m.runeCount(part)
 
 		if cur.Len() > 0 && runes+len(sep)+n > pieceChars {
 			out = append(out, cur.String())
@@ -152,13 +202,13 @@ func pack(section string) []string {
 			continue
 		}
 
-		if utf8.RuneCountInString(para) <= pieceChars {
+		if m.runeCount(para) <= pieceChars {
 			add(para, "\n\n")
 
 			continue
 		}
 
-		for i, part := range cut(para) {
+		for i, part := range cut(para, m) {
 			sep := "\n"
 			if i == 0 {
 				sep = "\n\n"
@@ -177,12 +227,12 @@ func pack(section string) []string {
 
 // cut splits a long paragraph into parts of at most pieceChars characters: at lines, then at
 // spaces, then anywhere. Each cut reads only the part it cuts, so a line costs its length.
-func cut(para string) []string {
+func cut(para string, m *meter) []string {
 	var out []string
 
 	for line := range strings.SplitSeq(para, "\n") {
-		for end := runeOffset(line, pieceChars); end < len(line); end = runeOffset(line, pieceChars) {
-			at := strings.LastIndexByte(line[:end], ' ')
+		for end := m.runeOffset(line, pieceChars); end < len(line); end = m.runeOffset(line, pieceChars) {
+			at := m.lastSpace(line[:end])
 			if at <= 0 {
 				at = end
 			}
@@ -197,19 +247,6 @@ func cut(para string) []string {
 	}
 
 	return out
-}
-
-// runeOffset is the byte offset in s after its first n characters, len(s) when it has no more.
-func runeOffset(s string, n int) int {
-	for i := range s {
-		if n == 0 {
-			return i
-		}
-
-		n--
-	}
-
-	return len(s)
 }
 
 // tail is the end of s, at most n characters, starting at a word.

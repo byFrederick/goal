@@ -4,7 +4,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 	"unicode/utf8"
 )
 
@@ -100,9 +99,11 @@ func TestChunk_LongSectionsSplitWithOverlap(t *testing.T) {
 }
 
 // Review 4 M4: cutting a long line was quadratic (a minified JSON upload of 25 MiB took minutes
-// of one worker's CPU while it held its source's lease); it is linear. A time limit failed on busy
-// run boxes (7 MiB took 10 s under -race there), so the test compares sizes instead: four times the
-// text takes about four times as long when cutting is linear, sixteen when it is quadratic.
+// of one worker's CPU while it held its source's lease); it is linear. Timing it flaked under
+// load, so the test counts Chunk's work instead: the bytes its scans read grow four times for
+// four times the text and stay within five readings of it (counting a paragraph, walking to a
+// cut, finding its space and counting the part read it about four times), where a quadratic cut
+// grows sixteen times.
 func TestChunk_LongLineIsLinear(t *testing.T) {
 	t.Parallel()
 
@@ -114,11 +115,24 @@ func TestChunk_LongLineIsLinear(t *testing.T) {
 		"one line, spaces": func(size int) string { return strings.Repeat("wörd ", size/6) },
 	} {
 		small, big := doc(1<<20), doc(4<<20)
-		smallTook, _ := fastestChunk(small)
-		bigTook, pieces := fastestChunk(big)
 
-		if growth := float64(bigTook) / float64(smallTook); growth > 8 {
-			t.Errorf("%s: Chunk took %v for 1 MiB and %v for 4 MiB, %.1f times as long", name, smallTook, bigTook, growth)
+		var smallWork, bigWork meter
+
+		chunk(small, &smallWork)
+		pieces := chunk(big, &bigWork)
+
+		if growth := float64(bigWork.scanned) / float64(smallWork.scanned); growth > 4.5 {
+			t.Errorf("%s: Chunk scanned %d bytes for 1 MiB and %d for 4 MiB, %.1f times as many",
+				name, smallWork.scanned, bigWork.scanned, growth)
+		}
+
+		for _, w := range []struct {
+			doc     string
+			scanned int
+		}{{small, smallWork.scanned}, {big, bigWork.scanned}} {
+			if w.scanned > 5*len(w.doc) {
+				t.Errorf("%s: Chunk scanned %d bytes of a %d-byte document, more than 5 times its length", name, w.scanned, len(w.doc))
+			}
 		}
 
 		var b strings.Builder
@@ -135,23 +149,4 @@ func TestChunk_LongLineIsLinear(t *testing.T) {
 			t.Errorf("%s: the pieces do not join back into the document", name)
 		}
 	}
-}
-
-// fastestChunk cuts doc twice and returns the quicker time: a busy machine slows one cut, rarely both.
-func fastestChunk(doc string) (time.Duration, []Piece) {
-	var (
-		best   time.Duration
-		pieces []Piece
-	)
-
-	for i := range 2 {
-		start := time.Now()
-		pieces = Chunk(doc)
-
-		if took := time.Since(start); i == 0 || took < best {
-			best = took
-		}
-	}
-
-	return best, pieces
 }
