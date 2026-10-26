@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -65,60 +66,83 @@ const (
 var migrationRoles = []string{AppRole, AuthRole}
 
 // Migrate applies every pending migration from the migrations package. Instances that start
-// together take turns on a transaction-scoped advisory lock keyed by the schema, so exactly
-// one applies each migration and the lock is freed even if the process dies.
-// The lock is held on one pool connection while goose migrates on others, so the pool needs at
-// least two. It applies nothing while a role the migrations grant to is missing (an install
-// from before goal_auth that was not started with goal up); the error wraps ErrRoleMissing. Nor
-// while a live organization still has a legacy import to do; the error wraps
-// ErrLegacyImportPending.
+// together take turns on a session advisory lock keyed by the schema, so exactly one applies
+// each migration; the lock is freed when its connection closes, even if the process dies.
+// While it holds the lock it takes no connection from pool: the lock is held on a connection of
+// its own and goose migrates on another, both opened from pool's config and closed on return,
+// so any number of callers share a pool of any size. It applies nothing while a role the
+// migrations grant to is missing (an install from before goal_auth that was not started with
+// goal up); the error wraps ErrRoleMissing. Nor while a live organization still has a legacy
+// import to do; the error wraps ErrLegacyImportPending.
 func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 	return migrateRequiring(ctx, pool, migrationRoles)
 }
 
-func migrateRequiring(ctx context.Context, pool *pgxpool.Pool, roles []string) error {
+// closeTimeout bounds closing migrateRequiring's connections once ctx may be done.
+const closeTimeout = 5 * time.Second
+
+func migrateRequiring(ctx context.Context, pool *pgxpool.Pool, roles []string) (err error) {
 	if err := requireRoles(ctx, pool, roles); err != nil {
 		return fmt.Errorf("postgres: migrate: %w", err)
 	}
 
-	sqlDB := stdlib.OpenDBFromPool(pool) // closing it leaves the pool open
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("postgres: migrate: %w", err)
+		}
+	}()
+
+	cfg := pool.Config().ConnConfig
+
+	lockConn, err := pgx.ConnectConfig(ctx, cfg.Copy())
+	if err != nil {
+		return fmt.Errorf("connect for the lock: %w", err)
+	}
+
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), closeTimeout)
+		defer cancel()
+
+		err = errors.Join(err, lockConn.Close(closeCtx)) // frees the lock
+	}()
+
+	// The previous release takes this key with pg_advisory_xact_lock, which conflicts with the
+	// session lock, so mixed-version instances take turns too.
+	if _, err := lockConn.Exec(ctx, "SELECT pg_advisory_lock(hashtext('goal.migrate.' || current_schema()))"); err != nil {
+		return fmt.Errorf("lock: %w", err)
+	}
+
+	// Goose's provider runs on one connection at a time.
+	sqlDB := stdlib.OpenDB(*cfg.Copy())
+	sqlDB.SetMaxOpenConns(1)
+
+	defer func() { err = errors.Join(err, sqlDB.Close()) }()
 
 	p, err := goose.NewProvider(goose.DialectPostgres, sqlDB, migrations.FS)
 	if err != nil {
-		return errors.Join(fmt.Errorf("postgres: migrate: %w", err), sqlDB.Close())
-	}
-
-	err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext('goal.migrate.' || current_schema()))"); err != nil {
-			return fmt.Errorf("lock: %w", err)
-		}
-
-		version, err := p.GetDBVersion(ctx)
-		if err != nil {
-			return fmt.Errorf("read the version: %w", err)
-		}
-
-		if err := refuseLegacyImport(ctx, pool, version); err != nil {
-			return err
-		}
-
-		_, err = p.Up(ctx)
-
 		return err
-	})
-	if err != nil {
-		err = fmt.Errorf("postgres: migrate: %w", err)
 	}
 
-	return errors.Join(err, sqlDB.Close())
+	version, err := p.GetDBVersion(ctx)
+	if err != nil {
+		return fmt.Errorf("read the version: %w", err)
+	}
+
+	if err := refuseLegacyImport(ctx, lockConn, version); err != nil {
+		return err
+	}
+
+	_, err = p.Up(ctx)
+
+	return err
 }
 
 // refuseLegacyImport fails with ErrLegacyImportPending when the database, at migration version,
 // still has a legacy import to do: a live organization 00039 recorded pending, or any database
 // from before 00039, which would record every organization pending. A new database (version 0)
-// and one past 00050 have none. It reads on a connection of its own, outside the lock's
-// transaction, which would otherwise keep a lock on the table 00050 drops.
-func refuseLegacyImport(ctx context.Context, pool *pgxpool.Pool, version int64) error {
+// and one past 00050 have none. It reads on conn, the lock's connection, outside a transaction,
+// so it keeps no lock on the table 00050 drops.
+func refuseLegacyImport(ctx context.Context, conn *pgx.Conn, version int64) error {
 	switch {
 	case version == 0 || version >= legacyImportDropped:
 		return nil
@@ -128,7 +152,7 @@ func refuseLegacyImport(ctx context.Context, pool *pgxpool.Pool, version int64) 
 
 	var pending []string
 
-	err := pool.QueryRow(ctx, `
+	err := conn.QueryRow(ctx, `
 		SELECT coalesce(array_agg(o.slug ORDER BY o.slug), '{}') FROM legacy_import_pending p
 		JOIN organizations o ON o.id = p.org_id WHERE o.deleted_at IS NULL`).Scan(&pending)
 	if err != nil {
