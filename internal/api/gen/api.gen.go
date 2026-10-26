@@ -539,6 +539,7 @@ func (e InboxEntryKind) Valid() bool {
 
 // Defines values for ItemState.
 const (
+	ItemStateAssembly     ItemState = "assembly"
 	ItemStateBlocked      ItemState = "blocked"
 	ItemStateCancelled    ItemState = "cancelled"
 	ItemStateDone         ItemState = "done"
@@ -551,6 +552,8 @@ const (
 // Valid indicates whether the value is a known member of the ItemState enum.
 func (e ItemState) Valid() bool {
 	switch e {
+	case ItemStateAssembly:
+		return true
 	case ItemStateBlocked:
 		return true
 	case ItemStateCancelled:
@@ -1181,6 +1184,61 @@ type ApprovalBrief struct {
 	PullRequest *string `json:"pull_request"`
 	SpendUsd    float64 `json:"spend_usd"`
 	Summary     *string `json:"summary"`
+}
+
+// AssemblyPart defines model for AssemblyPart.
+type AssemblyPart struct {
+	// Agent The agent id working it while in progress; never a numbered copy
+	Agent     *string    `json:"agent"`
+	CostUsd   float64    `json:"cost_usd"`
+	CreatedAt time.Time  `json:"created_at"`
+	DoneAt    *time.Time `json:"done_at"`
+	Id        string     `json:"id"`
+
+	// Index 1-based position in the plan, as in part 3 of 6
+	Index int `json:"index"`
+
+	// Key The part's key in the plan
+	Key string `json:"key"`
+
+	// Needs Refs of the parts this part needs
+	Needs  []string `json:"needs"`
+	Number int64    `json:"number"`
+
+	// Paths The files the plan said the part changes
+	Paths []string `json:"paths"`
+
+	// PrUrl The pull request its outputs name
+	PrUrl *string `json:"pr_url"`
+
+	// Ref <factory name>#<number>
+	Ref string `json:"ref"`
+
+	// State assembly: the item was split into parts (its children) and closes when they are; never claimed (ADR 0012)
+	State   ItemState `json:"state"`
+	Station string    `json:"station"`
+	Title   string    `json:"title"`
+
+	// WaitingOn Refs of the needs that are neither done nor cancelled
+	WaitingOn []string `json:"waiting_on"`
+
+	// Wave 0 for no needs, otherwise 1 + the largest wave among its needs
+	Wave int `json:"wave"`
+}
+
+// AssemblyParts defines model for AssemblyParts.
+type AssemblyParts struct {
+	// Done Parts done
+	Done int `json:"done"`
+
+	// LeadTimeSeconds The assembly's lead time, created to its last part done, or to now while it is open; 0 for an item that is not an assembly
+	LeadTimeSeconds int64 `json:"lead_time_seconds"`
+
+	// Parts In plan order
+	Parts []AssemblyPart `json:"parts"`
+
+	// Total All parts
+	Total int `json:"total"`
 }
 
 // AuditEntry defines model for AuditEntry.
@@ -2308,14 +2366,22 @@ type Item struct {
 	// Outputs Each station's output, by station id
 	Outputs  map[string]interface{} `json:"outputs"`
 	ParentId *string                `json:"parent_id,omitempty"`
-	Priority int                    `json:"priority"`
+
+	// PartKey The part's key in its assembly's plan; absent unless the item is a part
+	PartKey *string `json:"part_key,omitempty"`
+
+	// PartPaths The files the plan said the part changes; absent unless the item is a part
+	PartPaths *[]string `json:"part_paths,omitempty"`
+	Priority  int       `json:"priority"`
 
 	// Ref <factory name>#<number>, as in goal#2
-	Ref         string    `json:"ref"`
-	ReworkCount int       `json:"rework_count"`
-	State       ItemState `json:"state"`
-	Station     string    `json:"station"`
-	Title       string    `json:"title"`
+	Ref         string `json:"ref"`
+	ReworkCount int    `json:"rework_count"`
+
+	// State assembly: the item was split into parts (its children) and closes when they are; never claimed (ADR 0012)
+	State   ItemState `json:"state"`
+	Station string    `json:"station"`
+	Title   string    `json:"title"`
 
 	// Touches The item's human touches; getItem only
 	Touches   *ItemTouches `json:"touches,omitempty"`
@@ -2325,8 +2391,10 @@ type Item struct {
 
 // ItemAt defines model for ItemAt.
 type ItemAt struct {
-	Id      string    `json:"id"`
-	Number  int64     `json:"number"`
+	Id     string `json:"id"`
+	Number int64  `json:"number"`
+
+	// State assembly: the item was split into parts (its children) and closes when they are; never claimed (ADR 0012)
 	State   ItemState `json:"state"`
 	Station string    `json:"station"`
 }
@@ -2371,7 +2439,9 @@ type ItemCard struct {
 	RopeHeld bool `json:"rope_held"`
 
 	// Slot While in progress at a station that runs several copies of its agent, the copy working it, 1-based (investigator-2); else null
-	Slot    *int      `json:"slot"`
+	Slot *int `json:"slot"`
+
+	// State assembly: the item was split into parts (its children) and closes when they are; never claimed (ADR 0012)
 	State   ItemState `json:"state"`
 	Station string    `json:"station"`
 
@@ -2425,12 +2495,14 @@ type ItemSpan struct {
 	ReworkBy *string `json:"rework_by"`
 
 	// ReworkRound The item's rework count during the span
-	ReworkRound int       `json:"rework_round"`
-	State       ItemState `json:"state"`
-	Station     string    `json:"station"`
+	ReworkRound int `json:"rework_round"`
+
+	// State assembly: the item was split into parts (its children) and closes when they are; never claimed (ADR 0012)
+	State   ItemState `json:"state"`
+	Station string    `json:"station"`
 }
 
-// ItemState defines model for ItemState.
+// ItemState assembly: the item was split into parts (its children) and closes when they are; never claimed (ADR 0012)
 type ItemState string
 
 // ItemTouches defines model for ItemTouches.
@@ -3425,7 +3497,9 @@ type StreamEvent struct {
 	OrgId string `json:"org_id"`
 
 	// Ref <factory name>#<number>, as in goal#2
-	Ref     string    `json:"ref"`
+	Ref string `json:"ref"`
+
+	// State assembly: the item was split into parts (its children) and closes when they are; never claimed (ADR 0012)
 	State   ItemState `json:"state"`
 	Station *string   `json:"station,omitempty"`
 }
@@ -5238,6 +5312,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/notes (the `NoteItem` operationId).
 	NoteItem(ctx context.Context, org OrgRef, item ItemRef, body NoteItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListItemParts An assembly's parts in plan order, with their needs and waves
+	//
+	// An item that is not an assembly has no parts (done 0, total 0).
+	//
+	// Corresponds with GET /v1/orgs/{org}/items/{item}/parts (the `ListItemParts` operationId).
+	ListItemParts(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PauseItemWithBody Stop an open item where it is until a retry resumes it
 	//
@@ -7233,6 +7314,23 @@ func (c *Client) NoteItemWithBody(ctx context.Context, org OrgRef, item ItemRef,
 // Corresponds with POST /v1/orgs/{org}/items/{item}/notes (the `NoteItem` operationId).
 func (c *Client) NoteItem(ctx context.Context, org OrgRef, item ItemRef, body NoteItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewNoteItemRequest(c.Server, org, item, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListItemParts An assembly's parts in plan order, with their needs and waves
+//
+// An item that is not an assembly has no parts (done 0, total 0).
+//
+// Corresponds with GET /v1/orgs/{org}/items/{item}/parts (the `ListItemParts` operationId).
+func (c *Client) ListItemParts(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListItemPartsRequest(c.Server, org, item)
 	if err != nil {
 		return nil, err
 	}
@@ -12079,6 +12177,47 @@ func NewNoteItemRequestWithBody(server string, org OrgRef, item ItemRef, content
 	return req, nil
 }
 
+// NewListItemPartsRequest constructs an http.Request for the ListItemParts method
+func NewListItemPartsRequest(server string, org OrgRef, item ItemRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/parts", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewPauseItemRequest calls the generic PauseItem builder with application/json body
 func NewPauseItemRequest(server string, org OrgRef, item ItemRef, body PauseItemJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -14775,6 +14914,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/notes (the `NoteItem` operationId).
 	NoteItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body NoteItemJSONRequestBody, reqEditors ...RequestEditorFn) (*NoteItemResponse, error)
+
+	// ListItemPartsWithResponse An assembly's parts in plan order, with their needs and waves
+	//
+	// An item that is not an assembly has no parts (done 0, total 0).
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/items/{item}/parts (the `ListItemParts` operationId).
+	ListItemPartsWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*ListItemPartsResponse, error)
 
 	// PauseItemWithBodyWithResponse Stop an open item where it is until a retry resumes it
 	//
@@ -18626,6 +18774,54 @@ func (r NoteItemResponse) ContentType() string {
 	return ""
 }
 
+type ListItemPartsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AssemblyParts
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListItemPartsResponse) GetJSON200() *AssemblyParts {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListItemPartsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListItemPartsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListItemPartsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListItemPartsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListItemPartsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type PauseItemResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -21758,6 +21954,21 @@ func (c *ClientWithResponses) NoteItemWithResponse(ctx context.Context, org OrgR
 	return ParseNoteItemResponse(rsp)
 }
 
+// ListItemPartsWithResponse An assembly's parts in plan order, with their needs and waves
+//
+// An item that is not an assembly has no parts (done 0, total 0).
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/items/{item}/parts (the `ListItemParts` operationId).
+func (c *ClientWithResponses) ListItemPartsWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*ListItemPartsResponse, error) {
+	rsp, err := c.ListItemParts(ctx, org, item, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListItemPartsResponse(rsp)
+}
+
 // PauseItemWithBodyWithResponse Stop an open item where it is until a retry resumes it
 //
 // The item becomes blocked at its station with a paused event; retry resumes it. In progress, its lease is taken and its run stopped (lease_taken). 409 item-closed (done or cancelled), already-blocked or item-changed.
@@ -24866,6 +25077,39 @@ func ParseNoteItemResponse(rsp *http.Response) (*NoteItemResponse, error) {
 	return response, nil
 }
 
+// ParseListItemPartsResponse parses an HTTP response from a ListItemPartsWithResponse call
+func ParseListItemPartsResponse(rsp *http.Response) (*ListItemPartsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListItemPartsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AssemblyParts
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParsePauseItemResponse parses an HTTP response from a PauseItemWithResponse call
 func ParsePauseItemResponse(rsp *http.Response) (*PauseItemResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -26325,6 +26569,9 @@ type ServerInterface interface {
 	// NoteItem Leave a note for the agents working an item
 	// (POST /v1/orgs/{org}/items/{item}/notes)
 	NoteItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
+	// ListItemParts An assembly's parts in plan order, with their needs and waves
+	// (GET /v1/orgs/{org}/items/{item}/parts)
+	ListItemParts(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
 	// PauseItem Stop an open item where it is until a retry resumes it
 	// (POST /v1/orgs/{org}/items/{item}/pause)
 	PauseItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
@@ -29592,6 +29839,41 @@ func (siw *ServerInterfaceWrapper) NoteItem(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// ListItemParts operation middleware
+func (siw *ServerInterfaceWrapper) ListItemParts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item" -------------
+	var item ItemRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item", r.PathValue("item"), &item, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListItemParts(w, r, org, item)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PauseItem operation middleware
 func (siw *ServerInterfaceWrapper) PauseItem(w http.ResponseWriter, r *http.Request) {
 
@@ -31156,6 +31438,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/stream", wrapper.StreamEvents)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}", wrapper.GetItem)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/events", wrapper.ListItemEvents)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/parts", wrapper.ListItemParts)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/runs", wrapper.ListItemRuns)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/notes", wrapper.NoteItem)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/touches/{event}/reason", wrapper.SetTouchReason)
@@ -34094,6 +34377,46 @@ func (response NoteItemdefaultApplicationProblemPlusJSONResponse) VisitNoteItemR
 	return err
 }
 
+type ListItemPartsRequestObject struct {
+	Org  OrgRef  `json:"org"`
+	Item ItemRef `json:"item"`
+}
+
+type ListItemPartsResponseObject interface {
+	VisitListItemPartsResponse(w http.ResponseWriter) error
+}
+
+type ListItemParts200JSONResponse AssemblyParts
+
+func (response ListItemParts200JSONResponse) VisitListItemPartsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListItemPartsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListItemPartsdefaultApplicationProblemPlusJSONResponse) VisitListItemPartsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type PauseItemRequestObject struct {
 	Org  OrgRef  `json:"org"`
 	Item ItemRef `json:"item"`
@@ -35836,6 +36159,9 @@ type StrictServerInterface interface {
 	// NoteItem Leave a note for the agents working an item
 	// (POST /v1/orgs/{org}/items/{item}/notes)
 	NoteItem(ctx context.Context, request NoteItemRequestObject) (NoteItemResponseObject, error)
+	// ListItemParts An assembly's parts in plan order, with their needs and waves
+	// (GET /v1/orgs/{org}/items/{item}/parts)
+	ListItemParts(ctx context.Context, request ListItemPartsRequestObject) (ListItemPartsResponseObject, error)
 	// PauseItem Stop an open item where it is until a retry resumes it
 	// (POST /v1/orgs/{org}/items/{item}/pause)
 	PauseItem(ctx context.Context, request PauseItemRequestObject) (PauseItemResponseObject, error)
@@ -38092,6 +38418,33 @@ func (sh *strictHandler) NoteItem(w http.ResponseWriter, r *http.Request, org Or
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(NoteItemResponseObject); ok {
 		if err := validResponse.VisitNoteItemResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListItemParts operation middleware
+func (sh *strictHandler) ListItemParts(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
+	var request ListItemPartsRequestObject
+
+	request.Org = org
+	request.Item = item
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListItemParts(ctx, request.(ListItemPartsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListItemParts")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListItemPartsResponseObject); ok {
+		if err := validResponse.VisitListItemPartsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

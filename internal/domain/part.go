@@ -104,3 +104,42 @@ func planCycle(parts []NewPart) error {
 
 	return nil
 }
+
+// PartWaves gives each part of an assembly its wave in the plan: 0 when it needs no other part,
+// otherwise one more than the largest wave among the parts it needs. needs maps each part to
+// the parts it needs; needs outside the map (items that are not parts) are ignored, and a
+// cycle, which a validated plan never has, is cut where it closes.
+func PartWaves(needs map[string][]string) map[string]int {
+	waves := make(map[string]int, len(needs))
+	visiting := make(map[string]bool, len(needs))
+
+	var wave func(string) int
+
+	wave = func(k string) int {
+		if w, ok := waves[k]; ok {
+			return w
+		}
+
+		visiting[k] = true
+		w := 0
+
+		for _, n := range needs[k] {
+			if _, part := needs[n]; !part || visiting[n] {
+				continue
+			}
+
+			w = max(w, wave(n)+1)
+		}
+
+		visiting[k] = false
+		waves[k] = w
+
+		return w
+	}
+
+	for k := range needs {
+		wave(k)
+	}
+
+	return waves
+}
