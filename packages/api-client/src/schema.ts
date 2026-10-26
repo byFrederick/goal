@@ -593,7 +593,7 @@ export interface paths {
         };
         /**
          * The organization's factories, published or not
-         * @description Every factory of the organization by name, with its current version, its open draft and whether it is paused. stations and work_types are those of the version goald runs (empty for a factory never published).
+         * @description Every factory of the organization by name, with its current version, its open draft and whether it is paused. stations and work_types are those of the version goald runs (empty for a factory never published). Archived factories are left out unless archived is true, which lists only the archived ones.
          */
         get: operations["listFactories"];
         put?: never;
@@ -672,6 +672,56 @@ export interface paths {
         put?: never;
         /** Start a paused factory again */
         post: operations["resumeFactory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive a paused, idle factory
+         * @description Retires a factory no longer used without deleting its history: it stays readable, its items stay where they are, and listFactories leaves it out unless archived is true. Only a paused factory none of whose items is being worked is archived: 409 factory-running ("Pause the factory first") for a running one, 409 factory-busy ("N items are being worked", N the items holding a lease) while runs still work its items. Idempotent: archiving an archived factory changes nothing and answers it. Audited as factory.archived.
+         */
+        post: operations["archiveFactory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/unarchive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore an archived factory, still paused
+         * @description Undoes archiveFactory: the factory is listed again and stays paused (resumeFactory starts it), its items where they were. Idempotent: restoring a factory that is not archived changes nothing and answers it. Audited as factory.restored.
+         */
+        post: operations["restoreFactory"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2678,6 +2728,13 @@ export interface components {
             draft: components["schemas"]["DraftRef"] | null;
             /** @description A paused factory takes no work; runs in progress finish */
             paused: boolean;
+            /**
+             * Format: date-time
+             * @description When the factory was archived; absent unless it is
+             */
+            archived_at?: string;
+            /** @description Who archived the factory; absent unless it is archived */
+            archived_by?: components["schemas"]["Actor"];
             /** Format: date-time */
             created_at: string;
             /** @description The caller's effective role on the factory: editor for owners and admins, an API key's ceiling; absent under GOAL_AUTH=none */
@@ -5657,7 +5714,10 @@ export interface operations {
     };
     listFactories: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description true lists only the archived factories; absent or false, only the others */
+                archived?: boolean;
+            };
             header?: never;
             path: {
                 /** @description The organization's slug or id */
@@ -5800,6 +5860,58 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description The factory, running */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Factory"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    archiveFactory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The factory, archived */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Factory"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    restoreFactory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The factory, restored and paused */
             200: {
                 headers: {
                     [name: string]: unknown;

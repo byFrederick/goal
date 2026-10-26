@@ -29,6 +29,8 @@ type Definitions interface {
 	DeleteFactory(ctx context.Context, f domain.FactoryID) error
 	Pause(ctx context.Context, f domain.FactoryID) (ports.FactoryRecord, error)
 	Resume(ctx context.Context, f domain.FactoryID) (ports.FactoryRecord, error)
+	Archive(ctx context.Context, f domain.FactoryID) (ports.FactoryRecord, error)
+	Unarchive(ctx context.Context, f domain.FactoryID) (ports.FactoryRecord, error)
 
 	Templates(ctx context.Context) ([]authoring.TemplateSummary, error)
 	Template(ctx context.Context, name string, version int) (authoring.Template, error)
@@ -60,17 +62,20 @@ var _ Definitions = (*authoring.Service)(nil)
 // immutableCache is how long a published version's file may be cached: forever, it never changes.
 const immutableCache = "private, max-age=31536000, immutable"
 
-func (s *server) ListFactories(ctx context.Context, _ gen.ListFactoriesRequestObject) (gen.ListFactoriesResponseObject, error) {
+// ListFactories lists the factories the caller may see: the archived ones only with
+// archived=true, the others without.
+func (s *server) ListFactories(ctx context.Context, req gen.ListFactoriesRequestObject) (gen.ListFactoriesResponseObject, error) {
 	recs, err := s.defs.Factories(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	loaded := s.loaded(ctx)
+	archived := deref(req.Params.Archived)
 
 	out := gen.ListFactories200JSONResponse{Factories: make([]gen.Factory, 0, len(recs))}
 	for _, rec := range recs {
-		if s.visible(ctx, rec.ID) {
+		if rec.Archived() == archived && s.visible(ctx, rec.ID) {
 			out.Factories = append(out.Factories, s.factoryOf(ctx, rec, loaded[rec.ID]))
 		}
 	}
@@ -180,6 +185,32 @@ func (s *server) ResumeFactory(ctx context.Context, req gen.ResumeFactoryRequest
 	}
 
 	return gen.ResumeFactory200JSONResponse(s.factoryOut(ctx, rec)), nil
+}
+
+func (s *server) ArchiveFactory(ctx context.Context, req gen.ArchiveFactoryRequestObject) (gen.ArchiveFactoryResponseObject, error) {
+	rec, err := s.definition(ctx, req.Factory)
+	if err != nil {
+		return nil, err
+	}
+
+	if rec, err = s.defs.Archive(ctx, rec.ID); err != nil {
+		return nil, err
+	}
+
+	return gen.ArchiveFactory200JSONResponse(s.factoryOut(ctx, rec)), nil
+}
+
+func (s *server) RestoreFactory(ctx context.Context, req gen.RestoreFactoryRequestObject) (gen.RestoreFactoryResponseObject, error) {
+	rec, err := s.definition(ctx, req.Factory)
+	if err != nil {
+		return nil, err
+	}
+
+	if rec, err = s.defs.Unarchive(ctx, rec.ID); err != nil {
+		return nil, err
+	}
+
+	return gen.RestoreFactory200JSONResponse(s.factoryOut(ctx, rec)), nil
 }
 
 func (s *server) ListTemplates(ctx context.Context, _ gen.ListTemplatesRequestObject) (gen.ListTemplatesResponseObject, error) {
@@ -326,6 +357,11 @@ func (s *server) factoryOf(ctx context.Context, rec ports.FactoryRecord, f *conf
 		Role: s.factoryRole(ctx, rec.ID), Can: permissionsOut(s.can(ctx, rec.ID)),
 	}
 
+	if rec.Archived() {
+		by := s.actorOut(rec.ArchivedBy)
+		out.ArchivedAt, out.ArchivedBy = &rec.ArchivedAt, &by
+	}
+
 	if f == nil {
 		return out
 	}
@@ -369,6 +405,8 @@ var definitionStatus = map[string]int{
 	authoring.CodeFactoryPublished:  http.StatusConflict,
 	authoring.CodeDefinitionInvalid: http.StatusConflict,
 	authoring.CodeItemsAtRemoved:    http.StatusConflict,
+	authoring.CodeFactoryRunning:    http.StatusConflict,
+	authoring.CodeFactoryBusy:       http.StatusConflict,
 	authoring.CodeYAMLInvalid:       http.StatusConflict,
 	authoring.CodeDraftConflict:     http.StatusPreconditionFailed,
 	authoring.CodeModelInvalid:      http.StatusUnprocessableEntity,
@@ -415,6 +453,15 @@ func definitionProblem(err error) (gen.Problem, bool) {
 
 	if e, ok := errors.AsType[*ports.ItemsAtRemovedStationError](err); ok {
 		p.Items = &gen.ItemsAtRemovedStations{InProgress: itemsAtOut(e.InProgress), Unmapped: itemsAtOut(e.Unmapped)}
+	}
+
+	switch code {
+	case authoring.CodeFactoryRunning:
+		p.Detail = optional("Pause the factory first")
+	case authoring.CodeFactoryBusy:
+		if e, ok := errors.AsType[*ports.FactoryBusyError](err); ok {
+			p.Detail = optional(e.Error())
+		}
 	}
 
 	return p, true

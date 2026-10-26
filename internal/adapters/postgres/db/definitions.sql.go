@@ -157,18 +157,18 @@ func (q *Queries) Draft(ctx context.Context, factoryID uuid.UUID) (DefinitionVer
 	return i, err
 }
 
-const factoryLeased = `-- name: FactoryLeased :one
-SELECT EXISTS (SELECT 1 FROM leases WHERE factory_id = $1)
+const factoryLeases = `-- name: FactoryLeases :one
+SELECT count(*)::integer FROM leases WHERE factory_id = $1
 `
 
-// Whether one of the factory's items holds a lease. Under the factory's row lock this sees every
+// How many of the factory's items hold a lease. Under the factory's row lock this sees every
 // lease committed before it; a claim from a stale cache of a paused factory could still insert
 // one after it (a lease's foreign key takes FOR KEY SHARE, which the lock does not block).
-func (q *Queries) FactoryLeased(ctx context.Context, factoryID uuid.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, factoryLeased, factoryID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
+func (q *Queries) FactoryLeases(ctx context.Context, factoryID uuid.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, factoryLeases, factoryID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const factoryRecord = `-- name: FactoryRecord :one

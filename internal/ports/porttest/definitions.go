@@ -296,8 +296,8 @@ func (d *Definitions) setArchived(ctx context.Context, id domain.FactoryID, arch
 				return ports.FactoryRecord{}, nil, fmt.Errorf("factory %s: %w", id, ports.ErrFactoryRunning)
 			}
 
-			if d.items != nil && d.items.leased(org, id) {
-				return ports.FactoryRecord{}, nil, fmt.Errorf("factory %s: %w", id, ports.ErrFactoryBusy)
+			if n := d.items.leased(org, id); n > 0 {
+				return ports.FactoryRecord{}, nil, fmt.Errorf("factory %s: %w", id, &ports.FactoryBusyError{Items: n})
 			}
 		}
 
@@ -1030,18 +1030,24 @@ func (s *Store) moveOffStations(org domain.OrgID, factory domain.FactoryID, m st
 	return len(move), nil
 }
 
-// leased reports whether one of org's items of factory holds a lease.
-func (s *Store) leased(org domain.OrgID, factory domain.FactoryID) bool {
+// leased is how many of org's items of factory hold a lease; 0 without an item store.
+func (s *Store) leased(org domain.OrgID, factory domain.FactoryID) int {
+	if s == nil {
+		return 0
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	n := 0
+
 	for _, l := range s.leases {
 		if _, ok := s.visible(l.ItemID, org); ok && l.FactoryID == factory {
-			return true
+			n++
 		}
 	}
 
-	return false
+	return n
 }
 
 // forgetFactory drops a deleted factory's registration.

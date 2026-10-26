@@ -78,6 +78,32 @@ approveItem          pat-demoted      404 item-not-found       404 org-not-found
 approveItem          pat-removed      401 unauthenticated      401 unauthenticated
 approveItem          pat-platform     200                      404 org-not-found
 approveItem          pat-deleted-org  401 unauthenticated      401 unauthenticated
+archiveFactory       anonymous        401 unauthenticated      401 unauthenticated
+archiveFactory       owner            200                      404 org-not-found
+archiveFactory       admin            200                      404 org-not-found
+archiveFactory       viewer           403 forbidden            404 org-not-found
+archiveFactory       approver         403 forbidden            404 org-not-found
+archiveFactory       editor           403 forbidden            404 org-not-found
+archiveFactory       member-no-roles  403 forbidden            404 org-not-found
+archiveFactory       other-org-owner  404 org-not-found        200
+archiveFactory       platform-admin   404 org-not-found        404 org-not-found
+archiveFactory       stale-owner      200                      404 org-not-found
+archiveFactory       key-scoped       403 forbidden            404 org-not-found
+archiveFactory       key-restricted   404 factory-not-found    404 org-not-found
+archiveFactory       key-other-org    404 org-not-found        200
+archiveFactory       key-expired      401 unauthenticated      401 unauthenticated
+archiveFactory       key-revoked      401 unauthenticated      401 unauthenticated
+archiveFactory       bearer-owner     200                      404 org-not-found
+archiveFactory       pat-approver     403 forbidden            404 org-not-found
+archiveFactory       pat-owner        200                      404 org-not-found
+archiveFactory       pat-viewer       403 forbidden            404 org-not-found
+archiveFactory       pat-other-org    404 org-not-found        200
+archiveFactory       pat-expired      401 unauthenticated      401 unauthenticated
+archiveFactory       pat-revoked      401 unauthenticated      401 unauthenticated
+archiveFactory       pat-demoted      403 forbidden            404 org-not-found
+archiveFactory       pat-removed      401 unauthenticated      401 unauthenticated
+archiveFactory       pat-platform     200                      404 org-not-found
+archiveFactory       pat-deleted-org  401 unauthenticated      401 unauthenticated
 cancelItem           anonymous        401 unauthenticated      401 unauthenticated
 cancelItem           owner            200                      404 org-not-found
 cancelItem           admin            200                      404 org-not-found
@@ -2366,6 +2392,32 @@ replaceDraftTree     pat-demoted      404 factory-not-found    404 org-not-found
 replaceDraftTree     pat-removed      401 unauthenticated      401 unauthenticated
 replaceDraftTree     pat-platform     200                      404 org-not-found
 replaceDraftTree     pat-deleted-org  401 unauthenticated      401 unauthenticated
+restoreFactory       anonymous        401 unauthenticated      401 unauthenticated
+restoreFactory       owner            200                      404 org-not-found
+restoreFactory       admin            200                      404 org-not-found
+restoreFactory       viewer           403 forbidden            404 org-not-found
+restoreFactory       approver         403 forbidden            404 org-not-found
+restoreFactory       editor           403 forbidden            404 org-not-found
+restoreFactory       member-no-roles  403 forbidden            404 org-not-found
+restoreFactory       other-org-owner  404 org-not-found        200
+restoreFactory       platform-admin   404 org-not-found        404 org-not-found
+restoreFactory       stale-owner      200                      404 org-not-found
+restoreFactory       key-scoped       403 forbidden            404 org-not-found
+restoreFactory       key-restricted   404 factory-not-found    404 org-not-found
+restoreFactory       key-other-org    404 org-not-found        200
+restoreFactory       key-expired      401 unauthenticated      401 unauthenticated
+restoreFactory       key-revoked      401 unauthenticated      401 unauthenticated
+restoreFactory       bearer-owner     200                      404 org-not-found
+restoreFactory       pat-approver     403 forbidden            404 org-not-found
+restoreFactory       pat-owner        200                      404 org-not-found
+restoreFactory       pat-viewer       403 forbidden            404 org-not-found
+restoreFactory       pat-other-org    404 org-not-found        200
+restoreFactory       pat-expired      401 unauthenticated      401 unauthenticated
+restoreFactory       pat-revoked      401 unauthenticated      401 unauthenticated
+restoreFactory       pat-demoted      403 forbidden            404 org-not-found
+restoreFactory       pat-removed      401 unauthenticated      401 unauthenticated
+restoreFactory       pat-platform     200                      404 org-not-found
+restoreFactory       pat-deleted-org  401 unauthenticated      401 unauthenticated
 restoreVersion       anonymous        401 unauthenticated      401 unauthenticated
 restoreVersion       owner            200                      404 org-not-found
 restoreVersion       admin            200                      404 org-not-found

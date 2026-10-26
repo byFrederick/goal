@@ -747,7 +747,7 @@ func factoryList(ctx context.Context, out *printer, getenv func(string) string, 
 		return err
 	}
 
-	res, err := c.ListFactoriesWithResponse(ctx, c.org)
+	res, err := c.ListFactoriesWithResponse(ctx, c.org, nil)
 	if err != nil {
 		return apiDown(err)
 	}

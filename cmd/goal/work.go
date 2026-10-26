@@ -168,7 +168,7 @@ func itemRef(ctx context.Context, c orgClient, arg, factory string) (string, err
 		return domain.ItemRef{Factory: factory, Number: n}.String(), nil
 	}
 
-	res, err := c.ListFactoriesWithResponse(ctx, c.org)
+	res, err := c.ListFactoriesWithResponse(ctx, c.org, nil)
 	if err != nil {
 		return "", apiDown(err)
 	}

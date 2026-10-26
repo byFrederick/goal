@@ -27,6 +27,7 @@ var (
 	// ErrFactoryRunning means a factory must be paused first: archiving a running factory.
 	ErrFactoryRunning = errors.New("factory running")
 	// ErrFactoryBusy means one of the factory's items holds a lease: a run is still working it.
+	// The error is a *FactoryBusyError.
 	ErrFactoryBusy = errors.New("factory busy")
 )
 
@@ -54,7 +55,7 @@ type DefinitionStore interface {
 	SetPaused(ctx context.Context, id domain.FactoryID, paused bool, by domain.Actor) (FactoryRecord, error)
 	// ArchiveFactory retires a factory: it stays readable, with its items where they are, and is
 	// still listed (FactoryRecord.Archived). Only a paused factory none of whose items holds a
-	// lease is archived: ErrFactoryRunning otherwise, or ErrFactoryBusy. Archiving an archived
+	// lease is archived: ErrFactoryRunning otherwise, or a *FactoryBusyError. Archiving an archived
 	// factory changes nothing. Audit: factory.archived.
 	ArchiveFactory(ctx context.Context, id domain.FactoryID, by domain.Actor) (FactoryRecord, error)
 	// RestoreArchivedFactory undoes ArchiveFactory; the factory stays paused, its items where
@@ -259,6 +260,19 @@ func (e *ItemsAtRemovedStationError) Error() string {
 
 // Unwrap makes the error match ErrItemsAtRemovedStation.
 func (e *ItemsAtRemovedStationError) Unwrap() error { return ErrItemsAtRemovedStation }
+
+// FactoryBusyError refuses to archive a factory whose items hold leases: Items is how many,
+// counted under the same lock as the refusal.
+type FactoryBusyError struct {
+	Items int
+}
+
+func (e *FactoryBusyError) Error() string {
+	return fmt.Sprintf("%d items are being worked", e.Items)
+}
+
+// Unwrap makes the error match ErrFactoryBusy.
+func (e *FactoryBusyError) Unwrap() error { return ErrFactoryBusy }
 
 // DefinitionNotices delivers a notice of every committed definition change, from any goald
 // instance: PostgreSQL LISTEN/NOTIFY on goal_definitions, every organization's.
