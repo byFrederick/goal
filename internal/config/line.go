@@ -72,13 +72,13 @@ func (f *Factory) Line() domain.Line {
 }
 
 // flowPolicy maps board.flow; an unset release is push, unset assembly settings rebase,
-// rework and serialize.
+// rework, serialize and materialize.
 func flowPolicy(fl Flow) domain.FlowPolicy {
 	p := domain.FlowPolicy{
 		Release: domain.ReleasePush, Constraint: fl.Constraint,
 		Assemblies: domain.AssemblyPolicy{
 			FreshBase: domain.FreshBaseRebase, OnConflict: domain.ConflictRework,
-			Overlap: domain.OverlapSerialize,
+			Overlap: domain.OverlapSerialize, Materialize: true,
 		},
 	}
 	if a := fl.Assemblies; a != nil {
@@ -92,6 +92,10 @@ func flowPolicy(fl Flow) domain.FlowPolicy {
 
 		if a.Overlap != "" {
 			p.Assemblies.Overlap = domain.OverlapPolicy(a.Overlap)
+		}
+
+		if a.Materialize != nil {
+			p.Assemblies.Materialize = *a.Materialize
 		}
 	}
 

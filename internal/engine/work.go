@@ -31,6 +31,15 @@ type outputError struct{ err error }
 func (o *outputError) Error() string { return o.err.Error() }
 func (o *outputError) Unwrap() error { return o.err }
 
+// checked is what an output that passed its checks says to finish: the gate's verdict, at a
+// gate, the plan that makes the item an assembly, if any, and next, the current line it was
+// read against, which also decides where the item goes (finish).
+type checked struct {
+	verdict *domain.Verdict
+	plan    []domain.NewPart
+	next    domain.Line
+}
+
 // claimed is an item this instance holds a lease on at an agent station.
 type claimed struct {
 	line    domain.Line
@@ -67,7 +76,7 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 	rejection, attempt, lost := "", 1, 0
 
 	for {
-		res, verdict, err := e.runOnce(ctx, c, &b, feedbackOf(notes, rejection))
+		res, chk, err := e.runOnce(ctx, c, &b, feedbackOf(notes, rejection))
 
 		if e.cut(ctx, log, c, err) {
 			return
@@ -90,7 +99,7 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 			e.block(ctx, log, c, fmt.Sprintf("run %s: %s", res.Status, res.Error))
 			return
 		default:
-			e.finish(ctx, log, c, res.Output, verdict)
+			e.finish(ctx, log, c, res.Output, chk)
 			return
 		}
 
@@ -206,7 +215,7 @@ func agentFor(l domain.Line, st domain.Station, lane string) (domain.AgentSpec, 
 // when not, it has blocked the item.
 func (e *Engine) outputFailed(ctx context.Context, log *slog.Logger, c claimed, attempt int, err error) bool {
 	retryable := errors.Is(err, ports.ErrContractViolation) || errors.Is(err, domain.ErrBadVerdict) ||
-		errors.Is(err, errCheckFailed)
+		errors.Is(err, domain.ErrBadPlan) || errors.Is(err, errCheckFailed)
 	if !retryable {
 		e.block(ctx, log, c, "check output: "+err.Error())
 		return false
@@ -229,37 +238,53 @@ func (e *Engine) outputFailed(ctx context.Context, log *slog.Logger, c claimed, 
 	return false
 }
 
-// check validates an output against the station's contract and, at a gate, reads its verdict.
-func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (*domain.Verdict, error) {
+// check validates an output against the station's contract (of the version the run started
+// on), at a gate reads its verdict and, when the current line materializes plans and the output
+// is not a rejection, reads its plan. The current line is read once here and finish moves the
+// item along the same one, so a plan is assembled only by a line that parsed it.
+func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (checked, error) {
 	if c.station.Output != "" {
 		if err := e.contracts.Validate(ctx, c.line.VersionID, c.station.Output, output); err != nil {
-			return nil, fmt.Errorf("contract %s: %w", c.station.Output, err)
+			return checked{}, fmt.Errorf("contract %s: %w", c.station.Output, err)
 		}
 	}
 
-	if c.station.Gate == nil {
-		return nil, nil // no verdict outside a gate
+	chk := checked{next: e.lineNow(c.line, c.station.ID)}
+
+	if c.station.Gate != nil {
+		v, err := domain.ParseVerdict(output)
+		if err != nil {
+			return checked{}, err
+		}
+
+		chk.verdict = &v
 	}
 
-	v, err := domain.ParseVerdict(output)
+	if !chk.next.Flow.Assemblies.Materialize || (chk.verdict != nil && chk.verdict.Decision == domain.Reject) {
+		return chk, nil
+	}
+
+	plan, err := domain.PlanFrom(output)
 	if err != nil {
-		return nil, err
+		return checked{}, err
 	}
 
-	return &v, nil
+	chk.plan = plan
+
+	return chk, nil
 }
 
 // runOnce records a run and, while heartbeating the lease, runs it in the claim's sandbox (b,
 // created and prepared by the first run), checks its output and runs the station's checks. It
 // returns ErrLeaseLost when another instance took the item, an *outputError when the output
 // failed its checks, and any other error when the run could not be carried out.
-func (e *Engine) runOnce(ctx context.Context, c claimed, b *box, feedback string) (domain.RunResult, *domain.Verdict, error) {
+func (e *Engine) runOnce(ctx context.Context, c claimed, b *box, feedback string) (domain.RunResult, checked, error) {
 	runID, err := e.store.StartRun(ctx, ports.NewRun{
 		FactoryID: c.line.FactoryID, DefinitionVersionID: c.line.VersionID, ItemID: c.item.ID, Station: c.station.ID,
 		Agent: c.agent.Name, Model: modelOf(c), StartedAt: e.clock.Now(),
 	})
 	if err != nil {
-		return domain.RunResult{}, nil, fmt.Errorf("record run: %w", err)
+		return domain.RunResult{}, checked{}, fmt.Errorf("record run: %w", err)
 	}
 
 	taskCtx, stop := context.WithTimeout(ctx, e.cfg.TaskTimeout)
@@ -276,21 +301,21 @@ func (e *Engine) runOnce(ctx context.Context, c claimed, b *box, feedback string
 
 	beats.Go(func() { lost = e.heartbeat(beatCtx, c.lease, stop) })
 
-	res, verdict, err := e.runInBox(taskCtx, c, runID, b, feedback)
+	res, chk, err := e.runInBox(taskCtx, c, runID, b, feedback)
 
 	stopBeat()
 	beats.Wait()
 
 	if lost {
-		return res, nil, ports.ErrLeaseLost
+		return res, checked{}, ports.ErrLeaseLost
 	}
 
-	return res, verdict, err
+	return res, chk, err
 }
 
 // runInBox opens the claim's sandbox when the run is its first, runs the agent there, checks
 // its output and runs the station's checks.
-func (e *Engine) runInBox(ctx context.Context, c claimed, runID domain.RunID, b *box, feedback string) (domain.RunResult, *domain.Verdict, error) {
+func (e *Engine) runInBox(ctx context.Context, c claimed, runID domain.RunID, b *box, feedback string) (domain.RunResult, checked, error) {
 	token, err := e.gatewayToken(ctx, c, runID)
 
 	var (
@@ -311,7 +336,7 @@ func (e *Engine) runInBox(ctx context.Context, c claimed, runID domain.RunID, b 
 
 	if err != nil {
 		e.finishRun(ctx, runID, failure(ctx, err))
-		return domain.RunResult{}, nil, err
+		return domain.RunResult{}, checked{}, err
 	}
 
 	agentEnv := maps.Clone(env.agent)
@@ -325,23 +350,23 @@ func (e *Engine) runInBox(ctx context.Context, c claimed, runID domain.RunID, b 
 	e.finishRun(ctx, runID, res)
 
 	if lost != nil {
-		return res, nil, lost
+		return res, checked{}, lost
 	}
 
 	if res.Status != domain.RunSucceeded {
-		return res, nil, nil
+		return res, checked{}, nil
 	}
 
-	verdict, err := e.check(ctx, c, res.Output)
+	chk, err := e.check(ctx, c, res.Output)
 	if err != nil {
-		return res, nil, &outputError{err: err}
+		return res, checked{}, &outputError{err: err}
 	}
 
 	if err := e.runChecks(ctx, c, runID, b, scrub); err != nil {
-		return res, nil, err
+		return res, checked{}, err
 	}
 
-	return res, verdict, nil
+	return res, chk, nil
 }
 
 // agent runs `goal-agent run` in the claim's sandbox with env, relays the events it reports and
@@ -574,11 +599,12 @@ func (e *Engine) finishRun(ctx context.Context, id domain.RunID, res domain.RunR
 }
 
 // finish moves an item whose output passed its checks: through the gate's verdict when the
-// station has one, otherwise to the next station. The run was checked against the version it
-// started on; where the item goes next is the current line's say, so an item finishing on v1
-// after v2 was published moves along v2.
-func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output json.RawMessage, v *domain.Verdict) {
-	next := e.lineNow(c.line, c.station.ID)
+// station has one, into state assembly when its output has a plan (assemble), otherwise to the
+// next station. The run was checked against the version it started on; where the item goes
+// next is the current line's say (chk.next), so an item finishing on v1 after v2 was published
+// moves along v2.
+func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output json.RawMessage, chk checked) {
+	next, v := chk.next, chk.verdict
 
 	t := ports.Transition{
 		ItemID: c.item.ID, From: domain.Position{Station: c.station.ID, State: domain.StateInProgress},
@@ -591,6 +617,14 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output
 	switch {
 	case v != nil && v.Decision == domain.Reject:
 		err = e.gateReject(c, next, *v, &t)
+	case len(chk.plan) > 0:
+		if v != nil { // an approving gate's plan: no merge, the parts make the pull requests
+			t.Events = append(t.Events, event(c.item, domain.EventGateApproved, t.At, c.agent.Name, nil))
+		}
+
+		e.assemble(ctx, log, c, ports.Assembly{Transition: t, Parts: chk.plan})
+
+		return
 	case v != nil:
 		t.Events = append(t.Events, event(c.item, domain.EventGateApproved, t.At, c.agent.Name, nil))
 		if err = e.mergeOnApproval(ctx, c, next, &t); err == nil {
@@ -606,6 +640,35 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output
 	}
 
 	e.transition(ctx, log, t)
+}
+
+// assemble makes the claimed item an assembly with the parts of its plan, queued at the station
+// that planned them; the item stays there, in state assembly. A part cannot plan an assembly
+// (assemblies do not nest), so its plan blocks it. A lost acknowledgement is only logged: the
+// store's Assemble is idempotent, so the parts exist at most once.
+func (e *Engine) assemble(ctx context.Context, log *slog.Logger, c claimed, a ports.Assembly) {
+	if c.item.ParentID != "" {
+		e.block(ctx, log, c, "a part cannot plan an assembly")
+		return
+	}
+
+	a.Transition.To = domain.Position{Station: c.station.ID, State: domain.StateAssembly}
+
+	ctx, cancel := cleanup(ctx)
+	defer cancel()
+
+	_, parts, err := e.store.Assemble(ctx, a)
+
+	switch {
+	case errors.Is(err, ports.ErrLeaseLost), errors.Is(err, ports.ErrConflict):
+		log.WarnContext(ctx, "item changed hands before it became an assembly", slog.Any("error", err))
+	case errors.Is(err, domain.ErrInvalid), errors.Is(err, domain.ErrCycle):
+		e.block(ctx, log, c, "assemble: "+err.Error())
+	case err != nil:
+		log.ErrorContext(ctx, "assemble item; the lease will expire and requeue it", slog.Any("error", err))
+	default:
+		log.InfoContext(ctx, "item assembled", slog.String("station", c.station.ID), slog.Int("parts", parts.Total))
+	}
 }
 
 // advance points t at the station after the item's current one.
