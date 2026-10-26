@@ -105,6 +105,41 @@ func refusal(err, hidden error) error {
 	}
 }
 
+// errFactoryArchived refuses an item write or an andon call on an archived factory (409
+// factory-archived): it is read-only until restored.
+var errFactoryArchived = errors.New("factory archived")
+
+// archivedDetail is errFactoryArchived's fixed detail.
+const archivedDetail = "This factory is archived; restore it first"
+
+// itemWrites are the permissions of the operations an archived factory refuses: new items and
+// parts, decisions, item operations and andon calls. Reads ask about none of them.
+var itemWrites = map[string]bool{
+	"item:create": true, string(permItemDecide): true, "item:operate": true, "andon:manage": true,
+}
+
+// writable refuses the request in ctx with errFactoryArchived when its operation writes items or
+// the andon of factory f and f is archived. It runs after the Authorizer, so a factory the
+// principal cannot see still answers as unknown. server.factory and server.item call it, so no
+// handler does.
+func (s *server) writable(ctx context.Context, f domain.FactoryID) error {
+	operation, _ := ctx.Value(operationKey{}).(string)
+	if !itemWrites[operationScopes[operation]] {
+		return nil
+	}
+
+	rec, err := s.defs.Factory(ctx, string(f))
+	if err != nil {
+		return fmt.Errorf("factory %s: %w", f, err)
+	}
+
+	if rec.Archived() {
+		return fmt.Errorf("factory %s: %w", f, errFactoryArchived)
+	}
+
+	return nil
+}
+
 // factory resolves a path's factory (its id or name) within the request's organization and
 // passes the Authorizer with it; unknown and invisible answer alike. Handlers reach a factory
 // only through here.
@@ -119,6 +154,10 @@ func (s *server) factory(ctx context.Context, ref string) (*config.Factory, erro
 	}
 
 	if err := s.authorize(ctx, domain.FactoryID(f.Metadata.ID), errFactoryNotFound); err != nil {
+		return nil, err
+	}
+
+	if err := s.writable(ctx, domain.FactoryID(f.Metadata.ID)); err != nil {
 		return nil, err
 	}
 
@@ -138,6 +177,10 @@ func (s *server) item(ctx context.Context, ref string) (domain.Item, error) {
 	}
 
 	if err := s.authorize(ctx, it.FactoryID, errItemNotFound); err != nil {
+		return domain.Item{}, err
+	}
+
+	if err := s.writable(ctx, it.FactoryID); err != nil {
 		return domain.Item{}, err
 	}
 
