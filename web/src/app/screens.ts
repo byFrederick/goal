@@ -29,7 +29,8 @@ export type FactoryPath =
   | '/o/$org/f/$factory'
   | '/o/$org/f/$factory/board'
   | '/o/$org/f/$factory/items'
-  | '/o/$org/f/$factory/definition';
+  | '/o/$org/f/$factory/definition'
+  | '/o/$org/f/$factory/settings';
 /** Paths of the organization's screens; their only param is its slug. */
 export type OrgPath =
   | '/o/$org'
@@ -76,6 +77,15 @@ export const factoryScreens: readonly FactoryScreen[] = [
     group: 'build',
     available: true,
     to: '/o/$org/f/$factory/definition',
+  },
+  // The factory's own settings: Pause or Resume and the Danger zone (archive, restore, delete).
+  {
+    id: 'settings',
+    label: 'Settings',
+    icon: Settings,
+    group: 'build',
+    available: true,
+    to: '/o/$org/f/$factory/settings',
   },
   // The organization's Connections, filtered to the factory (spec 4 §10).
   {

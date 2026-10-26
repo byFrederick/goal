@@ -12,6 +12,8 @@ export type OrgPermission =
   | 'org:delete'
   | 'org:transfer'
   | 'factory:create'
+  | 'factory:archive'
+  | 'factory:delete'
   | 'member:manage'
   | 'api_key:read'
   | 'api_key:manage'
@@ -23,6 +25,7 @@ export type OrgPermission =
   | 'knowledge:manage'
   | 'audit:read';
 export type FactoryPermission =
+  | 'factory:manage'
   | 'item:create'
   | 'item:decide'
   | 'item:operate'

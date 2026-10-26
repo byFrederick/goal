@@ -183,6 +183,31 @@ export async function listFactories(org: string, signal?: AbortSignal): Promise<
   return body.factories;
 }
 
+/** Stops the factory taking work; runs in progress finish. Answers the factory, paused. */
+export function pauseFactory(org: string, factory: string): Promise<Factory> {
+  return unwrap(goal.POST(orgPath('/factories/{factory}/pause'), { params: { path: { org, factory } } }));
+}
+
+/** Starts a paused factory again. Answers the factory, running. */
+export function resumeFactory(org: string, factory: string): Promise<Factory> {
+  return unwrap(goal.POST(orgPath('/factories/{factory}/resume'), { params: { path: { org, factory } } }));
+}
+
+/** Retires a paused, idle factory: off the rail and the Factories home, still readable. 409 factory-running or factory-busy otherwise. */
+export function archiveFactory(org: string, factory: string): Promise<Factory> {
+  return unwrap(goal.POST(orgPath('/factories/{factory}/archive'), { params: { path: { org, factory } } }));
+}
+
+/** Puts an archived factory back in the list, still paused. */
+export function restoreFactory(org: string, factory: string): Promise<Factory> {
+  return unwrap(goal.POST(orgPath('/factories/{factory}/unarchive'), { params: { path: { org, factory } } }));
+}
+
+/** Deletes an archived, idle factory for good with its items, runs, events and versions. 409 factory-not-archived or factory-busy otherwise. */
+export async function purgeFactory(org: string, factory: string): Promise<void> {
+  await unwrap(goal.POST(orgPath('/factories/{factory}/purge'), { params: { path: { org, factory } } }));
+}
+
 export function getBoard(org: string, factory: string, signal?: AbortSignal): Promise<Board> {
   return unwrap(
     goal.GET(orgPath('/factories/{factory}/board'), { params: { path: { org, factory } }, ...cancel(signal) }),
