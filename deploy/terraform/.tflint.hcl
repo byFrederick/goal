@@ -1,4 +1,4 @@
-# tflint --recursive from terraform/ (task tf:lint). The terraform ruleset is bundled with tflint,
+# tflint --recursive from deploy/terraform/ (task tf:lint). The terraform ruleset is bundled with tflint,
 # so nothing is downloaded. Local modules declare their providers' sources without versions (the
 # root pins them) and no required_version, so the two rules that ask for those are off.
 config {

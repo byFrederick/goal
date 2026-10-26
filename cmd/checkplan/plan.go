@@ -92,7 +92,7 @@ var rules = []rule{
 	{under("packages/api-client"), []part{partAPIClient, partWeb}, ""},
 	{under("apps/web"), []part{partWeb}, ""},
 	{under("deploy/cloudflare"), []part{partCloudflare, partEnv}, ""},
-	{under("terraform"), []part{partTerraform}, ""},
+	{under("deploy/terraform"), []part{partTerraform}, ""},
 	{exact(".sops.yaml"), []part{partTerraform}, ""},
 	{under("docs", "design-system", ".claude", ".github", ".githooks"), nil, ""},
 	{exact("skills-lock.json"), nil, ""},

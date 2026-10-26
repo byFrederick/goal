@@ -48,7 +48,7 @@ func TestPlan(t *testing.T) {
 		"generated roles":  {[]string{"apps/auth/src/access.gen.ts"}, append(slices.Clone(goEnvTasks[:4]), "auth:check", "validate"), "auth (auth:check): apps/auth/src/access.gen.ts", "migrate-check"},
 		"api client":       {[]string{"packages/api-client/src/client.ts"}, []string{"api-client:check", "web:check"}, "web (web:check): packages/api-client/src/client.ts", ""},
 		"control worker":   {[]string{"deploy/cloudflare/src/index.ts"}, []string{envCheck, "cloudflare:check"}, "cloudflare (cloudflare:check): deploy/cloudflare/src/index.ts", ""},
-		"terraform":        {[]string{"terraform/r2.tf"}, []string{"tf:check"}, "terraform (tf:check): terraform/r2.tf", ""},
+		"terraform":        {[]string{"deploy/terraform/r2.tf"}, []string{"tf:check"}, "terraform (tf:check): deploy/terraform/r2.tf", ""},
 		"sops rules":       {[]string{".sops.yaml"}, []string{"tf:check"}, ".sops.yaml", ""},
 		"agents map":       {[]string{"AGENTS.md"}, layoutTasks, "layout (layout:check): AGENTS.md", ""},
 		"layout adr":       {[]string{"docs/adr/0013-repository-layout.md"}, layoutTasks, "layout (layout:check): docs/adr/0013-repository-layout.md", ""},
@@ -68,7 +68,7 @@ func TestPlan(t *testing.T) {
 			nil, "", "",
 		},
 		"parts keep task check's order": {
-			[]string{"terraform/r2.tf", "apps/web/src/a.tsx", "internal/api/org.go", "apps/worker/src/a.ts"},
+			[]string{"deploy/terraform/r2.tf", "apps/web/src/a.tsx", "internal/api/org.go", "apps/worker/src/a.ts"},
 			[]string{envCheck, "lint", "test", "api:permissions-check", "worker:check", "web:check", "validate", "tf:check"},
 			"worker (worker:check)", "",
 		},

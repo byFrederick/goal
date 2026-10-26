@@ -96,13 +96,13 @@ func testRenameAcrossParts(t *testing.T) {
 func testUncommitted(t *testing.T) {
 	t.Parallel()
 
-	dir := repo(t, ".gitignore", "apps/auth/src/a.ts", "terraform/r2.tf")
+	dir := repo(t, ".gitignore", "apps/auth/src/a.ts", "deploy/terraform/r2.tf")
 	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("*.log\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	gitT(t, dir, "add", ".gitignore")
-	write(t, dir, "terraform/r2.tf", " v2")
+	write(t, dir, "deploy/terraform/r2.tf", " v2")
 	write(t, dir, "apps/web/src/new.tsx")
 	write(t, dir, "debug.log")
 
@@ -111,7 +111,7 @@ func testUncommitted(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if want := []string{".gitignore", "apps/web/src/new.tsx", "terraform/r2.tf"}; !slices.Equal(got, want) {
+	if want := []string{".gitignore", "apps/web/src/new.tsx", "deploy/terraform/r2.tf"}; !slices.Equal(got, want) {
 		t.Fatalf("changed = %v, want %v", got, want)
 	}
 }

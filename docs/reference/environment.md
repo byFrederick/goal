@@ -230,5 +230,5 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOOGLE_OAUTH_ACCESS_TOKEN` | secret | no | In CI, the Google access token the Terraform tasks use for the Google provider. |
 | `PLANETSCALE_SERVICE_TOKEN` | secret | no | The PlanetScale service token the Terraform tasks use. |
 | `PLANETSCALE_SERVICE_TOKEN_ID` | config | no | The id of the PlanetScale service token the Terraform tasks use. |
-| `SOPS_AGE_KEY_FILE` | config | no | The operator's age key file, which decrypts the platform secrets under terraform/secrets/. |
+| `SOPS_AGE_KEY_FILE` | config | no | The operator's age key file, which decrypts the platform secrets under deploy/terraform/secrets/. |
 | `XDG_CONFIG_HOME` | config | no | Where the CLI keeps its config and goal up the Mailpit UI password (default ~/.config). |
