@@ -37,7 +37,7 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one object storage buc
 | `internal/api` (+ generated `api/gen`) | `domain`, `ports`, `config`, `engine`, `authoring` (its request and result types and refusal codes; calls go through `api.Definitions`) | adapters, `definitions`, `factorymodel`, `builder`, `gateway`, `connkind`, cloud SDKs |
 | `cmd/*` | everything | — (wiring only) |
 
-`depguard` in `.golangci.yml` enforces every row but the last. A new external system is a new adapter behind an existing or new port; it never adds an import to the engine.
+`depguard` in `.golangci.yml` enforces every row but the last; the rules that follow from the table are in [`.claude/rules/architecture.md`](../../.claude/rules/architecture.md) and [`engine.md`](../../.claude/rules/engine.md).
 
 ### Ports
 
@@ -234,7 +234,7 @@ PostgreSQL
 
 ### Wiring
 
-Manual constructor injection. `cmd/goald/main.go` reads the environment (`cmd/goald/settings.go` lists every variable), builds each adapter, passes them to `engine.New(...)` and starts the HTTP server. No container, no globals, no `init()` side effects.
+`cmd/goald/main.go` reads the environment (`cmd/goald/settings.go` lists every variable), builds each adapter, passes them to `engine.New(...)` and starts the HTTP server (the injection rules: [`.claude/rules/architecture.md`](../../.claude/rules/architecture.md)).
 
 ```
 settings (env) ─┬─ envsecrets.New ───────────────────────────────┐ Secrets
