@@ -20,7 +20,7 @@ const (
 	envExampleFile = ".env.example"
 	wranglerFile   = "deploy/cloudflare/wrangler.jsonc"
 	composeFile    = "compose.yaml"
-	taskfileFile   = "Taskfile.yml"
+	taskfileName   = "Taskfile.yml" // the root Taskfile and each area's it includes
 )
 
 // The readers, in the order the reference lists them.
