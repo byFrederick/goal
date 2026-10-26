@@ -1,10 +1,12 @@
 package api_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -260,4 +262,105 @@ func partsReads(steps []step) int {
 	}
 
 	return n
+}
+
+// addPart posts body as a part of ref and returns the answer's status, parts and problem.
+func (h *harness) addPart(t *testing.T, ref, body string) (int, gen.AssemblyParts, gen.Problem) {
+	t.Helper()
+
+	var raw json.RawMessage
+
+	code := h.call(t, http.MethodPost, "/v1/orgs/acme/items/"+url.PathEscape(ref)+"/parts", body, &raw)
+
+	var (
+		parts gen.AssemblyParts
+		p     gen.Problem
+	)
+
+	out := any(&p)
+	if code == http.StatusCreated {
+		out = &parts
+	}
+
+	if err := json.Unmarshal(raw, out); err != nil {
+		t.Fatalf("add part to %s: %d %s: %v", ref, code, raw, err)
+	}
+
+	return code, parts, p
+}
+
+// TestAPI_AddItemPart: a part added to an open assembly comes back last among its parts, keyed by
+// its title and waiting on what it needs, in the body listItemParts answers; a malformed part is
+// 400 part-invalid, a plain item 409 not-an-assembly and a done assembly 409 item-closed.
+func TestAPI_AddItemPart(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	ref := h.partsInFlight(t)
+
+	code, got, p := h.addPart(t, ref, `{"title":"  Docs page ","lane":"api","brief":"Document it","needs":["b"]}`)
+	if code != http.StatusCreated {
+		t.Fatalf("add part = %d %+v; want 201", code, p)
+	}
+
+	if !reflect.DeepEqual(got, h.parts(t, ref)) {
+		t.Errorf("add part answered %+v; want the assembly's parts as listItemParts answers them", got)
+	}
+
+	b := got.Parts[1].Ref
+	want := assemblyPart{Index: 4, Wave: 2, Key: "docs-page", State: "queued", Needs: []string{b}, WaitingOn: []string{b}, Paths: []string{}}
+
+	if got.Total != 4 || len(got.Parts) != 4 || !reflect.DeepEqual(assemblyPartOf(got.Parts[3]), want) || got.Parts[3].Station != stBuild {
+		t.Fatalf("parts = %d, new part %+v at %s; want 4 and %+v at %s", got.Total, got.Parts[len(got.Parts)-1], got.Parts[len(got.Parts)-1].Station, want, stBuild)
+	}
+
+	plain := h.seed(t, stBuild, domain.StateQueued, h.clock.Now())
+	closed := newHarness(t)
+	done := closed.assemble(t, []domain.NewPart{{Key: "a", Title: "Contract", Lane: laneAPI}})
+	closed.move(t, done, domain.Position{Station: stDone, State: domain.StateDone}, func(tr *ports.Transition) { tr.DoneAt = h.clock.Now() })
+
+	refusals := []struct {
+		h               *harness
+		name, ref, body string
+		status          int
+		code            string
+	}{
+		{h, "an unknown need", ref, `{"title":"Late","brief":"x","needs":["zzz"]}`, http.StatusBadRequest, "part-invalid"},
+		{h, "an empty title", ref, `{"title":"  ","brief":"x"}`, http.StatusBadRequest, "part-invalid"},
+		{h, "a title too long", ref, `{"title":"` + strings.Repeat("t", 201) + `","brief":"x"}`, http.StatusBadRequest, "part-invalid"},
+		{h, "a plain item", "line#" + strconv.FormatInt(plain.Number, 10), `{"title":"Late","brief":"x"}`, http.StatusConflict, "not-an-assembly"},
+		{closed, "a done assembly", "line#" + strconv.FormatInt(done.Number, 10), `{"title":"Late","brief":"x"}`, http.StatusConflict, codeItemClosed},
+	}
+
+	for _, r := range refusals {
+		if code, _, p := r.h.addPart(t, r.ref, r.body); code != r.status || deref(p.Code) != r.code {
+			t.Errorf("add part with %s = %d %q; want %d %q", r.name, code, deref(p.Code), r.status, r.code)
+		}
+	}
+
+	if after := h.parts(t, ref); after.Total != 4 {
+		t.Errorf("parts after the refusals = %d; want 4: a refusal adds nothing", after.Total)
+	}
+}
+
+// A factory viewer may read an assembly's parts but not add one: item:create is not theirs.
+func TestAPI_AddItemPartNeedsItemCreate(t *testing.T) {
+	t.Parallel()
+
+	h := newSignedIn(t)
+
+	var it gen.Item
+	if res := h.as(t, ownerToken, http.MethodPost, acmeItems, `{"title":"Plain","type":"feature"}`); res.status != http.StatusCreated || json.Unmarshal(res.body, &it) != nil {
+		t.Fatalf("the owner submitting = %d %s; want 201", res.status, res.body)
+	}
+
+	path := "/v1/orgs/acme/items/" + url.PathEscape(it.Ref) + "/parts"
+
+	if res := h.as(t, viewerToken, http.MethodGet, path, ""); res.status != http.StatusOK {
+		t.Errorf("the viewer reading parts = %d %s; want 200", res.status, res.body)
+	}
+
+	if res := h.as(t, viewerToken, http.MethodPost, path, `{"title":"Late","brief":"x"}`); res.status != http.StatusForbidden {
+		t.Errorf("the viewer adding a part = %d %s; want 403", res.status, res.body)
+	}
 }
