@@ -1,15 +1,16 @@
 ---
 paths:
   - "apps/web/**"
+  - "docs/design/**"
 ---
 
 # Web
 
-The UI is one product, so its look comes from one design system: [MASTER.md](../../design-system/goal/MASTER.md). How the app is built and why: [frontend.md](../../docs/engineering/frontend.md).
+The UI is one product, so its look comes from one design system: [MASTER.md](../../docs/design/MASTER.md). How the app is built and why: [frontend.md](../../docs/engineering/frontend.md).
 
 ## Design
 
-- Follow `design-system/goal/MASTER.md` exactly: its tokens, Inter, radii and spacing. Drift between screens is what users notice first.
+- Follow `docs/design/MASTER.md` exactly: its tokens, Inter, radii and spacing. Drift between screens is what users notice first.
 - Use token names only, never a hex, `rgb()` or `hsl()` value, and no gradients. A theme switch then needs no edits, and `apps/web/src/ui/raw-colors.test.ts` enforces it.
 - Support light and dark from the same tokens. People choose the theme, so both must read well.
 - Lay out for a phone first and check 375, 768 and 1440 px by reasoning about the CSS. The app fills the viewport with no framed shell.
