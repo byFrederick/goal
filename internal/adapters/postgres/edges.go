@@ -108,7 +108,7 @@ func edgeItems(ctx context.Context, q *db.Queries, n domain.NewEdge, item, needs
 }
 
 // RemoveEdge implements ports.Store.
-func (s *Store) RemoveEdge(ctx context.Context, item, needs domain.ItemID, by domain.Actor, at time.Time) error {
+func (s *Store) RemoveEdge(ctx context.Context, item, needs domain.ItemID, by domain.Actor, at time.Time, reason string) error {
 	missing := fmt.Errorf("edge %s needs %s: %w", item, needs, ports.ErrNotFound)
 
 	itemID, err := uuid.Parse(string(item))
@@ -136,7 +136,12 @@ func (s *Store) RemoveEdge(ctx context.Context, item, needs domain.ItemID, by do
 			return fmt.Errorf("item %s: %w", item, err)
 		}
 
-		return appendEvents(ctx, q, []domain.Event{edgeEvent(domain.EventEdgeRemoved, it, edgeFrom(row), by, at)})
+		ev := edgeEvent(domain.EventEdgeRemoved, it, edgeFrom(row), by, at)
+		if reason != "" {
+			ev.Data["reason"] = reason
+		}
+
+		return appendEvents(ctx, q, []domain.Event{ev})
 	})
 	if err != nil {
 		return fmt.Errorf("remove edge: %w", err)
