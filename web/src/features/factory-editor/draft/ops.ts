@@ -571,6 +571,28 @@ export function addSkillFromCatalog(agents: AgentsSection, agent: string, skill:
   );
 }
 
+// Factory rules (ADR 0014): each is an entry in the agents section and its file under rules/.
+
+/** A rule's file in the definition. */
+export const ruleFile = (name: string) => `rules/${name}.md`;
+
+/** Adds a factory rule: its entry and its file (the text serializeRule wrote) in one agents save. */
+export function addRule(agents: AgentsSection, name: string, text: string): Edit<'agents'> {
+  const rules = [...(agents.rules ?? []), { name, source: `./${ruleFile(name)}` }];
+  return edit('agents', { ...agents, rules }, { [ruleFile(name)]: { text } });
+}
+
+/** Rewrites a rule's file; its entry on the agents section stays as it is. */
+export function setRuleText(agents: AgentsSection, name: string, text: string): Edit<'agents'> {
+  return edit('agents', agents, { [ruleFile(name)]: { text } });
+}
+
+/** Removes a factory rule: its entry and its file in one agents save. */
+export function removeRule(agents: AgentsSection, name: string): Edit<'agents'> {
+  const rules = (agents.rules ?? []).filter((r) => r.name !== name);
+  return edit('agents', { ...agents, rules }, undefined, [ruleFile(name)]);
+}
+
 /** Sets one built-in tool's mode (Off / Ask me / Allowed), keeping run's command list. */
 export function setBuiltin(agents: AgentsSection, agent: string, key: BuiltinKey, mode: BuiltinMode): Edit<'agents'> {
   return edit(

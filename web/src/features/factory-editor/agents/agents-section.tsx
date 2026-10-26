@@ -1,5 +1,6 @@
 // Agents (D §10.7, canvas Define-Agents and New-Agents): the list of the factory's agents with
-// where each works, then the chosen one's detail (`?agent=`, else the first). Two columns from
+// where each works, then the chosen one's detail (`?agent=`, else the first), then the factory's
+// rules (ADR 0014) below them. Two columns from
 // 760 px of `main`, one below; on phones the list comes first and `?agent=` opens the detail with
 // a back link. Definition and the wizard share it (`place`).
 import { Bot, ChevronLeft } from 'lucide-react';
@@ -12,6 +13,7 @@ import { SearchLink } from '../search-link';
 import type { SectionViewProps } from '../section-views';
 import { AgentDetail } from './agent-detail';
 import { AddAgentButton, CopyAgentButton } from './agent-dialogs';
+import { RulesEditor } from './rules-editor';
 
 export function AgentsSection({ place, search }: SectionViewProps) {
   const viewOnly = useViewOnly();
@@ -100,6 +102,7 @@ export function AgentsSection({ place, search }: SectionViewProps) {
           )}
         </div>
       </div>
+      <RulesEditor />
     </SectionShell>
   );
 }
