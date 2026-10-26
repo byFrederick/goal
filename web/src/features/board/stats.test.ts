@@ -14,7 +14,6 @@ import {
   stationMeter,
   stationNote,
   stationStat,
-  waitStatus,
   wipText,
 } from './stats';
 
@@ -332,14 +331,7 @@ describe('firstStation', () => {
   });
 });
 
-describe('waitStatus and doingText', () => {
-  it('shows a check for a ready item and a clock for one that waits', () => {
-    expect(waitStatus(card({ state: 'ready' }))).toBe('ready');
-    expect(waitStatus(card({ state: 'ready', in_buffer: true }))).toBe('waiting');
-    expect(waitStatus(card({ state: 'queued' }))).toBe('waiting');
-    expect(waitStatus(card({ state: 'blocked' }))).toBeNull();
-  });
-
+describe('doingText', () => {
   it('says the doing line with the turn, never a numbered agent', () => {
     expect(doingText({ turn: 4 })).toBe('Working, turn 4');
     expect(doingText({ turn: null })).toBe('Working');

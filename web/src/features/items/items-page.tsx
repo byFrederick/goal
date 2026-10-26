@@ -5,13 +5,14 @@ import { itemsQuery } from '../../api/queries';
 import type { ItemState } from '../../api/types';
 import { factoryTitle, refParam, useFactory, useFactoryParams } from '../../shared/factory';
 import { formatAge, formatUsd, humanize } from '../../shared/format';
-import { describeState, toneText } from '../../shared/item-state';
+import { InboxButton } from '../../shared/inbox-drawer';
+import { describeState, itemStatus, toneText } from '../../shared/item-state';
 import { NewItemButton } from '../../shared/new-item';
 import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
-import { PhoneNeedsYou } from './phone-needs-you';
+import { StatusIcon } from '../../ui/status-icon';
 
 export const itemFilters: { state?: ItemState; label: string }[] = [
   { label: 'All' },
@@ -35,15 +36,16 @@ export function ItemsPage() {
         <h1 className="m-0 text-[34px] leading-[1.05] font-normal tracking-display md:text-5xl">
           {factoryTitle(factory)} items
         </h1>
-        <span className="md:hidden">
-          <NewItemButton factory={factory} compact />
-        </span>
-        <span className="hidden md:inline-flex">
-          <NewItemButton factory={factory} />
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <InboxButton factory={factory} />
+          <span className="md:hidden">
+            <NewItemButton factory={factory} compact />
+          </span>
+          <span className="hidden md:inline-flex">
+            <NewItemButton factory={factory} />
+          </span>
+        </div>
       </header>
-
-      <PhoneNeedsYou factory={factory} />
 
       <nav aria-label="Filter items" className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
         <ul className="m-0 flex list-none gap-1 p-0">
@@ -77,6 +79,7 @@ export function ItemsPage() {
         <ul className="m-0 flex list-none flex-col overflow-hidden rounded-card border border-line bg-card p-0">
           {data.items.map((it) => {
             const label = describeState(it, { decides });
+            const status = itemStatus(it);
             return (
               <li key={it.id} className="border-t border-line first:border-t-0">
                 <Link
@@ -87,8 +90,17 @@ export function ItemsPage() {
                   <span className="hidden text-sm text-muted md:block">{it.ref}</span>
                   <span className="flex min-w-0 flex-col gap-1">
                     <span className="text-[15px] leading-snug font-medium">{it.title}</span>
-                    <span className="flex flex-wrap items-center gap-1.5 text-[13px] text-muted md:hidden">
-                      {it.ref}, {humanize(it.station)}, <span className={toneText[label.tone]}>{label.text}</span>
+                    <span className="flex min-w-0 items-center gap-1.5 text-[13px] text-muted md:hidden">
+                      <span className="min-w-0 truncate">
+                        {it.ref}, {humanize(it.station)},
+                      </span>
+                      <span
+                        className={cn('flex min-w-0 items-center gap-1.5', toneText[label.tone])}
+                        title={label.text}
+                      >
+                        {status ? <StatusIcon status={status} /> : null}
+                        <span className="truncate">{label.text}</span>
+                      </span>
                     </span>
                     <span className="hidden flex-wrap gap-1.5 md:flex">
                       {it.type ? <Chip tone="quiet">{humanize(it.type)}</Chip> : null}
@@ -96,7 +108,13 @@ export function ItemsPage() {
                     </span>
                   </span>
                   <span className="hidden text-sm md:block">{humanize(it.station)}</span>
-                  <span className={cn('hidden text-sm md:block', toneText[label.tone])}>{label.text}</span>
+                  <span
+                    className={cn('hidden min-w-0 items-center gap-1.5 text-sm md:flex', toneText[label.tone])}
+                    title={label.text}
+                  >
+                    {status ? <StatusIcon status={status} /> : null}
+                    <span className="truncate">{label.text}</span>
+                  </span>
                   <span className="hidden text-right text-sm text-muted tabular-nums md:block">
                     {formatAge(it.age_seconds)}
                     <br />

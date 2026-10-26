@@ -67,12 +67,14 @@ type Engine interface {
 	Pause(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
 	Merge(ctx context.Context, id domain.ItemID, by domain.Actor, method string) (domain.Item, error)
 	Note(ctx context.Context, id domain.ItemID, by domain.Actor, text string) (domain.Event, error)
+	Link(ctx context.Context, id, needs domain.ItemID, by domain.Actor) (domain.Edge, error)
+	Unlink(ctx context.Context, id, needs domain.ItemID, by domain.Actor) error
 	PullAndon(ctx context.Context, f domain.FactoryID, by domain.Actor, reason string) (domain.AndonPull, error)
 	ClearAndon(ctx context.Context, f domain.FactoryID, by domain.Actor, note string) (domain.AndonPull, error)
 }
 
 // Items reads items, their history and runs, the leases on them, a factory's flow and its
-// stations' times, an item's spans and run in progress, the turns of the runs in progress, the
+// stations' times, an item's spans and run in progress, what the runs in progress have done so far, the
 // human touches, and what the organization's factories need from people, and sets a touch's
 // reason; a store that implements ports.Store and ports.FlowStats satisfies it.
 type Items interface {
@@ -93,7 +95,7 @@ type Items interface {
 	InboxItems(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.AttentionItem, error)
 	ItemSpans(ctx context.Context, id domain.ItemID) ([]domain.Span, error)
 	CurrentRun(ctx context.Context, id domain.ItemID) (*domain.CurrentRun, error)
-	LiveTurns(ctx context.Context, factory domain.FactoryID) (map[domain.ItemID]int, error)
+	LiveRuns(ctx context.Context, factory domain.FactoryID) (map[domain.ItemID]domain.LiveRun, error)
 	StationTimes(ctx context.Context, factory domain.FactoryID, since, until time.Time) ([]domain.StationTimes, time.Time, error)
 	OpenAndon(ctx context.Context, factory domain.FactoryID) (*domain.AndonPull, error)
 	AndonPulls(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.AndonPull, error)
@@ -421,6 +423,13 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 
 	out.Touches = s.itemTouchesOf(touches)
 
+	needs, dependents, err := s.itemLinks(ctx, it.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	out.Needs, out.Dependents = &needs, &dependents
+
 	if out.Assembly, err = s.assemblyOf(ctx, it); err != nil {
 		return nil, err
 	}
@@ -561,7 +570,7 @@ func problemOf(err error) gen.Problem {
 	// The connection and knowledge routes' answers come before the definitions' (all wrap
 	// ports.ErrNameTaken).
 	for _, answer := range []func(error) (gen.Problem, bool){
-		fixedProblem, connectionProblem, knowledgeProblem, definitionProblem, controlProblem, agentProblem, apiKeyProblem, personalTokenProblem,
+		fixedProblem, edgeProblem, connectionProblem, knowledgeProblem, definitionProblem, controlProblem, agentProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {
 			return p

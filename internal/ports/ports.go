@@ -238,9 +238,10 @@ type FlowStats interface {
 	// so far, or nil when the item has none (no running run under a live lease).
 	CurrentRun(ctx context.Context, id domain.ItemID) (*domain.CurrentRun, error)
 
-	// LiveTurns counts, for every item of the factory with a running run under a live lease, the
-	// turns its newest running run has reported so far (its usage events), by item.
-	LiveTurns(ctx context.Context, factory domain.FactoryID) (map[domain.ItemID]int, error)
+	// LiveRuns returns, for every item of the factory with a running run under a live lease, what
+	// its newest running run has done so far, by item: the turns it reported (its usage events),
+	// its newest tool call and its newest call of domain.ToolTodoWrite.
+	LiveRuns(ctx context.Context, factory domain.FactoryID) (map[domain.ItemID]domain.LiveRun, error)
 
 	// StationTimes measures every station of the factory over [since, until) (see
 	// domain.StationTimes); a station appears when it has a lease, a waiting item or a verdict to

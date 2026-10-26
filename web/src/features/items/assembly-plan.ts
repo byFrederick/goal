@@ -2,6 +2,7 @@
 // in waves, the spend, and the time to finish. Pure, so the rules are tested without a DOM.
 import type { AssemblyPart, BoardLane, Item } from '../../api/types';
 import { humanize } from '../../shared/format';
+import { itemStatus } from '../../shared/item-state';
 import type { StatusKind } from '../../ui/status-icon';
 
 /** A part as the bar and the icons see it: done, being worked, waiting, or cancelled. */
@@ -26,14 +27,13 @@ export function barSegments(parts: readonly AssemblyPart[]): { key: string; tone
 }
 
 /**
- * The status icon of a part: working while it is worked, ready once merged or when it needs
- * nothing more, waiting for another item while it names open needs, and waiting otherwise.
+ * The status icon of a part: the item's status everywhere (`itemStatus`), except that a part still
+ * waiting on the open items it names is waiting too, even when it is ready to start. A blocked
+ * part has no icon in `itemStatus`; the plan shows it as waiting.
  */
 export function partStatus(part: Pick<AssemblyPart, 'state' | 'waiting_on'>): StatusKind {
-  if (part.state === 'in_progress') return 'working';
-  if (part.state === 'done') return 'ready';
-  if (part.waiting_on.length > 0) return 'waiting';
-  return part.state === 'ready' ? 'ready' : 'waiting';
+  if (part.state !== 'in_progress' && part.state !== 'done' && part.waiting_on.length > 0) return 'waiting';
+  return itemStatus(part) ?? 'waiting';
 }
 
 export interface Wave {
