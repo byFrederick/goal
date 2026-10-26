@@ -225,7 +225,7 @@ func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 		{ID: "inbox", Kind: domain.KindQueue},
 		{ID: "spec", Kind: domain.KindAgent, Agent: "architect", Agents: 1, WIP: 2, Output: "spec"},
 		{ID: "approve-spec", Kind: domain.KindHuman, WIP: 3},
-		{ID: "build", Kind: domain.KindAgent, Route: map[string]string{"backend": "engineer", "frontend": "engineer"}, Agents: 2, WIP: 2, Checks: []string{"make test"}},
+		{ID: "build", Kind: domain.KindAgent, Route: map[string]string{"backend": "engineer", "frontend": "engineer"}, RouteAgents: map[string]int{"backend": 1}, Agents: 2, WIP: 2, Checks: []string{"make test"}},
 		{ID: "review", Kind: domain.KindAgent, Agent: "reviewer", Gate: &domain.Gate{OnReject: "build", MaxRework: 2}},
 		{ID: "merge", Kind: domain.KindHuman, Action: domain.ActionMerge},
 		{ID: "done", Kind: domain.KindDone},
@@ -339,5 +339,21 @@ func TestLine_BuiltinsAllOffDenyEveryTool(t *testing.T) {
 
 	if len(a.ToolsAllow) != 0 || strings.Join(a.ToolsDeny, " ") != want {
 		t.Errorf("allow %q deny %q, want nothing allowed and %q denied", a.ToolsAllow, a.ToolsDeny, want)
+	}
+}
+
+// A route of plain agent names keeps no slots for any lane: the line is what it was before
+// route entries could set a count.
+func TestLine_PlainRoutesKeepNoSlots(t *testing.T) {
+	t.Parallel()
+
+	f, err := Load(checkTree(edited(workAgentLine, "        route: { backend: worker, frontend: worker }\n        agents: 2\n"), nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := domain.Station{ID: "work", Kind: domain.KindAgent, Route: map[string]string{"backend": "worker", "frontend": "worker"}, Agents: 2}
+	if got := f.Line().Stations[1]; !reflect.DeepEqual(got, want) {
+		t.Errorf("station = %+v, want %+v", got, want)
 	}
 }

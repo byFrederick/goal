@@ -5361,7 +5361,9 @@ components:
                 type: object
                 description: >-
                   id, name, description, kind (queue, agent, human, done), agent, route (lane →
-                  agent), agents, wip, buffer, output, checks (strings or {kind, run, min}), gate
+                  agent or {agent, agents}: an entry with agents n keeps n of the station's slots
+                  for its lane, which uses no others; entries without a count share the rest),
+                  agents, wip, buffer, output, checks (strings or {kind, run, min}), gate
                   ({on_reject, max_rework}), action
                 additionalProperties: {}
             intake:
