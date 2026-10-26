@@ -186,11 +186,12 @@ func (t constTable) evalDepth(e ast.Expr, depth int) (string, bool) {
 }
 
 // The TypeScript reads. get('X') and env.X take only names with the shape of a variable, so a
-// header lookup (get('user-agent')) or a method (env.get) does not count.
+// header lookup (get('user-agent')) or a method (env.get) does not count; get must be a plain call,
+// not a method (headers.get('X_Y')).
 var tsPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`\benv\.([A-Z][A-Z0-9_]*)\b`),
 	regexp.MustCompile(`\benv\[\s*['"]([A-Z][A-Z0-9_]*)['"]\s*\]`),
-	regexp.MustCompile(`\bget\(\s*'([A-Z][A-Z0-9]*_[A-Z0-9_]+)'\s*\)`),
+	regexp.MustCompile(`(?:^|[^.\w$])get\(\s*'([A-Z][A-Z0-9]*_[A-Z0-9_]+)'\s*\)`),
 	regexp.MustCompile(`\brequired\(\s*[\w.]+\s*,\s*'([A-Z][A-Z0-9_]*)'\s*\)`),
 }
 

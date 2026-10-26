@@ -1,0 +1,4 @@
+tasks:
+  up:
+    cmds:
+      - goal up --factories "${GOAL_FACTORIES_DIR}"
