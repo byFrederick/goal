@@ -1,9 +1,13 @@
 package main
 
 import (
+	"maps"
+	"os"
 	"slices"
 	"strings"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
 )
 
 // A planCase is a set of changed paths and the plan they must give.
@@ -27,6 +31,60 @@ var (
 	// goEnvTasks are a Go change's: Go code may read the environment.
 	goEnvTasks = append(slices.Clone(envTasks), goTasks...)
 )
+
+// includedTaskfiles returns the taskfile: path of every include of the repository's root Taskfile.yml.
+func includedTaskfiles(t *testing.T) []string {
+	t.Helper()
+
+	raw, err := os.ReadFile("../../Taskfile.yml")
+	if err != nil {
+		t.Fatalf("read the root Taskfile: %v", err)
+	}
+
+	var root struct {
+		Includes map[string]struct {
+			Taskfile string `yaml:"taskfile"`
+		} `yaml:"includes"`
+	}
+	if err := yaml.Unmarshal(raw, &root); err != nil {
+		t.Fatalf("parse the root Taskfile: %v", err)
+	}
+
+	var paths []string
+	for _, inc := range root.Includes {
+		paths = append(paths, inc.Taskfile)
+	}
+
+	if len(paths) == 0 {
+		t.Fatal("the root Taskfile includes no area Taskfile")
+	}
+
+	slices.Sort(paths)
+
+	return paths
+}
+
+// sharedCases gives a case for each file shared by every part: its change runs all of tasks.
+func sharedCases(t *testing.T, tasks []string) map[string]planCase {
+	t.Helper()
+
+	shared := []string{"go.mod", "go.sum", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "Taskfile.yml", ".golangci.yml", ".mise.toml"}
+	// Every area Taskfile the root includes, read from its includes: so a new area is covered.
+	shared = append(shared, includedTaskfiles(t)...)
+
+	cases := map[string]planCase{}
+
+	for _, p := range shared {
+		note := ""
+		if strings.HasPrefix(p, "apps/auth/") {
+			note = "task migrate-check also applies"
+		}
+
+		cases["shared "+p] = planCase{[]string{"apps/web/src/a.tsx", p}, tasks, "everything (" + strings.Join(tasks, ", ") + "): " + p + " (shared by every part)", note}
+	}
+
+	return cases
+}
 
 func TestPlan(t *testing.T) {
 	t.Parallel()
@@ -91,9 +149,7 @@ func TestPlan(t *testing.T) {
 		},
 	}
 
-	for _, shared := range []string{"go.mod", "go.sum", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "Taskfile.yml", "apps/web/Taskfile.yml", "deploy/terraform/Taskfile.yml", ".golangci.yml", ".mise.toml"} {
-		tests["shared "+shared] = planCase{[]string{"apps/web/src/a.tsx", shared}, tasks, "everything (" + strings.Join(tasks, ", ") + "): " + shared + " (shared by every part)", ""}
-	}
+	maps.Copy(tests, sharedCases(t, tasks))
 
 	tests["contract api"] = struct {
 		changed []string

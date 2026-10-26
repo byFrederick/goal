@@ -35,7 +35,7 @@ func (e *Engine) Unlink(ctx context.Context, id, needs domain.ItemID, by domain.
 		return err
 	}
 
-	if err := e.store.RemoveEdge(ctx, id, needs, by, e.clock.Now()); err != nil {
+	if err := e.store.RemoveEdge(ctx, id, needs, by, e.clock.Now(), ""); err != nil {
 		return fmt.Errorf("unlink %s from %s: %w", id, needs, err)
 	}
 

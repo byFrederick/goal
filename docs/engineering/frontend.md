@@ -4,7 +4,7 @@ The UI is a static React single-page app. `goald` embeds it for the laptop; the 
 
 ## Monorepo layout
 
-One repository, two toolchains: a Go module at the root and a pnpm workspace for TypeScript. `Taskfile.yml` orchestrates both (Turborepo is not installed; it earns its place once workspace builds need caching), and `task check` runs both.
+One repository, two toolchains: a Go module at the root and a pnpm workspace for TypeScript. The root `Taskfile.yml` and the area Taskfiles it includes (`apps/web/`, `apps/auth/`, `apps/worker/`, `packages/api-client/`… [ADR 0013](../adr/0013-repository-layout.md)) orchestrate both (Turborepo is not installed; it earns its place once workspace builds need caching), and `task check` runs both.
 
 ```
 goal/
