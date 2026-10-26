@@ -11,6 +11,7 @@ import { SectionCard, Stat, StatGrid } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { StatusIcon } from '../../ui/status-icon';
+import { AssemblyActions } from './assembly-actions';
 import {
   agentLabel,
   barSegments,
@@ -258,8 +259,9 @@ function PartsTable({
 }
 
 /**
- * An item in state assembly: the request split into parts (ADR 0012). Pause and Cancel assembly
- * and Add a part are not offered: they wait for the cascade and an add-part operation.
+ * An item in state assembly: the request split into parts (ADR 0012). The header offers Pause (Resume
+ * once every open part is blocked) and Cancel assembly, both acting on the open parts (AssemblyActions).
+ * Add a part is not offered yet: it waits for an add-part operation.
  */
 export function AssemblyPage() {
   const factory = useFactory();
@@ -310,6 +312,7 @@ export function AssemblyPage() {
         {item.body ? (
           <p className="m-0 max-w-[820px] text-[15px] leading-relaxed whitespace-pre-wrap text-muted">{item.body}</p>
         ) : null}
+        <AssemblyActions item={item} itemKey={key} parts={assembly.parts} factory={factory} />
       </header>
 
       <div className="flex flex-col gap-4 md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] md:items-start">

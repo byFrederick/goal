@@ -200,7 +200,9 @@ An item in state `assembly` (ADR 0012) opens the Assembly page instead of the it
 - **Plan**: the parts in waves (`planWaves`, cancelled parts left out). A part being worked is a work card (title clamped to two lines, its station and its agent's role and model from the board lane, `agentLabel`; the board is read only when already loaded, else the agent's name as words). Every other part is a one-line row ending in an ellipsis, named by its status icon (`partStatus`, the item's `itemStatus` with one rule added): an open part with `waiting_on` is waiting for those refs, and a done part is ready.
 - **Parts**: a table in plan order (index "N of M", ref, title, station, state, cost, pull request), each title linking to the part's own item page.
 
-Pause, Cancel assembly and Add a part are not offered: Add a part has no API operation, and Pause and Cancel wait for the cascade (software#33). Board cards do not show assembly lines yet.
+The header's actions (`AssemblyActions`, `features/items/assembly-actions.tsx`) act on the open parts (neither done nor cancelled), with no confirm for Pause: **Pause** (`white`) needs `item:operate` and shows while some open part is not blocked (`pauseAction`); it calls `pauseItem`. **Resume** (`primary`, Play) replaces it once every open part is blocked and needs `item:decide`; it calls `retryItem`. **Cancel assembly** (`rework`) needs `item:decide`, opens a dialog that names the open-part count (`openPartCount`, "Its 3 open parts are cancelled too.") and calls `cancelItem` on confirm; Keep it or Esc calls nothing, and a 409 shows inline as a `role="alert"`. Each action is hidden on a done or cancelled assembly. The decisions invalidate the item, its parts and the work keys (`itemChangeInvalidations`).
+
+Add a part is not offered: it has no API operation. Board cards do not show assembly lines yet.
 
 ### Organization settings
 

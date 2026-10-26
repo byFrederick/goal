@@ -1526,7 +1526,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return res.end();
     }
 
-    m = rest.match(/^\/items\/([^/]+)(?:\/(events|runs|notes|approve|reject|merge|retry|move|pause))?$/);
+    m = rest.match(/^\/items\/([^/]+)(?:\/(events|runs|notes|approve|reject|merge|retry|move|pause|cancel))?$/);
     if (!m) return problem(res, 404, 'Not found', path);
 
     const it = findItem(decodeURIComponent(m[1] ?? ''), org.id);
@@ -1606,6 +1606,14 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       take('pause');
       it.state = 'blocked';
       emit(it, 'paused', by, { actor: 'user:local', ...(reason ? { reason } : {}) });
+      return json(res, 200, full(it));
+    }
+
+    if (action === 'cancel') {
+      if (closed) return problem(res, 409, 'Conflict', `${ref(it)} is ${it.state}`, 'item-closed');
+      take('cancel');
+      it.state = 'cancelled';
+      emit(it, 'cancelled', by, { actor: 'user:local', ...(reason ? { reason } : {}) });
       return json(res, 200, full(it));
     }
 
