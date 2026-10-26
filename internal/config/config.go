@@ -330,7 +330,7 @@ type Gate struct {
 }
 
 // Flow holds the line's pull policy (expedite lane, constraint, release and andon), its
-// targets and its assembly policy.
+// targets, its assembly policy and its retry policy.
 type Flow struct {
 	Expedite *struct {
 		Types []string `json:"types,omitempty"`
@@ -344,6 +344,15 @@ type Flow struct {
 	} `json:"andon,omitempty"`
 	Targets    *Targets    `json:"targets,omitempty"`
 	Assemblies *Assemblies `json:"assemblies,omitempty"`
+	Retry      *Retry      `json:"retry,omitempty"`
+}
+
+// Retry caps the runs again of a claim whose run failed for a transient reason: its sandbox
+// was lost. Transient.Attempts unset is domain.DefaultTransientAttempts.
+type Retry struct {
+	Transient *struct {
+		Attempts int `json:"attempts,omitempty"`
+	} `json:"transient,omitempty"`
 }
 
 // Assemblies says how runs keep item branches fresh (rebase or merge), what a merge conflict
