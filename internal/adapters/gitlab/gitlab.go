@@ -384,3 +384,13 @@ func problem(raw []byte) string {
 
 	return p.Error
 }
+
+// BranchHead implements ports.CodeHost: GitLab does not support it yet, and nothing is sent.
+func (cl *Client) BranchHead(context.Context, domain.ResolvedConnection, string, string) (string, error) {
+	return "", fmt.Errorf("gitlab: branch head: %w", errors.ErrUnsupported)
+}
+
+// Compare implements ports.CodeHost: GitLab does not support it yet, and nothing is sent.
+func (cl *Client) Compare(context.Context, domain.ResolvedConnection, string, string, string) (ports.Comparison, error) {
+	return ports.Comparison{}, fmt.Errorf("gitlab: compare: %w", errors.ErrUnsupported)
+}

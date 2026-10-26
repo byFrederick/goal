@@ -18,6 +18,7 @@ The owner wants a small root, one home for each kind of file, rules that load on
    pnpm-lock.yaml Taskfile.yml compose.yaml
    skills-lock.json .mise.toml and the dotfiles
    cmd/ internal/                                        Go (unchanged)
+   tools/                                                repository tooling that is not a shipped binary
    apps/web/ apps/auth/ apps/worker/                     the pnpm apps
    packages/                                             shared TypeScript packages (unchanged)
    contracts/api/                                        openapi.yaml, permissions.yaml, sandbox.yaml, and events.schema.json once it exists
@@ -33,6 +34,8 @@ The owner wants a small root, one home for each kind of file, rules that load on
    `.claude/rules/` holds our rules, each scoped to the paths it governs. `.claude/skills/` holds our own skills and the vendored skills we actually use.
 
 2. **A new top-level directory needs an amendment to this ADR.** It names the directory, the kind of file it holds and why no existing home fits.
+
+   *Amended 2026-10-26: `tools/`.* It holds repository tooling that is not a shipped binary: programs that check or generate the repository's own files and that only the Taskfile and CI run, starting with `tools/layoutcheck` (`task layout:check`). `cmd/` does not fit because it holds the binaries Goal ships (`goal`, `goald`, `goal-egress`), and mixing in tooling makes it harder to tell what is deployed. `task layout:check` checks that this layout, the AGENTS.md map and the `paths:` globs of `.claude/rules` still match the tracked files.
 
 3. **No process output is committed.** Run artifacts, reports, metrics, screenshots and generated evidence stay out of the repository. Work state lives in Goal (items, runs, events), not in files here.
 

@@ -31,7 +31,9 @@ const keyText = "text"
 // Note records a person's note for the agents working an item (event kind note). The next run
 // of the item, at whatever station, carries after its brief (GOAL_FEEDBACK) every note left
 // since the item's last run started, under "Notes from people"; a note left while a run works
-// reaches its retry, or else the run after it. Delivery to a running agent is phase 2.2-E14b.
+// reaches its retry, or else the run after it. A run in progress also reads the notes left since
+// it started from the gateway (GET /run?notes_after), which its worker gives the agent between
+// turns and reports as note_delivered.
 func (e *Engine) Note(ctx context.Context, id domain.ItemID, by domain.Actor, text string) (domain.Event, error) {
 	text = strings.TrimSpace(text)
 	if text == "" || utf8.RuneCountInString(text) > MaxNoteRunes {

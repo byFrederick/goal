@@ -710,6 +710,39 @@ type CodeHost interface {
 	// DeleteBranch deletes a branch of the repository the pull request at url merges into; a
 	// branch that is already gone is not an error.
 	DeleteBranch(ctx context.Context, c domain.ResolvedConnection, url, branch string) error
+
+	// BranchHead returns the SHA of the head commit of branch in the repository at repo
+	// (https://<host>/<owner>/<repo>, optionally ending in .git), which must be on the host of c's
+	// git login (otherwise an error, before anything is sent). An empty branch means the
+	// repository's default branch. An unknown repository or branch is an error wrapping
+	// ErrNotFound. It only reads.
+	BranchHead(ctx context.Context, c domain.ResolvedConnection, repo, branch string) (string, error)
+
+	// Compare returns the commits of the repository at repo (as for BranchHead) reachable from
+	// head and not from base, oldest first, each with its subject and the paths it changed. It
+	// returns at most MaxCompareCommits, the oldest ones, and sets Comparison.Truncated when there
+	// are more. An unknown repository or commit is an error wrapping ErrNotFound. It only reads.
+	Compare(ctx context.Context, c domain.ResolvedConnection, repo, base, head string) (Comparison, error)
+}
+
+// MaxCompareCommits bounds the commits one CodeHost.Compare returns.
+const MaxCompareCommits = 100
+
+// Comparison is what CodeHost.Compare found between two commits.
+type Comparison struct {
+	// Commits are oldest first, at most MaxCompareCommits of them.
+	Commits []Commit
+	// Truncated reports that head has more commits since base than Commits holds.
+	Truncated bool
+}
+
+// Commit is one commit of a Comparison.
+type Commit struct {
+	SHA string
+	// Subject is the first line of the commit's message.
+	Subject string
+	// Files are the repository paths the commit changed.
+	Files []string
 }
 
 // PullRequest is what goald needs to know before and after merging a pull request.
