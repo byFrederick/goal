@@ -17,6 +17,9 @@ type planCase struct {
 var (
 	goTasks     = []string{"lint", "test", "api:permissions-check", "validate"}
 	layoutTasks = []string{"layout:check"}
+	envTasks    = []string{"env:check"}
+	// goEnvTasks are a Go change's: Go code may read the environment.
+	goEnvTasks = append(slices.Clone(envTasks), goTasks...)
 )
 
 func TestPlan(t *testing.T) {
@@ -24,8 +27,8 @@ func TestPlan(t *testing.T) {
 
 	tests := map[string]planCase{
 		"web only":                {[]string{"apps/web/src/routes/board.tsx", "apps/web/package.json"}, []string{"web:check"}, "web (web:check): apps/web/src/routes/board.tsx and 1 more", ""},
-		"go file":                 {[]string{"internal/engine/pull.go"}, goTasks, "go (lint, test, api:permissions-check, validate): internal/engine/pull.go", ""},
-		"go file outside go dirs": {[]string{"apps/web/webui.go"}, goTasks, "apps/web/webui.go", ""},
+		"go file":                 {[]string{"internal/engine/pull.go"}, goEnvTasks, "go (lint, test, api:permissions-check, validate): internal/engine/pull.go", ""},
+		"go file outside go dirs": {[]string{"apps/web/webui.go"}, goEnvTasks, "apps/web/webui.go", ""},
 		"go fixture":              {[]string{"internal/config/testdata/acme/factory.yaml"}, goTasks, "go (", ""},
 		"queries":                 {[]string{"db/queries/items.sql"}, goTasks, "db/queries/items.sql", ""},
 		"sqlc config":             {[]string{"db/sqlc.yaml"}, goTasks, "db/sqlc.yaml", ""},
@@ -36,13 +39,13 @@ func TestPlan(t *testing.T) {
 		},
 		"embedded roles":   {[]string{"internal/adapters/postgres/roles.sql"}, goTasks, "roles.sql", ""},
 		"migration":        {[]string{"db/migrations/00060_x.sql"}, goTasks, "db/migrations/00060_x.sql", "db/migrations/00060_x.sql changed: task migrate-check also applies"},
-		"compose read":     {[]string{"compose.yaml"}, goTasks, "compose.yaml", ""},
-		"env example read": {[]string{".env.example"}, goTasks, ".env.example", ""},
-		"worker":           {[]string{"apps/worker/src/run.ts", "apps/worker/Dockerfile"}, []string{"worker:check"}, "worker (worker:check): apps/worker/src/run.ts and 1 more", ""},
-		"auth":             {[]string{"apps/auth/src/server.ts"}, []string{"auth:check"}, "auth (auth:check): apps/auth/src/server.ts", "apps/auth/src/server.ts changed: task migrate-check also applies"},
-		"generated roles":  {[]string{"apps/auth/src/access.gen.ts"}, append(slices.Clone(goTasks[:3]), "auth:check", "validate"), "auth (auth:check): apps/auth/src/access.gen.ts", "migrate-check"},
+		"compose read":     {[]string{"compose.yaml"}, goEnvTasks, "env (env:check): compose.yaml", ""},
+		"env example read": {[]string{".env.example"}, goEnvTasks, "env (env:check): .env.example", ""},
+		"worker":           {[]string{"apps/worker/src/run.ts", "apps/worker/Dockerfile"}, []string{"env:check", "worker:check"}, "worker (worker:check): apps/worker/src/run.ts and 1 more", ""},
+		"auth":             {[]string{"apps/auth/src/server.ts"}, []string{"env:check", "auth:check"}, "auth (auth:check): apps/auth/src/server.ts", "apps/auth/src/server.ts changed: task migrate-check also applies"},
+		"generated roles":  {[]string{"apps/auth/src/access.gen.ts"}, append(slices.Clone(goEnvTasks[:4]), "auth:check", "validate"), "auth (auth:check): apps/auth/src/access.gen.ts", "migrate-check"},
 		"api client":       {[]string{"packages/api-client/src/client.ts"}, []string{"api-client:check", "web:check"}, "web (web:check): packages/api-client/src/client.ts", ""},
-		"control worker":   {[]string{"deploy/cloudflare/src/index.ts"}, []string{"cloudflare:check"}, "cloudflare (cloudflare:check): deploy/cloudflare/src/index.ts", ""},
+		"control worker":   {[]string{"deploy/cloudflare/src/index.ts"}, []string{"env:check", "cloudflare:check"}, "cloudflare (cloudflare:check): deploy/cloudflare/src/index.ts", ""},
 		"terraform":        {[]string{"terraform/r2.tf"}, []string{"tf:check"}, "terraform (tf:check): terraform/r2.tf", ""},
 		"sops rules":       {[]string{".sops.yaml"}, []string{"tf:check"}, ".sops.yaml", ""},
 		"agents map":       {[]string{"AGENTS.md"}, layoutTasks, "layout (layout:check): AGENTS.md", ""},
@@ -52,13 +55,19 @@ func TestPlan(t *testing.T) {
 			[]string{"tools/layoutcheck/check.go", "tools/layoutcheck/testdata/x.md"},
 			append(slices.Clone(layoutTasks), goTasks...), "layout (layout:check): tools/layoutcheck/check.go and 1 more", "",
 		},
+		"env check": {
+			[]string{"tools/envcheck/check.go", "tools/envcheck/testdata/repo/compose.yaml"},
+			goEnvTasks, "env (env:check): tools/envcheck/check.go and 1 more", "",
+		},
+		"env reference":     {[]string{"docs/reference/environment.md"}, envTasks, "env (env:check): docs/reference/environment.md", ""},
+		"wrangler bindings": {[]string{"deploy/cloudflare/wrangler.jsonc"}, []string{"env:check", "cloudflare:check"}, "env (env:check): deploy/cloudflare/wrangler.jsonc", ""},
 		"nothing to check": {
 			[]string{"docs/adr/0001.md", "design-system/goal/MASTER.md", ".claude/skills/x/SKILL.md", ".github/workflows/ci.yml", ".githooks/pre-push", "README.md", "skills-lock.json"},
 			nil, "", "",
 		},
 		"parts keep task check's order": {
 			[]string{"terraform/r2.tf", "apps/web/src/a.tsx", "internal/api/org.go", "apps/worker/src/a.ts"},
-			[]string{"lint", "test", "api:permissions-check", "worker:check", "web:check", "validate", "tf:check"},
+			[]string{"env:check", "lint", "test", "api:permissions-check", "worker:check", "web:check", "validate", "tf:check"},
 			"worker (worker:check)", "",
 		},
 	}

@@ -9,7 +9,7 @@ import (
 
 // tasks is the order task check runs its tasks in; a plan keeps it.
 var tasks = []string{
-	"layout:check", "lint", "test", "api:permissions-check", "worker:check", "auth:check",
+	"layout:check", "env:check", "lint", "test", "api:permissions-check", "worker:check", "auth:check",
 	"api-client:check", "web:check", "cloudflare:check", "validate", "tf:check",
 }
 
@@ -28,11 +28,12 @@ var (
 	partCloudflare = part{"cloudflare", []string{"cloudflare:check"}}
 	partTerraform  = part{"terraform", []string{"tf:check"}}
 	partLayout     = part{"layout", []string{"layout:check"}}
+	partEnv        = part{"env", []string{"env:check"}}
 	partEverything = part{"everything", tasks}
 )
 
 // parts lists every part in report order; everything comes first since it covers the rest.
-var parts = []part{partEverything, partGo, partWorker, partAuth, partAPIClient, partWeb, partCloudflare, partTerraform, partLayout}
+var parts = []part{partEverything, partGo, partWorker, partAuth, partAPIClient, partWeb, partCloudflare, partTerraform, partLayout, partEnv}
 
 // A rule maps the paths it matches to the parts they select; no parts means nothing to check.
 type rule struct {
@@ -69,21 +70,28 @@ var rules = []rule{
 	{under("contracts"), []part{partEverything}, "a contract every part builds on"},
 	// tools/layoutcheck is Go, and the layout check it runs.
 	{under("tools/layoutcheck"), []part{partGo, partLayout}, ""},
+	// tools/envcheck is Go, and the environment check it runs.
+	{under("tools/envcheck"), []part{partGo, partEnv}, ""},
+	// The files tools/envcheck compares with contracts/env.yaml, besides the code below.
+	{exact("docs/reference/environment.md"), []part{partEnv}, ""},
+	{exact("deploy/cloudflare/wrangler.jsonc"), []part{partCloudflare, partEnv}, ""},
 	// The descriptions of the layout that tools/layoutcheck compares with the tracked files.
 	{exact("AGENTS.md", "docs/adr/0013-repository-layout.md"), []part{partLayout}, ""},
 	{under(".claude/rules"), []part{partLayout}, ""},
-	// Go code anywhere, and the files Go embeds (go:embed) or its tests read.
-	{goFile, []part{partGo}, ""},
+	// Go code anywhere, and the files Go embeds (go:embed) or its tests read. Go code may read
+	// the environment, which tools/envcheck checks.
+	{goFile, []part{partGo, partEnv}, ""},
 	{under("cmd", "internal", "db", "apps/web/placeholder"), []part{partGo}, ""},
-	{exact("apps/web/csp.txt", "compose.yaml", ".env.example"), []part{partGo}, ""},
+	{exact("apps/web/csp.txt"), []part{partGo}, ""},
+	{exact("compose.yaml", ".env.example"), []part{partGo, partEnv}, ""},
 	// permgen -check (api:permissions-check) compares this generated file with contracts/api/permissions.yaml.
-	{exact("apps/auth/src/access.gen.ts"), []part{partGo, partAuth}, ""},
-	{under("apps/worker"), []part{partWorker}, ""},
-	{under("apps/auth"), []part{partAuth}, ""},
+	{exact("apps/auth/src/access.gen.ts"), []part{partGo, partAuth, partEnv}, ""},
+	{under("apps/worker"), []part{partWorker, partEnv}, ""},
+	{under("apps/auth"), []part{partAuth, partEnv}, ""},
 	// web depends on @goal/api-client.
 	{under("packages/api-client"), []part{partAPIClient, partWeb}, ""},
 	{under("apps/web"), []part{partWeb}, ""},
-	{under("deploy/cloudflare"), []part{partCloudflare}, ""},
+	{under("deploy/cloudflare"), []part{partCloudflare, partEnv}, ""},
 	{under("terraform"), []part{partTerraform}, ""},
 	{exact(".sops.yaml"), []part{partTerraform}, ""},
 	{under("docs", "design-system", ".claude", ".github", ".githooks"), nil, ""},
