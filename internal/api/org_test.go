@@ -287,6 +287,8 @@ var probes = map[string]probe{
 	"getAgentStats":  {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/agents/writer/stats", org: testOrg, factory: acmeID},
 	"mergeItem":      {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/merge", org: testOrg, factory: acmeID},
 	"noteItem":       {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/notes", body: `{"text":"hi"}`, org: testOrg, factory: acmeID},
+	"linkItem":       {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/needs", body: `{"needs":"acme#1"}`, org: testOrg, factory: acmeID},
+	"unlinkItem":     {method: http.MethodDelete, path: "/v1/orgs/acme/items/acme%231/needs/acme%231", org: testOrg, factory: acmeID},
 	"listItemRuns":   {method: http.MethodGet, path: "/v1/orgs/acme/items/acme%231/runs", org: testOrg, factory: acmeID},
 	"getAndon":       {method: http.MethodGet, path: acmeAndon, org: testOrg, factory: acmeID},
 	"pullAndon":      {method: http.MethodPost, path: acmeAndon, body: `{"reason":"probe"}`, org: testOrg, factory: acmeID},
