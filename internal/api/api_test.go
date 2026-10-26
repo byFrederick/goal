@@ -129,6 +129,9 @@ type harness struct {
 	defs       *porttest.Definitions
 	defNotices *porttest.DefinitionNotices
 	objects    *porttest.ObjectStore
+	// defAudit receives the definition store's audit entries, kept apart from the log the API
+	// lists so that tests of the audit endpoint see only the entries they make.
+	defAudit *porttest.Tenancy
 	// keys keeps the organizations' API keys: the identity's own under GOAL_AUTH=session, so a
 	// key made through the API signs requests in.
 	keys *porttest.Identity
@@ -361,8 +364,9 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
 	// The definition store holds the factories' versions: both are published as v1, keeping their
 	// ids, by the same authoring service the API serves. Factories published here are registered
 	// in the item store, as in one database.
+	h.defAudit = newTenancy(t)
 	h.defs = porttest.NewDefinitions(porttest.DefinitionsDeps{
-		Objects: porttest.NewObjectStore(), Items: h.store, Notices: h.defNotices, Now: h.clock.Now,
+		Objects: porttest.NewObjectStore(), Items: h.store, Audit: h.defAudit, Notices: h.defNotices, Now: h.clock.Now,
 	})
 
 	var ids atomic.Int64

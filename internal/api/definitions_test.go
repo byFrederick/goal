@@ -908,6 +908,62 @@ func TestDefinitions_ArchiveRefusals(t *testing.T) {
 	}
 }
 
+func TestDefinitions_PurgeArchivedFactory(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.pauseLine(t)
+	decode[gen.Factory](t, h.request(t, http.MethodPost, linePath+"/archive", "", nil), http.StatusOK)
+
+	if r := h.request(t, http.MethodPost, linePath+"/purge", "", nil); r.status != http.StatusNoContent {
+		t.Fatalf("purge an archived factory = %d %s, want 204", r.status, r.body)
+	}
+
+	refused(t, "purged", h.request(t, http.MethodGet, linePath, "", nil), http.StatusNotFound, authoring.CodeFactoryNotFound)
+
+	entries, err := h.defAudit.AuditLog(inOrg(t), ports.AuditQuery{Action: domain.AuditFactoryDeleted, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(entries) != 1 || entries[0].TargetID != string(lineID) || entries[0].Actor.ID != domain.LocalUser.ID {
+		t.Errorf("audit %+v, want one factory.deleted of line by the local user", entries)
+	}
+}
+
+func TestDefinitions_PurgeRefusals(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	p := refused(t, "purge of a live factory", h.request(t, http.MethodPost, linePath+"/purge", "", nil),
+		http.StatusConflict, authoring.CodeFactoryNotArchived)
+	if valueOf(p.Detail) != "Archive the factory first" {
+		t.Errorf("detail %q, want \"Archive the factory first\"", valueOf(p.Detail))
+	}
+
+	h.pauseLine(t)
+	decode[gen.Factory](t, h.request(t, http.MethodPost, linePath+"/archive", "", nil), http.StatusOK)
+	h.seed(t, stBuild, domain.StateQueued, t0)
+
+	if _, _, err := h.store.ClaimNext(inOrg(t), ports.Claim{
+		FactoryID: lineID, Station: build, Now: t0, ExpiresAt: t0.Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	p = refused(t, "purge while an item holds a lease", h.request(t, http.MethodPost, linePath+"/purge", "", nil),
+		http.StatusConflict, authoring.CodeFactoryBusy)
+	if valueOf(p.Detail) != "1 items are being worked" {
+		t.Errorf("detail %q, want \"1 items are being worked\"", valueOf(p.Detail))
+	}
+
+	decode[gen.Factory](t, h.request(t, http.MethodGet, linePath, "", nil), http.StatusOK)
+
+	refused(t, "purge of an unknown factory", h.request(t, http.MethodPost, factoriesPath+"/nope/purge", "", nil),
+		http.StatusNotFound, authoring.CodeFactoryNotFound)
+}
+
 func TestDefinitions_ListFactoriesHidesArchived(t *testing.T) {
 	t.Parallel()
 

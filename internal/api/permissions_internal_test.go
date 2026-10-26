@@ -192,7 +192,7 @@ func TestPermissions_PersonalTokensCarryExactlyThese(t *testing.T) {
 
 	want := []string{
 		"andon:manage", "authenticated", "connection:read", "definition:edit", "definition:publish", "factory:archive",
-		"factory:create", string(permFactoryRead), "item:create", "item:decide", "item:operate", "knowledge:read", "org:read",
+		"factory:create", "factory:delete", string(permFactoryRead), "item:create", "item:decide", "item:operate", "knowledge:read", "org:read",
 	}
 
 	var got []string

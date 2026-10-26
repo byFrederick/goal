@@ -349,11 +349,12 @@ var probes = map[string]probe{
 	// Definitions: writes carry a (stale) If-Match, so the request reaches the resolver.
 	"createFactory":      {method: http.MethodPost, path: "/v1/orgs/acme/factories", body: `{"name":"probe","start":{"kind":"blank"}}`, org: testOrg},
 	"getFactory":         {method: http.MethodGet, path: acmeFactory, org: testOrg, factory: acmeID},
-	"deleteFactory":      {method: http.MethodDelete, path: acmeFactory, org: testOrg, factory: acmeID},
+	opDelete:             {method: http.MethodDelete, path: acmeFactory, org: testOrg, factory: acmeID},
 	"pauseFactory":       {method: http.MethodPost, path: acmeFactory + "/pause", org: testOrg, factory: acmeID},
 	"resumeFactory":      {method: http.MethodPost, path: acmeFactory + "/resume", org: testOrg, factory: acmeID},
 	opArchive:            {method: http.MethodPost, path: acmeFactory + "/archive", org: testOrg, factory: acmeID},
 	opUnarchive:          {method: http.MethodPost, path: acmeFactory + "/unarchive", org: testOrg, factory: acmeID},
+	opPurge:              {method: http.MethodPost, path: acmeFactory + "/purge", org: testOrg, factory: acmeID},
 	"getDraft":           {method: http.MethodGet, path: acmeDraft, org: testOrg, factory: acmeID},
 	"openDraft":          {method: http.MethodPost, path: acmeDraft, body: `{}`, org: testOrg, factory: acmeID},
 	"discardDraft":       {method: http.MethodDelete, path: acmeDraft, org: testOrg, factory: acmeID, header: staleMatch},

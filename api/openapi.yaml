@@ -841,7 +841,9 @@ paths:
       x-goal-scope: definition:edit
       tags: [definitions]
       summary: Delete a factory that was never published, with its draft (the wizard's Cancel)
-      description: 409 factory-published once a version was published.
+      description: >-
+        409 factory-published once a version was published: a published factory is archived
+        (archiveFactory) and then deleted for good (purgeFactory).
       responses:
         "204": { description: Deleted }
         default: { $ref: "#/components/responses/Problem" }
@@ -920,6 +922,24 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Factory" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/purge:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    post:
+      operationId: purgeFactory
+      x-goal-scope: factory:delete
+      tags: [definitions]
+      summary: Delete an archived, idle factory for good
+      description: >-
+        Deletes an archived factory none of whose items holds a lease, together with its items,
+        runs, events and definition versions; its audit history stays. 409 factory-not-archived
+        ("Archive the factory first") for a factory that is not archived, 409 factory-busy ("N
+        items are being worked", N the items holding a lease) while runs still work its items.
+        Audited as factory.deleted.
+      responses:
+        "204": { description: Deleted }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/draft:
     parameters:
