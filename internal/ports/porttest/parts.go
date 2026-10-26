@@ -99,18 +99,7 @@ func (s *Store) assemble(org domain.OrgID, a ports.Assembly) (domain.Item, domai
 		}
 	}
 
-	for _, p := range a.Parts {
-		if len(p.Needs) > 0 {
-			continue
-		}
-
-		part := s.items[ids[p.Key]]
-		for _, need := range after {
-			e := domain.Edge{Item: part.ID, Needs: need.ID, Kind: domain.EdgeLinked, By: a.AfterBy.Ref(), At: t.At}
-			s.edges = append(s.edges, e)
-			s.append(edgeEvent(domain.EventEdgeAdded, part, e, a.AfterBy, t.At))
-		}
-	}
+	s.linkAfter(a, ids, after)
 
 	s.append(domain.Event{
 		FactoryID: it.FactoryID, ItemID: it.ID, At: t.At, Kind: domain.EventAssembled, Station: it.Station,
@@ -118,6 +107,25 @@ func (s *Store) assemble(org domain.OrgID, a ports.Assembly) (domain.Item, domai
 	})
 
 	return clone(it), s.partsOf(it.ID), s.audit, true, nil
+}
+
+// linkAfter adds a linked edge by a.AfterBy, with its edge_added event, from each of a's parts
+// without needs (ids by key) to each of after.
+func (s *Store) linkAfter(a ports.Assembly, ids map[string]domain.ItemID, after []*domain.Item) {
+	at := a.Transition.At
+
+	for _, p := range a.Parts {
+		if len(p.Needs) > 0 {
+			continue
+		}
+
+		part := s.items[ids[p.Key]]
+		for _, need := range after {
+			e := domain.Edge{Item: part.ID, Needs: need.ID, Kind: domain.EdgeLinked, By: a.AfterBy.Ref(), At: at}
+			s.edges = append(s.edges, e)
+			s.append(edgeEvent(domain.EventEdgeAdded, part, e, a.AfterBy, at))
+		}
+	}
 }
 
 // afterItems are the items an assembly's root parts follow: ErrNotFound for one that is missing,

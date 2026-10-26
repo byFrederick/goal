@@ -108,15 +108,8 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 			e.block(ctx, log, c, fmt.Sprintf("run %s: %s", res.Status, res.Error))
 			return
 		default:
-			if err = e.follow(ctx, c, chk); err == nil {
-				e.finish(ctx, log, c, res.Output, chk)
-				return
-			}
-
-			if !errors.As(err, &rejected) {
-				e.block(ctx, log, c, err.Error())
-				return
-			}
+			e.finish(ctx, log, c, res.Output, chk)
+			return
 		}
 
 		if !e.outputFailed(ctx, log, c, attempt, rejected.err) {
@@ -340,7 +333,8 @@ func (e *Engine) runOnce(ctx context.Context, c claimed, b *box, feedback string
 }
 
 // runInBox opens the claim's sandbox when the run is its first, runs the agent there, checks
-// its output and runs the station's checks.
+// its output, runs the station's checks and links a single item to the items its output
+// follows (follow).
 func (e *Engine) runInBox(ctx context.Context, c claimed, runID domain.RunID, b *box, feedback string) (domain.RunResult, checked, error) {
 	token, err := e.gatewayToken(ctx, c, runID)
 
@@ -389,6 +383,10 @@ func (e *Engine) runInBox(ctx context.Context, c claimed, runID domain.RunID, b 
 	}
 
 	if err := e.runChecks(ctx, c, runID, b, scrub); err != nil {
+		return res, checked{}, err
+	}
+
+	if err := e.follow(ctx, c, chk); err != nil {
 		return res, checked{}, err
 	}
 

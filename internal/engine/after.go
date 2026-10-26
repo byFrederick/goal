@@ -94,7 +94,8 @@ func (e *Engine) reaches(ctx context.Context, from, to domain.ItemID) (bool, err
 }
 
 // follow adds a linked edge by the agent from a single item to each item its output follows,
-// before finish moves it, while the lease still keeps it from claims; a plan's root parts get
+// once the output passed its checks and before finish moves the item, while the lease still
+// keeps it from claims; a plan's root parts get
 // theirs in Assemble instead. An edge an earlier attempt added (ports.ErrConflict) counts as
 // added, so a retry is idempotent. followed checked for cycles outside the factory's lock, so an
 // edge added since can still close one: that fails the output as an *outputError.

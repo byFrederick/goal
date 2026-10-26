@@ -176,7 +176,7 @@ func afterItems(ctx context.Context, q *db.Queries, cur db.WorkItem, ids []domai
 	return after, nil
 }
 
-// linkAfter inserts a linked edge by by from each of roots, new parts without needs, to each of
+// linkAfter inserts a linked edge, created by the given actor, from each of roots, new parts without needs, to each of
 // after, and returns their edge_added events. New parts have no dependents, so no edge closes a
 // cycle.
 func linkAfter(ctx context.Context, q *db.Queries, roots []db.WorkItem, after []uuid.UUID, by domain.Actor, at time.Time) ([]domain.Event, error) {

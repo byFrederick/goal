@@ -882,7 +882,7 @@ func testAssembleLinksRootPartsAfter(f *fixture) {
 	ctx := f.ctx(t)
 
 	before := f.create(t, domain.NewItem{Title: "in flight", Station: stNext})
-	other := f.create(t, domain.NewItem{Title: "other factory", FactoryID: f.newFactory(t), Station: stNext})
+	other := f.create(t, domain.NewItem{Title: "of another factory", FactoryID: f.newFactory(t), Station: stNext})
 	it, l := f.planning(t, domain.NewItem{Title: titleBig})
 	agent := domain.Actor{Kind: domain.ActorAgent, ID: agWorker, Name: agWorker}
 
@@ -890,8 +890,8 @@ func testAssembleLinksRootPartsAfter(f *fixture) {
 		after domain.ItemID
 		want  error
 	}{
-		"unknown item":  {"00000000-0000-4000-8000-0000000000ff", ports.ErrNotFound},
-		"other factory": {other.ID, domain.ErrInvalid},
+		"unknown item":    {"00000000-0000-4000-8000-0000000000ff", ports.ErrNotFound},
+		"another factory": {other.ID, domain.ErrInvalid},
 	} {
 		a := assembly(it, l, plan())
 		a.After, a.AfterBy = []domain.ItemID{r.after}, agent
@@ -932,7 +932,7 @@ func testAssembleLinksRootPartsAfter(f *fixture) {
 		},
 		{
 			FactoryID: f.factory, ItemID: api.ID, At: t1, Kind: domain.EventEdgeAdded, Station: stWork, Actor: agWorker,
-			Data: map[string]any{"needs": string(before.ID), "kind": string(domain.EdgeLinked), "actor": agent.Ref()},
+			Data: map[string]any{"needs": string(before.ID), "kind": string(domain.EdgeLinked), dataActor: agent.Ref()},
 		},
 	})
 

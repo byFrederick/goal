@@ -99,7 +99,7 @@ func TestEngine_AfterHoldsUntilDone(t *testing.T) {
 	follower := h.submit(t, domain.NewItem{Title: "follower"})
 	out.set(follower.ID, follows("", refOf(inFlight)))
 
-	h.step(t) // both specified: each queued at build
+	h.step(t)                  // both specified: each queued at build
 	out.set(follower.ID, `{}`) // build's output follows nothing
 
 	got := h.linkedNeeds(t, follower.ID)
@@ -194,6 +194,8 @@ func TestEngine_AfterBadRefFailsOutput(t *testing.T) {
 		}},
 		{name: "unknown", setup: func(*testing.T, *harness, domain.Item, domain.Item) string { return testFactory + "#99" }},
 		{name: "done", setup: func(t *testing.T, h *harness, other, _ domain.Item) string {
+			t.Helper()
+
 			if _, err := h.e.Move(inOrg(t), other.ID, stBuild, human, ""); err != nil {
 				t.Fatal(err)
 			}
@@ -204,6 +206,8 @@ func TestEngine_AfterBadRefFailsOutput(t *testing.T) {
 			return refOf(other)
 		}},
 		{name: "cancelled", setup: func(t *testing.T, h *harness, other, _ domain.Item) string {
+			t.Helper()
+
 			if _, err := h.e.Cancel(inOrg(t), other.ID, human, ""); err != nil {
 				t.Fatal(err)
 			}
@@ -211,6 +215,8 @@ func TestEngine_AfterBadRefFailsOutput(t *testing.T) {
 			return refOf(other)
 		}},
 		{name: "cycle", setup: func(t *testing.T, h *harness, other, it domain.Item) string {
+			t.Helper()
+
 			if _, err := h.e.Link(inOrg(t), other.ID, it.ID, human); err != nil {
 				t.Fatal(err)
 			}

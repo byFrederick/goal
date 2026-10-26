@@ -76,3 +76,28 @@ A review station's output contract may carry an optional `violations` array, one
 - The key is a convention, not a contract goald ships: the definition's own contract declares it (an array of objects with `rule` and `reason` strings). goald reads `violations` from any accepted station output that has it, whatever the station or contract.
 - When the output is accepted (it passed its contract and checks, whether its gate approves or rejects), goald appends one `rule_violated` item event per entry, with data `{rule, reason, station, agent}`, in the same transaction that accepts the output, so a retry or a lost lease never counts it twice. Counting those events by `rule` shows which rules break most.
 - An entry naming a rule the run's definition version does not declare, or no rule, is ignored and logged; the others of the same output still count. A `violations` value that is not a list records nothing and never blocks the item.
+
+## Output contracts
+
+A station's output contract is the definition's own JSON Schema; goald validates each output against it and reads a few fields from an accepted one: the gate's verdict, `violations` (above), `lane` and `plan` ([ADR 0012](../adr/0012-assemblies-and-parts.md)), and the dependency field below.
+
+### Dependencies: `board.flow.dependencies.after`
+
+`board.flow.dependencies.after` names the output property, any name the definition chooses, that lists the open items the work must follow ([ADR 0015](../adr/0015-overlapping-in-flight-work.md) §2). No property is fixed by the platform; with the key unset, goald reads none and nothing below happens.
+
+```yaml
+board:
+  flow:
+    dependencies:
+      after: follows
+```
+
+```json
+{ "follows": ["acme#93"] }
+```
+
+- The value is an array of item refs `<factory>#<number>` (the factory's `metadata.name` or its id): open items of the same factory, outside the output's own `plan`. Absent, `null` or `[]` means none; a ref listed twice counts once.
+- When a station finishes with a non-empty list, goald adds a `linked` edge by the agent (`agent:<name>`) to each item. For a single item the edge goes from the item, before it moves on; when the output also has a plan that becomes an assembly, it goes from every part with no in-plan `needs`, in the same transaction that creates the parts. The claim gate then holds the item, or those parts, until each named item is done or cancelled. A gate's rejection reads no list.
+- The output fails, as a malformed plan does (`contract_failed` naming the ref, one more attempt with the reason, then blocked), and no edge is written, when an entry is not an item ref, or names an item of another factory, an item that does not exist, one that is done or cancelled, the item itself or its own assembly, or an item that already waits for this one (the edge would close a cycle).
+
+**Planning-station convention.** When a request overlaps work in flight, a planning station does one of two things: name that item in the mapped `after` field, so the new work follows it, or declare the overlapping paths in `touches` (a single item) or in the plan's `paths` (each part), so the overlap hold serializes them. A factory's prompt for its planning agent should say so; goald enforces neither.
