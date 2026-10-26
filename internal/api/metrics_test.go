@@ -9,6 +9,7 @@ import (
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/domain"
+	"github.com/byFrederick/goal/internal/ports"
 )
 
 // oct is a time on a day of October 2026; the harness's clock reads Oct 23, 09:00 UTC.
@@ -197,4 +198,41 @@ func rangeSummary(m gen.Metrics) string {
 
 	return fmt.Sprintf("%s..%s (%s): %d done, %.2f a day, p85 %s, rework %.2f",
 		m.From, m.To, m.Window, m.ItemsDone, m.ThroughputPerDay, p85, m.ReworkRate)
+}
+
+// An assembly's lead time runs from its creation to its last part done; the range reports its
+// percentiles and how many were done, the previous range null when none were.
+func TestAPI_MetricsAssemblyLeadTime(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	assembly := h.assemble(t, []domain.NewPart{
+		{Key: "a", Title: "Contract", Lane: laneAPI},
+		{Key: "b", Title: "Store", Lane: laneAPI},
+	})
+
+	for i, after := range []time.Duration{time.Hour, 2 * time.Hour} {
+		part, err := h.store.ItemByNumber(inOrg(t), lineID, assembly.Number+int64(i)+1)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		h.clock.Advance(after)
+		h.move(t, part, domain.Position{Station: stDone, State: domain.StateDone}, func(tr *ports.Transition) { tr.DoneAt = h.clock.Now() })
+	}
+
+	h.clock.Advance(time.Minute) // the range ends now, excluded
+
+	var m gen.Metrics
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/metrics?compare=previous", "", &m); code != http.StatusOK {
+		t.Fatalf("metrics = %d", code)
+	}
+
+	if a := m.AssemblyLeadTimeHours; a == nil || a.Assemblies != 1 || a.P50 != 3 || a.P85 != 3 {
+		t.Errorf("assembly lead time = %+v, want 1 assembly at 3 h", a)
+	}
+
+	if m.Previous == nil || m.Previous.AssemblyLeadTimeHours != nil {
+		t.Errorf("previous = %+v, want a range with no assembly lead time", m.Previous)
+	}
 }

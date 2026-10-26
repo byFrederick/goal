@@ -282,6 +282,44 @@ func (q *Queries) CurrentRun(ctx context.Context, arg CurrentRunParams) (Current
 	return i, err
 }
 
+const flowAssemblyStats = `-- name: FlowAssemblyStats :one
+SELECT count(*) AS assemblies_done,
+       coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM w.done_at - w.created_at)::float8), 0)::float8 AS p50_seconds,
+       coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM w.done_at - w.created_at)::float8), 0)::float8 AS p85_seconds
+FROM work_items w
+WHERE w.factory_id = $1 AND w.done_at >= $2::timestamptz AND w.done_at < $3::timestamptz
+  AND w.state = 'done' AND ($4::text = '' OR w.type = $4::text)
+  AND EXISTS (SELECT 1 FROM work_items p WHERE p.parent_id = w.id AND p.part_key IS NOT NULL)
+`
+
+type FlowAssemblyStatsParams struct {
+	FactoryID uuid.UUID
+	Since     time.Time
+	Until     time.Time
+	Type      string
+}
+
+type FlowAssemblyStatsRow struct {
+	AssembliesDone int64
+	P50Seconds     float64
+	P85Seconds     float64
+}
+
+// Assemblies (items with parts) done, and their lead-time (created to last part done)
+// percentiles in seconds, interpolated between ranks: done items on work_items_done_at_idx,
+// their parts on work_items_parent_part_key_idx. Cancelled assemblies never reach done.
+func (q *Queries) FlowAssemblyStats(ctx context.Context, arg FlowAssemblyStatsParams) (FlowAssemblyStatsRow, error) {
+	row := q.db.QueryRow(ctx, flowAssemblyStats,
+		arg.FactoryID,
+		arg.Since,
+		arg.Until,
+		arg.Type,
+	)
+	var i FlowAssemblyStatsRow
+	err := row.Scan(&i.AssembliesDone, &i.P50Seconds, &i.P85Seconds)
+	return i, err
+}
+
 const flowDoneByBucket = `-- name: FlowDoneByBucket :many
 SELECT floor(extract(epoch FROM done_at - $1::timestamptz) / $2::float8)::int AS bucket,
        count(*) AS done

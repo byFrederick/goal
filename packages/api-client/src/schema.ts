@@ -3308,6 +3308,15 @@ export interface components {
                 /** Format: double */
                 p85: number;
             } | null;
+            /** @description Percentiles of created → last part done of the assemblies (items split into parts) done in the window; null when none were. Cancelled assemblies are left out */
+            assembly_lead_time_hours: {
+                /** Format: double */
+                p50: number;
+                /** Format: double */
+                p85: number;
+                /** @description How many assemblies were done in the window */
+                assemblies: number;
+            } | null;
             /** @description Items in the line now, neither done nor cancelled */
             wip: number;
             /**
@@ -3337,6 +3346,15 @@ export interface components {
                 p50: number;
                 /** Format: double */
                 p85: number;
+            } | null;
+            /** @description Percentiles of created → last part done of the assemblies (items split into parts) done in the range; null when none were. Cancelled assemblies are left out */
+            assembly_lead_time_hours: {
+                /** Format: double */
+                p50: number;
+                /** Format: double */
+                p85: number;
+                /** @description How many assemblies were done in the range */
+                assemblies: number;
             } | null;
             /** Format: double */
             rework_rate: number;
