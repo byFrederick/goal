@@ -147,6 +147,12 @@ type Config struct {
 // keyReason is the event data key that explains a block, rejection or escalation.
 const keyReason = "reason"
 
+// keyRule is the event data key of the factory rule a rule_violated event counts.
+const keyRule = "rule"
+
+// maxRuleLog bounds the rule name an output gives that goald logs when it declares no such rule.
+const maxRuleLog = 200
+
 // keyCategory is the event data key of a gate rejection's category (domain.Verdict.Category).
 const keyCategory = "category"
 

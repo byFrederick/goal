@@ -38,6 +38,12 @@ func (f *Factory) Line() domain.Line {
 		l.KnowledgeSources = slices.Clone(s.Knowledge.Sources)
 	}
 
+	for _, r := range s.Rules {
+		l.Rules = append(l.Rules, domain.Rule{
+			Name: r.Name, Description: r.Description, AppliesTo: r.AppliesTo, Paths: slices.Clone(r.Paths), Body: r.Body,
+		})
+	}
+
 	l.Removed = slices.Clone(f.removed)
 
 	if b := s.Runtime.Budget; b != nil {

@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 )
@@ -62,5 +63,36 @@ func TestEffectiveRules(t *testing.T) {
 
 	if got := EffectiveRules(nil, RuleTarget{Agent: coder}); len(got) != 0 {
 		t.Errorf("EffectiveRules of no rules = %v", got)
+	}
+}
+
+func TestViolationsFrom(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		output string
+		want   []Violation
+	}{
+		{name: "none", output: `{"decision":"approve"}`},
+		{name: "empty", output: `{"violations":[]}`},
+		{name: "not a list", output: `{"violations":{"rule":"tests-first"}}`},
+		{name: "not an object", output: `[1,2]`},
+		{name: "not json", output: `nope`},
+		{
+			name:   "in order, skipping what is not an entry",
+			output: `{"violations":[{"rule":"tests-first","reason":"no test"},"wrap-errors",{"rule":"wrap-errors","reason":"bare"}]}`,
+			want:   []Violation{{Rule: "tests-first", Reason: "no test"}, {Rule: "wrap-errors", Reason: "bare"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := ViolationsFrom(json.RawMessage(tt.output)); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ViolationsFrom(%s) = %+v, want %+v", tt.output, got, tt.want)
+			}
+		})
 	}
 }
