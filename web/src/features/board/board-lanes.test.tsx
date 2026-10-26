@@ -222,6 +222,65 @@ describe('board lanes', () => {
     expect(within(card).queryByText(/touch/)).toBeNull();
   });
 
+  it('says what the run is doing now on a work card, its working icon and one truncated line', async () => {
+    const doing = item({ ...workItem, activity: 'Editing src/checkout/handler.ts' });
+    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [doing]) });
+
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const card = within(columns).getByRole('link', { name: WORKING }).closest('article') as HTMLElement;
+    const line = within(card).getByText('Editing src/checkout/handler.ts');
+    expect(line.classList).toContain('truncate');
+    expect(line.parentElement?.getAttribute('title')).toBe('Editing src/checkout/handler.ts');
+    expect(within(card).queryByText('Working, turn 3')).toBeNull();
+  });
+
+  it('truncates a long doing line on one line with the full text in a title', async () => {
+    const activity = `Running ${'the full integration suite against the staging cluster '.repeat(4)}`.trimEnd();
+    const doing = item({ ...workItem, activity });
+    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [doing]) });
+
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const card = within(columns).getByRole('link', { name: WORKING }).closest('article') as HTMLElement;
+    const line = within(card).getByText(activity);
+    expect(line.classList).toContain('truncate');
+    expect(line.parentElement?.getAttribute('title')).toBe(activity);
+  });
+
+  it('shows a plan bar of one segment per todo, done, the one in hand, then to do, with its count', async () => {
+    const planned = item({ ...workItem, plan_steps: { done: 2, total: 5 } });
+    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [planned]) });
+
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const bar = within(columns).getByRole('img', { name: '2 of 5 steps' });
+    const states = Array.from(bar.querySelectorAll('[data-state]')).map((el) => el.getAttribute('data-state'));
+    expect(states).toEqual(['done', 'done', 'current', 'todo', 'todo']);
+  });
+
+  it('shows no plan bar on a card whose run has no plan steps', async () => {
+    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [{ ...workItem, plan_steps: null }]) });
+
+    await screen.findByRole('region', { name: 'Stations' });
+    expect(screen.queryByRole('img', { name: /steps/ })).toBeNull();
+  });
+
+  it('shows the doing line and the plan bar on the phone’s compact lane cards too', async () => {
+    const planned = item({
+      ...workItem,
+      activity: 'Searching for retry handlers',
+      plan_steps: { done: 1, total: 3 },
+    });
+    const stationOf = board({}, [planned]).stations[0] as BoardStation;
+    renderBoardPage({
+      page: () => <StationBody station={stationOf} onMove={vi.fn()} draggable={false} compact />,
+      org,
+      factory,
+    });
+
+    expect(await screen.findByText('Searching for retry handlers')).toBeTruthy();
+    expect(screen.getByRole('img', { name: '1 of 3 steps' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Move sre#12/ }).classList).toContain('size-11');
+  });
+
   it('never shows a numbered agent copy on a card, row or lane', async () => {
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [workItem, queuedItem]) });
 

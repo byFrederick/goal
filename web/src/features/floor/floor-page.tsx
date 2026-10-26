@@ -4,6 +4,7 @@ import { ChevronDown, ListFilter } from 'lucide-react';
 import { boardQuery, constraintQuery, leadTimeQuery, metricsQuery, touchesQuery, weeklyQuery } from '../../api/queries';
 import type { Metrics } from '../../api/types';
 import { factoryTitle, useFactory } from '../../shared/factory';
+import { InboxButton } from '../../shared/inbox-drawer';
 import { NewItemButton } from '../../shared/new-item';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
@@ -12,7 +13,6 @@ import { DateRange } from '../../ui/date-range';
 import { Menu, MenuChoice, MenuContent, MenuRadioGroup, MenuTrigger } from '../../ui/menu';
 import { ConstraintCard } from './constraint-card';
 import { LeadTimeCard } from './lead-time-card';
-import { NeedsYouCard } from './needs-you';
 import {
   type FloorSearch,
   lastDaysSearch,
@@ -30,13 +30,14 @@ import { WeeklyCard } from './weekly-card';
 
 // The approved design's grid (Main and Mobile-Floor boards), laid out by the room beside the
 // sidebar (container queries on main): one column with the constraint after throughput, two
-// from 720 px, the three columns of the approved design from 960 px. The human touches panel
-// runs across the top from 768 px; on a phone their card follows Throughput, in its cell.
+// from 720 px with the lead time across the foot, the three columns of the approved design from
+// 960 px (the constraint runs down the right, the lead time down the middle). The human touches
+// panel runs across the top from 768 px; on a phone their card follows Throughput, in its cell.
 const grid = cn(
   'grid gap-3 md:gap-4',
-  "[grid-template-areas:'tp'_'hero'_'needs'_'flow'_'wk']",
-  "@[720px]:grid-cols-2 @[720px]:[grid-template-areas:'tp_hero'_'flow_needs'_'wk_wk']",
-  "@[960px]:grid-cols-3 @[960px]:[grid-template-areas:'tp_flow_hero'_'wk_flow_needs']",
+  "[grid-template-areas:'tp'_'hero'_'flow'_'wk']",
+  "@[720px]:grid-cols-2 @[720px]:[grid-template-areas:'tp_hero'_'flow_flow'_'wk_wk']",
+  "@[960px]:grid-cols-3 @[960px]:[grid-template-areas:'tp_flow_hero'_'wk_flow_hero']",
 );
 
 const maxRangeDays = 90;
@@ -73,10 +74,13 @@ export function FloorPage() {
           <h1 className="m-0 text-[34px] leading-[1.05] font-normal tracking-display md:text-5xl">{title}</h1>
           <p className="m-0 mt-1 text-sm text-muted md:hidden">{phoneCaption(metrics)}</p>
         </div>
-        <div className="hidden flex-wrap items-center gap-2 md:flex">
-          <RangeControl metrics={metrics} before={before} label={label} />
-          <WorkTypeFilter types={factory.work_types} value={search.type} />
-          <NewItemButton factory={factory} />
+        <div className="flex flex-wrap items-center gap-2">
+          <InboxButton factory={factory} />
+          <div className="hidden flex-wrap items-center gap-2 md:flex">
+            <RangeControl metrics={metrics} before={before} label={label} />
+            <WorkTypeFilter types={factory.work_types} value={search.type} />
+            <NewItemButton factory={factory} />
+          </div>
         </div>
       </header>
 
@@ -96,7 +100,6 @@ export function FloorPage() {
           )}
         </div>
         <ConstraintCard report={constraint} board={board} className="[grid-area:hero]" />
-        <NeedsYouCard factory={factory} className="[grid-area:needs]" />
         <LeadTimeCard bridge={bridge} factory={factory} className="[grid-area:flow]" />
         <WeeklyCard weekly={weekly} className="[grid-area:wk]" />
       </div>
