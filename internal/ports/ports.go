@@ -547,6 +547,9 @@ type Transition struct {
 	Audit *domain.AuditEntry
 	// Lane, when non-empty, replaces the item's lane.
 	Lane string
+	// Paths, when non-nil, replaces the item's paths (the file globs it is expected to change);
+	// an empty non-nil slice clears them and nil keeps them.
+	Paths []string
 	// Output, when set, is stored as the item's output for OutputStation.
 	OutputStation string
 	Output        json.RawMessage
