@@ -2,7 +2,7 @@ import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { Users } from 'lucide-react';
 import { Tabs } from 'radix-ui';
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { boardQuery, touchesQuery } from '../../api/queries';
 import type { Board, BoardStation, ItemCard, TouchHeadline } from '../../api/types';
 import { AndonButton, LineStatus } from '../../shared/andon';
@@ -18,8 +18,20 @@ import { perItem, stationRates } from '../../shared/touches';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
+import { NativeSelect } from '../../ui/field';
 import { Meter } from '../../ui/hatch';
+import { SegmentedControl, type SegmentedOption } from '../../ui/segmented-control';
+import { StatusIcon } from '../../ui/status-icon';
 import { CardDnd, DropColumn } from './board-dnd';
+import {
+  type AssemblyOption,
+  arrangeBoard,
+  assemblyOptions,
+  type BoardView,
+  knownView,
+  roleOptions,
+  statusChoices,
+} from './board-filters';
 import { StationBody } from './board-lane';
 import {
   budgetNote,
@@ -258,7 +270,9 @@ function StationTabs({
   return (
     <Tabs.Root
       value={selected}
-      onValueChange={(station) => navigate({ search: { station }, replace: true, resetScroll: false })}
+      onValueChange={(station) =>
+        navigate({ search: (prev) => ({ ...prev, station }), replace: true, resetScroll: false })
+      }
       className="flex flex-col gap-3 md:hidden"
     >
       <Tabs.List ref={list} aria-label="Stations" className="-mx-4 flex gap-2 overflow-x-auto px-4 py-1">
@@ -328,6 +342,104 @@ function StationNote({ station, rateOf }: { station: BoardStation; rateOf: RateO
   return <p className="m-0 mb-1 text-[13px] text-ink-soft">{touches}.</p>;
 }
 
+const groupChoices: SegmentedOption<'none' | 'assembly'>[] = [
+  { value: 'none', label: 'None' },
+  { value: 'assembly', label: 'Assembly' },
+];
+
+/** A filter: a labelled native select (44 px on phones), with the status icon of its choice beside it. */
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  icon,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  icon?: ReactNode;
+  children: ReactNode;
+}) {
+  const id = useId();
+  return (
+    <div className="flex min-w-0 max-w-full items-center gap-2 text-sm text-muted">
+      <label htmlFor={id} className="shrink-0">
+        {label}
+      </label>
+      <NativeSelect
+        id={id}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-44 max-w-full truncate"
+      >
+        {children}
+      </NativeSelect>
+      {icon}
+    </div>
+  );
+}
+
+/**
+ * The filters over the columns and the phone's station tabs: Assembly, Agent role and Status, then
+ * Group by. Each choice is a URL search param; "Any" and "None" are the absent param.
+ */
+function FilterRow({
+  board,
+  view,
+  onChange,
+}: {
+  board: Board;
+  view: BoardView;
+  onChange: (change: BoardView) => void;
+}) {
+  const assemblies: AssemblyOption[] = assemblyOptions(board);
+  return (
+    <fieldset className="m-0 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 border-0 p-0">
+      <legend className="sr-only">Filter and group the cards</legend>
+      <FilterSelect
+        label="Assembly"
+        value={view.assembly ?? ''}
+        onChange={(v) => onChange({ assembly: v || undefined })}
+      >
+        <option value="">Any</option>
+        {assemblies.map((a) => (
+          <option key={a.id} value={a.id} title={a.title}>
+            {a.title}
+          </option>
+        ))}
+      </FilterSelect>
+      <FilterSelect label="Agent role" value={view.role ?? ''} onChange={(v) => onChange({ role: v || undefined })}>
+        <option value="">Any</option>
+        {roleOptions(board).map((role) => (
+          <option key={role} value={role}>
+            {role}
+          </option>
+        ))}
+      </FilterSelect>
+      <FilterSelect
+        label="Status"
+        value={view.status ?? ''}
+        onChange={(v) => onChange({ status: statusChoices.find((s) => s.value === v)?.value })}
+        icon={view.status ? <StatusIcon status={view.status} /> : null}
+      >
+        <option value="">Any</option>
+        {statusChoices.map((s) => (
+          <option key={s.value} value={s.value}>
+            {s.label}
+          </option>
+        ))}
+      </FilterSelect>
+      <SegmentedControl
+        label="Group by"
+        options={groupChoices}
+        value={view.group ?? 'none'}
+        onChange={(group) => onChange({ group: group === 'assembly' ? 'assembly' : undefined })}
+      />
+    </fieldset>
+  );
+}
+
 /** Puts focus back on a card after it moved (it is rendered in its new column by then). */
 function focusCard(id: string) {
   requestAnimationFrame(() => {
@@ -347,6 +459,12 @@ export function BoardPage() {
   const rates = touches ? stationRates(touches) : undefined;
   const rateOf: RateOf = (s) => (!rates || touches?.finished === 0 ? null : (rates.get(s.id) ?? 0));
   const search = useSearch({ from: '/o/$org/f/$factory/board' });
+  const navigate = useNavigate({ from: '/o/$org/f/$factory/board' });
+  // The filters and the grouping: the URL's choices, those the board offers only.
+  const view = knownView(board, search);
+  const shown = arrangeBoard(board, view);
+  const changeView = (change: BoardView) =>
+    navigate({ search: (prev) => ({ ...prev, ...change }), replace: true, resetScroll: false });
   const expedite = expediteHeader(board.line, board.stations.flatMap((s) => s.items).filter(isExpedite).length);
   // The phone's status line: the line, its WIP and the week's touches per item, in one truncated line.
   const headline = board.line.touches;
@@ -410,8 +528,9 @@ export function BoardPage() {
       <div className="hidden md:block">
         <LineCard board={board} decides={holds(factory, 'item:decide')} rateOf={rateOf} expedite={expedite} />
       </div>
-      <Columns board={board} onMove={onMove} />
-      <StationTabs board={board} selected={selected} onMove={onMove} rateOf={rateOf} />
+      <FilterRow board={board} view={view} onChange={changeView} />
+      <Columns board={shown} onMove={onMove} />
+      <StationTabs board={shown} selected={selected} onMove={onMove} rateOf={rateOf} />
       {onMove ? (
         <>
           <p className="m-0 hidden text-[13px] text-muted md:block">
