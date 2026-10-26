@@ -49,8 +49,8 @@ func specPath(key string, rest []string) (string, []string) {
 		return boardPath(rest)
 	case keyAgents:
 		return domain.SectionAgents, append([]string{domain.SectionAgents, keyAgents}, agentPath(rest)...)
-	case "skills":
-		return domain.SectionAgents, append([]string{domain.SectionAgents, "skills"}, rest...)
+	case "skills", "rules":
+		return domain.SectionAgents, append([]string{domain.SectionAgents, key}, rest...)
 	case "connections":
 		return domain.SectionConnections, append([]string{domain.SectionConnections}, connectionPath(rest)...)
 	case "knowledge", "secrets", "knowledgeBase":
