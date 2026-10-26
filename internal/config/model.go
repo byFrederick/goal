@@ -8,7 +8,7 @@ import (
 )
 
 // ModelPointer maps a path in factory.yaml to the Visual editor's section and the RFC 6901
-// pointer of the same value in the factory model (FactoryModel in api/openapi.yaml, built by
+// pointer of the same value in the factory model (FactoryModel in contracts/api/openapi.yaml, built by
 // internal/factorymodel): /spec/board/stations/3/gate/onReject is ("line",
 // "/line/stations/3/gate/on_reject"). Model keys are the YAML keys in snake_case; keys that
 // are data (route lanes, tool names, header and env names, connector settings) are kept as

@@ -1,5 +1,5 @@
 // Define a kind (spec 4 §4.2, canvas "Connection-New"): an organization kind is a kind file
-// (schema/connection-kind.schema.json), written here as YAML and sent as JSON to PUT
+// (contracts/definitions/connection-kind.schema.json), written here as YAML and sent as JSON to PUT
 // …/connection-kinds/{metadata.name}. goald checks it (400 connection-kind-invalid names every
 // broken rule; 409 connection-kind-name-taken for a platform kind's name); a kind of that name
 // the organization already has is replaced, changing its connections from their next run.

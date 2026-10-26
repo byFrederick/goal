@@ -1,7 +1,7 @@
 // Monaco, the lazily loaded half of code-editor.tsx: only the editor core and the contributions
 // the editor uses (find, clipboard, line and word operations, Ctrl+M tab focus, bracket matching,
 // hover and suggestions for the schema), Markdown and YAML highlighting, monaco-yaml bound to
-// schema/factory.schema.json for files named factory.yaml (completion, hover, schema markers; D
+// contracts/definitions/factory.schema.json for files named factory.yaml (completion, hover, schema markers; D
 // §10.9), the editor and YAML workers, and a theme from MASTER's tokens. It grows with its text
 // between minLines and maxLines. Accessibility support is on (D §10.12). For the YAML view: one
 // model per path, B's problems as markers with a rust glyph and a tint on their lines, the change
@@ -27,7 +27,7 @@ import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
 import { configureMonacoYaml } from 'monaco-yaml';
 import { type ReactNode, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import schema from '../../../../../schema/factory.schema.json';
+import schema from '../../../../../contracts/definitions/factory.schema.json';
 import type { CodeEditorProps } from './code-editor';
 import './monaco-editor.css';
 import YamlWorker from './yaml.worker.ts?worker';

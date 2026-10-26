@@ -62,13 +62,13 @@ func TestPlan(t *testing.T) {
 		want    []string
 		reason  string
 		note    string
-	}{[]string{"api/openapi.yaml"}, tasks, "everything (" + strings.Join(tasks, ", ") + "): api/openapi.yaml (a contract", ""}
+	}{[]string{"contracts/api/openapi.yaml"}, tasks, "everything (" + strings.Join(tasks, ", ") + "): contracts/api/openapi.yaml (a contract", ""}
 	tests["contract schema"] = struct {
 		changed []string
 		want    []string
 		reason  string
 		note    string
-	}{[]string{"schema/factory.schema.json"}, tasks, "schema/factory.schema.json (a contract", ""}
+	}{[]string{"contracts/definitions/factory.schema.json"}, tasks, "contracts/definitions/factory.schema.json (a contract", ""}
 
 	for _, unknown := range []string{"Makefile", "packages/ui/src/button.tsx", "deploy/aws/main.tf", ".editorconfig"} {
 		tests["unknown "+unknown] = planCase{[]string{unknown}, tasks, "everything (" + strings.Join(tasks, ", ") + "): " + unknown + " (matches no rule)", ""}

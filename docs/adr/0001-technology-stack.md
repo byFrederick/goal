@@ -9,7 +9,7 @@ Status: accepted · 2026-10-23
 | Control plane (`goald`) and CLI (`goal`) | **Go** | One static binary; goroutines handle hundreds of concurrent agent streams; Docker Engine, AWS SDK v2 and the official MCP Go SDK (1Password SDK in the last phase) are all native; ~30 MB RSS next to many containers on a laptop. |
 | Agent worker (inside each container) | **TypeScript on Node 22, Claude Agent SDK** | The SDK is first-class in TS: in-process PreToolUse hooks, MCP config, skills, subagents, `maxBudgetUsd`. Same language as the UI. |
 | UI | **React 19 + Vite + TypeScript**, TanStack Router/Query, Tailwind v4 + shadcn/ui, dnd-kit, xyflow, Monaco (YAML + schema) | Built static and embedded in the Go binary with `go:embed`: `goal up` serves everything. |
-| Contracts | **JSON Schema 2020-12** (`schema/`) | One source for Go validation, generated TS types, and editor autocompletion via yaml-language-server. |
+| Contracts | **JSON Schema 2020-12** (`contracts/definitions/`) | One source for Go validation, generated TS types, and editor autocompletion via yaml-language-server. |
 | State | **PostgreSQL 18 only** (`compose.yaml` locally), `pgx/v5`, `sqlc`, `goose` forward-only migrations | One datastore for everything: event log, projections, the work queue (`FOR UPDATE SKIP LOCKED` leases) and realtime (`LISTEN/NOTIFY`). `uuidv7()` keys. No SQLite, Redis or other stores. |
 | Realtime | Postgres `LISTEN/NOTIFY` → Server-Sent Events from `goald` | One-way stream of board and trace events is all the UI needs. |
 | Containers | Docker Engine API (Docker Desktop, OrbStack or Colima) | Local-first; an ECS runner can implement the same interface later. |

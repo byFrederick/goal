@@ -183,7 +183,7 @@ The access log covers both routes; its `credential` gains `oauth:<client id>` an
 
 ## 15. Work breakdown
 
-Skills: the Go skills on Go PRs; Identity skills (better-auth-best-practices, better-auth-security-best-practices, security-and-hardening, golang-security) on 6-2, 6-3, 6-6, 6-7; `mcp-builder` on 6-1 and 6-3 to 6-5; PostgreSQL skills with migrations; UI skills on 6-7; `openapi-spec-generation` and `api-design-principles` with `api/`.
+Skills: the Go skills on Go PRs; Identity skills (better-auth-best-practices, better-auth-security-best-practices, security-and-hardening, golang-security) on 6-2, 6-3, 6-6, 6-7; `mcp-builder` on 6-1 and 6-3 to 6-5; PostgreSQL skills with migrations; UI skills on 6-7; `openapi-spec-generation` and `api-design-principles` with `contracts/api/`.
 
 | # | Pull request | Acceptance criteria | Verified by |
 | --- | --- | --- | --- |

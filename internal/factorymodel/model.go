@@ -4,7 +4,7 @@
 // comment, the key order, flow and block style, quotes, anchors, blank lines and indentation
 // survive a Visual save. Format normalizes a whole file the way Apply writes changed lines.
 //
-// The model's keys are factory.yaml's keys in snake_case (FactoryModel in api/openapi.yaml);
+// The model's keys are factory.yaml's keys in snake_case (FactoryModel in contracts/api/openapi.yaml);
 // keys that are data (route lanes, tool names, connector settings) are kept as written. A key
 // the YAML does not have is absent from the model, so a model read from a file and written
 // back unchanged leaves the file byte for byte as it was. config.ModelPointer maps a

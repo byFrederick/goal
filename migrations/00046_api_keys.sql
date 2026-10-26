@@ -1,6 +1,6 @@
 -- +goose Up
 -- Phase 3 (3-12): API keys, an organization's service accounts (spec 3 §4.3, §6.6). A key has a
--- name, scopes (permissions of api/permissions.yaml marked keys: true), an optional factory
+-- name, scopes (permissions of contracts/api/permissions.yaml marked keys: true), an optional factory
 -- restriction, a role ceiling and a mandatory expiry of at most 90 days; goald stores only its
 -- hash, base64url(SHA-256(key)), and a hint (goal_sk_ and the secret's first four characters).
 -- Both tables are org tables under the tenancy kit; goald creates, lists and revokes keys as

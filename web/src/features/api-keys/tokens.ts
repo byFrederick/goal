@@ -1,5 +1,5 @@
 // What a personal token can do, in the New token dialog's words (spec 3 §4.5, §10.2 "Personal
-// tokens"): the permissions personal tokens may carry (api/permissions.yaml `pat: true`), grouped
+// tokens"): the permissions personal tokens may carry (contracts/api/permissions.yaml `pat: true`), grouped
 // Read / Work / High impact. High-impact scopes (editing drafts, publishing versions, creating
 // and archiving factories) are never in a preset: publishing controls the prompts agents run and the repository
 // they push to. A token acts as its owner, so it can never do more than their role allows, and

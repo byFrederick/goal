@@ -2,7 +2,7 @@
 -- Phase 3 (3-12b): personal tokens, a member's own credential in one organization for the CLI
 -- or a script (spec 3 §4.5, §6.7). A table of its own, not a kind of API key: a key is the
 -- organization's service account, a token acts as the person, with its scopes (permissions of
--- api/permissions.yaml marked pat: true) within the person's roles at each request. goald stores
+-- contracts/api/permissions.yaml marked pat: true) within the person's roles at each request. goald stores
 -- only its hash, base64url(SHA-256(token)), and a hint (goal_pat_ and the secret's first four
 -- characters); every token expires, after at most 90 days. A token lives only while its owner is
 -- a member: the foreign key to auth.member cascades, so removal deletes it and a re-invitation

@@ -6,7 +6,7 @@
 !cmd/goald/
 !internal/
 !migrations/
-!schema/
+!contracts/definitions/
 !web/
 !packages/api-client/
 !package.json

@@ -20,8 +20,8 @@ const scope = (id: string) => {
 };
 
 describe('what a personal token can do', () => {
-  it('offers exactly what api/permissions.yaml lets tokens carry (but authenticated, which every token has)', () => {
-    const table = parse(readFileSync(join(import.meta.dirname, '../../../../api/permissions.yaml'), 'utf8')) as {
+  it('offers exactly what contracts/api/permissions.yaml lets tokens carry (but authenticated, which every token has)', () => {
+    const table = parse(readFileSync(join(import.meta.dirname, '../../../../contracts/api/permissions.yaml'), 'utf8')) as {
       permissions: { name: string; pat?: boolean }[];
     };
     const pat = table.permissions.filter((p) => p.pat && p.name !== 'authenticated').map((p) => p.name);

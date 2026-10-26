@@ -228,7 +228,7 @@ type probe struct {
 	header http.Header
 }
 
-// probes has a request for every operation of api/openapi.yaml; the item is acme#1.
+// probes has a request for every operation of contracts/api/openapi.yaml; the item is acme#1.
 // submitFix is a valid submission to acme; noDocument is the id of no knowledge document.
 const (
 	submitFix  = `{"title":"t","type":"fix"}`
@@ -392,11 +392,11 @@ var (
 )
 
 // operations reads every operationId of the contract, failing for one without an x-goal-scope
-// (the permission it needs, api/permissions.yaml).
+// (the permission it needs, contracts/api/permissions.yaml).
 func operations(t *testing.T) []string {
 	t.Helper()
 
-	raw, err := os.ReadFile("../../api/openapi.yaml")
+	raw, err := os.ReadFile("../../contracts/api/openapi.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -416,7 +416,7 @@ func operations(t *testing.T) []string {
 			if m, ok := op.(map[string]any); ok {
 				if id, ok := m["operationId"].(string); ok {
 					if scope, _ := m["x-goal-scope"].(string); scope == "" {
-						t.Errorf("operation %s has no x-goal-scope: give it one of api/permissions.yaml", id)
+						t.Errorf("operation %s has no x-goal-scope: give it one of contracts/api/permissions.yaml", id)
 					}
 
 					ids = append(ids, id)

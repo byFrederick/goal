@@ -12,8 +12,8 @@ import (
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 
+	"github.com/byFrederick/goal/contracts/definitions"
 	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/schema"
 )
 
 // english prints schema messages, as the validator does by default.
@@ -21,7 +21,7 @@ var english = message.NewPrinter(language.English)
 
 // compiledSchema compiles the embedded schema once; Check is safe for concurrent use.
 var compiledSchema = sync.OnceValues(func() (*jsonschema.Schema, error) {
-	s, err := jsonschema.UnmarshalJSON(bytes.NewReader(schema.Factory))
+	s, err := jsonschema.UnmarshalJSON(bytes.NewReader(definitions.Factory))
 	if err != nil {
 		return nil, err
 	}

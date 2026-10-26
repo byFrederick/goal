@@ -1,5 +1,5 @@
 // Package connkind reads connection kinds (spec 4 §4.2): it parses a kind file, validates it
-// against schema/connection-kind.schema.json and the kind's own rules, and embeds the platform's
+// against contracts/definitions/connection-kind.schema.json and the kind's own rules, and embeds the platform's
 // kinds (kinds/*.yaml), which goald upserts at its start. Organizations' kinds, sent through the
 // API, go through the same Parse.
 package connkind
@@ -21,8 +21,8 @@ import (
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 
+	"github.com/byFrederick/goal/contracts/definitions"
 	"github.com/byFrederick/goal/internal/domain"
-	"github.com/byFrederick/goal/schema"
 )
 
 // MaxBytes bounds a kind file (00051 bounds the stored kind the same).
@@ -51,7 +51,7 @@ type document struct {
 
 // compiledSchema compiles the embedded schema once; Parse is safe for concurrent use.
 var compiledSchema = sync.OnceValues(func() (*jsonschema.Schema, error) {
-	s, err := jsonschema.UnmarshalJSON(bytes.NewReader(schema.ConnectionKind))
+	s, err := jsonschema.UnmarshalJSON(bytes.NewReader(definitions.ConnectionKind))
 	if err != nil {
 		return nil, err
 	}

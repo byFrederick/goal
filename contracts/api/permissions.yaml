@@ -1,6 +1,6 @@
 # The one source of Goal's permissions. cmd/permgen (task api:gen) generates
 # internal/api/permissions_gen.go and auth/src/access.gen.ts; task check fails on drift.
-# Every operation of api/openapi.yaml names one of these in x-goal-scope.
+# Every operation of contracts/api/openapi.yaml names one of these in x-goal-scope.
 version: 1
 org_roles: [owner, admin, member]
 factory_roles: [viewer, approver, editor]   # a ladder: each includes the one before

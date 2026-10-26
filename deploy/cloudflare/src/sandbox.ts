@@ -1,4 +1,4 @@
-// The sandbox API (api/sandbox.yaml): one Durable Object per run holds the run's box, a container
+// The sandbox API (contracts/api/sandbox.yaml): one Durable Object per run holds the run's box, a container
 // of the `durable_object` scheduling policy started from one of the Worker's named images, and an
 // index lists the boxes for goald's reaper. The box's environment comes only from goald's request.
 

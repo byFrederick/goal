@@ -23,7 +23,7 @@ export interface Env {
 export const hosts = {
   /** The auth service, for goald's /api/auth proxy. */
   auth: 'auth.internal',
-  /** The sandbox API (api/sandbox.yaml), for goald's cloudflare adapter. */
+  /** The sandbox API (contracts/api/sandbox.yaml), for goald's cloudflare adapter. */
   sandbox: 'sandbox.internal',
   /** goald's gateway (/mcp, /run), for the boxes. */
   gateway: 'gateway.internal',

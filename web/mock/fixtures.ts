@@ -241,7 +241,7 @@ const published = (id: string, number: number, at: string): VersionRef => ({
 });
 
 /**
- * What the mock's caller may do (Org.can, Factory.can): every permission of api/permissions.yaml
+ * What the mock's caller may do (Org.can, Factory.can): every permission of contracts/api/permissions.yaml
  * at the level, sorted, as goald answers the local user and an owner.
  */
 export const orgCan = [

@@ -1,4 +1,4 @@
-# oapi-codegen settings for the Go side of api/openapi.yaml (`task api:gen`).
+# oapi-codegen settings for the Go side of contracts/api/openapi.yaml (`task api:gen`).
 package: gen
 output: internal/api/gen/api.gen.go
 generate:

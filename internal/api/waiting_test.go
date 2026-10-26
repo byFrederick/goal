@@ -19,9 +19,9 @@ func TestAPI_WaitingSaysWhatHoldsAnItem(t *testing.T) {
 
 	h := newHarness(t)
 	_, parts := h.assembledOf(t,
-		domain.NewPart{Key: "contract", Title: "the contract", Paths: []string{"api/openapi.yaml", "web/**"}},
+		domain.NewPart{Key: "contract", Title: "the contract", Paths: []string{"contracts/api/openapi.yaml", "web/**"}},
 		domain.NewPart{Key: "client", Title: "the client", Paths: []string{"web/src/a.ts"}, Needs: []string{"contract"}},
-		domain.NewPart{Key: "docs", Title: "the docs", Paths: []string{"docs/a.md", "api/*.yaml"}},
+		domain.NewPart{Key: "docs", Title: "the docs", Paths: []string{"docs/a.md", "contracts/api/*.yaml"}},
 	)
 	contract, client, docs := parts[0], parts[1], parts[2]
 	h.edge(t, docs, contract, domain.EdgeOverlap)
@@ -40,7 +40,7 @@ func TestAPI_WaitingSaysWhatHoldsAnItem(t *testing.T) {
 	}{
 		{"planned need", client, &gen.ItemWaiting{Kind: gen.WaitingAfter, Items: []string{contractRef}, Files: []string{}}},
 		{"linked need", linked, &gen.ItemWaiting{Kind: gen.WaitingAfter, Items: []string{needRef}, Files: []string{}}},
-		{"overlap need", docs, &gen.ItemWaiting{Kind: gen.WaitingFiles, Items: []string{contractRef}, Files: []string{"api/*.yaml"}}},
+		{"overlap need", docs, &gen.ItemWaiting{Kind: gen.WaitingFiles, Items: []string{contractRef}, Files: []string{"contracts/api/*.yaml"}}},
 		{"no open need", need, nil},
 	}
 

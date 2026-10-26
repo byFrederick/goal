@@ -24,12 +24,12 @@ import (
 
 var updateGolden = flag.Bool("update", false, "rewrite testdata/access.golden from the current table")
 
-// awaitingOperations are the permissions of api/permissions.yaml whose operations later phase 3
+// awaitingOperations are the permissions of contracts/api/permissions.yaml whose operations later phase 3
 // PRs add (spec 3, §8.2 and §15). Remove a permission here in the PR that gives it an operation;
 // the test fails while one is both listed and used.
 var awaitingOperations = map[string]string{}
 
-// contractOp is one operation of api/openapi.yaml as the permission tests see it.
+// contractOp is one operation of contracts/api/openapi.yaml as the permission tests see it.
 type contractOp struct {
 	scope string // x-goal-scope, "" for none
 	path  string
@@ -38,11 +38,11 @@ type contractOp struct {
 	factoryQuery bool
 }
 
-// contractOps reads every operation of api/openapi.yaml by operationId.
+// contractOps reads every operation of contracts/api/openapi.yaml by operationId.
 func contractOps(t *testing.T) map[string]contractOp {
 	t.Helper()
 
-	raw, err := os.ReadFile("../../api/openapi.yaml")
+	raw, err := os.ReadFile("../../contracts/api/openapi.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,9 +92,9 @@ func TestPermissions_EveryOperationHasAKnownScope(t *testing.T) {
 	for id, op := range contract {
 		switch _, known := permissionRules[op.scope]; {
 		case op.scope == "":
-			t.Errorf("operation %s has no x-goal-scope: give it one of api/permissions.yaml", id)
+			t.Errorf("operation %s has no x-goal-scope: give it one of contracts/api/permissions.yaml", id)
 		case !known:
-			t.Errorf("operation %s: x-goal-scope %q is not in api/permissions.yaml", id, op.scope)
+			t.Errorf("operation %s: x-goal-scope %q is not in contracts/api/permissions.yaml", id, op.scope)
 		case operationScopes[id] != op.scope:
 			t.Errorf("operation %s: generated scope %q, contract %q: run task api:gen", id, operationScopes[id], op.scope)
 		}
@@ -128,7 +128,7 @@ func TestPermissions_EveryPermissionIsUsed(t *testing.T) {
 
 	for name := range awaitingOperations {
 		if _, ok := permissionRules[name]; !ok {
-			t.Errorf("awaitingOperations names %s, which api/permissions.yaml does not have", name)
+			t.Errorf("awaitingOperations names %s, which contracts/api/permissions.yaml does not have", name)
 		}
 	}
 }
@@ -137,7 +137,7 @@ func TestPermissions_EveryPermissionIsUsed(t *testing.T) {
 func TestPermissions_RolesMatchTheTable(t *testing.T) {
 	t.Parallel()
 
-	raw, err := os.ReadFile("../../api/permissions.yaml")
+	raw, err := os.ReadFile("../../contracts/api/permissions.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

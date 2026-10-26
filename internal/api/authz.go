@@ -12,7 +12,7 @@ import (
 
 // Authorizer decides whether the request's principal may run an operation. GOAL_AUTH=none wires
 // AllowAll, which allows everything (its one local user may do anything); Permissions decides
-// from api/permissions.yaml (permissions.go).
+// from contracts/api/permissions.yaml (permissions.go).
 //
 // Every request passes it once in the /v1 middleware, after its organization is resolved
 // (Factory ""), and again in the only resolvers that turn a path into a factory, an item or a

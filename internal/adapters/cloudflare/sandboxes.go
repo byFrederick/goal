@@ -1,5 +1,5 @@
 // Package cloudflare runs sandboxes on Cloudflare Containers (ports.Sandboxes): an HTTP client of
-// the control Worker's sandbox API (api/sandbox.yaml, deploy/cloudflare). The Worker keeps one
+// the control Worker's sandbox API (contracts/api/sandbox.yaml, deploy/cloudflare). The Worker keeps one
 // Durable Object per run, which starts the run's container, streams its commands and destroys it
 // at its deadline even if no goald is left.
 package cloudflare

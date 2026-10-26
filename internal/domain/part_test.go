@@ -69,7 +69,7 @@ func TestPlanFrom_ValidPlanBecomesParts(t *testing.T) {
 
 	output := `{"lane":"backend","plan":[
 		{"key":"store","title":"Store","lane":"data","brief":"Add the table.","paths":["migrations/"]},
-		{"key":"api","title":"API","lane":"data","brief":"Expose it.","paths":["api/"],"needs":["store"]}
+		{"key":"api","title":"API","lane":"data","brief":"Expose it.","paths":["contracts/api/"],"needs":["store"]}
 	]}`
 
 	parts, err := PlanFrom(json.RawMessage(output))
@@ -79,7 +79,7 @@ func TestPlanFrom_ValidPlanBecomesParts(t *testing.T) {
 
 	want := []NewPart{
 		{Key: "store", Title: "Store", Lane: "data", Brief: "Add the table.", Paths: []string{"migrations/"}},
-		{Key: "api", Title: "API", Lane: "data", Brief: "Expose it.", Paths: []string{"api/"}, Needs: []string{"store"}},
+		{Key: "api", Title: "API", Lane: "data", Brief: "Expose it.", Paths: []string{"contracts/api/"}, Needs: []string{"store"}},
 	}
 	if !reflect.DeepEqual(parts, want) {
 		t.Errorf("parts = %+v, want %+v", parts, want)

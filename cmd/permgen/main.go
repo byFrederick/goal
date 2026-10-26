@@ -1,5 +1,5 @@
-// Command permgen generates Goal's permission table from its one source, api/permissions.yaml,
-// and the x-goal-scope of every operation of api/openapi.yaml (spec 3, §8.2). `task api:gen`
+// Command permgen generates Goal's permission table from its one source, contracts/api/permissions.yaml,
+// and the x-goal-scope of every operation of contracts/api/openapi.yaml (spec 3, §8.2). `task api:gen`
 // runs it; `task check` runs it with -check, which fails when a generated file is stale.
 //
 // It refuses to generate from a table that does not hold together: a permission with an
@@ -34,8 +34,8 @@ func run(args []string) error {
 	fs := flag.NewFlagSet("permgen", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
-	permissions := fs.String("permissions", "api/permissions.yaml", "the permission table")
-	openapi := fs.String("openapi", "api/openapi.yaml", "the API contract whose operations carry x-goal-scope")
+	permissions := fs.String("permissions", "contracts/api/permissions.yaml", "the permission table")
+	openapi := fs.String("openapi", "contracts/api/openapi.yaml", "the API contract whose operations carry x-goal-scope")
 	goOut := fs.String("go", "internal/api/permissions_gen.go", "the Go table for goald")
 	tsOut := fs.String("ts", "auth/src/access.gen.ts", "the TypeScript roles for the auth service")
 	check := fs.Bool("check", false, "fail when a generated file differs from what the sources give, writing nothing")

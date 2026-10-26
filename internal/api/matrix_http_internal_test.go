@@ -36,7 +36,7 @@ type mxRequest struct {
 	method, path, body, contentType string
 }
 
-// mxParam is a parameter of api/openapi.yaml, or a reference to one.
+// mxParam is a parameter of contracts/api/openapi.yaml, or a reference to one.
 type mxParam struct {
 	Ref      string `yaml:"$ref"`
 	Name     string `yaml:"name"`
@@ -66,13 +66,13 @@ var mxBodies = map[string]string{
 	"setTouchReason": `{"reason":"other"}`, "linkItem": `{"needs":"i1"}`,
 }
 
-// mxRequests builds every operation of api/openapi.yaml as a request: path parameters filled
+// mxRequests builds every operation of contracts/api/openapi.yaml as a request: path parameters filled
 // with the matrix's names (the org's factory f, item i1, run r1), a factory query for operations
 // that take one, and a body of the right kind.
 func mxRequests(t *testing.T, org string) map[string]mxRequest {
 	t.Helper()
 
-	raw, err := os.ReadFile("../../api/openapi.yaml")
+	raw, err := os.ReadFile("../../contracts/api/openapi.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

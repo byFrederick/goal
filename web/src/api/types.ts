@@ -1,4 +1,4 @@
-// The contract's shapes, generated from api/openapi.yaml into @goal/api-client, under the names
+// The contract's shapes, generated from contracts/api/openapi.yaml into @goal/api-client, under the names
 // the screens use. Nothing here is written by hand: a shape changes in the contract first.
 import type { ItemPage, MergeRequest } from '@goal/api-client';
 

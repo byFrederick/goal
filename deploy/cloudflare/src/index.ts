@@ -3,7 +3,7 @@
 //
 //   public https       ─▶ goald's container (every path)
 //   goald ─▶ auth.internal    ─▶ the auth service's container
-//   goald ─▶ sandbox.internal ─▶ the sandbox API (api/sandbox.yaml): one Durable Object per run
+//   goald ─▶ sandbox.internal ─▶ the sandbox API (contracts/api/sandbox.yaml): one Durable Object per run
 //   box   ─▶ gateway.internal ─▶ goald's gateway listener (/mcp, /run)
 //
 // The .internal names exist only inside the containers, where the Worker's outbound handlers
