@@ -89,6 +89,36 @@ func TestLoad_RefusesUnknownAssemblyPolicies(t *testing.T) {
 	}
 }
 
+// board.flow.dependencies.after names the output property whose item refs the work must follow;
+// unset, no property is read. dependencies takes only its keys, each a property name.
+func TestLine_CarriesDependenciesAfter(t *testing.T) {
+	t.Parallel()
+
+	for flow, want := range map[string]string{
+		"":                                    "",
+		"    flow:\n      dependencies: {}\n": "",
+		"    flow:\n      dependencies: { after: follows }\n": "follows",
+	} {
+		f, err := Load(checkTree(baseFactory+flow, nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if got := f.Line().Flow.Dependencies.After; got != want {
+			t.Errorf("flow %q: dependencies.after = %q, want %q", flow, got, want)
+		}
+	}
+
+	for _, deps := range []string{"{ before: follows }", "{ after: 3 }", "{ after: \"\" }"} {
+		doc := baseFactory + "    flow:\n      dependencies: " + deps + "\n"
+
+		_, problems := Check(checkTree(doc, nil))
+		if !slices.ContainsFunc(problems, func(p domain.DefinitionProblem) bool { return p.Check == checkSchema && p.Blocking() }) {
+			t.Errorf("dependencies %s: problems %+v, want a schema problem", deps, problems)
+		}
+	}
+}
+
 // board.flow.assemblies.materialize turns a station's plan into an assembly with its parts; it
 // is on unless a factory sets it to false.
 func TestLine_CarriesAssembliesMaterialize(t *testing.T) {

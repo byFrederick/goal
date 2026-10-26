@@ -122,8 +122,11 @@ type Store interface {
 	// Assemble makes a planning item an assembly, in one transaction: a.Transition moves it to
 	// state assembly (fenced as Transition is, its lease recorded as a lease span), each of
 	// a.Parts becomes an item with the parent's type, priority and class of service, its brief
-	// as body, queued at a.Transition.From.Station (the station that planned it), and each need a
-	// planned edge. It appends assembled on the parent and part_created on each part. A plan that
+	// as body, queued at a.Transition.From.Station (the station that planned it), each need a
+	// planned edge, and each part without needs a linked edge by a.AfterBy to each of a.After (with
+	// an edge_added event; new parts have no dependents, so these close no cycle). It appends
+	// assembled on the parent and part_created on each part. An item of a.After that is missing
+	// is ErrNotFound, one of another factory domain.ErrInvalid. A plan that
 	// fails domain.ValidatePlan (domain.ErrInvalid or domain.ErrCycle), a transition not to state
 	// assembly and a parent that is itself a part (assemblies do not nest) are refused with
 	// nothing written. When the parent already has parts, a retry, it returns them and changes
@@ -580,6 +583,10 @@ type NewRun struct {
 type Assembly struct {
 	Transition Transition
 	Parts      []domain.NewPart
+	// After are open items of the parent's factory, outside the plan, that the work must follow:
+	// each part without in-plan needs gets a linked edge to each of them by AfterBy.
+	After   []domain.ItemID
+	AfterBy domain.Actor
 }
 
 // NewAssemblyPart is one part added to an open assembly by By at At.

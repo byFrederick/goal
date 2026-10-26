@@ -86,12 +86,18 @@ func assemble(ctx context.Context, q *db.Queries, cur db.WorkItem, a ports.Assem
 		return db.WorkItem{}, fmt.Errorf("item %s: %w", t.ItemID, err)
 	}
 
+	after, err := afterItems(ctx, q, cur, a.After)
+	if err != nil {
+		return db.WorkItem{}, err
+	}
+
 	row, err := transition(ctx, q, cur, t)
 	if err != nil {
 		return db.WorkItem{}, err
 	}
 
 	ids := make(map[string]uuid.UUID, len(a.Parts))
+	roots := make([]db.WorkItem, 0, len(a.Parts))
 	events := make([]domain.Event, 0, len(a.Parts)+1)
 
 	for _, p := range a.Parts {
@@ -101,6 +107,10 @@ func assemble(ctx context.Context, q *db.Queries, cur db.WorkItem, a ports.Assem
 		}
 
 		ids[p.Key] = part.ID
+		if len(p.Needs) == 0 {
+			roots = append(roots, part)
+		}
+
 		events = append(events, domain.Event{
 			FactoryID: domain.FactoryID(part.FactoryID.String()), ItemID: domain.ItemID(part.ID.String()), At: t.At,
 			Kind: domain.EventPartCreated, Station: part.Station, Actor: domain.ActorEngine,
@@ -118,6 +128,12 @@ func assemble(ctx context.Context, q *db.Queries, cur db.WorkItem, a ports.Assem
 		}
 	}
 
+	linked, err := linkAfter(ctx, q, roots, after, a.AfterBy, t.At)
+	if err != nil {
+		return db.WorkItem{}, err
+	}
+
+	events = append(events, linked...)
 	events = append(events, domain.Event{
 		FactoryID: domain.FactoryID(row.FactoryID.String()), ItemID: t.ItemID, At: t.At, Kind: domain.EventAssembled,
 		Station: row.Station, Actor: domain.ActorEngine, Data: map[string]any{"parts": len(a.Parts)},
@@ -128,6 +144,58 @@ func assemble(ctx context.Context, q *db.Queries, cur db.WorkItem, a ports.Assem
 	}
 
 	return row, nil
+}
+
+// afterItems parses and reads the items an assembly's root parts follow: ErrNotFound for one that
+// is missing (or of another organization), domain.ErrInvalid for one of another factory than cur.
+func afterItems(ctx context.Context, q *db.Queries, cur db.WorkItem, ids []domain.ItemID) ([]uuid.UUID, error) {
+	after := make([]uuid.UUID, 0, len(ids))
+
+	for _, id := range ids {
+		need, err := parseID("needed item", string(id))
+		if err != nil {
+			return nil, err
+		}
+
+		it, err := q.GetItem(ctx, need)
+		if notFound(err) {
+			return nil, fmt.Errorf("after %s: %w", id, ports.ErrNotFound)
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("after %s: %w", id, err)
+		}
+
+		if it.FactoryID != cur.FactoryID {
+			return nil, fmt.Errorf("after %s of another factory: %w", id, domain.ErrInvalid)
+		}
+
+		after = append(after, need)
+	}
+
+	return after, nil
+}
+
+// linkAfter inserts a linked edge, created by the given actor, from each of roots, new parts without needs, to each of
+// after, and returns their edge_added events. New parts have no dependents, so no edge closes a
+// cycle.
+func linkAfter(ctx context.Context, q *db.Queries, roots []db.WorkItem, after []uuid.UUID, by domain.Actor, at time.Time) ([]domain.Event, error) {
+	events := make([]domain.Event, 0, len(roots)*len(after))
+
+	for _, part := range roots {
+		for _, need := range after {
+			row, err := q.InsertEdge(ctx, db.InsertEdgeParams{
+				ItemID: part.ID, NeedsID: need, Kind: string(domain.EdgeLinked), CreatedBy: by.Ref(), CreatedAt: at,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("part %s after %s: %w", part.ID, need, err)
+			}
+
+			events = append(events, edgeEvent(domain.EventEdgeAdded, part, edgeFrom(row), by, at))
+		}
+	}
+
+	return events, nil
 }
 
 // insertPart creates one part of the assembly parent at at: the parent's type, priority and class
