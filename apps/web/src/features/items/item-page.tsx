@@ -2,7 +2,7 @@ import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-quer
 import { Link, useParams, useSearch } from '@tanstack/react-router';
 import { ChevronLeft, Eye, LayoutGrid } from 'lucide-react';
 import { useId, useMemo, useRef, useState } from 'react';
-import { eventsQuery, inboxQuery, itemQuery, runsQuery } from '../../api/queries';
+import { eventsQuery, inboxQuery, itemQuery, itemRunsQuery } from '../../api/queries';
 import type { Station } from '../../api/types';
 import { usePhone } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
@@ -110,7 +110,7 @@ export function ItemPage() {
   const { data: item } = useSuspenseQuery(itemQuery(org.id, key));
   const { data: events } = useSuspenseQuery(eventsQuery(client, org.id, key));
   // The run records refine the trace when they arrive; the events alone already draw it.
-  const runsQ = useQuery(runsQuery(org.id, key));
+  const runsQ = useQuery(itemRunsQuery(org.id, key));
   const runs = runsQ.data;
   const trace = useMemo(() => buildTrace(events, runs?.runs), [events, runs]);
   const [fullTrace, setFullTrace] = useState(false);
@@ -282,10 +282,7 @@ export function ItemPage() {
               <p aria-live="polite" className="m-0 inline-flex items-center gap-2 text-sm text-run">
                 {run ? (
                   <>
-                    <span
-                      aria-hidden="true"
-                      className="size-2 rounded-full bg-run shadow-[0_0_0_4px_var(--color-run-tint)]"
-                    />
+                    <span aria-hidden="true" className="size-2 rounded-full bg-run ring-4 ring-run-tint" />
                     {runRole(run)} working, {run.tools.length} tool calls
                   </>
                 ) : null}
@@ -335,10 +332,10 @@ export function ItemPage() {
           state={item.state}
           compact
           fieldRef={compactNoteField}
-          className="order-8 @[720px]:hidden max-md:fixed max-md:inset-x-0 max-md:bottom-16 max-md:z-20 max-md:border-t max-md:border-line max-md:bg-card max-md:px-4 max-md:py-2"
+          className="order-8 @[720px]:hidden max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(4rem_+_env(safe-area-inset-bottom))] max-md:z-20 max-md:border-t max-md:border-line max-md:bg-card max-md:px-4 max-md:py-2"
         />
         {/* Keeps the end of the page clear of the pinned note field and the tab bar on a phone. */}
-        <div aria-hidden="true" className="h-24 @[720px]:hidden" />
+        <div aria-hidden="true" className="h-[calc(6rem_+_env(safe-area-inset-bottom))] @[720px]:hidden" />
       </div>
     </>
   );

@@ -1,7 +1,7 @@
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { createFileRoute, notFound, useParams } from '@tanstack/react-router';
 import { ApiError } from '../api/client';
-import { ensureLoaded, eventsQuery, itemQuery, partsQuery, runsQuery, touchesQuery } from '../api/queries';
+import { ensureLoaded, eventsQuery, itemQuery, itemRunsQuery, partsQuery, touchesQuery } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
 import { NotFoundScreen } from '../app/states';
 import { AssemblyPage } from '../features/items/assembly-page';
@@ -28,7 +28,7 @@ export const Route = createFileRoute('/o/$org/f/$factory/items/$ref')({
     const key = itemKey(factory.name, params.ref);
     // The run records only refine the trace, the line's touches only the touches card's sentence:
     // fetched alongside, never waited for.
-    void queryClient.prefetchQuery(runsQuery(org.id, key));
+    void queryClient.prefetchQuery(itemRunsQuery(org.id, key));
     void queryClient.prefetchQuery(touchesQuery(org.id, factory.id));
     // An assembly's parts, for the page an assembly opens on; an item that is not one has none.
     void queryClient.prefetchQuery(partsQuery(org.id, key));

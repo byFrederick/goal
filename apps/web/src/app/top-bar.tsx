@@ -24,6 +24,7 @@ import {
   membersScreen,
   newFactoryScreen,
   type OrgPath,
+  runsScreen,
   settingsScreen,
   sidebarFactoryPages,
 } from './screens';
@@ -74,6 +75,7 @@ const orgRoutePages: Record<string, { label: string; to?: OrgPath }> = {
   '/o/$org/_org/': homeScreen,
   '/o/$org/_org/api-keys': apiKeysScreen,
   '/o/$org/_org/members': membersScreen,
+  '/o/$org/_org/runs': runsScreen,
   '/o/$org/_org/settings': settingsScreen,
   '/o/$org/_org/connections/': connectionsScreen,
   '/o/$org/_org/connections/$connection': connectionsScreen,

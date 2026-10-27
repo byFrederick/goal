@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { type ReactNode, useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { inboxQuery, keys, runsQuery } from '../../api/queries';
+import { inboxQuery, keys } from '../../api/queries';
 import type { Factory, InboxEntry, Item, ItemEvent, OrgSummary } from '../../api/types';
 import { TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { itemKey } from '../../shared/factory';
@@ -133,7 +133,7 @@ function renderPage(it: Item, events: ItemEvent[] = [approval]) {
     seed: [
       [keys.item(org.id, key), it],
       [keys.events(org.id, key), events],
-      [keys.runs(org.id, key), { runs: [] }],
+      [keys.itemRuns(org.id, key), { runs: [] }],
     ],
   });
 }
@@ -310,7 +310,7 @@ function renderTab(location: string, it: Item, inbox: InboxEntry[] = [question])
   const seed: Seed[] = [
     [keys.item(org.id, key), it],
     [keys.events(org.id, key), [approval]],
-    [runsQuery(org.id, key).queryKey, { runs: [] }],
+    [keys.itemRuns(org.id, key), { runs: [] }],
     [inboxQuery(org.id, factory.id).queryKey, { entries: inbox }],
   ];
   return renderFactoryPage({

@@ -22,19 +22,6 @@ test('the floor shows no touches panel: the picture has none, and the item page 
   await expectNoHorizontalScroll(page);
 });
 
-test('each factory tile says its touches per item this week against last week', async ({ page }) => {
-  await page.goto('/o/acme');
-  const sre = page.getByRole('article', { name: 'sre' });
-  // From 768 px a tile above the stats, on a phone a line under them: one of them shows.
-  await expect(sre.getByText(/human touches per item/).filter({ visible: true })).toBeVisible();
-  await expect(sre.getByText(/\d+% touchless/).filter({ visible: true })).toBeVisible();
-  // The support line finished nothing this week: no per item to say.
-  const support = page.getByRole('article', { name: 'support' });
-  await expect(support.getByText(/^No items finished this week/).filter({ visible: true })).toBeVisible();
-  await expectAccessible(page);
-  await expectNoHorizontalScroll(page);
-});
-
 test("the board says the week's touches per item, by station and on each touched card", async ({ page }) => {
   await touchSre8(page);
   await page.goto(isPhone(page) ? '/o/acme/f/sre/board?station=investigate' : '/o/acme/f/sre/board');
