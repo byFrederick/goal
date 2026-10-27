@@ -1,6 +1,6 @@
 ## When you change
 
-The eval runs store: the `eval_runs` and `eval_results` tables (`db/migrations/00067_evals.sql` and the migrations after it), their queries (`db/queries/evals.sql`) or the adapter (`internal/adapters/store/postgres/evals.go`)
+The eval runs store: the `eval_runs` and `eval_results` tables (`db/migrations/00068_evals.sql` and the migrations after it), their queries (`db/queries/evals.sql`) or the adapter (`internal/adapters/store/postgres/evals.go`)
 
 ## Also change
 

@@ -29,7 +29,7 @@ export function WizardPage({ step, search }: { step: WizardStep; search: WizardS
   const readOnly = listed !== undefined && !holds(listed, 'definition:edit');
 
   return (
-    <ShellFrame>
+    <ShellFrame tabs={false}>
       {factory ? (
         <DraftSessionProvider key={`${factory}:${readOnly}`} org={org.id} factory={factory} readOnly={readOnly}>
           {step === 'start' ? (

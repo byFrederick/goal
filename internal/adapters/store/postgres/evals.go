@@ -15,7 +15,7 @@ import (
 
 var _ ports.Evals = (*Evals)(nil)
 
-// Evals implements ports.Evals over 00067's eval_runs and eval_results, as goal_app under
+// Evals implements ports.Evals over 00068's eval_runs and eval_results, as goal_app under
 // row-level security: every statement sees the organization in ctx. A method that changes a try
 // and its run locks the try first, so claims, records and finishes never deadlock.
 type Evals struct{ s *Store }
