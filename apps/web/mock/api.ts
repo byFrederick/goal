@@ -23,6 +23,7 @@ import type {
   AndonPull,
   AndonState,
   ApprovalBrief,
+  AssemblyPart,
   AssemblyParts,
   AuditPage,
   Board,
@@ -49,6 +50,8 @@ import type {
   OrgRole,
   OrgSettings,
   OrgTouchMetrics,
+  PartOf,
+  PartsSummary,
   RunList,
   StreamEvent,
   TouchMetrics,
@@ -269,6 +272,39 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     return { kind: it.waitsOn.kind, items: [needed.ref], files, needs: [needed] };
   };
 
+  /** The assembly an item is a part of, and its place among the parts (the card's assembly line). */
+  const partOfOf = (it: MockItem): { assembly?: PartOf } => {
+    const assembly = it.partOf ? state.items.find((o) => o.id === it.partOf?.id) : undefined;
+    if (!it.partOf || !assembly) return {};
+    const parts = partsOf(assembly.id);
+    return {
+      assembly: {
+        id: assembly.id,
+        ref: ref(assembly),
+        title: assembly.title,
+        part: it.partOf.part,
+        parts: parts.length,
+      },
+    };
+  };
+
+  /** An assembly's parts in plan order. */
+  const partsOf = (id: string): MockItem[] =>
+    state.items.filter((o) => o.partOf?.id === id).sort((a, b) => (a.partOf?.part ?? 0) - (b.partOf?.part ?? 0));
+
+  /** Where an assembly's parts stand: a cancelled part counts in no other field (the contract's PartsSummary). */
+  const partsSummary = (id: string): PartsSummary => {
+    const parts = partsOf(id);
+    const open = parts.filter((p) => p.state !== 'done' && p.state !== 'cancelled');
+    return {
+      total: parts.length,
+      merged: parts.filter((p) => p.state === 'done').length,
+      in_progress: open.filter((p) => p.state === 'in_progress').length,
+      waiting: open.filter((p) => p.state !== 'in_progress').length,
+      stations: [...new Set(open.map((p) => p.station))],
+    };
+  };
+
   const card = (it: MockItem): ItemCard => {
     const run = liveRun(it);
     const waiting = waitingOf(it);
@@ -298,6 +334,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       rope_held: false,
       touch_count: itemTouches(it).length,
       ...(waiting ? { waiting } : {}),
+      ...partOfOf(it),
+      ...(it.state === 'assembly' ? { parts: partsSummary(it.id) } : {}),
     };
   };
 
@@ -1636,7 +1674,37 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     }
     // The mock has no assemblies: an item has no parts, and adding one is refused as the API refuses it.
     if (action === 'parts' && method === 'GET') {
-      const body: AssemblyParts = { done: 0, total: 0, lead_time_seconds: 0, parts: [] };
+      const parts = it.state === 'assembly' ? partsOf(it.id) : [];
+      const done = parts.filter((p) => p.state === 'done');
+      const closed = parts.every((p) => p.state === 'done');
+      const last = done.reduce((latest, p) => Math.max(latest, Date.parse(p.updated_at)), 0);
+      const end = closed && last > 0 ? last : clock();
+      const body: AssemblyParts = {
+        done: done.length,
+        total: parts.length,
+        lead_time_seconds: parts.length > 0 ? Math.round((end - Date.parse(it.created_at)) / 1000) : 0,
+        parts: parts.map(
+          (p): AssemblyPart => ({
+            id: p.id,
+            ref: ref(p),
+            number: p.number,
+            index: p.partOf?.part ?? 0,
+            key: `part-${p.partOf?.part ?? 0}`,
+            title: p.title,
+            paths: p.paths ?? [],
+            station: p.station,
+            state: p.state,
+            needs: [],
+            waiting_on: [],
+            wave: 0,
+            cost_usd: p.cost_usd,
+            pr_url: p.pr_url,
+            agent: p.agent,
+            created_at: p.created_at,
+            done_at: p.done_at ?? null,
+          }),
+        ),
+      };
       return json(res, 200, body);
     }
     if (method !== 'POST') return problem(res, 405, 'Method not allowed');
