@@ -22,6 +22,7 @@ import {
   ExpediteMark,
   moveKeys,
   PrLink,
+  roleMark,
   TouchCount,
 } from './board-card';
 import { DraggableCard } from './board-dnd';
@@ -200,17 +201,6 @@ function Lane({
       />
     </section>
   );
-}
-
-/** The role mark's letters: "Infra engineer" → "IE". Decorative; the role says the same. */
-function roleMark(role: string): string {
-  return role
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0])
-    .join('')
-    .toUpperCase();
 }
 
 /** The lane's role mark, role, model and slot boxes (filled: busy). A person lane has no slots. */

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, screen, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Board, BoardLane, BoardStation, Factory, ItemCard, ItemWaiting, OrgSummary } from '../../api/types';
 import { renderBoardPage } from '../../test/route';
@@ -134,16 +134,23 @@ const strayItem = item({
   board_lane: 'gone',
 });
 
+/** The phone's picked station: the one tab panel (jsdom draws the desktop columns too, so the names repeat). */
+async function phonePanel(): Promise<HTMLElement> {
+  await waitFor(() => expect(document.querySelector('[role="tabpanel"]')).not.toBeNull());
+  return document.querySelector('[role="tabpanel"]') as HTMLElement;
+}
+
 describe('board lanes', () => {
   it('renders one lane per station lane in API order, headed by role, model and slot boxes', async () => {
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [workItem, queuedItem]) });
 
-    const columns = await screen.findByRole('region', { name: 'Stations' });
-    const investigate = within(columns).getByRole('region', { name: 'Investigate' });
+    const columns = await phonePanel();
+    const investigate = columns;
     const lanes = within(investigate).getAllByRole('region');
-    expect(lanes.map((l) => l.getAttribute('aria-label'))).toEqual(['Investigator', 'Triager']);
+    // The station's own panel is a region too; its lanes are the ones with a name of their own.
+    expect(lanes.map((l) => l.getAttribute('aria-label'))).toEqual([null, 'Investigator', 'Triager']);
 
-    const investigator = lanes[0] as HTMLElement;
+    const investigator = lanes[1] as HTMLElement;
     expect(within(investigator).getByText('Sonnet 5.5')).toBeTruthy();
     // Two slots, one of them busy: one filled box, one outlined.
     expect(within(investigator).getByText('1 of 2 slots busy')).toBeTruthy();
@@ -151,7 +158,7 @@ describe('board lanes', () => {
     expect([...boxes].map((b) => b.classList.contains('bg-run'))).toEqual([true, false]);
 
     // A lane with no model and no card of its own says so.
-    const triager = lanes[1] as HTMLElement;
+    const triager = lanes[2] as HTMLElement;
     expect(within(triager).queryByText('Sonnet 5.5')).toBeNull();
     expect(within(triager).getByText('Nothing to do')).toBeTruthy();
   });
@@ -172,20 +179,19 @@ describe('board lanes', () => {
         }),
       ],
     };
-    renderBoardPage({ page: BoardPage, org, factory, board: approve });
+    renderBoardPage({ page: BoardPage, org, factory, board: approve, station: 'approve' });
 
-    const columns = await screen.findByRole('region', { name: 'Stations' });
-    // The column and its lane are both named Approve; the column comes first, the lane inside it.
-    const [column] = within(columns).getAllByRole('region', { name: 'Approve' });
-    const [person] = within(column as HTMLElement).getAllByRole('region');
-    expect(within(person as HTMLElement).getByRole('heading', { name: 'Approve' })).toBeTruthy();
+    const columns = await phonePanel();
+    // The station's panel is named Approve, and its lane inside it.
+    const [person] = within(columns).getAllByRole('region');
+    expect(within(person as HTMLElement).getAllByRole('heading', { name: 'Approve' }).length).toBeGreaterThan(0);
     expect(within(person as HTMLElement).queryByText(/slots busy/)).toBeNull();
   });
 
   it('puts a card in the lane its board_lane names, and a card no lane claims in an untitled lane at the foot', async () => {
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [workItem, strayItem, queuedItem]) });
 
-    const investigate = within(await screen.findByRole('region', { name: 'Stations' })).getByRole('region', {
+    const investigate = within(await phonePanel()).getByRole('region', {
       name: 'Investigate',
     });
     const investigator = within(investigate).getByRole('region', { name: 'Investigator' });
@@ -202,9 +208,7 @@ describe('board lanes', () => {
   it('lists a lane’s work cards (doing line, touches) above its waiting rows (reason)', async () => {
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [queuedItem, workItem]) });
 
-    const investigator = within(
-      within(await screen.findByRole('region', { name: 'Stations' })).getByRole('region', { name: 'Investigate' }),
-    ).getByRole('region', { name: 'Investigator' });
+    const investigator = within(await phonePanel()).getByRole('region', { name: 'Investigator' });
     const [card, row] = within(investigator).getAllByRole('article');
     expect(within(card as HTMLElement).getByRole('link', { name: WORKING })).toBeTruthy();
     expect(within(card as HTMLElement).getByText('Working, turn 3')).toBeTruthy();
@@ -218,7 +222,7 @@ describe('board lanes', () => {
   it('shows no touches on a card nobody touched', async () => {
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [{ ...workItem, touch_count: 0 }]) });
 
-    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const columns = await phonePanel();
     const card = within(columns).getByRole('link', { name: WORKING }).closest('article') as HTMLElement;
     expect(within(card).queryByText(/touch/)).toBeNull();
   });
@@ -227,7 +231,7 @@ describe('board lanes', () => {
     const doing = item({ ...workItem, activity: 'Editing src/checkout/handler.ts' });
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [doing]) });
 
-    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const columns = await phonePanel();
     const card = within(columns).getByRole('link', { name: WORKING }).closest('article') as HTMLElement;
     const line = within(card).getByText('Editing src/checkout/handler.ts');
     expect(line.classList).toContain('truncate');
@@ -240,7 +244,7 @@ describe('board lanes', () => {
     const doing = item({ ...workItem, activity });
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [doing]) });
 
-    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const columns = await phonePanel();
     const card = within(columns).getByRole('link', { name: WORKING }).closest('article') as HTMLElement;
     const line = within(card).getByText(activity);
     expect(line.classList).toContain('truncate');
@@ -251,7 +255,7 @@ describe('board lanes', () => {
     const planned = item({ ...workItem, plan_steps: { done: 2, total: 5 } });
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [planned]) });
 
-    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const columns = await phonePanel();
     const bar = within(columns).getByRole('img', { name: '2 of 5 steps' });
     const states = Array.from(bar.querySelectorAll('[data-state]')).map((el) => el.getAttribute('data-state'));
     expect(states).toEqual(['done', 'done', 'current', 'todo', 'todo']);
@@ -260,7 +264,7 @@ describe('board lanes', () => {
   it('shows no plan bar on a card whose run has no plan steps', async () => {
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [{ ...workItem, plan_steps: null }]) });
 
-    await screen.findByRole('region', { name: 'Stations' });
+    await phonePanel();
     expect(screen.queryByRole('img', { name: /steps/ })).toBeNull();
   });
 
@@ -285,7 +289,7 @@ describe('board lanes', () => {
   it('never shows a numbered agent copy on a card, row or lane', async () => {
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [workItem, queuedItem]) });
 
-    await screen.findByRole('region', { name: 'Stations' });
+    await phonePanel();
     expect(screen.queryByText(/investigator-\d+\b/)).toBeNull();
     expect(screen.queryByText(/triager-\d+\b/)).toBeNull();
   });
@@ -305,7 +309,7 @@ describe('board lanes', () => {
     const longBoard = board({ lanes: [lane({ key: 'long', role: longRole, model_label: longRole })] }, [working]);
     renderBoardPage({ page: BoardPage, org, factory, board: longBoard });
 
-    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const columns = await phonePanel();
     const card = within(columns).getByRole('link', { name: longTitle }).closest('article') as HTMLElement;
     // The title clamps to two lines and carries its full text.
     const link = within(card).getByRole('link', { name: longTitle });
@@ -332,7 +336,7 @@ describe('board lanes', () => {
     });
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [queuedItem, blocked]) });
 
-    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const columns = await phonePanel();
     const queuedRow = within(columns).getByRole('link', { name: QUEUED }).closest('article') as HTMLElement;
     expect(queuedRow.querySelector('.lucide-clock')).not.toBeNull();
 
@@ -377,7 +381,7 @@ describe('board lanes', () => {
     });
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [starts, shared, approved]) });
 
-    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const columns = await phonePanel();
     const afterRow = within(columns)
       .getByRole('link', { name: 'Ship the export migration' })
       .closest('article') as HTMLElement;
@@ -415,9 +419,7 @@ describe('board lanes', () => {
     });
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [expediteRow, queuedItem]) });
 
-    const investigator = within(
-      within(await screen.findByRole('region', { name: 'Stations' })).getByRole('region', { name: 'Investigate' }),
-    ).getByRole('region', { name: 'Investigator' });
+    const investigator = within(await phonePanel()).getByRole('region', { name: 'Investigator' });
     const expedited = within(investigator).getByRole('link', { name: 'Restore the export job' }).closest('article');
     expect(expedited?.classList.contains('bg-rework-tint')).toBe(true);
     expect(within(expedited as HTMLElement).getByText('Expedite')).toBeTruthy();
@@ -468,7 +470,7 @@ describe('board lanes', () => {
       ]),
     });
 
-    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const columns = await phonePanel();
     const work = within(columns).getByRole('link', { name: WORKING }).closest('article') as HTMLElement;
     const row = within(columns).getByRole('link', { name: QUEUED }).closest('article') as HTMLElement;
     for (const card of [work, row]) {
@@ -485,7 +487,7 @@ describe('board lanes', () => {
     const assembly = { id: 'item-41', ref: 'sre#41', title: longTitle, part: 12, parts: 14 };
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [{ ...workItem, assembly }]) });
 
-    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const columns = await phonePanel();
     const line = within(columns).getByRole('link', { name: `Part 12 of 14 of ${longTitle}` });
     expect(within(line).getByText(longTitle).classList).toContain('truncate');
     expect(within(line).getByText('› 12 of 14').classList).toContain('shrink-0');
@@ -501,7 +503,7 @@ describe('board lanes', () => {
       board: board({}, [{ ...workItem, assembly: null }, { ...queuedItem }]),
     });
 
-    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const columns = await phonePanel();
     expect(within(columns).queryByRole('link', { name: /^Part \d+ of/ })).toBeNull();
     expect(within(columns).getByRole('link', { name: WORKING })).toBeTruthy();
     expect(within(columns).getByRole('link', { name: QUEUED })).toBeTruthy();
