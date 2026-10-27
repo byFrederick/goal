@@ -78,7 +78,7 @@ routes/       file-based route files (TanStack Router plugin; routeTree.gen.ts i
                     /o/$org/settings            → Organization settings (C7): general, slots, model connections, secrets
                     /o/$org/connections         → Connections (spec 4 §10; connection:read): ?factory= (a factory's name: what its
                                                   current version names), ?kind=, ?q=
-                    /o/$org/connections/new     → New connection (?kind=): kind picker, Define a kind…, the kind's fields
+                    /o/$org/connections/new     → Add connection (?kind=): catalog and details, Define a kind…, the kind's fields
                     /o/$org/connections/$connection → One connection (?created after a create): fields, Test, Replace secret,
                                                   Delete, what a run gets, used by, recent use (audit:read)
                     /o/$org/knowledge           → Knowledge (spec 4 §10; knowledge:read): ?factory= (a factory's name: the sources its
@@ -269,7 +269,7 @@ One app, not two, filling the viewport with no outer frame. From 768 px: one 256
 
 From 768 px, `ShellFrame` draws a 56 px bar (`top-bar.tsx`, MASTER.md "Top bar") above `main`: `h-14`, `px-7`, a bottom border in `rule`. Below 768 px `ShellFrame` draws the phone's top bar instead (see "Phone shell"), and the desktop bar is not rendered: the page's actions are drawn once, in whichever bar the width shows (`usePhone`, a `matchMedia` of `max-width: 767px`). Its left side is a `nav` named "Breadcrumb". On a factory page it starts with the factory's badge (`FactoryBadge`, the same mark the sidebar shows, at 20 px) and the factory's name, linked to its Floor. Then the page: the label from `sidebarFactoryPages` in `screens.ts`, found by the route the URL matched (`factoryRoutePages`, keyed by route id). On an organization page it is the page's name from `orgRoutePages`, with no link. The last crumb is in ink with `aria-current="page"`. The right side is the page's actions (`ml-auto`), in the order the page gives them, so the primary one goes last.
 
-A page sets its last crumb and its actions with one component, `<TopBarSlot crumb={…} actions={…} />`, rendered anywhere in the page. It sets them in a layout effect and clears them on unmount. Until a page does (its data is loading, or it failed), the bar shows the page's own name alone. The item and assembly pages set `#<number>`; the connection and knowledge-source pages set the connection's or source's name; the new connection and new source pages set "New connection" and "New source". When a crumb is set, the page's name links to the page before it.
+A page sets its last crumb and its actions with one component, `<TopBarSlot crumb={…} actions={…} />`, rendered anywhere in the page. It sets them in a layout effect and clears them on unmount. Until a page does (its data is loading, or it failed), the bar shows the page's own name alone. The item and assembly pages set `#<number>`; the connection and knowledge-source pages set the connection's or source's name; the add-connection page sets "Add connection", the new source page "New source". When a crumb is set, the page's name links to the page before it.
 
 `ShellFrame`'s content padding is 16 px on phones and 20 px 28 px from 768 px (`px-4 pt-5 md:px-7 md:py-5`). Route focus still lands on the page's `h1` inside `#main`; the bar is outside `#main` and is not a heading. Document titles do not change.
 
