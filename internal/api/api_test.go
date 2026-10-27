@@ -34,7 +34,8 @@ const (
 	acmeItems = "/v1/orgs/acme/factories/acme/items"
 )
 
-// acme is inbox → approve (human) → done: enough to submit, read and decide on items.
+// acme is inbox → approve (human) → done: enough to submit, read and decide on items, with an
+// intake trigger of each source (a schedule, a GitHub event, a disabled webhook) for Intake.
 const acme = `apiVersion: goal/v1
 kind: Factory
 metadata: { id: ` + acmeID + `, name: acme, title: Acme }
@@ -44,6 +45,20 @@ spec:
     - { name: writer, prompt: ./agents/writer.md }
   board:
     workTypes: [feature, fix]
+    triggers:
+      - name: nightly-audit
+        on: schedule
+        cron: "0 6 * * MON-FRI"
+        timeZone: Europe/Berlin
+        create: { type: feature, station: inbox, title: "Nightly audit" }
+      - name: flaky-test-on-main
+        on: github.check_run.failed
+        only: { dedupe: check }
+        create: { type: fix, station: inbox, expedite: true, title: "{{check}} is flaky" }
+      - name: deploy-failed
+        enabled: false
+        on: webhook.ci-hooks.deploy
+        create: { type: fix, station: inbox, title: "A deploy failed" }
     stations:
       - { id: inbox, kind: queue }
       - { id: approve, kind: human }
@@ -150,6 +165,8 @@ type harness struct {
 	kb        *porttest.Knowledge
 	kbObjects *porttest.ObjectStore
 	uploads   *knowledge.Uploads
+	// intake keeps the factories' webhook endpoints, deliveries and trigger firings, over store.
+	intake *porttest.Intake
 }
 
 // acme's one prompt and its path.
@@ -452,6 +469,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
 	h.platform = porttest.NewPlatform(h.keys)
 
 	connections := h.connections(t, tenancy)
+	h.intake = porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), h.store)
 
 	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
@@ -459,7 +477,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
 		Builder: h.builder, Connections: h.conns, Credentials: h.creds, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
 		// GitLab's code host lists no repositories, as the gitlab adapter.
 		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()},
-		Knowledge: h.kb, KnowledgeUploads: h.uploads, KnowledgeSearch: knowledge.NewSearcher(h.kb, nil, nil), UploadMaxBytes: testUploadMax, Clock: h.clock,
+		Knowledge: h.kb, KnowledgeUploads: h.uploads, KnowledgeSearch: knowledge.NewSearcher(h.kb, nil, nil), UploadMaxBytes: testUploadMax, Intake: h.intake, Clock: h.clock,
 	}
 	if in != nil {
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity

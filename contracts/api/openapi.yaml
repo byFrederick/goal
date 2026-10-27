@@ -67,6 +67,12 @@ tags:
       synced into it and of connections searched live, their documents, and the search agents
       run through the gateway's knowledge__search. Members and keys read and search it; owners,
       admins and keys add, sync and delete sources and documents.
+  - name: intake
+    description: >-
+      Where a factory's items come from (ADR 0026): the sources of its newest items and its
+      triggers, the rules of the definition's board.triggers that turn events and schedules into
+      items, with what they did. Reads only: a trigger is edited in the definition, through the
+      draft and publish operations.
   - name: definitions
     description: >-
       Factory definitions: creating factories, the one shared draft per factory (Visual
@@ -1694,6 +1700,61 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ConstraintReport" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/intake:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: getIntake
+      x-goal-scope: intake:read
+      tags: [intake]
+      summary: Where the factory's newest items came from, and its triggers
+      description: >-
+        The sources of the factory's newest `items` items (by creation) with the UTC days the
+        oldest and the newest of them were created, and every trigger of the current definition
+        in definition order, each with the items it created on each of the last 7 UTC days and
+        its problem, if it has one. Clients re-read it on `item` and `definition` stream events.
+        Triggers are edited through the definition's draft and publish operations. 400 for items
+        outside 1 to 500.
+      parameters:
+        - name: items
+          in: query
+          required: false
+          description: How many of the newest items the sources count (default 48)
+          schema: { type: integer, minimum: 1, maximum: 500, default: 48 }
+      responses:
+        "200":
+          description: The factory's intake
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Intake" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - name: trigger
+        in: path
+        required: true
+        description: The trigger's name in the current definition
+        schema: { type: string }
+    get:
+      operationId: getIntakeTrigger
+      x-goal-scope: intake:read
+      tags: [intake]
+      summary: One trigger with this week's results and its recent events
+      description: >-
+        The trigger as getIntake shows it, what the items it created in the weekly budget's
+        window (the last 7×24 hours) came to, and its 20 newest events. Clients re-read it on
+        `item` and `definition` stream events. 404 trigger-not-found for a name the current
+        definition does not have.
+      responses:
+        "200":
+          description: The trigger
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IntakeTriggerDetail" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/metrics/lead-time:
     parameters:
@@ -4799,6 +4860,99 @@ components:
               to: { type: string, format: date, description: The week's last day, included }
               done: { type: integer }
               per_day: { type: number, format: double, description: done divided by 7 }
+    Intake:
+      type: object
+      required: [items, from, to, sources, triggers]
+      properties:
+        items: { type: integer, description: How many items the sources count, at most the items asked for }
+        from: { type: string, format: date, nullable: true, description: The UTC day the oldest of them was created; null without items }
+        to: { type: string, format: date, nullable: true, description: The UTC day the newest of them was created; null without items }
+        sources:
+          type: object
+          description: >-
+            How many of the items came from each source, zero included. Items whose creator
+            recorded no source count in items only.
+          required: [people, cli, api, schedule, webhook, github]
+          properties:
+            people: { type: integer }
+            cli: { type: integer }
+            api: { type: integer }
+            schedule: { type: integer }
+            webhook: { type: integer }
+            github: { type: integer }
+        triggers:
+          type: array
+          description: The current definition's board.triggers, in definition order
+          items: { $ref: "#/components/schemas/IntakeTrigger" }
+    IntakeTrigger:
+      type: object
+      required: [name, enabled, source, on, when, create, days, problem]
+      properties:
+        name: { type: string }
+        enabled: { type: boolean }
+        source: { type: string, enum: [schedule, webhook, github] }
+        "on": { type: string, description: "The trigger's event key, as in the definition (schedule, github.check_run.failed, webhook.<endpoint>[.<event>])" }
+        when:
+          type: string
+          description: >-
+            A plain summary of when it fires: the cron and its time zone for a schedule
+            ("0 8 * * MON-FRI, Europe/Berlin"), the event key otherwise
+        create:
+          type: object
+          required: [type, station, lane, expedite]
+          properties:
+            type: { type: string }
+            station: { type: string }
+            lane: { type: string, nullable: true }
+            expedite: { type: boolean }
+        days:
+          type: array
+          description: The items it created on each of the last 7 UTC days, oldest first, ending today
+          minItems: 7
+          maxItems: 7
+          items: { type: integer }
+        problem:
+          type: object
+          nullable: true
+          description: >-
+            Why it may not be creating items. missing_connection: it listens on a webhook
+            endpoint the factory does not have (no endpoint of its name for webhook.<name>, none
+            of kind github for github.*). refused_deliveries: its endpoints refused deliveries in
+            the last 7 days, counted over each endpoint's 100 newest deliveries.
+          required: [kind, message]
+          properties:
+            kind: { type: string, enum: [missing_connection, refused_deliveries] }
+            message: { type: string }
+    IntakeTriggerDetail:
+      type: object
+      required: [trigger, week, events]
+      properties:
+        trigger: { $ref: "#/components/schemas/IntakeTrigger" }
+        week:
+          type: object
+          description: The items it created in the weekly budget's window (the last 7×24 hours)
+          required: [created, merged, spend_usd]
+          properties:
+            created: { type: integer }
+            merged: { type: integer, description: How many of them have been merged }
+            spend_usd: { type: number, format: double, description: What their agent runs cost }
+        events:
+          type: array
+          description: Its 20 newest events, newest first
+          items: { $ref: "#/components/schemas/IntakeEvent" }
+    IntakeEvent:
+      type: object
+      required: [title, event, at, outcome, item_number, reason]
+      properties:
+        title: { type: string, description: "The event's value of the trigger's only.dedupe field, or its event key without one" }
+        event: { type: string, description: The event key it matched }
+        at: { type: string, format: date-time }
+        outcome:
+          type: string
+          enum: [created, merged, skipped]
+          description: created an item; merged once that item has been merged; skipped with the reason
+        item_number: { type: integer, format: int64, nullable: true, description: The item it created; null when it created none or that item is gone }
+        reason: { type: string, nullable: true, description: Why it was skipped; null otherwise }
     LeadTimeBridge:
       type: object
       required:

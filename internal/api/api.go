@@ -181,6 +181,9 @@ type Deps struct {
 	KnowledgeUploads KnowledgeUploads
 	KnowledgeSearch  KnowledgeSearch
 	UploadMaxBytes   int64
+	// Intake is the state of the factories' intake triggers (ADR 0026): Intake's sources, the
+	// triggers' firings and the webhook endpoints' deliveries.
+	Intake ports.Intake
 	// Clock dates ages and metric windows and paces stream heartbeats.
 	Clock  ports.Clock
 	Logger *slog.Logger
@@ -192,7 +195,7 @@ func (d Deps) complete() bool {
 		d.Engine == nil, d.Items == nil, d.Factories == nil, d.Definitions == nil, d.Versions == nil, d.Orgs == nil,
 		d.Audit == nil, d.Access == nil, d.Authorizer == nil, d.Platform == nil, d.Feed == nil, d.Builder == nil, d.Clock == nil,
 		d.Connections == nil, d.Credentials == nil, d.ParseKind == nil, d.ConnectionTransport == nil, d.OrgRetention <= 0,
-		d.Knowledge == nil, d.KnowledgeUploads == nil, d.KnowledgeSearch == nil, d.UploadMaxBytes <= 0,
+		d.Knowledge == nil, d.KnowledgeUploads == nil, d.KnowledgeSearch == nil, d.UploadMaxBytes <= 0, d.Intake == nil,
 	}
 
 	return !slices.Contains(missing, true)
@@ -234,7 +237,7 @@ var errInvalid = errors.New("invalid request")
 func New(d Deps) (http.Handler, error) {
 	if !d.complete() {
 		return nil, errors.New("api: Engine, Items, Factories, Definitions, Versions, Orgs, Audit, Access, Authorizer, Platform, Feed, Builder, Clock, " +
-			"Connections, Credentials, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeSearch, a positive UploadMaxBytes " +
+			"Connections, Credentials, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeSearch, Intake, a positive UploadMaxBytes " +
 			"and a positive OrgRetention are required")
 	}
 
@@ -253,7 +256,7 @@ func New(d Deps) (http.Handler, error) {
 		builder: d.Builder, connections: d.Connections, credentials: d.Credentials, parseKind: d.ParseKind, codehosts: d.CodeHosts,
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
 		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, search: d.KnowledgeSearch, uploadMax: d.UploadMaxBytes,
-		clock: d.Clock, log: log,
+		intake: d.Intake, clock: d.Clock, log: log,
 	}
 	s.inbox = append([]InboxSource{workInbox{s: s}}, d.InboxSources...)
 
@@ -379,8 +382,10 @@ type server struct {
 	uploads   KnowledgeUploads
 	search    KnowledgeSearch
 	uploadMax int64
-	clock     ports.Clock
-	log       *slog.Logger
+	// intake serves the intake routes.
+	intake ports.Intake
+	clock  ports.Clock
+	log    *slog.Logger
 }
 
 var _ gen.StrictServerInterface = (*server)(nil)
@@ -628,6 +633,11 @@ func problemOf(err error) gen.Problem {
 			Title: http.StatusText(http.StatusConflict), Status: http.StatusConflict, Detail: &detail,
 			Code: optional("factory-archived"),
 		}
+	case errors.Is(err, errTriggerNotFound):
+		p := detailed(http.StatusNotFound, err)
+		p.Code = optional("trigger-not-found")
+
+		return p
 	case errors.Is(err, errTouchNotFound):
 		p := detailed(http.StatusNotFound, err)
 		p.Code = optional("touch-not-found")

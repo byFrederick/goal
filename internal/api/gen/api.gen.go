@@ -621,6 +621,66 @@ func (e InboxEntryKind) Valid() bool {
 	}
 }
 
+// Defines values for IntakeEventOutcome.
+const (
+	IntakeEventOutcomeCreated IntakeEventOutcome = "created"
+	IntakeEventOutcomeMerged  IntakeEventOutcome = "merged"
+	IntakeEventOutcomeSkipped IntakeEventOutcome = "skipped"
+)
+
+// Valid indicates whether the value is a known member of the IntakeEventOutcome enum.
+func (e IntakeEventOutcome) Valid() bool {
+	switch e {
+	case IntakeEventOutcomeCreated:
+		return true
+	case IntakeEventOutcomeMerged:
+		return true
+	case IntakeEventOutcomeSkipped:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IntakeTriggerProblemKind.
+const (
+	MissingConnection IntakeTriggerProblemKind = "missing_connection"
+	RefusedDeliveries IntakeTriggerProblemKind = "refused_deliveries"
+)
+
+// Valid indicates whether the value is a known member of the IntakeTriggerProblemKind enum.
+func (e IntakeTriggerProblemKind) Valid() bool {
+	switch e {
+	case MissingConnection:
+		return true
+	case RefusedDeliveries:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IntakeTriggerSource.
+const (
+	Github   IntakeTriggerSource = "github"
+	Schedule IntakeTriggerSource = "schedule"
+	Webhook  IntakeTriggerSource = "webhook"
+)
+
+// Valid indicates whether the value is a known member of the IntakeTriggerSource enum.
+func (e IntakeTriggerSource) Valid() bool {
+	switch e {
+	case Github:
+		return true
+	case Schedule:
+		return true
+	case Webhook:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ItemLinkKind.
 const (
 	Linked  ItemLinkKind = "linked"
@@ -2686,6 +2746,106 @@ type InboxEntry struct {
 // InboxEntryKind What waits; later phases add kinds, which clients that do not know them show as a generic row
 type InboxEntryKind string
 
+// Intake defines model for Intake.
+type Intake struct {
+	// From The UTC day the oldest of them was created; null without items
+	From *openapi_types.Date `json:"from"`
+
+	// Items How many items the sources count
+	Items int `json:"items"`
+
+	// Sources How many of the items came from each source, zero included. Items whose creator recorded no source count in items only.
+	Sources struct {
+		Api      int `json:"api"`
+		Cli      int `json:"cli"`
+		Github   int `json:"github"`
+		People   int `json:"people"`
+		Schedule int `json:"schedule"`
+		Webhook  int `json:"webhook"`
+	} `json:"sources"`
+
+	// To The UTC day the newest of them was created; null without items
+	To *openapi_types.Date `json:"to"`
+
+	// Triggers The current definition's board.triggers, in definition order
+	Triggers []IntakeTrigger `json:"triggers"`
+}
+
+// IntakeEvent defines model for IntakeEvent.
+type IntakeEvent struct {
+	At time.Time `json:"at"`
+
+	// Event The event key it matched
+	Event string `json:"event"`
+
+	// ItemNumber The item it created; null when it created none or that item is gone
+	ItemNumber *int64 `json:"item_number"`
+
+	// Outcome created an item; merged once that item has been merged; skipped with the reason
+	Outcome IntakeEventOutcome `json:"outcome"`
+
+	// Reason Why it was skipped; null otherwise
+	Reason *string `json:"reason"`
+
+	// Title The event's value of the trigger's only.dedupe field, or its event key without one
+	Title string `json:"title"`
+}
+
+// IntakeEventOutcome created an item; merged once that item has been merged; skipped with the reason
+type IntakeEventOutcome string
+
+// IntakeTrigger defines model for IntakeTrigger.
+type IntakeTrigger struct {
+	Create struct {
+		Expedite bool    `json:"expedite"`
+		Lane     *string `json:"lane"`
+		Station  string  `json:"station"`
+		Type     string  `json:"type"`
+	} `json:"create"`
+
+	// Days The items it created on each of the last 7 UTC days, oldest first, ending today
+	Days    []int  `json:"days"`
+	Enabled bool   `json:"enabled"`
+	Name    string `json:"name"`
+
+	// On The trigger's event key, as in the definition (schedule, github.check_run.failed, webhook.<endpoint>[.<event>])
+	On string `json:"on"`
+
+	// Problem Why it may not be creating items. missing_connection: it listens on a webhook endpoint the factory does not have (no endpoint of its name for webhook.<name>, none of kind github for github.*). refused_deliveries: its endpoints refused deliveries in the last 7 days, counted over each endpoint's 100 newest deliveries.
+	Problem *struct {
+		Kind    IntakeTriggerProblemKind `json:"kind"`
+		Message string                   `json:"message"`
+	} `json:"problem"`
+	Source IntakeTriggerSource `json:"source"`
+
+	// When A plain summary of when it fires: the cron and its time zone for a schedule ("0 8 * * MON-FRI, Europe/Berlin"), the event key otherwise
+	When string `json:"when"`
+}
+
+// IntakeTriggerProblemKind defines model for IntakeTrigger.Problem.Kind.
+type IntakeTriggerProblemKind string
+
+// IntakeTriggerSource defines model for IntakeTrigger.Source.
+type IntakeTriggerSource string
+
+// IntakeTriggerDetail defines model for IntakeTriggerDetail.
+type IntakeTriggerDetail struct {
+	// Events Its 20 newest events, newest first
+	Events  []IntakeEvent `json:"events"`
+	Trigger IntakeTrigger `json:"trigger"`
+
+	// Week The items it created in the weekly budget's window (the last 7×24 hours)
+	Week struct {
+		Created int `json:"created"`
+
+		// Merged How many of them have been merged
+		Merged int `json:"merged"`
+
+		// SpendUsd What their agent runs cost
+		SpendUsd float64 `json:"spend_usd"`
+	} `json:"week"`
+}
+
 // Invitation A pending invitation
 type Invitation struct {
 	CreatedAt time.Time `json:"created_at"`
@@ -4747,6 +4907,12 @@ type RevertDraftSectionParams struct {
 	IfMatch *IfMatch `json:"If-Match,omitempty"`
 }
 
+// GetIntakeParams defines parameters for GetIntake.
+type GetIntakeParams struct {
+	// Items How many of the newest items the sources count (default 48)
+	Items *int `form:"items,omitempty" json:"items,omitempty"`
+}
+
 // ListItemsParams defines parameters for ListItems.
 type ListItemsParams struct {
 	// State Only items in this state
@@ -5974,6 +6140,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/validate (the `ValidateDraft` operationId).
 	ValidateDraft(ctx context.Context, org OrgRef, factory FactoryRef, body ValidateDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetIntake Where the factory's newest items came from, and its triggers
+	//
+	// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake (the `GetIntake` operationId).
+	GetIntake(ctx context.Context, org OrgRef, factory FactoryRef, params *GetIntakeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetIntakeTrigger One trigger with this week's results and its recent events
+	//
+	// The trigger as getIntake shows it, what the items it created in the weekly budget's window (the last 7×24 hours) came to, and its 20 newest events. Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger} (the `GetIntakeTrigger` operationId).
+	GetIntakeTrigger(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListItems One page of a factory's items, newest first
 	//
@@ -8021,6 +8201,40 @@ func (c *Client) ValidateDraftWithBody(ctx context.Context, org OrgRef, factory 
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/validate (the `ValidateDraft` operationId).
 func (c *Client) ValidateDraft(ctx context.Context, org OrgRef, factory FactoryRef, body ValidateDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewValidateDraftRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetIntake Where the factory's newest items came from, and its triggers
+//
+// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake (the `GetIntake` operationId).
+func (c *Client) GetIntake(ctx context.Context, org OrgRef, factory FactoryRef, params *GetIntakeParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetIntakeRequest(c.Server, org, factory, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetIntakeTrigger One trigger with this week's results and its recent events
+//
+// The trigger as getIntake shows it, what the items it created in the weekly budget's window (the last 7×24 hours) came to, and its 20 newest events. Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger} (the `GetIntakeTrigger` operationId).
+func (c *Client) GetIntakeTrigger(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetIntakeTriggerRequest(c.Server, org, factory, trigger)
 	if err != nil {
 		return nil, err
 	}
@@ -12618,6 +12832,122 @@ func NewValidateDraftRequestWithBody(server string, org OrgRef, factory FactoryR
 	return req, nil
 }
 
+// NewGetIntakeRequest constructs an http.Request for the GetIntake method
+func NewGetIntakeRequest(server string, org OrgRef, factory FactoryRef, params *GetIntakeParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/intake", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Items != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "items", *params.Items, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetIntakeTriggerRequest constructs an http.Request for the GetIntakeTrigger method
+func NewGetIntakeTriggerRequest(server string, org OrgRef, factory FactoryRef, trigger string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "trigger", trigger, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/intake/triggers/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewListItemsRequest constructs an http.Request for the ListItems method
 func NewListItemsRequest(server string, org OrgRef, factory FactoryRef, params *ListItemsParams) (*http.Request, error) {
 	var err error
@@ -17119,6 +17449,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/validate (the `ValidateDraft` operationId).
 	ValidateDraftWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body ValidateDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*ValidateDraftResponse, error)
 
+	// GetIntakeWithResponse Where the factory's newest items came from, and its triggers
+	//
+	// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake (the `GetIntake` operationId).
+	GetIntakeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetIntakeParams, reqEditors ...RequestEditorFn) (*GetIntakeResponse, error)
+
+	// GetIntakeTriggerWithResponse One trigger with this week's results and its recent events
+	//
+	// The trigger as getIntake shows it, what the items it created in the weekly budget's window (the last 7×24 hours) came to, and its 20 newest events. Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger} (the `GetIntakeTrigger` operationId).
+	GetIntakeTriggerWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, reqEditors ...RequestEditorFn) (*GetIntakeTriggerResponse, error)
+
 	// ListItemsWithResponse One page of a factory's items, newest first
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -20726,6 +21074,102 @@ func (r ValidateDraftResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ValidateDraftResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetIntakeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Intake
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetIntakeResponse) GetJSON200() *Intake {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetIntakeResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetIntakeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetIntakeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetIntakeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetIntakeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetIntakeTriggerResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *IntakeTriggerDetail
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetIntakeTriggerResponse) GetJSON200() *IntakeTriggerDetail {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetIntakeTriggerResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetIntakeTriggerResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetIntakeTriggerResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetIntakeTriggerResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetIntakeTriggerResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -25181,6 +25625,36 @@ func (c *ClientWithResponses) ValidateDraftWithResponse(ctx context.Context, org
 	return ParseValidateDraftResponse(rsp)
 }
 
+// GetIntakeWithResponse Where the factory's newest items came from, and its triggers
+//
+// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake (the `GetIntake` operationId).
+func (c *ClientWithResponses) GetIntakeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetIntakeParams, reqEditors ...RequestEditorFn) (*GetIntakeResponse, error) {
+	rsp, err := c.GetIntake(ctx, org, factory, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetIntakeResponse(rsp)
+}
+
+// GetIntakeTriggerWithResponse One trigger with this week's results and its recent events
+//
+// The trigger as getIntake shows it, what the items it created in the weekly budget's window (the last 7×24 hours) came to, and its 20 newest events. Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger} (the `GetIntakeTrigger` operationId).
+func (c *ClientWithResponses) GetIntakeTriggerWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, reqEditors ...RequestEditorFn) (*GetIntakeTriggerResponse, error) {
+	rsp, err := c.GetIntakeTrigger(ctx, org, factory, trigger, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetIntakeTriggerResponse(rsp)
+}
+
 // ListItemsWithResponse One page of a factory's items, newest first
 //
 // Returns a wrapper object for the known response body format(s).
@@ -28451,6 +28925,72 @@ func ParseValidateDraftResponse(rsp *http.Response) (*ValidateDraftResponse, err
 	return response, nil
 }
 
+// ParseGetIntakeResponse parses an HTTP response from a GetIntakeWithResponse call
+func ParseGetIntakeResponse(rsp *http.Response) (*GetIntakeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetIntakeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Intake
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetIntakeTriggerResponse parses an HTTP response from a GetIntakeTriggerWithResponse call
+func ParseGetIntakeTriggerResponse(rsp *http.Response) (*GetIntakeTriggerResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetIntakeTriggerResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest IntakeTriggerDetail
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListItemsResponse parses an HTTP response from a ListItemsWithResponse call
 func ParseListItemsResponse(rsp *http.Response) (*ListItemsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -30953,6 +31493,12 @@ type ServerInterface interface {
 	// ValidateDraft Validate the draft at its revision, as publish will
 	// (POST /v1/orgs/{org}/factories/{factory}/draft/validate)
 	ValidateDraft(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// GetIntake Where the factory's newest items came from, and its triggers
+	// (GET /v1/orgs/{org}/factories/{factory}/intake)
+	GetIntake(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetIntakeParams)
+	// GetIntakeTrigger One trigger with this week's results and its recent events
+	// (GET /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger})
+	GetIntakeTrigger(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, trigger string)
 	// ListItems One page of a factory's items, newest first
 	// (GET /v1/orgs/{org}/factories/{factory}/items)
 	ListItems(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params ListItemsParams)
@@ -33513,6 +34059,101 @@ func (siw *ServerInterfaceWrapper) ValidateDraft(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ValidateDraft(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetIntake operation middleware
+func (siw *ServerInterfaceWrapper) GetIntake(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetIntakeParams
+
+	// ------------- Optional query parameter "items" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "items", r.URL.Query(), &params.Items, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "items"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "items", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetIntake(w, r, org, factory, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetIntakeTrigger operation middleware
+func (siw *ServerInterfaceWrapper) GetIntakeTrigger(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "trigger" -------------
+	var trigger string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "trigger", r.PathValue("trigger"), &trigger, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "trigger", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetIntakeTrigger(w, r, org, factory, trigger)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -36635,6 +37276,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics", wrapper.GetMetrics)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/weekly", wrapper.GetWeeklyThroughput)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/constraint", wrapper.GetConstraintReport)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/intake", wrapper.GetIntake)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}", wrapper.GetIntakeTrigger)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/lead-time", wrapper.GetLeadTimeBridge)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/touches", wrapper.GetTouchMetrics)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/agents/{agent}/stats", wrapper.GetAgentStats)
@@ -39122,6 +39765,88 @@ type ValidateDraftdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ValidateDraftdefaultApplicationProblemPlusJSONResponse) VisitValidateDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetIntakeRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Params  GetIntakeParams
+}
+
+type GetIntakeResponseObject interface {
+	VisitGetIntakeResponse(w http.ResponseWriter) error
+}
+
+type GetIntake200JSONResponse Intake
+
+func (response GetIntake200JSONResponse) VisitGetIntakeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetIntakedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetIntakedefaultApplicationProblemPlusJSONResponse) VisitGetIntakeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetIntakeTriggerRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Trigger string     `json:"trigger"`
+}
+
+type GetIntakeTriggerResponseObject interface {
+	VisitGetIntakeTriggerResponse(w http.ResponseWriter) error
+}
+
+type GetIntakeTrigger200JSONResponse IntakeTriggerDetail
+
+func (response GetIntakeTrigger200JSONResponse) VisitGetIntakeTriggerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetIntakeTriggerdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetIntakeTriggerdefaultApplicationProblemPlusJSONResponse) VisitGetIntakeTriggerResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -42252,6 +42977,12 @@ type StrictServerInterface interface {
 	// ValidateDraft Validate the draft at its revision, as publish will
 	// (POST /v1/orgs/{org}/factories/{factory}/draft/validate)
 	ValidateDraft(ctx context.Context, request ValidateDraftRequestObject) (ValidateDraftResponseObject, error)
+	// GetIntake Where the factory's newest items came from, and its triggers
+	// (GET /v1/orgs/{org}/factories/{factory}/intake)
+	GetIntake(ctx context.Context, request GetIntakeRequestObject) (GetIntakeResponseObject, error)
+	// GetIntakeTrigger One trigger with this week's results and its recent events
+	// (GET /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger})
+	GetIntakeTrigger(ctx context.Context, request GetIntakeTriggerRequestObject) (GetIntakeTriggerResponseObject, error)
 	// ListItems One page of a factory's items, newest first
 	// (GET /v1/orgs/{org}/factories/{factory}/items)
 	ListItems(ctx context.Context, request ListItemsRequestObject) (ListItemsResponseObject, error)
@@ -44246,6 +44977,62 @@ func (sh *strictHandler) ValidateDraft(w http.ResponseWriter, r *http.Request, o
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ValidateDraftResponseObject); ok {
 		if err := validResponse.VisitValidateDraftResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetIntake operation middleware
+func (sh *strictHandler) GetIntake(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetIntakeParams) {
+	var request GetIntakeRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetIntake(ctx, request.(GetIntakeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetIntake")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetIntakeResponseObject); ok {
+		if err := validResponse.VisitGetIntakeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetIntakeTrigger operation middleware
+func (sh *strictHandler) GetIntakeTrigger(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, trigger string) {
+	var request GetIntakeTriggerRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Trigger = trigger
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetIntakeTrigger(ctx, request.(GetIntakeTriggerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetIntakeTrigger")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetIntakeTriggerResponseObject); ok {
+		if err := validResponse.VisitGetIntakeTriggerResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -1040,6 +1040,58 @@ getInbox             pat-demoted      404 factory-not-found    404 org-not-found
 getInbox             pat-removed      401 unauthenticated      401 unauthenticated
 getInbox             pat-platform     200                      404 org-not-found
 getInbox             pat-deleted-org  401 unauthenticated      401 unauthenticated
+getIntake            anonymous        401 unauthenticated      401 unauthenticated
+getIntake            owner            200                      404 org-not-found
+getIntake            admin            200                      404 org-not-found
+getIntake            viewer           200                      404 org-not-found
+getIntake            approver         200                      404 org-not-found
+getIntake            editor           200                      404 org-not-found
+getIntake            member-no-roles  404 factory-not-found    404 org-not-found
+getIntake            other-org-owner  404 org-not-found        200
+getIntake            platform-admin   404 org-not-found        404 org-not-found
+getIntake            stale-owner      200                      404 org-not-found
+getIntake            key-scoped       403 forbidden            404 org-not-found
+getIntake            key-restricted   404 factory-not-found    404 org-not-found
+getIntake            key-other-org    404 org-not-found        200
+getIntake            key-expired      401 unauthenticated      401 unauthenticated
+getIntake            key-revoked      401 unauthenticated      401 unauthenticated
+getIntake            bearer-owner     200                      404 org-not-found
+getIntake            pat-approver     403 forbidden            404 org-not-found
+getIntake            pat-owner        200                      404 org-not-found
+getIntake            pat-viewer       200                      404 org-not-found
+getIntake            pat-other-org    404 org-not-found        200
+getIntake            pat-expired      401 unauthenticated      401 unauthenticated
+getIntake            pat-revoked      401 unauthenticated      401 unauthenticated
+getIntake            pat-demoted      404 factory-not-found    404 org-not-found
+getIntake            pat-removed      401 unauthenticated      401 unauthenticated
+getIntake            pat-platform     200                      404 org-not-found
+getIntake            pat-deleted-org  401 unauthenticated      401 unauthenticated
+getIntakeTrigger     anonymous        401 unauthenticated      401 unauthenticated
+getIntakeTrigger     owner            200                      404 org-not-found
+getIntakeTrigger     admin            200                      404 org-not-found
+getIntakeTrigger     viewer           200                      404 org-not-found
+getIntakeTrigger     approver         200                      404 org-not-found
+getIntakeTrigger     editor           200                      404 org-not-found
+getIntakeTrigger     member-no-roles  404 factory-not-found    404 org-not-found
+getIntakeTrigger     other-org-owner  404 org-not-found        200
+getIntakeTrigger     platform-admin   404 org-not-found        404 org-not-found
+getIntakeTrigger     stale-owner      200                      404 org-not-found
+getIntakeTrigger     key-scoped       403 forbidden            404 org-not-found
+getIntakeTrigger     key-restricted   404 factory-not-found    404 org-not-found
+getIntakeTrigger     key-other-org    404 org-not-found        200
+getIntakeTrigger     key-expired      401 unauthenticated      401 unauthenticated
+getIntakeTrigger     key-revoked      401 unauthenticated      401 unauthenticated
+getIntakeTrigger     bearer-owner     200                      404 org-not-found
+getIntakeTrigger     pat-approver     403 forbidden            404 org-not-found
+getIntakeTrigger     pat-owner        200                      404 org-not-found
+getIntakeTrigger     pat-viewer       200                      404 org-not-found
+getIntakeTrigger     pat-other-org    404 org-not-found        200
+getIntakeTrigger     pat-expired      401 unauthenticated      401 unauthenticated
+getIntakeTrigger     pat-revoked      401 unauthenticated      401 unauthenticated
+getIntakeTrigger     pat-demoted      404 factory-not-found    404 org-not-found
+getIntakeTrigger     pat-removed      401 unauthenticated      401 unauthenticated
+getIntakeTrigger     pat-platform     200                      404 org-not-found
+getIntakeTrigger     pat-deleted-org  401 unauthenticated      401 unauthenticated
 getItem              anonymous        401 unauthenticated      401 unauthenticated
 getItem              owner            200                      404 org-not-found
 getItem              admin            200                      404 org-not-found

@@ -57,6 +57,7 @@ permissions:
   - {name: factory:archive,    level: org, org_roles: [owner, admin], keys: true, pat: true}   # high impact
   - {name: factory:delete,     level: org, org_roles: [owner, admin], keys: true, pat: true}   # high impact
   - {name: factory:read,       level: factory, factory_role: viewer,   keys: true, pat: true}
+  - {name: intake:read,        level: factory, factory_role: viewer,   keys: true, pat: true}  # Intake's sources and triggers (ADR 0026)
   - {name: item:create,        level: factory, factory_role: approver, keys: true, pat: true}
   - {name: item:decide,        level: factory, factory_role: approver, keys: true, pat: true}
   - {name: item:operate,       level: factory, factory_role: approver, keys: true, pat: true}

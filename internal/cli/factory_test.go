@@ -144,7 +144,7 @@ func newDefGoald(t *testing.T) *defGoald {
 		Builder: builder.New(objects, clock, builder.Config{}), Connections: conns, ParseKind: connkind.Parse,
 		Credentials:         creds,
 		ConnectionTransport: transport, Knowledge: kb, KnowledgeUploads: uploads, KnowledgeSearch: knowledge.NewSearcher(kb, nil, nil),
-		UploadMaxBytes: domain.DefaultMaxUpload, Clock: clock,
+		UploadMaxBytes: domain.DefaultMaxUpload, Intake: porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), store), Clock: clock,
 	})
 	if err != nil {
 		t.Fatal(err)

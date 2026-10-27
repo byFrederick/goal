@@ -20,6 +20,7 @@ export const scopeGroups: readonly { id: 'read' | 'work' | 'build'; label: strin
     scopes: [
       { id: 'org:read', label: 'See the organization', needs: null },
       { id: 'factory:read', label: 'See factories', needs: 'viewer' },
+      { id: 'intake:read', label: 'See intake triggers', needs: 'viewer' },
       { id: 'audit:read', label: 'Read the audit log', needs: null },
       { id: 'connection:read', label: 'See connections', needs: null },
       { id: 'connection:browse', label: 'List the repositories a connection reaches', needs: null },

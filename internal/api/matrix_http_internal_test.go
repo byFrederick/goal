@@ -289,7 +289,7 @@ func mxServer(t *testing.T, identity Identity) *httptest.Server {
 		Auth: AuthConfig{Mode: AuthSession}, Identity: identity, Platform: mxPlatform{}, Feed: NewFeed(porttest.NewItemNotices(), porttest.NewDefinitionNotices(), nil),
 		Builder: struct{ Builder }{}, Connections: struct{ ports.Connections }{}, Credentials: struct{ ports.Credentials }{}, ParseKind: connkind.Parse,
 		ConnectionTransport: http.DefaultTransport, Knowledge: struct{ ports.Knowledge }{}, KnowledgeUploads: struct{ KnowledgeUploads }{},
-		KnowledgeSearch: struct{ KnowledgeSearch }{}, UploadMaxBytes: 1 << 20, Clock: clock,
+		KnowledgeSearch: struct{ KnowledgeSearch }{}, UploadMaxBytes: 1 << 20, Intake: struct{ ports.Intake }{}, Clock: clock,
 	})
 	if err != nil {
 		t.Fatal(err)
