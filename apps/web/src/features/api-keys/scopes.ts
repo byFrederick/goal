@@ -22,6 +22,7 @@ export const scopeGroups: readonly { id: 'read' | 'work' | 'build'; label: strin
       { id: 'factory:read', label: 'See factories', needs: 'viewer' },
       { id: 'audit:read', label: 'Read the audit log', needs: null },
       { id: 'connection:read', label: 'See connections', needs: null },
+      { id: 'connection:browse', label: 'List the repositories a connection reaches', needs: null },
       { id: 'knowledge:read', label: 'Search the knowledge base', needs: null },
     ],
   },

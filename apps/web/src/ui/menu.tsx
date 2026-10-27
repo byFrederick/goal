@@ -18,7 +18,7 @@ export const MenuTrigger = M.Trigger;
 export const MenuGroup = M.Group;
 export const MenuRadioGroup = M.RadioGroup;
 
-/** The white panel beside its trigger: to the right of the rail, below a phone's top row. */
+/** The white panel beside its trigger: to the right of the sidebar, below a phone's top row. */
 export function MenuContent({
   className,
   side = 'right',

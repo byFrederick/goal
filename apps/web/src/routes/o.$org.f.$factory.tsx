@@ -2,12 +2,11 @@ import { createFileRoute, notFound, Outlet } from '@tanstack/react-router';
 import { archivedFactoriesQuery, ensureFound, factoriesQuery } from '../api/queries';
 import { ShellFrame } from '../app/app-shell';
 import { ArchivedBanner } from '../app/archived-banner';
-import { FactorySidebar } from '../app/factory-sidebar';
 import { PhoneCrumb, TabBar } from '../app/phone-chrome';
 import { NotFoundScreen } from '../app/states';
 import { findFactory, useFactory } from '../shared/factory';
 
-// Every page of one factory: the factory sidebar, and on phones the crumb and the tab bar. An
+// Every page of one factory: on phones the crumb and the tab bar (the sidebar is AppShell's). An
 // archived factory is not in the list, so it is looked up in the archived list: its pages stay
 // readable, under a banner (ArchivedBanner).
 export const Route = createFileRoute('/o/$org/f/$factory')({
@@ -32,11 +31,7 @@ function FactoryLayout() {
   const { org } = Route.useRouteContext();
   const factory = useFactory();
   return (
-    <ShellFrame
-      sidebar={<FactorySidebar org={org} factory={factory} />}
-      crumb={<PhoneCrumb org={org} factory={factory} />}
-      tabBar={<TabBar org={org} factory={factory} />}
-    >
+    <ShellFrame crumb={<PhoneCrumb org={org} factory={factory} />} tabBar={<TabBar org={org} factory={factory} />}>
       <ArchivedBanner />
       <Outlet />
     </ShellFrame>
@@ -45,7 +40,7 @@ function FactoryLayout() {
 
 function FactoryNotFound() {
   return (
-    <ShellFrame sidebar={null}>
+    <ShellFrame>
       <NotFoundScreen what="factory" />
     </ShellFrame>
   );

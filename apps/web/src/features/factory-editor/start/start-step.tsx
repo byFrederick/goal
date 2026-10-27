@@ -180,8 +180,8 @@ export function StartStep({ search }: { search: StartSearch }) {
           error={nameError}
           help={
             kind === 'yaml'
-              ? 'Leave it empty to use the name in factory.yaml. Lowercase, used in links and the rail.'
-              : 'Lowercase, used in links and the rail. You can change it in Basics.'
+              ? 'Leave it empty to use the name in factory.yaml. Lowercase, used in links and the sidebar.'
+              : 'Lowercase, used in links and the sidebar. You can change it in Basics.'
           }
         >
           <Input
