@@ -18,6 +18,10 @@ info:
     A draft request's sandbox (ADR 0021) has an empty `item` and `station`: it belongs to no item,
     and goal-agent runs in definition mode on the factory's draft files (apps/worker/README.md,
     "Definition mode").
+
+    A judge's sandbox (ADR 0025) runs a spec that carries a `judge`, with no repository:
+    goal-agent runs in judge mode, one model call without tools that returns an outcome and a
+    one-sentence reason (apps/worker/README.md, "Judge mode").
 servers:
   - url: http://sandbox.internal
 security:

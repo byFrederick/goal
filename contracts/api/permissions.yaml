@@ -16,7 +16,7 @@ permissions:
   - {name: public,             level: install}                       # no credential needed
   - {name: authenticated,      level: install, keys: true, pat: true} # any valid principal
   - {name: device:read,        level: install}                       # signed-in users, not keys
-  - {name: org:create,         level: install}                       # signed-in users, not keys (ADR 0027)
+  - {name: org:create,         level: install}                       # signed-in users, not keys (ADR 0032)
   - {name: platform:read,      level: install, platform_admin: true}
   - {name: platform:manage,    level: install, platform_admin: true, fresh: true}
   - {name: org:read,           level: org, org_roles: [owner, admin, member], keys: true, pat: true}

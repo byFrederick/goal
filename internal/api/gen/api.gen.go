@@ -1089,6 +1089,29 @@ func (e GetMetricsParamsCompare) Valid() bool {
 	}
 }
 
+// Activity defines model for Activity.
+type Activity struct {
+	// Events Newest first
+	Events []ActivityEvent `json:"events"`
+}
+
+// ActivityEvent An Event with its item's ref, number and title
+type ActivityEvent struct {
+	Actor  string                 `json:"actor"`
+	At     time.Time              `json:"at"`
+	Data   map[string]interface{} `json:"data"`
+	Id     int64                  `json:"id"`
+	ItemId string                 `json:"item_id"`
+	Kind   string                 `json:"kind"`
+	Number int64                  `json:"number"`
+
+	// Ref <factory name>#<number>, as in goal#2
+	Ref     string  `json:"ref"`
+	RunId   *string `json:"run_id,omitempty"`
+	Station *string `json:"station,omitempty"`
+	Title   string  `json:"title"`
+}
+
 // Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
 type Actor struct {
 	// Id "local" for the local user, an agent's name or a job's name
@@ -1099,6 +1122,17 @@ type Actor struct {
 
 // ActorKind defines model for Actor.Kind.
 type ActorKind string
+
+// AgentHit An agent of a factory's current definition; never one of its copies
+type AgentHit struct {
+	// FactoryId The factory's metadata.id
+	FactoryId   string `json:"factory_id"`
+	FactoryName string `json:"factory_name"`
+	Name        string `json:"name"`
+
+	// Stations The ids of the stations the agent works at, in line order
+	Stations []string `json:"stations"`
+}
 
 // AgentStation defines model for AgentStation.
 type AgentStation struct {
@@ -1706,6 +1740,12 @@ type ConnectionFactory struct {
 	Name string `json:"name"`
 }
 
+// ConnectionHit defines model for ConnectionHit.
+type ConnectionHit struct {
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+}
+
 // ConnectionKind A template for connections (spec 4 §4.2), the platform's or the organization's
 type ConnectionKind struct {
 	// CodeHost The code host adapter that reads and merges its pull requests (github, gitlab)
@@ -2171,6 +2211,16 @@ type FactoryEvent struct {
 
 // FactoryHealth running; stopped while an andon pull is open; draft when the factory has no published version yet
 type FactoryHealth string
+
+// FactoryHit defines model for FactoryHit.
+type FactoryHit struct {
+	// Id The factory's metadata.id
+	Id   string `json:"id"`
+	Name string `json:"name"`
+
+	// Title The factory's title
+	Title string `json:"title"`
+}
 
 // FactoryList defines model for FactoryList.
 type FactoryList struct {
@@ -3278,6 +3328,16 @@ type OrgList struct {
 // OrgRole defines model for OrgRole.
 type OrgRole string
 
+// OrgSearch What a search found in the organization, by group, each best first
+type OrgSearch struct {
+	Agents []AgentHit `json:"agents"`
+
+	// Connections Empty unless the caller holds connection:read
+	Connections []ConnectionHit `json:"connections"`
+	Factories   []FactoryHit    `json:"factories"`
+	Items       []SearchItem    `json:"items"`
+}
+
 // OrgSettings defines model for OrgSettings.
 type OrgSettings struct {
 	Mark string `json:"mark"`
@@ -3645,6 +3705,22 @@ type SaveResult struct {
 	// Sha256 A file save's new sha256
 	Sha256    *string   `json:"sha256,omitempty"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// SearchItem defines model for SearchItem.
+type SearchItem struct {
+	// FactoryId The factory's metadata.id
+	FactoryId   string `json:"factory_id"`
+	FactoryName string `json:"factory_name"`
+	Id          string `json:"id"`
+	Number      int64  `json:"number"`
+
+	// State assembly: the item was split into parts (its children) and closes when they are; never claimed (ADR 0012)
+	State ItemState `json:"state"`
+
+	// Station The id of the station the item is at
+	Station string `json:"station"`
+	Title   string `json:"title"`
 }
 
 // Section defines model for Section.
@@ -4274,6 +4350,11 @@ type ListFactoriesParams struct {
 	Archived *bool `form:"archived,omitempty" json:"archived,omitempty"`
 }
 
+// ListFactoryActivityParams defines parameters for ListFactoryActivity.
+type ListFactoryActivityParams struct {
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // GetAgentStatsParams defines parameters for GetAgentStats.
 type GetAgentStatsParams struct {
 	// From The first UTC day of the range; 6 days before `to` when absent
@@ -4476,6 +4557,15 @@ type GetOrgTouchMetricsParams struct {
 type GetFactoryOverviewParams struct {
 	// Window The last N UTC calendar days, today included, written Nd (1d to 90d), as for metrics. The previous window, which deltas compare against, has the same length and ends where this one starts.
 	Window *string `form:"window,omitempty" json:"window,omitempty"`
+}
+
+// SearchOrgParams defines parameters for SearchOrg.
+type SearchOrgParams struct {
+	// Q What to find, 1 to 200 characters once trimmed; anything else is a 400 problem
+	Q string `form:"q" json:"q"`
+
+	// Limit How many results each group holds at most
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // StreamEventsParams defines parameters for StreamEvents.
@@ -5217,6 +5307,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory} (the `GetFactory` operationId).
 	GetFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListFactoryActivity The factory's latest milestone events, newest first
+	//
+	// The latest events of the factory's items, newest first (by at, then id), each with its item's ref, number and title. Only these kinds are listed: created, moved, gate_approved, gate_rejected, approved, rejected, blocked, check_failed, merged, done, assembled and cancelled; a run's per-turn events (tool_call, tool_result, agent_message, usage and the others) never are. data is the stored event data, as listItemEvents returns it. There is no paging past the limit. 400 for a limit outside 1 to 50, 404 for an unknown factory.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/activity (the `ListFactoryActivity` operationId).
+	ListFactoryActivity(ctx context.Context, org OrgRef, factory FactoryRef, params *ListFactoryActivityParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetAgentStats One agent's work over a range of UTC days
 	//
@@ -5985,6 +6082,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/runs/{run} (the `GetRun` operationId).
 	GetRun(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SearchOrg Find the organization's items, agents, factories and connections, for the shell's search box
+	//
+	// One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Connections are searched only for a caller who holds connection:read; for anyone else the group is empty.
+	//
+	// Corresponds with GET /v1/orgs/{org}/search (the `SearchOrg` operationId).
+	SearchOrg(ctx context.Context, org OrgRef, params *SearchOrgParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetOrgSettings The organization's settings, slot caps included
 	//
@@ -6780,6 +6884,23 @@ func (c *Client) DeleteFactory(ctx context.Context, org OrgRef, factory FactoryR
 // Corresponds with GET /v1/orgs/{org}/factories/{factory} (the `GetFactory` operationId).
 func (c *Client) GetFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetFactoryRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListFactoryActivity The factory's latest milestone events, newest first
+//
+// The latest events of the factory's items, newest first (by at, then id), each with its item's ref, number and title. Only these kinds are listed: created, moved, gate_approved, gate_rejected, approved, rejected, blocked, check_failed, merged, done, assembled and cancelled; a run's per-turn events (tool_call, tool_result, agent_message, usage and the others) never are. data is the stored event data, as listItemEvents returns it. There is no paging past the limit. 400 for a limit outside 1 to 50, 404 for an unknown factory.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/activity (the `ListFactoryActivity` operationId).
+func (c *Client) ListFactoryActivity(ctx context.Context, org OrgRef, factory FactoryRef, params *ListFactoryActivityParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListFactoryActivityRequest(c.Server, org, factory, params)
 	if err != nil {
 		return nil, err
 	}
@@ -8558,6 +8679,23 @@ func (c *Client) GetRun(ctx context.Context, org OrgRef, run string, reqEditors 
 	return c.Client.Do(req)
 }
 
+// SearchOrg Find the organization's items, agents, factories and connections, for the shell's search box
+//
+// One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Connections are searched only for a caller who holds connection:read; for anyone else the group is empty.
+//
+// Corresponds with GET /v1/orgs/{org}/search (the `SearchOrg` operationId).
+func (c *Client) SearchOrg(ctx context.Context, org OrgRef, params *SearchOrgParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSearchOrgRequest(c.Server, org, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetOrgSettings The organization's settings, slot caps included
 //
 // Corresponds with GET /v1/orgs/{org}/settings (the `GetOrgSettings` operationId).
@@ -10258,6 +10396,74 @@ func NewGetFactoryRequest(server string, org OrgRef, factory FactoryRef) (*http.
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListFactoryActivityRequest constructs an http.Request for the ListFactoryActivity method
+func NewListFactoryActivityRequest(server string, org OrgRef, factory FactoryRef, params *ListFactoryActivityParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/activity", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
@@ -14624,6 +14830,75 @@ func NewGetRunRequest(server string, org OrgRef, run string) (*http.Request, err
 	return req, nil
 }
 
+// NewSearchOrgRequest constructs an http.Request for the SearchOrg method
+func NewSearchOrgRequest(server string, org OrgRef, params *SearchOrgParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/search", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "q", params.Q, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetOrgSettingsRequest constructs an http.Request for the GetOrgSettings method
 func NewGetOrgSettingsRequest(server string, org OrgRef) (*http.Request, error) {
 	var err error
@@ -15487,6 +15762,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory} (the `GetFactory` operationId).
 	GetFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*GetFactoryResponse, error)
+
+	// ListFactoryActivityWithResponse The factory's latest milestone events, newest first
+	//
+	// The latest events of the factory's items, newest first (by at, then id), each with its item's ref, number and title. Only these kinds are listed: created, moved, gate_approved, gate_rejected, approved, rejected, blocked, check_failed, merged, done, assembled and cancelled; a run's per-turn events (tool_call, tool_result, agent_message, usage and the others) never are. data is the stored event data, as listItemEvents returns it. There is no paging past the limit. 400 for a limit outside 1 to 50, 404 for an unknown factory.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/activity (the `ListFactoryActivity` operationId).
+	ListFactoryActivityWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *ListFactoryActivityParams, reqEditors ...RequestEditorFn) (*ListFactoryActivityResponse, error)
 
 	// GetAgentStatsWithResponse One agent's work over a range of UTC days
 	//
@@ -16359,6 +16643,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/runs/{run} (the `GetRun` operationId).
 	GetRunWithResponse(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*GetRunResponse, error)
+
+	// SearchOrgWithResponse Find the organization's items, agents, factories and connections, for the shell's search box
+	//
+	// One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Connections are searched only for a caller who holds connection:read; for anyone else the group is empty.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/search (the `SearchOrg` operationId).
+	SearchOrgWithResponse(ctx context.Context, org OrgRef, params *SearchOrgParams, reqEditors ...RequestEditorFn) (*SearchOrgResponse, error)
 
 	// GetOrgSettingsWithResponse The organization's settings, slot caps included
 	//
@@ -17976,6 +18269,54 @@ func (r GetFactoryResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetFactoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListFactoryActivityResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Activity
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListFactoryActivityResponse) GetJSON200() *Activity {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListFactoryActivityResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListFactoryActivityResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListFactoryActivityResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListFactoryActivityResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListFactoryActivityResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -21729,6 +22070,54 @@ func (r GetRunResponse) ContentType() string {
 	return ""
 }
 
+type SearchOrgResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *OrgSearch
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SearchOrgResponse) GetJSON200() *OrgSearch {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SearchOrgResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SearchOrgResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SearchOrgResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SearchOrgResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SearchOrgResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetOrgSettingsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -22783,6 +23172,21 @@ func (c *ClientWithResponses) GetFactoryWithResponse(ctx context.Context, org Or
 		return nil, err
 	}
 	return ParseGetFactoryResponse(rsp)
+}
+
+// ListFactoryActivityWithResponse The factory's latest milestone events, newest first
+//
+// The latest events of the factory's items, newest first (by at, then id), each with its item's ref, number and title. Only these kinds are listed: created, moved, gate_approved, gate_rejected, approved, rejected, blocked, check_failed, merged, done, assembled and cancelled; a run's per-turn events (tool_call, tool_result, agent_message, usage and the others) never are. data is the stored event data, as listItemEvents returns it. There is no paging past the limit. 400 for a limit outside 1 to 50, 404 for an unknown factory.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/activity (the `ListFactoryActivity` operationId).
+func (c *ClientWithResponses) ListFactoryActivityWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *ListFactoryActivityParams, reqEditors ...RequestEditorFn) (*ListFactoryActivityResponse, error) {
+	rsp, err := c.ListFactoryActivity(ctx, org, factory, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListFactoryActivityResponse(rsp)
 }
 
 // GetAgentStatsWithResponse One agent's work over a range of UTC days
@@ -24257,6 +24661,21 @@ func (c *ClientWithResponses) GetRunWithResponse(ctx context.Context, org OrgRef
 	return ParseGetRunResponse(rsp)
 }
 
+// SearchOrgWithResponse Find the organization's items, agents, factories and connections, for the shell's search box
+//
+// One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Connections are searched only for a caller who holds connection:read; for anyone else the group is empty.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/search (the `SearchOrg` operationId).
+func (c *ClientWithResponses) SearchOrgWithResponse(ctx context.Context, org OrgRef, params *SearchOrgParams, reqEditors ...RequestEditorFn) (*SearchOrgResponse, error) {
+	rsp, err := c.SearchOrg(ctx, org, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSearchOrgResponse(rsp)
+}
+
 // GetOrgSettingsWithResponse The organization's settings, slot caps included
 //
 // Returns a wrapper object for the known response body format(s).
@@ -25483,6 +25902,39 @@ func ParseGetFactoryResponse(rsp *http.Response) (*GetFactoryResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Factory
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListFactoryActivityResponse parses an HTTP response from a ListFactoryActivityWithResponse call
+func ParseListFactoryActivityResponse(rsp *http.Response) (*ListFactoryActivityResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListFactoryActivityResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Activity
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -28164,6 +28616,39 @@ func ParseGetRunResponse(rsp *http.Response) (*GetRunResponse, error) {
 	return response, nil
 }
 
+// ParseSearchOrgResponse parses an HTTP response from a SearchOrgWithResponse call
+func ParseSearchOrgResponse(rsp *http.Response) (*SearchOrgResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SearchOrgResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OrgSearch
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetOrgSettingsResponse parses an HTTP response from a GetOrgSettingsWithResponse call
 func ParseGetOrgSettingsResponse(rsp *http.Response) (*GetOrgSettingsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -28581,6 +29066,9 @@ type ServerInterface interface {
 	// GetFactory One factory, published or not
 	// (GET /v1/orgs/{org}/factories/{factory})
 	GetFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// ListFactoryActivity The factory's latest milestone events, newest first
+	// (GET /v1/orgs/{org}/factories/{factory}/activity)
+	ListFactoryActivity(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params ListFactoryActivityParams)
 	// GetAgentStats One agent's work over a range of UTC days
 	// (GET /v1/orgs/{org}/factories/{factory}/agents/{agent}/stats)
 	GetAgentStats(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, agent string, params GetAgentStatsParams)
@@ -28812,6 +29300,9 @@ type ServerInterface interface {
 	// GetRun One agent run (404 for a run of another organization)
 	// (GET /v1/orgs/{org}/runs/{run})
 	GetRun(w http.ResponseWriter, r *http.Request, org OrgRef, run string)
+	// SearchOrg Find the organization's items, agents, factories and connections, for the shell's search box
+	// (GET /v1/orgs/{org}/search)
+	SearchOrg(w http.ResponseWriter, r *http.Request, org OrgRef, params SearchOrgParams)
 	// GetOrgSettings The organization's settings, slot caps included
 	// (GET /v1/orgs/{org}/settings)
 	GetOrgSettings(w http.ResponseWriter, r *http.Request, org OrgRef)
@@ -29917,6 +30408,57 @@ func (siw *ServerInterfaceWrapper) GetFactory(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetFactory(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListFactoryActivity operation middleware
+func (siw *ServerInterfaceWrapper) ListFactoryActivity(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListFactoryActivityParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListFactoryActivity(w, r, org, factory, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -33409,6 +33951,61 @@ func (siw *ServerInterfaceWrapper) GetRun(w http.ResponseWriter, r *http.Request
 	handler.ServeHTTP(w, r)
 }
 
+// SearchOrg operation middleware
+func (siw *ServerInterfaceWrapper) SearchOrg(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SearchOrgParams
+
+	// ------------- Required query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SearchOrg(w, r, org, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetOrgSettings operation middleware
 func (siw *ServerInterfaceWrapper) GetOrgSettings(w http.ResponseWriter, r *http.Request) {
 
@@ -33868,6 +34465,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/member-tokens", wrapper.ListMemberTokens)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/member-tokens/{token}", wrapper.RevokeMemberToken)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/attention", wrapper.GetOrgAttention)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/search", wrapper.SearchOrg)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/overview", wrapper.GetFactoryOverview)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/metrics/touches", wrapper.GetOrgTouchMetrics)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/inbox", wrapper.GetInbox)
@@ -33906,6 +34504,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/items", wrapper.ListItems)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/items", wrapper.SubmitItem)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/board", wrapper.GetBoard)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/activity", wrapper.ListFactoryActivity)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics", wrapper.GetMetrics)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/weekly", wrapper.GetWeeklyThroughput)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/constraint", wrapper.GetConstraintReport)
@@ -35189,6 +35788,47 @@ type GetFactorydefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetFactorydefaultApplicationProblemPlusJSONResponse) VisitGetFactoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListFactoryActivityRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Params  ListFactoryActivityParams
+}
+
+type ListFactoryActivityResponseObject interface {
+	VisitListFactoryActivityResponse(w http.ResponseWriter) error
+}
+
+type ListFactoryActivity200JSONResponse Activity
+
+func (response ListFactoryActivity200JSONResponse) VisitListFactoryActivityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListFactoryActivitydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListFactoryActivitydefaultApplicationProblemPlusJSONResponse) VisitListFactoryActivityResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -38565,6 +39205,46 @@ func (response GetRundefaultApplicationProblemPlusJSONResponse) VisitGetRunRespo
 	return err
 }
 
+type SearchOrgRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params SearchOrgParams
+}
+
+type SearchOrgResponseObject interface {
+	VisitSearchOrgResponse(w http.ResponseWriter) error
+}
+
+type SearchOrg200JSONResponse OrgSearch
+
+func (response SearchOrg200JSONResponse) VisitSearchOrgResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchOrgdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response SearchOrgdefaultApplicationProblemPlusJSONResponse) VisitSearchOrgResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetOrgSettingsRequestObject struct {
 	Org OrgRef `json:"org"`
 }
@@ -39080,6 +39760,9 @@ type StrictServerInterface interface {
 	// GetFactory One factory, published or not
 	// (GET /v1/orgs/{org}/factories/{factory})
 	GetFactory(ctx context.Context, request GetFactoryRequestObject) (GetFactoryResponseObject, error)
+	// ListFactoryActivity The factory's latest milestone events, newest first
+	// (GET /v1/orgs/{org}/factories/{factory}/activity)
+	ListFactoryActivity(ctx context.Context, request ListFactoryActivityRequestObject) (ListFactoryActivityResponseObject, error)
 	// GetAgentStats One agent's work over a range of UTC days
 	// (GET /v1/orgs/{org}/factories/{factory}/agents/{agent}/stats)
 	GetAgentStats(ctx context.Context, request GetAgentStatsRequestObject) (GetAgentStatsResponseObject, error)
@@ -39311,6 +39994,9 @@ type StrictServerInterface interface {
 	// GetRun One agent run (404 for a run of another organization)
 	// (GET /v1/orgs/{org}/runs/{run})
 	GetRun(ctx context.Context, request GetRunRequestObject) (GetRunResponseObject, error)
+	// SearchOrg Find the organization's items, agents, factories and connections, for the shell's search box
+	// (GET /v1/orgs/{org}/search)
+	SearchOrg(ctx context.Context, request SearchOrgRequestObject) (SearchOrgResponseObject, error)
 	// GetOrgSettings The organization's settings, slot caps included
 	// (GET /v1/orgs/{org}/settings)
 	GetOrgSettings(ctx context.Context, request GetOrgSettingsRequestObject) (GetOrgSettingsResponseObject, error)
@@ -40273,6 +40959,34 @@ func (sh *strictHandler) GetFactory(w http.ResponseWriter, r *http.Request, org 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetFactoryResponseObject); ok {
 		if err := validResponse.VisitGetFactoryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListFactoryActivity operation middleware
+func (sh *strictHandler) ListFactoryActivity(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params ListFactoryActivityParams) {
+	var request ListFactoryActivityRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListFactoryActivity(ctx, request.(ListFactoryActivityRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListFactoryActivity")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListFactoryActivityResponseObject); ok {
+		if err := validResponse.VisitListFactoryActivityResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -42567,6 +43281,33 @@ func (sh *strictHandler) GetRun(w http.ResponseWriter, r *http.Request, org OrgR
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetRunResponseObject); ok {
 		if err := validResponse.VisitGetRunResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SearchOrg operation middleware
+func (sh *strictHandler) SearchOrg(w http.ResponseWriter, r *http.Request, org OrgRef, params SearchOrgParams) {
+	var request SearchOrgRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SearchOrg(ctx, request.(SearchOrgRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SearchOrg")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SearchOrgResponseObject); ok {
+		if err := validResponse.VisitSearchOrgResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

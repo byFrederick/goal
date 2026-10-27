@@ -75,7 +75,7 @@ type Engine interface {
 	ClearAndon(ctx context.Context, f domain.FactoryID, by domain.Actor, note string) (domain.AndonPull, error)
 }
 
-// Items reads items, their history and runs, the leases on them, a factory's flow and its
+// Items reads items, their history and runs, a factory's latest milestone events, the leases on them, a factory's flow and its
 // stations' times, an item's spans and run in progress, what the runs in progress have done so far, the
 // human touches, and what the organization's factories need from people, and sets a touch's
 // reason; a store that implements ports.Store and ports.FlowStats satisfies it.
@@ -83,9 +83,11 @@ type Items interface {
 	Item(ctx context.Context, id domain.ItemID) (domain.Item, error)
 	ItemByNumber(ctx context.Context, factory domain.FactoryID, number int64) (domain.Item, error)
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
+	FactoryActivity(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ActivityEvent, error)
 	Runs(ctx context.Context, item domain.ItemID, limit int) ([]domain.Run, error)
 	Run(ctx context.Context, id domain.RunID) (domain.Run, error)
 	ListItems(ctx context.Context, q ports.ItemQuery) ([]domain.Item, error)
+	SearchItems(ctx context.Context, q ports.ItemSearch) ([]domain.Item, error)
 	Assemblies(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID]domain.Assembly, error)
 	Leases(ctx context.Context, factory domain.FactoryID, station string) ([]domain.Lease, error)
 	StationLoads(ctx context.Context, factory domain.FactoryID) ([]domain.StationLoad, error)

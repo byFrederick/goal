@@ -1,7 +1,7 @@
 // The Definition editor's frame and Basics (D6) against the mock: goal has a draft of v9 at
 // revision 42 based on v8 (3 changes in 2 sections, 1 warning).
 import { expect, type Page, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll, isPhone, orgNav } from './support';
+import { expectAccessible, expectNoHorizontalScroll, isPhone, openNavigation, orgNav } from './support';
 
 const basics = '/o/acme/f/goal/definition/basics';
 const draft = '/v1/orgs/acme/factories/goal/draft';
@@ -18,7 +18,7 @@ const tile = (page: Page, name: RegExp) =>
 /** Floor, from the sidebar or, on a phone, the tab bar. */
 const floorLink = (page: Page) =>
   page
-    .getByRole('navigation', { name: isPhone(page) ? 'Factory' : 'Organization and factories' })
+    .getByRole('navigation', { name: isPhone(page) ? 'Tabs' : 'Organization and factories' })
     .getByRole('link', { name: 'Floor' });
 
 async function openBasics(page: Page) {
@@ -53,10 +53,12 @@ test('the definition frame is accessible and fits the screen', async ({ page }) 
   await expectNoHorizontalScroll(page);
 });
 
-test('Definition opens the Line from the sidebar or the Build tab', async ({ page }) => {
+test('Definition opens the Line from the sidebar or the drawer', async ({ page }) => {
   await page.goto('/o/acme/f/goal');
   if (isPhone(page)) {
-    await page.getByRole('navigation', { name: 'Factory' }).getByRole('link', { name: 'Build' }).click();
+    // The drawer's factory group lists Definition under the open factory.
+    await openNavigation(page);
+    await orgNav(page).getByRole('link', { name: 'Definition' }).click();
   } else {
     const entry = orgNav(page).getByRole('link', { name: 'Definition' });
     await expect(entry).toContainText('v8 + draft');

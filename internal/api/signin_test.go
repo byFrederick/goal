@@ -285,7 +285,7 @@ func TestAPI_SignIn_RemovalHoldsAtOnce(t *testing.T) {
 	}
 }
 
-// A new organization is its creator's (NewOrg.Owner), a platform admin's or a member's (ADR 0027,
+// A new organization is its creator's (NewOrg.Owner), a platform admin's or a member's (ADR 0032,
 // decision 1).
 func TestAPI_SignIn_CreateOrgOwnedByTheCaller(t *testing.T) {
 	t.Parallel()
@@ -304,7 +304,7 @@ func TestAPI_SignIn_CreateOrgOwnedByTheCaller(t *testing.T) {
 	}
 }
 
-// ADR 0027, decision 1: any person signed in with a session creates an organization and owns it,
+// ADR 0032, decision 1: any person signed in with a session creates an organization and owns it,
 // without being a platform admin.
 func TestAPI_SignIn_AnyPersonCreatesAnOrg(t *testing.T) {
 	t.Parallel()

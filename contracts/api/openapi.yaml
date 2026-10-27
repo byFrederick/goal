@@ -684,6 +684,37 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/OrgAttention" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/search:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: searchOrg
+      x-goal-scope: org:read
+      tags: [shell]
+      summary: Find the organization's items, agents, factories and connections, for the shell's search box
+      description: >-
+        One read per keystroke. Each group holds up to limit results, best first: an exact match,
+        then a prefix, then the rest. Items match by title (a case-insensitive substring, taken
+        literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which
+        ranks first. Only the factories the caller sees are searched. Connections are searched
+        only for a caller who holds connection:read; for anyone else the group is empty.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: What to find, 1 to 200 characters once trimmed; anything else is a 400 problem
+          schema: { type: string, minLength: 1, maxLength: 200 }
+        - name: limit
+          in: query
+          description: How many results each group holds at most
+          schema: { type: integer, minimum: 1, maximum: 20, default: 5 }
+      responses:
+        "200":
+          description: The results, by group
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrgSearch" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/overview:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -1542,6 +1573,33 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Board" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/activity:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: listFactoryActivity
+      x-goal-scope: factory:read
+      tags: [work]
+      summary: The factory's latest milestone events, newest first
+      description: >-
+        The latest events of the factory's items, newest first (by at, then id), each with its
+        item's ref, number and title. Only these kinds are listed: created, moved, gate_approved,
+        gate_rejected, approved, rejected, blocked, check_failed, merged, done, assembled and
+        cancelled; a run's per-turn events (tool_call, tool_result, agent_message, usage and the
+        others) never are. data is the stored event data, as listItemEvents returns it. There is
+        no paging past the limit. 400 for a limit outside 1 to 50, 404 for an unknown factory.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        "200":
+          description: The factory's latest milestone events
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Activity" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/metrics:
     parameters:
@@ -4662,6 +4720,32 @@ components:
         station: { type: string }
         state: { $ref: "#/components/schemas/ItemState" }
         at: { type: string, format: date-time }
+    Activity:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          description: Newest first
+          items: { $ref: "#/components/schemas/ActivityEvent" }
+    ActivityEvent:
+      type: object
+      description: An Event with its item's ref, number and title
+      required: [id, item_id, at, kind, actor, data, ref, number, title]
+      properties:
+        id: { type: integer, format: int64 }
+        item_id: { type: string }
+        run_id: { type: string }
+        at: { type: string, format: date-time }
+        kind: { type: string }
+        station: { type: string }
+        actor: { type: string }
+        data:
+          type: object
+          additionalProperties: {}
+        ref: { type: string, description: "<factory name>#<number>, as in goal#2" }
+        number: { type: integer, format: int64 }
+        title: { type: string }
     EventPage:
       type: object
       required: [events, next_after]
@@ -4868,6 +4952,60 @@ components:
           allOf:
             - $ref: "#/components/schemas/AndonPull"
         connections_blocked: { type: integer, description: Connections that stop work; always 0 until connections exist }
+    OrgSearch:
+      type: object
+      description: What a search found in the organization, by group, each best first
+      required: [items, agents, factories, connections]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/SearchItem" }
+        agents:
+          type: array
+          items: { $ref: "#/components/schemas/AgentHit" }
+        factories:
+          type: array
+          items: { $ref: "#/components/schemas/FactoryHit" }
+        connections:
+          type: array
+          description: Empty unless the caller holds connection:read
+          items: { $ref: "#/components/schemas/ConnectionHit" }
+    SearchItem:
+      type: object
+      required: [id, number, factory_id, factory_name, title, state, station]
+      properties:
+        id: { type: string }
+        number: { type: integer, format: int64 }
+        factory_id: { type: string, description: The factory's metadata.id }
+        factory_name: { type: string }
+        title: { type: string }
+        state: { $ref: "#/components/schemas/ItemState" }
+        station: { type: string, description: The id of the station the item is at }
+    AgentHit:
+      type: object
+      description: An agent of a factory's current definition; never one of its copies
+      required: [name, stations, factory_id, factory_name]
+      properties:
+        name: { type: string }
+        stations:
+          type: array
+          description: The ids of the stations the agent works at, in line order
+          items: { type: string }
+        factory_id: { type: string, description: The factory's metadata.id }
+        factory_name: { type: string }
+    FactoryHit:
+      type: object
+      required: [id, name, title]
+      properties:
+        id: { type: string, description: The factory's metadata.id }
+        name: { type: string }
+        title: { type: string, description: The factory's title, or its name when it has none }
+    ConnectionHit:
+      type: object
+      required: [name, kind]
+      properties:
+        name: { type: string }
+        kind: { type: string }
     FactoryOverviewList:
       type: object
       required: [window, since, until, waiting_on_you, spend_usd, budget_usd, factories]

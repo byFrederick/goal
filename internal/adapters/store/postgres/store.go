@@ -744,3 +744,32 @@ func (s *Store) ItemEvents(ctx context.Context, id domain.ItemID, after int64, l
 
 	return convertAll(rows, eventFrom)
 }
+
+// FactoryActivity implements ports.Store.
+func (s *Store) FactoryActivity(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ActivityEvent, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	kinds := make([]string, 0, len(domain.ActivityKinds))
+	for _, k := range domain.ActivityKinds {
+		kinds = append(kinds, string(k))
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.FactoryActivityRow, error) {
+		return q.FactoryActivity(ctx, db.FactoryActivityParams{FactoryID: fid, Kinds: kinds, MaxEvents: int64(limit)})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("activity of factory %s: %w", factory, err)
+	}
+
+	return convertAll(rows, func(r db.FactoryActivityRow) (domain.ActivityEvent, error) {
+		e, err := eventFrom(r.ItemEvent)
+		if err != nil {
+			return domain.ActivityEvent{}, err
+		}
+
+		return domain.ActivityEvent{Event: e, Number: r.Number, Title: r.Title}, nil
+	})
+}

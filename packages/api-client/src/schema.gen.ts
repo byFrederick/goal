@@ -515,6 +515,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Find the organization's items, agents, factories and connections, for the shell's search box
+         * @description One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Connections are searched only for a caller who holds connection:read; for anyone else the group is empty.
+         */
+        get: operations["searchOrg"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/overview": {
         parameters: {
             query?: never;
@@ -1285,6 +1308,31 @@ export interface paths {
          * @description Every open item (up to 500, newest first) at its station, and the 20 newest done items at the done station. waiting and in_progress count every item, beyond the cards shown. The constraint is the agent station with the most work per slot right now, (waiting + in_progress) / min(agents, wip), or null when no agent station has any work; later phases replace this heuristic with constraint detection over time. Each station carries its statistics: the busy share and send-back share over the window, the queue's trend over the last 24 hours, how long the oldest waiting item has waited and, at the done station, the items done today (UTC).
          */
         get: operations["getBoard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The factory's latest milestone events, newest first
+         * @description The latest events of the factory's items, newest first (by at, then id), each with its item's ref, number and title. Only these kinds are listed: created, moved, gate_approved, gate_rejected, approved, rejected, blocked, check_failed, merged, done, assembled and cancelled; a run's per-turn events (tool_call, tool_result, agent_message, usage and the others) never are. data is the stored event data, as listItemEvents returns it. There is no paging past the limit. 400 for a limit outside 1 to 50, 404 for an unknown factory.
+         */
+        get: operations["listFactoryActivity"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3755,6 +3803,30 @@ export interface components {
             /** Format: date-time */
             at: string;
         };
+        Activity: {
+            /** @description Newest first */
+            events: components["schemas"]["ActivityEvent"][];
+        };
+        /** @description An Event with its item's ref, number and title */
+        ActivityEvent: {
+            /** Format: int64 */
+            id: number;
+            item_id: string;
+            run_id?: string;
+            /** Format: date-time */
+            at: string;
+            kind: string;
+            station?: string;
+            actor: string;
+            data: {
+                [key: string]: unknown;
+            };
+            /** @description <factory name>#<number>, as in goal#2 */
+            ref: string;
+            /** Format: int64 */
+            number: number;
+            title: string;
+        };
         EventPage: {
             events: components["schemas"]["Event"][];
             /**
@@ -3923,6 +3995,46 @@ export interface components {
             andon: components["schemas"]["AndonPull"] | null;
             /** @description Connections that stop work; always 0 until connections exist */
             connections_blocked: number;
+        };
+        /** @description What a search found in the organization, by group, each best first */
+        OrgSearch: {
+            items: components["schemas"]["SearchItem"][];
+            agents: components["schemas"]["AgentHit"][];
+            factories: components["schemas"]["FactoryHit"][];
+            /** @description Empty unless the caller holds connection:read */
+            connections: components["schemas"]["ConnectionHit"][];
+        };
+        SearchItem: {
+            id: string;
+            /** Format: int64 */
+            number: number;
+            /** @description The factory's metadata.id */
+            factory_id: string;
+            factory_name: string;
+            title: string;
+            state: components["schemas"]["ItemState"];
+            /** @description The id of the station the item is at */
+            station: string;
+        };
+        /** @description An agent of a factory's current definition; never one of its copies */
+        AgentHit: {
+            name: string;
+            /** @description The ids of the stations the agent works at, in line order */
+            stations: string[];
+            /** @description The factory's metadata.id */
+            factory_id: string;
+            factory_name: string;
+        };
+        FactoryHit: {
+            /** @description The factory's metadata.id */
+            id: string;
+            name: string;
+            /** @description The factory's title */
+            title: string;
+        };
+        ConnectionHit: {
+            name: string;
+            kind: string;
         };
         FactoryOverviewList: {
             /** @description The window asked for, as in 7d */
@@ -5741,6 +5853,35 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    searchOrg: {
+        parameters: {
+            query: {
+                /** @description What to find, 1 to 200 characters once trimmed; anything else is a 400 problem */
+                q: string;
+                /** @description How many results each group holds at most */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The results, by group */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgSearch"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     getFactoryOverview: {
         parameters: {
             query?: {
@@ -6842,6 +6983,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Board"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listFactoryActivity: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The factory's latest milestone events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Activity"];
                 };
             };
             default: components["responses"]["Problem"];

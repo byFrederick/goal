@@ -33,13 +33,13 @@ DELETE FROM connection_kinds WHERE org_id = goal_org() AND name = sqlc.arg(name)
 SELECT goal_sync_platform_kinds(sqlc.arg(kinds)::jsonb);
 
 -- name: Connections :many
-SELECT c.id, c.name, k.name AS kind, c.description, c.fields, c.secret_fields, c.created_by, c.created_at, c.updated_by,
+SELECT c.id, c.name, k.name AS kind, c.description, c.fields, c.secret_fields, c.secret_refs, c.created_by, c.created_at, c.updated_by,
        c.updated_at, c.last_used_at, c.last_test_at, c.last_test_ok, c.last_test_error
 FROM connections c JOIN connection_kinds k ON k.id = c.kind_id
 ORDER BY c.name;
 
 -- name: Connection :one
-SELECT c.id, c.name, k.name AS kind, c.description, c.fields, c.secret_fields, c.created_by, c.created_at, c.updated_by,
+SELECT c.id, c.name, k.name AS kind, c.description, c.fields, c.secret_fields, c.secret_refs, c.created_by, c.created_at, c.updated_by,
        c.updated_at, c.last_used_at, c.last_test_at, c.last_test_ok, c.last_test_error
 FROM connections c JOIN connection_kinds k ON k.id = c.kind_id
 WHERE c.name = sqlc.arg(name);
@@ -48,7 +48,7 @@ WHERE c.name = sqlc.arg(name);
 -- The named connections with their kinds and sealed values, locked: an update, or a run's use.
 -- Locked in id order, as goal db rekey locks them (StaleSealedConnections), so the two never deadlock.
 SELECT c.id, c.name, k.name AS kind, k.org_id AS kind_org_id, k.spec AS kind_spec, c.description, c.fields, c.secret_fields,
-       c.key_id, c.nonce, c.ciphertext, c.created_by, c.created_at, c.updated_by, c.updated_at, c.last_used_at,
+       c.secret_refs, c.key_id, c.nonce, c.ciphertext, c.created_by, c.created_at, c.updated_by, c.updated_at, c.last_used_at,
        c.last_test_at, c.last_test_ok, c.last_test_error
 FROM connections c JOIN connection_kinds k ON k.id = c.kind_id
 WHERE c.name = ANY (sqlc.arg(names)::text[])
@@ -57,18 +57,25 @@ FOR NO KEY UPDATE OF c;
 
 -- name: InsertConnection :one
 -- org_id comes from its default, goal_org().
-INSERT INTO connections (id, name, kind_id, description, fields, secret_fields, key_id, nonce, ciphertext, created_by, updated_by)
+INSERT INTO connections (id, name, kind_id, description, fields, secret_fields, secret_refs, key_id, nonce, ciphertext, created_by,
+                         updated_by)
 VALUES (sqlc.arg(id), sqlc.arg(name), sqlc.arg(kind_id), sqlc.arg(description), sqlc.arg(fields), sqlc.arg(secret_fields)::text[],
-        sqlc.narg(key_id), sqlc.narg(nonce), sqlc.narg(ciphertext), sqlc.arg(created_by), sqlc.arg(created_by))
+        sqlc.arg(secret_refs), sqlc.narg(key_id), sqlc.narg(nonce), sqlc.narg(ciphertext), sqlc.arg(created_by), sqlc.arg(created_by))
 RETURNING created_at;
 
 -- name: UpdateConnection :one
 UPDATE connections
 SET name = sqlc.arg(name), description = sqlc.arg(description), fields = sqlc.arg(fields), secret_fields = sqlc.arg(secret_fields)::text[],
-    key_id = sqlc.narg(key_id), nonce = sqlc.narg(nonce), ciphertext = sqlc.narg(ciphertext),
+    secret_refs = sqlc.arg(secret_refs), key_id = sqlc.narg(key_id), nonce = sqlc.narg(nonce), ciphertext = sqlc.narg(ciphertext),
     updated_by = sqlc.arg(updated_by), updated_at = now()
 WHERE id = sqlc.arg(id)
 RETURNING updated_at;
+
+-- name: ShareReferencedCredentials :exec
+-- Locks the credentials a connection's write refers to (ADR 0017 decision 8) against their
+-- deletion until it commits: a credential's delete locks it FOR UPDATE and then counts its users.
+-- A name that is no credential locks nothing; a reference may name one that does not exist yet.
+SELECT id FROM credentials WHERE name = ANY (sqlc.arg(names)::text[]) ORDER BY id FOR KEY SHARE;
 
 -- name: DeleteConnection :one
 WITH gone AS (DELETE FROM connections c WHERE c.name = sqlc.arg(connection)::text RETURNING c.id, c.kind_id)

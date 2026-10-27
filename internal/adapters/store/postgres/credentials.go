@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -22,8 +23,10 @@ var _ ports.Credentials = (*Credentials)(nil)
 // audit entry in its transaction. Each value is sealed with key under domain.CredentialAAD
 // (organization, credential id and key id) and opened only by Resolve; a rename keeps the sealed
 // value, which is bound to the id. Without a master key (the zero masterkey.Keys) metadata works
-// and Create, a Replace and Resolve fail with ports.ErrNoMasterKey. No connection refers to a
-// credential yet, so ImportPreview counts none and Delete never conflicts.
+// and Create, a Replace and Resolve fail with ports.ErrNoMasterKey. Connections refer to a
+// credential as {{name}} in 00066's secret_refs: UsedBy and ImportPreview count them, and Delete
+// locks the credential and refuses while one does, as a connection's write locks the credentials it
+// refers to (ShareReferencedCredentials), so neither can slip past the other.
 type Credentials struct {
 	s   *Store
 	key ports.MasterKey
@@ -222,11 +225,25 @@ func patchAudits(ctx context.Context, q *db.Queries, by domain.Actor, id uuid.UU
 // Delete implements ports.Credentials.
 func (c *Credentials) Delete(ctx context.Context, name string, by domain.Actor) error {
 	err := c.s.inTx(ctx, func(q *db.Queries) error {
-		id, err := q.DeleteCredential(ctx, name)
+		_, err := q.LockCredential(ctx, name)
 		if notFound(err) {
 			return fmt.Errorf("credential %q: %w", name, ports.ErrNotFound)
 		}
 
+		if err != nil {
+			return err
+		}
+
+		users, err := q.CredentialUsers(ctx, name)
+		if err != nil {
+			return err
+		}
+
+		if len(users) > 0 {
+			return fmt.Errorf("credential %q is used by connections %s: %w", name, strings.Join(users, ", "), ports.ErrConflict)
+		}
+
+		id, err := q.DeleteCredential(ctx, name)
 		if err != nil {
 			return err
 		}
@@ -238,6 +255,16 @@ func (c *Credentials) Delete(ctx context.Context, name string, by domain.Actor) 
 	}
 
 	return nil
+}
+
+// UsedBy implements ports.Credentials.
+func (c *Credentials) UsedBy(ctx context.Context, name string) ([]string, error) {
+	users, err := fetch(ctx, c.s.read, func(q *db.Queries) ([]string, error) { return q.CredentialUsers(ctx, name) })
+	if err != nil {
+		return nil, fmt.Errorf("credential %s: its connections: %w", name, err)
+	}
+
+	return append([]string{}, users...), nil
 }
 
 // Resolve implements ports.Credentials.
@@ -346,14 +373,34 @@ func (c *Credentials) ImportPreview(ctx context.Context, names []string) ([]doma
 		return nil, fmt.Errorf("import preview: %w", err)
 	}
 
-	existing, err := fetch(ctx, c.s.read, func(q *db.Queries) ([]string, error) { return q.CredentialNames(ctx, names) })
+	var (
+		existing []string
+		used     []db.CredentialUserCountsRow
+	)
+
+	err := c.s.read(ctx, func(q *db.Queries) error {
+		var err error
+
+		if existing, err = q.CredentialNames(ctx, names); err != nil {
+			return err
+		}
+
+		used, err = q.CredentialUserCounts(ctx, names)
+
+		return err
+	})
 	if err != nil {
 		return nil, fmt.Errorf("import preview: %w", err)
 	}
 
+	counts := make(map[string]int, len(used))
+	for _, u := range used {
+		counts[u.Name] = int(u.Connections)
+	}
+
 	out := make([]domain.CredentialImportPreview, 0, len(names))
 	for _, name := range names {
-		out = append(out, domain.CredentialImportPreview{Name: name, Exists: slices.Contains(existing, name)})
+		out = append(out, domain.CredentialImportPreview{Name: name, Exists: slices.Contains(existing, name), Connections: counts[name]})
 	}
 
 	return out, nil
