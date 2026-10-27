@@ -952,9 +952,9 @@ func isForeignKeyViolation(err error) bool {
 	return ok && pgErr.Code == foreignKeyViolation
 }
 
-// ConnectionKeyIDs are the master key ids some connection or credential of any organization is
-// sealed under (goal_connection_key_ids, as 00065 replaced it): goald refuses to start without
-// each of them.
+// ConnectionKeyIDs are the master key ids some connection, credential or webhook endpoint of any
+// organization is sealed under (goal_connection_key_ids, as 00071 replaced it): goald refuses to
+// start without each of them.
 func ConnectionKeyIDs(ctx context.Context, s *Store) ([]string, error) {
 	var ids []string
 
@@ -972,14 +972,15 @@ func ConnectionKeyIDs(ctx context.Context, s *Store) ([]string, error) {
 	return ids, nil
 }
 
-// rekeyBatch is how many connections or credentials one transaction of Rekey reseals.
+// rekeyBatch is how many connections, credentials or webhook secrets one transaction of Rekey
+// reseals.
 const rekeyBatch = 100
 
-// Rekey reseals every connection and credential of every organization that is sealed under
-// another master key than key's active one (`goal db rekey`, spec 4 §5.2, ADR 0017), rekeyBatch
-// per transaction, and returns how many it resealed. s's pool connects as goal_owner, which
-// row-level security does not bind: rekeying is the install's, not an organization's. Values
-// never leave this function; a row that does not open stops it with an error naming its id.
+// Rekey reseals every connection, credential and webhook signing secret of every organization
+// that is sealed under another master key than key's active one (`goal db rekey`, spec 4 §5.2,
+// ADR 0017, ADR 0026), rekeyBatch per transaction, and returns how many it resealed. s's pool
+// connects as goal_owner, which row-level security does not bind: rekeying is the install's, not
+// an organization's. Values never leave this function; a row that does not open stops it with an error naming its id.
 func Rekey(ctx context.Context, s *Store, key ports.MasterKey) (int, error) {
 	if key.Active() == "" {
 		return 0, ports.ErrNoMasterKey
@@ -987,7 +988,7 @@ func Rekey(ctx context.Context, s *Store, key ports.MasterKey) (int, error) {
 
 	total := 0
 
-	for _, batch := range []func(context.Context, *db.Queries, ports.MasterKey) (int, error){resealConnections, resealCredentials} {
+	for _, batch := range []func(context.Context, *db.Queries, ports.MasterKey) (int, error){resealConnections, resealCredentials, resealWebhookSecrets} {
 		for {
 			var n int
 

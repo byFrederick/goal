@@ -20,7 +20,7 @@ import (
 var orgTables = []string{
 	"factories", "work_items", "leases", "agent_runs", "item_events", "andon_pulls", "audit_log", "item_spans", "lease_spans",
 	"factory_roles", "connection_kinds", "connections", "item_touch_labels", "credentials", "judge_scores", "eval_runs", "eval_results", "org_policies",
-	"knowledge_uses", "knowledge_verdicts",
+	"webhook_endpoints", "webhook_deliveries", "trigger_firings", "knowledge_uses", "knowledge_verdicts",
 }
 
 // withPlatformRows are the org tables whose org_id may be NULL for the platform's rows, and why;
