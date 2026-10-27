@@ -1,0 +1,80 @@
+# Regenerates the two generated docs on main after a merge (ADR 0015, decision 6, amended
+# 2026-10-27): docs/engineering/change-map.md from docs/engineering/change-map/ and docs/adr/README.md
+# from docs/adr/NNNN-*.md (tools/gendocs, task docs:gen). Branches add or edit only the entry files and
+# never touch the two generated files, so parallel pull requests do not conflict on them; task
+# docs:check in a pull request only validates the sources.
+# When either file changed, the job commits only those two files to main as github-actions[bot] and
+# pushes. When main moved meanwhile, the push is rejected: the job fetches main, drops its commit,
+# regenerates on the new tip and tries again, at most 5 times. With nothing changed it exits 0.
+# A push made with GITHUB_TOKEN starts no other workflow, so ci.yml does not run on the bot's commit
+# (it changes only generated docs) and this workflow does not trigger itself.
+# Hardening (github-actions-hardening skill): actions pinned to commit SHAs, contents: write only
+# for this job, no checkout credentials persisted (the token is passed to git only in the push step),
+# no ${{ }} expressions inside run scripts.
+# Concurrency: one run at a time and none cancelled, so every merge's run completes in push order.
+name: docs-gen
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/engineering/change-map/**
+      - docs/adr/**
+      - tools/gendocs/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  regenerate:
+    name: task docs:gen
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: main
+      # Only Go, at .mise.toml's version: tools/gendocs needs nothing else.
+      - uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
+        with:
+          version: 2026.10.3
+          install_args: go
+      - uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
+        with:
+          version: 3.46.1
+          checksum: 8220f1b4563a5bed932348b7350aafba66e1100e90bd411e4bcda4fe80de08f1 # task_linux_amd64.tar.gz
+      - name: Regenerate the change map and ADR index, commit and push them to main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          files="docs/engineering/change-map.md docs/adr/README.md"
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for attempt in 1 2 3 4 5; do
+            task docs:gen
+            # shellcheck disable=SC2086 # $files is two fixed paths without spaces
+            if [ -z "$(git status --porcelain --untracked-files=all -- $files)" ]; then
+              echo "docs-gen: the change map and ADR index are up to date"
+              exit 0
+            fi
+            # shellcheck disable=SC2086
+            git add -- $files
+            git commit -q -m "docs: regenerate the change map and ADR index"
+            if git -c "http.https://github.com/.extraheader=$auth" push origin HEAD:main; then
+              exit 0
+            fi
+            echo "docs-gen: push $attempt rejected; main moved, regenerating on its new tip"
+            git -c "http.https://github.com/.extraheader=$auth" fetch -q origin main
+            git reset -q --hard origin/main
+          done
+          echo "docs-gen: main kept moving; gave up after 5 attempts" >&2
+          exit 1

@@ -51,7 +51,7 @@ Other docs cite these as "AGENTS.md rule N", so the numbers stay fixed.
 
 - One work item, one branch (`goal/<item>`), one small pull request; refactors and features go in separate ones ([goal-deliver](.claude/skills/goal-deliver/SKILL.md)).
 - Decisions that others must follow get an ADR in `docs/adr/` ([goal-adr](.claude/skills/goal-adr/SKILL.md)).
-- A new change-map row is a new entry file in `docs/engineering/change-map/`, and a new ADR is a new file in `docs/adr/`; then run `task docs:gen`. Never edit `docs/engineering/change-map.md` or `docs/adr/README.md`: `task docs:gen` writes them, and `task check` fails when they differ from their sources ([ADR 0015](docs/adr/0015-overlapping-in-flight-work.md), decision 6).
+- A new change-map row is a new entry file in `docs/engineering/change-map/`, and a new ADR is a new file in `docs/adr/`; a branch adds or edits only that entry file. Never edit or regenerate `docs/engineering/change-map.md` or `docs/adr/README.md` in a branch: after the merge, the docs-gen workflow (`.github/workflows/docs-gen.yml`) regenerates them on main, and `task docs:check` only validates the entry files ([ADR 0015](docs/adr/0015-overlapping-in-flight-work.md), decision 6).
 - Executable source and manifests (code, `Taskfile.yml`, workflows, `.golangci.yml`, schemas, lock files) win over prose. An agent that finds them disagreeing says so in its pull request.
 
 ## Done means verified
