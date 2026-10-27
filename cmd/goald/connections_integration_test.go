@@ -42,11 +42,11 @@ func TestGoald_RefusesUnknownMasterKeyID(t *testing.T) {
 	log := slog.New(slog.DiscardHandler)
 	env := keysEnv
 
-	if _, _, err := openConnections(t.Context(), store, env(""), log); err != nil {
+	if _, _, _, err := openConnections(t.Context(), store, env(""), log); err != nil {
 		t.Fatalf("without a key and nothing sealed: %v", err)
 	}
 
-	conns, _, err := openConnections(t.Context(), store, env(masterKeyEntry("k1", 1)), log)
+	conns, _, _, err := openConnections(t.Context(), store, env(masterKeyEntry("k1", 1)), log)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,13 +64,13 @@ func TestGoald_RefusesUnknownMasterKeyID(t *testing.T) {
 	}
 
 	for name, keys := range map[string]string{"another key": masterKeyEntry("k2", 2), "no key": ""} {
-		_, _, err := openConnections(t.Context(), store, env(keys), log)
+		_, _, _, err := openConnections(t.Context(), store, env(keys), log)
 		if err == nil || !strings.Contains(err.Error(), "master key k1") || strings.Contains(err.Error(), "ghp_x") {
 			t.Errorf("with %s: %v; want a refusal naming k1", name, err)
 		}
 	}
 
-	if _, _, err := openConnections(t.Context(), store, env(masterKeyEntry("k2", 2)+","+masterKeyEntry("k1", 1)), log); err != nil {
+	if _, _, _, err := openConnections(t.Context(), store, env(masterKeyEntry("k2", 2)+","+masterKeyEntry("k1", 1)), log); err != nil {
 		t.Errorf("with the key among others: %v", err)
 	}
 }
@@ -84,7 +84,7 @@ func TestGoald_RefusesUnknownCredentialKeyID(t *testing.T) {
 	store := postgres.New(db.pool)
 	log := slog.New(slog.DiscardHandler)
 
-	_, creds, err := openConnections(t.Context(), store, keysEnv(masterKeyEntry("k3", 3)), log)
+	_, creds, _, err := openConnections(t.Context(), store, keysEnv(masterKeyEntry("k3", 3)), log)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestGoald_RefusesUnknownCredentialKeyID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, err = openConnections(t.Context(), store, keysEnv(masterKeyEntry("k2", 2)+","+masterKeyEntry("k1", 1)), log)
+	_, _, _, err = openConnections(t.Context(), store, keysEnv(masterKeyEntry("k2", 2)+","+masterKeyEntry("k1", 1)), log)
 	if err == nil || !strings.Contains(err.Error(), "master key k3") || !strings.Contains(err.Error(), "credentials") ||
 		strings.Contains(err.Error(), "sk-only-k3") {
 		t.Errorf("with a credential sealed under k3: %v; want a refusal naming k3 and credentials", err)

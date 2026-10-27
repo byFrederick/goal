@@ -107,8 +107,11 @@ type Deps struct {
 	// version (ADR 0024): the default and allowed models, the denied commands and the box time
 	// limit. Nil applies no policy.
 	Policies ports.OrgPolicies
-	Clock    ports.Clock
-	Logger   *slog.Logger // nil discards logs
+	// Intake records trigger firings and holds the schedule lock (intake.go, schedules.go); nil
+	// leaves Intake and FireSchedules failing with errNoIntake.
+	Intake ports.Intake
+	Clock  ports.Clock
+	Logger *slog.Logger // nil discards logs
 }
 
 func (d Deps) complete() bool {
@@ -191,6 +194,7 @@ type Engine struct {
 	codehosts   map[string]ports.CodeHost
 	minters     map[string]ports.Minter
 	policies    ports.OrgPolicies
+	intake      ports.Intake
 	clock       ports.Clock
 	log         *slog.Logger
 	cfg         Config
@@ -247,7 +251,7 @@ func New(d Deps, cfg Config) (*Engine, error) {
 
 	return &Engine{
 		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, connections: d.Connections,
-		credentials: d.Credentials, codehosts: d.CodeHosts, minters: d.Minters, policies: d.Policies, clock: d.Clock, log: log, cfg: cfg, lines: lines,
+		credentials: d.Credentials, codehosts: d.CodeHosts, minters: d.Minters, policies: d.Policies, intake: d.Intake, clock: d.Clock, log: log, cfg: cfg, lines: lines,
 		active: map[domain.ItemID]*activeRun{}, exhausted: map[domain.FactoryID]bool{},
 	}, nil
 }

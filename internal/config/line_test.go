@@ -585,3 +585,41 @@ func TestLoad_RefusesUnknownDependencyKeys(t *testing.T) {
 		}
 	}
 }
+
+// workIncident is the support factory's expedited work type.
+const workIncident = "incident"
+
+// The line carries board.triggers in order, an unset enabled as enabled.
+func TestLine_Triggers(t *testing.T) {
+	t.Parallel()
+
+	f, err := LoadDir("testdata/support")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []domain.Trigger{
+		{
+			Name: "morning-sweep", Enabled: true, On: domain.OnSchedule, Cron: "0 8 * * MON-FRI", TimeZone: "Europe/Berlin",
+			Create: domain.TriggerCreate{Type: "question", Station: "inbox", Title: "Inbox sweep"},
+		},
+		{
+			Name: "shop-incident", Enabled: true, On: "webhook.shop-alerts.failed",
+			Filter: domain.TriggerFilter{Repo: "acme/shop", SkipBots: true},
+			Only:   domain.TriggerOnly{FailuresInARow: 2, Dedupe: "service"},
+			Create: domain.TriggerCreate{
+				Type: workIncident, Station: "triage", Expedite: true, Title: "{{service}} is failing", Brief: "Alert: {{alert.summary}}",
+			},
+			Limits: domain.TriggerLimits{PerDay: 3, PauseOnBudget: true},
+		},
+	}
+
+	if got := f.Line().Triggers; !reflect.DeepEqual(got, want) {
+		t.Errorf("triggers = %+v\nwant %+v", got, want)
+	}
+
+	off := false
+	if got := trigger(Trigger{Name: "off", Enabled: &off, On: domain.OnSchedule}); got.Enabled {
+		t.Error("a trigger with enabled: false maps as enabled")
+	}
+}

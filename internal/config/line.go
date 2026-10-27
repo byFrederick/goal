@@ -69,6 +69,10 @@ func (f *Factory) Line() domain.Line {
 		fl = *s.Board.Flow
 	}
 
+	for _, t := range s.Board.Triggers {
+		l.Triggers = append(l.Triggers, trigger(t))
+	}
+
 	l.Flow = flowPolicy(fl)
 	if fl.Expedite != nil {
 		l.ExpediteTypes = slices.Clone(fl.Expedite.Types)
@@ -184,6 +188,34 @@ func station(st Station) domain.Station {
 
 	if st.Gate != nil {
 		out.Gate = &domain.Gate{OnReject: st.Gate.OnReject, MaxRework: st.Gate.MaxRework}
+	}
+
+	return out
+}
+
+// trigger maps one of board.triggers; an unset enabled is enabled.
+func trigger(t Trigger) domain.Trigger {
+	out := domain.Trigger{
+		Name: t.Name, Enabled: t.Enabled == nil || *t.Enabled, On: t.On, Cron: t.Cron, TimeZone: t.TimeZone,
+		Create: domain.TriggerCreate{
+			Type: t.Create.Type, Station: t.Create.Station, Lane: t.Create.Lane, Expedite: t.Create.Expedite,
+			Title: t.Create.Title, Brief: t.Create.Brief,
+		},
+	}
+
+	if f := t.Filter; f != nil {
+		out.Filter = domain.TriggerFilter{
+			Branch: f.Branch, Repo: f.Repo, Label: f.Label, Paths: slices.Clone(f.Paths), Authors: slices.Clone(f.Authors),
+			SkipBots: f.SkipBots,
+		}
+	}
+
+	if o := t.Only; o != nil {
+		out.Only = domain.TriggerOnly{FailuresInARow: o.FailuresInARow, Dedupe: o.Dedupe}
+	}
+
+	if l := t.Limits; l != nil {
+		out.Limits = domain.TriggerLimits{PerDay: l.PerDay, PauseOnBudget: l.PauseOnBudget}
 	}
 
 	return out
