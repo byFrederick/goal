@@ -1,36 +1,30 @@
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useParams, useSearch } from '@tanstack/react-router';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Eye, LayoutGrid } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { eventsQuery, inboxQuery, itemQuery, runsQuery } from '../../api/queries';
 import type { Station } from '../../api/types';
+import { usePhone } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
-import { factoryTitle, itemKey, useFactory, useFactoryParams } from '../../shared/factory';
-import { humanize, plural } from '../../shared/format';
+import { factoryTitle, itemKey, refParam, useFactory, useFactoryParams } from '../../shared/factory';
 import { type ItemControls, ItemDecisions } from '../../shared/item-actions';
-import { describeState, pausedNow, pullRequestsOf } from '../../shared/item-state';
+import { pausedNow, pullRequestsOf } from '../../shared/item-state';
 import { useOrg } from '../../shared/org';
-import { holds } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
-import { PathCard, TimeCard } from './flow-cards';
-import { ItemStateChip } from './item-state-chip';
+import { NotAvailable } from '../../ui/not-available';
+import { Stepper } from '../../ui/stepper';
 import { ItemTabs } from './item-tabs';
 import { NoteComposer } from './note-composer';
 import { OutputsCard } from './outputs';
 import { QuestionCard } from './question-card';
 import { CostCard, DetailsCard, OverlapsCard, RulesCard } from './side-cards';
+import { noFlow, stepsOf } from './steps';
 import { activeRun, buildTrace, criteriaOf, editedFiles, latestToolCalls, runRole, type Trace } from './timeline';
 import { TouchesCard } from './touches-card';
 import { EventList, type TimelineStatus, ToolRow, TraceList } from './trace-view';
-
-/** The role working the item now, as the trace names it. */
-function roleOf(trace: Trace): string | null {
-  const run = activeRun(trace);
-  return run ? runRole(run) : null;
-}
 
 /** The spec's acceptance criteria, as the Spec tab lists them. */
 function SpecCriteria({ criteria }: { criteria: string[] }) {
@@ -95,102 +89,108 @@ export function ItemPage() {
   const compactNoteField = useRef<HTMLTextAreaElement>(null);
   // The wide field is hidden on phones and the compact one elsewhere, so the focus goes to the one shown.
   const focusNote = () => (noteField.current?.offsetParent ? noteField.current : compactNoteField.current)?.focus();
-  // The question: this item's open decision in the inbox, when the caller may decide it.
+  // The question: this item's open decision in the inbox.
   const { data: inbox } = useQuery(inboxQuery(org.id, factory.id));
   const question = inbox?.entries.find((e) => e.kind === 'decision' && e.item?.id === item.id);
   const latest = trace.entries.findLast((e) => e.kind === 'run');
   const runsStatus: TimelineStatus = runsQ.isPending ? 'loading' : runsQ.isError ? 'error' : 'ready';
   const files = editedFiles(trace).length;
   const checks = trace.entries.filter((e) => e.kind === 'check');
+  const run = item.state === 'in_progress' ? activeRun(trace) : undefined;
   const station = factory.stations.find((s) => s.id === item.station);
-  const state = describeState(
-    { state: item.state, agent: roleOf(trace), rework_count: item.rework_count },
-    { decides: holds(factory, 'item:decide') },
+  const decidable = useMemo(
+    () => ({
+      key,
+      ref: item.ref,
+      title: item.title,
+      state: item.state,
+      pull_requests: pullRequestsOf(
+        item.outputs,
+        factory.stations.map((s) => s.id),
+      ),
+    }),
+    [key, item, factory],
   );
-  const decidable = {
-    key,
-    ref: item.ref,
-    title: item.title,
-    state: item.state,
-    pull_requests: pullRequestsOf(
-      item.outputs,
-      factory.stations.map((s) => s.id),
-    ),
-  };
-  const controls = {
-    id: item.id,
-    station: item.station,
-    reworkTarget: item.flow?.rework_target ?? null,
-    paused: pausedNow(item.state, events),
-    factory,
-  };
+  const controls = useMemo<ItemControls>(
+    () => ({
+      id: item.id,
+      station: item.station,
+      reworkTarget: item.flow?.rework_target ?? null,
+      paused: pausedNow(item.state, events),
+      factory,
+    }),
+    [item, events, factory],
+  );
+  const steps = stepsOf({ item, stations: factory.stations, events, flow: item.flow ?? noFlow, now: Date.now() });
+  // The top bar's actions: Watch live (not built yet), then the item's decisions, Move in a menu.
+  // A phone has its decisions in its card under the title, so the bar has no actions there.
+  const phone = usePhone();
+  const actions = useMemo(
+    () =>
+      phone ? undefined : (
+        <div className="flex items-center gap-2">
+          <NotAvailable>
+            <Button variant="secondary">
+              <Eye size={16} strokeWidth={1.75} aria-hidden="true" />
+              Watch live
+            </Button>
+          </NotAvailable>
+          <ItemDecisions item={decidable} factory={factory.id} station={station} controls={controls} moveInMenu />
+        </div>
+      ),
+    [phone, decidable, factory.id, station, controls],
+  );
   const board = `${factoryTitle(factory)} board`;
   // At a decision, what is being decided on comes before how it was made.
   const deciding = item.state === 'waiting_human';
 
   return (
     <>
-      <TopBarSlot crumb={`#${item.number}`} />
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex max-w-[820px] min-w-0 flex-col gap-3">
-          <Link
-            to="/o/$org/f/$factory/board"
-            params={params}
-            className="inline-flex min-h-11 items-center gap-2 self-start text-[15px] text-muted no-underline md:hidden"
-          >
-            <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" />
-            {board}
-          </Link>
-          <nav aria-label="Breadcrumb" className="hidden text-sm text-muted md:block">
-            <ol className="m-0 flex list-none gap-2 p-0">
-              <li>
-                <Link to="/o/$org/f/$factory/board" params={params} className="text-muted hover:text-run">
-                  {board}
-                </Link>
-              </li>
-              <li aria-hidden="true">/</li>
-              <li aria-current="page">{item.ref}</li>
-            </ol>
-          </nav>
-          <div className="flex flex-wrap gap-2 md:order-last">
-            {item.class_of_service === 'expedite' ? <Chip tone="rework">Expedite</Chip> : null}
-            {item.type ? <Chip tone="plain">{humanize(item.type)}</Chip> : null}
-            {item.lane ? <Chip tone="plain">{item.lane}</Chip> : null}
-            <Chip tone="plain">At {humanize(item.station)}</Chip>
-            <ItemStateChip state={item.state} label={state} waiting={item.waiting ?? null} />
-            {item.touches && item.touches.count > 0 ? (
-              <Chip tone="you" className="max-md:hidden">
-                {plural(item.touches.count, 'human touch', 'human touches')}
+      <TopBarSlot crumb={`#${item.number}`} actions={actions} />
+      <header className="flex flex-col gap-3">
+        <Link
+          to="/o/$org/f/$factory/board"
+          params={params}
+          className="inline-flex min-h-11 items-center gap-2 self-start text-body text-muted no-underline md:hidden"
+        >
+          <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" />
+          {board}
+        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-secondary font-semibold text-muted">#{item.number}</span>
+          {item.class_of_service === 'expedite' ? <Chip tone="rework">Expedite</Chip> : null}
+          <Chip tone="plain">{item.type}</Chip>
+          {item.lane ? <Chip tone="plain">{item.lane}</Chip> : null}
+          {item.assembly ? (
+            <Link
+              to="/o/$org/f/$factory/items/$ref"
+              params={{ ...params, ref: refParam(item.assembly.ref) }}
+              className="no-underline hover:text-run"
+            >
+              <Chip tone="plain">
+                <LayoutGrid size={12} strokeWidth={1.75} aria-hidden="true" />
+                {item.assembly.title}, part {item.assembly.part} of {item.assembly.parts}
               </Chip>
-            ) : null}
-            <Chip tone="plain" className="md:hidden">
-              {item.ref}
-            </Chip>
-          </div>
-          <h1 className="m-0 text-[26px] leading-[1.15] font-normal tracking-display text-balance md:text-[42px] md:leading-[1.08]">
-            {item.title}
-          </h1>
+            </Link>
+          ) : null}
         </div>
-        <ItemDecisions
-          item={decidable}
-          factory={factory.id}
-          station={station}
-          controls={controls}
-          size="lg"
-          className="hidden @[720px]:flex"
-        />
+        <h1 className="m-0 text-page-title tracking-display text-balance">{item.title}</h1>
+        <Stepper label="Progress through the line" steps={steps} waiting={item.state === 'waiting_human'} />
       </header>
 
       <div className="flex flex-col gap-3 @[720px]:grid @[720px]:grid-cols-3 @[720px]:items-start @[720px]:gap-4">
         <div className="contents @[720px]:flex @[720px]:flex-col @[720px]:gap-4">
-          <ItemDecisionsCard
-            item={decidable}
-            factory={factory.id}
-            station={station}
-            controls={controls}
-            // A decision or a retry leads; pausing or moving work in flow comes after the trace.
-            className={deciding || item.state === 'blocked' ? 'order-1' : 'order-9'}
-          />
+          {/* Only on a phone: the top bar holds these actions from 768 px, so they never show twice. */}
+          {phone ? (
+            <ItemDecisionsCard
+              item={decidable}
+              factory={factory.id}
+              station={station}
+              controls={controls}
+              // A decision or a retry leads; pausing or moving work in flow comes after the trace.
+              className={deciding || item.state === 'blocked' ? 'order-1' : 'order-9'}
+            />
+          ) : null}
           <DetailsCard
             item={item}
             factory={factory}
@@ -201,7 +201,6 @@ export function ItemPage() {
           <CostCard item={item} factory={factory} runs={runs?.runs ?? []} className="order-2 @[720px]:order-none" />
           <OverlapsCard item={item} className="order-2 @[720px]:order-none" />
           <RulesCard item={item} factory={factory} trace={trace} className="order-2 @[720px]:order-none" />
-          <TimeCard item={item} factory={factory} trace={trace} className="order-2 @[720px]:order-none" />
           <TouchesCard
             item={item}
             itemKey={key}
@@ -209,7 +208,6 @@ export function ItemPage() {
             events={events}
             className="order-2 @[720px]:order-none"
           />
-          <PathCard item={item} factory={factory} className="order-7 @[720px]:order-none" />
         </div>
         <div className="contents @[720px]:col-span-2 @[720px]:flex @[720px]:flex-col @[720px]:gap-4">
           {question ? (
@@ -234,6 +232,17 @@ export function ItemPage() {
               aria-label="Timeline"
               className={cn('order-6 flex flex-col gap-4 @[720px]:order-none', !fullTrace && 'hidden @[720px]:flex')}
             >
+              <p aria-live="polite" className="m-0 inline-flex items-center gap-2 text-sm text-run">
+                {run ? (
+                  <>
+                    <span
+                      aria-hidden="true"
+                      className="size-2 rounded-full bg-run shadow-[0_0_0_4px_var(--color-run-tint)]"
+                    />
+                    {runRole(run)} working, {run.tools.length} tool calls
+                  </>
+                ) : null}
+              </p>
               <TraceList entries={trace.entries} itemState={item.state} status={runsStatus} />
             </section>
           ) : null}
@@ -307,7 +316,7 @@ function ItemDecisionsCard({
       station={station}
       controls={controls}
       layout="stack"
-      className={cn(className, 'rounded-card border border-line bg-card p-4 @[720px]:hidden')}
+      className={cn(className, 'rounded-card border border-line bg-card p-4')}
     />
   );
 }
