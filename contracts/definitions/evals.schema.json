@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://goal.local/schema/evals.schema.json",
   "title": "Goal judges and eval cases (Jonah)",
-  "description": "Two kinds (ADR 0023). EvalCase is evals/cases/<name>.yaml: one task an agent must get right, run on a definition version before it is published. Judge is the YAML front matter of evals/judges/<slug>.md, whose Markdown body is the rubric: it scores a sample of the finished production runs of the agents it names. A document with a kind is an EvalCase; one without is a judge's front matter.",
+  "description": "Two kinds (ADR 0025). EvalCase is evals/cases/<name>.yaml: one task an agent must get right, run on a definition version before it is published. Judge is the YAML front matter of evals/judges/<slug>.md, whose Markdown body is the rubric: it scores a sample of the finished production runs of the agents it names. A document with a kind is an EvalCase; one without is a judge's front matter.",
   "if": { "required": ["kind"] },
   "then": { "$ref": "#/$defs/case" },
   "else": { "$ref": "#/$defs/judge" },

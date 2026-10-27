@@ -132,7 +132,7 @@ With `board.flow.assemblies.changedSince: true` (default false), plans bind late
 
 ## Judges and eval cases
 
-Jonah's two file kinds live under `evals/` ([ADR 0023](../adr/0023-judges-and-evals-as-the-screens-show-them.md)). `contracts/definitions/evals.schema.json` defines both, and `config.Check` validates them with the factory (`internal/config/evals.go`). Judge runs, eval runs and the publish gate are not built yet.
+Jonah's two file kinds live under `evals/` ([ADR 0025](../adr/0025-judges-and-evals-as-the-screens-show-them.md)). `contracts/definitions/evals.schema.json` defines both, and `config.Check` validates them with the factory (`internal/config/evals.go`). Judge runs, eval runs and the publish gate are not built yet.
 
 ### Judges: `evals/judges/<slug>.md`
 

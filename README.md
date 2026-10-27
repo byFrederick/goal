@@ -138,7 +138,7 @@ factory.yaml
 agents/*.md
 skills/<name>/SKILL.md
 contracts/*.schema.json
-evals/          judges/<slug>.md, cases/<name>.yaml, fixtures/ (ADR 0023)
+evals/          judges/<slug>.md, cases/<name>.yaml, fixtures/ (ADR 0025)
 ```
 
 A contract a station names as its `output` becomes the tool `input_schema` the model fills, so its top level must be `"type": "object"` with no `oneOf`, `anyOf` or `allOf` there (nested under a property is fine). Validate and publish refuse one that is not (`contract-not-tool-schema`): describe the alternatives in one object, or nest the choice under a property, and check the alternatives in Go.

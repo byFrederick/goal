@@ -26,7 +26,7 @@ const (
 	checkContracts  = "contracts"  // every output contract is a schema the model API takes as a tool's input
 	// checkAvailability: what the definition declares that this install cannot serve yet.
 	checkAvailability = "availability"
-	checkEvals        = "evals" // judges and eval cases are well formed (ADR 0023)
+	checkEvals        = "evals" // judges and eval cases are well formed (ADR 0025)
 )
 
 // Problem codes config reports. They are stable: the UI, the CLI and tests key on them.

@@ -4,7 +4,7 @@ The judge or eval case format: the `judge` or `case` definition in `contracts/de
 
 ## Also change
 
-The table rows of `TestCheck_Judges` and `TestCheck_EvalCases` in `internal/config/evals_test.go`; the "Judges and eval cases" section of `docs/engineering/factory-definition.md`; the Judge and Eval case entries of `docs/reference/glossary.md`; [ADR 0023](../adr/0023-judges-and-evals-as-the-screens-show-them.md) by amendment when a decision changes
+The table rows of `TestCheck_Judges` and `TestCheck_EvalCases` in `internal/config/evals_test.go`; the "Judges and eval cases" section of `docs/engineering/factory-definition.md`; the Judge and Eval case entries of `docs/reference/glossary.md`; [ADR 0025](../adr/0025-judges-and-evals-as-the-screens-show-them.md) by amendment when a decision changes
 
 ## Run
 

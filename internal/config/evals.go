@@ -18,7 +18,7 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
-// The folders of a definition that hold its judges and its eval cases (ADR 0023): one
+// The folders of a definition that hold its judges and its eval cases (ADR 0025): one
 // evals/judges/<slug>.md per judge, one evals/cases/<name>.yaml per case.
 const (
 	JudgesDir = "evals/judges"
