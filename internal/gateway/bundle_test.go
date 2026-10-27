@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -669,4 +670,35 @@ func rulesApplied(events []domain.Event) []domain.Event {
 	}
 
 	return out
+}
+
+// The bundle's model is the one the engine chose at run start, in the task token, and its deny
+// rules are the agent's followed by the organization's denied commands, each once.
+func TestBundle_ModelAndDeniedCommandsFromTheTaskToken(t *testing.T) {
+	t.Parallel()
+
+	h := newHarnessWith(t, Config{}, harnessDeps{yaml: bundleYAML, files: bundleFiles})
+	it := h.submit(t, factoryID, "Add a health endpoint", "")
+	c := h.claims()
+	c.ItemID, c.Model = it.ID, "claude-haiku-5-5"
+	c.DeniedCommands = []string{"Bash(terraform apply:*)", "Bash(git push --force*)"}
+
+	status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, c))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (%s)", status, body)
+	}
+
+	var got runBundle
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Spec.Model != "claude-haiku-5-5" {
+		t.Errorf("model %q, want the token's claude-haiku-5-5", got.Spec.Model)
+	}
+
+	want := []string{"Bash(git push --force*)", "issues__get_secret", "Bash(terraform apply:*)"}
+	if !slices.Equal(got.Spec.ToolsDeny, want) {
+		t.Errorf("tools_deny %q, want %q", got.Spec.ToolsDeny, want)
+	}
 }

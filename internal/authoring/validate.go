@@ -92,6 +92,7 @@ var checkSections = map[string]string{
 	"references": domain.SectionAgents, CheckName: domain.SectionBasics, CheckItems: domain.SectionLine,
 	"tools": domain.SectionBasics, "contracts": domain.SectionFiles, "removed": domain.SectionBasics,
 	"availability": domain.SectionConnections, CheckConnections: domain.SectionConnections,
+	config.CheckPolicy: domain.SectionAgents,
 }
 
 // candidate is a definition to validate and what it is validated against.
@@ -211,7 +212,7 @@ type ownResult struct {
 	ran      []string
 }
 
-// ownChecks runs the name, items and credentials checks on a factory that loaded.
+// ownChecks runs the name, items, credentials and policy checks on a factory that loaded.
 func (s *Service) ownChecks(ctx context.Context, c candidate, f *config.Factory, m Model) (ownResult, error) {
 	var out ownResult
 
@@ -238,6 +239,15 @@ func (s *Service) ownChecks(ctx context.Context, c candidate, f *config.Factory,
 		}
 
 		out.problems, out.ran = append(out.problems, p...), append(out.ran, CheckConnections)
+	}
+
+	if s.policies != nil {
+		pol, err := s.policies.Get(ctx)
+		if err != nil {
+			return ownResult{}, fmt.Errorf("read the organization policy: %w", err)
+		}
+
+		out.problems, out.ran = append(out.problems, config.ModelProblems(f, pol.AllowedModels)...), append(out.ran, config.CheckPolicy)
 	}
 
 	return out, nil
@@ -445,13 +455,14 @@ func results(ran []string, problems []domain.DefinitionProblem, f *config.Factor
 
 // staticSummaries are the green lines of checks whose summary needs no data.
 var staticSummaries = map[string]string{
-	checkYAML:      "Every file parses",
-	checkSchema:    "factory.yaml matches the schema",
-	"references":   "Every agent, skill, contract, connection and prompt it names exists",
-	"tools":        "Every tool is a mise tool spec",
-	"removed":      "Uses none of the removed forms",
-	CheckItems:     "No open items at a removed station",
-	"availability": "Everything it declares is available on this install",
+	checkYAML:          "Every file parses",
+	checkSchema:        "factory.yaml matches the schema",
+	"references":       "Every agent, skill, contract, connection and prompt it names exists",
+	"tools":            "Every tool is a mise tool spec",
+	"removed":          "Uses none of the removed forms",
+	CheckItems:         "No open items at a removed station",
+	"availability":     "Everything it declares is available on this install",
+	config.CheckPolicy: "Every model it names is one the organization allows",
 }
 
 // passedSummary is the green line of a check that found nothing.
