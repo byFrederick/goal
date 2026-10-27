@@ -141,7 +141,7 @@ describe('the phone summary line under the stepper', () => {
     );
   });
 
-  it('stops the clock at the item's end once it is done', () => {
+  it("stops the clock at the item's end once it is done", () => {
     const done = item({ state: 'done', station: 'done', done_at: '2026-10-25T09:00:00Z' });
     expect(summaryOf({ item: done, flow: { ...flow, target_seconds: null }, now })).toBe(
       '0 s in Done, 1 h in the line',
