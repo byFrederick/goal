@@ -6,7 +6,6 @@ import {
   expectAccessible,
   expectNoHorizontalScroll,
   expectToast,
-  isPhone,
   openNavigation,
   orgMarkOf,
   orgNav,
@@ -101,17 +100,31 @@ test('signing in by code returns to the page that asked, and the session stays o
   expect(await page.evaluate(() => document.cookie)).not.toContain('session_token');
   await expectNoSessionTokenInScripts(page);
 
-  // The account names the person, their role here and that they are a platform admin.
+  // The account menu names the person, their role here and that they are a platform admin. It is the
+  // same popover at every width; on a phone it opens from the drawer's top row.
+  await openNavigation(page);
   await orgNav(page).getByRole('button', { name: 'FC, F. Cruz, account' }).click();
   const account = page.getByRole('dialog', { name: 'Account' });
   await expect(account.getByText('F. Cruz', { exact: true })).toBeVisible();
-  await expect(account.getByText(owner)).toBeVisible();
-  await expect(account.getByText('Owner of Acme')).toBeVisible();
+  await expect(account.getByText('Owner', { exact: true })).toBeVisible();
   await expect(account.getByText('Platform admin')).toBeVisible();
-  await expect(account.getByRole('button', { name: 'Edit name…' })).toBeVisible();
+  await expect(account.getByRole('button', { name: 'Profile' })).toBeVisible();
+  // Pages not built yet are listed, disabled, and do nothing when chosen.
+  for (const name of ['Notifications', 'Connected apps', 'Keyboard shortcuts']) {
+    await expect(account.getByRole('button', { name: new RegExp(`^${name}`) })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  }
   await expectAccessible(page);
   await page.keyboard.press('Escape');
   await expect(account).toBeHidden();
+
+  // The organization menu names the organization's pages, and the two not built yet are disabled.
+  const orgMenu = await openOrgMenu(page);
+  await expect(orgMenu.getByRole('menuitem', { name: 'Spend and billing' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(orgMenu.getByRole('menuitem', { name: 'Models and policies' })).toHaveAttribute('aria-disabled', 'true');
+  await page.keyboard.press('Escape');
 });
 
 test('a wrong code, a used-up code, a new code after the countdown, an expired one', async ({ page, request }) => {
@@ -274,14 +287,16 @@ test('edit name, sign out everywhere, sign out', async ({ page }) => {
   await signInOn(page.request, { signed_in: 'fresh' });
   await page.goto('/o/acme');
 
+  // The account menu opens from the sidebar's person row, or from the phone drawer's at every width.
   const openAccount = async (name: string) => {
+    await openNavigation(page);
     await orgNav(page)
       .getByRole('button', { name: `${name}, account` })
       .click();
     return page.getByRole('dialog', { name: 'Account' });
   };
 
-  await (await openAccount('FC, F. Cruz')).getByRole('button', { name: 'Edit name…' }).click();
+  await (await openAccount('FC, F. Cruz')).getByRole('button', { name: 'Profile' }).click();
   const edit = page.getByRole('dialog', { name: 'Edit name' });
   await expect(edit.getByLabel('Name')).toBeFocused();
   await expect(edit.getByLabel('Name')).toHaveValue('F. Cruz');
@@ -296,7 +311,7 @@ test('edit name, sign out everywhere, sign out', async ({ page }) => {
   await expectToast(page, 'Name saved');
 
   // Sign out everywhere asks first; Cancel has focus, so Enter never signs anyone out by accident.
-  await (await openAccount('FC, Fred Cruz')).getByRole('button', { name: 'Sign out everywhere…' }).click();
+  await (await openAccount('FC, Fred Cruz')).getByRole('button', { name: 'Sign out everywhere' }).click();
   const confirm = page.getByRole('dialog', { name: 'Sign out of every browser and the CLI?' });
   await expect(
     confirm.getByText(
@@ -315,13 +330,7 @@ test('edit name, sign out everywhere, sign out', async ({ page }) => {
   // Sign out (here only).
   await signInOn(page.request, { signed_in: 'fresh' });
   await page.goto('/o/acme');
-  if (isPhone(page)) {
-    // On a phone the account is at the bottom of the drawer, in the same menu as the sidebar's.
-    await openNavigation(page);
-    await (await openAccount('FC, F. Cruz')).getByRole('button', { name: 'Sign out', exact: true }).click();
-  } else {
-    await (await openAccount('FC, F. Cruz')).getByRole('button', { name: 'Sign out', exact: true }).click();
-  }
+  await (await openAccount('FC, F. Cruz')).getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in to Goal' })).toBeVisible();
   await page.goto('/o/acme');
   await expect(page).toHaveURL(/\/sign-in\?next=%2Fo%2Facme$/);
@@ -347,7 +356,7 @@ test('a change that needs a recent sign-in asks to confirm it’s you, then goes
 
   // Signed in again, the deletion is sent once more and goes through.
   await expect(reauth).toBeHidden();
-  await expect(page).toHaveURL(/\/o\/example-labs$/);
+  await expect(page).toHaveURL(/\/o\/goal$/);
   await expectToast(page, 'Deleted Acme');
 });
 
