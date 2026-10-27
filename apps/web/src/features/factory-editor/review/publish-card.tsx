@@ -164,16 +164,16 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
       {place === 'wizard' ? (
         <StatGrid>
           <Stat label="Stations">
-            <dd className="m-0 text-2xl tabular-nums">{counts?.stations ?? '–'}</dd>
+            <dd className="m-0 text-detail-title tabular-nums">{counts?.stations ?? '–'}</dd>
           </Stat>
           <Stat label="Agents">
-            <dd className="m-0 text-2xl tabular-nums">{counts?.agents ?? '–'}</dd>
+            <dd className="m-0 text-detail-title tabular-nums">{counts?.agents ?? '–'}</dd>
           </Stat>
           <Stat label="Connections">
-            <dd className="m-0 text-2xl tabular-nums">{counts?.connections ?? '–'}</dd>
+            <dd className="m-0 text-detail-title tabular-nums">{counts?.connections ?? '–'}</dd>
           </Stat>
           <Stat label="Skills">
-            <dd className="m-0 text-2xl tabular-nums">{counts?.skills ?? '–'}</dd>
+            <dd className="m-0 text-detail-title tabular-nums">{counts?.skills ?? '–'}</dd>
           </Stat>
         </StatGrid>
       ) : null}
@@ -183,7 +183,7 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
 
       {rows.length > 0 ? (
         <fieldset className="m-0 flex flex-col gap-3 border-0 p-0">
-          <legend className="mb-1 text-sm font-medium">Where do these items go?</legend>
+          <legend className="mb-1 text-body font-medium">Where do these items go?</legend>
           {rows.map((r) => (
             <Field key={r.station} label={`Items waiting at ${r.station}, which v${next} removes`}>
               <NativeSelect
@@ -228,12 +228,12 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
           {pending ? 'Publishing…' : `Publish v${next}`}
         </Button>
         {why ? (
-          <p id={reason} className="m-0 text-sm text-rework-ink">
+          <p id={reason} className="m-0 text-body text-rework-ink">
             {why}
           </p>
         ) : null}
         {refusal ? (
-          <div role="alert" className="flex flex-col gap-2 text-sm text-rework-ink">
+          <div role="alert" className="flex flex-col gap-2 text-body text-rework-ink">
             <p className="m-0">
               {refusal.message}{' '}
               {refusal.differences ? (

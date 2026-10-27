@@ -49,7 +49,7 @@ export function BudgetCard({ name }: { name: string }) {
         </Field>
       </div>
       <fieldset className="m-0 flex flex-col gap-1 border-0 p-0">
-        <legend className="mb-2 text-sm font-medium">When the week’s budget runs out</legend>
+        <legend className="mb-2 text-body font-medium">When the week’s budget runs out</legend>
         {(
           [
             ['drain', 'Finish items in progress, take no new ones'],
@@ -85,7 +85,7 @@ function WeekSpend() {
   const label = `${spent} spent in the last 7 days`;
   return (
     <div className="flex flex-col gap-2 border-t border-line pt-3">
-      <div className="flex justify-between gap-3 text-sm">
+      <div className="flex justify-between gap-3 text-body">
         <span>Spent in the last 7 days</span>
         <span className="tabular-nums">{spent}</span>
       </div>
@@ -173,7 +173,7 @@ function ClaudeSlots({ name }: { name: string }) {
   const label = `Claude slots ${name} can use: ${mine} of ${cap.cap}`;
   return (
     <div className="flex flex-col gap-2 border-t border-line pt-3">
-      <div className="flex justify-between gap-3 text-sm">
+      <div className="flex justify-between gap-3 text-body">
         <span>Claude slots {name} can use</span>
         <span className="tabular-nums">
           {mine} of {cap.cap}

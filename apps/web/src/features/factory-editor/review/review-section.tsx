@@ -19,7 +19,7 @@ import { BudgetCard } from './budget-card';
 import { ChangesCard } from './changes-card';
 import { ChecksCard, ProblemAlert } from './checks-card';
 import { PublishCard } from './publish-card';
-import { movesFromProblems, reviewCompare, sourceText } from './review';
+import { allVersionsText, movesFromProblems, reviewCompare, sourceText } from './review';
 import { useComparison, useEditorFacts } from './use-review';
 import { DraftRow, draftDetail, RestoreDialog, VersionRow } from './version-history';
 
@@ -151,7 +151,7 @@ function History({
         patch={{}}
         className="block border-t border-line py-3 text-secondary font-medium underline underline-offset-3 transition-colors duration-200 hover:text-run"
       >
-        All {versions.length} versions
+        {allVersionsText(versions)}
       </SectionLink>
       <RestoreDialog version={restoring} onClose={() => setRestoring(null)} />
     </SectionCard>

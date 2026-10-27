@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Change, DefinitionProblem } from '../../../api/types';
 import {
+  allVersionsText,
   blockedSentence,
   defaultMessage,
   hunksOf,
@@ -125,5 +126,16 @@ describe('version rows', () => {
     );
     expect(sourceText({ kind: 'template', template: 'cost-review@2' }, 'Cost review')).toBe('Template Cost review v2');
     expect(sourceText({ kind: 'clone', factory: 'sre', version: '3' })).toBe('Clone of sre v3');
+  });
+});
+
+describe('the versions link', () => {
+  it('counts every version from the newest number, not the rows of the page', () => {
+    const page = Array.from({ length: 20 }, (_, i) => ({ number: 21 - i }));
+    expect(allVersionsText(page)).toBe('All 21 versions');
+  });
+
+  it('names the link without a count when there are no versions', () => {
+    expect(allVersionsText([])).toBe('All versions');
   });
 });

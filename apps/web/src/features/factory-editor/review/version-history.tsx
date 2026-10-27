@@ -180,12 +180,12 @@ export function RestoreDialog({ version, onClose }: { version: Version | null; o
       onConfirm={() => void restore()}
     >
       {error ? (
-        <p role="alert" className="m-0 text-sm text-rework-ink">
+        <p role="alert" className="m-0 text-body text-rework-ink">
           {error}
         </p>
       ) : null}
       {stuck(items).length > 0 ? (
-        <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-sm">
+        <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-body">
           {stuck(items).map((i) => (
             <li key={i.id}>
               #{i.number} is being worked at {i.station}: let its run finish or stop it first.
@@ -195,7 +195,7 @@ export function RestoreDialog({ version, onClose }: { version: Version | null; o
       ) : null}
       {unmapped.length > 0 ? (
         <fieldset className="m-0 flex flex-col gap-3 border-0 p-0">
-          <legend className="mb-2 text-sm font-medium">Where do these items go?</legend>
+          <legend className="mb-2 text-body font-medium">Where do these items go?</legend>
           {unmapped.map((station) => (
             <Field key={station} label={`Items at ${station}`}>
               <NativeSelect

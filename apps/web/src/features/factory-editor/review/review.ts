@@ -160,6 +160,12 @@ export function publishedLine(at: string | null, by: Actor | null): string {
   return by ? `${when} by ${by.name}`.trim() : when;
 }
 
+/** "All 21 versions". The list is one page, newest first, and numbers count up from 1, so the newest numbered version is the total. A draft has no number. */
+export function allVersionsText(versions: readonly { number: number | null }[]): string {
+  const newest = versions.find((v) => v.number !== null)?.number;
+  return newest ? `All ${newest} versions` : 'All versions';
+}
+
 /** Where a draft or version started ("Template cost-review v2", "Clone of sre v3"). */
 export function sourceText(source: VersionSource, templateTitle?: string): string {
   switch (source.kind) {
