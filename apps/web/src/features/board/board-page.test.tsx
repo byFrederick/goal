@@ -364,10 +364,32 @@ describe('the desktop Board, as the screen draws it', () => {
     await waitFor(() => expect(router.state.location.pathname).toMatch(/\/items\/?$/));
   });
 
+  it('writes the work type and the lane to the URL, and the select keeps the choice', async () => {
+    const lanes = board({}, [expediteItem, { ...standardItem, lane: 'backend' }]);
+    const { router } = renderBoardPage({ page: ShellBoard, org, factory, board: lanes });
+
+    await screen.findByRole('region', { name: 'Stations' });
+    const search = () => router.state.location.search as Record<string, unknown>;
+    fireEvent.change(screen.getByRole('combobox', { name: 'Work type' }), { target: { value: 'incident' } });
+    await waitFor(() => expect(search().type).toBe('incident'));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Lane' }), { target: { value: 'backend' } });
+    await waitFor(() => expect(search().lane).toBe('backend'));
+    expect(search().type).toBe('incident');
+    expect((screen.getByRole('combobox', { name: 'Lane' }) as HTMLSelectElement).value).toBe('backend');
+  });
+
   it('heads the Done column with Merged pull requests and the week’s count', async () => {
     const done = board();
     done.stations.push(station({ id: 'done', kind: 'done', items: [] }));
-    renderBoardPage({ page: ShellBoard, org, factory, board: { ...done, line: { ...done.line, touches: { finished: 53, per_item_mean: 0, per_item_median: 0, touchless_rate: 0 } } } });
+    renderBoardPage({
+      page: ShellBoard,
+      org,
+      factory,
+      board: {
+        ...done,
+        line: { ...done.line, touches: { finished: 53, per_item_mean: 0, per_item_median: 0, touchless_rate: 0 } },
+      },
+    });
 
     const columns = await screen.findByRole('region', { name: 'Stations' });
     const doneColumn = within(columns).getByRole('region', { name: 'Done' });
@@ -386,7 +408,7 @@ describe('the desktop Board, as the screen draws it', () => {
       in_buffer: true,
     });
     const drum = board({ release: { policy: 'push', enforced: false, drum: 'build', buffer: 2, in_buffer: 1 } });
-    drum.stations[1] = { ...drum.stations[1]!, items: [ready, buildItem] };
+    drum.stations = drum.stations.map((s) => (s.id === 'build' ? { ...s, items: [ready, buildItem] } : s));
     renderBoardPage({ page: ShellBoard, org, factory, board: drum });
 
     const columns = await screen.findByRole('region', { name: 'Stations' });

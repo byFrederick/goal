@@ -58,6 +58,8 @@ export interface MockItem {
   paths?: string[];
   /** The open need it waits for while queued or ready (Item.waiting). Not on Item. */
   waitsOn?: MockWaitsOn;
+  /** The assembly it is a part of (the assembly's item id) and its place among the parts, 1-based. */
+  partOf?: { id: string; part: number };
 }
 
 /** The need a queued item waits for: an item of the factory by number, by its order (after) or its files (files). */
@@ -223,6 +225,9 @@ interface Seed {
   outputs?: Record<string, unknown>;
   paths?: string[];
   waitsOn?: MockWaitsOn;
+  /** The assembly the item is a part of (its seed number) and its place among the parts. */
+  assembly?: number;
+  part?: number;
   steps: Step[];
 }
 
@@ -394,13 +399,65 @@ const specRun = (tools: Tool[], cost: number, turns: number): Step => ({
 });
 
 const goalSeeds: Seed[] = [
+  // An assembly of three parts across three columns: one merged, one in review, one in spec.
+  {
+    number: 17,
+    title: 'Canvas screens for the UI revamp',
+    type: 'feature',
+    body: 'Restyle the screens the revamp covers to the canvas pictures, one part at a time.',
+    station: 'inbox',
+    state: 'assembly',
+    createdMin: 4320,
+    updatedMin: 240,
+    steps: [],
+  },
+  {
+    number: 18,
+    title: 'Restyle the Floor header and andon panel',
+    type: 'feature',
+    body: 'The Floor page, as the canvas picture draws it.',
+    station: 'done',
+    state: 'done',
+    pr: 42,
+    assembly: 17,
+    part: 1,
+    createdMin: 4300,
+    updatedMin: 300,
+    steps: [{ move: 'spec' }, { move: 'build' }, { move: 'review' }, { move: 'merge' }, { move: 'done' }],
+  },
+  {
+    number: 19,
+    title: 'Restyle the Board columns and cards',
+    type: 'feature',
+    body: 'The Board page at 768 px and up, as the canvas picture draws it.',
+    station: 'review',
+    state: 'queued',
+    assembly: 17,
+    part: 2,
+    createdMin: 200,
+    updatedMin: 20,
+    steps: [{ move: 'spec' }, { move: 'build' }, { move: 'review' }],
+  },
+  {
+    number: 20,
+    title: 'Restyle the Items list to the canvas screen',
+    type: 'feature',
+    body: 'The Items list, as the canvas picture draws it.',
+    station: 'spec',
+    state: 'queued',
+    assembly: 17,
+    part: 3,
+    createdMin: 120,
+    updatedMin: 15,
+    steps: [{ move: 'spec' }],
+  },
   // The sidebar search's "spend" (shell.jpg s2): items whose titles match it at the Build station.
   {
     number: 147,
     title: "Show this week's spend",
     type: 'feature',
     body: 'The sidebar shows the spend of the week against the budget, with the factories it is spent on.',
-    station: 'build',
+    station: 'inbox',
     state: 'queued',
     createdMin: 95,
     updatedMin: 12,
@@ -411,7 +468,7 @@ const goalSeeds: Seed[] = [
     title: 'Check the spend against the budget',
     type: 'refactor',
     body: 'Compare the week’s spend with each factory’s budget and say which ones are close.',
-    station: 'build',
+    station: 'inbox',
     state: 'queued',
     createdMin: 120,
     updatedMin: 30,
@@ -1198,6 +1255,7 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
       pr_url: seed.pr ? `${repo}/pull/${seed.pr}` : null,
       ...(seed.paths ? { paths: seed.paths } : {}),
       ...(seed.waitsOn ? { waitsOn: seed.waitsOn } : {}),
+      ...(seed.assembly ? { partOf: { id: uuid(factoryIndex + 1, seed.assembly), part: seed.part ?? 1 } } : {}),
       spans: [],
     };
 
@@ -1354,6 +1412,7 @@ export function seed(now = Date.now()): MockState {
           agents: ['builder-1', 'builder-2'],
           wip_limit: 2,
           copies: 2,
+          buffer: 2,
           output: 'change',
           checks: ['schema', 'task check'],
         },

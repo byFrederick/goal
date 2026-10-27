@@ -11,8 +11,8 @@ import { BoardCard, type CardDrag } from './board-card';
 import { DraggableCard, DropColumn } from './board-dnd';
 import { columnCount, isExpedite, stationNote } from './stats';
 
-/** The header's border for the constraint: amber, as the picture draws it (the shadow is the thick top edge). */
-export const constraintEdge = 'border-amber shadow-[inset_0_3px_0_var(--color-amber)]';
+/** The constraint's edge: an amber border with a 1 px amber ring, as the picture draws it. */
+export const constraintEdge = 'border-amber ring-1 ring-amber';
 
 /** One card of the column; dragged on the desktop, moved by its Move button (and M) always. */
 function ColumnCard({

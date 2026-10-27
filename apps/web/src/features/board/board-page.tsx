@@ -22,7 +22,6 @@ import { SegmentedControl, type SegmentedOption } from '../../ui/segmented-contr
 import { StatusIcon } from '../../ui/status-icon';
 import { StationColumn } from './board-column';
 import { CardDnd } from './board-dnd';
-import { BoardTopBar, SearchItems } from './board-top-bar';
 import {
   type AssemblyOption,
   arrangeBoard,
@@ -36,6 +35,7 @@ import {
   typeOptions,
 } from './board-filters';
 import { type OpenAssemblies, StationBody } from './board-lane';
+import { BoardTopBar, SearchItems } from './board-top-bar';
 import {
   constraintSentence,
   expediteHeader,
@@ -308,9 +308,7 @@ function FilterRow({
   return (
     <fieldset className="m-0 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 border-0 p-0">
       <legend className="sr-only">Filter and group the cards</legend>
-      {phone ? (
-        <SearchItems value={view.q ?? ''} onChange={(q) => onChange({ q: q || undefined })} />
-      ) : null}
+      {phone ? <SearchItems value={view.q ?? ''} onChange={(q) => onChange({ q: q || undefined })} /> : null}
       <FilterSelect label="Work type" value={view.type ?? ''} onChange={(v) => onChange({ type: v || undefined })}>
         <option value="">Any</option>
         {typeOptions(board).map((type) => (

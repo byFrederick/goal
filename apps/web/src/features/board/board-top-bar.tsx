@@ -19,7 +19,12 @@ export function SearchItems({ value, onChange }: { value: string; onChange: (q: 
   return (
     <label className="relative flex min-w-0 max-w-full items-center">
       <span className="sr-only">Search items</span>
-      <Search size={15} strokeWidth={1.75} aria-hidden="true" className="pointer-events-none absolute left-3 text-muted" />
+      <Search
+        size={15}
+        strokeWidth={1.75}
+        aria-hidden="true"
+        className="pointer-events-none absolute left-3 text-muted"
+      />
       <input
         type="search"
         value={value}

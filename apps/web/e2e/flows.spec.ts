@@ -32,7 +32,9 @@ for (const [name, path, heading] of [
 ] as const) {
   test(`${name} is accessible and fits the screen`, async ({ page }) => {
     await page.goto(path);
-    await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
+    // From 768 px the Board's title is Board; its phone header keeps the factory's name.
+    const title = name === 'board' && !isPhone(page) ? 'Board' : heading;
+    await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
     await expect(orgNav(page)).toBeVisible();
     await expectAccessible(page);
     await expectNoHorizontalScroll(page);
