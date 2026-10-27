@@ -253,7 +253,7 @@ JOIN src ON src.id = c.source_id
 ORDER BY fused.score DESC, c.id
 LIMIT sqlc.arg(max_hits);
 
--- Knowledge use and verdicts (00070, ADR 0027).
+-- Knowledge use and verdicts (00071, ADR 0027).
 
 -- name: UpsertKnowledgeUse :execrows
 -- One use per run, document and kind: a second merges its chunk ids into the first's, sorted

@@ -12,7 +12,7 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
-// Knowledge use and verdicts (ADR 0027) with 00070's rules: one use per run, document and kind,
+// Knowledge use and verdicts (ADR 0027) with 00071's rules: one use per run, document and kind,
 // one verdict per actor, document and run, both kept on their document so its deletion, or its
 // source's, takes them, and a source's window counted from now.
 
