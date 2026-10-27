@@ -148,7 +148,8 @@ func asJSON(t *testing.T, v any) string {
 
 const orgRunsPath = "/v1/orgs/acme/runs"
 
-// orgRun records a run of agent on it, started at at and finished with res unless res is running.
+// orgRun records a run of agent on it, started at the given time and finished with res unless
+// res is running.
 func (h *harness) orgRun(t *testing.T, it domain.Item, agent string, at time.Time, res domain.RunResult) domain.RunID {
 	t.Helper()
 
@@ -193,6 +194,15 @@ func runIDs(list gen.OrgRunList) []domain.RunID {
 	return out
 }
 
+// sameRunSummary checks a run list's summary, which cents of float sums leave exact here.
+func sameRunSummary(t *testing.T, got, want gen.RunSummary) {
+	t.Helper()
+
+	if asJSON(t, got) != asJSON(t, want) {
+		t.Errorf("summary =\n  %s\nwant\n  %s", asJSON(t, got), asJSON(t, want))
+	}
+}
+
 // spendOf renders a summary's spend by factory as "name=usd" pairs.
 func spendOf(s gen.RunSummary) []string {
 	out := []string{}
@@ -226,11 +236,10 @@ func TestAPI_ListRuns(t *testing.T) {
 		t.Errorf("next_cursor = %q; want null on the last page", *list.NextCursor)
 	}
 
-	wantSum := gen.RunSummary{Total: 3, Running: 1, Failed: 1, Finished: 1, SpendUsd: 0.75}
-	if got := list.Summary; got.Total != wantSum.Total || got.Running != wantSum.Running || got.Failed != wantSum.Failed ||
-		got.Finished != wantSum.Finished || got.SpendUsd != wantSum.SpendUsd || !slices.Equal(spendOf(got), []string{"line=0.7500", "acme=0.0000"}) {
-		t.Errorf("summary = %+v; want %+v with line=0.75, acme=0", got, wantSum)
-	}
+	sameRunSummary(t, list.Summary, gen.RunSummary{
+		Total: 3, Running: 1, Failed: 1, Finished: 1, SpendUsd: 0.75,
+		SpendByFactory: []gen.FactorySpend{{Id: lineID, Name: lineSlug, SpendUsd: 0.75}, {Id: acmeID, Name: acmeSlug}},
+	})
 
 	failure := "checks failed"
 	ended := t0.Add(3 * time.Minute)
@@ -238,7 +247,7 @@ func TestAPI_ListRuns(t *testing.T) {
 	want := gen.OrgRun{
 		Id: string(failed), ItemId: string(build.ID), Station: stBuild, Agent: agBackend, Model: runModel,
 		Status: gen.RunStatus(domain.RunFailed), CostUsd: 0.25, Error: &failure, StartedAt: t0.Add(2 * time.Minute), EndedAt: &ended,
-		Factory: gen.FactoryHit{Id: lineID, Name: "line", Title: row.Factory.Title},
+		Factory: gen.FactoryHit{Id: lineID, Name: lineSlug, Title: row.Factory.Title},
 		Item:    gen.RunItem{Id: string(build.ID), Ref: "line#1", Title: "Fix the backend build"},
 	}
 

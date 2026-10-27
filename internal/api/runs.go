@@ -179,7 +179,6 @@ func (s *server) runQuery(p gen.ListRunsParams) (ports.RunQuery, error) {
 		return q, fmt.Errorf("%w: q must have at most %d characters", errInvalid, maxOrgRunsQuery)
 	}
 
-
 	if c := deref(p.Cursor); c != "" {
 		after, err := decodeRunCursor(c)
 		if err != nil {

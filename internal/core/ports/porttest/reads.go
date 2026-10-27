@@ -139,20 +139,6 @@ func (s *Store) OrgRuns(ctx context.Context, q ports.RunQuery) ([]domain.ListedR
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	text := strings.ToLower(q.Text)
-	matches := func(r *domain.Run, it *domain.Item) bool {
-		if q.Status != "" && r.Result.Status != q.Status {
-			return false
-		}
-
-		if text != "" && !strings.Contains(strings.ToLower(it.Title), text) && !strings.Contains(strings.ToLower(r.Agent), text) &&
-			!strings.Contains(strings.ToLower(r.Model), text) && (q.Number <= 0 || it.Number != q.Number || (q.NumberOf != "" && it.FactoryID != q.NumberOf)) {
-			return false
-		}
-
-		return q.After == nil || r.StartedAt.Before(q.After.StartedAt) || (r.StartedAt.Equal(q.After.StartedAt) && r.ID < q.After.ID)
-	}
-
 	var (
 		match = []domain.ListedRun{}
 		sum   domain.RunSummary
@@ -165,20 +151,10 @@ func (s *Store) OrgRuns(ctx context.Context, q ports.RunQuery) ([]domain.ListedR
 			continue
 		}
 
-		sum.Total++
-		sum.SpendUSD += r.Result.CostUSD
+		countRun(&sum, r)
 		spend[r.FactoryID] += r.Result.CostUSD
 
-		switch r.Result.Status {
-		case domain.RunRunning:
-			sum.Running++
-		case domain.RunFailed:
-			sum.Failed++
-		case domain.RunSucceeded, domain.RunCancelled:
-			sum.Finished++
-		}
-
-		if matches(r, it) {
+		if runMatches(q, r, it) {
 			match = append(match, domain.ListedRun{Run: *r, ItemNumber: it.Number, ItemTitle: it.Title})
 		}
 	}
@@ -192,6 +168,45 @@ func (s *Store) OrgRuns(ctx context.Context, q ports.RunQuery) ([]domain.ListedR
 	})
 
 	return match[:min(q.Limit, len(match))], sum, nil
+}
+
+// countRun adds r to a run summary.
+func countRun(sum *domain.RunSummary, r *domain.Run) {
+	sum.Total++
+	sum.SpendUSD += r.Result.CostUSD
+
+	switch r.Result.Status {
+	case domain.RunRunning:
+		sum.Running++
+	case domain.RunFailed:
+		sum.Failed++
+	case domain.RunSucceeded, domain.RunCancelled:
+		sum.Finished++
+	}
+}
+
+// runMatches reports whether r, a run of it, passes q's status, text and cursor.
+func runMatches(q ports.RunQuery, r *domain.Run, it *domain.Item) bool {
+	if q.Status != "" && r.Result.Status != q.Status {
+		return false
+	}
+
+	if q.Text != "" && !containsFold(it.Title, q.Text) && !containsFold(r.Agent, q.Text) && !containsFold(r.Model, q.Text) &&
+		!numbered(q, it) {
+		return false
+	}
+
+	return q.After == nil || r.StartedAt.Before(q.After.StartedAt) || (r.StartedAt.Equal(q.After.StartedAt) && r.ID < q.After.ID)
+}
+
+// numbered reports whether it is the item q's number names.
+func numbered(q ports.RunQuery, it *domain.Item) bool {
+	return q.Number > 0 && it.Number == q.Number && (q.NumberOf == "" || it.FactoryID == q.NumberOf)
+}
+
+// containsFold reports whether s contains sub, case-insensitively.
+func containsFold(s, sub string) bool {
+	return strings.Contains(strings.ToLower(s), strings.ToLower(sub))
 }
 
 // StationLoads implements ports.Store.
