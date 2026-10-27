@@ -45,7 +45,8 @@ export function ReviewSection({ place, search }: SectionViewProps) {
     enabled: place === 'wizard' && Boolean(template?.[0]),
   }).data?.title;
   const name = detail?.name ?? model.basics.name ?? 'This factory';
-  const allPass = validation !== undefined && errors.length === 0 && validation.checks.every((c) => c.status === 'passed');
+  const allPass =
+    validation !== undefined && errors.length === 0 && validation.checks.every((c) => c.status === 'passed');
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -81,8 +82,8 @@ export function ReviewSection({ place, search }: SectionViewProps) {
           {hasDraft && current ? (
             <SectionCard title="What happens to work in progress">
               <p className="m-0 text-body text-ink-soft">
-                Runs already started finish on v{current.number}. Every run that starts after you publish uses v{next}, so
-                an item can change version between stations. Nothing restarts.
+                Runs already started finish on v{current.number}. Every run that starts after you publish uses v{next},
+                so an item can change version between stations. Nothing restarts.
               </p>
             </SectionCard>
           ) : null}

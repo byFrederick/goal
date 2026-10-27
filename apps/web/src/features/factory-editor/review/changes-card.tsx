@@ -61,7 +61,7 @@ export function ChangesCard({
               </div>
               <ul className="m-0 flex list-none flex-col p-0">
                 {list.map((c, i) => (
-                  <li key={`${c.summary}${i}`} className={cn('px-4 py-3 text-heading', i > 0 && 'border-t border-line')}>
+                  <li key={c.summary} className={cn('px-4 py-3 text-heading', i > 0 && 'border-t border-line')}>
                     {c.summary}
                   </li>
                 ))}
@@ -96,7 +96,8 @@ function FileDiff({ file, pair, changes }: { file: FileChange; pair: ComparePair
     enabled: Boolean(file.to_sha256),
   });
   const loading = (file.from_sha256 && !before.data) || (file.to_sha256 && !after.data);
-  if (before.isError || after.isError) return <p className="m-0 text-secondary text-rework-ink">This file could not load.</p>;
+  if (before.isError || after.isError)
+    return <p className="m-0 text-secondary text-rework-ink">This file could not load.</p>;
   if (loading) {
     return (
       <div aria-busy="true">
