@@ -23,6 +23,7 @@ func TestLeaseOutcome_Finished(t *testing.T) {
 		{LeaseReleased, false},
 		{LeaseExpired, false},
 		{LeaseTaken, false},
+		{LeaseAsked, false},
 		{"", false},
 	} {
 		if got := tt.outcome.Finished(); got != tt.finished {

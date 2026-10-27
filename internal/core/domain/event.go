@@ -100,6 +100,15 @@ const (
 	// rules: [{name, sha256}], the rule's name and the hash of its rule file in the run's
 	// definition version.
 	EventRulesApplied EventKind = "rules_applied"
+	// EventQuestionAsked is an agent asking a person a question while its run works (ADR 0018):
+	// the run ends and the item waits for the answer at its station. Data question, choices (0–4
+	// quick answers), agent and run_id.
+	EventQuestionAsked EventKind = "question_asked"
+	// EventQuestionAnswered is a person's answer to the item's open question: the item goes back
+	// to its station's queue and the next run's brief carries the answer. Data answer (a picked
+	// choice's text, or the person's words), choice_index only when a choice was picked, and
+	// actor (ref).
+	EventQuestionAnswered EventKind = "question_answered"
 )
 
 // Audit of items.
