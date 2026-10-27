@@ -62,7 +62,7 @@ function usePauseMany(factory: Factory) {
 
 /** Buttons on the navy bar: 44 px on a phone, 32 px from 768 px. */
 const barButton =
-  'inline-flex min-h-11 items-center gap-2 rounded-control border border-andon-line px-3 text-secondary font-control text-white transition-colors hover:bg-andon-raised disabled:opacity-50 md:min-h-8';
+  'inline-flex min-h-11 items-center gap-2 rounded-control border border-andon-line px-3 text-secondary text-white transition-colors hover:bg-andon-raised disabled:opacity-50 md:min-h-8';
 
 export function BulkActions({
   items,
