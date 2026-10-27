@@ -231,9 +231,9 @@ test('a stopped line is what its floor needs first, and clears from it', async (
 });
 
 test('approve from the phone: the Inbox drawer decides the oldest decision', async ({ page }) => {
-  test.skip(!isPhone(page), 'the phone Board is the one that opens the Inbox drawer (the Items header has none)');
-  await page.goto('/o/acme/f/sre/board');
-  await expect(page.getByRole('heading', { name: 'Needs you' })).toHaveCount(0);
+  // The phone Board has no Inbox, and Needs you is not built yet: the phone's Inbox is the Floor's.
+  test.skip(!isPhone(page), 'the phone Floor is the one that opens the Inbox drawer (the Items header has none)');
+  await page.goto('/o/acme/f/sre/');
 
   await page.getByRole('button', { name: /^Inbox/ }).click();
   const drawer = page.getByRole('dialog', { name: 'Inbox' });
@@ -247,10 +247,10 @@ test('approve from the phone: the Inbox drawer decides the oldest decision', asy
 });
 
 test('merging from the phone names every pull request the merge lands', async ({ page, request }) => {
-  test.skip(!isPhone(page), 'the phone Board is the one that opens the Inbox drawer (the Items header has none)');
+  test.skip(!isPhone(page), 'the phone Floor is the one that opens the Inbox drawer (the Items header has none)');
   // goal#12 is older; once approved, goal#6 (two pull requests, at Merge) is the one to decide.
   await request.post('/v1/orgs/acme/items/goal%2312/approve', { data: {} });
-  await page.goto('/o/acme/f/goal/board');
+  await page.goto('/o/acme/f/goal/');
   await page.getByRole('button', { name: /^Inbox/ }).click();
   const drawer = page.getByRole('dialog', { name: 'Inbox' });
   await drawer.getByRole('button', { name: 'Merge goal#6' }).click();
@@ -260,35 +260,14 @@ test('merging from the phone names every pull request the merge lands', async ({
   await expectAccessible(page);
 });
 
-test('an item shows its time at each station against its target', async ({ page }) => {
+test('an item shows its stepper: each station with its time, and the step it is at', async ({ page }) => {
   // goal#16: an expedite fix created 38 minutes ago, its spec being written now.
   await page.goto('/o/acme/f/goal/items/16');
-  const time = page.getByRole('region', { name: /so far$/ });
-  await expect(time.getByRole('heading', { name: /^3[89] min so far$/ })).toBeVisible();
-  await expect(
-    time.getByRole('img', {
-      name: /^Inbox \d+ min, Spec \d+ min \(\d+ min waiting, \d+ min working\), 2[12] min left/,
-    }),
-  ).toBeVisible();
-  await expect(time.getByText(/^Inbox \d+ min$/)).toBeVisible();
-  await expect(time.getByText('60 min', { exact: true })).toBeVisible();
-
-  // Below 720 px of content (phones, and tablets beside the sidebar) the card is compact.
-  if ((await page.locator('main').evaluate((main) => main.clientWidth)) < 720) {
-    await expect(time.getByText('target 60 min')).toBeVisible();
-    await expect(time.getByText('spec-writer-1 on turn 3 of 80, $0.31 of $12.00')).toBeVisible();
-  } else {
-    await expect(time.getByText('Expedite target: within 60 minutes')).toBeVisible();
-    await expect(time.getByText('3 of 80', { exact: true })).toBeVisible();
-    await expect(time.getByText('$0.31 of $12.00', { exact: true })).toBeVisible();
-    await expect(time.getByText('spec', { exact: true })).toBeVisible();
-  }
-
-  const path = page.getByRole('region', { name: 'Path' });
-  await expect(path.locator('[aria-current="step"]')).toContainText('spec-writer-1 working');
-  await expect(path.getByRole('listitem').filter({ hasText: 'Inbox' })).toContainText(/Spent \d+ min/);
-  // A station not reached yet is named, never given a state it does not have ("Finished").
-  await expect(path.getByRole('listitem').last()).toHaveText('Done');
+  const steps = page.getByRole('list', { name: 'Progress through the line' });
+  await expect(steps.locator('[aria-current="step"]')).toContainText('Spec');
+  await expect(steps.getByRole('listitem').first()).toContainText(/\d+ min/);
+  // The done station says the lead time: the expedite target and the time so far.
+  await expect(steps.getByRole('listitem').last()).toContainText(/Target 60 min, \d+ min so far/);
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
@@ -489,20 +468,17 @@ test('on a phone the board opens where a person is needed, then picks any statio
   // Items waiting on a person come first: the board opens on Approve, not the constraint.
   const picker = page.getByRole('tablist', { name: 'Stations' });
   await expect(picker.getByRole('tab', { name: /^Approve/ })).toHaveAttribute('aria-selected', 'true');
-  // The line's WIP stays one phrase on one line ("WIP 1 / of 2" read badly).
-  const wip = page.getByText(/^WIP \d+( of \d+)?$/).filter({ visible: true });
-  expect(await wip.evaluate((el) => el.getClientRects().length)).toBe(1);
-  await picker.getByRole('tab', { name: 'Investigate 3 of 3, 2 ready' }).click();
+  // The phone has no status line: the picked station's column names the constraint.
+  await picker.getByRole('tab', { name: /^Investigate/ }).click();
   await expect(page).toHaveURL(/station=investigate/);
-  await expect(page.getByText('Investigate is the constraint: 3 of 3 busy, 2 waiting')).toBeVisible();
-  await expect(page.getByRole('article').filter({ hasText: 'billing-svc' })).toContainText(
-    'sre#8, Incident, 1 hbilling-svc deploy rolled back twiceinvestigator-1, turn 3',
-  );
+  await expect(page.getByRole('tabpanel').getByRole('heading', { name: 'Investigate' })).toBeVisible();
+  await expect(page.getByRole('tabpanel').getByText('Constraint', { exact: true })).toBeVisible();
+  await expect(page.getByRole('article').filter({ hasText: 'billing-svc' })).toContainText('sre#8');
   await expect(page.getByRole('tabpanel').getByRole('article').filter({ hasText: 'Checkout API p95' })).toContainText(
     'Expedite',
   );
 
-  await picker.getByRole('tab', { name: 'Done 1 today' }).click();
+  await picker.getByRole('tab', { name: /^Done/ }).click();
   await expect(page).toHaveURL(/station=done/);
   await expect(page.getByRole('article').filter({ hasText: 'Redis evictions' })).not.toContainText('Postmortem filed');
   await expectAccessible(page);

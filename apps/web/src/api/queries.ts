@@ -20,6 +20,7 @@ import {
   getAuthConfig,
   getBoard,
   getConstraint,
+  getFactoryActivity,
   getFactoryOverview,
   getInbox,
   getItem,
@@ -169,6 +170,8 @@ export const keys = {
   move: (org: string, factory: string) => ['org', org, 'factory', factory, 'move'] as const,
   metrics: (org: string, factory: string, range: FlowRange) =>
     ['org', org, 'factory', factory, 'metrics', range] as const,
+  /** The factory's latest milestone events (listFactoryActivity); the stream refreshes it, nothing polls. */
+  activity: (org: string, factory: string) => ['org', org, 'factory', factory, 'activity'] as const,
   weekly: (org: string, factory: string, to: string | undefined, type: string | undefined) =>
     ['org', org, 'factory', factory, 'weekly', to ?? 'today', type ?? 'all'] as const,
   constraint: (org: string, factory: string, from: string | undefined, to: string | undefined) =>
@@ -404,6 +407,16 @@ export const weeklyQuery = (org: string, factory: string, { to, type }: FlowRang
     queryKey: keys.weekly(org, factory, to, type),
     queryFn: ({ signal }) => getWeekly(org, factory, { to, type }, signal),
     staleTime: 30_000,
+  });
+
+/** The rows the Floor's Activity card shows. */
+const activityLimit = 5;
+
+/** The factory's latest milestone events, newest first (the Floor's Activity card). */
+export const activityQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: keys.activity(org, factory),
+    queryFn: ({ signal }) => getFactoryActivity(org, factory, { limit: activityLimit }, signal),
   });
 
 /** The constraint over a range (the work type does not change it). */

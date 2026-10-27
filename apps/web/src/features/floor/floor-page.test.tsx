@@ -1,17 +1,19 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { approveItem, getFactoryActivity, rejectItem } from '../../api/client';
 import {
+  activityQuery,
   boardQuery,
   constraintQuery,
   inboxQuery,
-  leadTimeQuery,
   metricsQuery,
   overviewQuery,
-  touchesQuery,
   weeklyQuery,
 } from '../../api/queries';
 import type {
+  Activity,
+  ActivityEvent,
   Board,
   ConstraintReport,
   Factory,
@@ -19,19 +21,28 @@ import type {
   FactoryOverviewList,
   InboxEntry,
   ItemCard,
-  LeadTimeBridge,
   Metrics,
   MetricsSummary,
   OrgSummary,
-  TouchMetrics,
   WeeklyThroughput,
 } from '../../api/types';
 import { renderFactoryPage } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
 import { FloorPage } from './floor-page';
-import { addDays, previousRange, rangeOf, todayUtc } from './range';
+import { addDays, rangeOf, todayUtc } from './range';
 
-afterEach(cleanup);
+// The decisions and the activity feed go through the API client; the other calls are answered by the seeded queries.
+vi.mock('../../api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../api/client')>()),
+  approveItem: vi.fn(),
+  rejectItem: vi.fn(),
+  getFactoryActivity: vi.fn(),
+}));
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 const org: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'A', factory_count: 1, role: null };
 const factory: Factory = {
@@ -131,20 +142,6 @@ const weekly: WeeklyThroughput = {
   weeks: [],
 };
 
-const bridge: LeadTimeBridge = {
-  from: '2026-10-20',
-  to: '2026-10-26',
-  type: null,
-  status: 'not_enough_data',
-  target_hours: null,
-  actual_p85_hours: null,
-  gap_hours: null,
-  items_done: 0,
-  over_target_items: 0,
-  steps: [],
-  constraint: null,
-};
-
 const constraint: ConstraintReport = {
   from: '2026-10-20',
   to: '2026-10-26',
@@ -153,31 +150,6 @@ const constraint: ConstraintReport = {
   constraint: null,
   source: 'detected',
   candidates: [],
-};
-
-const touches: TouchMetrics = {
-  from: '2026-10-20',
-  to: '2026-10-26',
-  type: null,
-  version: null,
-  weekly: [],
-  daily: [],
-  stats: {
-    finished: 0,
-    touches: 0,
-    planned: 0,
-    unplanned: 0,
-    touchless_rate: 0,
-    per_item_mean: 0,
-    per_item_median: 0,
-    planned_per_item: 0,
-    unplanned_per_item: 0,
-    by_station: [],
-    by_kind: [],
-    by_reason: [],
-    by_version: [],
-    line_stops: 0,
-  },
 };
 
 /** The Floor's flow metrics of the range before, for the deltas: last week's figures. */
@@ -237,6 +209,102 @@ function overviewList(window: string, factories: FactoryOverview[]): FactoryOver
   };
 }
 
+const event = (over: Partial<ActivityEvent>): ActivityEvent => ({
+  id: 1,
+  item_id: 'item-3',
+  at: '2026-10-26T14:32:00Z',
+  kind: 'merged',
+  station: 'merge',
+  actor: 'reviewer',
+  data: {},
+  ref: 'sre#146',
+  number: 146,
+  title: 'Ship the retry fix',
+  ...over,
+});
+
+/** The factory's latest milestone events, newest first: a merge by the reviewer, a move by a frontend engineer copy. */
+const feed: Activity = {
+  events: [
+    event({ id: 2, kind: 'merged', actor: 'reviewer', station: 'review' }),
+    event({
+      id: 1,
+      at: '2026-10-26T13:48:00Z',
+      kind: 'moved',
+      actor: 'frontend-engineer-2',
+      station: 'build',
+      ref: 'sre#147',
+      number: 147,
+    }),
+  ],
+};
+
+/** The constraint with three busy stations: Build is the constraint at 94%. */
+const busy: ConstraintReport = {
+  ...constraint,
+  coverage_since: '2026-10-01T00:00:00Z',
+  configured: 'build',
+  constraint: 'build',
+  source: 'configured',
+  candidates: [
+    {
+      station: 'spec',
+      slots: 2,
+      agents: ['architect'],
+      busy_ratio: 0.41,
+      avg_waiting: 0,
+      mean_wait_minutes: null,
+      mean_service_minutes: 30,
+      leases: 12,
+      spend_per_slot_day_usd: null,
+      estimate: null,
+    },
+    {
+      station: 'build',
+      slots: 6,
+      agents: ['frontend-engineer'],
+      busy_ratio: 0.94,
+      avg_waiting: 3,
+      mean_wait_minutes: 40,
+      mean_service_minutes: 55,
+      leases: 80,
+      spend_per_slot_day_usd: null,
+      estimate: null,
+    },
+    {
+      station: 'review',
+      slots: 2,
+      agents: ['reviewer'],
+      busy_ratio: 0.58,
+      avg_waiting: 0,
+      mean_wait_minutes: null,
+      mean_service_minutes: 20,
+      leases: 30,
+      spend_per_slot_day_usd: null,
+      estimate: null,
+    },
+  ],
+};
+
+/** Two weeks of merges with a target of 10 a day. */
+const twoWeeks: WeeklyThroughput = {
+  to: '2026-10-26',
+  type: null,
+  targets: { throughput_per_day: 10, lead_time_hours: null, expedite_lead_time_minutes: null },
+  weeks: [
+    { from: '2026-10-13', to: '2026-10-19', done: 57, per_day: 8.1 },
+    { from: '2026-10-20', to: '2026-10-26', done: 53, per_day: 7.6 },
+  ],
+};
+
+const deciding: InboxEntry = {
+  ...ship,
+  id: 'decision:item-4',
+  action: null,
+  item: item({ id: 'item-4', ref: 'sre#4', title: 'Add the audit log', station: 'review' }),
+  station: 'review',
+};
+
 /** The Floor at its default range (the last seven days), with every query it reads seeded. */
 function renderFloor({
   entries = [],
@@ -244,12 +312,19 @@ function renderFloor({
   flowMetrics = metrics,
   today = overviewList('1d', [overviewRow(96, 150)]),
   week = overviewList('7d', [overviewRow(412, 1050)]),
+  constraintReport = constraint,
+  weeks = weekly,
+  activity = feed,
 }: {
   entries?: InboxEntry[];
   line?: Board;
   flowMetrics?: Metrics;
   today?: FactoryOverviewList;
   week?: FactoryOverviewList;
+  constraintReport?: ConstraintReport;
+  weeks?: WeeklyThroughput;
+  /** null seeds no activity, so the card fetches it (and the test decides the answer). */
+  activity?: Activity | null;
 } = {}) {
   const range = rangeOf({});
   return renderFactoryPage({
@@ -265,14 +340,12 @@ function renderFloor({
     seed: [
       [boardQuery(org.id, factory.id).queryKey, line],
       [metricsQuery(org.id, factory.id, range).queryKey, flowMetrics],
-      [weeklyQuery(org.id, factory.id, range).queryKey, weekly],
-      [leadTimeQuery(org.id, factory.id, range).queryKey, bridge],
-      [constraintQuery(org.id, factory.id, range).queryKey, constraint],
-      [touchesQuery(org.id, factory.id, range).queryKey, touches],
-      [touchesQuery(org.id, factory.id, previousRange(range)).queryKey, touches],
+      [weeklyQuery(org.id, factory.id, range).queryKey, weeks],
+      [constraintQuery(org.id, factory.id, range).queryKey, constraintReport],
       [inboxQuery(org.id, factory.id).queryKey, { entries, truncated: false }],
       [overviewQuery(org.id, '1d').queryKey, today],
       [overviewQuery(org.id, '7d').queryKey, week],
+      ...(activity ? [[activityQuery(org.id, factory.id).queryKey, activity] as const] : []),
     ],
   });
 }
@@ -287,12 +360,16 @@ describe('FloorPage', () => {
     expect(within(drawer).getByRole('button', { name: 'Merge sre#3' })).toBeTruthy();
   });
 
-  it('has no Needs you card, with or without waiting entries', async () => {
+  it('shows Needs you, Where work waits, Throughput by week and Activity below the figures, in that order', async () => {
     renderFloor({ entries: [ship] });
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Floor' })).toBeTruthy();
-    expect(screen.queryByRole('region', { name: 'Needs you' })).toBeNull();
-    expect(screen.queryByText('Needs you')).toBeNull();
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+    const from = headings.indexOf('Needs you');
+    expect(from).toBeGreaterThanOrEqual(0);
+    expect(headings.slice(from, from + 4)).toEqual(['Needs you', 'Where work waits', 'Throughput by week', 'Activity']);
+    expect(screen.queryByText('Touches')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Lead time' })).toBeNull();
   });
 
   it('shows the line running and the range it covers, against the 7 days before', async () => {
@@ -374,5 +451,109 @@ describe('FloorPage', () => {
     renderFloor({ flowMetrics: flow, today: overviewList('1d', []) });
 
     expect(await screen.findByText('Not enough data')).toBeTruthy();
+  });
+});
+
+describe('the cards below the figures', () => {
+  it('Needs you shows the count and a decision row with Deny and Approve', async () => {
+    renderFloor({ entries: [deciding] });
+
+    const card = await screen.findByRole('region', { name: 'Needs you' });
+    expect(within(card).getByText('Add the audit log')).toBeTruthy();
+    expect(within(card).getByText('sre#4 at Review')).toBeTruthy();
+    expect(within(card).getByRole('button', { name: 'Deny' })).toBeTruthy();
+    expect(within(card).getByRole('button', { name: 'Approve sre#4' })).toBeTruthy();
+  });
+
+  it('Approve calls approveItem with the item and shows no question rows', async () => {
+    vi.mocked(approveItem).mockResolvedValue({ ...item({ ref: 'sre#4' }), state: 'queued', station: 'merge' } as never);
+    renderFloor({ entries: [deciding] });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve sre#4' }));
+    await waitFor(() => expect(approveItem).toHaveBeenCalledWith('org-1', 'sre#4'));
+    expect(screen.queryByText(/asked a question/)).toBeNull();
+  });
+
+  it('Deny asks for a reason and then calls rejectItem', async () => {
+    vi.mocked(rejectItem).mockResolvedValue({ ...item({ ref: 'sre#4' }), state: 'queued', station: 'build' } as never);
+    renderFloor({ entries: [deciding] });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Deny' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'The audit log is missing' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /send back/i }));
+    await waitFor(() => expect(rejectItem).toHaveBeenCalledWith('org-1', 'sre#4', 'The audit log is missing'));
+  });
+
+  it('a row that is not a decision offers Decide, which opens the item', async () => {
+    renderFloor({ entries: [ship] });
+
+    const card = await screen.findByRole('region', { name: 'Needs you' });
+    expect(within(card).getByRole('link', { name: 'Decide' }).getAttribute('href')).toContain('/items/sre%233');
+    expect(within(card).queryByRole('button', { name: 'Approve sre#3' })).toBeNull();
+  });
+
+  it('Needs you says when nothing waits on the person', async () => {
+    renderFloor();
+
+    const card = await screen.findByRole('region', { name: 'Needs you' });
+    expect(within(card).getByText('Nothing waits on you.')).toBeTruthy();
+  });
+
+  it('Where work waits draws one bar per station, the constraint in amber, and names it', async () => {
+    renderFloor({ constraintReport: busy });
+
+    const card = await screen.findByRole('region', { name: 'Where work waits' });
+    expect(within(card).getByText('Build is the constraint')).toBeTruthy();
+    expect(within(card).getByText("Share of the week each station's agents were busy")).toBeTruthy();
+    expect(within(card).getByText('94%')).toBeTruthy();
+    expect(card.querySelectorAll('.bg-amber')).toHaveLength(1);
+  });
+
+  it('the what-if button is not available yet: aria-disabled, and it says so on focus', async () => {
+    renderFloor({ constraintReport: busy });
+
+    const card = await screen.findByRole('region', { name: 'Where work waits' });
+    const button = within(card).getByRole('button', { name: 'Add a build agent' });
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    button.focus();
+    expect(await screen.findByText('Not available yet')).toBeTruthy();
+    expect(within(card).queryByText(/lead time/i)).toBeNull();
+  });
+
+  it('Throughput by week draws each week with the target', async () => {
+    renderFloor({ weeks: twoWeeks });
+
+    const card = await screen.findByRole('region', { name: 'Throughput by week' });
+    expect(within(card).getByRole('img', { name: /Items merged a day by week/ })).toBeTruthy();
+    expect(within(card).getByText('Target 10')).toBeTruthy();
+  });
+
+  it('Activity shows Live and a sentence per event, naming the actor by role, never by copy number', async () => {
+    renderFloor();
+
+    const card = await screen.findByRole('region', { name: 'Activity' });
+    expect(within(card).getByText('Live')).toBeTruthy();
+    expect(card.textContent).toContain('sre#146 merged by reviewer at Review');
+    expect(card.textContent).toContain('sre#147 moved by frontend-engineer at Build');
+    expect(card.textContent).not.toContain('frontend-engineer-2');
+  });
+
+  it('Activity says what failed and offers Retry', async () => {
+    vi.mocked(getFactoryActivity).mockRejectedValueOnce(new Error('goald is down'));
+    renderFloor({ activity: null });
+
+    const card = await screen.findByRole('region', { name: 'Activity' });
+    expect(await within(card).findByText('Could not load activity.')).toBeTruthy();
+    expect(within(card).getByRole('button', { name: 'Retry' })).toBeTruthy();
+  });
+
+  it('Activity is busy until its first answer arrives', async () => {
+    vi.mocked(getFactoryActivity).mockReturnValueOnce(new Promise(() => {}));
+    renderFloor({ activity: null });
+
+    const card = await screen.findByRole('region', { name: 'Activity' });
+    expect(card.getAttribute('aria-busy')).toBe('true');
+    expect(within(card).getByText('Loading')).toBeTruthy();
   });
 });
