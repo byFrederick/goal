@@ -38,7 +38,7 @@ func TestRun_Golden(t *testing.T) {
 	}
 
 	// Each of these runs with no arguments, and its golden file has its name.
-	for group := range strings.FieldsSeq("version factory org key andon admin catalog connection knowledge db storage run search") {
+	for group := range strings.FieldsSeq("version factory org key andon admin catalog connection credential knowledge db storage run search") {
 		cases = append(cases, struct {
 			name string
 			line string
