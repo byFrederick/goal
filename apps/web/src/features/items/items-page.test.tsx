@@ -188,6 +188,24 @@ describe('Items page header and views', () => {
     expect(screen.getByText('Urgent fix')).toBeTruthy();
   });
 
+  it('lists only the items done in the last seven days under Done this week, and its count matches', async () => {
+    renderItems([
+      item({ id: 'a', ref: 'sre#1', title: 'Shipped today', state: 'done', updated_at: now() }),
+      item({ id: 'b', ref: 'sre#2', title: 'Shipped long ago', state: 'done', updated_at: '2020-01-01T00:00:00Z' }),
+    ]);
+
+    fireEvent.click(await screen.findByRole('link', { name: /^Done this week/ }));
+    const views = await screen.findByRole('navigation', { name: 'Saved views' });
+    expect(
+      within(views)
+        .getByRole('link', { name: /^Done this week/ })
+        .getAttribute('aria-current'),
+    ).toBe('page');
+    expect(within(views).getByRole('link', { name: /^Done this week/ }).textContent).toContain('1');
+    expect(await screen.findByText('Shipped today')).toBeTruthy();
+    expect(screen.queryByText('Shipped long ago')).toBeNull();
+  });
+
   it('renders Save view, Set lane and Source as not available, and does nothing when pressed', async () => {
     renderItems([item({ id: 'a', ref: 'sre#1', title: 'Some work' })]);
 

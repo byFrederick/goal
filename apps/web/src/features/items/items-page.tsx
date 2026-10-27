@@ -114,8 +114,10 @@ export function ItemsPage() {
   const org = useOrg();
   const navigate = useNavigate({ from: '/o/$org/f/$factory/items/' });
   const groupedId = useId();
+  // The Done this week view lists the done items; its seven-day window is applied in the browser.
+  const listState = view === 'done-week' ? 'done' : state;
   const everything = useQuery(itemsQuery(org.id, factory.id, { limit: 200 }));
-  const listed = useQuery(itemsQuery(org.id, factory.id, { state, limit: 200 }));
+  const listed = useQuery(itemsQuery(org.id, factory.id, { state: listState, limit: 200 }));
   const actions = useMemo(() => <ItemsActions />, []);
 
   const canOperate = holds(factory, 'item:operate');
@@ -127,9 +129,10 @@ export function ItemsPage() {
   const filters: ItemsFilters = { view, type, lane, assembly };
   const narrowed =
     state !== undefined || view !== undefined || type !== undefined || lane !== undefined || assembly !== undefined;
-  const shown = applyFilters(listed.data?.items ?? [], filters);
+  const now = Date.now();
+  const shown = applyFilters(listed.data?.items ?? [], filters, now);
   const rows = flat ? [] : listRows(shown, all, narrowed);
-  const counts = countsOf(all, Date.now());
+  const counts = countsOf(all, now);
   const selected = new Set(selectedIds(sel));
   const checked = shown.filter((it) => !isAssemblyCard(it) && selected.has(it.id));
 
@@ -216,11 +219,11 @@ export function ItemsPage() {
       search: { ...viewKeep, view: 'expedite' as const },
     },
     {
-      key: 'done',
+      key: 'done-week',
       label: 'Done this week',
       count: counts.doneThisWeek,
-      current: !view && state === 'done',
-      search: { ...viewKeep, state: 'done' as const },
+      current: view === 'done-week',
+      search: { ...viewKeep, view: 'done-week' as const },
     },
   ];
 
@@ -270,9 +273,12 @@ export function ItemsPage() {
         <legend className="sr-only">Filters</legend>
         <FilterMenu
           name="State"
-          chosen={state}
+          chosen={listState}
           choices={stateChoices.flatMap((c) => (c.state ? [{ value: c.state, label: c.label }] : []))}
-          onChoose={(value) => setSearch({ state: value as ItemState | undefined })}
+          onChoose={(value) =>
+            // Choosing a State leaves the Done this week view, so the State shown is the list shown.
+            setSearch({ state: value as ItemState | undefined, ...(view === 'done-week' ? { view: undefined } : {}) })
+          }
         />
         <FilterMenu
           name="Type"

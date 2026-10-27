@@ -52,7 +52,16 @@ describe('Items filters', () => {
   it('keeps the items that match the type, the lane and the expedite view', () => {
     expect(applyFilters(items, { type: 'task' }).map((it) => it.id)).toEqual(['b']);
     expect(applyFilters(items, { lane: 'backend' }).map((it) => it.id)).toEqual(['a']);
-    expect(applyFilters(items, { view: 'expedite' }).map((it) => it.id)).toEqual(['b']);
+    expect(applyFilters(items, { view: 'expedite' }, now).map((it) => it.id)).toEqual(['b']);
+  });
+
+  it('keeps only the done items updated within seven days for the Done this week view', () => {
+    const done = [
+      card({ id: 'recent', state: 'done', updated_at: '2026-10-21T12:00:00Z' }),
+      card({ id: 'old', state: 'done', updated_at: '2026-10-01T10:00:00Z' }),
+      card({ id: 'open', state: 'in_progress', updated_at: '2026-10-26T10:00:00Z' }),
+    ];
+    expect(applyFilters(done, { view: 'done-week' }, now).map((it) => it.id)).toEqual(['recent']);
   });
 
   it('lets an assembly card pass through the filters, so its parts can still group under it', () => {

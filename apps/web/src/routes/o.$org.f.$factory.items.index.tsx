@@ -9,8 +9,8 @@ interface ItemsSearch {
   state?: ItemState | undefined;
   /** `flat` lists every item as a row; the default groups parts under their assembly. */
   show?: 'flat' | undefined;
-  /** A saved view: `expedite`. Open, Waiting on you and Done this week are the state filter. */
-  view?: 'expedite' | undefined;
+  /** A saved view: `expedite`, or `done-week` (the done items of the last seven days). Open and Waiting on you are the state filter. */
+  view?: 'expedite' | 'done-week' | undefined;
   /** The Type, Lane and Assembly filters, by the values the list shows. */
   type?: string | undefined;
   lane?: string | undefined;
@@ -26,13 +26,14 @@ export const Route = createFileRoute('/o/$org/f/$factory/items/')({
   validateSearch: (search: Record<string, unknown>): ItemsSearch => ({
     ...(isState(search.state) ? { state: search.state } : {}),
     ...(search.show === 'flat' ? { show: 'flat' as const } : {}),
-    ...(search.view === 'expedite' ? { view: 'expedite' as const } : {}),
+    ...(search.view === 'expedite' || search.view === 'done-week' ? { view: search.view } : {}),
     ...(nonEmpty(search.type) ? { type: nonEmpty(search.type) } : {}),
     ...(nonEmpty(search.lane) ? { lane: nonEmpty(search.lane) } : {}),
     ...(nonEmpty(search.assembly) ? { assembly: nonEmpty(search.assembly) } : {}),
     ...(nonEmpty(search.sel) ? { sel: nonEmpty(search.sel) } : {}),
   }),
-  loaderDeps: ({ search }) => ({ state: search.state }),
+  // The Done this week view lists the done items, so it loads the same state a State filter of Done would.
+  loaderDeps: ({ search }) => ({ state: search.view === 'done-week' ? ('done' as const) : search.state }),
   // The saved views' counts and the filter menus read every item, so the unfiltered list is always
   // loaded; it holds the assemblies too, whose progress heads the parts a state filter keeps (the
   // page's listRows). The board is loaded for the Move menu's optimistic update.

@@ -4,7 +4,7 @@
 import type { ItemCard, ItemState } from '../../api/types';
 
 /** A saved view: Open is the default (no view and no state), the others are a state or this view. */
-export type ItemsView = 'expedite';
+export type ItemsView = 'expedite' | 'done-week';
 
 export interface ItemsFilters {
   view?: ItemsView | undefined;
@@ -47,11 +47,15 @@ export function countsOf(items: ItemCard[], now: number): ItemsCounts {
   };
 }
 
-/** The items that pass the view and the Type, Lane and Assembly filters. Assembly cards pass through. */
-export function applyFilters(items: ItemCard[], filters: ItemsFilters): ItemCard[] {
+/**
+ * The items that pass the view and the Type, Lane and Assembly filters. Assembly cards pass through.
+ * The Done this week view keeps the done items of the last seven days, the same rule its count uses.
+ */
+export function applyFilters(items: ItemCard[], filters: ItemsFilters, now: number = Date.now()): ItemCard[] {
   return items.filter((it) => {
     if (isAssemblyCard(it)) return true;
     if (filters.view === 'expedite' && it.class_of_service !== 'expedite') return false;
+    if (filters.view === 'done-week' && !isDoneThisWeek(it, now)) return false;
     if (filters.type && it.type !== filters.type) return false;
     if (filters.lane && it.lane !== filters.lane) return false;
     if (filters.assembly && it.assembly?.id !== filters.assembly) return false;
