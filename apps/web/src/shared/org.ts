@@ -59,6 +59,35 @@ export function defaultOrg(orgs: readonly OrgSummary[]): OrgSummary | undefined 
   return (last ? findOrg(orgs, last) : undefined) ?? orgs[0];
 }
 
+const lastFactoryKey = (orgId: string) => `goal.factory.${orgId}`;
+
+/** Remembers the factory a person last opened in an organization (by its id), for the phone's tab bar. */
+export function rememberFactory(orgId: string, factoryId: string): void {
+  try {
+    localStorage.setItem(lastFactoryKey(orgId), factoryId);
+  } catch {
+    // Storage can be unavailable; the tab bar then falls back to the first factory.
+  }
+}
+
+/**
+ * The factory last opened in `orgId`, if it is still in `factories` and not archived; otherwise
+ * undefined. The list is the organization's active factories, so an archived one never matches.
+ */
+export function lastFactory<F extends { id: string; archived_at?: string | null }>(
+  orgId: string,
+  factories: readonly F[],
+): F | undefined {
+  let id: string | null;
+  try {
+    id = localStorage.getItem(lastFactoryKey(orgId));
+  } catch {
+    return undefined;
+  }
+  if (!id) return undefined;
+  return factories.find((f) => f.id === id && !f.archived_at);
+}
+
 /** "3 factories", "1 factory". */
 export function factoryCount(n: number): string {
   return `${n} ${n === 1 ? 'factory' : 'factories'}`;

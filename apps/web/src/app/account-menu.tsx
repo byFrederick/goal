@@ -1,8 +1,7 @@
 // The account (canvas "Account-Menu", "Mobile-Org-Switcher"; spec 3 §10.2): the person at the
-// bottom of the sidebar (and the avatar in the phone's top row) opens a panel naming the person, their role in
+// bottom of the sidebar (on phones, of the drawer) opens a panel naming the person, their role in
 // this organization and whether they are a platform admin, with Edit name…, Personal tokens (to
-// this organization's API keys page, 3-12b), Sign out and Sign out everywhere…; on phones the same
-// block sits at the bottom of the organization sheet. With sign-in off (GOAL_AUTH=none) it names
+// this organization's API keys page, 3-12b), Sign out and Sign out everywhere…. With sign-in off (GOAL_AUTH=none) it names
 // the local user and has no actions.
 //
 // AccountProvider (in AppShell) keeps the dialogs those actions open, so they outlive the panel or
@@ -28,7 +27,6 @@ import { Avatar } from '../ui/mark';
 import { menuRow } from '../ui/menu';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { AppearanceChoice } from './appearance-choice';
-import { railItem, railItemClass } from './rail-items';
 
 /** Better Auth extends a session its endpoints see (spec 3 §8.3): on load, then hourly. */
 const keepAliveMs = 60 * 60_000;
@@ -110,10 +108,10 @@ export function AccountProvider({ org, children }: { org: OrgSummary; children: 
 }
 
 /**
- * The account's trigger and panel: the person's name and role at the bottom of the sidebar (the panel
- * opens above it), or the avatar in the phone's top row (the panel opens below).
+ * The account's trigger and panel: the person's name and role at the bottom of the sidebar, or of the
+ * phone's drawer (the panel opens above it).
  */
-export function AccountMenu({ org, size }: { org: OrgSummary; size: 'sidebar' | 'phone' }) {
+export function AccountMenu({ org }: { org: OrgSummary }) {
   const { person } = useAccount();
   const [open, setOpen] = useState(false);
   const name = person ? displayName(person) : 'Local user';
@@ -122,27 +120,17 @@ export function AccountMenu({ org, size }: { org: OrgSummary; size: 'sidebar' | 
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      {size === 'sidebar' ? (
-        <PopoverTrigger
-          aria-label={label}
-          className="flex w-full items-center gap-3 rounded-cell p-2 text-left text-ink hover:bg-hover aria-expanded:bg-hover"
-        >
-          <Avatar initials={initials} size="sidebar" />
-          <span className="flex min-w-0 flex-col">
-            <span className="truncate text-body font-semibold">{name}</span>
-            {roleName(org.role) ? <span className="truncate text-meta text-muted">{roleName(org.role)}</span> : null}
-          </span>
-        </PopoverTrigger>
-      ) : (
-        <PopoverTrigger aria-label={label} className={railItemClass} {...railItem}>
-          <Avatar initials={initials} size="phone" />
-        </PopoverTrigger>
-      )}
-      <PopoverContent
-        side={size === 'sidebar' ? 'top' : 'bottom'}
-        align={size === 'sidebar' ? 'start' : 'end'}
-        aria-label="Account"
+      <PopoverTrigger
+        aria-label={label}
+        className="flex w-full items-center gap-3 rounded-cell p-2 text-left text-ink hover:bg-hover aria-expanded:bg-hover"
       >
+        <Avatar initials={initials} size="sidebar" />
+        <span className="flex min-w-0 flex-col">
+          <span className="truncate text-body font-semibold">{name}</span>
+          {roleName(org.role) ? <span className="truncate text-meta text-muted">{roleName(org.role)}</span> : null}
+        </span>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="start" aria-label="Account">
         <AccountPanel org={org} onAction={() => setOpen(false)} />
       </PopoverContent>
     </Popover>
