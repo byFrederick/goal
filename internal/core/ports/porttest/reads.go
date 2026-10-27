@@ -7,6 +7,7 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -78,6 +79,47 @@ func (s *Store) ListItems(ctx context.Context, q ports.ItemQuery) ([]domain.Item
 	}
 
 	slices.SortFunc(match, func(a, b *domain.Item) int { return cmp.Compare(b.Number, a.Number) })
+
+	out := make([]domain.Item, 0, min(q.Limit, len(match)))
+	for _, it := range match[:min(q.Limit, len(match))] {
+		out = append(out, clone(it))
+	}
+
+	return out, nil
+}
+
+// SearchItems implements ports.Store.
+func (s *Store) SearchItems(ctx context.Context, q ports.ItemSearch) ([]domain.Item, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	title := strings.ToLower(q.Title)
+
+	var match []*domain.Item
+
+	for _, it := range s.items {
+		byTitle := title != "" && strings.Contains(strings.ToLower(it.Title), title)
+		if it.OrgID == org && slices.Contains(q.Factories, it.FactoryID) && (byTitle || (q.Number > 0 && it.Number == q.Number)) {
+			match = append(match, it)
+		}
+	}
+
+	exact := func(it *domain.Item) int {
+		if it.Number == q.Number {
+			return 0
+		}
+
+		return 1
+	}
+
+	slices.SortFunc(match, func(a, b *domain.Item) int {
+		return cmp.Or(cmp.Compare(exact(a), exact(b)), cmp.Compare(b.Number, a.Number), cmp.Compare(a.FactoryID, b.FactoryID))
+	})
 
 	out := make([]domain.Item, 0, min(q.Limit, len(match)))
 	for _, it := range match[:min(q.Limit, len(match))] {

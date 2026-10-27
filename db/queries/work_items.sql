@@ -84,6 +84,17 @@ WHERE factory_id = sqlc.arg(factory_id)
 ORDER BY number DESC
 LIMIT sqlc.arg(max_items)::bigint;
 
+-- name: SearchItems :many
+-- The shell's search: the items of the factories whose title contains the pattern (already
+-- escaped, with \ as the escape character) or whose number is the one given, that one first.
+-- Bounded by factory_id and the limit; no index serves the ILIKE (no trigram index yet).
+SELECT * FROM work_items
+WHERE factory_id = ANY (sqlc.arg(factories)::uuid[])
+  AND ((sqlc.arg(pattern)::text <> '' AND title ILIKE '%' || sqlc.arg(pattern)::text || '%' ESCAPE '\')
+       OR (sqlc.arg(number)::bigint > 0 AND number = sqlc.arg(number)::bigint))
+ORDER BY (number = sqlc.arg(number)::bigint) DESC, number DESC, factory_id
+LIMIT sqlc.arg(max_items)::bigint;
+
 -- name: StationLoads :many
 -- The open items of a factory by station: waiting to be pulled, in progress, waiting for a
 -- person's decision. (The station_wip view counts only the first two.)
