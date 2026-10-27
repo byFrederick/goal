@@ -724,6 +724,46 @@ func (q *Queries) StationLeaseTimes(ctx context.Context, arg StationLeaseTimesPa
 	return items, nil
 }
 
+const stationSpend = `-- name: StationSpend :many
+SELECT station, coalesce(sum(cost_usd), 0)::float8 AS spend_usd
+FROM agent_runs
+WHERE factory_id = $1 AND started_at >= $2::timestamptz AND started_at < $3::timestamptz
+GROUP BY station
+`
+
+type StationSpendParams struct {
+	FactoryID uuid.UUID
+	Since     time.Time
+	Until     time.Time
+}
+
+type StationSpendRow struct {
+	Station  string
+	SpendUsd float64
+}
+
+// The cost of each station's runs started in [since, until), failed and retried ones included, on
+// agent_runs_factory_started_idx.
+func (q *Queries) StationSpend(ctx context.Context, arg StationSpendParams) ([]StationSpendRow, error) {
+	rows, err := q.db.Query(ctx, stationSpend, arg.FactoryID, arg.Since, arg.Until)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StationSpendRow
+	for rows.Next() {
+		var i StationSpendRow
+		if err := rows.Scan(&i.Station, &i.SpendUsd); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const stationVerdicts = `-- name: StationVerdicts :many
 SELECT station, count(*) AS verdicts, count(*) FILTER (WHERE kind = 'gate_rejected') AS rejected
 FROM item_events
