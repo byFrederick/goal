@@ -64,8 +64,7 @@ func (e *Engine) open(ctx context.Context, c claimed, runID domain.RunID, b *box
 	sb, err := e.sandboxes.Create(ctx, ports.SandboxSpec{
 		OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, ItemID: c.item.ID, RunID: runID, Station: c.station.ID, Agent: c.agent.Name,
 		Image: e.cfg.Image, Size: c.line.Runtime.Size, Env: map[string]string{envGatewayURL: e.cfg.GatewayURL},
-		// A retry runs in the same sandbox: it lives as long as both attempts may.
-		Deadline: started.Add(maxAttempts*e.cfg.TaskTimeout + e.cfg.LeaseTTL),
+		Deadline: started.Add(boxLife(c, e.cfg)),
 	})
 	if err != nil {
 		return fmt.Errorf("create sandbox: %w", scrub.err(err))
@@ -103,6 +102,17 @@ func (e *Engine) open(ctx context.Context, c claimed, runID domain.RunID, b *box
 		slog.Int("exit", st.Code), slog.Float64("seconds", e.since(started)))
 
 	return nil
+}
+
+// boxLife is how long a claim's sandbox may live: as long as both attempts may, since a retry runs
+// in the same sandbox, and never longer than the organization policy's box time limit.
+func boxLife(c claimed, cfg Config) time.Duration {
+	life := maxAttempts*cfg.TaskTimeout + cfg.LeaseTTL
+	if c.boxLimit > 0 {
+		life = min(life, c.boxLimit)
+	}
+
+	return life
 }
 
 // deleteBox deletes the claim's sandbox, if it has one, even as ctx is cancelled. A sandbox that
