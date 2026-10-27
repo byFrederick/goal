@@ -19,12 +19,14 @@ func TestCredentials_Conformance(t *testing.T) {
 	credentialtest.Run(t, func(*testing.T) credentialtest.Harness {
 		tn := porttest.NewTenancy(time.Now)
 		keys := porttest.NewMasterKeys()
-		creds := porttest.NewCredentials(keys.Key(), tn)
+		conns := porttest.NewConnections(keys.Key(), tn)
+		creds := porttest.NewCredentials(keys.Key(), tn, conns)
 
 		var orgs atomic.Int64
 
 		return credentialtest.Harness{
 			Credentials: func(key ports.MasterKey) ports.Credentials { return creds.WithKey(key) },
+			Connections: func(key ports.MasterKey) ports.Connections { return conns.WithKey(key) },
 			Key:         keys.Key,
 			Audit:       tn,
 			NewOrg: func(t *testing.T) domain.OrgID {
