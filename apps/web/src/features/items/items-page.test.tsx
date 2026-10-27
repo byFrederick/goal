@@ -1,33 +1,67 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { boardQuery, inboxQuery } from '../../api/queries';
-import type { Board, Factory, InboxEntry, ItemCard, OrgSummary } from '../../api/types';
+import { moveItem, pauseItem } from '../../api/client';
+import { boardQuery } from '../../api/queries';
+import type { Board, Factory, Item, ItemCard, OrgSummary, Station } from '../../api/types';
 import { renderFactoryPage } from '../../test/route';
+import { TooltipProvider } from '../../ui/tooltip';
 import { ItemsPage } from './items-page';
 
-// The list reads the items; the Inbox button and drawer read the inbox, which the tests seed.
-const shown = vi.hoisted(() => ({ items: [] as ItemCard[] }));
-vi.mock(import('../../api/client'), async (original) => ({
-  ...(await original()),
-  // Like the server: a state filter keeps the items in that state.
-  listItems: vi.fn(async (_org: string, _factory: string, filter: { state?: string | undefined }) => ({
-    items: filter.state ? shown.items.filter((it) => it.state === filter.state) : shown.items,
-    next_after: null,
-  })),
-  getInbox: vi.fn(async () => ({ entries: [], truncated: false })),
+// The list reads the items, filtered by state like the server; the tests set what it holds, and
+// which requests fail. The Move and Pause requests are mocked: each one is a call per item.
+const list = vi.hoisted(() => ({
+  items: [] as ItemCard[],
+  fail: false,
+  /** While set, the list never answers: the page stays in its loading state. */
+  hold: false,
+  refuse: {} as Record<string, string>,
 }));
 
-afterEach(cleanup);
+vi.mock(import('../../api/client'), async (original) => ({
+  ...(await original()),
+  listItems: vi.fn(async (_org: string, _factory: string, filter: { state?: string | undefined }) => {
+    if (list.hold) return new Promise<never>(() => {});
+    if (list.fail) throw new Error('The server is busy');
+    return {
+      items: filter.state ? list.items.filter((it) => it.state === filter.state) : list.items,
+      next_after: null,
+    };
+  }),
+  moveItem: vi.fn(async (_org: string, key: string, to: string) => {
+    if (list.refuse[key]) throw new Error(list.refuse[key]);
+    return { ...list.items.find((it) => it.ref === key), station: to } as unknown as Item;
+  }),
+  pauseItem: vi.fn(
+    async (_org: string, key: string) =>
+      ({ ...list.items.find((it) => it.ref === key), state: 'queued' }) as unknown as Item,
+  ),
+}));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+  list.fail = false;
+  list.hold = false;
+  list.refuse = {};
+});
 
 const org: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'A', factory_count: 1, role: null };
+const stations = [
+  { id: 'investigate', kind: 'agent' },
+  { id: 'build', kind: 'agent' },
+  { id: 'merge', kind: 'human' },
+  { id: 'done', kind: 'done' },
+] as unknown as Station[];
 const factory: Factory = {
   id: 'factory-1',
   org_id: 'org-1',
   name: 'sre',
   title: 'SRE',
   work_types: ['incident'],
-  stations: [],
+  stations,
   current: null,
   draft: null,
   paused: false,
@@ -35,6 +69,8 @@ const factory: Factory = {
   role: 'approver',
   can: ['item:operate', 'item:decide'],
 };
+
+const now = () => new Date().toISOString();
 
 const item = (over: Partial<ItemCard>): ItemCard => ({
   id: 'item-1',
@@ -78,71 +114,196 @@ const board: Board = {
   },
 } as unknown as Board;
 
-/** The status icons in a row: a StatusIcon is a shrink-0 svg; the row's chevron is not. */
+/** The status icons in a row: a StatusIcon is a shrink-0 svg. */
 function statusIcons(row: HTMLElement): string[] {
   return [...row.querySelectorAll('svg.shrink-0')].map((svg) => svg.getAttribute('class') ?? '');
 }
 
-/** The row (the list's link) that holds a title. */
+/** The table row that holds a title. */
 async function rowOf(title: string): Promise<HTMLElement> {
-  return (await screen.findByText(title)).closest('a') as HTMLElement;
+  return (await screen.findByText(title)).closest('tr') as HTMLElement;
 }
 
-function renderItems(items: ItemCard[], entries: InboxEntry[] = [], search: Record<string, string> = {}) {
-  shown.items = items;
+function renderItems(items: ItemCard[], search: Record<string, string> = {}, permissions = factory.can) {
+  list.items = items;
   return renderFactoryPage({
-    page: ItemsPage,
+    page: () => (
+      <TooltipProvider>
+        <ItemsPage />
+      </TooltipProvider>
+    ),
     path: 'items/',
     org,
-    factory,
+    factory: { ...factory, can: permissions },
     search,
-    seed: [
-      [boardQuery(org.id, factory.id).queryKey, board],
-      [inboxQuery(org.id, factory.id).queryKey, { entries, truncated: false }],
-    ],
+    seed: [[boardQuery(org.id, factory.id).queryKey, board]],
   });
 }
 
-const ship: InboxEntry = {
-  id: 'decision:item-3',
-  kind: 'decision',
-  factory: { id: factory.id, name: factory.name, title: factory.title ?? null },
-  since: '2026-10-25T09:00:00Z',
-  station: 'merge',
-  action: 'merge',
-  item: item({ id: 'item-3', ref: 'sre#3', number: 3, title: 'Ship the retry fix', station: 'merge' }),
-  approval: null,
-  blocked: null,
-  andon: null,
-  rework: null,
-};
+describe('Items page header and views', () => {
+  it('shows the heading, the open and done counts, and the saved views with their counts', async () => {
+    renderItems([
+      item({ id: 'a', ref: 'sre#1', title: 'Open one', state: 'queued' }),
+      item({ id: 'b', ref: 'sre#2', title: 'Waiting one', state: 'waiting_human' }),
+      item({ id: 'c', ref: 'sre#3', title: 'Finished', state: 'done', updated_at: now() }),
+    ]);
 
-describe('ItemsPage inbox', () => {
-  it('has no Needs you section on the phone', async () => {
-    renderItems([item({ title: 'Ship the retry fix' })], [ship]);
-
-    expect(await screen.findByRole('heading', { level: 1, name: 'SRE items' })).toBeTruthy();
-    expect(screen.queryByRole('region', { name: 'Needs you' })).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Needs you' })).toBeNull();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Items' })).toBeTruthy();
+    expect(screen.getByText('2 open, 1 done this week')).toBeTruthy();
+    const views = screen.getByRole('navigation', { name: 'Saved views' });
+    expect(within(views).getByRole('link', { name: /^Open/ }).getAttribute('aria-current')).toBe('page');
+    expect(within(views).getByRole('link', { name: /^Waiting on you/ }).textContent).toContain('1');
+    expect(within(views).getByRole('link', { name: /^Done this week/ }).textContent).toContain('1');
   });
 
-  it('the header Inbox button opens the inbox drawer, with its count', async () => {
-    renderItems([item({ title: 'Ship the retry fix' })], [ship]);
+  it('marks the Waiting on you view as current when the URL has its state', async () => {
+    renderItems(
+      [
+        item({ id: 'b', ref: 'sre#2', title: 'Waiting one', state: 'waiting_human' }),
+        item({ id: 'a', title: 'Open one' }),
+      ],
+      { state: 'waiting_human' },
+    );
 
-    const button = await screen.findByRole('button', { name: /^Inbox/ });
-    expect(button.textContent).toContain('1');
-    fireEvent.click(button);
-    const drawer = await screen.findByRole('dialog', { name: 'Inbox' });
-    expect(within(drawer).getByText('Ready to merge')).toBeTruthy();
+    const views = await screen.findByRole('navigation', { name: 'Saved views' });
+    expect(
+      within(views)
+        .getByRole('link', { name: /^Waiting on you/ })
+        .getAttribute('aria-current'),
+    ).toBe('page');
+    expect(within(views).getByRole('link', { name: /^Open/ }).getAttribute('aria-current')).not.toBe('page');
+    expect(screen.queryByText('Open one')).toBeNull();
+    expect(screen.getByText('Waiting one')).toBeTruthy();
+  });
+
+  it('switches to a view from its tab, and the Expedite view keeps only expedite items', async () => {
+    renderItems([
+      item({ id: 'a', ref: 'sre#1', title: 'Normal work' }),
+      item({ id: 'b', ref: 'sre#2', title: 'Urgent fix', class_of_service: 'expedite' }),
+    ]);
+
+    fireEvent.click(await screen.findByRole('link', { name: /^Expedite/ }));
+    expect(await screen.findByRole('link', { name: /^Expedite/ })).toBeTruthy();
+    expect(screen.queryByText('Normal work')).toBeNull();
+    expect(screen.getByText('Urgent fix')).toBeTruthy();
+  });
+
+  it('renders Save view, Set lane and Source as not available, and does nothing when pressed', async () => {
+    renderItems([item({ id: 'a', ref: 'sre#1', title: 'Some work' })]);
+
+    const save = await screen.findByRole('button', { name: '+ Save view' });
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(save);
+    const source = screen.getByRole('button', { name: /^Source/ });
+    expect(source.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(source);
+    expect(screen.getByText('Some work')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Bulk actions' })).toBeNull();
   });
 });
+
+describe('Items filters in the URL', () => {
+  it('filters by type, lane and assembly from the URL and names the chosen value on the button', async () => {
+    renderItems(
+      [
+        item({ id: 'a', ref: 'sre#1', title: 'Backend bug', type: 'incident', lane: 'backend' }),
+        item({ id: 'b', ref: 'sre#2', title: 'Frontend task', type: 'task', lane: 'frontend' }),
+      ],
+      { type: 'incident', lane: 'backend' },
+    );
+
+    expect(await screen.findByText('Backend bug')).toBeTruthy();
+    expect(screen.queryByText('Frontend task')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Type: Incident' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Lane: backend' })).toBeTruthy();
+  });
+
+  it('applies a state filter to the parts of an assembly, under the assembly progress', async () => {
+    renderItems(
+      [
+        assembly(),
+        partOf(1, { title: 'Move the schema', state: 'in_progress', agent: 'infra-engineer' }),
+        partOf(2, { title: 'Backfill the ledger', state: 'queued' }),
+        item({ id: 'plain', title: 'Checkout API latency', state: 'in_progress' }),
+      ],
+      { state: 'in_progress' },
+    );
+
+    expect(await screen.findByText('Move the schema')).toBeTruthy();
+    expect(screen.getByText('1 of 3 parts merged')).toBeTruthy();
+    expect(screen.getByText('Checkout API latency')).toBeTruthy();
+    expect(screen.queryByText('Backfill the ledger')).toBeNull();
+  });
+
+  it('keeps the Show choice across a view change and lists every item flat when it is off', async () => {
+    renderItems([assembly(), partOf(1, { title: 'Move the schema', state: 'done', updated_at: now() })], {
+      show: 'flat',
+    });
+
+    const grouped = await screen.findByRole('switch', { name: 'Grouped by assembly' });
+    expect(grouped.getAttribute('aria-checked')).toBe('false');
+    expect(screen.queryByRole('button', { name: 'Parts of Migrate billing' })).toBeNull();
+    expect(screen.getAllByRole('row')).toHaveLength(3);
+
+    fireEvent.click(screen.getByRole('link', { name: /^Done this week/ }));
+    expect((await screen.findByRole('switch', { name: 'Grouped by assembly' })).getAttribute('aria-checked')).toBe(
+      'false',
+    );
+  });
+});
+
+describe('Items list states', () => {
+  it('shows the app background with aria-busy and a spoken Loading while the items load', async () => {
+    list.hold = true;
+    renderItems([]);
+
+    expect((await screen.findByText('Loading')).closest('main')?.getAttribute('aria-busy')).toBe('true');
+  });
+
+  it('shows an empty sentence and New item when the factory has no items', async () => {
+    renderItems([]);
+
+    expect(await screen.findByText('No items here. Create one with New item.')).toBeTruthy();
+  });
+
+  it('shows the error with a Retry button when the list fails to load', async () => {
+    list.fail = true;
+    renderItems([item({ title: 'Never shown' })]);
+
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByText(/Could not load the items\. The server is busy/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+  });
+});
+
+/** A part of the assembly "Migrate billing" (sre#10), three parts in all. */
+const partOf = (part: number, over: Partial<ItemCard>): ItemCard =>
+  item({
+    id: `part-${part}`,
+    ref: `sre#${10 + part}`,
+    number: 10 + part,
+    title: `Part ${part} title`,
+    assembly: { id: 'asm-1', ref: 'sre#10', title: 'Migrate billing', part, parts: 3 },
+    ...over,
+  });
+
+const assembly = (over: Partial<ItemCard> = {}): ItemCard =>
+  item({
+    id: 'asm-1',
+    ref: 'sre#10',
+    number: 10,
+    title: 'Migrate billing',
+    state: 'assembly',
+    parts: { total: 3, merged: 1, in_progress: 1, waiting: 1, stations: ['build', 'merge'] },
+    ...over,
+  });
 
 describe('Items list status icons', () => {
   it('shows the working icon for an item in progress', async () => {
     renderItems([item({ title: 'Checkout API latency', state: 'in_progress', agent: 'infra-engineer' })]);
 
     const row = await rowOf('Checkout API latency');
-    expect(screen.getAllByText('Infra engineer working').length).toBeGreaterThan(0);
+    expect(within(row).getAllByText('Infra engineer working').length).toBeGreaterThan(0);
     const icons = statusIcons(row);
     expect(icons.length).toBeGreaterThan(0);
     expect(icons.every((c) => c.includes('text-run'))).toBe(true);
@@ -178,34 +339,16 @@ describe('Items list status icons', () => {
     const states = (await rowOf('Triage the export')).querySelectorAll('[title="Waiting"]');
     expect(states.length).toBeGreaterThan(0);
   });
+
+  it('shows an expedite item with its Expedite chip beside its state', async () => {
+    renderItems([item({ title: 'Fix the lease', class_of_service: 'expedite', state: 'in_progress' })]);
+
+    expect(within(await rowOf('Fix the lease')).getByText('Expedite')).toBeTruthy();
+  });
 });
 
-/** A part of the assembly "Migrate billing" (sre#10), three parts in all. */
-const partOf = (part: number, over: Partial<ItemCard>): ItemCard =>
-  item({
-    id: `part-${part}`,
-    ref: `sre#${10 + part}`,
-    number: 10 + part,
-    title: `Part ${part} title`,
-    assembly: { id: 'asm-1', ref: 'sre#10', title: 'Migrate billing', part, parts: 3 },
-    ...over,
-  });
-
-const assembly = (over: Partial<ItemCard> = {}): ItemCard =>
-  item({
-    id: 'asm-1',
-    ref: 'sre#10',
-    number: 10,
-    title: 'Migrate billing',
-    state: 'assembly',
-    parts: { total: 3, merged: 1, in_progress: 1, waiting: 1, stations: ['build', 'review'] },
-    ...over,
-  });
-
-const linkTitles = () => [...document.querySelectorAll('a')].map((a) => a.textContent ?? '');
-
 describe('Items list assemblies', () => {
-  it('shows an assembly as one row with its parts beneath it, in plan order', async () => {
+  it('shows an assembly as one group row with its parts beneath it, in plan order', async () => {
     renderItems([
       assembly(),
       partOf(2, { title: 'Backfill the ledger', state: 'queued', station: 'build' }),
@@ -216,29 +359,25 @@ describe('Items list assemblies', () => {
     const toggle = await screen.findByRole('button', { name: 'Parts of Migrate billing' });
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('1 of 3 parts merged')).toBeTruthy();
-    expect(screen.getByText('Build, Review')).toBeTruthy();
+    expect(screen.getByText('Build, Merge')).toBeTruthy();
     expect(screen.getAllByTitle('Migrate billing').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Assembly').length).toBeGreaterThan(0);
 
-    const titles = linkTitles();
+    const titles = [...document.querySelectorAll('tbody a')].map((a) => a.textContent ?? '');
     expect(titles.findIndex((t) => t.includes('Move the schema'))).toBeLessThan(
       titles.findIndex((t) => t.includes('Backfill the ledger')),
     );
     // A part never also shows as a top-level row: its title is in one link only.
     expect(screen.getAllByText('Move the schema')).toHaveLength(1);
-    // Only the parts are indented, and a plain item has no type chip.
-    expect(document.querySelectorAll('ul ul')).toHaveLength(1);
-    expect(screen.queryByText('Incident')).toBeNull();
     expect(screen.getByText('Triage the export')).toBeTruthy();
   });
 
   it('shows a part with its station and its status in the shared words and icon', async () => {
     renderItems([assembly(), partOf(1, { title: 'Move the schema', state: 'done', station: 'merge' })]);
 
-    const row = (await screen.findByText('Move the schema')).closest('a') as HTMLElement;
+    const row = await rowOf('Move the schema');
     expect(within(row).getAllByText('Merge').length).toBeGreaterThan(0);
     expect(within(row).getAllByText('Done').length).toBeGreaterThan(0);
-    const icons = [...row.querySelectorAll('svg.shrink-0')].map((svg) => svg.getAttribute('class') ?? '');
+    const icons = statusIcons(row);
     expect(icons.length).toBeGreaterThan(0);
     expect(icons.every((c) => c.includes('text-ok'))).toBe(true);
   });
@@ -255,60 +394,6 @@ describe('Items list assemblies', () => {
     expect(screen.getByText('Move the schema')).toBeTruthy();
   });
 
-  it('lists every item flat, with no assembly row and no indented part, when Show is Every item flat', async () => {
-    renderItems([assembly(), partOf(1, { title: 'Move the schema', state: 'done' })]);
-
-    fireEvent.click(await screen.findByLabelText('Every item flat'));
-    expect(
-      await screen.findByText(
-        'Every item is listed on its own, assemblies and parts included. Filters apply to every item.',
-      ),
-    ).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Parts of Migrate billing' })).toBeNull();
-    expect(document.querySelectorAll('ul ul')).toHaveLength(0);
-    expect(document.querySelectorAll('ul.rounded-card > li')).toHaveLength(2);
-    expect(screen.getByText('Move the schema')).toBeTruthy();
-  });
-
-  it('keeps the Show choice across a filter change', async () => {
-    renderItems([assembly(), partOf(1, { title: 'Move the schema', state: 'done' })], [], { show: 'flat' });
-
-    expect((await screen.findByLabelText('Every item flat')) as HTMLInputElement).toHaveProperty('checked', true);
-    fireEvent.click(screen.getByRole('link', { name: 'Done' }));
-    expect(await screen.findByLabelText('Every item flat')).toHaveProperty('checked', true);
-  });
-
-  it('applies a filter to parts, under their assembly, with the assembly progress from the assemblies', async () => {
-    renderItems(
-      [
-        assembly(),
-        assembly({
-          id: 'asm-2',
-          ref: 'sre#20',
-          title: 'Other assembly',
-          parts: { total: 2, merged: 0, in_progress: 0, waiting: 2, stations: ['build'] },
-        }),
-        partOf(1, { title: 'Move the schema', state: 'in_progress', agent: 'infra-engineer' }),
-        partOf(2, { title: 'Backfill the ledger', state: 'queued' }),
-        {
-          ...partOf(3, { title: 'Other part', state: 'queued' }),
-          assembly: { id: 'asm-2', ref: 'sre#20', title: 'Other assembly', part: 1, parts: 2 },
-        },
-        item({ id: 'plain', title: 'Checkout API latency', state: 'in_progress' }),
-      ],
-      [],
-      { state: 'in_progress' },
-    );
-
-    expect(await screen.findByText('Move the schema')).toBeTruthy();
-    // The assemblies come from their own query, which the loader fills in production.
-    expect(await screen.findByText('1 of 3 parts merged')).toBeTruthy();
-    expect(screen.getByText('Checkout API latency')).toBeTruthy();
-    expect(screen.queryByText('Backfill the ledger')).toBeNull();
-    expect(screen.queryByText('Other part')).toBeNull();
-    expect(screen.queryByText('Other assembly')).toBeNull();
-  });
-
   it('builds an assembly row from a part when the assembly is not on the page, without a progress bar', async () => {
     renderItems([partOf(2, { title: 'Backfill the ledger', state: 'queued' })]);
 
@@ -318,9 +403,97 @@ describe('Items list assemblies', () => {
     expect(screen.getByText('Backfill the ledger')).toBeTruthy();
   });
 
-  it('footnotes how the list groups and filters', async () => {
+  it('footnotes how many items the table shows', async () => {
     renderItems([assembly(), partOf(1, { title: 'Move the schema', state: 'done' })]);
 
-    expect(await screen.findByText('Parts are grouped under their assembly. Filters apply to parts.')).toBeTruthy();
+    expect(await screen.findByText(/^Showing 1 of 2 items\./)).toBeTruthy();
+  });
+});
+
+/** Two queued items at the first station, for the bulk actions. */
+const twoItems = () => [
+  item({ id: 'one', ref: 'sre#1', title: 'First item' }),
+  item({ id: 'two', ref: 'sre#2', title: 'Second item' }),
+];
+
+describe('Items list bulk actions', () => {
+  it('shows the bulk actions for the checked rows and clears them', async () => {
+    renderItems(twoItems());
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select sre#1' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select sre#2' }));
+    const bar = await screen.findByRole('region', { name: 'Bulk actions' });
+    expect(within(bar).getByText('2 selected')).toBeTruthy();
+    expect(within(bar).getByRole('button', { name: 'Move' })).toBeTruthy();
+    expect(within(bar).getByRole('button', { name: 'Pause' })).toBeTruthy();
+    expect(within(bar).getByRole('button', { name: 'Set lane' }).getAttribute('aria-disabled')).toBe('true');
+
+    fireEvent.click(within(bar).getByRole('button', { name: 'Clear' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Bulk actions' })).toBeNull());
+  });
+
+  it('pauses each checked item with its own request', async () => {
+    renderItems(twoItems());
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select sre#1' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select sre#2' }));
+    fireEvent.click(
+      within(await screen.findByRole('region', { name: 'Bulk actions' })).getByRole('button', { name: 'Pause' }),
+    );
+
+    await waitFor(() => expect(pauseItem).toHaveBeenCalledTimes(2));
+    expect(pauseItem).toHaveBeenCalledWith('org-1', 'sre#1');
+    expect(pauseItem).toHaveBeenCalledWith('org-1', 'sre#2');
+  });
+
+  it('moves each checked item to the station the Move menu chose', async () => {
+    renderItems(twoItems());
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select sre#1' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select sre#2' }));
+    fireEvent.click(
+      within(await screen.findByRole('region', { name: 'Bulk actions' })).getByRole('button', { name: 'Move' }),
+    );
+    fireEvent.click(await screen.findByRole('radio', { name: /Build/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move to Build' }));
+
+    await waitFor(() => expect(moveItem).toHaveBeenCalledTimes(2));
+    expect(moveItem).toHaveBeenCalledWith('org-1', 'sre#1', 'build', undefined);
+    expect(moveItem).toHaveBeenCalledWith('org-1', 'sre#2', 'build', undefined);
+  });
+
+  it('names a refused item and still moves the others', async () => {
+    list.refuse = { 'sre#2': 'The station is closed' };
+    renderItems(twoItems());
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select sre#1' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select sre#2' }));
+    fireEvent.click(
+      within(await screen.findByRole('region', { name: 'Bulk actions' })).getByRole('button', { name: 'Move' }),
+    );
+    fireEvent.click(await screen.findByRole('radio', { name: /Build/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move to Build' }));
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('Could not move sre#2', { description: 'The station is closed' }),
+    );
+    expect(toast.success).toHaveBeenCalledWith('Moved sre#1 to Build.');
+  });
+
+  it('hides Move and Pause, and keeps Clear, without the permission to operate items', async () => {
+    renderItems(twoItems(), {}, ['item:decide']);
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select sre#1' }));
+    const bar = await screen.findByRole('region', { name: 'Bulk actions' });
+    expect(within(bar).queryByRole('button', { name: 'Move' })).toBeNull();
+    expect(within(bar).queryByRole('button', { name: 'Pause' })).toBeNull();
+    expect(within(bar).getByRole('button', { name: 'Clear' })).toBeTruthy();
+  });
+
+  it('checks every part of an assembly from its group row', async () => {
+    renderItems([assembly(), partOf(1, { title: 'Move the schema' }), partOf(2, { title: 'Backfill the ledger' })]);
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select the parts of Migrate billing' }));
+    expect(within(await screen.findByRole('region', { name: 'Bulk actions' })).getByText('2 selected')).toBeTruthy();
   });
 });
