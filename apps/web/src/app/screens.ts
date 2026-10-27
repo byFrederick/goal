@@ -42,7 +42,8 @@ export type OrgPath =
   | '/o/$org/settings'
   | '/o/$org/api-keys'
   | '/o/$org/connections'
-  | '/o/$org/knowledge';
+  | '/o/$org/knowledge'
+  | '/o/$org/needs-you';
 
 type Availability<Path> = { available: true; to: Path; exact?: boolean } | { available: false };
 
@@ -179,10 +180,13 @@ type Listed<Path extends string> = { id: string; label: string; icon?: LucideIco
 /** The organization's Home: the factories list (the sidebar's first entry, the top bar's page name). */
 export const homeScreen: OrgScreen = { id: 'home', label: 'Home', icon: House, to: '/o/$org', exact: true };
 
+/** Needs you: what waits on a person across the factories (ADR 0016, wave 2). */
+export const needsYouScreen: OrgScreen = { id: 'needs-you', label: 'Needs you', icon: Inbox, to: '/o/$org/needs-you' };
+
 /** The sidebar's organization-wide entries, top to bottom. */
 export const sidebarOrgScreens: readonly Listed<OrgPath>[] = [
   { ...homeScreen, available: true },
-  { id: 'needs-you', label: 'Needs you', icon: Inbox, available: false },
+  { ...needsYouScreen, available: true },
   { id: 'runs', label: 'Runs', icon: Activity, available: false },
   { ...connectionsScreen, available: true },
   { id: 'credentials', label: 'Credentials', icon: KeyRound, available: false },

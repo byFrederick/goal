@@ -166,6 +166,24 @@ An archived factory (spec 2.2-b, `factory:archive`) is left out of the factory l
 
 Approve and retry act at once (they only move work forward); send back asks for a reason in a dialog, and merge asks for confirmation. Merge replaces approve at a human station whose `action` is `merge`; nothing is keyed by station names. Decisions carry no actor: goald records the request's (the local user until phase 4 adds sign-in).
 
+### Needs you
+
+`/o/$org/needs-you` (`routes/o.$org._org.needs-you.tsx`, `features/needs-you/`) lists what waits on a person across the organization's factories. Its data is `inboxQuery(org)` (`GET /v1/orgs/{org}/inbox`, the contract keeps the name `inbox`, ADR 0016 decision 5), under `keys.inbox`, so the stream's item events refresh it with the other inbox queries.
+
+The kind-to-type mapping is in `features/needs-you/types.ts`, a pure function with its own test:
+
+| Entry kind | Type | Shown |
+|---|---|---|
+| `decision` | Decision (violet) | Under All and Decisions |
+| `andon`, `rework_warning`, `blocked`, `expedite` | Alert (red ink) | Under All and Alerts |
+| any other kind | generic row | Under All only |
+
+Approval and Question have no backend (tool approvals and agent questions are not built), so their tabs are disabled (`ui/not-available.tsx`) and no entry has those types. The drawer's grouping in `shared/inbox.ts` is separate and unchanged.
+
+The URL holds the state: `?type=` (the tab, `decision`, `alert`, and so on; absent is All), `?factory=` (a factory's name; absent is all) and `?entry=` (the selected entry's id). A linked URL opens the same tab, factory and entry. On a phone (below 768 px) an `entry` shows the approve view with Deny, Approve and the disabled "Edit, then approve"; the list is the other view.
+
+Approve calls `approveItem`, or `mergeItem` when the entry's action is `merge`. Deny asks for a reason and calls `rejectItem`. An Alert has no decision: it shows its andon pull, rework tally or block reason, with links to the item and the factory's Floor. The keys J and K move the selection, A approves and D opens Deny; they do nothing while a field or the Deny dialog has focus.
+
 ### The Inbox drawer
 
 The Inbox button sits in the header of the Board, the Floor and Items, at every width, and shows the count of what waits on people in the factory it is on; it opens a right-side drawer (`ui/drawer.tsx`, Radix Dialog: about 460 px wide, a full-screen sheet below 768 px). Its data is the organization's inbox (`inboxQuery(org, factory?)`); the segmented control "All factories | This factory" (default This factory) switches between the two queries. `shared/inbox.ts` is the pure grouping: entries become Ready to merge (a `decision` whose `action` is `merge`: Merge), Needs a decision (any other `decision`: Approve; `rework_warning` and kinds this build does not know: Open), and Blocked (`blocked`: Retry; `andon`: Open to the board). Expedite entries are left out (they wait on no person and the board shows them). Groups with no rows are left out, and each group's rows are oldest first. Each row is a link to its item (or to the board, for rows about no item) with one action button named for the item's key (`Approve sre#5`); an action the entry's own factory does not allow (no `item:decide` there, by that factory's `can`) is disabled with who decides. Merge asks for confirmation; "Merge all" (Ready to merge with more than one row) asks once with the count, then merges each item in turn: a refusal names its item in the drawer and the rest still merge. Every action invalidates `keys.inboxes(org)`, so a handled row leaves the drawer. Escape closes; focus is trapped while open and returns to the Inbox button (`onCloseAutoFocus` in `ui/drawer.tsx`).
