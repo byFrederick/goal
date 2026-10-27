@@ -17,7 +17,7 @@ var update = flag.Bool("update", false, "rewrite the golden files in testdata/go
 
 // TestRun_Golden pins what the CLI prints, and its exit code, for command lines that need no
 // goald, database or bucket: the usage, each command group's usage, goal version and an offline
-// validate. go test -run TestRun_Golden -update rewrites testdata/golden.
+// validate. Other tests pin their output through checkGolden too. go test -run TestRun_Golden -update rewrites testdata/golden.
 func TestRun_Golden(t *testing.T) {
 	cases := []struct {
 		name string
@@ -37,7 +37,7 @@ func TestRun_Golden(t *testing.T) {
 	}
 
 	// Each of these runs with no arguments, and its golden file has its name.
-	for group := range strings.FieldsSeq("version factory org key andon admin catalog connection knowledge db storage run") {
+	for group := range strings.FieldsSeq("version factory org key andon admin catalog connection knowledge db storage run search") {
 		cases = append(cases, struct {
 			name string
 			line string
@@ -59,29 +59,36 @@ func TestRun_Golden(t *testing.T) {
 			code := Run(context.Background(), args, strings.NewReader(""), &stdout, &stderr, getenv, fixedBuildInfo)
 
 			got := fmt.Sprintf("exit %d\n--- stdout\n%s--- stderr\n%s", code, stdout.String(), stderr.String())
-			path := filepath.Join("testdata", "golden", tc.name+".txt")
-
-			if *update {
-				if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-					t.Fatal(err)
-				}
-
-				if err := os.WriteFile(path, []byte(got), 0o600); err != nil {
-					t.Fatal(err)
-				}
-
-				return
-			}
-
-			want, err := fs.ReadFile(os.DirFS(filepath.Dir(path)), filepath.Base(path))
-			if err != nil {
-				t.Fatalf("read %s (go test -run TestRun_Golden -update writes it): %v", path, err)
-			}
-
-			if got != string(want) {
-				t.Errorf("goal %s printed\n%s\nwant (%s)\n%s", tc.line, got, path, want)
-			}
+			checkGolden(t, tc.name, got)
 		})
+	}
+}
+
+// checkGolden compares got with testdata/golden/<name>.txt, or with -update rewrites it.
+func checkGolden(t *testing.T, name, got string) {
+	t.Helper()
+
+	path := filepath.Join("testdata", "golden", name+".txt")
+
+	if *update {
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := os.WriteFile(path, []byte(got), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		return
+	}
+
+	want, err := fs.ReadFile(os.DirFS(filepath.Dir(path)), filepath.Base(path))
+	if err != nil {
+		t.Fatalf("read %s (go test -run '%s' -update writes it): %v", path, t.Name(), err)
+	}
+
+	if got != string(want) {
+		t.Errorf("%s printed\n%s\nwant (%s)\n%s", t.Name(), got, path, want)
 	}
 }
 
