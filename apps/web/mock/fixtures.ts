@@ -16,6 +16,7 @@ import type {
   ItemSpan,
   ItemState,
   Org,
+  PartOf,
   Run,
   VersionRef,
 } from '@goal/api-client';
@@ -58,6 +59,8 @@ export interface MockItem {
   paths?: string[];
   /** The open need it waits for while queued or ready (Item.waiting). Not on Item. */
   waitsOn?: MockWaitsOn;
+  /** The assembly it is a part of, and its place (Item.assembly, getItem only). */
+  assembly?: PartOf;
 }
 
 /** The need a queued item waits for: an item of the factory by number, by its order (after) or its files (files). */
@@ -223,6 +226,8 @@ interface Seed {
   outputs?: Record<string, unknown>;
   paths?: string[];
   waitsOn?: MockWaitsOn;
+  /** The assembly the item is a part of: its number, title and the part's place. */
+  assembly?: { number: number; title: string; part: number; parts: number };
   steps: Step[];
 }
 
@@ -394,17 +399,40 @@ const specRun = (tools: Tool[], cost: number, turns: number): Step => ({
 });
 
 const goalSeeds: Seed[] = [
-  // The sidebar search's "spend" (shell.jpg s2): items whose titles match it at the Build station.
+  // The assembly "Usage and budgets": its part 4 of 4 is goal#147 (the item page's chip links here).
+  {
+    number: 144,
+    title: 'Usage and budgets',
+    type: 'feature',
+    body: 'Show the week’s spend against the budgets, in the sidebar and on the factories.',
+    station: 'build',
+    state: 'assembly',
+    createdMin: 600,
+    updatedMin: 60,
+    steps: [],
+  },
+  // The sidebar search's "spend" (shell.jpg s2): items whose titles match it. At Build, waiting on you
+  // (the item page's picture, item.jpg): spec accepted at Approve spec, part 4 of 4 of an assembly.
   {
     number: 147,
-    title: "Show this week's spend",
+    title: "Show this week's spend in the sidebar",
     type: 'feature',
+    lane: 'frontend',
     body: 'The sidebar shows the spend of the week against the budget, with the factories it is spent on.',
     station: 'build',
-    state: 'queued',
-    createdMin: 95,
-    updatedMin: 12,
-    steps: [],
+    state: 'waiting_human',
+    pr: 318,
+    createdMin: 190,
+    updatedMin: 8,
+    assembly: { number: 144, title: 'Usage and budgets', part: 4, parts: 4 },
+    steps: [
+      { move: 'spec' },
+      specRun([['Read', 'web/src/features/usage/usage.tsx', 'Read 120 lines']], 0.62, 14),
+      { move: 'approve-spec' },
+      { human: 'approved', by: 'fcruz' },
+      { move: 'build' },
+      { waiting: true },
+    ],
   },
   {
     number: 145,
@@ -1199,6 +1227,17 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
       ...(seed.paths ? { paths: seed.paths } : {}),
       ...(seed.waitsOn ? { waitsOn: seed.waitsOn } : {}),
       spans: [],
+      ...(seed.assembly
+        ? {
+            assembly: {
+              id: uuid(factoryIndex + 1, seed.assembly.number),
+              ref: `${factory.name}#${seed.assembly.number}`,
+              title: seed.assembly.title,
+              part: seed.assembly.part,
+              parts: seed.assembly.parts,
+            },
+          }
+        : {}),
     };
 
     if (seed.state === 'done') item.done_at = item.updated_at;
