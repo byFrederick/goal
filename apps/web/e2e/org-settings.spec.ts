@@ -87,7 +87,7 @@ test('a new address moves the page to it, and the old one stops working', async 
 test('an address another organization has is the field’s error', async ({ page }) => {
   await page.goto('/o/acme/settings');
   const address = page.getByLabel('Address');
-  await address.fill('example-labs');
+  await address.fill('goal');
   await save(page).click();
 
   await expect(address).toHaveAttribute('aria-invalid', 'true');
@@ -170,15 +170,15 @@ test('delete is enabled only by the typed name, then opens the next organization
   await typed.fill('Acme');
   await confirm.click();
 
-  await expect(page).toHaveURL(/\/o\/example-labs$/);
+  await expect(page).toHaveURL(/\/o\/goal$/);
   await expectToast(page, 'Deleted Acme');
   expect((await request.get('/v1/orgs/acme')).status()).toBe(404);
 
   // The last organization: `/` says there is none.
-  await page.goto('/o/example-labs/settings');
+  await page.goto('/o/goal/settings');
   await expect(page.getByText('Deletes 1 factory and its history. You type the name to confirm.')).toBeVisible();
   await page.getByRole('button', { name: 'Delete organization…' }).click();
-  await page.getByLabel('Type Example Labs to confirm').fill('Example Labs');
+  await page.getByLabel('Type Goal to confirm').fill('Goal');
   await page.getByRole('button', { name: 'Delete organization', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'No organization yet' })).toBeVisible();
 });

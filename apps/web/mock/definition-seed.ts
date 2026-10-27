@@ -265,7 +265,7 @@ metadata:
   id: 9e8d7c6b-5a49-4382-9172-6a5b4c3d2e1f
   name: research
   title: Research
-  purpose: Reads papers and writes short notes for the Example Labs team.
+  purpose: Reads papers and writes short notes for the Goal team.
 spec:
   agents:
     - name: reader
