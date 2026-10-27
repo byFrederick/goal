@@ -55,7 +55,7 @@ test.describe('the Connections page', () => {
     await page.getByRole('searchbox', { name: 'Find a connection' }).fill('aws');
     await expect(page.getByRole('heading', { level: 2, name: '1 of 8 connections' })).toBeVisible();
 
-    // The factory's own filter (Connections of sre) is the phone's More sheet; the sidebar's Connections is the organization's.
+    // The factory's own filter (Connections of sre) is not on the phone; the drawer's Connections is the organization's.
     if (isPhone(page)) return;
     await page.goto('/o/acme/f/sre');
     await orgNav(page).getByRole('link', { name: 'Connections' }).click();
