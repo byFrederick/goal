@@ -19,7 +19,7 @@ import { newFactoryScreen, sidebarFactoryPages } from './screens';
 export const rowClass =
   'flex h-9 w-full items-center gap-3 rounded-control px-3 text-left text-body font-control text-ink-soft no-underline hover:bg-hover hover:text-ink aria-[current=page]:bg-card aria-[current=page]:text-ink aria-disabled:cursor-default aria-disabled:text-muted aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted';
 
-export function FactoryGroups({ org }: { org: OrgSummary }) {
+export function FactoryGroups({ org, onNavigate }: { org: OrgSummary; onNavigate?: (() => void) | undefined }) {
   const squares = useFactorySquares(org);
   // New factory only for whoever may create one (owners and admins).
   const mayCreate = useOrgHolds('factory:create');
@@ -42,6 +42,7 @@ export function FactoryGroups({ org }: { org: OrgSummary }) {
           <Link
             to={newFactoryScreen.to}
             params={{ org: org.slug, step: 'start' }}
+            onClick={onNavigate}
             aria-label={newFactoryScreen.label}
             className="flex size-7 items-center justify-center rounded-control text-muted hover:bg-hover hover:text-ink"
           >
@@ -52,7 +53,7 @@ export function FactoryGroups({ org }: { org: OrgSummary }) {
       <ul aria-labelledby={labelId} className="m-0 flex list-none flex-col gap-1 p-0">
         {squares.map((square) => (
           <li key={square.factory.id}>
-            <FactoryGroup org={org} square={square} current={square.factory.id === openId} />
+            <FactoryGroup org={org} square={square} current={square.factory.id === openId} onNavigate={onNavigate} />
           </li>
         ))}
       </ul>
@@ -61,7 +62,17 @@ export function FactoryGroups({ org }: { org: OrgSummary }) {
 }
 
 /** A factory's group. Its header opens the factory's Floor; its chevron collapses or expands the pages. */
-function FactoryGroup({ org, square, current }: { org: OrgSummary; square: FactorySquare; current: boolean }) {
+function FactoryGroup({
+  org,
+  square,
+  current,
+  onNavigate,
+}: {
+  org: OrgSummary;
+  square: FactorySquare;
+  current: boolean;
+  onNavigate: (() => void) | undefined;
+}) {
   // Expanded while it is the open factory, until the person collapses or expands it by hand.
   const [toggled, setToggled] = useState<boolean | null>(null);
   const expanded = toggled ?? current;
@@ -76,6 +87,7 @@ function FactoryGroup({ org, square, current }: { org: OrgSummary; square: Facto
           to="/o/$org/f/$factory"
           params={params}
           activeOptions={{ exact: true }}
+          onClick={onNavigate}
           aria-label={label}
           className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-body font-control text-ink no-underline hover:bg-hover"
         >
@@ -107,7 +119,13 @@ function FactoryGroup({ org, square, current }: { org: OrgSummary; square: Facto
           {sidebarFactoryPages.map((page) => (
             <li key={page.id}>
               {page.available ? (
-                <Link to={page.to} params={params} activeOptions={{ exact: page.exact ?? false }} className={rowClass}>
+                <Link
+                  to={page.to}
+                  params={params}
+                  activeOptions={{ exact: page.exact ?? false }}
+                  onClick={onNavigate}
+                  className={rowClass}
+                >
                   {page.label}
                 </Link>
               ) : (
