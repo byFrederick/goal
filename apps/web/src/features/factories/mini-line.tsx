@@ -15,6 +15,7 @@ export function MiniLine({
   factory,
   name,
   constraint,
+  stopped = false,
   className,
 }: {
   org: string;
@@ -23,6 +24,8 @@ export function MiniLine({
   /** The factory's name, for the box's label. */
   name: string;
   constraint: string | null;
+  /** The andon is pulled: the track dims to the rework tone, as the picture's stopped line does. */
+  stopped?: boolean | undefined;
   className?: string | undefined;
 }) {
   const { data: board, isError, refetch } = useQuery(boardQuery(org, factory));
@@ -44,18 +47,20 @@ export function MiniLine({
       </span>
     );
   }
-  return <Line board={board} name={name} constraint={constraint} className={className} />;
+  return <Line board={board} name={name} constraint={constraint} stopped={stopped} className={className} />;
 }
 
 function Line({
   board,
   name,
   constraint,
+  stopped,
   className,
 }: {
   board: Board;
   name: string;
   constraint: string | null;
+  stopped: boolean;
   className?: string | undefined;
 }) {
   const { stations } = board;
@@ -70,7 +75,10 @@ function Line({
       )}
     >
       <div className="relative w-max">
-        <span aria-hidden="true" className="absolute top-3 right-8 left-8 h-px rounded-full bg-run" />
+        <span
+          aria-hidden="true"
+          className={cn('absolute top-3 right-8 left-8 h-px rounded-full', stopped ? 'bg-rework/60' : 'bg-run')}
+        />
         <ol aria-label={`${name}, stations from intake to done`} className="relative m-0 flex list-none gap-5 p-0">
           {stations.map((s) => (
             <Station key={s.id} station={s} tone={toneOf(s, constraint)} />

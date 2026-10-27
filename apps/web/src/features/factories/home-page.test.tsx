@@ -261,6 +261,7 @@ function renderHome({
     page: () => <FactoriesPage />,
     org,
     seed: seeded as unknown as Seed[],
+    topBar: true,
   });
   return rendered;
 }
@@ -280,6 +281,15 @@ describe('Home: the ready state', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Good afternoon, Freddy' })).toBeTruthy();
     expect(screen.getByText('3 factories, 5 things need you, one andon pulled')).toBeTruthy();
+  });
+
+  it('puts New factory and New item in the top bar, once', async () => {
+    await renderReady();
+
+    const bar = screen.getByRole('banner');
+    expect(within(bar).getByRole('link', { name: 'New factory' })).toBeTruthy();
+    expect(within(bar).getByRole('button', { name: /New item/ })).toBeTruthy();
+    expect(screen.getAllByRole('link', { name: 'New factory' })).toHaveLength(1);
   });
 
   it('lists each factory with its health, its line and its three figures', async () => {

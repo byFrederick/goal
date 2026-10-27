@@ -1,4 +1,4 @@
-// Home, the organization's page (ADR 0016, wave 2; docs/design/screens/daily-work/home.jpg): a top bar
+// Home, the organization's page (ADR 0016, wave 2; docs/design/screens/daily-work/home.jpg): the top bar
 // with New factory and New item, a greeting with a summary of what waits, one row per factory with its
 // navy line and three figures, then "Needs you first" and "Spend this week". Everything comes from the
 // overview (7 days and today), the inbox and the attention list, which the organization's stream keeps
@@ -9,6 +9,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { Factory as FactoryIcon } from 'lucide-react';
 import { useId } from 'react';
 import { attentionQuery, inboxQuery, meQuery, overviewQuery } from '../../api/queries';
+import { TopBarSlot } from '../../app/top-bar';
 import { plural } from '../../shared/format';
 import { factoryMark } from '../../shared/marks';
 import { NewItemFromSidebar } from '../../shared/new-item';
@@ -34,20 +35,24 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
   const attention = useQuery(attentionQuery(org.id));
   const me = useQuery(meQuery);
 
-  const header = (
-    <header className="flex flex-wrap items-center gap-3 border-b border-line pb-4">
-      <p className="m-0 mr-auto text-heading font-semibold">Home</p>
-      {!archived && mayCreate && overview.data && overview.data.factories.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="secondary">
-            <StartLink>New factory</StartLink>
-          </Button>
-          <NewItemFromSidebar />
-        </div>
-      ) : !archived ? (
-        <NewItemFromSidebar />
-      ) : null}
-    </header>
+  // The top bar's actions: New factory only for whoever may create one, and once a factory exists to
+  // show; New item always, except on the archived list.
+  const hasFactories = overview.data !== undefined && overview.data.factories.length > 0;
+  const topBar = (
+    <TopBarSlot
+      actions={
+        archived ? null : (
+          <>
+            {mayCreate && hasFactories ? (
+              <Button asChild variant="secondary">
+                <StartLink>New factory</StartLink>
+              </Button>
+            ) : null}
+            <NewItemFromSidebar />
+          </>
+        )
+      }
+    />
   );
 
   const segmented = (
@@ -72,7 +77,7 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
   if (archived) {
     return (
       <>
-        {header}
+        {topBar}
         <h1 className="m-0 text-page-title">Archived factories</h1>
         {segmented}
         <ArchivedFactories org={org} />
@@ -85,7 +90,7 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
   if (failed) {
     return (
       <>
-        {header}
+        {topBar}
         <section className="flex flex-col items-start gap-3 rounded-card border border-line bg-card p-5" role="alert">
           <h1 className="m-0 text-heading">Home could not load</h1>
           <p className="m-0 text-secondary text-muted">{failed.message}</p>
@@ -106,6 +111,7 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
   if (!overview.data || !inbox.data) {
     return (
       <div aria-busy="true" className="min-h-40">
+        {topBar}
         <span className="sr-only">Loading</span>
       </div>
     );
@@ -123,7 +129,7 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
   if (factories.length === 0) {
     return (
       <>
-        {header}
+        {topBar}
         <h1 className="m-0 text-page-title">{greeting(new Date(), me.data?.user?.name)}</h1>
         {segmented}
         {mayCreate ? (
@@ -147,7 +153,7 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
 
   return (
     <>
-      {header}
+      {topBar}
       <div className="flex flex-col gap-1">
         <h1 className="m-0 text-page-title">{greeting(new Date(), me.data?.user?.name)}</h1>
         <p className="m-0 text-secondary text-muted">{summary(factories.length, week.waiting_on_you, andons)}</p>

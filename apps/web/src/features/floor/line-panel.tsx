@@ -187,7 +187,7 @@ export function Slots({ station, compact = false }: { station: BoardStation; com
           key={i}
           aria-hidden="true"
           className={cn(
-            compact ? 'size-2 rounded-sm' : 'size-3.5 rounded-chip',
+            compact ? 'size-2 rounded-chip' : 'size-3.5 rounded-chip',
             i < busy ? 'bg-run-soft' : i < busy + waiting ? 'bg-you' : 'border border-andon-text',
           )}
         />

@@ -37,11 +37,13 @@ export function FactoryRow({
     <article
       aria-labelledby={headingId}
       className={cn(
-        'flex min-w-0 flex-col gap-4 rounded-card border bg-card p-4 md:flex-row md:items-center md:gap-5 md:p-5',
+        // Below 1100 px (the main area's width) the name and figures share a row and the line takes the next;
+        // from 1100 px all three share one row.
+        'flex min-w-0 flex-wrap items-center gap-4 rounded-card border bg-card p-4 md:p-5 @[1100px]:flex-nowrap @[1100px]:gap-5',
         stopped ? 'border-rework/40' : 'border-line',
       )}
     >
-      <div className="flex min-w-0 items-center gap-3 md:w-44 md:shrink-0">
+      <div className="flex min-w-0 flex-1 items-center gap-3 @[1100px]:w-44 @[1100px]:flex-none">
         <span
           aria-hidden="true"
           className="flex size-9 shrink-0 items-center justify-center rounded-control bg-run font-numeral text-body font-semibold text-white"
@@ -73,7 +75,7 @@ export function FactoryRow({
       </div>
 
       {draft ? (
-        <p className="m-0 text-secondary text-muted">
+        <p className="m-0 min-w-0 basis-full text-secondary text-muted @[1100px]:basis-auto @[1100px]:flex-1">
           Not published yet. Continue its setup, then publish v1 to start the line.
         </p>
       ) : (
@@ -83,7 +85,8 @@ export function FactoryRow({
             factory={factory.id}
             name={factory.name}
             constraint={constraint?.station ?? null}
-            className="min-w-0 flex-1"
+            stopped={stopped}
+            className="w-full min-w-0 @[1100px]:w-auto @[1100px]:flex-1"
           />
           <Figures org={org.id} overview={overview} today={today} />
         </>
@@ -110,24 +113,26 @@ function Figures({
   const budget = today?.budget_usd ?? null;
 
   return (
-    <dl className="m-0 grid shrink-0 grid-cols-3 gap-4 md:flex md:gap-6">
+    <dl className="m-0 grid w-full grid-cols-3 gap-4 @[560px]:flex @[560px]:w-auto @[560px]:shrink-0 @[560px]:gap-6">
       <Figure label="Needs you">
-        <span className={cn('font-numeral text-kpi font-semibold', waiting.on_you > 0 ? 'text-you-ink' : 'text-muted')}>
+        <span
+          className={cn('font-numeral text-heading font-semibold', waiting.on_you > 0 ? 'text-you-ink' : 'text-muted')}
+        >
           {waiting.on_you}
         </span>
       </Figure>
       {worst !== null ? (
         <Figure label="Sent back">
-          <span className="font-numeral text-kpi font-semibold text-rework-ink">{formatPercent(worst)}</span>
+          <span className="font-numeral text-heading font-semibold text-rework-ink">{formatPercent(worst)}</span>
         </Figure>
       ) : (
         <Figure label="Throughput">
-          <span className="font-numeral text-kpi font-semibold">{overview.throughput.per_day.toFixed(1)}</span>
+          <span className="font-numeral text-heading font-semibold">{overview.throughput.per_day.toFixed(1)}</span>
           <span className="text-meta text-muted">{target !== null ? ` of ${target} a day` : ' a day'}</span>
         </Figure>
       )}
       <Figure label="Spend today">
-        <span className="font-numeral text-kpi font-semibold">{spent === null ? '…' : formatUsd(spent)}</span>
+        <span className="font-numeral text-heading font-semibold">{spent === null ? '…' : formatUsd(spent)}</span>
         {spent !== null && budget !== null ? (
           <span className="text-meta text-muted"> of {formatUsd(budget)}</span>
         ) : null}
@@ -140,7 +145,7 @@ function Figure({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <dt className="text-meta text-muted">{label}</dt>
-      <dd className="m-0 whitespace-nowrap tabular-nums">{children}</dd>
+      <dd className="m-0 tabular-nums">{children}</dd>
     </div>
   );
 }
