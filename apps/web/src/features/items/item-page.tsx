@@ -11,7 +11,6 @@ import { type ItemControls, ItemDecisions } from '../../shared/item-actions';
 import { describeState, pausedNow, pullRequestsOf } from '../../shared/item-state';
 import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
-import { WaitingFor } from '../../shared/waiting-for';
 import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
@@ -22,6 +21,7 @@ import { ItemTabs } from './item-tabs';
 import { NoteComposer } from './note-composer';
 import { OutputsCard } from './outputs';
 import { QuestionCard } from './question-card';
+import { CostCard, DetailsCard, OverlapsCard, RulesCard } from './side-cards';
 import { activeRun, buildTrace, criteriaOf, editedFiles, latestToolCalls, runRole, type Trace } from './timeline';
 import { TouchesCard } from './touches-card';
 import { EventList, type TimelineStatus, ToolRow, TraceList } from './trace-view';
@@ -67,7 +67,7 @@ function LatestSteps({ trace, onShowAll, className }: { trace: Trace; onShowAll:
       )}
       <Button
         variant="ghost"
-        className="h-11 self-start px-2 text-[15px] underline underline-offset-3"
+        className="h-11 self-start px-2 text-body underline underline-offset-3"
         onClick={onShowAll}
       >
         Full trace
@@ -178,8 +178,6 @@ export function ItemPage() {
         />
       </header>
 
-      <WaitingFor waiting={item.waiting} />
-
       <div className="flex flex-col gap-3 @[720px]:grid @[720px]:grid-cols-3 @[720px]:items-start @[720px]:gap-4">
         <div className="contents @[720px]:flex @[720px]:flex-col @[720px]:gap-4">
           <ItemDecisionsCard
@@ -190,6 +188,16 @@ export function ItemPage() {
             // A decision or a retry leads; pausing or moving work in flow comes after the trace.
             className={deciding || item.state === 'blocked' ? 'order-1' : 'order-9'}
           />
+          <DetailsCard
+            item={item}
+            factory={factory}
+            events={events}
+            trace={trace}
+            className="order-2 @[720px]:order-none"
+          />
+          <CostCard item={item} factory={factory} runs={runs?.runs ?? []} className="order-2 @[720px]:order-none" />
+          <OverlapsCard item={item} className="order-2 @[720px]:order-none" />
+          <RulesCard item={item} factory={factory} trace={trace} className="order-2 @[720px]:order-none" />
           <TimeCard item={item} factory={factory} trace={trace} className="order-2 @[720px]:order-none" />
           <TouchesCard
             item={item}

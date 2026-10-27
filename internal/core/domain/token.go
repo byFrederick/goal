@@ -48,7 +48,8 @@ type TaskClaims struct {
 	// Model is the run's model: its agent's, its factory's or the organization policy's default
 	// (ADR 0024). Tokens issued before the policy name none; the gateway then takes the version's.
 	Model string `json:"m,omitempty"`
-	// DeniedCommands are the organization policy's denied commands at run start, which the
+	// DeniedCommands are the organization policy's denied commands at run start, and the web
+	// tools (WebFetch, WebSearch) when its Read the web and docs default is off or ask, which the
 	// gateway adds to the agent's deny rules whatever the version says.
 	DeniedCommands []string `json:"d,omitempty"`
 	ExpiresAt      int64    `json:"e"` // unix seconds
