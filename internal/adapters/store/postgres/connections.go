@@ -872,8 +872,9 @@ func isForeignKeyViolation(err error) bool {
 	return ok && pgErr.Code == foreignKeyViolation
 }
 
-// ConnectionKeyIDs are the master key ids some connection of any organization is sealed under
-// (00051's goal_connection_key_ids): goald refuses to start without each of them.
+// ConnectionKeyIDs are the master key ids some connection or credential of any organization is
+// sealed under (goal_connection_key_ids, as 00064 replaced it): goald refuses to start without
+// each of them.
 func ConnectionKeyIDs(ctx context.Context, s *Store) ([]string, error) {
 	var ids []string
 
@@ -891,51 +892,62 @@ func ConnectionKeyIDs(ctx context.Context, s *Store) ([]string, error) {
 	return ids, nil
 }
 
-// rekeyBatch is how many connections one transaction of Rekey reseals.
+// rekeyBatch is how many connections or credentials one transaction of Rekey reseals.
 const rekeyBatch = 100
 
-// Rekey reseals every connection of every organization that is sealed under another master key
-// than key's active one (`goal db rekey`, spec 4 §5.2), rekeyBatch per transaction, and returns
-// how many it resealed. s's pool connects as goal_owner, which row-level security does not bind:
-// rekeying is the install's, not an organization's. Values never leave this function; a
-// connection that does not open stops it with an error naming the connection's id.
+// Rekey reseals every connection and credential of every organization that is sealed under
+// another master key than key's active one (`goal db rekey`, spec 4 §5.2, ADR 0017), rekeyBatch
+// per transaction, and returns how many it resealed. s's pool connects as goal_owner, which
+// row-level security does not bind: rekeying is the install's, not an organization's. Values
+// never leave this function; a row that does not open stops it with an error naming its id.
 func Rekey(ctx context.Context, s *Store, key ports.MasterKey) (int, error) {
-	active := key.Active()
-	if active == "" {
+	if key.Active() == "" {
 		return 0, ports.ErrNoMasterKey
 	}
 
 	total := 0
 
-	for {
-		var n int
+	for _, batch := range []func(context.Context, *db.Queries, ports.MasterKey) (int, error){resealConnections, resealCredentials} {
+		for {
+			var n int
 
-		err := s.systemTx(ctx, func(q *db.Queries) error {
-			rows, err := q.StaleSealedConnections(ctx, db.StaleSealedConnectionsParams{Active: active, Batch: rekeyBatch})
-			if err != nil {
+			err := s.systemTx(ctx, func(q *db.Queries) error {
+				var err error
+
+				n, err = batch(ctx, q, key)
+
 				return err
+			})
+			if err != nil {
+				return total, fmt.Errorf("rekey: %w", err)
 			}
 
-			for _, r := range rows {
-				if err := reseal(ctx, q, key, r); err != nil {
-					return err
-				}
+			total += n
+
+			if n < rekeyBatch {
+				break
 			}
-
-			n = len(rows)
-
-			return nil
-		})
-		if err != nil {
-			return total, fmt.Errorf("rekey: %w", err)
-		}
-
-		total += n
-
-		if n < rekeyBatch {
-			return total, nil
 		}
 	}
+
+	return total, nil
+}
+
+// resealConnections reseals a batch of connections of every organization sealed under another
+// key than key's active one, and returns how many.
+func resealConnections(ctx context.Context, q *db.Queries, key ports.MasterKey) (int, error) {
+	rows, err := q.StaleSealedConnections(ctx, db.StaleSealedConnectionsParams{Active: key.Active(), Batch: rekeyBatch})
+	if err != nil {
+		return 0, err
+	}
+
+	for _, r := range rows {
+		if err := reseal(ctx, q, key, r); err != nil {
+			return 0, err
+		}
+	}
+
+	return len(rows), nil
 }
 
 func reseal(ctx context.Context, q *db.Queries, key ports.MasterKey, r db.StaleSealedConnectionsRow) error {
