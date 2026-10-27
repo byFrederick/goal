@@ -55,7 +55,7 @@ func testStationTimes(f *fixture) {
 	f.runAt(t, c, stWork, agWorker, h(-1), succeeded(8)) // started before the window
 	f.runAt(t, c, stWork, agWorker, h(5), succeeded(0.5))
 	f.runAt(t, c, stWork, agWorker, h(6), domain.RunResult{Status: domain.RunFailed, CostUSD: 0.25})
-	f.runAt(t, c, stWork, agWorker, until, succeeded(4)) // started at the window's end
+	f.runAt(t, c, stWork, agWorker, until, succeeded(4))  // started at the window's end
 	f.runAt(t, c, stReview, agWorker, h(7), succeeded(2)) // review held no lease
 
 	got, coverage, err := f.Flow.StationTimes(f.ctx(t), f.factory, since, until)
