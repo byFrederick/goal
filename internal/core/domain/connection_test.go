@@ -502,3 +502,47 @@ func TestConnectionAAD(t *testing.T) {
 		}
 	}
 }
+
+func TestConnectionSecrets(t *testing.T) {
+	t.Parallel()
+
+	const value = "ghp_connection-secrets-marker"
+
+	sealed, refs, err := ConnectionSecrets(
+		map[string]string{fieldBaseURL: "https://git.example.com"},
+		map[string]string{fieldToken: "{{sentry-token}}", fieldKey: value, fieldPrefix: ""},
+	)
+	if err != nil {
+		t.Fatalf("ConnectionSecrets = %v", err)
+	}
+
+	if want := map[string]string{fieldKey: value, fieldPrefix: ""}; !maps.Equal(sealed, want) {
+		t.Errorf("sealed = %v; want %v", sealed, want)
+	}
+
+	if want := map[string]string{fieldToken: "sentry-token"}; !maps.Equal(refs, want) {
+		t.Errorf("refs = %v; want %v", refs, want)
+	}
+
+	refused := []struct {
+		name           string
+		fields, values map[string]string
+	}{
+		{"embedded reference", nil, map[string]string{fieldToken: "Bearer {{sentry-token}} " + value}},
+		{"two references", nil, map[string]string{fieldToken: "{{a-key}}{{b-key}}"}},
+		{"bad credential name", nil, map[string]string{fieldToken: "{{Bad_Name}}"}},
+		{"reference in a field", map[string]string{fieldBaseURL: "{{sentry-token}}"}, nil},
+		{"embedded in a field", map[string]string{fieldBaseURL: "https://{{sentry-token}}.example.com"}, nil},
+	}
+
+	for _, tt := range refused {
+		_, _, err := ConnectionSecrets(tt.fields, tt.values)
+		if !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: ConnectionSecrets = %v; want ErrInvalid", tt.name, err)
+		}
+
+		if err != nil && strings.Contains(err.Error(), value) {
+			t.Errorf("%s: the error shows the value: %v", tt.name, err)
+		}
+	}
+}

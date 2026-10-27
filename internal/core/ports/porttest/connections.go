@@ -95,7 +95,8 @@ var _ ports.Connections = (*Connections)(nil)
 
 // Connections keeps connection kinds and connections in memory with the database's rules: the
 // platform's kinds and each organization's, names unique per organization, secrets sealed with
-// the master key under domain.ConnectionAAD and never returned but by Resolve and Open, and an audit entry
+// the master key under domain.ConnectionAAD and never returned but by Resolve and Open, references
+// to credentials ({{name}}) kept in the clear beside them, and an audit entry
 // through audit for every change and use. Views made with WithKey share the data, as goalds
 // with different keys share one database.
 type Connections struct {
@@ -366,8 +367,13 @@ func (c *Connections) Create(ctx context.Context, n domain.NewConnection, by dom
 		return domain.Connection{}, fmt.Errorf("connection kind %q: %w", n.Kind, ports.ErrNotFound)
 	}
 
-	fields, secrets := setOnly(n.Fields), setOnly(n.Secrets)
-	secretNames := slices.Sorted(maps.Keys(secrets))
+	sealed, refs, err := domain.ConnectionSecrets(n.Fields, n.Secrets)
+	if err != nil {
+		return domain.Connection{}, err
+	}
+
+	fields, secrets := setOnly(n.Fields), setOnly(sealed)
+	secretNames := secretFields(secrets, refs)
 
 	if err := kind.CheckValues(fields, secretNames); err != nil {
 		return domain.Connection{}, err
@@ -385,7 +391,7 @@ func (c *Connections) Create(ctx context.Context, n domain.NewConnection, by dom
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	r := &connectionRow{own: own, conn: domain.Connection{
 		ID: domain.ConnectionID(id.String()), Name: n.Name, Kind: n.Kind, Description: n.Description, Fields: fields,
-		SecretFields: secretNames, CreatedBy: by, CreatedAt: now, UpdatedBy: by, UpdatedAt: now,
+		SecretFields: secretNames, SecretRefs: refs, CreatedBy: by, CreatedAt: now, UpdatedBy: by, UpdatedAt: now,
 	}}
 
 	if err := c.sealLocked(org, r, secrets); err != nil {
@@ -419,6 +425,11 @@ func (c *Connections) Update(ctx context.Context, name string, p domain.Connecti
 		return domain.Connection{}, err
 	}
 
+	sealed, refs, err := domain.ConnectionSecrets(p.Fields, p.Secrets)
+	if err != nil {
+		return domain.Connection{}, err
+	}
+
 	c.d.mu.Lock()
 	defer c.d.mu.Unlock()
 
@@ -449,7 +460,7 @@ func (c *Connections) Update(ctx context.Context, name string, p domain.Connecti
 		r.conn.Fields = setOnly(p.Fields)
 	}
 
-	if err := c.replaceLocked(org, r, p.Secrets); err != nil {
+	if err := c.replaceLocked(org, r, sealed, refs); err != nil {
 		return domain.Connection{}, err
 	}
 
@@ -485,9 +496,11 @@ func checkPatch(p domain.ConnectionPatch) error {
 	return errors.Join(errs...)
 }
 
-// replaceLocked opens r's secrets, replaces those of with (an empty value clears one) and reseals.
-func (c *Connections) replaceLocked(org domain.OrgID, r *connectionRow, with map[string]string) error {
-	if len(with) == 0 {
+// replaceLocked opens r's secrets, replaces those of with (an empty value clears one) and the
+// references of refs, and reseals what is left to seal: a field moves between sealed and a
+// reference as its new value is one or the other.
+func (c *Connections) replaceLocked(org domain.OrgID, r *connectionRow, with, refs map[string]string) error {
+	if len(with) == 0 && len(refs) == 0 {
 		return nil
 	}
 
@@ -496,7 +509,14 @@ func (c *Connections) replaceLocked(org domain.OrgID, r *connectionRow, with map
 		return err
 	}
 
+	kept := maps.Clone(r.conn.SecretRefs)
+	if kept == nil {
+		kept = map[string]string{}
+	}
+
 	for k, v := range with {
+		delete(kept, k)
+
 		if v == "" {
 			delete(secrets, k)
 		} else {
@@ -504,9 +524,44 @@ func (c *Connections) replaceLocked(org domain.OrgID, r *connectionRow, with map
 		}
 	}
 
-	r.conn.SecretFields = slices.Sorted(maps.Keys(secrets))
+	for k, name := range refs {
+		delete(secrets, k)
+		kept[k] = name
+	}
+
+	r.conn.SecretFields, r.conn.SecretRefs = secretFields(secrets, kept), kept
 
 	return c.sealLocked(org, r, secrets)
+}
+
+// secretFields are the names of a connection's sealed secrets and references, sorted.
+func secretFields(sealed, refs map[string]string) []string {
+	names := append(slices.Collect(maps.Keys(sealed)), slices.Collect(maps.Keys(refs))...)
+	slices.Sort(names)
+
+	return slices.Compact(names)
+}
+
+// referrers are the names of org's connections that refer to credential name, sorted.
+func (c *Connections) referrers(org domain.OrgID, name string) []string {
+	c.d.mu.Lock()
+	defer c.d.mu.Unlock()
+
+	out := []string{}
+
+	for _, r := range c.d.conns[org] {
+		for _, cred := range r.conn.SecretRefs {
+			if cred == name {
+				out = append(out, r.conn.Name)
+
+				break
+			}
+		}
+	}
+
+	slices.Sort(out)
+
+	return out
 }
 
 func (c *Connections) updateAudits(ctx context.Context, by domain.Actor, from string, conn domain.Connection, p domain.ConnectionPatch) error {
@@ -682,7 +737,9 @@ func (c *Connections) resolvedLocked(org domain.OrgID, r *connectionRow) (domain
 		kind = c.d.platform[r.conn.Kind]
 	}
 
-	return domain.ResolvedConnection{Connection: cloneConnection(r.conn), Kind: cloneKind(kind), Values: values}, nil
+	return domain.ResolvedConnection{
+		Connection: cloneConnection(r.conn), Kind: cloneKind(kind), Values: values, SecretRefs: maps.Clone(r.conn.SecretRefs),
+	}, nil
 }
 
 // Rekey reseals every organization's connections sealed under another key than key's active one
@@ -780,6 +837,7 @@ func setOnly(m map[string]string) map[string]string {
 func cloneConnection(c domain.Connection) domain.Connection {
 	c.Fields = maps.Clone(c.Fields)
 	c.SecretFields = slices.Clone(c.SecretFields)
+	c.SecretRefs = maps.Clone(c.SecretRefs)
 
 	if c.LastUsedAt != nil {
 		at := *c.LastUsedAt

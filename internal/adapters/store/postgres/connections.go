@@ -349,10 +349,15 @@ func (c *Connections) Create(ctx context.Context, n domain.NewConnection, by dom
 		return domain.Connection{}, err
 	}
 
-	fields, secrets := setValues(n.Fields), setValues(n.Secrets)
+	toSeal, refs, err := domain.ConnectionSecrets(n.Fields, n.Secrets)
+	if err != nil {
+		return domain.Connection{}, fmt.Errorf("create connection: %w", err)
+	}
+
+	fields, secrets := setValues(n.Fields), setValues(toSeal)
 	out := domain.Connection{
 		ID: domain.ConnectionID(id.String()), Name: n.Name, Kind: n.Kind, Description: n.Description, Fields: fields,
-		SecretFields: valueNames(secrets), CreatedBy: by, UpdatedBy: by,
+		SecretFields: secretNames(secrets, refs), SecretRefs: refs, CreatedBy: by, UpdatedBy: by,
 	}
 
 	err = c.s.inTx(ctx, func(q *db.Queries) error {
@@ -374,6 +379,10 @@ func (c *Connections) Create(ctx context.Context, n domain.NewConnection, by dom
 			return err
 		}
 
+		if err := shareReferenced(ctx, q, refs); err != nil {
+			return err
+		}
+
 		s, err := c.seal(org, out.ID, secrets)
 		if err != nil {
 			return err
@@ -384,9 +393,14 @@ func (c *Connections) Create(ctx context.Context, n domain.NewConnection, by dom
 			return err
 		}
 
+		rawRefs, err := json.Marshal(refs)
+		if err != nil {
+			return err
+		}
+
 		out.CreatedAt, err = q.InsertConnection(ctx, db.InsertConnectionParams{
 			ID: id, Name: n.Name, KindID: kr.ID, Description: n.Description, Fields: raw, SecretFields: out.SecretFields,
-			KeyID: s.keyID, Nonce: s.nonce, Ciphertext: s.ciphertext, CreatedBy: by.Ref(),
+			SecretRefs: rawRefs, KeyID: s.keyID, Nonce: s.nonce, Ciphertext: s.ciphertext, CreatedBy: by.Ref(),
 		})
 		if violates(err, connectionNameKey) {
 			return fmt.Errorf("connection %q: %w", n.Name, ports.ErrNameTaken)
@@ -435,12 +449,17 @@ func (c *Connections) Update(ctx context.Context, name string, p domain.Connecti
 		return domain.Connection{}, fmt.Errorf("update connection %s: %w", name, err)
 	}
 
+	toSeal, refs, err := domain.ConnectionSecrets(p.Fields, p.Secrets)
+	if err != nil {
+		return domain.Connection{}, fmt.Errorf("update connection %s: %w", name, err)
+	}
+
 	var out domain.Connection
 
-	err := c.s.inTx(ctx, func(q *db.Queries) error {
+	err = c.s.inTx(ctx, func(q *db.Queries) error {
 		var err error
 
-		out, err = c.update(ctx, q, org, name, p, by)
+		out, err = c.update(ctx, q, org, name, p, secretPatch{toSeal: toSeal, refs: refs}, by)
 
 		return err
 	})
@@ -451,9 +470,16 @@ func (c *Connections) Update(ctx context.Context, name string, p domain.Connecti
 	return out, nil
 }
 
-// update applies p to the connection name of org in q's transaction and audits it.
+// secretPatch is a patch's secrets split by domain.ConnectionSecrets: the values to seal (an
+// empty one clearing its field) and the references to credentials.
+type secretPatch struct {
+	toSeal, refs map[string]string
+}
+
+// update applies p, its secrets split in sp, to the connection name of org in q's transaction and
+// audits it.
 func (c *Connections) update(ctx context.Context, q *db.Queries, org domain.OrgID, name string, p domain.ConnectionPatch,
-	by domain.Actor,
+	sp secretPatch, by domain.Actor,
 ) (domain.Connection, error) {
 	r, kind, err := c.sealedOne(ctx, q, name)
 	if err != nil {
@@ -480,7 +506,7 @@ func (c *Connections) update(ctx context.Context, q *db.Queries, org domain.OrgI
 	s := sealed{keyID: r.KeyID, nonce: r.Nonce, ciphertext: r.Ciphertext}
 
 	if len(p.Secrets) > 0 {
-		if s, out.SecretFields, err = c.replaceSecrets(org, out.ID, r, p.Secrets); err != nil {
+		if s, err = c.replaceSecrets(org, r, &out, sp); err != nil {
 			return domain.Connection{}, err
 		}
 	}
@@ -489,13 +515,22 @@ func (c *Connections) update(ctx context.Context, q *db.Queries, org domain.OrgI
 		return domain.Connection{}, err
 	}
 
+	if err := shareReferenced(ctx, q, sp.refs); err != nil {
+		return domain.Connection{}, err
+	}
+
 	raw, err := json.Marshal(out.Fields)
 	if err != nil {
 		return domain.Connection{}, err
 	}
 
+	rawRefs, err := json.Marshal(out.SecretRefs)
+	if err != nil {
+		return domain.Connection{}, err
+	}
+
 	at, err := q.UpdateConnection(ctx, db.UpdateConnectionParams{
-		Name: out.Name, Description: out.Description, Fields: raw, SecretFields: out.SecretFields, KeyID: s.keyID, Nonce: s.nonce,
+		Name: out.Name, Description: out.Description, Fields: raw, SecretFields: out.SecretFields, SecretRefs: rawRefs, KeyID: s.keyID, Nonce: s.nonce,
 		Ciphertext: s.ciphertext, UpdatedBy: by.Ref(), ID: r.ID,
 	})
 	if violates(err, connectionNameKey) {
@@ -530,17 +565,20 @@ func checkPatch(p domain.ConnectionPatch) error {
 	return errors.Join(errs...)
 }
 
-// replaceSecrets opens r's secrets, replaces those named in with (an empty value clears one) and
-// seals the result: the new sealed value and the secret fields now set.
-func (c *Connections) replaceSecrets(org domain.OrgID, id domain.ConnectionID, r db.SealedConnectionsRow,
-	with map[string]string,
-) (sealed, []string, error) {
-	secrets, err := c.open(org, id, r)
+// replaceSecrets opens r's secrets, replaces those of sp (an empty value clears one, a reference
+// replaces a sealed value and a sealed value a reference) and seals what is left to seal, none
+// leaving no ciphertext. It sets out's SecretFields and SecretRefs and returns the new sealed value.
+func (c *Connections) replaceSecrets(org domain.OrgID, r db.SealedConnectionsRow, out *domain.Connection, sp secretPatch) (sealed, error) {
+	secrets, err := c.open(org, out.ID, r)
 	if err != nil {
-		return sealed{}, nil, err
+		return sealed{}, err
 	}
 
-	for name, v := range with {
+	refs := maps.Clone(out.SecretRefs)
+
+	for name, v := range sp.toSeal {
+		delete(refs, name)
+
 		if v == "" {
 			delete(secrets, name)
 		} else {
@@ -548,9 +586,32 @@ func (c *Connections) replaceSecrets(org domain.OrgID, id domain.ConnectionID, r
 		}
 	}
 
-	s, err := c.seal(org, id, secrets)
+	for name, cred := range sp.refs {
+		delete(secrets, name)
+		refs[name] = cred
+	}
 
-	return s, valueNames(secrets), err
+	out.SecretFields, out.SecretRefs = secretNames(secrets, refs), refs
+
+	return c.seal(org, out.ID, secrets)
+}
+
+// shareReferenced locks the credentials refs refer to against their deletion until q's
+// transaction commits (ShareReferencedCredentials).
+func shareReferenced(ctx context.Context, q *db.Queries, refs map[string]string) error {
+	if len(refs) == 0 {
+		return nil
+	}
+
+	return q.ShareReferencedCredentials(ctx, slices.Sorted(maps.Values(refs)))
+}
+
+// secretNames are the names of a connection's sealed secrets and references, sorted; never nil.
+func secretNames(sealed, refs map[string]string) []string {
+	names := append(valueNames(sealed), slices.Collect(maps.Keys(refs))...)
+	slices.Sort(names)
+
+	return slices.Compact(names)
 }
 
 // updateAudits records an update of the connection from, now named name: connection.updated for
@@ -732,7 +793,7 @@ func (c *Connections) resolved(org domain.OrgID, r db.SealedConnectionsRow) (dom
 
 	maps.Copy(values, conn.Fields)
 
-	return domain.ResolvedConnection{Connection: conn, Kind: kind, Values: values}, nil
+	return domain.ResolvedConnection{Connection: conn, Kind: kind, Values: values, SecretRefs: maps.Clone(conn.SecretRefs)}, nil
 }
 
 // sealedOne is the connection name, locked, with its kind.
@@ -813,9 +874,14 @@ func connectionFrom(r db.ConnectionRow) (domain.Connection, error) {
 		return domain.Connection{}, fmt.Errorf("connection %s: fields: %w", r.Name, err)
 	}
 
+	refs := map[string]string{}
+	if err := json.Unmarshal(r.SecretRefs, &refs); err != nil {
+		return domain.Connection{}, fmt.Errorf("connection %s: secret references: %w", r.Name, err)
+	}
+
 	out := domain.Connection{
 		ID: domain.ConnectionID(r.ID.String()), Name: r.Name, Kind: r.Kind, Description: r.Description, Fields: fields,
-		SecretFields: slices.Clone(r.SecretFields), CreatedBy: namedActor(r.CreatedBy, ""), CreatedAt: r.CreatedAt.UTC(),
+		SecretFields: slices.Clone(r.SecretFields), SecretRefs: refs, CreatedBy: namedActor(r.CreatedBy, ""), CreatedAt: r.CreatedAt.UTC(),
 		UpdatedBy: namedActor(r.UpdatedBy, ""), UpdatedAt: r.UpdatedAt.UTC(), LastUsedAt: utc(r.LastUsedAt),
 	}
 
@@ -830,7 +896,7 @@ func connectionFrom(r db.ConnectionRow) (domain.Connection, error) {
 func sealedConnection(r db.SealedConnectionsRow) db.ConnectionRow {
 	return db.ConnectionRow{
 		ID: r.ID, Name: r.Name, Kind: r.Kind, Description: r.Description, Fields: r.Fields, SecretFields: r.SecretFields,
-		CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, UpdatedBy: r.UpdatedBy, UpdatedAt: r.UpdatedAt, LastUsedAt: r.LastUsedAt,
+		SecretRefs: r.SecretRefs, CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, UpdatedBy: r.UpdatedBy, UpdatedAt: r.UpdatedAt, LastUsedAt: r.LastUsedAt,
 		LastTestAt: r.LastTestAt, LastTestOk: r.LastTestOk, LastTestError: r.LastTestError,
 	}
 }

@@ -51,6 +51,10 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"SyncPlatformKinds_ReplacesAndKeepsUsed", testSync},
 		{"Create_SecretsNeverReturned", testCreate},
 		{"Create_RulesRefused", testCreateRules},
+		{"Create_SecretReferenceStoredUnsealed", testCreateReference},
+		{"Create_PartialReferenceRefused", testPartialReference},
+		{"Update_SecretMovesBetweenSealedAndReference", testMoveReference},
+		{"Resolve_ReturnsReferencesUnopened", testResolveReferences},
 		{"Update_FieldsAndDescription", testUpdate},
 		{"Update_ReplaceSecret", testReplaceSecret},
 		{"Update_RenameKeepsSecrets", testRename},
@@ -99,6 +103,9 @@ const (
 	labsValue   = "labs-sealed-value"
 	apiValue    = "api-sealed-value"
 	docsURL     = "https://docs.example.com/mcp"
+	// gitCred and apiCred are credentials connections refer to as {{name}}.
+	gitCred = "git-token"
+	apiCred = "api-cred"
 	euSite      = "eu.example.com"
 	run         = domain.RunID("00000000-0000-7000-8000-0000000000aa")
 )
@@ -504,6 +511,140 @@ func testCreateRules(f *fixture) {
 	got, err := f.c.List(ctx)
 	f.expect(err == nil && len(got) == 1, "List after refusals = %+v, %v; want only git", got, err)
 	f.one(acme, domain.AuditConnectionCreated)
+}
+
+// ref is a secret value that refers to credential name.
+func ref(name string) string { return "{{" + name + "}}" }
+
+func testCreateReference(f *fixture) {
+	acme := f.NewOrg(f.t)
+	ctx := f.in(acme)
+
+	// Only references: nothing to seal, so no master key is needed.
+	got, err := f.Connections(f.Key()).Create(ctx, domain.NewConnection{Name: connGit, Kind: gitName, Secrets: map[string]string{fieldToken: ref(gitCred)}}, admin)
+	if err != nil {
+		f.t.Fatalf("Create with a reference without a master key = %v", err)
+	}
+
+	f.expect(slices.Equal(got.SecretFields, []string{fieldToken}) && reflect.DeepEqual(got.SecretRefs, map[string]string{fieldToken: gitCred}),
+		"Create with a reference = %+v; want token set and referring to %s", got, gitCred)
+
+	one := f.get(acme, connGit)
+	f.expect(reflect.DeepEqual(one.SecretRefs, map[string]string{fieldToken: gitCred}), "Get's references = %v", one.SecretRefs)
+
+	listed, err := f.c.List(ctx)
+	f.expect(err == nil && len(listed) == 1 && listed[0].SecretRefs[fieldToken] == gitCred, "List = %+v, %v", listed, err)
+
+	// A reference beside a sealed value.
+	mixed := f.create(acme, domain.NewConnection{Name: connCloud, Kind: cloudName, Secrets: map[string]string{fieldAPIKey: ref(apiCred), fieldAppKey: sealedValue}})
+	f.expect(slices.Equal(mixed.SecretFields, []string{fieldAPIKey, fieldAppKey}) && reflect.DeepEqual(mixed.SecretRefs, map[string]string{fieldAPIKey: apiCred}),
+		"Create with a reference and a sealed value = %+v", mixed)
+	f.noSecret("Create", mixed, sealedValue)
+
+	_, err = f.Connections(f.Key()).Open(ctx, connCloud)
+	f.refused("Open of a connection with a sealed value without a master key", err, ports.ErrNoMasterKey)
+
+	docs := f.docs(acme)
+	f.expect(len(docs.SecretRefs) == 0, "a connection without secrets has references %v", docs.SecretRefs)
+}
+
+func testPartialReference(f *fixture) {
+	acme := f.NewOrg(f.t)
+	ctx := f.in(acme)
+	f.create(acme, domain.NewConnection{Name: connCloud, Kind: cloudName, Secrets: map[string]string{fieldAPIKey: apiValue}})
+
+	refused := map[string]domain.NewConnection{
+		"an embedded reference": {Name: connGit, Kind: gitName, Secrets: map[string]string{fieldToken: "Bearer " + ref(gitCred) + sealedValue}},
+		"two references":        {Name: connGit, Kind: gitName, Secrets: map[string]string{fieldToken: ref("a-key") + ref("b-key")}},
+		"a reference in a field": {
+			Name: connGit, Kind: gitName, Fields: map[string]string{"host": ref(gitCred)}, Secrets: map[string]string{fieldToken: sealedValue},
+		},
+	}
+
+	for what, n := range refused {
+		_, err := f.c.Create(ctx, n, admin)
+		f.refused("Create with "+what, err, domain.ErrInvalid)
+
+		if err != nil {
+			f.noSecret("the error of Create with "+what, err, sealedValue)
+		}
+
+		_, err = f.c.Update(ctx, connCloud, domain.ConnectionPatch{Fields: n.Fields, Secrets: map[string]string{fieldAppKey: n.Secrets[fieldToken]}}, admin)
+		f.refused("Update with "+what, err, domain.ErrInvalid)
+	}
+
+	_, err := f.c.Get(ctx, connGit)
+	f.refused("Get of a refused connection", err, ports.ErrNotFound)
+
+	got := f.get(acme, connCloud)
+	f.expect(slices.Equal(got.SecretFields, []string{fieldAPIKey}) && len(got.SecretRefs) == 0 && len(got.Fields) == 0,
+		"a refused update changed the connection: %+v", got)
+	f.one(acme, domain.AuditConnectionCreated)
+}
+
+func testMoveReference(f *fixture) {
+	acme := f.NewOrg(f.t)
+	ctx := f.in(acme)
+	f.create(acme, domain.NewConnection{Name: connCloud, Kind: cloudName, Secrets: map[string]string{fieldAPIKey: apiValue, fieldAppKey: "app-1"}})
+
+	update := func(secrets map[string]string, fields []string, refs map[string]string) {
+		f.t.Helper()
+
+		got, err := f.c.Update(ctx, connCloud, domain.ConnectionPatch{Secrets: secrets}, admin)
+		if err != nil {
+			f.t.Fatalf("Update %v: %v", secrets, err)
+		}
+
+		f.expect(slices.Equal(got.SecretFields, fields) && reflect.DeepEqual(got.SecretRefs, refs),
+			"Update %v = fields %v, references %v; want %v, %v", secrets, got.SecretFields, got.SecretRefs, fields, refs)
+		f.noSecret("Update", got, apiValue, "app-1", "app-2")
+	}
+
+	both := []string{fieldAPIKey, fieldAppKey}
+
+	update(map[string]string{fieldAppKey: ref(apiCred)}, both, map[string]string{fieldAppKey: apiCred})
+
+	v := f.values(acme, connCloud)
+	f.expect(v[fieldAPIKey] == apiValue && v[fieldAppKey] == "", "values after app_key became a reference = %v; want only api_key", v)
+
+	update(map[string]string{fieldAPIKey: ref(gitCred)}, both, map[string]string{fieldAPIKey: gitCred, fieldAppKey: apiCred})
+
+	// Nothing is sealed any more: the connection opens without a master key and holds no secret.
+	opened, err := f.Connections(f.Key()).Open(ctx, connCloud)
+	f.expect(err == nil && opened.Values[fieldAPIKey] == "" && opened.Values[fieldAppKey] == "",
+		"Open of a reference-only connection without a master key = %+v, %v", opened, err)
+
+	update(map[string]string{fieldAppKey: "app-2"}, both, map[string]string{fieldAPIKey: gitCred})
+
+	v = f.values(acme, connCloud)
+	f.expect(v[fieldAppKey] == "app-2" && v[fieldAPIKey] == "", "values after app_key was sealed again = %v", v)
+
+	update(map[string]string{fieldAppKey: ""}, []string{fieldAPIKey}, map[string]string{fieldAPIKey: gitCred})
+
+	_, err = f.c.Update(ctx, connCloud, domain.ConnectionPatch{Secrets: map[string]string{fieldAPIKey: ""}}, admin)
+	f.refused("clearing a required reference", err, domain.ErrInvalid)
+
+	f.noSecret("the audit entries", f.audit(acme, domain.AuditConnectionSecretReplaced), apiValue, "app-2")
+}
+
+func testResolveReferences(f *fixture) {
+	acme := f.NewOrg(f.t)
+	ctx := f.in(acme)
+	f.create(acme, domain.NewConnection{Name: connCloud, Kind: cloudName, Secrets: map[string]string{fieldAPIKey: ref(apiCred), fieldAppKey: sealedValue}})
+
+	want := map[string]string{fieldAPIKey: apiCred}
+
+	got := f.resolve(acme, connCloud)
+	f.expect(len(got) == 1 && reflect.DeepEqual(got[0].SecretRefs, want) && got[0].Connection.SecretRefs[fieldAPIKey] == apiCred,
+		"Resolve's references = %+v; want %v", got, want)
+	f.expect(got[0].Values[fieldAppKey] == sealedValue, "Resolve's values = %v; want app_key opened", got[0].Values)
+
+	_, held := got[0].Values[fieldAPIKey]
+	f.expect(!held, "Resolve put a reference in Values: %v", got[0].Values)
+
+	opened, err := f.c.Open(ctx, connCloud)
+	f.expect(err == nil && reflect.DeepEqual(opened.SecretRefs, want) && opened.Values[fieldAppKey] == sealedValue,
+		"Open = %+v, %v; want the reference unopened and app_key opened", opened, err)
 }
 
 func testUpdate(f *fixture) {
