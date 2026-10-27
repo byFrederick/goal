@@ -1,4 +1,4 @@
-# ADR 0023 — Organization policy: a ceiling over factory definitions
+# ADR 0024 — Organization policy: a ceiling over factory definitions
 
 Status: accepted · 2026-10-27 · Builds on [ADR 0016](0016-ui-revamp.md) (the `organization/models` screen is binding) and [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (runs in boxes, the egress proxy, connections that carry credentials)
 
