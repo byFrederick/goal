@@ -1,6 +1,6 @@
 ## When you change
 
-The intake store: the `webhook_endpoints`, `webhook_deliveries` and `trigger_firings` tables or `work_items.trigger` and `work_items.source` (`db/migrations/00066_intake.sql` and the migrations after it), their queries (`db/queries/intake.sql`) or the adapter (`internal/adapters/store/postgres/intake.go`)
+The intake store: the `webhook_endpoints`, `webhook_deliveries` and `trigger_firings` tables or `work_items.trigger` and `work_items.source` (`db/migrations/00068_intake.sql` and the migrations after it), their queries (`db/queries/intake.sql`) or the adapter (`internal/adapters/store/postgres/intake.go`)
 
 ## Also change
 

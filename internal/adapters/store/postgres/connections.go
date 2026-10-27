@@ -873,7 +873,7 @@ func isForeignKeyViolation(err error) bool {
 }
 
 // ConnectionKeyIDs are the master key ids some connection, credential or webhook endpoint of any
-// organization is sealed under (goal_connection_key_ids, as 00066 replaced it): goald refuses to
+// organization is sealed under (goal_connection_key_ids, as 00068 replaced it): goald refuses to
 // start without each of them.
 func ConnectionKeyIDs(ctx context.Context, s *Store) ([]string, error) {
 	var ids []string

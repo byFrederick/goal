@@ -876,6 +876,32 @@ func (s *Store) ItemEvents(ctx context.Context, id domain.ItemID, after int64, l
 	return out, nil
 }
 
+// FactoryActivity implements ports.Store.
+func (s *Store) FactoryActivity(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ActivityEvent, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := []domain.ActivityEvent{}
+
+	for _, e := range s.events {
+		it, ok := s.visible(e.ItemID, org)
+		if ok && e.FactoryID == factory && slices.Contains(domain.ActivityKinds, e.Kind) {
+			out = append(out, domain.ActivityEvent{Event: e, Number: it.Number, Title: it.Title})
+		}
+	}
+
+	slices.SortFunc(out, func(a, b domain.ActivityEvent) int {
+		return cmp.Or(b.At.Compare(a.At), cmp.Compare(b.ID, a.ID))
+	})
+
+	return out[:min(len(out), limit)], nil
+}
+
 // waiting returns an organization's items waiting at a station in pull order. Callers hold s.mu.
 func (s *Store) waiting(org domain.OrgID, factory domain.FactoryID, station string) []*domain.Item {
 	var w []*domain.Item

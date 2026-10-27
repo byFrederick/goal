@@ -151,13 +151,12 @@ test.describe('the Knowledge page', () => {
     await expect(orgNav(page).getByRole('link', { name: 'Knowledge' })).toHaveAttribute('href', '/o/acme/knowledge');
   });
 
-  test("on a phone, More leads to the factory's Knowledge", async ({ page }) => {
+  test("on a phone, More opens the drawer, whose Knowledge is the organization's", async ({ page }) => {
     test.skip(!isPhone(page), 'phone navigation');
     await page.goto('/o/acme/f/sre');
-    await page.getByRole('navigation', { name: 'Factory' }).getByRole('button', { name: 'More' }).click();
-    await page.getByRole('dialog', { name: 'More' }).getByRole('link', { name: 'Knowledge' }).click();
-    await expect(page).toHaveURL(/\/o\/acme\/knowledge\?factory=sre$/);
-    await expect(page.getByRole('heading', { level: 2, name: '1 source sre may search' })).toBeVisible();
+    await page.getByRole('navigation', { name: 'Tabs' }).getByRole('button', { name: 'More' }).click();
+    await page.getByRole('dialog', { name: 'Acme' }).getByRole('link', { name: 'Knowledge' }).click();
+    await expect(page).toHaveURL(/\/o\/acme\/knowledge$/);
   });
 });
 

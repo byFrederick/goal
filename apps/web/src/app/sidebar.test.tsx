@@ -177,7 +177,6 @@ describe('the sidebar', () => {
   });
 
   it.each([
-    ['Search', /^Search$/],
     ['Collapse', /^Collapse sidebar$/],
     ['Needs you', /^Needs you/],
     ['Runs', /^Runs$/],

@@ -25,6 +25,7 @@ func TestStore_Conformance(t *testing.T) {
 		return storetest.Harness{
 			Store: s,
 			Flow:  s,
+			Spend: s,
 			Audit: tn,
 			LeaseSpans: func(_ *testing.T, org domain.OrgID, id domain.ItemID) []domain.LeaseSpan {
 				return s.LeaseSpans(org, id)

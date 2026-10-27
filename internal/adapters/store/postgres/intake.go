@@ -17,7 +17,7 @@ import (
 
 var _ ports.Intake = (*Intake)(nil)
 
-// Intake implements ports.Intake over 00066's webhook_endpoints, webhook_deliveries and
+// Intake implements ports.Intake over 00068's webhook_endpoints, webhook_deliveries and
 // trigger_firings, as goal_app under row-level security: every statement sees the organization in
 // ctx, except EndpointOrg and PruneDeliveries, which go through their definers. Each signing
 // secret is sealed with key under domain.WebhookSecretAAD (organization, endpoint id and key id);
@@ -484,20 +484,6 @@ func (in *Intake) newSecret(org domain.OrgID, id domain.WebhookEndpointID) ([]by
 	}
 
 	return secret, sealedValue{keyID: keyID, nonce: nonce, ciphertext: ct}, nil
-}
-
-// optionalID is id as a UUID, nil when empty; an id that is not a UUID is ErrNotFound.
-func optionalID(kind, id string) (*uuid.UUID, error) {
-	if id == "" {
-		return nil, nil
-	}
-
-	u, err := parseID(kind, id)
-	if err != nil {
-		return nil, err
-	}
-
-	return &u, nil
 }
 
 func endpointFrom(r db.WebhookEndpointRow) domain.WebhookEndpoint {

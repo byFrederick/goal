@@ -1,6 +1,7 @@
 // The top bar (MASTER.md "Top bar"): from 768 px, a 56 px row above main. On the left, a breadcrumb:
 // on a factory page the factory's badge and name, then the page; on an organization page, the page.
-// On the right, the page's actions, the primary one last. Phones keep their crumb (phone-chrome.tsx).
+// On the right, the page's actions, the primary one last. Below 768 px the phone's top bar takes its
+// place (phone-chrome.tsx): the same page name and actions, without the crumbs.
 //
 // The page's names come from screens.ts, keyed by the route the URL matched. A page sets its last
 // crumb (a detail's name, once its query resolves) and its actions with <TopBarSlot>; until it does,
@@ -80,7 +81,19 @@ const orgRoutePages: Record<string, { label: string; to?: OrgPath }> = {
 
 const crumbLink = 'text-ink-soft no-underline hover:text-ink';
 
-/** The bar. Hidden on phones, where the phone's own crumb and top row do the job. */
+/** The page's name the matched route shows (screens.ts), or undefined for a route the bar does not name. */
+export function usePageLabel(): string | undefined {
+  return useMatches({ select: (matches) => pageLabel(matches.at(-1)?.routeId ?? '') });
+}
+
+function pageLabel(routeId: string): string | undefined {
+  if (routeId.startsWith('/o/$org/f/$factory/')) {
+    return sidebarFactoryPages.find((p) => p.id === factoryRoutePages[routeId])?.label;
+  }
+  return orgRoutePages[routeId]?.label;
+}
+
+/** The bar, from 768 px. Phones use phone-chrome.tsx's top bar instead (ShellFrame picks one). */
 export function TopBar({ state }: { state: TopBarState | null }) {
   const routeId = useMatches({ select: (matches) => matches.at(-1)?.routeId ?? '' });
   const inFactory = routeId.startsWith('/o/$org/f/$factory/');
