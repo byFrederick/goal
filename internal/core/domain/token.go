@@ -18,13 +18,23 @@ var ErrBadTaskToken = errors.New("bad task token")
 // accepts a task token, and nothing else verifies one.
 const TaskAudience = "goal-gateway"
 
+// TaskKind is what kind of task a token is for: empty for a production run of a line's item.
+type TaskKind string
+
+// TaskKindEval is one try of an eval case (ADR 0025 decision 4). Its token names no connection,
+// so the gateway serves it only the knowledge tools: an eval never pushes, comments or calls an
+// outside API. The model connection reaches the agent's box apart from the token.
+const TaskKindEval TaskKind = "eval"
+
 // TaskClaims scope one agent task's access to the MCP gateway: which organization, factory,
 // definition version, item, station, agent and run it acts for, which connections it may use,
 // what the organization policy decided at run start (the model and the denied commands) and
 // until when.
 type TaskClaims struct {
 	// Audience is always TaskAudience: SignTaskToken sets it and VerifyTaskToken requires it.
-	Audience  string    `json:"aud"`
+	Audience string `json:"aud"`
+	// Kind is empty for a production task and TaskKindEval for an eval try.
+	Kind      TaskKind  `json:"k,omitempty"`
 	OrgID     OrgID     `json:"o"`
 	FactoryID FactoryID `json:"f"`
 	// VersionID is the definition version the run started on: the gateway serves that
@@ -52,6 +62,10 @@ func SignTaskToken(key []byte, c TaskClaims) (string, error) {
 	}
 
 	c.Audience = TaskAudience
+
+	if err := c.checkKind(); err != nil {
+		return "", err
+	}
 
 	payload, err := json.Marshal(c)
 	if err != nil {
@@ -106,7 +120,20 @@ func VerifyTaskToken(key []byte, token string, now time.Time) (TaskClaims, error
 		return TaskClaims{}, fmt.Errorf("%w: no definition version", ErrBadTaskToken)
 	}
 
+	if err := c.checkKind(); err != nil {
+		return TaskClaims{}, err
+	}
+
 	return c, nil
+}
+
+// checkKind refuses an eval task's claims that name a connection.
+func (c TaskClaims) checkKind() error {
+	if c.Kind == TaskKindEval && len(c.Connections) > 0 {
+		return fmt.Errorf("%w: an eval task names connections", ErrBadTaskToken)
+	}
+
+	return nil
 }
 
 func mac(key, payload []byte) []byte {

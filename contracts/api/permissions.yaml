@@ -41,6 +41,11 @@ permissions:
   # value; owners and admins change and test them after a recent sign-in, never with a key.
   - {name: connection:read,    level: org, org_roles: [owner, admin, member], keys: true, pat: true}
   - {name: connection:manage,  level: org, org_roles: [owner, admin], fresh: true}
+  # The organization's credentials (ADR 0017 decision 10): members, keys and tokens read names and
+  # metadata, never a value; owners and admins create, change, replace, delete and import them
+  # after a recent sign-in, never with a key.
+  - {name: credential:read,    level: org, org_roles: [owner, admin, member], keys: true, pat: true}
+  - {name: credential:manage,  level: org, org_roles: [owner, admin], fresh: true}
   # Browsing what a code host connection reaches (its owners and repositories) uses its
   # credential from goald, which connection:read never does; members, keys and tokens may.
   - {name: connection:browse,  level: org, org_roles: [owner, admin, member], keys: true, pat: true}

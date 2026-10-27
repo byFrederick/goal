@@ -136,8 +136,6 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	// The API takes the credentials in its own part (software#217).
-
 	s3cfg, err := s3.ConfigFromEnv(os.Getenv)
 	if err != nil {
 		return err
@@ -226,7 +224,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 			Mode: api.AuthMode(s.Auth), EmailCodes: s.EmailCodes, Google: s.Google, SecureCookies: s.strictTransport(),
 		},
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
-		Connections: connections, ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
+		Connections: connections, Credentials: credentials, ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes,
 		Clock: clock, Logger: log,
 	})

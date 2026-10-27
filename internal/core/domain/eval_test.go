@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -129,5 +130,103 @@ func TestManifestSHA256(t *testing.T) {
 
 	if ManifestSHA256(nil) != ManifestSHA256(Manifest{}) {
 		t.Error("a nil and an empty manifest hash differently")
+	}
+}
+
+func TestEvalCaseSpec_Check(t *testing.T) {
+	t.Parallel()
+
+	ok := EvalCaseSpec{Name: testEvalCase, Agent: "engineer", Tries: 2, Contract: true}
+
+	tests := []struct {
+		name      string
+		edit      func(*EvalCaseSpec)
+		want      string
+		checkedBy string
+	}{
+		{name: "the contract", edit: func(*EvalCaseSpec) {}, checkedBy: "contract"},
+		{name: "a judge", edit: func(c *EvalCaseSpec) { c.Contract, c.Judge = false, "spec-followed" }, checkedBy: "judge:spec-followed"},
+		{
+			name: "a reference patch", edit: func(c *EvalCaseSpec) { c.Contract, c.ReferencePatch = false, "evals/patches/fix.diff" },
+			checkedBy: "reference-patch:evals/patches/fix.diff",
+		},
+		{name: "no check", edit: func(c *EvalCaseSpec) { c.Contract = false }, want: "0 checks"},
+		{name: "two checks", edit: func(c *EvalCaseSpec) { c.Judge = "spec-followed" }, want: "2 checks"},
+		{name: "no agent", edit: func(c *EvalCaseSpec) { c.Agent = "" }, want: "no agent"},
+		{name: "no tries", edit: func(c *EvalCaseSpec) { c.Tries = 0 }, want: "0 tries"},
+		{name: "a bad name", edit: func(c *EvalCaseSpec) { c.Name = "Merge Step" }, want: "not a case file's name"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			c := ok
+			tt.edit(&c)
+
+			err := c.Check()
+			if tt.want == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if got := c.CheckedBy(); got != tt.checkedBy {
+					t.Errorf("CheckedBy() = %q, want %q", got, tt.checkedBy)
+				}
+
+				return
+			}
+
+			if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), tt.want) {
+				t.Errorf("err = %v, want ErrInvalid saying %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestPatchFiles(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		diff string
+		want []string
+	}{
+		{
+			name: "a change",
+			diff: "diff --git a/internal/lease.go b/internal/lease.go\nindex 1..2 100644\n--- a/internal/lease.go\n+++ b/internal/lease.go\n@@ -1,2 +1,2 @@\n package lease\n-var x = 1\n+var x = 2\n",
+			want: []string{"internal/lease.go"},
+		},
+		{
+			name: "a new file and a deleted one skip /dev/null",
+			diff: "--- /dev/null\n+++ b/docs/new.md\n@@ -0,0 +1 @@\n+hello\n--- a/docs/old.md\n+++ /dev/null\n@@ -1 +0,0 @@\n-bye\n",
+			want: []string{"docs/new.md", "docs/old.md"},
+		},
+		{
+			name: "a rename counts under both names",
+			diff: "diff --git a/old/name.go b/new/name.go\nsimilarity index 100%\nrename from old/name.go\nrename to new/name.go\n",
+			want: []string{"new/name.go", "old/name.go"},
+		},
+		{
+			name: "hunk lines that look like headers are content",
+			diff: "--- a/notes.md\n+++ b/notes.md\n@@ -1,2 +1,2 @@\n--- a/secret.md\n+++ b/other.md\n",
+			want: []string{"notes.md"},
+		},
+		{
+			name: "plain diff headers with timestamps",
+			diff: "--- lease.go\t2026-10-01 12:00:00\n+++ lease.go\t2026-10-02 12:00:00\n@@ -1 +1 @@\n-a\n+b\n",
+			want: []string{"lease.go"},
+		},
+		{name: "nothing", diff: "", want: []string{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := PatchFiles([]byte(tt.diff)); !slices.Equal(got, tt.want) {
+				t.Errorf("PatchFiles = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
