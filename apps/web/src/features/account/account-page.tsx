@@ -19,7 +19,6 @@ import { roleLine, useUpdateName } from '../../shared/account';
 import { displayName, initialsOf } from '../../shared/names';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
-import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
 import { Field, Input } from '../../ui/field';
 import { Avatar } from '../../ui/mark';
@@ -50,7 +49,7 @@ const channels = ['In Goal', 'Email', 'Slack'] as const;
 
 export function AccountPage() {
   const org = useOrg();
-  const { data: me, isPending, isError, refetch } = useQuery(meQuery);
+  const { data: me, isPending, isError, error } = useQuery(meQuery);
 
   if (isPending) {
     return (
@@ -61,17 +60,8 @@ export function AccountPage() {
       </div>
     );
   }
-  if (isError) {
-    return (
-      <div className="flex max-w-xl flex-col items-start gap-3">
-        <h1 className="m-0 text-page-title tracking-display">Your account</h1>
-        <Callout tone="rework">Can’t reach Goal. Check your connection and try again.</Callout>
-        <Button variant="white" onClick={() => void refetch()}>
-          Try again
-        </Button>
-      </div>
-    );
-  }
+  // A failed load goes to the route's error screen (ErrorScreen, with its retry), as on the other routes.
+  if (isError) throw error;
   return <AccountContent me={me} org={org} />;
 }
 
@@ -308,6 +298,20 @@ function SessionsSection({ signedIn }: { signedIn: boolean }) {
         <span className="text-body font-semibold">This browser</span>
         <Chip tone="ok">This device</Chip>
         <span className="ml-auto text-meta text-muted">Active now</span>
+      </div>
+      {/* The other sessions are not listed: goald cannot list them yet, so the row only shows that it is not available. */}
+      <div className="flex items-center gap-2 border-t border-line pt-4">
+        <span className="flex min-w-0 flex-col">
+          <span className="text-body font-semibold">Another browser or device</span>
+          <span className="text-meta text-muted">Not listed yet</span>
+        </span>
+        <span className="ml-auto">
+          <NotAvailable label="Sign out of another browser or device">
+            <Button variant="white" size="sm">
+              Sign out
+            </Button>
+          </NotAvailable>
+        </span>
       </div>
     </section>
   );
