@@ -1,59 +1,42 @@
-// The organization menu (C §10.4, canvas "Org-Switcher" and "Mobile-Org-Switcher"): every
-// organization on the install (switch by choosing one), the current organization's own pages,
-// and Create organization, for platform admins only (spec 3 §4.2; everyone with sign-in off, the
-// local user creates them). A Radix DropdownMenu under the sidebar's top row (sidebar.tsx); a bottom
-// sheet on phones, opened by the organization mark (org-mark.tsx). Both are fed by useOrgMenuModel.
-// The sheet ends with
-// the account (account-menu.tsx). Each organization says the caller's role there ("3 factories,
-// owner"; nothing with sign-in off), and Members and roles opens the current one's people.
+// The organization menu (docs/design/screens/account/shell.html, "Organization menu"): the organizations
+// the caller is in, each with its factory count and role and a check on the current one; Create
+// organization for whoever may create one (platform admins, or everyone with sign-in off); and the
+// current organization's pages. Members and roles shows the member count once it loads. Spend and
+// billing and Models and policies have no pages yet, so they render disabled (ADR 0016, decision 4).
+// A Radix DropdownMenu under the sidebar's top row (sidebar.tsx); a bottom sheet on phones, opened by
+// the organization mark (org-mark.tsx). The sheet ends with the account (account-menu.tsx).
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from '@tanstack/react-router';
-import { Check, Plus } from 'lucide-react';
+import { Check, CreditCard, KeyRound, Plus, Settings, Shield, Users } from 'lucide-react';
 import { type ReactNode, type RefObject, useId, useRef } from 'react';
-import { meQuery, orgsQuery } from '../api/queries';
+import { membersQuery, meQuery, orgsQuery } from '../api/queries';
 import type { OrgSummary } from '../api/types';
-import { orgMark } from '../shared/marks';
 import { factoryCount, useOrgGrants } from '../shared/org';
 import { cn } from '../ui/cn';
-import {
-  MenuContent,
-  MenuGroup,
-  MenuItem,
-  MenuLabel,
-  MenuRadioGroup,
-  MenuRadioItem,
-  MenuSeparator,
-  menuRow,
-} from '../ui/menu';
+import { MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, menuRow } from '../ui/menu';
+import { NotAvailable } from '../ui/not-available';
 import { SheetContent, SheetLabel } from '../ui/sheet';
 import { AccountBlock } from './account-menu';
-import {
-  apiKeysScreen,
-  connectionsScreen,
-  knowledgeScreen,
-  membersScreen,
-  type OrgScreen,
-  screensFor,
-  settingsScreen,
-} from './screens';
+import { apiKeysScreen, membersScreen, screensFor, settingsScreen } from './screens';
 
 interface OrgChoice {
   org: OrgSummary;
-  mark: string;
-  /** "3 factories", "3 factories, owner" */
+  /** "3 factories, owner" */
   detail: string;
   current: boolean;
 }
 
 interface OrgMenuModel {
   orgs: OrgChoice[];
-  /** The current organization's pages: members, API keys, connections, knowledge and settings. */
-  links: { screen: OrgScreen; label: string }[];
+  /** Members and roles is offered to whoever may read the members (member:read). */
+  canMembers: boolean;
+  /** API keys is offered to whoever may read keys (api_key:read or personal_token:read). */
+  canApiKeys: boolean;
   /** Create organization is offered: to platform admins, or to the local user with sign-in off. */
   canCreate: boolean;
   /**
    * Whether going to `path` leaves the current page. Only then does the new page's heading take
-   * focus; otherwise focus returns to the mark as the menu closes.
+   * focus; otherwise focus returns to the trigger as the menu closes.
    */
   leaves: (path: string) => boolean;
 }
@@ -68,41 +51,47 @@ function useOrgMenuModel(current: OrgSummary): OrgMenuModel {
   // Hidden until goald says who this is: only platform admins create organizations.
   const { data: canCreate = false } = useQuery({ ...meQuery, select: (me) => me.mode === 'none' || me.platform_admin });
   const can = useOrgGrants()?.can;
-  const shown = screensFor([membersScreen, apiKeysScreen, connectionsScreen, knowledgeScreen, settingsScreen], can);
-  const labels: Record<string, string> = { [settingsScreen.id]: 'Organization settings' };
   return {
     orgs: data.map((org) => ({
       org,
-      mark: orgMark(org),
       detail: org.role ? `${factoryCount(org.factory_count)}, ${org.role}` : factoryCount(org.factory_count),
       current: org.id === current.id,
     })),
-    links: shown.map((screen) => ({ screen, label: labels[screen.id] ?? screen.label })),
+    canMembers: can?.includes('member:read') ?? false,
+    canApiKeys: screensFor([apiKeysScreen], can).length > 0,
     canCreate,
     leaves: (path) => path !== pathname,
   };
 }
 
-const iconProps = { size: 18, strokeWidth: 1.5, 'aria-hidden': true, className: 'shrink-0 text-muted' } as const;
+const iconProps = { size: 16, strokeWidth: 1.5, 'aria-hidden': true, className: 'shrink-0 text-muted' } as const;
 
-/** An organization's 36 px tile in the list: ink when current, outlined otherwise. */
-function OrgTile({ mark, current }: { mark: string; current: boolean }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        'box-border flex size-9 items-center justify-center rounded-cell text-secondary font-semibold',
-        current ? 'bg-ink text-white' : 'border border-ink bg-card text-ink',
-      )}
-    >
-      {mark}
-    </span>
-  );
+/** A row of the menu: the hover fill of the picture (hover token), 14 px body text. */
+const rowClass = cn(menuRow, 'cursor-pointer text-body hover:bg-hover data-[highlighted]:bg-hover');
+
+/** The check on the current organization; its label is what a screen reader hears for it. */
+function CurrentCheck() {
+  return <Check role="img" aria-label="Current" size={16} strokeWidth={1.75} className="shrink-0 text-run" />;
+}
+
+/** The member count, from the members list. It mounts only while the menu is open and the caller may read members. */
+function MembersCount({ orgId }: { orgId: string }) {
+  const { data, isPending, isError } = useQuery(membersQuery(orgId));
+  // A failed count leaves the number out; the row stays usable.
+  if (isError) return null;
+  if (isPending) {
+    return (
+      <span aria-busy="true" className="ml-auto text-meta text-muted">
+        <span className="sr-only">Loading</span>
+      </span>
+    );
+  }
+  return <span className="ml-auto text-meta text-muted tabular-nums">{data.length}</span>;
 }
 
 function OrgText({ choice }: { choice: OrgChoice }) {
   return (
-    <span className="min-w-0">
+    <span className="min-w-0 flex-1">
       <span className="block truncate text-heading font-medium">{choice.org.name}</span>
       <span className="block text-secondary text-muted">{choice.detail}</span>
     </span>
@@ -133,54 +122,89 @@ export function OrgMenuContent({ org, onCreate, navigating }: OrgMenuProps) {
     >
       <MenuGroup aria-labelledby={`${ids}-orgs`}>
         <MenuLabel id={`${ids}-orgs`}>Organizations</MenuLabel>
-        <MenuRadioGroup value={org.id} className="flex flex-col gap-1">
-          {model.orgs.map((choice) => (
-            <MenuRadioItem
-              key={choice.org.id}
-              value={choice.org.id}
-              onSelect={() => {
-                navigating.current = model.leaves(orgPath('/o/$org', choice.org.slug));
-                navigate({ to: '/o/$org', params: { org: choice.org.slug } });
-              }}
-            >
-              <OrgTile mark={choice.mark} current={choice.current} />
-              <OrgText choice={choice} />
-            </MenuRadioItem>
-          ))}
-        </MenuRadioGroup>
+        {model.orgs.map((choice) => (
+          <MenuItem
+            key={choice.org.id}
+            aria-current={choice.current ? 'true' : undefined}
+            className={rowClass}
+            onSelect={() => {
+              navigating.current = model.leaves(orgPath('/o/$org', choice.org.slug));
+              navigate({ to: '/o/$org', params: { org: choice.org.slug } });
+            }}
+          >
+            <OrgText choice={choice} />
+            {choice.current ? <CurrentCheck /> : null}
+          </MenuItem>
+        ))}
+        {model.canCreate ? (
+          <MenuItem onSelect={onCreate} className={rowClass}>
+            <Plus {...iconProps} />
+            Create organization
+          </MenuItem>
+        ) : null}
       </MenuGroup>
       <MenuSeparator />
       <MenuGroup aria-labelledby={`${ids}-org`}>
         <MenuLabel id={`${ids}-org`}>{org.name}</MenuLabel>
-        {model.links.map(({ screen, label }) => (
+        {model.canMembers ? (
           <MenuItem
-            key={screen.id}
             asChild
+            className={rowClass}
             onSelect={() => {
-              navigating.current = model.leaves(orgPath(screen.to, org.slug));
+              navigating.current = model.leaves(orgPath(membersScreen.to, org.slug));
             }}
           >
-            <Link to={screen.to} params={{ org: org.slug }}>
-              <screen.icon {...iconProps} />
-              {label}
+            <Link to={membersScreen.to} params={{ org: org.slug }}>
+              <Users {...iconProps} />
+              {membersScreen.label}
+              <MembersCount orgId={org.id} />
             </Link>
           </MenuItem>
-        ))}
-      </MenuGroup>
-      {model.canCreate ? (
-        <>
-          <MenuSeparator />
-          <MenuItem onSelect={onCreate}>
-            <Plus {...iconProps} />
-            Create organization
+        ) : null}
+        <NotAvailable>
+          <MenuItem className={rowClass}>
+            <CreditCard {...iconProps} />
+            Spend and billing
           </MenuItem>
-        </>
-      ) : null}
+        </NotAvailable>
+        <NotAvailable>
+          <MenuItem className={rowClass}>
+            <Shield {...iconProps} />
+            Models and policies
+          </MenuItem>
+        </NotAvailable>
+        {model.canApiKeys ? (
+          <MenuItem
+            asChild
+            className={rowClass}
+            onSelect={() => {
+              navigating.current = model.leaves(orgPath(apiKeysScreen.to, org.slug));
+            }}
+          >
+            <Link to={apiKeysScreen.to} params={{ org: org.slug }}>
+              <KeyRound {...iconProps} />
+              {apiKeysScreen.label}
+            </Link>
+          </MenuItem>
+        ) : null}
+        <MenuItem
+          asChild
+          className={rowClass}
+          onSelect={() => {
+            navigating.current = model.leaves(orgPath(settingsScreen.to, org.slug));
+          }}
+        >
+          <Link to={settingsScreen.to} params={{ org: org.slug }}>
+            <Settings {...iconProps} />
+            Organization settings
+          </Link>
+        </MenuItem>
+      </MenuGroup>
     </MenuContent>
   );
 }
 
-const sheetRow = cn(menuRow, 'min-h-12 text-base hover:bg-shell');
+const sheetRow = cn(menuRow, 'min-h-13 text-body hover:bg-hover');
 
 interface OrgSheetProps extends OrgMenuProps {
   /** Closes the sheet; a link calls it as it navigates. */
@@ -217,49 +241,82 @@ export function OrgSheetContent({ org, onCreate, onClose, navigating }: OrgSheet
               // The Link says "page" itself when the organization's Factories home is open.
               activeOptions={{ exact: true }}
               aria-current={choice.current ? 'true' : undefined}
-              data-current={choice.current}
               onClick={() => go(orgPath('/o/$org', choice.org.slug))}
-              className="grid min-h-[52px] grid-cols-[36px_minmax(0,1fr)_20px] items-center gap-3 rounded-control px-2 py-2 text-ink no-underline transition-colors duration-200 hover:bg-shell data-[current=true]:bg-shell"
+              className={sheetRow}
             >
-              <OrgTile mark={choice.mark} current={choice.current} />
               <OrgText choice={choice} />
-              {choice.current ? (
-                <>
-                  <Check size={18} strokeWidth={1.75} aria-hidden="true" />
-                  <span className="sr-only">, current organization</span>
-                </>
-              ) : null}
+              {choice.current ? <CurrentCheck /> : null}
             </Link>
           </li>
         ))}
+        {model.canCreate ? (
+          <li>
+            <button type="button" onClick={onCreate} className={sheetRow}>
+              <Plus {...iconProps} />
+              Create organization
+            </button>
+          </li>
+        ) : null}
       </SheetList>
       <div aria-hidden="true" className="my-2 h-px bg-line" />
       <SheetLabel id={`${ids}-org`}>{org.name}</SheetLabel>
       <SheetList labelledBy={`${ids}-org`}>
-        {model.links.map(({ screen, label }) => (
-          <li key={screen.id}>
+        {model.canMembers ? (
+          <li>
             <Link
-              to={screen.to}
+              to={membersScreen.to}
               params={{ org: org.slug }}
-              onClick={() => go(orgPath(screen.to, org.slug))}
+              onClick={() => go(orgPath(membersScreen.to, org.slug))}
               className={sheetRow}
             >
-              <screen.icon {...iconProps} />
-              {label}
+              <Users {...iconProps} />
+              {membersScreen.label}
+              <MembersCount orgId={org.id} />
             </Link>
           </li>
-        ))}
+        ) : null}
+        <li>
+          <NotAvailable>
+            <button type="button" className={sheetRow}>
+              <CreditCard {...iconProps} />
+              Spend and billing
+            </button>
+          </NotAvailable>
+        </li>
+        <li>
+          <NotAvailable>
+            <button type="button" className={sheetRow}>
+              <Shield {...iconProps} />
+              Models and policies
+            </button>
+          </NotAvailable>
+        </li>
+        {model.canApiKeys ? (
+          <li>
+            <Link
+              to={apiKeysScreen.to}
+              params={{ org: org.slug }}
+              onClick={() => go(orgPath(apiKeysScreen.to, org.slug))}
+              className={sheetRow}
+            >
+              <KeyRound {...iconProps} />
+              {apiKeysScreen.label}
+            </Link>
+          </li>
+        ) : null}
+        <li>
+          <Link
+            to={settingsScreen.to}
+            params={{ org: org.slug }}
+            onClick={() => go(orgPath(settingsScreen.to, org.slug))}
+            className={sheetRow}
+          >
+            <Settings {...iconProps} />
+            Organization settings
+          </Link>
+        </li>
       </SheetList>
       <div aria-hidden="true" className="my-2 h-px bg-line" />
-      {model.canCreate ? (
-        <>
-          <button type="button" onClick={onCreate} className={sheetRow}>
-            <Plus {...iconProps} />
-            Create organization
-          </button>
-          <div aria-hidden="true" className="my-2 h-px bg-line" />
-        </>
-      ) : null}
       <AccountBlock org={org} onAction={onClose} />
     </SheetContent>
   );
