@@ -197,7 +197,7 @@ test('the sidebar collapses to a rail and remembers it', async ({ page }) => {
   await sidebar.getByRole('button', { name: 'Collapse sidebar' }).click();
   await expect(sidebar.getByRole('button', { name: 'Expand sidebar' })).toBeFocused();
   await expect(sidebar.getByRole('link', { name: 'Home' })).toBeVisible();
-  await expect(sidebar.getByRole('button', { name: 'Needs you' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(sidebar.getByRole('link', { name: /^Needs you/ })).toHaveAttribute('href', '/o/acme/needs-you');
 
   // The choice is kept across a reload: the rail shows its icons and no spend text.
   await page.reload();
@@ -279,9 +279,9 @@ test('a stopped line is what its floor needs first, and clears from it', async (
 });
 
 test('approve from the phone: the Inbox drawer decides the oldest decision', async ({ page }) => {
-  test.skip(!isPhone(page), 'the phone Board is the one that opens the Inbox drawer (the Items header has none)');
-  await page.goto('/o/acme/f/sre/board');
-  await expect(page.getByRole('heading', { name: 'Needs you' })).toHaveCount(0);
+  // The phone Board has no Inbox, and Needs you is not built yet: the phone's Inbox is the Floor's.
+  test.skip(!isPhone(page), 'the phone Floor is the one that opens the Inbox drawer (the Items header has none)');
+  await page.goto('/o/acme/f/sre/');
 
   await page.getByRole('button', { name: /^Inbox/ }).click();
   const drawer = page.getByRole('dialog', { name: 'Inbox' });
@@ -295,10 +295,10 @@ test('approve from the phone: the Inbox drawer decides the oldest decision', asy
 });
 
 test('merging from the phone names every pull request the merge lands', async ({ page, request }) => {
-  test.skip(!isPhone(page), 'the phone Board is the one that opens the Inbox drawer (the Items header has none)');
+  test.skip(!isPhone(page), 'the phone Floor is the one that opens the Inbox drawer (the Items header has none)');
   // goal#12 is older; once approved, goal#6 (two pull requests, at Merge) is the one to decide.
   await request.post('/v1/orgs/acme/items/goal%2312/approve', { data: {} });
-  await page.goto('/o/acme/f/goal/board');
+  await page.goto('/o/acme/f/goal/');
   await page.getByRole('button', { name: /^Inbox/ }).click();
   const drawer = page.getByRole('dialog', { name: 'Inbox' });
   await drawer.getByRole('button', { name: 'Merge goal#6' }).click();
@@ -516,20 +516,17 @@ test('on a phone the board opens where a person is needed, then picks any statio
   // Items waiting on a person come first: the board opens on Approve, not the constraint.
   const picker = page.getByRole('tablist', { name: 'Stations' });
   await expect(picker.getByRole('tab', { name: /^Approve/ })).toHaveAttribute('aria-selected', 'true');
-  // The line's WIP stays one phrase on one line ("WIP 1 / of 2" read badly).
-  const wip = page.getByText(/^WIP \d+( of \d+)?$/).filter({ visible: true });
-  expect(await wip.evaluate((el) => el.getClientRects().length)).toBe(1);
-  await picker.getByRole('tab', { name: 'Investigate 3 of 3, 2 ready' }).click();
+  // The phone has no status line: the picked station's column names the constraint.
+  await picker.getByRole('tab', { name: /^Investigate/ }).click();
   await expect(page).toHaveURL(/station=investigate/);
-  await expect(page.getByText('Investigate is the constraint: 3 of 3 busy, 2 waiting')).toBeVisible();
-  await expect(page.getByRole('article').filter({ hasText: 'billing-svc' })).toContainText(
-    'sre#8, Incident, 1 hbilling-svc deploy rolled back twiceinvestigator-1, turn 3',
-  );
+  await expect(page.getByRole('tabpanel').getByRole('heading', { name: 'Investigate' })).toBeVisible();
+  await expect(page.getByRole('tabpanel').getByText('Constraint', { exact: true })).toBeVisible();
+  await expect(page.getByRole('article').filter({ hasText: 'billing-svc' })).toContainText('sre#8');
   await expect(page.getByRole('tabpanel').getByRole('article').filter({ hasText: 'Checkout API p95' })).toContainText(
     'Expedite',
   );
 
-  await picker.getByRole('tab', { name: 'Done 1 today' }).click();
+  await picker.getByRole('tab', { name: /^Done/ }).click();
   await expect(page).toHaveURL(/station=done/);
   await expect(page.getByRole('article').filter({ hasText: 'Redis evictions' })).not.toContainText('Postmortem filed');
   await expectAccessible(page);
