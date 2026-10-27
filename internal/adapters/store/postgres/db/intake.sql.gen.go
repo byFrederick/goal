@@ -352,6 +352,33 @@ func (q *Queries) TriggerCreatedSince(ctx context.Context, arg TriggerCreatedSin
 	return count, err
 }
 
+const triggerFailureStreak = `-- name: TriggerFailureStreak :one
+WITH last_created AS (
+  SELECT at, id FROM trigger_firings
+  WHERE factory_id = $1 AND trigger = $2 AND dedupe = $3::text AND outcome = 'created'
+  ORDER BY at DESC, id DESC
+  LIMIT 1
+)
+SELECT count(*) FROM trigger_firings f
+WHERE f.factory_id = $1 AND f.trigger = $2 AND f.dedupe = $3::text
+  AND NOT EXISTS (SELECT 1 FROM last_created c WHERE (f.at, f.id) <= (c.at, c.id))
+`
+
+type TriggerFailureStreakParams struct {
+	FactoryID uuid.UUID
+	Trigger   string
+	Dedupe    string
+}
+
+// The trigger's firings with the dedupe value after its newest one with that value that created
+// an item (all of them when none did), for only.failuresInARow.
+func (q *Queries) TriggerFailureStreak(ctx context.Context, arg TriggerFailureStreakParams) (int64, error) {
+	row := q.db.QueryRow(ctx, triggerFailureStreak, arg.FactoryID, arg.Trigger, arg.Dedupe)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const triggerFiringByKey = `-- name: TriggerFiringByKey :one
 SELECT id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, at FROM trigger_firings
 WHERE factory_id = $1 AND trigger = $2 AND idempotency_key = $3
