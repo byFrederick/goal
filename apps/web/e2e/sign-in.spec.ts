@@ -296,19 +296,18 @@ test('edit name, sign out everywhere, sign out', async ({ page }) => {
     return page.getByRole('dialog', { name: 'Account' });
   };
 
+  // Profile opens the account page, where the name is edited and saved from the top bar.
   await (await openAccount('FC, F. Cruz')).getByRole('button', { name: 'Profile' }).click();
-  const edit = page.getByRole('dialog', { name: 'Edit name' });
-  await expect(edit.getByLabel('Name')).toBeFocused();
-  await expect(edit.getByLabel('Name')).toHaveValue('F. Cruz');
-  await expect(edit.getByText('1 to 80 characters. Acme’s members and the audit log show it.')).toBeVisible();
-  await edit.getByLabel('Name').fill('  ');
-  await edit.getByRole('button', { name: 'Save' }).click();
-  await expect(edit.getByLabel('Name')).toHaveAccessibleDescription(/^A name is 1 to 80 characters\./);
+  await expect(page).toHaveURL(/\/account$/);
+  await expect(page.getByLabel('Name', { exact: true })).toHaveValue('F. Cruz');
+  await page.getByLabel('Name', { exact: true }).fill('  ');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByText('A name is 1 to 80 characters.')).toBeVisible();
   await expectAccessible(page);
-  await edit.getByLabel('Name').fill('Fred Cruz');
-  await edit.getByRole('button', { name: 'Save' }).click();
-  await expect(edit).toBeHidden();
+  await page.getByLabel('Name', { exact: true }).fill('Fred Cruz');
+  await page.getByRole('button', { name: 'Save changes' }).click();
   await expectToast(page, 'Name saved');
+  await page.goto('/o/acme');
 
   // Sign out everywhere asks first; Cancel has focus, so Enter never signs anyone out by accident.
   await (await openAccount('FC, Fred Cruz')).getByRole('button', { name: 'Sign out everywhere' }).click();
