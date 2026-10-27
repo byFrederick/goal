@@ -361,16 +361,7 @@ func (c *Connections) Create(ctx context.Context, n domain.NewConnection, by dom
 	}
 
 	err = c.s.inTx(ctx, func(q *db.Queries) error {
-		kr, err := q.ConnectionKind(ctx, n.Kind)
-		if notFound(err) {
-			return fmt.Errorf("connection kind %q: %w", n.Kind, ports.ErrNotFound)
-		}
-
-		if err != nil {
-			return err
-		}
-
-		kind, err := decodeKind(kr.Name, kr.OrgID, kr.Spec)
+		kindID, kind, err := kindNamed(ctx, q, n.Kind)
 		if err != nil {
 			return err
 		}
@@ -388,18 +379,13 @@ func (c *Connections) Create(ctx context.Context, n domain.NewConnection, by dom
 			return err
 		}
 
-		raw, err := json.Marshal(fields)
-		if err != nil {
-			return err
-		}
-
-		rawRefs, err := json.Marshal(refs)
+		raw, rawRefs, err := encodeValues(fields, refs)
 		if err != nil {
 			return err
 		}
 
 		out.CreatedAt, err = q.InsertConnection(ctx, db.InsertConnectionParams{
-			ID: id, Name: n.Name, KindID: kr.ID, Description: n.Description, Fields: raw, SecretFields: out.SecretFields,
+			ID: id, Name: n.Name, KindID: kindID, Description: n.Description, Fields: raw, SecretFields: out.SecretFields,
 			SecretRefs: rawRefs, KeyID: s.keyID, Nonce: s.nonce, Ciphertext: s.ciphertext, CreatedBy: by.Ref(),
 		})
 		if violates(err, connectionNameKey) {
@@ -420,6 +406,36 @@ func (c *Connections) Create(ctx context.Context, n domain.NewConnection, by dom
 	out.UpdatedAt = out.CreatedAt
 
 	return out, nil
+}
+
+// kindNamed is the kind name as the organization sees it, with its id; ErrNotFound when there is
+// none.
+func kindNamed(ctx context.Context, q *db.Queries, name string) (uuid.UUID, domain.ConnectionKind, error) {
+	kr, err := q.ConnectionKind(ctx, name)
+	if notFound(err) {
+		return uuid.UUID{}, domain.ConnectionKind{}, fmt.Errorf("connection kind %q: %w", name, ports.ErrNotFound)
+	}
+
+	if err != nil {
+		return uuid.UUID{}, domain.ConnectionKind{}, err
+	}
+
+	kind, err := decodeKind(kr.Name, kr.OrgID, kr.Spec)
+
+	return kr.ID, kind, err
+}
+
+// encodeValues are a connection's fields and secret references as their jsonb columns hold them.
+func encodeValues(fields, refs map[string]string) (rawFields, rawRefs []byte, err error) {
+	if rawFields, err = json.Marshal(fields); err != nil {
+		return nil, nil, err
+	}
+
+	if rawRefs, err = json.Marshal(refs); err != nil {
+		return nil, nil, err
+	}
+
+	return rawFields, rawRefs, nil
 }
 
 // created audits and notifies the creation of connection id, out, from n.
@@ -506,7 +522,7 @@ func (c *Connections) update(ctx context.Context, q *db.Queries, org domain.OrgI
 	s := sealed{keyID: r.KeyID, nonce: r.Nonce, ciphertext: r.Ciphertext}
 
 	if len(p.Secrets) > 0 {
-		if s, err = c.replaceSecrets(org, r, &out, sp); err != nil {
+		if s, err = c.replaceSecrets(ctx, q, org, r, &out, sp); err != nil {
 			return domain.Connection{}, err
 		}
 	}
@@ -515,16 +531,7 @@ func (c *Connections) update(ctx context.Context, q *db.Queries, org domain.OrgI
 		return domain.Connection{}, err
 	}
 
-	if err := shareReferenced(ctx, q, sp.refs); err != nil {
-		return domain.Connection{}, err
-	}
-
-	raw, err := json.Marshal(out.Fields)
-	if err != nil {
-		return domain.Connection{}, err
-	}
-
-	rawRefs, err := json.Marshal(out.SecretRefs)
+	raw, rawRefs, err := encodeValues(out.Fields, out.SecretRefs)
 	if err != nil {
 		return domain.Connection{}, err
 	}
@@ -567,8 +574,15 @@ func checkPatch(p domain.ConnectionPatch) error {
 
 // replaceSecrets opens r's secrets, replaces those of sp (an empty value clears one, a reference
 // replaces a sealed value and a sealed value a reference) and seals what is left to seal, none
-// leaving no ciphertext. It sets out's SecretFields and SecretRefs and returns the new sealed value.
-func (c *Connections) replaceSecrets(org domain.OrgID, r db.SealedConnectionsRow, out *domain.Connection, sp secretPatch) (sealed, error) {
+// leaving no ciphertext. It sets out's SecretFields and SecretRefs, locks the credentials its new
+// references name (shareReferenced) and returns the new sealed value.
+func (c *Connections) replaceSecrets(ctx context.Context, q *db.Queries, org domain.OrgID, r db.SealedConnectionsRow,
+	out *domain.Connection, sp secretPatch,
+) (sealed, error) {
+	if err := shareReferenced(ctx, q, sp.refs); err != nil {
+		return sealed{}, err
+	}
+
 	secrets, err := c.open(org, out.ID, r)
 	if err != nil {
 		return sealed{}, err

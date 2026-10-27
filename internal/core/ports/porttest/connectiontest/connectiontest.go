@@ -106,8 +106,10 @@ const (
 	// gitCred and apiCred are credentials connections refer to as {{name}}.
 	gitCred = "git-token"
 	apiCred = "api-cred"
-	euSite      = "eu.example.com"
-	run         = domain.RunID("00000000-0000-7000-8000-0000000000aa")
+	// appValue is app_key's value once it is sealed again.
+	appValue = "app-2"
+	euSite   = "eu.example.com"
+	run      = domain.RunID("00000000-0000-7000-8000-0000000000aa")
 )
 
 var (
@@ -597,7 +599,7 @@ func testMoveReference(f *fixture) {
 
 		f.expect(slices.Equal(got.SecretFields, fields) && reflect.DeepEqual(got.SecretRefs, refs),
 			"Update %v = fields %v, references %v; want %v, %v", secrets, got.SecretFields, got.SecretRefs, fields, refs)
-		f.noSecret("Update", got, apiValue, "app-1", "app-2")
+		f.noSecret("Update", got, apiValue, "app-1", appValue)
 	}
 
 	both := []string{fieldAPIKey, fieldAppKey}
@@ -614,17 +616,17 @@ func testMoveReference(f *fixture) {
 	f.expect(err == nil && opened.Values[fieldAPIKey] == "" && opened.Values[fieldAppKey] == "",
 		"Open of a reference-only connection without a master key = %+v, %v", opened, err)
 
-	update(map[string]string{fieldAppKey: "app-2"}, both, map[string]string{fieldAPIKey: gitCred})
+	update(map[string]string{fieldAppKey: appValue}, both, map[string]string{fieldAPIKey: gitCred})
 
 	v = f.values(acme, connCloud)
-	f.expect(v[fieldAppKey] == "app-2" && v[fieldAPIKey] == "", "values after app_key was sealed again = %v", v)
+	f.expect(v[fieldAppKey] == appValue && v[fieldAPIKey] == "", "values after app_key was sealed again = %v", v)
 
 	update(map[string]string{fieldAppKey: ""}, []string{fieldAPIKey}, map[string]string{fieldAPIKey: gitCred})
 
 	_, err = f.c.Update(ctx, connCloud, domain.ConnectionPatch{Secrets: map[string]string{fieldAPIKey: ""}}, admin)
 	f.refused("clearing a required reference", err, domain.ErrInvalid)
 
-	f.noSecret("the audit entries", f.audit(acme, domain.AuditConnectionSecretReplaced), apiValue, "app-2")
+	f.noSecret("the audit entries", f.audit(acme, domain.AuditConnectionSecretReplaced), apiValue, appValue)
 }
 
 func testResolveReferences(f *fixture) {

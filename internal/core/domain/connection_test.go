@@ -510,7 +510,7 @@ func TestConnectionSecrets(t *testing.T) {
 
 	sealed, refs, err := ConnectionSecrets(
 		map[string]string{fieldBaseURL: "https://git.example.com"},
-		map[string]string{fieldToken: "{{sentry-token}}", fieldKey: value, fieldPrefix: ""},
+		map[string]string{fieldToken: credRef(testCredName), fieldKey: value, fieldPrefix: ""},
 	)
 	if err != nil {
 		t.Fatalf("ConnectionSecrets = %v", err)
@@ -520,7 +520,7 @@ func TestConnectionSecrets(t *testing.T) {
 		t.Errorf("sealed = %v; want %v", sealed, want)
 	}
 
-	if want := map[string]string{fieldToken: "sentry-token"}; !maps.Equal(refs, want) {
+	if want := map[string]string{fieldToken: testCredName}; !maps.Equal(refs, want) {
 		t.Errorf("refs = %v; want %v", refs, want)
 	}
 
@@ -528,11 +528,11 @@ func TestConnectionSecrets(t *testing.T) {
 		name           string
 		fields, values map[string]string
 	}{
-		{"embedded reference", nil, map[string]string{fieldToken: "Bearer {{sentry-token}} " + value}},
-		{"two references", nil, map[string]string{fieldToken: "{{a-key}}{{b-key}}"}},
-		{"bad credential name", nil, map[string]string{fieldToken: "{{Bad_Name}}"}},
-		{"reference in a field", map[string]string{fieldBaseURL: "{{sentry-token}}"}, nil},
-		{"embedded in a field", map[string]string{fieldBaseURL: "https://{{sentry-token}}.example.com"}, nil},
+		{"embedded reference", nil, map[string]string{fieldToken: "Bearer " + credRef(testCredName) + " " + value}},
+		{"two references", nil, map[string]string{fieldToken: credRef("a-key") + credRef("b-key")}},
+		{"bad credential name", nil, map[string]string{fieldToken: credRef("Bad_Name")}},
+		{"reference in a field", map[string]string{fieldBaseURL: credRef(testCredName)}, nil},
+		{"embedded in a field", map[string]string{fieldBaseURL: "https://" + credRef(testCredName) + ".example.com"}, nil},
 	}
 
 	for _, tt := range refused {
@@ -546,3 +546,6 @@ func TestConnectionSecrets(t *testing.T) {
 		}
 	}
 }
+
+// credRef is a secret value that refers to credential name.
+func credRef(name string) string { return "{{" + name + "}}" }

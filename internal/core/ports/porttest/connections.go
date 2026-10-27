@@ -421,11 +421,7 @@ func (c *Connections) Update(ctx context.Context, name string, p domain.Connecti
 		return domain.Connection{}, domain.ErrNoOrg
 	}
 
-	if err := checkPatch(p); err != nil {
-		return domain.Connection{}, err
-	}
-
-	sealed, refs, err := domain.ConnectionSecrets(p.Fields, p.Secrets)
+	sealed, refs, err := checkPatch(p)
 	if err != nil {
 		return domain.Connection{}, err
 	}
@@ -481,8 +477,9 @@ func (c *Connections) Update(ctx context.Context, name string, p domain.Connecti
 	return cloneConnection(r.conn), nil
 }
 
-// checkPatch refuses a patch's malformed name or description.
-func checkPatch(p domain.ConnectionPatch) error {
+// checkPatch refuses a patch's malformed name, description or references to credentials, and
+// splits its secrets into the values to seal and the references (domain.ConnectionSecrets).
+func checkPatch(p domain.ConnectionPatch) (sealed, refs map[string]string, err error) {
 	var errs []error
 
 	if p.Name != nil {
@@ -493,7 +490,12 @@ func checkPatch(p domain.ConnectionPatch) error {
 		errs = append(errs, domain.CheckConnectionDescription(*p.Description))
 	}
 
-	return errors.Join(errs...)
+	sealed, refs, err = domain.ConnectionSecrets(p.Fields, p.Secrets)
+	if err := errors.Join(append(errs, err)...); err != nil {
+		return nil, nil, err
+	}
+
+	return sealed, refs, nil
 }
 
 // replaceLocked opens r's secrets, replaces those of with (an empty value clears one) and the

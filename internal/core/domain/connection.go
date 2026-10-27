@@ -124,11 +124,11 @@ type Connection struct {
 	// (ADR 0017 decision 5): stored in the clear, never sealed. Its fields are in SecretFields.
 	SecretRefs map[string]string
 	CreatedBy  Actor
-	CreatedAt    time.Time
-	UpdatedBy    Actor
-	UpdatedAt    time.Time
-	LastUsedAt   *time.Time
-	LastTest     *ConnectionTest
+	CreatedAt  time.Time
+	UpdatedBy  Actor
+	UpdatedAt  time.Time
+	LastUsedAt *time.Time
+	LastTest   *ConnectionTest
 }
 
 // ConnectionTest is the outcome of a connection's test.
