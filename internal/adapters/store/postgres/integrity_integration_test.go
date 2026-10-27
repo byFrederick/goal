@@ -182,7 +182,7 @@ func TestFlowReads_UseTheirIndexes(t *testing.T) {
 }
 
 // The organization's spend reads (db/queries/spend.sql) take their ranges from the indexes of
-// migration 00066 under the organization filter row-level security adds.
+// migration 00067 under the organization filter row-level security adds.
 func TestSpendReads_UseTheirIndexes(t *testing.T) {
 	t.Parallel()
 

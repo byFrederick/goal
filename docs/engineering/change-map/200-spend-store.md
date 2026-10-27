@@ -1,6 +1,6 @@
 ## When you change
 
-The spend store: its queries (`db/queries/spend.sql`), the indexes they use (`db/migrations/00066_org_spend_indexes.sql`) or the adapter (`internal/adapters/store/postgres/spend.go`)
+The spend store: its queries (`db/queries/spend.sql`), the indexes they use (`db/migrations/00067_org_spend_indexes.sql`) or the adapter (`internal/adapters/store/postgres/spend.go`)
 
 ## Also change
 

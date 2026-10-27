@@ -134,7 +134,7 @@ type OrgSpendByDayRow struct {
 
 // The organization's spend (ports.Spend.OrgSpend). Row-level security scopes every read to the
 // organization of the transaction; agent_runs_org_started_idx and work_items_org_done_at_idx
-// (migration 00066) serve its ranges. Days are UTC days whatever the session's time zone.
+// (migration 00067) serve its ranges. Days are UTC days whatever the session's time zone.
 // The cost of the runs started in [since, until), by UTC day and factory; a running run counts
 // with its cost so far.
 func (q *Queries) OrgSpendByDay(ctx context.Context, arg OrgSpendByDayParams) ([]OrgSpendByDayRow, error) {
