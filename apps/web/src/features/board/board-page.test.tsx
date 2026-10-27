@@ -339,7 +339,7 @@ describe('BoardPage', () => {
 });
 
 describe('the desktop Board, as the screen draws it', () => {
-  it('heads the page Board, with the line status and the top bar’s search, view and New item', async () => {
+  it('heads the page Board, with the line status, the search and the view, and New item in the top bar', async () => {
     const creator = { ...factory, can: [...factory.can, 'item:create'] } as Factory;
     renderBoardPage({ page: ShellBoard, org, factory: creator, board: board() });
 

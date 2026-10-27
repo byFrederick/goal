@@ -34,8 +34,8 @@ import {
   statusChoices,
   typeOptions,
 } from './board-filters';
+import { BoardTopBarActions, BoardViewControl, SearchItems } from './board-header';
 import { type OpenAssemblies, StationBody } from './board-lane';
-import { BoardTopBar, SearchItems } from './board-top-bar';
 import {
   constraintSentence,
   expediteHeader,
@@ -291,7 +291,7 @@ function FilterSelect({
 /**
  * The filters over the columns and the phone's station tabs: Assembly, Agent role and Status, then
  * Group by. Each choice is a URL search param; "Any" and "None" are the absent param. From 768 px the
- * search is in the top bar (board-top-bar.tsx), so the row keeps it only on a phone.
+ * search is on the title row (board-header.tsx), so the row keeps it only on a phone.
  */
 function FilterRow({
   board,
@@ -412,10 +412,10 @@ export function BoardPage() {
   const [moving, setMoving] = useState<{ item: ItemCard; to?: string | undefined } | null>(null);
   const onMove: OnMove = holds(factory, 'item:operate') ? (item, to) => setMoving({ item, to }) : undefined;
   const role = factoryRoleNote(factory.role, factory.name);
-  // From 768 px the actions and the search are in the top bar; a phone keeps its own header.
+  // From 768 px the top bar holds Pull andon and New item; a phone keeps its own header.
   const phone = usePhone();
   const actions = useMemo(
-    () => (phone ? undefined : <BoardTopBar factory={factory} andon={board.line.andon} />),
+    () => (phone ? undefined : <BoardTopBarActions factory={factory} andon={board.line.andon} />),
     [phone, factory, board.line.andon],
   );
   const filters = <FilterRow board={board} view={view} phone={phone} onChange={changeView} />;
@@ -438,6 +438,8 @@ export function BoardPage() {
         <div className="ml-auto flex min-w-0 flex-wrap items-center gap-2">
           <InboxButton factory={factory} />
           {phone ? <NewItemButton factory={factory} compact /> : null}
+          {phone ? null : <SearchItems value={view.q ?? ''} onChange={(q) => changeView({ q: q || undefined })} />}
+          {phone ? null : <BoardViewControl />}
           {phone ? null : filters}
         </div>
       </header>

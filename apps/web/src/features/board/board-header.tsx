@@ -1,7 +1,8 @@
-// The Board's actions in the top bar, from 768 px (MASTER.md "Top bar"): the search over the cards, the
-// Board | List view, Pull andon and New item. The phone keeps its search in the filters row and its
-// andon in the status line (board-page.tsx), so these actions are not passed to the phone's top bar.
-import { useNavigate, useSearch } from '@tanstack/react-router';
+// The Board's header controls from 768 px: the search over the cards, the Board | List view, and the
+// top bar's actions (Pull andon and New item). The search and the view sit on the title row, because
+// the top bar beside its breadcrumb has no room for them at 768 px (MASTER.md "Top bar"). The phone
+// keeps its search in the filters row and its andon in the status line (board-page.tsx).
+import { useNavigate } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
 import type { Board, Factory } from '../../api/types';
 import { AndonButton } from '../../shared/andon';
@@ -36,27 +37,26 @@ export function SearchItems({ value, onChange }: { value: string; onChange: (q: 
   );
 }
 
-/** The top bar's actions on the Board page. List goes to the Items page. */
-export function BoardTopBar({ factory, andon }: { factory: Factory; andon: Board['line']['andon'] }) {
+/** Board | List. Board is the page; List goes to the Items page. */
+export function BoardViewControl() {
   const params = useFactoryParams();
-  const search = useSearch({ from: '/o/$org/f/$factory/board' });
-  const navigate = useNavigate({ from: '/o/$org/f/$factory/board' });
+  const navigate = useNavigate();
   return (
-    <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-      <SearchItems
-        value={search.q ?? ''}
-        onChange={(q) =>
-          navigate({ search: (prev) => ({ ...prev, q: q || undefined }), replace: true, resetScroll: false })
-        }
-      />
-      <SegmentedControl
-        label="View"
-        options={viewChoices}
-        value="board"
-        onChange={(view) => {
-          if (view === 'list') navigate({ to: '/o/$org/f/$factory/items', params });
-        }}
-      />
+    <SegmentedControl
+      label="View"
+      options={viewChoices}
+      value="board"
+      onChange={(view) => {
+        if (view === 'list') navigate({ to: '/o/$org/f/$factory/items', params });
+      }}
+    />
+  );
+}
+
+/** The top bar's actions on the Board page: Pull andon and New item. */
+export function BoardTopBarActions({ factory, andon }: { factory: Factory; andon: Board['line']['andon'] }) {
+  return (
+    <div className="flex min-w-0 items-center justify-end gap-2">
       <AndonButton factory={factory} andon={andon} />
       <NewItemButton factory={factory} />
     </div>
