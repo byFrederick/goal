@@ -42,6 +42,7 @@ describe('what a personal token can do', () => {
     expect([...cliWorkPreset].sort()).toEqual(
       [
         'andon:manage',
+        'connection:browse',
         'connection:read',
         'factory:read',
         'item:create',
