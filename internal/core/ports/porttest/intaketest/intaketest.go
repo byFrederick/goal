@@ -58,6 +58,9 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Firing_RulesRefused", testFiringRules},
 		{"Firing_CreatedSinceCountsCreatedOnly", testCreatedSince},
 		{"Firing_OpenItemByDedupeIgnoresClosedItems", testDedupe},
+		{"Firing_ReadByItsKey", testFiringByKey},
+		{"Firing_FailureStreakCountsSinceTheLastCreated", testFailureStreak},
+		{"ScheduleLock_OneHolderAtATime", testScheduleLock},
 		{"Tally_SourcesAndTriggerStatsOverAWindow", testTallies},
 		{"OtherOrg_ReachesNoEndpoint", testIsolation},
 		{"OtherOrg_CountsNothing", testIsolatedReads},
@@ -582,6 +585,95 @@ func testDedupe(f *fixture) {
 	check(flaky, "unit", "")
 }
 
+// Firing reads the trigger's firing by its idempotency key, and none for another trigger or key.
+func testFiringByKey(f *fixture) {
+	t := f.t
+	it := f.item(domain.ItemFromGitHub, flaky, t0)
+	want, _ := f.fire(flaky, "check-run-1", "unit", it.ID, t0)
+
+	got, ok, err := f.in.Firing(f.ctx(), f.factory, flaky, "check-run-1")
+	if err != nil || !ok || got != want {
+		t.Errorf("Firing = %+v, %v, %v; want %+v", got, ok, err, want)
+	}
+
+	for _, k := range []struct{ trigger, key string }{{nightly, "check-run-1"}, {flaky, "check-run-2"}} {
+		if got, ok, err := f.in.Firing(f.ctx(), f.factory, k.trigger, k.key); err != nil || ok {
+			t.Errorf("Firing %s %s = %+v, %v, %v; want none", k.trigger, k.key, got, ok, err)
+		}
+	}
+}
+
+// FailureStreak counts the trigger's firings with the dedupe value since its newest one that
+// created an item for that value, or all of them when none did.
+func testFailureStreak(f *fixture) {
+	t := f.t
+
+	streak := func(trigger, value string, want int) {
+		t.Helper()
+
+		if n, err := f.in.FailureStreak(f.ctx(), f.factory, trigger, value); err != nil || n != want {
+			t.Errorf("FailureStreak %s %q = %d, %v; want %d", trigger, value, n, err, want)
+		}
+	}
+
+	streak(flaky, "unit", 0)
+
+	f.fire(flaky, "e1", "unit", "", t0)
+	f.fire(flaky, "e2", "unit", "", t0.Add(time.Minute))
+	f.fire(flaky, "e3", "lint", "", t0.Add(2*time.Minute))
+	f.fire(flaky, "e4", "", "", t0.Add(3*time.Minute))
+	streak(flaky, "unit", 2)
+	streak(flaky, "lint", 1)
+	streak(flaky, "", 1)
+	streak(nightly, "unit", 0)
+
+	it := f.item(domain.ItemFromGitHub, flaky, t0.Add(4*time.Minute))
+	f.fire(flaky, "e5", "unit", it.ID, t0.Add(4*time.Minute))
+	streak(flaky, "unit", 0)
+
+	f.fire(flaky, "e6", "unit", "", t0.Add(5*time.Minute))
+	streak(flaky, "unit", 1)
+	streak(flaky, "lint", 1)
+}
+
+// WithScheduleLock runs its function while no one else holds the lock, and skips it while the
+// lock is held, by this caller or another view of the same state; once freed it is taken again.
+func testScheduleLock(f *fixture) {
+	t := f.t
+	other := f.Intake(f.Key("k1"))
+
+	var inner, otherRan bool
+
+	ran, err := f.in.WithScheduleLock(t.Context(), func(ctx context.Context) error {
+		var err error
+
+		inner, err = f.in.WithScheduleLock(ctx, func(context.Context) error { return nil })
+		if err != nil {
+			return err
+		}
+
+		otherRan, err = other.WithScheduleLock(ctx, func(context.Context) error { return nil })
+
+		return err
+	})
+	if err != nil || !ran {
+		t.Fatalf("WithScheduleLock = %v, %v; want it run", ran, err)
+	}
+
+	if inner || otherRan {
+		t.Errorf("while the lock was held, a second taker ran (this view %v, another %v); want neither", inner, otherRan)
+	}
+
+	failed := errors.New("tick failed")
+	if ran, err := other.WithScheduleLock(t.Context(), func(context.Context) error { return failed }); !ran || !errors.Is(err, failed) {
+		t.Errorf("WithScheduleLock once freed = %v, %v; want it run and its error returned", ran, err)
+	}
+
+	if ran, err := f.in.WithScheduleLock(t.Context(), func(context.Context) error { return nil }); !ran || err != nil {
+		t.Errorf("WithScheduleLock after an error = %v, %v; want the lock freed", ran, err)
+	}
+}
+
 // SourceTally counts the factory's items since the instant by source, "" for none recorded;
 // TriggerStats counts each trigger's items since then, those merged, and their cost.
 func testTallies(f *fixture) {
@@ -711,6 +803,14 @@ func testIsolatedReads(f *fixture) {
 		t.Errorf("labs OpenItemByDedupe = %q, %v, %v; want none", got, ok, err)
 	}
 
+	if got, ok, err := f.in.Firing(labs, f.factory, flaky, "e1"); err != nil || ok {
+		t.Errorf("labs Firing = %+v, %v, %v; want none", got, ok, err)
+	}
+
+	if n, err := f.in.FailureStreak(labs, f.factory, flaky, "unit"); err != nil || n != 0 {
+		t.Errorf("labs FailureStreak = %d, %v; want 0", n, err)
+	}
+
 	if got, err := f.in.SourceTally(labs, f.factory, t0.Add(-time.Hour)); err != nil || len(got) != 0 {
 		t.Errorf("labs SourceTally = %v, %v; want none", got, err)
 	}
@@ -751,6 +851,8 @@ func testNoOrg(f *fixture) {
 		},
 		"CreatedSince":     func() error { _, err := f.in.CreatedSince(ctx, f.factory, flaky, t0); return err },
 		"OpenItemByDedupe": func() error { _, _, err := f.in.OpenItemByDedupe(ctx, f.factory, flaky, "unit"); return err },
+		"Firing":           func() error { _, _, err := f.in.Firing(ctx, f.factory, flaky, "k"); return err },
+		"FailureStreak":    func() error { _, err := f.in.FailureStreak(ctx, f.factory, flaky, "unit"); return err },
 		"SourceTally":      func() error { _, err := f.in.SourceTally(ctx, f.factory, t0); return err },
 		"TriggerStats":     func() error { _, err := f.in.TriggerStats(ctx, f.factory, t0); return err },
 	}

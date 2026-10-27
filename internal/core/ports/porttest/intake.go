@@ -31,6 +31,8 @@ type Intake struct {
 }
 
 type intakeData struct {
+	// schedules is the schedule lock (WithScheduleLock).
+	schedules  sync.Mutex
 	mu         sync.Mutex
 	endpoints  map[domain.WebhookEndpointID]*endpointRow
 	deliveries []deliveryRow
@@ -354,6 +356,69 @@ func (in *Intake) RecordFiring(ctx context.Context, f domain.TriggerFiring) (dom
 	in.d.firings = append(in.d.firings, firingRow{org: org, f: f})
 
 	return f, true, nil
+}
+
+// Firing implements ports.Intake.
+func (in *Intake) Firing(ctx context.Context, factory domain.FactoryID, trigger, key string) (domain.TriggerFiring, bool, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.TriggerFiring{}, false, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	for _, r := range in.d.firings {
+		if r.org == org && r.f.FactoryID == factory && r.f.Trigger == trigger && r.f.IdempotencyKey == key {
+			return r.f, true, nil
+		}
+	}
+
+	return domain.TriggerFiring{}, false, nil
+}
+
+// FailureStreak implements ports.Intake.
+func (in *Intake) FailureStreak(ctx context.Context, factory domain.FactoryID, trigger, dedupe string) (int, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	var mine []domain.TriggerFiring
+
+	for _, r := range in.d.firings {
+		if r.org == org && r.f.FactoryID == factory && r.f.Trigger == trigger && r.f.Dedupe == dedupe {
+			mine = append(mine, r.f)
+		}
+	}
+
+	slices.SortFunc(mine, func(a, b domain.TriggerFiring) int { return cmp.Or(a.At.Compare(b.At), cmp.Compare(a.ID, b.ID)) })
+
+	n := 0
+
+	for _, f := range mine {
+		if f.Outcome == domain.FiringCreated {
+			n = 0
+		} else {
+			n++
+		}
+	}
+
+	return n, nil
+}
+
+// WithScheduleLock implements ports.Intake. Views made with WithKey share the lock, as goalds
+// share one database.
+func (in *Intake) WithScheduleLock(ctx context.Context, fn func(ctx context.Context) error) (bool, error) {
+	if !in.d.schedules.TryLock() {
+		return false, nil
+	}
+	defer in.d.schedules.Unlock()
+
+	return true, fn(ctx)
 }
 
 // CreatedSince implements ports.Intake.

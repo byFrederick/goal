@@ -75,6 +75,19 @@ RETURNING id;
 SELECT id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, at FROM trigger_firings
 WHERE factory_id = sqlc.arg(factory_id) AND trigger = sqlc.arg(trigger) AND idempotency_key = sqlc.arg(idempotency_key);
 
+-- name: TriggerFailureStreak :one
+-- The trigger's firings with the dedupe value after its newest one with that value that created
+-- an item (all of them when none did), for only.failuresInARow.
+WITH last_created AS (
+  SELECT at, id FROM trigger_firings
+  WHERE factory_id = sqlc.arg(factory_id) AND trigger = sqlc.arg(trigger) AND dedupe = sqlc.arg(dedupe)::text AND outcome = 'created'
+  ORDER BY at DESC, id DESC
+  LIMIT 1
+)
+SELECT count(*) FROM trigger_firings f
+WHERE f.factory_id = sqlc.arg(factory_id) AND f.trigger = sqlc.arg(trigger) AND f.dedupe = sqlc.arg(dedupe)::text
+  AND NOT EXISTS (SELECT 1 FROM last_created c WHERE (f.at, f.id) <= (c.at, c.id));
+
 -- name: TriggerCreatedSince :one
 SELECT count(*) FROM trigger_firings
 WHERE factory_id = sqlc.arg(factory_id) AND trigger = sqlc.arg(trigger) AND outcome = 'created' AND at >= sqlc.arg(since);
