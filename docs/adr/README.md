@@ -27,3 +27,6 @@ One line per ADR: its number, its title and the first part of its status. To add
 - [ADR 0021](0021-asked-definition-changes-draft-requests.md): Asked definition changes: draft requests. Status: accepted.
 - [ADR 0022](0022-model-presets-in-the-new-factory-wizard.md): Model presets in the new-factory wizard. Status: accepted.
 - [ADR 0023](0023-notifications-and-sign-up-by-domain.md): Notifications by email and Slack, the daily digest and sign-up by domain. Status: accepted.
+- [ADR 0024](0024-organization-policy.md): Organization policy: a ceiling over factory definitions. Status: accepted.
+- [ADR 0025](0025-judges-and-evals-as-the-screens-show-them.md): Judges and evals as the screens show them. Status: accepted.
+- [ADR 0026](0026-intake-triggers.md): Intake triggers. Status: accepted.
