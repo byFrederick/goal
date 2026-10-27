@@ -12,7 +12,6 @@ import { type DecidableItem, useDecision } from '../../shared/item-actions';
 import { holds, reasons } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
-import { NotAvailable } from '../../ui/not-available';
 
 /** At most this many rows on Home; the rest wait behind "Open all". */
 const shown = 5;
@@ -44,11 +43,13 @@ export function NeedsYouFirst({
         <span className="rounded-chip bg-you-tint px-2 text-meta text-you-ink tabular-nums">
           {inbox.entries.length}
         </span>
-        <NotAvailable label="Needs you">
-          <button type="button" className="ml-auto text-secondary font-control text-run-ink underline">
-            Open all
-          </button>
-        </NotAvailable>
+        <Link
+          to="/o/$org/needs-you"
+          params={{ org: org.slug }}
+          className="ml-auto text-secondary font-control text-run-ink underline"
+        >
+          Open all
+        </Link>
       </div>
 
       {rows.length === 0 ? (

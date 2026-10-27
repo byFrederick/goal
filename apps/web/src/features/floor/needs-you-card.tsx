@@ -9,7 +9,6 @@ import { inboxQuery } from '../../api/queries';
 import type { ItemCard } from '../../api/types';
 import { useFactory, useFactoryParams } from '../../shared/factory';
 import { humanize } from '../../shared/format';
-import { type InboxRow, inboxGroups } from '../../shared/inbox';
 import { type DecidableItem, RejectDialog, useDecision } from '../../shared/item-actions';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
@@ -17,6 +16,7 @@ import { SectionCard } from '../../ui/card';
 import { cn } from '../../ui/cn';
 import { Count } from '../../ui/count';
 import { CardEmpty, CardFailed, CardLoading } from './card-states';
+import { type InboxRow, inboxGroups } from './needs-you-groups';
 
 function decidable(item: ItemCard): DecidableItem {
   return { key: item.ref, ref: item.ref, title: item.title, state: item.state, pull_requests: item.pull_requests };
@@ -93,7 +93,6 @@ function DecideLink({ row }: { row: InboxRow }) {
 export function NeedsYouCard({ className }: { className?: string }) {
   const org = useOrg();
   const factory = useFactory();
-  const params = useFactoryParams();
   const query = useQuery(inboxQuery(org.id, factory.id));
   const rows = query.data ? inboxGroups(query.data.entries).flatMap((g) => g.rows) : [];
   const count = rows.length;
@@ -107,8 +106,9 @@ export function NeedsYouCard({ className }: { className?: string }) {
         <span className="flex items-center gap-3">
           {query.data ? <Count value={count} label="waiting on you" tone="you" /> : null}
           <Link
-            to="/o/$org/f/$factory/items"
-            params={params}
+            to="/o/$org/needs-you"
+            params={{ org: org.slug }}
+            search={{ factory: factory.name }}
             className="inline-flex h-11 items-center text-secondary font-medium text-ink no-underline max-md:-mr-2 max-md:px-2 md:h-auto"
           >
             <span className="md:hidden">See all</span>

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import type { InboxEntry, ItemCard } from '../api/types';
-import { inboxCount, inboxGroups } from './inbox';
+import type { InboxEntry, ItemCard } from '../../api/types';
+import { inboxCount, inboxGroups } from './needs-you-groups';
 
 const factory = { id: 'f1', name: 'sre', title: 'SRE' };
 
