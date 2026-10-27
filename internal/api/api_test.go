@@ -468,7 +468,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
 		// GitLab's code host lists no repositories, as the gitlab adapter.
 		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()},
 		Knowledge: h.kb, KnowledgeUploads: h.uploads, KnowledgeSearch: knowledge.NewSearcher(h.kb, nil, nil), UploadMaxBytes: testUploadMax, Clock: h.clock,
-		OrgPolicies: porttest.NewOrgPolicies([]string{"claude-opus-5-5", "claude-haiku-5-5"}, tenancy, h.clock.Now),
+		OrgPolicies: porttest.NewOrgPolicies([]string{modelOpus, modelHaiku}, tenancy, h.clock.Now),
 		BoxSizes:    testBoxSizes, EgressAddresses: []netip.Prefix{netip.MustParsePrefix(testEgress)},
 	}
 	if in != nil {

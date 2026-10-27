@@ -140,6 +140,7 @@ func newDefGoald(t *testing.T) *defGoald {
 		Builder: builder.New(objects, clock, builder.Config{}), Connections: conns, ParseKind: connkind.Parse,
 		ConnectionTransport: transport, Knowledge: kb, KnowledgeUploads: uploads, KnowledgeSearch: knowledge.NewSearcher(kb, nil, nil),
 		UploadMaxBytes: domain.DefaultMaxUpload, Clock: clock,
+		OrgPolicies: porttest.NewOrgPolicies(nil, tenancy, clock.Now), BoxSizes: []domain.BoxSize{{Size: domain.SandboxMedium, VCPUs: 2, MemoryBytes: 4 << 30}},
 	})
 	if err != nil {
 		t.Fatal(err)

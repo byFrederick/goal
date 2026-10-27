@@ -15,6 +15,8 @@ const (
 	// The models of the harness's install (GOAL_MODELS), the first the default.
 	modelOpus  = "claude-opus-5-5"
 	modelHaiku = "claude-haiku-5-5"
+	// agentFrontend is line's agent of the web lane, which names its own model.
+	agentFrontend = "frontend"
 
 	codePolicyInvalid  = "policy-invalid"
 	codePolicyConflict = "policy-conflict"
@@ -67,15 +69,15 @@ func TestGetOrgPolicy_UsageAndSizes(t *testing.T) {
 	// acme's writer names no model and acme no runtime.model: the default, opus. line's backend
 	// takes line's runtime.model (claude-fable-5-1, not one of the install's), its frontend haiku.
 	wantModels := []gen.PolicyModel{
-		{Id: modelOpus, Label: "Claude Opus 5.5", UsedBy: []gen.ModelUse{{FactoryId: acmeID, Name: "acme", Agents: []string{"writer"}}}},
-		{Id: modelHaiku, Label: "Claude Haiku 5.5", UsedBy: []gen.ModelUse{{FactoryId: lineID, Name: "line", Agents: []string{"frontend"}}}},
+		{Id: modelOpus, Label: "Claude Opus 5.5", UsedBy: []gen.ModelUse{{FactoryId: acmeID, Name: acmeSlug, Agents: []string{"writer"}}}},
+		{Id: modelHaiku, Label: "Claude Haiku 5.5", UsedBy: []gen.ModelUse{{FactoryId: lineID, Name: lineSlug, Agents: []string{agentFrontend}}}},
 	}
 
 	if !slices.EqualFunc(got.Models, wantModels, equalModel) {
 		t.Errorf("models = %+v; want %+v", got.Models, wantModels)
 	}
 
-	both := []gen.SizeUse{{FactoryId: acmeID, Name: "acme"}, {FactoryId: lineID, Name: "line"}}
+	both := []gen.SizeUse{{FactoryId: acmeID, Name: acmeSlug}, {FactoryId: lineID, Name: lineSlug}}
 	wantSizes := []gen.PolicyBoxSize{
 		{Size: gen.Small, Vcpu: 1, MemoryBytes: 2 << 30, Factories: []gen.SizeUse{}},
 		{Size: gen.Medium, Vcpu: 2, MemoryBytes: 4 << 30, Factories: both},
@@ -96,7 +98,7 @@ func TestGetOrgPolicy_UsageAndSizes(t *testing.T) {
 		t.Errorf("opus after haiku became the default is used by %+v; want nobody", after.Models[0].UsedBy)
 	}
 
-	wantHaiku := []gen.ModelUse{{FactoryId: acmeID, Name: "acme", Agents: []string{"writer"}}, {FactoryId: lineID, Name: "line", Agents: []string{"frontend"}}}
+	wantHaiku := []gen.ModelUse{{FactoryId: acmeID, Name: acmeSlug, Agents: []string{"writer"}}, {FactoryId: lineID, Name: lineSlug, Agents: []string{agentFrontend}}}
 	if !slices.EqualFunc(after.Models[1].UsedBy, wantHaiku, equalUse) {
 		t.Errorf("haiku is used by %+v; want %+v", after.Models[1].UsedBy, wantHaiku)
 	}

@@ -2,13 +2,19 @@ package cli
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
+)
+
+// The policy subcommands.
+const (
+	policyGetVerb = "get"
+	policySetVerb = "set"
 )
 
 // policyCommand reads or changes the organization's policy (ADR 0024): goal policy get prints it
@@ -22,9 +28,9 @@ func policyCommand(ctx context.Context, out *printer, getenv func(string) string
 	}
 
 	switch cmd, rest := args[0], args[1:]; cmd {
-	case "get":
+	case policyGetVerb:
 		return policyGet(ctx, out, getenv, rest)
-	case "set":
+	case policySetVerb:
 		return policySet(ctx, out, getenv, rest)
 	default:
 		return errUsage
@@ -62,7 +68,7 @@ func (l *textFlag) String() string { return strings.Join(*l, "\n") }
 
 func (l *textFlag) Set(v string) error {
 	if strings.TrimSpace(v) == "" {
-		return fmt.Errorf("a blank value")
+		return errors.New("a blank value")
 	}
 
 	*l = append(*l, v)
@@ -70,7 +76,37 @@ func (l *textFlag) Set(v string) error {
 	return nil
 }
 
-func policySet(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+// policyChange is what goal policy set changes: each field set by its flag, the rest left as read.
+type policyChange struct {
+	models, denied []string
+	def            string
+	minutes        int
+}
+
+// apply is p with the change.
+func (c policyChange) apply(p gen.OrgPolicyInput) gen.OrgPolicyInput {
+	if len(c.models) > 0 {
+		p.AllowedModels = c.models
+	}
+
+	if c.def != "" {
+		p.DefaultModel = c.def
+	}
+
+	if len(c.denied) > 0 {
+		p.DeniedCommands = c.denied
+	}
+
+	if c.minutes > 0 {
+		p.BoxTimeLimitMinutes = c.minutes
+	}
+
+	return p
+}
+
+// parsePolicyChange reads goal policy set's flags: at least one, and a box limit in whole
+// positive minutes.
+func parsePolicyChange(args []string) (policyChange, string, error) {
 	fs := newFlags("policy set")
 	org := addOrgFlag(fs)
 
@@ -85,21 +121,30 @@ func policySet(ctx context.Context, out *printer, getenv func(string) string, ar
 
 	pos, err := parseInterspersed(fs, args)
 	if err != nil || len(pos) != 0 || (len(models) == 0 && len(denied) == 0 && *def == "" && *boxLimit == "") {
-		return errUsage
+		return policyChange{}, "", errUsage
 	}
 
-	minutes := 0
+	c := policyChange{models: models, denied: denied, def: *def}
 
 	if *boxLimit != "" {
 		d, err := time.ParseDuration(*boxLimit)
 		if err != nil || d < time.Minute || d%time.Minute != 0 {
-			return errUsage
+			return policyChange{}, "", errUsage
 		}
 
-		minutes = int(d / time.Minute)
+		c.minutes = int(d / time.Minute)
 	}
 
-	c, err := connect(ctx, getenv, *org)
+	return c, *org, nil
+}
+
+func policySet(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	change, org, err := parsePolicyChange(args)
+	if err != nil {
+		return err
+	}
+
+	c, err := connect(ctx, getenv, org)
 	if err != nil {
 		return err
 	}
@@ -109,25 +154,7 @@ func policySet(ctx context.Context, out *printer, getenv func(string) string, ar
 		return err
 	}
 
-	p := view.Policy
-
-	if len(models) > 0 {
-		p.AllowedModels = models
-	}
-
-	if *def != "" {
-		p.DefaultModel = *def
-	}
-
-	if len(denied) > 0 {
-		p.DeniedCommands = denied
-	}
-
-	if minutes > 0 {
-		p.BoxTimeLimitMinutes = minutes
-	}
-
-	res, err := c.PutOrgPolicyWithResponse(ctx, c.org, &gen.PutOrgPolicyParams{IfMatch: &etag}, p)
+	res, err := c.PutOrgPolicyWithResponse(ctx, c.org, &gen.PutOrgPolicyParams{IfMatch: &etag}, change.apply(view.Policy))
 	if err != nil {
 		return apiDown(err)
 	}

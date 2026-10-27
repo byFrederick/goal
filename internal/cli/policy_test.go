@@ -13,6 +13,9 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 )
 
+// cliOpus is the stub install's default model.
+const cliOpus = "claude-opus-5-5"
+
 // policyGoald serves acme's policy at revision 3 and records the save it was sent.
 type policyGoald struct {
 	srv *httptest.Server
@@ -32,12 +35,12 @@ func newPolicyGoald(t *testing.T) *policyGoald {
 	g := &policyGoald{view: gen.OrgPolicyView{
 		Revision: 3, UpdatedAt: &at,
 		Policy: gen.OrgPolicyInput{
-			AllowedModels: []string{"claude-opus-5-5", "claude-haiku-5-5"}, DefaultModel: "claude-opus-5-5",
+			AllowedModels: []string{cliOpus, "claude-haiku-5-5"}, DefaultModel: cliOpus,
 			DeniedCommands: []string{"Bash(terraform apply:*)"}, BoxTimeLimitMinutes: 180,
 			Tools: gen.ToolPolicy{WriteOutsideBranch: "off", MergePullRequest: "review_approval", ReadWeb: "ask", UseCredentials: "attached_only"},
 		},
 		Models: []gen.PolicyModel{
-			{Id: "claude-opus-5-5", Label: "Claude Opus 5.5", UsedBy: []gen.ModelUse{
+			{Id: cliOpus, Label: "Claude Opus 5.5", UsedBy: []gen.ModelUse{
 				{FactoryId: "f1", Name: "support", Agents: []string{"responder"}}, {FactoryId: "f2", Name: "web", Agents: []string{"backend", "frontend"}},
 			}},
 			{Id: "claude-sonnet-5-5", Label: "Claude Sonnet 5.5", UsedBy: []gen.ModelUse{}},
@@ -87,7 +90,7 @@ func newPolicyGoald(t *testing.T) *policyGoald {
 
 			w.Header().Set("Content-Type", "application/problem+json")
 			w.WriteHeader(http.StatusConflict)
-			_ = json.NewEncoder(w).Encode(gen.Problem{Title: "Conflict", Status: http.StatusConflict, Detail: &detail, Code: new("policy-conflict")})
+			_ = json.NewEncoder(w).Encode(gen.Problem{Title: http.StatusText(http.StatusConflict), Status: http.StatusConflict, Detail: &detail, Code: new("policy-conflict")})
 
 			return
 		}
@@ -124,7 +127,7 @@ func (g *policyGoald) goalPolicy(t *testing.T, args ...string) (string, error) {
 func TestPolicy_GetPrintsThePolicyAndItsFacts(t *testing.T) {
 	t.Parallel()
 
-	out, err := newPolicyGoald(t).goalPolicy(t, "get")
+	out, err := newPolicyGoald(t).goalPolicy(t, policyGetVerb)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +142,7 @@ func TestPolicy_SetKeepsWhatItRead(t *testing.T) {
 
 	g := newPolicyGoald(t)
 
-	out, err := g.goalPolicy(t, "set", "--models", "claude-opus-5-5,claude-sonnet-5-5", "--default", "claude-sonnet-5-5",
+	out, err := g.goalPolicy(t, policySetVerb, "--models", "claude-opus-5-5,claude-sonnet-5-5", "--default", "claude-sonnet-5-5",
 		"--deny-command", "Bash(git push --force:*)", "--deny-command", "Bash(rm -rf /:*)", "--box-limit", "90m")
 	if err != nil {
 		t.Fatal(err)
@@ -150,7 +153,7 @@ func TestPolicy_SetKeepsWhatItRead(t *testing.T) {
 	}
 
 	want := gen.OrgPolicyInput{
-		AllowedModels: []string{"claude-opus-5-5", "claude-sonnet-5-5"}, DefaultModel: "claude-sonnet-5-5",
+		AllowedModels: []string{cliOpus, "claude-sonnet-5-5"}, DefaultModel: "claude-sonnet-5-5",
 		DeniedCommands: []string{"Bash(git push --force:*)", "Bash(rm -rf /:*)"}, BoxTimeLimitMinutes: 90,
 		Tools: gen.ToolPolicy{WriteOutsideBranch: "off", MergePullRequest: "review_approval", ReadWeb: "ask", UseCredentials: "attached_only"},
 	}
@@ -168,7 +171,7 @@ func TestPolicy_SetOneFlagLeavesTheRest(t *testing.T) {
 
 	g := newPolicyGoald(t)
 
-	if _, err := g.goalPolicy(t, "set", "--box-limit", "2h"); err != nil {
+	if _, err := g.goalPolicy(t, policySetVerb, "--box-limit", "2h"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -187,7 +190,7 @@ func TestPolicy_SetRefusesBadFlags(t *testing.T) {
 
 	g := newPolicyGoald(t)
 
-	for _, args := range [][]string{{"set"}, {"set", "--box-limit", "0m"}, {"set", "--box-limit", "90s"}, {"set", "--box-limit", "soon"}, {"set", "acme"}, {"get", "x"}, {"frob"}} {
+	for _, args := range [][]string{{policySetVerb}, {policySetVerb, "--box-limit", "0m"}, {policySetVerb, "--box-limit", "90s"}, {policySetVerb, "--box-limit", "soon"}, {policySetVerb, orgAcme}, {policyGetVerb, "x"}, {"frob"}} {
 		if _, err := g.goalPolicy(t, args...); err == nil || !strings.HasPrefix(err.Error(), "usage:") {
 			t.Errorf("goal policy %v = %v; want the usage", args, err)
 		}
@@ -207,7 +210,7 @@ func TestPolicy_SetStaleIsGoaldsRefusal(t *testing.T) {
 	// Another save lands between this command's read and its write.
 	g.bump = true
 
-	_, err := g.goalPolicy(t, "set", "--default", "claude-haiku-5-5")
+	_, err := g.goalPolicy(t, policySetVerb, "--default", "claude-haiku-5-5")
 	if err == nil || err.Error() != "Conflict: the policy changed since it was read: read it again" {
 		t.Errorf("goal policy set on a stale read = %v; want goald's conflict", err)
 	}
