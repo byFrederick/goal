@@ -154,8 +154,9 @@ paths:
       tags: [identity]
       summary: The install's platform admins, earliest first
       description: >-
-        Platform admins create organizations and manage platform admins; inside an organization
-        they have only the rights of their membership there. Platform admins only.
+        Platform admins manage platform admins and, like every signed-in person, create
+        organizations; inside an organization they have only the rights of their membership there.
+        Platform admins only.
       responses:
         "200":
           description: The platform admins
@@ -256,7 +257,8 @@ paths:
         The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and
         not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default).
         The mark defaults to the name's initials. A taken or reserved slug, or a malformed field,
-        is 409. Platform admins only; the caller becomes the organization's owner.
+        is 409. Any person signed in with a session (in the browser or through the CLI's device
+        sign-in) may create one and becomes its owner; API keys and personal tokens may not.
       requestBody:
         required: true
         content:
@@ -2099,6 +2101,58 @@ paths:
         "204":
           description: The reason is set
         "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/runs:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: listRuns
+      x-goal-scope: org:read
+      tags: [work]
+      summary: The organization's agent runs across the factories the caller sees, newest first
+      description: >-
+        The runs that started in [since, until) in the factories the caller may read, or in the
+        one named by factory, newest first (by start, then id), paged by next_cursor. When since
+        is absent it is the start of the current UTC day; when until is absent it is the end of
+        that day; since must be before until. The summary covers the same factories and window
+        whatever status and q say. A wide window is a scan of every run in it: keep it short.
+      parameters:
+        - name: factory
+          in: query
+          description: Only this factory's runs (its metadata.id or metadata.name); unknown is 404
+          schema: { type: string }
+        - name: status
+          in: query
+          description: Only runs with this status
+          schema: { $ref: "#/components/schemas/RunStatus" }
+        - name: since
+          in: query
+          description: The earliest start, included; the start of the current UTC day when absent
+          schema: { type: string, format: date-time }
+        - name: until
+          in: query
+          description: The latest start, excluded; the end of the current UTC day when absent
+          schema: { type: string, format: date-time }
+        - name: q
+          in: query
+          description: >-
+            Only runs whose item title, agent or model contains q (case-insensitively and
+            literally: % and _ are no wildcards), or whose item has the number q names ("147",
+            "#147" or "goal#147"). Trimmed; at most 200 characters.
+          schema: { type: string, maxLength: 200 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: cursor
+          in: query
+          description: The next_cursor of the previous page, opaque
+          schema: { type: string }
+      responses:
+        "200":
+          description: A page of runs and the window's summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrgRunList" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/runs/{run}:
     parameters:
@@ -4974,6 +5028,55 @@ components:
           type: integer
           nullable: true
           description: That version's number ("ran on v9"); null when the run has no version
+    OrgRunList:
+      type: object
+      required: [runs, next_cursor, summary]
+      properties:
+        runs:
+          type: array
+          items: { $ref: "#/components/schemas/OrgRun" }
+        next_cursor:
+          type: string
+          nullable: true
+          description: Pass as cursor for the next page; null on the last page
+        summary: { $ref: "#/components/schemas/RunSummary" }
+    OrgRun:
+      description: A run with the factory and the item it worked
+      allOf:
+        - $ref: "#/components/schemas/Run"
+        - type: object
+          required: [factory, item]
+          properties:
+            factory: { $ref: "#/components/schemas/FactoryHit" }
+            item: { $ref: "#/components/schemas/RunItem" }
+    RunItem:
+      type: object
+      required: [id, ref, title]
+      properties:
+        id: { type: string }
+        ref: { type: string, description: '<factory>#<number>, as in goal#147' }
+        title: { type: string }
+    RunSummary:
+      type: object
+      description: The runs of a window's factories, whatever their status
+      required: [total, running, failed, finished, spend_usd, spend_by_factory]
+      properties:
+        total: { type: integer }
+        running: { type: integer }
+        failed: { type: integer }
+        finished: { type: integer, description: Succeeded and cancelled runs }
+        spend_usd: { type: number, format: double }
+        spend_by_factory:
+          type: array
+          description: The factories that ran anything in the window, the highest spend first, then by name
+          items: { $ref: "#/components/schemas/FactorySpend" }
+    FactorySpend:
+      type: object
+      required: [id, name, spend_usd]
+      properties:
+        id: { type: string, description: The factory's metadata.id }
+        name: { type: string }
+        spend_usd: { type: number, format: double }
     AndonPull:
       type: object
       description: >-
