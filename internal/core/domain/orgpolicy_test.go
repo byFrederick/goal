@@ -61,8 +61,7 @@ func TestOrgPolicy_Validate(t *testing.T) {
 func TestDefaultOrgPolicy(t *testing.T) {
 	t.Parallel()
 
-	models := slices.Clone(testPolicyModels)
-	p := DefaultOrgPolicy(models)
+	p := DefaultOrgPolicy(testPolicyModels)
 
 	if !slices.Equal(p.AllowedModels, testPolicyModels) || p.DefaultModel != "claude-opus-5-5" {
 		t.Errorf("models %v, default %q; want every platform model, the first the default", p.AllowedModels, p.DefaultModel)
@@ -85,8 +84,16 @@ func TestDefaultOrgPolicy(t *testing.T) {
 	if err := p.Validate(); err != nil {
 		t.Errorf("the default policy is invalid: %v", err)
 	}
+}
+
+func TestDefaultOrgPolicy_OwnsItsModels(t *testing.T) {
+	t.Parallel()
+
+	models := slices.Clone(testPolicyModels)
+	p := DefaultOrgPolicy(models)
 
 	models[0] = "claude-changed"
+
 	if p.AllowedModels[0] != "claude-opus-5-5" {
 		t.Error("the default policy shares the caller's slice")
 	}
