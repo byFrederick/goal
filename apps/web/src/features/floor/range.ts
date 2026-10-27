@@ -56,8 +56,8 @@ export function daysIn(from: string, to: string): number {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / dayMs) + 1;
 }
 
-/** The presets of the range menu: the last N days, ending today. */
-export const presets = [7, 14, 30] as const;
+/** The windows of the header's segmented control: the last N days, ending today. */
+export const windows = [1, 7, 30] as const;
 
 /**
  * The search params of the last `days` days, keeping the type: the last 7 days are goald's
@@ -68,11 +68,11 @@ export function lastDaysSearch(days: number, type: string | undefined, now = Dat
   return { ...range, ...(type ? { type } : {}) };
 }
 
-/** Which preset a range is, or null for a custom one. */
-export function presetOf(from: string, to: string, now = Date.now()): number | null {
+/** Which window a range is, or null for a custom one. */
+export function windowOf(from: string, to: string, now = Date.now()): number | null {
   if (to !== todayUtc(now)) return null;
   const days = daysIn(from, to);
-  return presets.find((p) => p === days) ?? null;
+  return windows.find((w) => w === days) ?? null;
 }
 
 const month = new Intl.DateTimeFormat('en-US', { month: 'short', timeZone: 'UTC' });
