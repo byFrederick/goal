@@ -235,6 +235,7 @@ Differences from `docs/design/screens/build/agents.jpg`, each for a reason:
 - The "53 merged this week" cell under Done is left out: the statistics do not count merged items per factory.
 - Agent marks are one colour, not one per agent: the design tokens have no per-agent palette.
 - The summary counts the agents' positions at stations, not copies, so it reads "4 agents" where the picture reads 15.
+- The Factory defaults' connections read the mock seed (github, playwright), not the picture's (github, cloudflare, context7): the seed has no cloudflare or context7 connection.
 
 ### Factory settings
 
