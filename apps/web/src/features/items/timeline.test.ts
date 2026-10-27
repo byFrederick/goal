@@ -3,8 +3,9 @@ import type { ItemEvent } from '../../api/types';
 import {
   activeRun,
   buildTrace,
+  criteriaOf,
+  editedFiles,
   latestToolCalls,
-  noteRecipient,
   type RunEntry,
   runRole,
   toolArgument,
@@ -85,21 +86,6 @@ describe('buildTrace', () => {
     expect(trace.entries).toMatchObject([
       { kind: 'note', text: 'Local user left a note for the next run', detail: 'Also check the pool.' },
     ]);
-  });
-
-  it('addresses a note to the agent working the item, or the last one at its station', () => {
-    const spec = { run_id: 's', actor: 'spec-writer', station: 'spec' };
-    const build = { run_id: 'b', actor: 'builder', station: 'build' };
-    const working = buildTrace([ev('run_started', {}, spec), ev('run_started', {}, build)]);
-    expect(noteRecipient(working, 'build')).toBe('builder');
-
-    const waiting = buildTrace([
-      ev('run_started', {}, spec),
-      ev('run_finished', { status: 'succeeded' }, spec),
-      ev('moved', { from: 'spec', to: 'approve' }),
-    ]);
-    expect(noteRecipient(waiting, 'spec')).toBe('spec-writer');
-    expect(noteRecipient(waiting, 'approve')).toBeUndefined();
   });
 
   it('shows event kinds it does not know instead of dropping them', () => {
@@ -293,5 +279,57 @@ describe('the agent reply in a run', () => {
   it('keeps prose, and a string output, as text', () => {
     expect(replyOf('Looking at the router.')).toEqual({ kind: 'text', text: 'Looking at the router.' });
     expect(replyOf('"The notes are written."')).toEqual({ kind: 'text', text: 'The notes are written.' });
+  });
+});
+
+describe('criteriaOf and editedFiles', () => {
+  it('reads a string list of criteria under acceptance or acceptance_criteria, and no other shape', () => {
+    expect(criteriaOf({ acceptance: ['a', 'b'] })).toEqual(['a', 'b']);
+    expect(criteriaOf({ acceptance_criteria: ['c'] })).toEqual(['c']);
+    expect(criteriaOf({ acceptance: 'one long sentence' })).toEqual([]);
+    expect(criteriaOf(['a'])).toEqual([]);
+    expect(criteriaOf(undefined)).toEqual([]);
+  });
+
+  it('counts each file an edit touched once', () => {
+    const events = [
+      {
+        id: 1,
+        kind: 'run_started',
+        at: '2026-10-27T10:00:00Z',
+        actor: 'frontend-engineer',
+        run_id: 'r1',
+        station: 'build',
+        data: {},
+      },
+      {
+        id: 2,
+        kind: 'tool_call',
+        at: '2026-10-27T10:01:00Z',
+        actor: 'frontend-engineer',
+        run_id: 'r1',
+        station: 'build',
+        data: { id: 'a', tool: 'Edit', input: JSON.stringify({ file_path: 'src/a.tsx' }) },
+      },
+      {
+        id: 3,
+        kind: 'tool_call',
+        at: '2026-10-27T10:02:00Z',
+        actor: 'frontend-engineer',
+        run_id: 'r1',
+        station: 'build',
+        data: { id: 'b', tool: 'Write', input: JSON.stringify({ file_path: 'src/a.tsx' }) },
+      },
+      {
+        id: 4,
+        kind: 'tool_call',
+        at: '2026-10-27T10:03:00Z',
+        actor: 'frontend-engineer',
+        run_id: 'r1',
+        station: 'build',
+        data: { id: 'c', tool: 'Read', input: JSON.stringify({ file_path: 'src/b.tsx' }) },
+      },
+    ] as unknown as ItemEvent[];
+    expect(editedFiles(buildTrace(events))).toEqual(['src/a.tsx']);
   });
 });

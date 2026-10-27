@@ -59,6 +59,7 @@ const factoryRoutePages: Record<string, string> = {
   '/o/$org/f/$factory/board': 'board',
   '/o/$org/f/$factory/items/': 'items',
   '/o/$org/f/$factory/items/$ref': 'items',
+  '/o/$org/f/$factory/agents/': 'agents',
   '/o/$org/f/$factory/agents/$agent': 'agents',
   '/o/$org/f/$factory/definition/': 'definition',
   '/o/$org/f/$factory/definition/$section': 'definition',

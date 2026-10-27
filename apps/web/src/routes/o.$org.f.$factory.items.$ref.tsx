@@ -6,6 +6,7 @@ import { pageTitle } from '../app/route-focus';
 import { NotFoundScreen } from '../app/states';
 import { AssemblyPage } from '../features/items/assembly-page';
 import { ItemPage } from '../features/items/item-page';
+import { type ItemTab, isItemTab } from '../features/items/item-tabs';
 import { itemKey, useFactory } from '../shared/factory';
 import { useOrg } from '../shared/org';
 
@@ -20,6 +21,9 @@ function ItemRoute() {
 
 // $ref is the item's number in the factory ("12"), a full ref ("goal#12") or its id.
 export const Route = createFileRoute('/o/$org/f/$factory/items/$ref')({
+  // The selected view. Timeline is the default, so it leaves no `tab` in the URL.
+  validateSearch: (search: Record<string, unknown>): { tab?: ItemTab } =>
+    isItemTab(search.tab) ? { tab: search.tab } : {},
   loader: async ({ context: { queryClient, org, factory }, params }) => {
     const key = itemKey(factory.name, params.ref);
     // The run records only refine the trace, the line's touches only the touches card's sentence:
