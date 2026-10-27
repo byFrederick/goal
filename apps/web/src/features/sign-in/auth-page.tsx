@@ -1,4 +1,4 @@
-// The frame of the pages before the app (canvas "Sign-In", "Mobile-Sign-In"): no rail, one card
+// The frame of the pages before the app (canvas "Sign-In", "Mobile-Sign-In"): no sidebar, one card
 // centered on the app's background; on phones the card's content fills the width.
 import type { ReactNode, Ref } from 'react';
 import { cn } from '../../ui/cn';
