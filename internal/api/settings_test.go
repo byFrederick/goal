@@ -230,7 +230,7 @@ func TestDeleteOrg_GoneAtOnceAndPurgedAfterTheRetention(t *testing.T) {
 	}
 
 	var list gen.OrgList
-	if h.call(t, http.MethodGet, "/v1/orgs", "", &list); len(list.Orgs) != 1 || list.Orgs[0].Slug != labsSlug {
+	if h.call(t, http.MethodGet, orgsPath, "", &list); len(list.Orgs) != 1 || list.Orgs[0].Slug != labsSlug {
 		t.Errorf("orgs after the delete = %+v; want only example-labs", list.Orgs)
 	}
 

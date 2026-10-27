@@ -72,6 +72,26 @@ type Run struct {
 	EndedAt             time.Time
 }
 
+// ListedRun is a run with the number and title of the item it worked, as the organization's run
+// list shows it.
+type ListedRun struct {
+	Run
+	ItemNumber int64
+	ItemTitle  string
+}
+
+// RunSummary counts the runs of a window, whatever their status, and what they cost.
+type RunSummary struct {
+	Total   int
+	Running int
+	Failed  int
+	// Finished counts succeeded and cancelled runs.
+	Finished int
+	SpendUSD float64
+	// ByFactory is each factory's spend, only factories with a run in the window, by factory id.
+	ByFactory []FactorySpend
+}
+
 // RunResult is what a runner returns when an agent task ends.
 type RunResult struct {
 	Status RunStatus
