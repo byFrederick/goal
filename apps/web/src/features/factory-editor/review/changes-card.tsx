@@ -61,7 +61,10 @@ export function ChangesCard({
               </div>
               <ul className="m-0 flex list-none flex-col p-0">
                 {list.map((c, i) => (
-                  <li key={c.summary} className={cn('px-4 py-3 text-heading', i > 0 && 'border-t border-line')}>
+                  <li
+                    key={`${c.op}:${c.target.kind}:${c.target.id}:${c.from_lines.join('-')}:${c.to_lines.join('-')}`}
+                    className={cn('px-4 py-3 text-heading', i > 0 && 'border-t border-line')}
+                  >
                     {c.summary}
                   </li>
                 ))}

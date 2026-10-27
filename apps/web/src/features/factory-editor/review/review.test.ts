@@ -7,10 +7,23 @@ import {
   mergeMoveNeeds,
   movesFromProblems,
   parseCompare,
+  publishExplainer,
   publishedLine,
   reviewCompare,
   sourceText,
 } from './review';
+
+describe('the publish explainer', () => {
+  it('says a first publish saves v1 and offers no roll-back', () => {
+    const text = publishExplainer(null, 1);
+    expect(text).toContain('Publishing saves version 1.');
+    expect(text).not.toContain('roll back');
+  });
+
+  it('offers the roll-back once a version is published', () => {
+    expect(publishExplainer(7, 8)).toBe('You can roll back to any earlier version later.');
+  });
+});
 
 const change = (over: Partial<Change>): Change => ({
   section: 'line',

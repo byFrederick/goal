@@ -142,7 +142,13 @@ export function blockedSentence(errors: number): string {
   return `Fix ${plural(errors, 'problem')} first. Your draft stays saved.`;
 }
 
-/** What publishing does to the running version (B's copy fix: runs, not items, finish on it). */
+/** What publishing does to the running version: the first publish saves v1; later, the roll-back line. */
+export function publishExplainer(current: number | null, next: number): string {
+  if (current === null) {
+    return `Publishing saves version ${next}. Later edits start a new draft; nothing changes the running factory until you publish again.`;
+  }
+  return 'You can roll back to any earlier version later.';
+}
 
 // Versions.
 

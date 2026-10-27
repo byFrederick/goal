@@ -1,9 +1,9 @@
-// The Publish card (D §10.10, boards Define-Publish and New-Review): what the version holds
-// (Stations / Agents / Connections / Changes, or Skills in the wizard), "Describe this version"
-// (prefilled from B's first two change summaries), "Start the line right away" on a first
-// publish, "Where do these items go?" when the new version drops stations open items wait at,
-// and Publish vN, disabled with its reason while problems remain. Publishing flushes the session,
-// sends the draft's revision and the version it saw running, and on success closes the draft.
+// The Publish card (ADR 0016, build/definition-publish): "What changed, in one line" (prefilled
+// from the draft's change summaries), "Where do these items go?" when the new version removes
+// stations open items wait at, "Start the line right away" on a first publish, and Publish vN,
+// disabled with its reason while problems remain. The wizard also shows the counts it creates
+// (Stations, Agents, Connections, Skills). Publishing flushes the session, sends the draft's
+// revision and the version it saw running, and on success closes the draft.
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useId, useState } from 'react';
@@ -14,15 +14,12 @@ import { defKeys, keys } from '../../../api/queries';
 import type { ItemsAtRemovedStations, Validation } from '../../../api/types';
 import { useOrg } from '../../../shared/org';
 import { Button } from '../../../ui/button';
-import { SectionCard } from '../../../ui/card';
+import { SectionCard, Stat, StatGrid } from '../../../ui/card';
 import { Field, Input, NativeSelect } from '../../../ui/field';
 import { useDraftSession, useModel } from '../draft/use-draft';
 import { SearchLink } from '../search-link';
-import { blockedSentence, defaultMessage, type MoveNeed, mergeMoveNeeds } from './review';
+import { blockedSentence, defaultMessage, type MoveNeed, mergeMoveNeeds, publishExplainer } from './review';
 import { useComparison, useEditorFacts } from './use-review';
-
-/** What a publish leaves open: the earlier versions stay one step away. */
-const rollbackLine = 'You can roll back to any earlier version later.';
 
 interface PublishCardProps {
   place: 'definition' | 'wizard';
@@ -71,6 +68,7 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
     if (fresh.length > 0) setRows((known) => mergeMoveNeeds(known, fresh));
   }, [freshKey]);
 
+  const counts = validation?.counts;
   const errors = validation?.problems.filter((p) => p.severity === 'error').length ?? 0;
   const unmapped = rows.filter((r) => !moves[r.station]).length;
   const note = message ?? defaultMessage(changes);
@@ -163,6 +161,22 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
 
   return (
     <SectionCard title="Publish">
+      {place === 'wizard' ? (
+        <StatGrid>
+          <Stat label="Stations">
+            <dd className="m-0 text-2xl tabular-nums">{counts?.stations ?? '–'}</dd>
+          </Stat>
+          <Stat label="Agents">
+            <dd className="m-0 text-2xl tabular-nums">{counts?.agents ?? '–'}</dd>
+          </Stat>
+          <Stat label="Connections">
+            <dd className="m-0 text-2xl tabular-nums">{counts?.connections ?? '–'}</dd>
+          </Stat>
+          <Stat label="Skills">
+            <dd className="m-0 text-2xl tabular-nums">{counts?.skills ?? '–'}</dd>
+          </Stat>
+        </StatGrid>
+      ) : null}
       <Field label="What changed, in one line">
         <Input value={note} maxLength={200} onChange={(e) => setMessage(e.target.value)} />
       </Field>
@@ -235,7 +249,9 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
             ))}
           </div>
         ) : null}
-        <p className="m-0 text-secondary leading-normal text-muted">{rollbackLine}</p>
+        <p className="m-0 text-secondary leading-normal text-muted">
+          {publishExplainer(current?.number ?? null, next)}
+        </p>
       </div>
     </SectionCard>
   );

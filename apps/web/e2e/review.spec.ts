@@ -127,7 +127,8 @@ test('Compare v7, Restore v7, then discard the draft (flow 5)', async ({ page })
   await page.getByRole('link', { name: /^All \d+ versions$/ }).click();
   await expect(page.getByRole('heading', { level: 2, name: 'Versions' })).toBeFocused();
   await page.getByRole('button', { name: 'Compare v8' }).click();
-  await expect(page.getByRole('region', { name: 'Changes from v7 to v8' })).toBeVisible();
+  const v8Changes = page.getByRole('region', { name: 'Changes from v7 to v8' });
+  await expect(v8Changes.getByRole('listitem').first()).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
