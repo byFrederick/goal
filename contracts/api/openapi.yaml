@@ -72,6 +72,12 @@ tags:
       Factory definitions: creating factories, the one shared draft per factory (Visual
       sections, single files and the whole tree, each write under an If-Match precondition),
       validation, publishing, versions, compare, restore and the template catalog
+  - name: evals
+    description: >-
+      Jonah's eval cases (ADR 0025): each evals/cases/<name>.yaml of a factory's definition, its
+      recent tries, eval runs of the current version or the draft and what they cost, and adding a
+      case from a past run. Every publish of a draft with cases waits for a run of them on its
+      content to pass (the eval gate); goald answers 503 evals-unavailable while it runs no evals.
   - name: spend
     description: >-
       What the organization's agent runs cost (agent_runs.cost_usd), over the factories the caller
@@ -1297,7 +1303,8 @@ paths:
         started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no
         longer at revision); 409 draft-base-moved (the current version is not
         expected_current_version_id), definition-invalid (with problems), items-at-removed-station
-        (with items), name-taken.
+        (with items), name-taken, and with eval cases evals-pending or evals-failing (the eval gate,
+        with eval_run_id; the draft stays open).
       requestBody:
         required: true
         content:
@@ -1534,6 +1541,151 @@ paths:
           content:
             text/yaml:
               schema: { type: string }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/evals:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: listEvals
+      x-goal-scope: factory:read
+      tags: [evals]
+      summary: The eval cases of the current version, with their last tries and a summary
+      description: >-
+        Each case of the current version's evals/cases/, by name, with what checks it, its last 3
+        finished tries (newest first) and what it cost in the latest run that ran it. The summary
+        counts the cases whose last tries all passed and the share of those tries that passed,
+        and names the latest run of the current version's content. A factory never published has
+        no cases and no version. 503 evals-unavailable while this goald does not run evals.
+      responses:
+        "200":
+          description: The cases and their summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvalList" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/evals/runs:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    post:
+      operationId: startEvalRun
+      x-goal-scope: definition:edit
+      tags: [evals]
+      summary: Start an eval run of every case, or of one, on the current version or the draft
+      description: >-
+        Queues a run (trigger manual) with one try per case and try, priced as estimateEvalRun
+        prices it, and answers at once; goald's eval loop works the tries. 400 invalid-request for
+        a case name that is not a slug, eval-case-unknown for a case the content does not have and
+        for content without cases; 404 version-not-found for a factory never published (on
+        current), no-draft for one without a draft (on draft); 503 evals-unavailable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EvalRunRequest" }
+      responses:
+        "202":
+          description: The queued run and its estimate
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvalRunStarted" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/evals/estimate:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    post:
+      operationId: estimateEvalRun
+      x-goal-scope: factory:read
+      tags: [evals]
+      summary: What an eval run would cost, about, without starting it
+      description: >-
+        Each try at the mean cost of its case's last finished tries or, for a case with none, at
+        the median cost of its agent's newest finished runs; a case with neither is unpriced. The
+        same refusals as startEvalRun.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EvalRunRequest" }
+      responses:
+        "200":
+          description: The estimate
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvalEstimate" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/EvalRunRef"
+    get:
+      operationId: getEvalRun
+      x-goal-scope: factory:read
+      tags: [evals]
+      summary: One eval run with its results by case and try
+      description: 404 eval-run-not-found for a run that is not the factory's; 503 evals-unavailable.
+      responses:
+        "200":
+          description: The run
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvalRun" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/EvalRunRef"
+    post:
+      operationId: cancelEvalRun
+      x-goal-scope: definition:edit
+      tags: [evals]
+      summary: Cancel an eval run
+      description: >-
+        No further try of it starts and a try that is running stops at its next poll. 404
+        eval-run-not-found; 409 eval-run-finished for a run that is done, failed or cancelled; 503
+        evals-unavailable.
+      responses:
+        "200":
+          description: The cancelled run
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvalRun" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/evals/cases:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    post:
+      operationId: addEvalCase
+      x-goal-scope: definition:publish
+      tags: [evals]
+      summary: Add an eval case from a past run and publish it
+      description: >-
+        Writes evals/cases/{name}.yaml from the past agent run: its agent, and its item's title,
+        body, type and lane as the input, checked by the agent's contract or by judge, with tries
+        tries (default 1). The file goes into a new draft of the current version, which publishes
+        as the next version through the same checks and eval gate as publishDraft (ADR 0025
+        decision 5). 400 invalid-request for a name that is not a slug; 404 run-not-found for a
+        run that is not the factory's; 409 eval-case-exists when the current version has the case,
+        draft-open when the factory already has a draft (the draft this call opened is
+        discarded), and the publish's own conflicts. When the eval gate refuses (evals-pending,
+        evals-failing) the draft stays open, so it publishes once its run passes. 503
+        evals-unavailable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EvalCaseFromRun" }
+      responses:
+        "201":
+          description: The new version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Version" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/items:
     parameters:
@@ -3127,6 +3279,12 @@ components:
       required: true
       description: The factory's metadata.id or metadata.name
       schema: { type: string }
+    EvalRunRef:
+      name: eval_run
+      in: path
+      required: true
+      description: The eval run's id
+      schema: { type: string }
     RangeFrom:
       name: from
       in: query
@@ -3259,6 +3417,10 @@ components:
             (404), connection-cannot-sync (400), knowledge-source-name-taken,
             knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413),
             unsupported-document-type (415).
+            Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found
+            (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409),
+            and a publish's evals-pending (its eval run is queued or running, or it started one)
+            and evals-failing (409, with eval_run_id and failing_cases); the draft stays open.
         problems:
           type: array
           description: definition-invalid only, every problem of the definition (errors block the publish)
@@ -3279,6 +3441,145 @@ components:
           type: string
           description: draft-conflict on a file write only, the file's sha256 now; absent when the file is gone
         items: { $ref: "#/components/schemas/ItemsAtRemovedStations" }
+        eval_run_id:
+          type: string
+          description: evals-pending and evals-failing only, the eval run of the draft's content the publish waits on or that failed
+        failing_cases:
+          type: array
+          description: evals-failing only, the cases of that run with a try that did not pass
+          items: { type: string }
+    EvalList:
+      type: object
+      required: [summary, cases]
+      properties:
+        summary: { $ref: "#/components/schemas/EvalSummary" }
+        cases:
+          type: array
+          items: { $ref: "#/components/schemas/EvalCaseEntry" }
+    EvalSummary:
+      type: object
+      required: [cases, cases_passing, tries, tries_passed]
+      properties:
+        version: { type: integer, description: The current version's number; absent for a factory never published }
+        cases: { type: integer, description: How many cases the current version has }
+        cases_passing: { type: integer, description: The cases whose last tries all passed (a case with no try does not pass) }
+        tries: { type: integer, description: The last tries of every case, counted }
+        tries_passed: { type: integer, description: Of those, the ones that passed }
+        first_try_pass_rate:
+          type: number
+          format: double
+          description: tries_passed of tries, 0 to 1; absent while no case has a try
+        latest_run_id: { type: string, description: The newest eval run of the current version's content }
+        latest_run_at:
+          type: string
+          format: date-time
+          description: When that run finished, or started while it runs
+        latest_tries_per_case: { type: integer, description: The most tries that run gave a case }
+    EvalCaseEntry:
+      type: object
+      required: [name, description, agent, checked_by, last_tries]
+      properties:
+        name: { type: string, description: The case's file name under evals/cases/, without .yaml }
+        description: { type: string }
+        agent: { type: string }
+        tries: { type: integer, description: How many tries a run gives it }
+        checked_by: { $ref: "#/components/schemas/EvalCheckedBy" }
+        last_tries:
+          type: array
+          description: Its last finished tries, newest first, at most 3
+          items: { $ref: "#/components/schemas/EvalHistoryTry" }
+        cost_usd:
+          type: number
+          format: double
+          description: What its tries cost in the latest run that ran it; absent when none did
+    EvalCheckedBy:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [contract, judge, reference_patch] }
+        judge: { type: string, description: judge only, the judge's slug }
+        title: { type: string, description: judge only, the judge's title when the version has it }
+        path: { type: string, description: reference_patch only, the patch's path in the definition }
+    EvalHistoryTry:
+      type: object
+      required: [eval_run_id, try, state, cost_usd]
+      properties:
+        eval_run_id: { type: string }
+        try: { type: integer }
+        state: { $ref: "#/components/schemas/EvalResultState" }
+        run_id: { type: string, description: The agent run of the try, when it had one }
+        cost_usd: { type: number, format: double }
+    EvalResultState:
+      type: string
+      enum: [pending, running, pass, fail, error]
+      description: pass, fail and error are finished; a try that failed for an infrastructure reason is error, never fail
+    EvalRunRequest:
+      type: object
+      properties:
+        case: { type: string, description: The one case to run; absent runs every case }
+        "on":
+          type: string
+          enum: [current, draft]
+          default: current
+          description: The content to run the cases of, the current version's or the open draft's
+    EvalEstimate:
+      type: object
+      required: [usd, unpriced]
+      properties:
+        usd: { type: number, format: double, description: About what the priced cases' tries cost }
+        unpriced:
+          type: array
+          description: The cases with no tries and whose agent has no finished run to price them by
+          items: { type: string }
+    EvalRunStarted:
+      type: object
+      required: [run, estimate]
+      properties:
+        run: { $ref: "#/components/schemas/EvalRun" }
+        estimate: { $ref: "#/components/schemas/EvalEstimate" }
+    EvalRun:
+      type: object
+      required: [id, state, trigger, content_sha256, estimate_usd, cost_usd, created_at, results]
+      properties:
+        id: { type: string }
+        state: { type: string, enum: [queued, running, done, failed, cancelled] }
+        trigger: { type: string, enum: [manual, publish] }
+        case: { type: string, description: The one case it was asked for; absent when it runs every case }
+        version: { type: integer, description: The published version it runs; absent for a draft's content }
+        content_sha256: { type: string, description: The hash of the content it runs, which the publish gate compares a draft by }
+        estimate_usd: { type: number, format: double }
+        cost_usd: { type: number, format: double, description: What its recorded tries cost }
+        created_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+        results:
+          type: array
+          description: By case, then try
+          items: { $ref: "#/components/schemas/EvalResult" }
+    EvalResult:
+      type: object
+      required: [case, try, state, cost_usd, turns]
+      properties:
+        case: { type: string }
+        try: { type: integer }
+        state: { $ref: "#/components/schemas/EvalResultState" }
+        checked_by: { type: string, description: "contract, judge:<slug> or reference-patch:<path>, once checked" }
+        run_id: { type: string }
+        cost_usd: { type: number, format: double }
+        turns: { type: integer }
+        detail:
+          type: object
+          additionalProperties: true
+          description: What the check found (a reason, a contract problem, the judge's outcome and score, missing files)
+    EvalCaseFromRun:
+      type: object
+      required: [run, name]
+      properties:
+        run: { type: string, description: The past agent run whose agent and item the case replays }
+        name: { type: string, description: "The case's name, its file name: 3 to 40 lowercase letters, digits and hyphens" }
+        description: { type: string, maxLength: 200, description: What the agent must get right; the item's title when absent }
+        tries: { type: integer, minimum: 1, maximum: 10, default: 1 }
+        judge: { type: string, description: A judge of the current version checks it; absent, the agent's contract does }
+        expected_current_version_id: { type: string, description: The version the caller saw running; the current one when absent }
     AuthMode:
       type: string
       enum: [session, none]

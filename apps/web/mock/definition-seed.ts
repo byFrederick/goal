@@ -65,6 +65,37 @@ export function tree(files: Record<string, string>): Tree {
   return new Map(Object.entries(files).map(([p, text]) => [p, encoder.encode(text)]));
 }
 
+/** The goal factory's skills. frontend-engineer loads all of them, so its Rules card reads "And 18 skills". */
+const goalSkills = [
+  'acme-conventions',
+  'ui-ux-pro-max',
+  'frontend-design',
+  'web-design-guidelines',
+  'accessibility',
+  'typescript-advanced-types',
+  'tanstack-query-best-practices',
+  'tanstack-router-best-practices',
+  'vercel-react-best-practices',
+  'vercel-composition-patterns',
+  'vitest',
+  'playwright-best-practices',
+  'tailwind-design-system',
+  'shadcn',
+  'impeccable',
+  'openapi-spec-generation',
+  'test-driven-development',
+  'pnpm',
+];
+
+/** The factory rules every agent it applies to follows on every run (rules/<name>.md). */
+const goalRules = [
+  ['evidence', 'Mark a criterion met only with evidence from this run.'],
+  ['delivery', 'Push after every step that passes, and never to main.'],
+  ['plain-language', 'Write commit messages, pull requests and copy in plain, specific sentences.'],
+  ['cost', 'Read only what the task needs, and bound every test run.'],
+  ['secrets', 'Never print, log or commit a secret, a token or a .env value.'],
+];
+
 // goal: a factory building this platform. v8 runs; the draft of v9 adds a check, raises the
 // review's rework limit and asks before frontend-engineer fetches web pages (a warning until
 // tool approvals arrive): 3 changes in 2 sections, 1 problem.
@@ -81,23 +112,24 @@ metadata:
   purpose: "Builds the Goal platform from this repository: engine, UI, infrastructure and its own factories."
 spec:
   runtime:
-    model: claude-sonnet-5-5
+    model: claude-opus-5-5
     modelConnection: claude
     size: large
     tools: [golangci-lint@2.1, sqlc@1.27]
     repository: { url: "https://github.com/acme/goal", connection: github }
-    budget: { weeklyUsd: 1000, perItemUsd: 4, onExhausted: drain }
+    budget: { weeklyUsd: 1000, perItemUsd: 12, maxTurnsPerTask: 150, onExhausted: drain }
   connections:
     # pull requests and issues of the repository
     - github
     - playwright
   skills:
-    - { name: acme-conventions, source: ./skills/acme-conventions }
+${goalSkills.map((name) => `    - { name: ${name}, source: ./skills/${name} }`).join('\n')}
+  rules:
+${goalRules.map(([name]) => `    - { name: ${name}, source: ./rules/${name}.md }`).join('\n')}
   agents:
     - name: spec-writer
       description: Turns an item into a spec with acceptance criteria.
       prompt: ./agents/spec-writer.md
-      model: claude-opus-5-5
       skills: [acme-conventions]
     - name: backend-engineer
       description: Builds Go changes from the spec.
@@ -109,7 +141,7 @@ spec:
       description: Builds web changes from the spec.
       prompt: ./agents/frontend-engineer.md
       model: claude-haiku-5-5
-      skills: [acme-conventions]
+      skills: [${goalSkills.join(', ')}]
       connections: [playwright]
       builtins: { read: allowed, edit: allowed, run: { mode: allowed, commands: [pnpm, git] }, web: ${o.draft ? 'ask' : 'off'} }
     - name: reviewer
@@ -137,6 +169,24 @@ spec:
       constraint: build
       andon: { reworkRate: 0.4, window: 10 }
 `;
+
+// The rules' texts and the skills' files beyond acme-conventions (which goalFiles writes out).
+const goalExtraFiles: Record<string, string> = {
+  ...Object.fromEntries(
+    goalRules.map(([name, description]) => [
+      `rules/${name}.md`,
+      `---\ndescription: ${description}\n---\n\n${description}\n`,
+    ]),
+  ),
+  ...Object.fromEntries(
+    goalSkills
+      .filter((name) => name !== 'acme-conventions')
+      .map((name) => [
+        `skills/${name}/SKILL.md`,
+        `---\nname: ${name}\ndescription: ${name}, loaded on demand.\n---\n\n# ${name}\n`,
+      ]),
+  ),
+};
 
 const goalFiles = (o: { merge: boolean; draft: boolean }) =>
   tree({
@@ -171,6 +221,7 @@ description: How acme names things, writes commits and structures pull requests.
 - Commit messages: \`<area>: <what>\`.
 - One change per pull request.
 `,
+    ...goalExtraFiles,
   });
 
 const sreYaml = `# SRE: triage alerts, investigate, and ask a person before changing anything.
@@ -183,7 +234,7 @@ metadata:
   purpose: Triage, investigate and document production issues and SRE toil.
 spec:
   runtime:
-    model: claude-sonnet-5-5
+    model: claude-opus-5-5
     modelConnection: claude
     budget: { weeklyUsd: 400, onExhausted: stop }
   connections: [aws-prod, datadog, pagerduty]
