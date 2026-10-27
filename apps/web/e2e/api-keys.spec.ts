@@ -2,7 +2,7 @@
 // a key and its secret shown once, refusals, revoking, a list that fails to load, the empty
 // organization, and confirming it's you before creating a key with an older sign-in.
 import { expect, type Page, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll, expectToast, isPhone, recordToasts } from './support';
+import { expectAccessible, expectNoHorizontalScroll, expectToast, isPhone, orgMarkOf, recordToasts } from './support';
 
 test.beforeEach(async ({ page, request }) => {
   await request.post('/__mock/reset');
@@ -42,11 +42,11 @@ test('the keys are listed with what each can do, and the page fits the screen', 
   await expectNoHorizontalScroll(page);
 });
 
-test('the organization sidebar opens API keys', async ({ page }) => {
-  test.skip(isPhone(page), 'sidebars are the 768 px and wider navigation');
+test('the organization menu opens API keys', async ({ page }) => {
+  test.skip(isPhone(page), 'the organization menu is the 768 px and wider navigation');
   await page.goto('/o/acme');
-  const sidebar = page.getByRole('navigation', { name: 'Acme organization' });
-  await sidebar.getByRole('link', { name: 'API keys' }).click();
+  await orgMarkOf(page).click();
+  await page.getByRole('menuitem', { name: 'API keys' }).click();
   await expect(page).toHaveURL(/\/o\/acme\/api-keys$/);
   await expect(heading(page)).toBeFocused();
 });

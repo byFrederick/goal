@@ -11,7 +11,7 @@ test.beforeEach(async ({ request }) => {
 test('skills, tool policy and Edit in Definition come from the version that runs', async ({ page }) => {
   await page.goto('/o/acme/f/sre/agents/investigator');
   await expect(page.getByRole('heading', { level: 1, name: 'investigator' })).toBeVisible();
-  // The role from the definition leads the sentence beside the rail; phones keep it short.
+  // The role from the definition leads the sentence beside the sidebar; phones keep it short.
   const role = page.getByText('Gathers evidence from AWS and the repository and proposes a diagnosis.');
   if (isPhone(page)) await expect(role).toBeHidden();
   else await expect(role).toBeVisible();

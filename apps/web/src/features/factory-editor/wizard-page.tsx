@@ -1,4 +1,4 @@
-// The New factory wizard (D §10.1, §10.3, §10.11): /o/$org/new/$step on the rail, with no
+// The New factory wizard (D §10.1, §10.3, §10.11): /o/$org/new/$step in the sidebar, with no
 // sidebar. Start chooses how to begin and creates the factory; from then on `?factory=` names the
 // new factory's id and the steps edit its draft in the editor's section views. `start` with a
 // factory resumes it (the Factories home's "Continue setup"): it opens the first step not done.
@@ -29,7 +29,7 @@ export function WizardPage({ step, search }: { step: WizardStep; search: WizardS
   const readOnly = listed !== undefined && !holds(listed, 'definition:edit');
 
   return (
-    <ShellFrame sidebar={null}>
+    <ShellFrame>
       {factory ? (
         <DraftSessionProvider key={`${factory}:${readOnly}`} org={org.id} factory={factory} readOnly={readOnly}>
           {step === 'start' ? (

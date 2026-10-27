@@ -2,7 +2,7 @@
 import { expect, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll } from './support';
 
-/** The page lays out by the room beside the rail and sidebar (72 + 232 px from 768 px): the five
+/** The page lays out by the room beside the sidebar (256 px from 768 px): the five
  * tiles of the Agent board from 720 px of it, the four of Mobile-Agent below. */
 const wide = (width: number) => width >= 768 && width - 304 >= 720;
 

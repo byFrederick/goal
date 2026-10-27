@@ -1,4 +1,4 @@
-# ADR 0021 — Model presets in the new-factory wizard
+# ADR 0022 — Model presets in the new-factory wizard
 
 Status: accepted · 2026-10-27 · Builds on [ADR 0016](0016-ui-revamp.md) (the screens are the contract) and [ADR 0005](0005-factory-definitions-in-object-storage.md) (the wizard edits the factory's draft)
 

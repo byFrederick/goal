@@ -1,8 +1,9 @@
 // The organization menu (C §10.4, canvas "Org-Switcher" and "Mobile-Org-Switcher"): every
 // organization on the install (switch by choosing one), the current organization's own pages,
 // and Create organization, for platform admins only (spec 3 §4.2; everyone with sign-in off, the
-// local user creates them). A Radix DropdownMenu on the rail; a bottom sheet on phones. Both are
-// opened by the organization mark (org-mark.tsx) and fed by useOrgMenuModel. The sheet ends with
+// local user creates them). A Radix DropdownMenu under the sidebar's top row (sidebar.tsx); a bottom
+// sheet on phones, opened by the organization mark (org-mark.tsx). Both are fed by useOrgMenuModel.
+// The sheet ends with
 // the account (account-menu.tsx). Each organization says the caller's role there ("3 factories,
 // owner"; nothing with sign-in off), and Members and roles opens the current one's people.
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
@@ -90,7 +91,7 @@ function OrgTile({ mark, current }: { mark: string; current: boolean }) {
     <span
       aria-hidden="true"
       className={cn(
-        'box-border flex size-9 items-center justify-center rounded-[10px] text-[13px] font-semibold',
+        'box-border flex size-9 items-center justify-center rounded-cell text-secondary font-semibold',
         current ? 'bg-ink text-white' : 'border border-ink bg-card text-ink',
       )}
     >
@@ -102,8 +103,8 @@ function OrgTile({ mark, current }: { mark: string; current: boolean }) {
 function OrgText({ choice }: { choice: OrgChoice }) {
   return (
     <span className="min-w-0">
-      <span className="block truncate text-[15px] font-medium">{choice.org.name}</span>
-      <span className="block text-[13px] text-muted">{choice.detail}</span>
+      <span className="block truncate text-heading font-medium">{choice.org.name}</span>
+      <span className="block text-secondary text-muted">{choice.detail}</span>
     </span>
   );
 }
@@ -116,7 +117,7 @@ interface OrgMenuProps {
   navigating: RefObject<boolean>;
 }
 
-/** The rail's menu (≥ 768 px): its content, beside the organization mark. */
+/** The sidebar's menu (≥ 768 px): its content, below the sidebar's top row. */
 export function OrgMenuContent({ org, onCreate, navigating }: OrgMenuProps) {
   const model = useOrgMenuModel(org);
   const navigate = useNavigate();
@@ -124,6 +125,7 @@ export function OrgMenuContent({ org, onCreate, navigating }: OrgMenuProps) {
 
   return (
     <MenuContent
+      side="bottom"
       onCloseAutoFocus={(e) => {
         if (navigating.current) e.preventDefault();
         navigating.current = false;
@@ -131,7 +133,7 @@ export function OrgMenuContent({ org, onCreate, navigating }: OrgMenuProps) {
     >
       <MenuGroup aria-labelledby={`${ids}-orgs`}>
         <MenuLabel id={`${ids}-orgs`}>Organizations</MenuLabel>
-        <MenuRadioGroup value={org.id} className="flex flex-col gap-0.5">
+        <MenuRadioGroup value={org.id} className="flex flex-col gap-1">
           {model.orgs.map((choice) => (
             <MenuRadioItem
               key={choice.org.id}
@@ -217,7 +219,7 @@ export function OrgSheetContent({ org, onCreate, onClose, navigating }: OrgSheet
               aria-current={choice.current ? 'true' : undefined}
               data-current={choice.current}
               onClick={() => go(orgPath('/o/$org', choice.org.slug))}
-              className="grid min-h-[52px] grid-cols-[36px_minmax(0,1fr)_20px] items-center gap-3 rounded-control px-2 py-1.5 text-ink no-underline transition-colors duration-200 hover:bg-shell data-[current=true]:bg-shell"
+              className="grid min-h-[52px] grid-cols-[36px_minmax(0,1fr)_20px] items-center gap-3 rounded-control px-2 py-2 text-ink no-underline transition-colors duration-200 hover:bg-shell data-[current=true]:bg-shell"
             >
               <OrgTile mark={choice.mark} current={choice.current} />
               <OrgText choice={choice} />
@@ -265,7 +267,7 @@ export function OrgSheetContent({ org, onCreate, onClose, navigating }: OrgSheet
 
 function SheetList({ labelledBy, children }: { labelledBy: string; children: ReactNode }) {
   return (
-    <ul aria-labelledby={labelledBy} className="m-0 flex list-none flex-col gap-0.5 p-0">
+    <ul aria-labelledby={labelledBy} className="m-0 flex list-none flex-col gap-1 p-0">
       {children}
     </ul>
   );
