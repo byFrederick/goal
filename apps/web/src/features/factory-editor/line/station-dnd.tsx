@@ -108,7 +108,7 @@ export function StationDnd({ children }: { children: ReactNode }) {
       {children}
       <DragOverlay dropAnimation={null}>
         {active ? (
-          <div className="flex w-[240px] items-center gap-3 rounded-control border border-muted bg-card px-3 py-2.5">
+          <div className="flex w-[240px] items-center gap-3 rounded-control border border-muted bg-card px-3 py-2.5 shadow-pop">
             <span className="flex size-7 items-center justify-center rounded-chip bg-shell text-[13px] font-semibold tabular-nums">
               {position(active.id)}
             </span>
