@@ -104,13 +104,26 @@ test('signing in by code returns to the page that asked, and the session stays o
   await orgNav(page).getByRole('button', { name: 'FC, F. Cruz, account' }).click();
   const account = page.getByRole('dialog', { name: 'Account' });
   await expect(account.getByText('F. Cruz', { exact: true })).toBeVisible();
-  await expect(account.getByText(owner)).toBeVisible();
-  await expect(account.getByText('Owner of Acme')).toBeVisible();
+  await expect(account.getByText('Owner', { exact: true })).toBeVisible();
   await expect(account.getByText('Platform admin')).toBeVisible();
-  await expect(account.getByRole('button', { name: 'Edit name…' })).toBeVisible();
+  await expect(account.getByRole('button', { name: 'Profile' })).toBeVisible();
+  // Pages not built yet are listed, disabled, and do nothing when chosen.
+  for (const name of ['Notifications', 'Connected apps', 'Keyboard shortcuts']) {
+    await expect(account.getByRole('button', { name: new RegExp(`^${name}`) })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  }
   await expectAccessible(page);
   await page.keyboard.press('Escape');
   await expect(account).toBeHidden();
+
+  // The organization menu names the organization's pages, and the two not built yet are disabled.
+  await page.getByRole('button', { name: 'Acme organization, switch organization' }).click();
+  const orgMenu = page.getByRole('menu', { name: 'Acme organization, switch organization' });
+  await expect(orgMenu.getByRole('menuitem', { name: 'Spend and billing' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(orgMenu.getByRole('menuitem', { name: 'Models and policies' })).toHaveAttribute('aria-disabled', 'true');
+  await page.keyboard.press('Escape');
 });
 
 test('a wrong code, a used-up code, a new code after the countdown, an expired one', async ({ page, request }) => {
@@ -280,7 +293,7 @@ test('edit name, sign out everywhere, sign out', async ({ page }) => {
     return page.getByRole('dialog', { name: 'Account' });
   };
 
-  await (await openAccount('FC, F. Cruz')).getByRole('button', { name: 'Edit name…' }).click();
+  await (await openAccount('FC, F. Cruz')).getByRole('button', { name: 'Profile' }).click();
   const edit = page.getByRole('dialog', { name: 'Edit name' });
   await expect(edit.getByLabel('Name')).toBeFocused();
   await expect(edit.getByLabel('Name')).toHaveValue('F. Cruz');
@@ -295,7 +308,7 @@ test('edit name, sign out everywhere, sign out', async ({ page }) => {
   await expectToast(page, 'Name saved');
 
   // Sign out everywhere asks first; Cancel has focus, so Enter never signs anyone out by accident.
-  await (await openAccount('FC, Fred Cruz')).getByRole('button', { name: 'Sign out everywhere…' }).click();
+  await (await openAccount('FC, Fred Cruz')).getByRole('button', { name: 'Sign out everywhere' }).click();
   const confirm = page.getByRole('dialog', { name: 'Sign out of every browser and the CLI?' });
   await expect(
     confirm.getByText(
@@ -350,7 +363,7 @@ test('a change that needs a recent sign-in asks to confirm it’s you, then goes
 
   // Signed in again, the deletion is sent once more and goes through.
   await expect(reauth).toBeHidden();
-  await expect(page).toHaveURL(/\/o\/example-labs$/);
+  await expect(page).toHaveURL(/\/o\/goal$/);
   await expectToast(page, 'Deleted Acme');
 });
 
