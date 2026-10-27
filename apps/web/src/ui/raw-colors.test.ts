@@ -7,8 +7,8 @@ import { describe, expect, it } from 'vitest';
 // A raw color anywhere else breaks the dark theme silently.
 const srcDir = fileURLToPath(new URL('../', import.meta.url));
 
-// Files that still hold raw colors until their own item moves them to tokens. Keep this short.
-const allowed = new Set(['features/factory-editor/yaml/monaco-editor.tsx']);
+// Files that still hold raw colors until their own item moves them to tokens. Keep this short: none now.
+const allowed = new Set<string>();
 
 const rawColor = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})\b|\b(?:rgba?|hsla?)\(/;
 

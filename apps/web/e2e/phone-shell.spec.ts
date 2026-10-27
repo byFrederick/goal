@@ -26,12 +26,12 @@ test.describe('the phone shell at 375 px', () => {
     await expect(mark).toBeFocused();
   });
 
-  test('Needs you is disabled and says it is not available yet', async ({ page }) => {
+  test('Needs you links to its page from the tab bar', async ({ page }) => {
     await page.goto('/o/acme/f/goal');
-    const needs = page.getByRole('navigation', { name: 'Tabs' }).getByRole('button', { name: 'Needs you' });
-    await expect(needs).toHaveAttribute('aria-disabled', 'true');
-    await needs.focus();
-    await expect(page.getByRole('tooltip', { name: 'Not available yet' })).toBeVisible();
+    const needs = page.getByRole('navigation', { name: 'Tabs' }).getByRole('link', { name: /^Needs you/ });
+    await expect(needs).toHaveAttribute('href', '/o/acme/needs-you');
+    await needs.click();
+    await expect(page).toHaveURL(/\/o\/acme\/needs-you$/);
   });
 
   test('Floor, Board and Items follow the last factory visited outside a factory', async ({ page }) => {

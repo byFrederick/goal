@@ -45,9 +45,9 @@ async function expectNoSessionTokenInScripts(page: Page) {
   expect(answer).not.toContain(token);
 }
 
-const emailField = (page: Page) => page.getByLabel('Email');
+const emailField = (page: Page) => page.getByLabel('Work email');
 const codeField = (page: Page) => page.getByLabel('Code');
-const sendCode = (page: Page) => page.getByRole('button', { name: 'Email me a code' });
+const sendCode = (page: Page) => page.getByRole('button', { name: 'Email me a sign-in code' });
 
 async function askForCode(page: Page, email = owner) {
   await emailField(page).fill(email);
@@ -72,6 +72,8 @@ test('signing in by code returns to the page that asked, and the session stays o
   await expect(page).toHaveTitle('Sign in · Goal');
   await expect(page.getByText('Goal is invite-only. Ask an owner of your organization to invite you.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeVisible();
+  // GitHub sign-in is not built yet: its button is there, disabled.
+  await expect(page.getByRole('button', { name: 'Continue with GitHub' })).toHaveAttribute('aria-disabled', 'true');
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
@@ -145,7 +147,7 @@ test('a wrong code, a used-up code, a new code after the countdown, an expired o
 
   // Three wrong tries void the code: only a new one helps, and it can be asked for at once.
   await expect(message('Send a new code to try again.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Sign in' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Verify' })).toBeDisabled();
   await expect(codeField(page)).toBeDisabled();
   await page.getByRole('button', { name: 'Send a new code' }).click();
   await expect(message('We sent a new code.')).toBeVisible();

@@ -67,7 +67,7 @@ describe('TraceList: a run', () => {
 
     expect(await screen.findByText('Investigator')).toBeTruthy();
     expect(screen.getByText(/Opus 5\.5/)).toBeTruthy();
-    const tools = screen.getByRole('list', { name: 'Tool calls by Investigator' });
+    const tools = screen.getByRole('list', { name: 'Events by Investigator' });
     expect(within(tools).getByText(/Read/)).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/investigator-\d/);
   });
@@ -102,5 +102,78 @@ describe('TraceList: a run', () => {
 
     expect(await screen.findByText('Investigator')).toBeTruthy();
     expect(screen.queryByText(/Ran with rules/)).toBeNull();
+  });
+});
+
+describe('TraceList: a spec run and the timeline states', () => {
+  const specRun: Entry = {
+    ...run,
+    key: 'run-spec',
+    id: 'spec',
+    station: 'spec',
+    agent: 'architect',
+    reply: {
+      kind: 'output',
+      value: { summary: 'Spend in the sidebar.', acceptance: ['Shows the amount', 'Turns amber at 80%'] },
+    },
+  };
+
+  it('lists a spec run’s acceptance criteria under its heading', async () => {
+    renderBoardPage({
+      page: () => <TraceList entries={[specRun]} itemState="done" />,
+      org,
+      factory,
+      builderMeta,
+    });
+
+    expect(await screen.findByText('Acceptance criteria')).toBeTruthy();
+    expect(screen.getByText('Shows the amount')).toBeTruthy();
+    expect(screen.getByText('Turns amber at 80%')).toBeTruthy();
+  });
+
+  it('says the run is waiting on the user when the item waits on them', async () => {
+    renderBoardPage({
+      page: () => <TraceList entries={[specRun]} itemState="waiting_human" />,
+      org,
+      factory,
+      builderMeta,
+    });
+
+    expect(await screen.findByText('Waiting on you')).toBeTruthy();
+  });
+
+  it('shows an sr-only loading state while the runs load', async () => {
+    renderBoardPage({
+      page: () => <TraceList entries={[]} itemState="in_progress" status="loading" />,
+      org,
+      factory,
+      builderMeta,
+    });
+
+    const busy = await screen.findByText('Loading');
+    expect(busy.closest('[aria-busy="true"]')).toBeTruthy();
+  });
+
+  it('shows the empty state when nothing has happened yet', async () => {
+    renderBoardPage({
+      page: () => <TraceList entries={[]} itemState="queued" />,
+      org,
+      factory,
+      builderMeta,
+    });
+
+    expect(await screen.findByText(/Nothing has happened yet/)).toBeTruthy();
+  });
+
+  it('says the runs could not load and still lists the events', async () => {
+    renderBoardPage({
+      page: () => <TraceList entries={[run]} itemState="done" status="error" />,
+      org,
+      factory,
+      builderMeta,
+    });
+
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByText('Investigator')).toBeTruthy();
   });
 });
