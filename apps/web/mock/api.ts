@@ -76,6 +76,7 @@ import { createKeys } from './keys.ts';
 import { createKnowledge } from './knowledge.ts';
 import { membersFor, orgCanOf } from './people.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
+import { orgRunsOf } from './runs.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
 
 type Next = (err?: unknown) => void;
@@ -1429,6 +1430,11 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       const archived = url.searchParams.get('archived') === 'true';
       const factories = state.factories.filter((f) => f.org_id === org.id && Boolean(f.archived_at) === archived);
       return json(res, 200, { factories });
+    }
+
+    if (rest === '/runs' && method === 'GET') {
+      const result = orgRunsOf(state, org.id, url.searchParams);
+      return 'body' in result ? json(res, 200, result.body) : problem(res, result.status, result.title, result.detail);
     }
 
     if (rest === '/attention' && method === 'GET') {

@@ -1,37 +1,38 @@
-// The Definition editor's frame (D §10.3, canvas Define*): the header (breadcrumb, "Definition"
-// with the draft's chip, Visual | YAML, Versions, Discard draft…, Review and publish), the status
-// line, the section tiles, then the section (children), and the dialogs a draft can need: discard,
-// conflicts, a discard elsewhere and the unsaved-changes guard. It reads the draft session and
-// B's draft; sections render inside it through `section-views.tsx`. View only (no
-// definition:edit, canvas Define-View): the running version's chip, a banner saying who edits
-// (and whose draft is open), no Discard, no Review and publish, no status line.
+// The Definition editor's frame (D §10.3, screens build/definition): the header (the breadcrumb with
+// the Live chip, the Form | YAML toggle in Form, Versions, Review changes and Publish), the draft
+// banner (the change count, the problem sentence, Review changes and Discard draft), the Ask bar
+// (not built yet), the status line, the section tiles in Form, then the section (children), and the
+// dialogs a draft can need: discard, conflicts, a discard elsewhere and the unsaved-changes guard.
+// It reads the draft session and B's draft; sections render inside it through `section-views.tsx`.
+// View only (no definition:edit, canvas Define-View): the running version's chip, a banner saying who
+// edits (and whose draft is open), no draft banner, no Discard, no Review or Publish, no status line.
 import { useQuery } from '@tanstack/react-query';
-import { Link, useLinkProps, useNavigate, useSearch } from '@tanstack/react-router';
-import { ChevronRight, Clock, Code, SlidersHorizontal } from 'lucide-react';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { ChevronRight, Clock } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useState } from 'react';
 import { draftQuery, factoryQuery } from '../../../api/queries';
 import type { Draft } from '../../../api/types';
-import { laterText } from '../../../app/screens';
 import { type Model, sections } from '../../../shared/definition/model';
-import { placeAtLine } from '../../../shared/definition/place';
 import { useFactory, useFactoryParams } from '../../../shared/factory';
+import { plural } from '../../../shared/format';
 import { useOrg } from '../../../shared/org';
 import { reasons } from '../../../shared/permissions';
 import { Button } from '../../../ui/button';
 import { Chip } from '../../../ui/chip';
-import { cn } from '../../../ui/cn';
 import { ViewOnlyBanner } from '../../../ui/view-only-banner';
 import type { DraftSession, SessionState } from '../draft/session';
-import { useDraft, useDraftOpen, useDraftSession, useModel } from '../draft/use-draft';
-import { yamlView } from '../section-views';
-import { type EditorSection, validateDefinitionSearch } from '../sections';
+import { useDraft, useDraftOpen, useDraftSession } from '../draft/use-draft';
+import type { EditorSection } from '../sections';
+import { AskBar } from '../yaml/ask-bar';
 import { ConflictDialog, DiscardedDialog, FileConflictDialog } from './conflict-dialog';
 import { DiscardDialog } from './discard-dialog';
+import { DraftBanner } from './draft-banner';
 import { SectionTiles } from './section-tiles';
 import { changesSentence } from './state';
 import { StatusLine } from './status-line';
 import { UnsavedGuard } from './unsaved-guard';
 import { useValidation } from './use-editor';
+import { ViewToggle } from './view-toggle';
 
 interface FrameProps {
   /** The section the route shows. */
@@ -101,84 +102,79 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
   // publish is then not the page's primary action.
   const unchanged = !s.hasDraft || (current !== null && changeCount === 0);
   const unchangedId = useId();
+  const blockedId = useId();
   const firstProblem = validation?.problems.find((p) => p.severity !== 'info');
   const hasFileConflicts = Object.keys(s.fileConflicts).length > 0;
   const viewOnly = session.readOnly;
-  const chip =
-    s.hasDraft && draft
-      ? draft.base || current
-        ? `Draft of v${draft.next_number}`
-        : 'Draft'
-      : current
-        ? `v${current.number}${viewOnly ? ', running' : ''}`
-        : null;
+  // The running version, the page's chip (the draft has its own banner).
+  const chip = current ? `Live: v${current.number}` : null;
   // Someone else's draft, while a viewer sees the running version.
   const elsewhere = viewOnly && current && detail?.draft ? detail.draft : null;
 
+  const publishNumber = draft?.next_number ?? (current ? current.number + 1 : 1);
+  const canPublish = !viewOnly && !unchanged && problemCount === 0;
+
   return (
     <>
-      <header className="flex flex-col gap-2.5">
-        <nav aria-label="Breadcrumb" className="hidden text-sm text-muted md:block">
-          <ol className="m-0 flex list-none gap-1.5 p-0">
-            <li>
-              <Link to="/o/$org" params={{ org: params.org }} className="text-muted hover:text-run">
-                {org.name}
-              </Link>
-            </li>
-            <li aria-hidden="true">/</li>
-            <li>
-              <Link to="/o/$org/f/$factory" params={params} className="text-muted hover:text-run">
-                {factory.name}
-              </Link>
-            </li>
-            <li aria-hidden="true">/</li>
-            <li aria-current="page">Definition</li>
-          </ol>
-        </nav>
+      <header className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="m-0 text-[34px] leading-[1.05] font-normal tracking-display md:text-[44px]">Definition</h1>
-            {chip ? (
-              <Chip tone="plain" className={cn(s.hasDraft && 'border-ink')}>
-                {chip}
-              </Chip>
-            ) : null}
-          </div>
+          <nav aria-label="Breadcrumb" className="flex min-w-0 flex-wrap items-center gap-2">
+            <span
+              aria-hidden="true"
+              className="inline-flex size-5 shrink-0 items-center justify-center rounded-chip bg-run text-meta font-control text-white"
+            >
+              {factory.name.charAt(0).toUpperCase()}
+            </span>
+            <Link to="/o/$org/f/$factory" params={params} className="text-secondary text-ink-soft hover:text-ink">
+              {factory.name}
+            </Link>
+            <ChevronRight size={12} strokeWidth={1.5} aria-hidden="true" className="text-muted" />
+            <h1 className="m-0 text-heading font-control text-ink">Definition</h1>
+            {chip ? <Chip tone="plain">{chip}</Chip> : null}
+          </nav>
           <div className="flex flex-wrap items-center gap-2">
-            <ViewToggle section={section} yaml={yaml} />
+            {yaml ? null : <ViewToggle section={section} yaml={false} />}
             <Button asChild variant="white" className="h-11 md:h-10">
               <Link to="/o/$org/f/$factory/definition/$section" params={{ ...params, section: 'versions' }}>
                 <Clock size={16} strokeWidth={1.5} aria-hidden="true" />
                 Versions
               </Link>
             </Button>
-            {s.hasDraft && current && !viewOnly ? (
-              <Button
-                variant="white"
-                className="h-11 md:h-10"
-                aria-haspopup="dialog"
-                onClick={() => setDiscardOpen(true)}
-              >
-                Discard draft…
-              </Button>
-            ) : null}
             {viewOnly ? null : (
               <>
-                <Button asChild variant={unchanged ? 'white' : 'primary'} className="h-11 md:h-10">
+                <Button asChild variant="white" className="h-11 md:h-10">
                   <Link
                     to="/o/$org/f/$factory/definition/$section"
                     params={{ ...params, section: 'review' }}
                     aria-describedby={unchanged ? unchangedId : undefined}
                   >
-                    Review and publish
-                    <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
+                    Review changes
                   </Link>
                 </Button>
-                {unchanged ? (
-                  <span id={unchangedId} className="text-sm text-muted max-md:sr-only">
-                    No changes yet
-                  </span>
-                ) : null}
+                {canPublish ? (
+                  <Button asChild variant="primary" className="h-11 md:h-10">
+                    <Link to="/o/$org/f/$factory/definition/$section" params={{ ...params, section: 'review' }}>
+                      Publish v{publishNumber}
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button
+                    variant="primary"
+                    className="h-11 opacity-50 md:h-10"
+                    disabled
+                    aria-describedby={unchanged ? unchangedId : blockedId}
+                  >
+                    Publish v{publishNumber}
+                  </Button>
+                )}
+                <span id={unchangedId} className="sr-only">
+                  No changes yet
+                </span>
+                <span id={blockedId} className="sr-only">
+                  {problemCount > 0
+                    ? `Fix ${plural(problemCount, 'problem')} before you publish`
+                    : 'Nothing to publish'}
+                </span>
               </>
             )}
           </div>
@@ -191,7 +187,28 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
           >
             {reasons.definition(factory.name)}
           </ViewOnlyBanner>
-        ) : (
+        ) : null}
+        {!viewOnly && s.hasDraft && draft ? (
+          <DraftBanner
+            next={publishNumber}
+            current={current?.number ?? null}
+            changeCount={changeCount}
+            problemCount={problemCount}
+          >
+            <Button asChild variant="white" size="sm">
+              <Link to="/o/$org/f/$factory/definition/$section" params={{ ...params, section: 'review' }}>
+                Review changes
+              </Link>
+            </Button>
+            {current ? (
+              <Button variant="white" size="sm" aria-haspopup="dialog" onClick={() => setDiscardOpen(true)}>
+                Discard draft
+              </Button>
+            ) : null}
+          </DraftBanner>
+        ) : null}
+        {viewOnly ? null : <AskBar />}
+        {viewOnly ? null : (
           <StatusLine
             session={{ ...s, savedAt: s.savedAt ?? (s.hasDraft ? (draft?.updated_at ?? null) : null) }}
             base={base}
@@ -207,16 +224,18 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
         )}
       </header>
 
-      <SectionTiles
-        current={section}
-        summaries={summaries}
-        changeCount={changeCount}
-        problemCount={problemCount}
-        hasDraft={s.hasDraft}
-        yaml={yaml && yamlView !== null}
-        parseError={s.parseError}
-        viewOnly={viewOnly}
-      />
+      {yaml ? null : (
+        <SectionTiles
+          current={section}
+          summaries={summaries}
+          changeCount={changeCount}
+          problemCount={problemCount}
+          hasDraft={s.hasDraft}
+          yaml={false}
+          parseError={s.parseError}
+          viewOnly={viewOnly}
+        />
+      )}
 
       {children}
 
@@ -233,66 +252,5 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
       <DiscardedDialog onLeave={() => void navigate({ to: '/o/$org/f/$factory', params, ignoreBlocker: true })} />
       <UnsavedGuard />
     </>
-  );
-}
-
-const viewItem =
-  'inline-flex h-[38px] items-center gap-1.5 rounded-chip px-3 text-sm text-ink-soft no-underline transition-colors duration-200 md:h-[34px]';
-
-/**
- * Visual | YAML: two links, the current one aria-current="page"; YAML is Later while no YAML view
- * is registered. The entity stays across views; from YAML, Visual opens the entity at the
- * cursor's line (`?line=`, kept by the YAML view), or the agent whose prompt is open.
- */
-function ViewToggle({ section, yaml }: { section: EditorSection; yaml: boolean }) {
-  const params = useFactoryParams();
-  const showYaml = yaml && yamlView !== null;
-  const { mode: _mode, file, line, ...entity } = validateDefinitionSearch(useSearch({ strict: false }));
-  const model = useModel();
-  const ranges = useDraft((s) => s.ranges);
-  const here =
-    showYaml && (line !== undefined || file)
-      ? placeAtLine(model, ranges, file ?? 'factory.yaml', line ?? 0)
-      : undefined;
-  const { section: visualSection, ...visualEntity } = here ?? { section, ...entity };
-  const { 'aria-current': _visualPage, ...visual } = useLinkProps({
-    to: '/o/$org/f/$factory/definition/$section',
-    params: { ...params, section: visualSection },
-    search: here ? visualEntity : entity,
-  });
-  const { 'aria-current': _yamlPage, ...yamlLink } = useLinkProps({
-    to: '/o/$org/f/$factory/definition/$section',
-    params: { ...params, section },
-    search: { ...entity, mode: 'yaml' },
-  });
-  const currentClass = 'bg-card font-medium text-ink';
-
-  return (
-    <nav aria-label="Editor view" className="inline-flex gap-0.5 rounded-control bg-panel p-[3px]">
-      <a
-        {...visual}
-        aria-current={showYaml ? undefined : 'page'}
-        className={cn(viewItem, !showYaml ? currentClass : 'hover:bg-shell hover:text-ink')}
-      >
-        <SlidersHorizontal size={15} strokeWidth={1.5} aria-hidden="true" />
-        Visual
-      </a>
-      {yamlView ? (
-        <a
-          {...yamlLink}
-          aria-current={showYaml ? 'page' : undefined}
-          className={cn(viewItem, showYaml ? currentClass : 'hover:bg-shell hover:text-ink')}
-        >
-          <Code size={15} strokeWidth={1.5} aria-hidden="true" />
-          YAML
-        </a>
-      ) : (
-        <span aria-disabled="true" className={cn(viewItem, 'cursor-default text-muted')}>
-          <Code size={15} strokeWidth={1.5} aria-hidden="true" />
-          YAML
-          <span className="sr-only">, {laterText}</span>
-        </span>
-      )}
-    </nav>
   );
 }

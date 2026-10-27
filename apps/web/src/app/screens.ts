@@ -33,6 +33,7 @@ export type FactoryPath =
   | '/o/$org/f/$factory'
   | '/o/$org/f/$factory/board'
   | '/o/$org/f/$factory/items'
+  | '/o/$org/f/$factory/agents'
   | '/o/$org/f/$factory/definition'
   | '/o/$org/f/$factory/settings';
 /** Paths of the organization's screens; their only param is its slug. */
@@ -43,6 +44,7 @@ export type OrgPath =
   | '/o/$org/api-keys'
   | '/o/$org/connections'
   | '/o/$org/knowledge'
+  | '/o/$org/runs'
   | '/o/$org/needs-you';
 
 type Availability<Path> = { available: true; to: Path; exact?: boolean } | { available: false };
@@ -161,6 +163,13 @@ export const knowledgeScreen: OrgScreen = {
   to: '/o/$org/knowledge',
   permissions: ['knowledge:read'],
 };
+/** The agent runs across the organization's factories (the Runs page, /o/$org/runs). */
+export const runsScreen: OrgScreen = {
+  id: 'runs',
+  label: 'Runs',
+  icon: Activity,
+  to: '/o/$org/runs',
+};
 export const settingsScreen: OrgScreen = {
   id: 'settings',
   label: 'Settings',
@@ -187,7 +196,7 @@ export const needsYouScreen: OrgScreen = { id: 'needs-you', label: 'Needs you', 
 export const sidebarOrgScreens: readonly Listed<OrgPath>[] = [
   { ...homeScreen, available: true },
   { ...needsYouScreen, available: true },
-  { id: 'runs', label: 'Runs', icon: Activity, available: false },
+  { ...runsScreen, available: true },
   { ...connectionsScreen, available: true },
   { id: 'credentials', label: 'Credentials', icon: KeyRound, available: false },
   { ...knowledgeScreen, available: true },
@@ -198,7 +207,7 @@ export const sidebarFactoryPages: readonly Listed<FactoryPath>[] = [
   { id: 'floor', label: 'Floor', available: true, to: '/o/$org/f/$factory', exact: true },
   { id: 'board', label: 'Board', available: true, to: '/o/$org/f/$factory/board' },
   { id: 'items', label: 'Items', available: true, to: '/o/$org/f/$factory/items' },
-  { id: 'agents', label: 'Agents', available: false },
+  { id: 'agents', label: 'Agents', available: true, to: '/o/$org/f/$factory/agents' },
   { id: 'intake', label: 'Intake', available: false },
   { id: 'jonah', label: 'Jonah', available: false },
   { id: 'definition', label: 'Definition', available: true, to: '/o/$org/f/$factory/definition' },

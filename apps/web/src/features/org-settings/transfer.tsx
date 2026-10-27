@@ -1,10 +1,10 @@
-// Transfer ownership (spec 3 §10.2; canvas "Org-Settings-Transfer"): an owner hands the
-// organization to one of its admins, typing its name; in one change the admin becomes an owner and
-// the owner an admin. Without an admin there is nobody to hand it to: the dialog says so and links
-// to Members and roles. Needs a sign-in from the last 10 minutes (the re-auth dialog asks).
+// Transfer ownership (spec 3 §10.2; canvas "Org-Settings", Danger zone): an owner picks one of the
+// organization's admins in the row and presses Transfer; the dialog then asks for the organization's
+// name, as before. In one change the admin becomes an owner and the owner an admin. Without an admin
+// there is nobody to hand it to: the row says so and links to Members and roles. Needs a sign-in from
+// the last 10 minutes (the re-auth dialog asks).
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useRouter } from '@tanstack/react-router';
-import { Info } from 'lucide-react';
 import { type FormEvent, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError, transferOwnership } from '../../api/client';
@@ -13,7 +13,8 @@ import type { OrgSummary } from '../../api/types';
 import { displayName } from '../../shared/names';
 import { Button } from '../../ui/button';
 import { Dialog, DialogClose, DialogContent } from '../../ui/dialog';
-import { Field, Input, NativeSelect } from '../../ui/field';
+import { Input, NativeSelect } from '../../ui/field';
+import { SettingsRow } from './card';
 
 /** Why a transfer failed, in the dialog's words. */
 function transferError(err: Error, org: string): string {
@@ -23,35 +24,87 @@ function transferError(err: Error, org: string): string {
   return err.detail ?? err.title;
 }
 
+/** The Transfer ownership row: the admins to choose from, and the Transfer button that opens the dialog. */
 export function TransferOwnership({ org, name }: { org: OrgSummary; name: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-card p-4">
-      <p className="m-0 flex min-w-0 flex-col">
-        <span className="text-[15px] font-medium">Transfer ownership</span>
-        <span className="text-sm text-muted">Hand {name} to one of its admins. You become an admin.</span>
-      </p>
-      <Button variant="raised" className="h-11 border border-line shadow-none md:h-10" onClick={() => setOpen(true)}>
-        Transfer ownership…
-      </Button>
-      {open ? <TransferDialog org={org} name={name} onClose={() => setOpen(false)} /> : null}
-    </div>
-  );
-}
-
-function TransferDialog({ org, name, onClose }: { org: OrgSummary; name: string; onClose: () => void }) {
-  const client = useQueryClient();
-  const router = useRouter();
   const members = useQuery(membersQuery(org.id));
   const admins = (members.data ?? []).filter((m) => m.role === 'admin');
   const [to, setTo] = useState('');
-  const [typed, setTyped] = useState('');
+  const [open, setOpen] = useState(false);
   const chosen = to || admins[0]?.user.id || '';
-  const ownerRef = useRef<HTMLSelectElement>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
+  const chosenName = admins.find((m) => m.user.id === chosen)?.user;
+  const none = members.isSuccess && admins.length === 0;
+
+  return (
+    <>
+      <SettingsRow
+        id="transfer-to"
+        label="Transfer ownership"
+        help={
+          none ? (
+            <>
+              Make someone an admin first.{' '}
+              <Link to="/o/$org/members" params={{ org: org.slug }} className="text-ink underline">
+                Open Members and roles
+              </Link>
+            </>
+          ) : (
+            'You become an Admin'
+          )
+        }
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <NativeSelect
+            id="transfer-to"
+            value={chosen}
+            onChange={(e) => setTo(e.target.value)}
+            disabled={!members.isSuccess || none}
+            className="w-auto"
+          >
+            {admins.map((m) => (
+              <option key={m.user.id} value={m.user.id}>
+                {displayName(m.user)}
+              </option>
+            ))}
+          </NativeSelect>
+          <Button variant="raised" className="text-rework-ink" disabled={!chosen || none} onClick={() => setOpen(true)}>
+            Transfer
+          </Button>
+        </div>
+      </SettingsRow>
+      {open ? (
+        <TransferDialog
+          org={org}
+          name={name}
+          to={chosenName ? displayName(chosenName) : ''}
+          toId={chosen}
+          onClose={() => setOpen(false)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function TransferDialog({
+  org,
+  name,
+  to,
+  toId,
+  onClose,
+}: {
+  org: OrgSummary;
+  name: string;
+  /** The new owner's name, as the row shows it. */
+  to: string;
+  toId: string;
+  onClose: () => void;
+}) {
+  const client = useQueryClient();
+  const router = useRouter();
+  const [typed, setTyped] = useState('');
+  const typedRef = useRef<HTMLInputElement>(null);
 
   const transfer = useMutation({
-    mutationFn: () => transferOwnership(org.id, chosen, typed),
+    mutationFn: () => transferOwnership(org.id, toId, typed),
     onSuccess: async () => {
       onClose();
       toast.success(`You’re now an admin of ${name}`);
@@ -68,66 +121,34 @@ function TransferDialog({ org, name, onClose }: { org: OrgSummary; name: string;
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (chosen && typed === name && !transfer.isPending) transfer.mutate();
+    if (typed === name && !transfer.isPending) transfer.mutate();
   };
-
-  const none = members.isSuccess && admins.length === 0;
 
   return (
     <Dialog open onOpenChange={(next) => (next ? null : onClose())}>
       <DialogContent
         title={`Transfer ownership of ${name}`}
-        description={
-          none
-            ? `Only an admin can become the owner, and ${name} has none.`
-            : `The new owner can delete ${name} and transfer it again. You become an admin.`
-        }
-        initialFocus={none ? closeRef : ownerRef}
+        description={`The new owner can delete ${name} and transfer it again. You become an admin.`}
+        initialFocus={typedRef}
       >
         <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
-          {none ? (
-            <p className="m-0 flex items-start gap-2.5 text-sm text-ink-soft">
-              <Info size={16} strokeWidth={1.75} aria-hidden="true" className="mt-0.5 shrink-0 text-muted" />
-              <span>
-                Make someone an admin first.{' '}
-                <Link to="/o/$org/members" params={{ org: org.slug }} className="text-ink underline">
-                  Open Members and roles
-                </Link>
-              </span>
-            </p>
-          ) : (
-            <>
-              <Field label="New owner" help={`Only admins of ${name} can become its owner.`}>
-                <NativeSelect
-                  ref={ownerRef}
-                  value={chosen}
-                  onChange={(e) => setTo(e.target.value)}
-                  disabled={!members.isSuccess}
-                >
-                  {admins.map((m) => (
-                    <option key={m.user.id} value={m.user.id}>
-                      {displayName(m.user)}, admin
-                    </option>
-                  ))}
-                </NativeSelect>
-              </Field>
-              <Field
-                label={
-                  <>
-                    Type <strong className="font-semibold">{name}</strong> to confirm
-                  </>
-                }
-              >
-                <Input
-                  value={typed}
-                  onChange={(e) => setTyped(e.target.value)}
-                  autoComplete="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                />
-              </Field>
-            </>
-          )}
+          <p className="m-0 text-sm text-ink-soft">
+            New owner: <span className="font-semibold text-ink">{to}</span>
+          </p>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="transfer-confirm" className="text-sm font-medium text-ink">
+              Type <strong className="font-semibold">{name}</strong> to confirm
+            </label>
+            <Input
+              id="transfer-confirm"
+              ref={typedRef}
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              autoComplete="off"
+              autoCapitalize="off"
+              spellCheck={false}
+            />
+          </div>
           {transfer.error ? (
             <p role="alert" className="m-0 text-sm text-rework-ink">
               {transferError(transfer.error, name)}
@@ -135,8 +156,8 @@ function TransferDialog({ org, name, onClose }: { org: OrgSummary; name: string;
           ) : null}
           <div className="flex flex-wrap justify-end gap-2">
             <DialogClose asChild>
-              <Button ref={closeRef} variant="secondary" size="lg" className="md:h-10 md:text-sm">
-                {none ? 'Close' : 'Cancel'}
+              <Button variant="secondary" size="lg" className="md:h-10 md:text-sm">
+                Cancel
               </Button>
             </DialogClose>
             <Button
@@ -144,7 +165,7 @@ function TransferDialog({ org, name, onClose }: { org: OrgSummary; name: string;
               variant="rework"
               size="lg"
               className="md:h-10 md:text-sm"
-              disabled={none || !chosen || typed !== name || transfer.isPending}
+              disabled={typed !== name || transfer.isPending}
             >
               {transfer.isPending ? 'Transferring…' : 'Transfer ownership'}
             </Button>

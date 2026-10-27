@@ -135,8 +135,8 @@ export function InviteDialog({ open, onOpenChange, org, role, factories, invite 
             onChange={setInviteAs}
           />
           {inviteAs === 'member' && factories.length > 0 ? (
-            <fieldset className="m-0 flex min-w-0 flex-col gap-2.5 border-0 p-0">
-              <legend className="mb-2 p-0 text-sm font-medium">Factory roles</legend>
+            <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
+              <legend className="mb-2 p-0 text-body font-medium">Factory roles</legend>
               {[...factories]
                 .sort((a, b) => a.name.localeCompare(b.name))
                 .map((f) => (
@@ -158,14 +158,14 @@ export function InviteDialog({ open, onOpenChange, org, role, factories, invite 
                     </NativeSelect>
                   </Field>
                 ))}
-              <p className="m-0 text-[13px] leading-snug text-muted">
+              <p className="m-0 text-secondary leading-snug text-muted">
                 Applied when they join. Owners and admins are editors in every factory, so these apply to members only.
               </p>
             </fieldset>
           ) : null}
           <div aria-live="polite">
             {refused.length > 0 ? (
-              <ul className="m-0 flex list-none flex-col gap-1 rounded-control border border-rework-tint bg-rework-tint px-3 py-2.5 text-sm text-rework-ink">
+              <ul className="m-0 flex list-none flex-col gap-1 rounded-control border border-rework-tint bg-rework-tint px-3 py-2 text-body text-rework-ink">
                 {refused.map((r) => (
                   <li key={r}>Not sent to {r}</li>
                 ))}

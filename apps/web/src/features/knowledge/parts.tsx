@@ -19,7 +19,7 @@ const toneIcon = { ok: Check, rework: TriangleAlert, muted: Info } as const;
 export function KindLabel({ kind, className }: { kind: KnowledgeSourceKind; className?: string }) {
   const { label, icon: Icon } = sourceKinds[kind];
   return (
-    <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap', className)}>
+    <span className={cn('inline-flex items-center gap-2 whitespace-nowrap', className)}>
       <Icon size={15} strokeWidth={1.5} aria-hidden="true" className="shrink-0" />
       {label}
     </span>
@@ -38,19 +38,17 @@ export function StatusText({
 }) {
   const Icon = busy ? LoaderCircle : toneIcon[line.tone];
   return (
-    <span className={cn('flex min-w-0 flex-col gap-0.5', className)}>
-      <span className={cn('inline-flex items-start gap-1.5', toneText[line.tone])}>
+    <span className={cn('flex min-w-0 flex-col gap-1', className)}>
+      <span className={cn('inline-flex items-center gap-2', toneText[line.tone])}>
         <Icon
           size={15}
           strokeWidth={1.75}
           aria-hidden="true"
-          className={cn('mt-[3px] shrink-0', busy && 'motion-safe:animate-spin')}
+          className={cn('shrink-0', busy && 'motion-safe:animate-spin')}
         />
         <span>{line.text}</span>
       </span>
-      {line.detail ? (
-        <span className="text-[13px] leading-snug [overflow-wrap:anywhere] text-muted">{line.detail}</span>
-      ) : null}
+      {line.detail ? <span className="text-secondary [overflow-wrap:anywhere] text-muted">{line.detail}</span> : null}
     </span>
   );
 }
@@ -85,26 +83,29 @@ export function useSyncSource(org: string) {
   });
 }
 
-/** The Sync now button of a source, busy while its request is in flight. */
+/** The Sync now (or Retry now) button of a source, busy while its request is in flight. */
 export function SyncNowButton({
   source,
   sync,
+  label = 'Sync now',
   className,
 }: {
   source: KnowledgeSource;
   sync: ReturnType<typeof useSyncSource>;
+  label?: string;
   className?: string;
 }) {
   const pending = sync.isPending && sync.variables?.name === source.name;
   return (
     <Button
-      variant="white"
+      variant="secondary"
+      size="sm"
       className={className}
       disabled={pending}
-      aria-label={`${pending ? 'Asking…' : 'Sync now'}, ${source.title}`}
+      aria-label={`${pending ? 'Asking…' : label}, ${source.title}`}
       onClick={() => sync.mutate(source)}
     >
-      {pending ? 'Asking…' : 'Sync now'}
+      {pending ? 'Asking…' : label}
     </Button>
   );
 }
