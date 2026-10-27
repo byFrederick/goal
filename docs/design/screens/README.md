@@ -54,9 +54,9 @@ How to use them:
 | Screen | Route | Status | Not built yet |
 |---|---|---|---|
 | `intake`: where items came from, triggers table, suggested triggers | `…/intake` | new feature (triggers) | |
-| `intake-new`: choose a source and event | `…/intake/new` | new feature | Linear, Jira, Sentry sources |
+| `intake-new`: choose a source and event | `…/intake/new` | new feature | Slack, Linear, Jira, Sentry sources |
 | `trigger`: When, Only if, Create, Limits, recent events, the YAML | `…/intake/$trigger` | new feature | Try with a past event, the model check |
-| `webhooks`: endpoints, signing secret, deliveries | `…/intake/webhooks` | new feature | |
+| `webhooks`: endpoints, signing secret, deliveries | `…/intake/webhooks` | new feature | Send a sample delivery (no API) |
 
 ## Build a factory (`build/`)
 

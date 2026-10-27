@@ -107,6 +107,7 @@ export function renderFactoryPage({
       </QueryClientProvider>,
     ),
     router,
+    queryClient,
   };
 }
 
