@@ -98,6 +98,7 @@ var operationScopes = map[string]string{
 	"getOrg":                      "org:read",
 	"getOrgAttention":             "org:read",
 	"getOrgSettings":              "org:read",
+	"getOrgSpend":                 "org:read",
 	"getOrgTouchMetrics":          "org:read",
 	"getRun":                      "factory:read",
 	"getSkillFiles":               "org:read",

@@ -78,8 +78,9 @@ type Engine interface {
 
 // Items reads items, their history and runs, a factory's latest milestone events, the leases on them, a factory's flow and its
 // stations' times, an item's spans and run in progress, what the runs in progress have done so far, the
-// human touches, and what the organization's factories need from people, and sets a touch's
-// reason; a store that implements ports.Store and ports.FlowStats satisfies it.
+// human touches, what the organization's factories need from people and what its runs cost, and
+// sets a touch's reason; a store that implements ports.Store, ports.FlowStats and ports.Spend
+// satisfies it.
 type Items interface {
 	Item(ctx context.Context, id domain.ItemID) (domain.Item, error)
 	ItemByNumber(ctx context.Context, factory domain.FactoryID, number int64) (domain.Item, error)
@@ -96,6 +97,7 @@ type Items interface {
 	FlowMetrics(ctx context.Context, q ports.FlowQuery, longWaitsAt string) (domain.FlowMetrics, error)
 	DoneByBucket(ctx context.Context, q ports.FlowQuery, d time.Duration, n int) ([]int, error)
 	SpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
+	OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgSpend, error)
 	ItemTimes(ctx context.Context, q ports.FlowQuery, limit int) ([]domain.ItemTime, error)
 	Attention(ctx context.Context) ([]domain.Attention, error)
 	InboxItems(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.AttentionItem, error)

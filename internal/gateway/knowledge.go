@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -16,19 +17,28 @@ import (
 )
 
 // Knowledge searches and reads the knowledge base of the organization in ctx, over the named
-// sources only (*knowledge.Searcher): a document of another source is ports.ErrNotFound.
+// sources only (*knowledge.Searcher): a document of another source is ports.ErrNotFound. It
+// records which documents a run used and the verdicts its agent gives them (ADR 0027).
 type Knowledge interface {
 	Search(ctx context.Context, text string, sources []string, limit int) ([]domain.KnowledgeHit, error)
 	Read(ctx context.Context, id domain.KnowledgeDocumentID, sources []string) (domain.KnowledgeDocument, string, error)
+	// RecordSearch records a search use of each document among hits, for use's factory, item,
+	// run and time.
+	RecordSearch(ctx context.Context, use domain.KnowledgeUse, hits []domain.KnowledgeHit) error
+	RecordUse(ctx context.Context, u domain.KnowledgeUse) error
+	RunUses(ctx context.Context, run domain.RunID) ([]domain.KnowledgeUse, error)
+	// Verdict records v on a document of sources and returns it as stored.
+	Verdict(ctx context.Context, v domain.KnowledgeVerdict, sources []string) (domain.KnowledgeVerdict, error)
 }
 
 // Goal's own tools (spec 4 §5.9), served to every run whose factory's version lists knowledge
-// sources: "knowledge__search" and "knowledge__read", in the <server>__<tool> form of
-// connections' tools.
+// sources: "knowledge__search", "knowledge__read" and "knowledge__verdict" (ADR 0027), in the
+// <server>__<tool> form of connections' tools.
 const (
 	knowledgeServer = "knowledge"
 	toolSearch      = "search"
 	toolRead        = "read"
+	toolVerdict     = "verdict"
 )
 
 // Limits of the knowledge tools.
@@ -38,6 +48,8 @@ const (
 	maxQueryRunes = 1000
 	// maxReadBytes is the most of a document's text knowledge__read returns (200 KiB).
 	maxReadBytes = 200 << 10
+	// useTimeout bounds the recording of a call's knowledge uses, which never fails the call.
+	useTimeout = 2 * time.Second
 )
 
 // The knowledge tools' input schemas.
@@ -48,6 +60,10 @@ const (
 "source":{"type":"string","description":"Only this one of the sources"}}}`
 	readSchema = `{"type":"object","additionalProperties":false,"required":["document"],"properties":{
 "document":{"type":"string","description":"A document id from knowledge__search"}}}`
+	verdictSchema = `{"type":"object","additionalProperties":false,"required":["document","verdict"],"properties":{
+"document":{"type":"string","description":"A document id this run searched or read"},
+"verdict":{"type":"string","enum":["helped","misled"],"description":"Whether the document helped or misled you"},
+"note":{"type":"string","maxLength":500,"description":"Why, in a sentence or two"}}}`
 )
 
 // knowledgeTools are Goal's tools as tools/list describes them, for a run that may search sources.
@@ -66,6 +82,14 @@ func knowledgeTools(sources []string) []*mcp.Tool {
 			InputSchema: json.RawMessage(readSchema),
 			Annotations: &mcp.ToolAnnotations{Title: "Read a knowledge document", ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: new(bool)},
 		},
+		{
+			Name: knowledgeServer + sep + toolVerdict,
+			Description: "Say whether a document this run searched or read helped or misled you, with an optional note of up to 500 characters. " +
+				"A later verdict on the same document replaces this run's earlier one.",
+			InputSchema: json.RawMessage(verdictSchema),
+			// A verdict replaces the run's earlier one and deletes nothing.
+			Annotations: &mcp.ToolAnnotations{Title: "Judge a knowledge document", IdempotentHint: true, DestructiveHint: new(bool), OpenWorldHint: new(bool)},
+		},
 	}
 }
 
@@ -83,7 +107,7 @@ func (g *Gateway) searchable(line domain.Line) []string {
 func (s *session) knowledgeTool(name string) (string, bool) {
 	tool, ok := strings.CutPrefix(name, knowledgeServer+sep)
 
-	return tool, ok && len(s.sources) > 0 && (tool == toolSearch || tool == toolRead)
+	return tool, ok && len(s.sources) > 0 && (tool == toolSearch || tool == toolRead || tool == toolVerdict)
 }
 
 // callKnowledge answers one call of Goal's tools and records it. Arguments the tool refuses and
@@ -101,6 +125,8 @@ func (s *session) callKnowledge(ctx context.Context, tool string, args json.RawM
 	switch tool {
 	case toolSearch:
 		text, err = s.search(ctx, args)
+	case toolVerdict:
+		text, err = s.verdict(ctx, args)
 	default:
 		text, err = s.read(ctx, args)
 	}
@@ -171,6 +197,10 @@ func (s *session) search(ctx context.Context, args json.RawMessage) (string, err
 		return "", fmt.Errorf("search: %w", err)
 	}
 
+	s.recordUse(ctx, toolSearch, func(ctx context.Context) error {
+		return s.g.knowledge.RecordSearch(ctx, s.use(), hits)
+	})
+
 	type hit struct {
 		Document string  `json:"document"`
 		Source   string  `json:"source"`
@@ -219,6 +249,13 @@ func (s *session) read(ctx context.Context, args json.RawMessage) (string, error
 		return "", fmt.Errorf("read: %w", err)
 	}
 
+	s.recordUse(ctx, toolRead, func(ctx context.Context) error {
+		u := s.use()
+		u.Source, u.Document, u.Kind = d.Source, d.ID, domain.KnowledgeRead
+
+		return s.g.knowledge.RecordUse(ctx, u)
+	})
+
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "Title: %s\n", d.Title)
@@ -243,4 +280,105 @@ func (s *session) read(ctx context.Context, args json.RawMessage) (string, error
 	b.WriteString(text)
 
 	return b.String(), nil
+}
+
+// use is a knowledge use by this run, now; the caller names its document.
+func (s *session) use() domain.KnowledgeUse {
+	return domain.KnowledgeUse{Factory: s.claims.FactoryID, Item: s.claims.ItemID, Run: s.claims.RunID, At: s.g.clock.Now()}
+}
+
+// recordUse records a call's knowledge use, best effort (ADR 0027): the call has its answer, so a
+// failure is logged with ids only, never a document's text, and the agent's cancellation does
+// not drop it.
+func (s *session) recordUse(ctx context.Context, tool string, record func(context.Context) error) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), useTimeout)
+	defer cancel()
+
+	if err := record(ctx); err != nil {
+		s.g.log.WarnContext(ctx, "gateway knowledge use failed", claimAttrs(s.claims, "tool", tool, "error", err)...)
+	}
+}
+
+// verdict answers knowledge__verdict: the agent's verdict on a document this run searched or
+// read, of the run's sources, as stored, as JSON.
+func (s *session) verdict(ctx context.Context, args json.RawMessage) (string, error) {
+	var in struct {
+		Document string `json:"document"`
+		Verdict  string `json:"verdict"`
+		Note     string `json:"note"`
+	}
+
+	if err := json.Unmarshal(args, &in); err != nil || in.Document == "" {
+		return "", refuse("the arguments are {document, verdict: helped|misled, note?}: a document id this run searched or read")
+	}
+
+	v := domain.KnowledgeVerdict{
+		Document: domain.KnowledgeDocumentID(in.Document), Run: s.claims.RunID, Item: s.claims.ItemID,
+		Verdict: domain.KnowledgeVerdictKind(in.Verdict), Note: strings.TrimSpace(in.Note),
+		By: domain.Actor{Kind: domain.ActorAgent, ID: s.claims.Agent},
+	}
+
+	switch {
+	case v.Verdict != domain.KnowledgeHelped && v.Verdict != domain.KnowledgeMisled:
+		return "", refuse("verdict %q is not helped or misled", in.Verdict)
+	case utf8.RuneCountInString(v.Note) > domain.MaxVerdictNote:
+		return "", refuse("note has at most %d characters", domain.MaxVerdictNote)
+	}
+
+	if err := s.used(ctx, v.Document); err != nil {
+		return "", err
+	}
+
+	got, err := s.g.knowledge.Verdict(ctx, v, s.sources)
+	if errors.Is(err, ports.ErrNotFound) {
+		return "", refuse("no document %q in the knowledge sources this factory may search", in.Document)
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("verdict: %w", err)
+	}
+
+	b, err := json.Marshal(struct {
+		Document string    `json:"document"`
+		Source   string    `json:"source"`
+		Run      string    `json:"run"`
+		Item     string    `json:"item"`
+		Verdict  string    `json:"verdict"`
+		Note     string    `json:"note,omitempty"`
+		By       string    `json:"by"`
+		At       time.Time `json:"at"`
+	}{
+		Document: string(got.Document), Source: string(got.Source), Run: string(got.Run), Item: string(got.Item),
+		Verdict: string(got.Verdict), Note: got.Note, By: got.By.Ref(), At: got.At,
+	})
+	if err != nil {
+		return "", fmt.Errorf("encode verdict: %w", err)
+	}
+
+	return string(b), nil
+}
+
+// used is nil when this run searched or read document; otherwise a refusal that says why: the
+// document is not one of the run's sources, or the run has not used it.
+func (s *session) used(ctx context.Context, document domain.KnowledgeDocumentID) error {
+	uses, err := s.g.knowledge.RunUses(ctx, s.claims.RunID)
+	if err != nil {
+		return fmt.Errorf("run uses: %w", err)
+	}
+
+	if slices.ContainsFunc(uses, func(u domain.KnowledgeUse) bool { return u.Document == document }) {
+		return nil
+	}
+
+	_, _, err = s.g.knowledge.Read(ctx, document, s.sources)
+
+	switch {
+	case errors.Is(err, ports.ErrNotFound):
+		return refuse("no document %q in the knowledge sources this factory may search", document)
+	case err != nil:
+		return fmt.Errorf("read: %w", err)
+	default:
+		// A use that failed to record lands here too, so the refusal does not blame the agent.
+		return refuse("this run has not searched or read document %q, or its use was not recorded: search or read it first", document)
+	}
 }

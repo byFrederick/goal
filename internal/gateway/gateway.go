@@ -44,9 +44,11 @@
 // The endpoint serves Goal's own tools, named "<server>__<tool>" (Claude's tool names allow no
 // dots); a tool the run may not call, a connection's included, is refused like an unknown one. A
 // run whose definition version lists knowledge sources (spec.knowledge.sources) is served
-// knowledge__search and knowledge__read (knowledge.go). They search and read those sources only,
-// in the token's organization only (row-level security), whatever the agent asks: a document of
-// another source answers as one that does not exist.
+// knowledge__search, knowledge__read and knowledge__verdict (knowledge.go). They search and read
+// those sources only, in the token's organization only (row-level security), whatever the agent
+// asks: a document of another source answers as one that does not exist. A search and a read
+// record the run's use of each document they return, best effort, and knowledge__verdict records
+// the agent's verdict on a document the run used (ADR 0027).
 //
 // # State
 //
