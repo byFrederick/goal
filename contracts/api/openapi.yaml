@@ -55,6 +55,12 @@ tags:
       each of a connection kind, with credentials sealed under the platform's master key and never
       readable back. Members read names, kinds and status; owners and admins create, test, change
       and delete them, after a recent sign-in.
+  - name: credentials
+    description: >-
+      The organization's credentials (ADR 0017): named secrets sealed under the platform's master
+      key, never readable back, that connections refer to as {{name}} and listed agents get as env.
+      Members read names and metadata; owners and admins create, change, replace, delete and
+      import them, after a recent sign-in.
   - name: knowledge
     description: >-
       The organization's knowledge base (spec 4 §4.8): sources of uploaded files, of connections
@@ -2682,6 +2688,134 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/RepositoryList" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/credentials:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: listCredentials
+      x-goal-scope: credential:read
+      tags: [credentials]
+      summary: The organization's credentials
+      description: >-
+        By name, each with its type, description, factory scope, agents per factory, expiry,
+        rotation reminder, last use and what uses it (the connections that refer to it as {{name}}
+        and the agents listed). Never a value.
+      responses:
+        "200":
+          description: The credentials
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CredentialList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createCredential
+      x-goal-scope: credential:manage
+      tags: [credentials]
+      summary: Create a credential
+      description: >-
+        A named credential with its value, sealed under the platform's master key and never
+        returned (ADR 0017). 400 credential-invalid for a name that is not a credential name or
+        whose env variable is reserved for the platform, a missing or oversized value, an unknown
+        type, a reminder without an expiry, or agents of a factory outside the scope; 409
+        credential-name-taken; 503 credentials-unavailable while goald has no master key. Needs a
+        sign-in from the last 10 minutes. Audited as credential.created.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewCredential" }
+      responses:
+        "201":
+          description: The credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Credential" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/credentials/import:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    post:
+      operationId: importCredentials
+      x-goal-scope: credential:manage
+      tags: [credentials]
+      summary: Import credentials from a .env or YAML text
+      description: >-
+        env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is
+        sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked
+        before anything is written: 400 credential-invalid for an unknown format, text that does
+        not parse, a name that is not a credential name or whose env variable is reserved. A dry
+        run answers each name as new or existing, with how many connections use it, and stores
+        nothing. A real run creates each new name as an api_key with no factories, and replaces
+        (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the
+        default) each existing one. A real run is not one transaction: should a write fail, the
+        names before it stay applied. 503 credentials-unavailable while goald has no master key.
+        Needs a sign-in from the last 10 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CredentialImport" }
+      responses:
+        "200":
+          description: What the import does, or did
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CredentialImportResult" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/credentials/{credential}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/CredentialRef"
+    get:
+      operationId: getCredential
+      x-goal-scope: credential:read
+      tags: [credentials]
+      summary: One credential, never its value
+      responses:
+        "200":
+          description: The credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Credential" }
+        default: { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: patchCredential
+      x-goal-scope: credential:manage
+      tags: [credentials]
+      summary: Change a credential's metadata, or replace its value
+      description: >-
+        Each property present replaces its own: name renames it, scope and agents replace the
+        scope and the agent list, expiry replaces the expiry and the reminder together (an empty
+        expiry clears both), value replaces the value for runs that start afterwards (audited as
+        credential.value_replaced); a change of the rest is audited as credential.updated. 400
+        credential-invalid, 404 credential-not-found, 409 credential-name-taken, 503
+        credentials-unavailable for a value while goald has no master key. Needs a sign-in from the
+        last 10 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CredentialPatch" }
+      responses:
+        "200":
+          description: The credential
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Credential" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteCredential
+      x-goal-scope: credential:manage
+      tags: [credentials]
+      summary: Delete a credential
+      description: >-
+        409 credential-in-use, naming the connections, while a connection refers to it as {{name}};
+        404 credential-not-found. Needs a sign-in from the last 10 minutes. Audited as
+        credential.deleted.
+      responses:
+        "204":
+          description: Deleted
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/knowledge/sources:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -2963,6 +3097,12 @@ components:
       required: true
       description: The connection's name
       schema: { type: string }
+    CredentialRef:
+      name: credential
+      in: path
+      required: true
+      description: The credential's name
+      schema: { type: string }
     SourceRef:
       name: source
       in: path
@@ -3112,6 +3252,9 @@ components:
             connection-name-taken, connection-kind-name-taken, connection-in-use,
             connection-kind-in-use and connection-not-testable (409), connections-unavailable
             (503: goald has no master key, so no secret can be sealed or opened).
+            Credentials (ADR 0017): credential-not-found (404), credential-invalid (400),
+            credential-name-taken and credential-in-use (409, naming the connections),
+            credentials-unavailable (503: goald has no master key).
             Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found
             (404), connection-cannot-sync (400), knowledge-source-name-taken,
             knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413),
@@ -6321,6 +6464,148 @@ components:
           writeOnly: true
           description: The secret fields to replace, by name; an empty value clears an optional one
           additionalProperties: { type: string }
+    CredentialName:
+      type: string
+      description: >-
+        3 to 40 lowercase letters, digits and inner dashes, starting with a letter; an agent gets
+        it as the env variable of the name upper-cased with each - turned into _, which must not be
+        one reserved for the platform
+      pattern: "^[a-z][a-z0-9-]{1,38}[a-z0-9]$"
+    CredentialType:
+      type: string
+      description: A label of what the credential is; every type reaches a run as one env value
+      enum: [api_key, oauth_token, ssh_key, cloud_role, app_key]
+    CredentialScope:
+      type: object
+      description: The factories whose runs may open it; neither all nor any listed reaches no run
+      required: [all_factories, factories]
+      properties:
+        all_factories: { type: boolean, description: Every factory, ones created later included }
+        factories:
+          type: array
+          description: The factories' metadata.id, when not all_factories
+          items: { type: string }
+    CredentialAgents:
+      type: object
+      description: Per factory id, the agents that get it in their run's box as env
+      additionalProperties:
+        type: array
+        items: { type: string }
+    CredentialList:
+      type: object
+      required: [credentials]
+      properties:
+        credentials:
+          type: array
+          items: { $ref: "#/components/schemas/Credential" }
+    Credential:
+      type: object
+      description: An organization's credential (ADR 0017), never its value
+      required: [id, name, type, description, scope, agents, expires_at, remind_days, last_used_at, used_by, created_by, created_at, updated_by, updated_at]
+      properties:
+        id: { type: string }
+        name: { $ref: "#/components/schemas/CredentialName" }
+        type: { $ref: "#/components/schemas/CredentialType" }
+        description: { type: string }
+        scope: { $ref: "#/components/schemas/CredentialScope" }
+        agents: { $ref: "#/components/schemas/CredentialAgents" }
+        expires_at: { type: string, format: date-time, nullable: true, description: When the value expires }
+        remind_days: { type: integer, description: "Days before expires_at a rotation reminder is due; 0: none" }
+        last_used_at: { type: string, format: date-time, nullable: true, description: When a run last opened it }
+        used_by: { $ref: "#/components/schemas/CredentialUsers" }
+        created_by: { $ref: "#/components/schemas/Actor" }
+        created_at: { type: string, format: date-time }
+        updated_by: { $ref: "#/components/schemas/Actor" }
+        updated_at: { type: string, format: date-time }
+    CredentialUsers:
+      type: object
+      description: What uses a credential
+      required: [connections, agents]
+      properties:
+        connections:
+          type: array
+          description: The connections that refer to it as {{name}}, sorted; it cannot be deleted meanwhile
+          items: { type: string }
+        agents:
+          type: array
+          description: The agents it lists, by factory id then agent
+          items: { $ref: "#/components/schemas/CredentialAgent" }
+    CredentialAgent:
+      type: object
+      required: [factory_id, agent]
+      properties:
+        factory_id: { type: string }
+        agent: { type: string }
+    NewCredential:
+      type: object
+      required: [name, type, value]
+      properties:
+        name: { $ref: "#/components/schemas/CredentialName" }
+        type: { $ref: "#/components/schemas/CredentialType" }
+        description: { type: string, maxLength: 500 }
+        scope: { $ref: "#/components/schemas/CredentialScope" }
+        agents: { $ref: "#/components/schemas/CredentialAgents" }
+        expires_at: { type: string, format: date-time }
+        remind_days: { type: integer, minimum: 0 }
+        value:
+          type: string
+          writeOnly: true
+          maxLength: 65536
+          description: The secret; sealed and never answered
+    CredentialPatch:
+      type: object
+      properties:
+        name: { $ref: "#/components/schemas/CredentialName" }
+        type: { $ref: "#/components/schemas/CredentialType" }
+        description: { type: string, maxLength: 500 }
+        scope: { $ref: "#/components/schemas/CredentialScope" }
+        agents: { $ref: "#/components/schemas/CredentialAgents" }
+        expiry: { $ref: "#/components/schemas/CredentialExpiry" }
+        value:
+          type: string
+          writeOnly: true
+          maxLength: 65536
+          description: A new secret, replacing the value; never answered
+    CredentialExpiry:
+      type: object
+      description: An expiry and its rotation reminder; without expires_at, neither
+      properties:
+        expires_at: { type: string, format: date-time }
+        remind_days: { type: integer, minimum: 0 }
+    CredentialImport:
+      type: object
+      required: [format, text]
+      properties:
+        format: { type: string, enum: [env, yaml] }
+        text:
+          type: string
+          writeOnly: true
+          description: The .env or YAML text; its values are sealed and never answered
+        on_conflict:
+          type: string
+          enum: [replace, skip]
+          description: What a real run does with a name that exists; skip when absent
+        dry_run: { type: boolean, description: Answer what the import would do and store nothing }
+    CredentialImportResult:
+      type: object
+      required: [dry_run, credentials]
+      properties:
+        dry_run: { type: boolean }
+        credentials:
+          type: array
+          description: Each name of the import, in its order
+          items: { $ref: "#/components/schemas/CredentialImportOutcome" }
+    CredentialImportOutcome:
+      type: object
+      required: [name, exists, connections]
+      properties:
+        name: { type: string }
+        exists: { type: boolean, description: A credential had the name before the import }
+        connections: { type: integer, description: How many connections use the existing one }
+        outcome:
+          type: string
+          enum: [created, replaced, skipped]
+          description: A real run only, what it did
     ConnectionTestResult:
       type: object
       required: [ok, at]

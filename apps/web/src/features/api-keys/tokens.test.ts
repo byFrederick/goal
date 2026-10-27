@@ -44,6 +44,7 @@ describe('what a personal token can do', () => {
         'andon:manage',
         'connection:browse',
         'connection:read',
+        'credential:read',
         'factory:read',
         'item:create',
         'item:decide',
