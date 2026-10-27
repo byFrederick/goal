@@ -4,12 +4,18 @@ package postgres
 
 import (
 	"net/url"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 )
+
+// spendDay is a time on a day of 2026, in UTC.
+func spendDay(m time.Month, d, h, mi, sec int) time.Time {
+	return time.Date(2026, m, d, h, mi, sec, 0, time.UTC)
+}
 
 // Two organizations spend, rework and merge on the same days, the second eight times as much;
 // each one's OrgSpend sums only its own runs and items: every total, day, agent, model, week and
@@ -31,103 +37,111 @@ func TestSpend_OrgsDoNotSee(t *testing.T) {
 	u.RawQuery = q.Encode()
 	s := New(openPool(t, u.String()))
 
-	at := func(m time.Month, d, h, mi, sec int) time.Time { return time.Date(2026, m, d, h, mi, sec, 0, time.UTC) }
-	day := func(m time.Month, d int) time.Time { return at(m, d, 0, 0, 0) }
-	w := domain.SpendWindow{Period: domain.SpendThisMonth, Now: at(10, 27, 12, 0, 0)}
+	w := domain.SpendWindow{Period: domain.SpendThisMonth, Now: spendDay(10, 27, 12, 0, 0)}
 
-	seed := func(k float64) (domain.OrgID, domain.FactoryID) {
-		id := newOrgID(t, s)
-		ctx := domain.WithOrg(t.Context(), id)
-		f := saveFactory(ctx, t, s)
-
-		create := func(created time.Time) domain.Item {
-			it, err := s.CreateItem(ctx, domain.NewItem{
-				FactoryID: f, Station: "work", State: domain.StateQueued, Class: domain.ClassStandard, Type: "task",
-				Title: "an item", CreatedAt: created,
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			return it
-		}
-
-		run := func(it domain.Item, started time.Time, usd float64) {
-			rid, err := s.StartRun(ctx, ports.NewRun{
-				FactoryID: f, ItemID: it.ID, Station: "work", Agent: "worker", Model: "model-a", StartedAt: started,
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			if err := s.FinishRun(ctx, rid, domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd}, started.Add(time.Minute)); err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		move := func(tr ports.Transition) {
-			if _, err := s.Transition(ctx, tr); err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		it := create(day(9, 29))
-		run(it, at(9, 30, 23, 59, 59), 1*k) // last month
-		run(it, day(10, 1), 2*k)            // this month's first second
-		move(ports.Transition{ItemID: it.ID, From: it.Position(), To: it.Position(), Rework: true, At: day(10, 10)})
-		run(it, day(10, 10), 4*k) // rework
-
-		done := create(day(10, 19))
-		move(ports.Transition{
-			ItemID: done.ID, From: done.Position(), To: domain.Position{Station: "done", State: domain.StateDone},
-			At: day(10, 20), DoneAt: day(10, 20),
-		})
-
-		return id, f
-	}
-
-	a, fa := seed(1)
-	b, fb := seed(8)
+	a, fa := seedSpend(t, s, 1)
+	b, fb := seedSpend(t, s, 8)
 
 	for _, o := range []struct {
-		id      domain.OrgID
+		org     domain.OrgID
 		factory domain.FactoryID
 		k       float64
 	}{{a, fa, 1}, {b, fb, 8}} {
-		got, err := s.OrgSpend(domain.WithOrg(t.Context(), o.id), w)
+		got, err := s.OrgSpend(domain.WithOrg(t.Context(), o.org), w)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		k := o.k
-		if got.TotalUSD != 6*k || got.ThisMonthUSD != 6*k || got.LastMonthUSD != k || got.Merged != 1 ||
-			got.CostPerMergedUSD != 6*k || got.ReworkUSD != 4*k || got.ReworkShare != 4.0/6 {
-			t.Errorf("org ×%v totals = %+v; want only its own runs and items", k, got)
+		checkSpend(t, got, o.factory, o.k)
+	}
+}
+
+// seedSpend makes an organization with a factory whose item spends k on the last second of
+// September, 2k on the first of October and, sent back on October 10, 4k that day; another item
+// is merged on October 20.
+func seedSpend(t *testing.T, s *Store, k float64) (domain.OrgID, domain.FactoryID) {
+	t.Helper()
+
+	org := newOrgID(t, s)
+	ctx := domain.WithOrg(t.Context(), org)
+	f := saveFactory(ctx, t, s)
+
+	create := func(created time.Time) domain.Item {
+		it, err := s.CreateItem(ctx, domain.NewItem{
+			FactoryID: f, Station: stWork, State: domain.StateQueued, Class: domain.ClassStandard, Type: typeTask,
+			Title: "a spending item", CreatedAt: created,
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
 
-		if len(got.Days) != 27 || !got.Days[0].Day.Equal(day(10, 1)) || got.Days[0].USD != 2*k ||
-			len(got.Days[0].ByFactory) != 1 || got.Days[0].ByFactory[0] != (domain.FactorySpend{FactoryID: o.factory, USD: 2 * k}) ||
-			got.Days[9].USD != 4*k || len(got.Days[9].ByFactory) != 1 {
-			t.Errorf("org ×%v days = %+v; want Oct 1 to 27 with its own factory only", k, got.Days)
+		return it
+	}
+
+	run := func(it domain.Item, started time.Time, usd float64) {
+		rid, err := s.StartRun(ctx, ports.NewRun{
+			FactoryID: f, ItemID: it.ID, Station: stWork, Agent: "worker", Model: "model-a", StartedAt: started,
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
 
-		if len(got.ByAgent) != 1 || got.ByAgent[0] != (domain.AgentSpend{FactoryID: o.factory, Agent: "worker", USD: 6 * k}) ||
-			len(got.ByModel) != 1 || got.ByModel[0] != (domain.ModelSpend{Model: "model-a", USD: 6 * k}) {
-			t.Errorf("org ×%v by agent %+v, by model %+v; want its own runs only", k, got.ByAgent, got.ByModel)
+		if err := s.FinishRun(ctx, rid, domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd}, started.Add(time.Minute)); err != nil {
+			t.Fatal(err)
 		}
+	}
 
-		if len(got.Factories) != 1 || got.Factories[0] != (domain.FactorySpendNow{FactoryID: o.factory}) {
-			t.Errorf("org ×%v factories = %+v; want its own, nothing today or this week", k, got.Factories)
+	move := func(tr ports.Transition) {
+		if _, err := s.Transition(ctx, tr); err != nil {
+			t.Fatal(err)
 		}
+	}
 
-		var weekly, merged float64
-		for _, wk := range got.Weekly {
-			weekly += wk.SpendUSD
-			merged += float64(wk.Merged)
-		}
+	it := create(spendDay(9, 29, 0, 0, 0))
+	run(it, spendDay(9, 30, 23, 59, 59), k)
+	run(it, spendDay(10, 1, 0, 0, 0), 2*k)
+	move(ports.Transition{ItemID: it.ID, From: it.Position(), To: it.Position(), Rework: true, At: spendDay(10, 10, 0, 0, 0)})
+	run(it, spendDay(10, 10, 0, 0, 0), 4*k)
 
-		if weekly != 7*k || merged != 1 {
-			t.Errorf("org ×%v weekly = %+v; want %v spent and 1 merged over the 8 weeks", k, got.Weekly, 7*k)
-		}
+	done := create(spendDay(10, 19, 0, 0, 0))
+	move(ports.Transition{
+		ItemID: done.ID, From: done.Position(), To: domain.Position{Station: "done", State: domain.StateDone},
+		At: spendDay(10, 20, 0, 0, 0), DoneAt: spendDay(10, 20, 0, 0, 0),
+	})
+
+	return org, f
+}
+
+// checkSpend checks that got, this month measured on October 27, is seedSpend(k)'s alone.
+func checkSpend(t *testing.T, got domain.OrgSpend, factory domain.FactoryID, k float64) {
+	t.Helper()
+
+	day := func(d int) time.Time { return spendDay(10, d, 0, 0, 0) }
+	now := spendDay(10, 27, 12, 0, 0)
+	want := domain.OrgSpend{
+		Period: domain.SpendThisMonth, Since: day(1), Until: now, TotalUSD: 6 * k, ThisMonthUSD: 6 * k, LastMonthUSD: k,
+		ByAgent: []domain.AgentSpend{{FactoryID: factory, Agent: "worker", USD: 6 * k}},
+		ByModel: []domain.ModelSpend{{Model: "model-a", USD: 6 * k}},
+		Merged:  1, CostPerMergedUSD: 6 * k, ReworkUSD: 4 * k, ReworkShare: 4 * k / (6 * k),
+		Factories: []domain.FactorySpendNow{{FactoryID: factory}},
+	}
+
+	for d := 1; d <= 27; d++ {
+		want.Days = append(want.Days, domain.DaySpend{Day: day(d)})
+	}
+
+	want.Days[0] = domain.DaySpend{Day: day(1), USD: 2 * k, ByFactory: []domain.FactorySpend{{FactoryID: factory, USD: 2 * k}}}
+	want.Days[9] = domain.DaySpend{Day: day(10), USD: 4 * k, ByFactory: []domain.FactorySpend{{FactoryID: factory, USD: 4 * k}}}
+
+	for i := range domain.SpendWeeks {
+		want.Weekly = append(want.Weekly, domain.WeekCost{WeekStart: spendDay(9, 7+7*i, 0, 0, 0)})
+	}
+
+	want.Weekly[3].SpendUSD = 3 * k // September 28: its last second and October 1
+	want.Weekly[4].SpendUSD = 4 * k // October 5: the rework of October 10
+	want.Weekly[6] = domain.WeekCost{WeekStart: day(19), Merged: 1}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("org ×%v OrgSpend =\n  %+v\nwant only its own runs and items:\n  %+v", k, got, want)
 	}
 }

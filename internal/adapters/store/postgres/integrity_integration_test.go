@@ -197,11 +197,11 @@ func TestSpendReads_UseTheirIndexes(t *testing.T) {
 		for _, stmt := range []string{
 			"SET LOCAL session_replication_role = replica",
 			`INSERT INTO agent_runs (org_id, factory_id, item_id, station, agent, model, status, cost_usd, started_at)
-			 SELECT CASE WHEN h % 10 = 0 THEN $1::uuid ELSE gen_random_uuid() END, gen_random_uuid(), gen_random_uuid(),
+			 SELECT CASE WHEN h % 10 = 0 THEN $1::uuid ELSE gen_random_uuid() END, gen_random_uuid(), uuidv7(),
 			        'work', 'worker', 'model-a', 'succeeded', 0.5, now() - h * interval '1 hour'
 			 FROM generate_series(1, 8760) h`,
 			`INSERT INTO work_items (org_id, factory_id, number, type, title, station, state, done_at)
-			 SELECT $1::uuid, gen_random_uuid(), h, 'task', 'an item', 'work',
+			 SELECT $1::uuid, gen_random_uuid(), h, 'task', 'a done item', 'work',
 			        CASE WHEN h % 10 = 0 THEN 'done' ELSE 'queued' END,
 			        CASE WHEN h % 10 = 0 THEN now() - h * interval '1 hour' END
 			 FROM generate_series(1, 8760) h`,
@@ -226,12 +226,14 @@ func TestSpendReads_UseTheirIndexes(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	const byStart = "agent_runs_org_started_idx"
+
 	runs := `FROM agent_runs WHERE org_id = $1::uuid AND started_at >= now() - interval '90 days' AND started_at < now()`
 	for _, c := range []struct{ index, query string }{
-		{"agent_runs_org_started_idx", `SELECT date_trunc('day', started_at, 'UTC'), factory_id, sum(cost_usd) ` + runs + ` GROUP BY 1, 2`},
-		{"agent_runs_org_started_idx", `SELECT factory_id, agent, sum(cost_usd) ` + runs + ` GROUP BY 1, 2`},
-		{"agent_runs_org_started_idx", `SELECT model, sum(cost_usd) ` + runs + ` GROUP BY 1`},
-		{"agent_runs_org_started_idx", `SELECT sum(r.cost_usd) FROM agent_runs r
+		{byStart, `SELECT date_trunc('day', started_at, 'UTC'), factory_id, sum(cost_usd) ` + runs + ` GROUP BY 1, 2`},
+		{byStart, `SELECT factory_id, agent, sum(cost_usd) ` + runs + ` GROUP BY 1, 2`},
+		{byStart, `SELECT model, sum(cost_usd) ` + runs + ` GROUP BY 1`},
+		{byStart, `SELECT sum(r.cost_usd) FROM agent_runs r
 			WHERE r.org_id = $1::uuid AND r.started_at >= now() - interval '90 days' AND r.started_at < now()
 			  AND EXISTS (SELECT 1 FROM item_spans s WHERE s.item_id = r.item_id AND s.rework_round >= 1 AND s.entered_at <= r.started_at)`},
 		{"work_items_org_done_at_idx", `SELECT date_trunc('day', done_at, 'UTC'), count(*) FROM work_items

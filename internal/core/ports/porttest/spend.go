@@ -27,6 +27,26 @@ func (s *Store) OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgS
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	f := s.runSpend(org, from, since, until)
+
+	merged := map[time.Time]int{}
+
+	for _, it := range s.items {
+		if it.OrgID == org && it.State == domain.StateDone && inWindow(it.DoneAt, from, until) {
+			merged[utcDay(it.DoneAt)]++
+		}
+	}
+
+	for d, n := range merged {
+		f.Merged = append(f.Merged, domain.DayCount{Day: d, Count: n})
+	}
+
+	return domain.NewOrgSpend(w, f), nil
+}
+
+// runSpend sums org's runs as the postgres spend queries do: by day and factory from `from`, by
+// agent, by model and on rework in [since, until). Callers hold s.mu.
+func (s *Store) runSpend(org domain.OrgID, from, since, until time.Time) domain.SpendFacts {
 	type factoryDay struct {
 		day     time.Time
 		factory domain.FactoryID
@@ -70,19 +90,7 @@ func (s *Store) OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgS
 		f.ByModel = append(f.ByModel, domain.ModelSpend{Model: m, USD: usd})
 	}
 
-	merged := map[time.Time]int{}
-
-	for _, it := range s.items {
-		if it.OrgID == org && it.State == domain.StateDone && inWindow(it.DoneAt, from, until) {
-			merged[utcDay(it.DoneAt)]++
-		}
-	}
-
-	for d, n := range merged {
-		f.Merged = append(f.Merged, domain.DayCount{Day: d, Count: n})
-	}
-
-	return domain.NewOrgSpend(w, f), nil
+	return f
 }
 
 // reworkAt reports whether the item had entered a rework round by at. Callers hold s.mu.

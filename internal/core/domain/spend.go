@@ -53,7 +53,9 @@ func (w SpendWindow) Bounds() (since, until time.Time) {
 		return monthStart(now), w.Now
 	case SpendLast90Days:
 		return dayStart(now).AddDate(0, 0, -89), w.Now
-	default:
+	case SpendThisWeek:
+		return weekStart(now), w.Now
+	default: // Check refuses any other period; measure it as this week.
 		return weekStart(now), w.Now
 	}
 }
@@ -194,76 +196,105 @@ type FactorySpendNow struct {
 // NewOrgSpend lays out a store's sums for the window w.
 func NewOrgSpend(w SpendWindow, f SpendFacts) OrgSpend {
 	since, until := w.Bounds()
-	now := w.Now.UTC()
-	today, week, month, lastMonth := dayStart(now), weekStart(now), monthStart(now), lastMonthStart(now)
-	first := firstSpendWeek(now)
-
-	out := OrgSpend{Period: w.Period, Since: since, Until: until, ReworkUSD: f.ReworkUSD}
-
-	days := map[time.Time]int{}
-	for d := since; !d.After(today); d = d.AddDate(0, 0, 1) {
-		days[d] = len(out.Days)
-		out.Days = append(out.Days, DaySpend{Day: d})
-	}
-
-	out.Weekly = make([]WeekCost, SpendWeeks)
-	for i := range out.Weekly {
-		out.Weekly[i].WeekStart = first.AddDate(0, 0, 7*i)
-	}
-
-	weekOf := func(d time.Time) (int, bool) {
-		i := int(d.Sub(first) / (7 * 24 * time.Hour))
-
-		return i, !d.Before(first) && i < SpendWeeks
-	}
-
-	factories := map[FactoryID]*FactorySpendNow{}
+	l := newSpendLayout(w.Now.UTC(), since)
+	l.out.Period, l.out.Since, l.out.Until, l.out.ReworkUSD = w.Period, since, until, f.ReworkUSD
 
 	for _, r := range f.Days {
-		d := dayStart(r.Day)
-
-		if i, ok := days[d]; ok {
-			out.TotalUSD += r.USD
-			out.Days[i].USD += r.USD
-			out.Days[i].ByFactory = append(out.Days[i].ByFactory, FactorySpend{FactoryID: r.FactoryID, USD: r.USD})
-		}
-
-		switch {
-		case !d.Before(month):
-			out.ThisMonthUSD += r.USD
-		case !d.Before(lastMonth):
-			out.LastMonthUSD += r.USD
-		}
-
-		if i, ok := weekOf(d); ok {
-			out.Weekly[i].SpendUSD += r.USD
-		}
-
-		fs := factories[r.FactoryID]
-		if fs == nil {
-			fs = &FactorySpendNow{FactoryID: r.FactoryID}
-			factories[r.FactoryID] = fs
-		}
-
-		if !d.Before(week) {
-			fs.WeekUSD += r.USD
-		}
-
-		if d.Equal(today) {
-			fs.TodayUSD += r.USD
-		}
+		l.addSpend(r)
 	}
 
 	for _, m := range f.Merged {
-		d := dayStart(m.Day)
-		if !d.Before(since) {
-			out.Merged += m.Count
-		}
-
-		if i, ok := weekOf(d); ok {
-			out.Weekly[i].Merged += m.Count
-		}
+		l.addMerged(m)
 	}
+
+	return l.finish(f.ByAgent, f.ByModel)
+}
+
+// spendLayout is NewOrgSpend's work in progress: the window's days by date, the weekly series
+// and each factory's today and this week.
+type spendLayout struct {
+	out                             OrgSpend
+	since, today, week, month, last time.Time
+	first                           time.Time
+	days                            map[time.Time]int
+	factories                       map[FactoryID]*FactorySpendNow
+}
+
+func newSpendLayout(now, since time.Time) *spendLayout {
+	l := &spendLayout{
+		since: since, today: dayStart(now), week: weekStart(now), month: monthStart(now), last: lastMonthStart(now),
+		first: firstSpendWeek(now), days: map[time.Time]int{}, factories: map[FactoryID]*FactorySpendNow{},
+	}
+
+	for d := since; !d.After(l.today); d = d.AddDate(0, 0, 1) {
+		l.days[d] = len(l.out.Days)
+		l.out.Days = append(l.out.Days, DaySpend{Day: d})
+	}
+
+	l.out.Weekly = make([]WeekCost, SpendWeeks)
+	for i := range l.out.Weekly {
+		l.out.Weekly[i].WeekStart = l.first.AddDate(0, 0, 7*i)
+	}
+
+	return l
+}
+
+// weekOf is the index in the weekly series of the week of day d.
+func (l *spendLayout) weekOf(d time.Time) (int, bool) {
+	i := int(d.Sub(l.first) / (7 * 24 * time.Hour))
+
+	return i, !d.Before(l.first) && i < SpendWeeks
+}
+
+func (l *spendLayout) addSpend(r FactoryDaySpend) {
+	d := dayStart(r.Day)
+
+	if i, ok := l.days[d]; ok {
+		l.out.TotalUSD += r.USD
+		l.out.Days[i].USD += r.USD
+		l.out.Days[i].ByFactory = append(l.out.Days[i].ByFactory, FactorySpend{FactoryID: r.FactoryID, USD: r.USD})
+	}
+
+	switch {
+	case !d.Before(l.month):
+		l.out.ThisMonthUSD += r.USD
+	case !d.Before(l.last):
+		l.out.LastMonthUSD += r.USD
+	}
+
+	if i, ok := l.weekOf(d); ok {
+		l.out.Weekly[i].SpendUSD += r.USD
+	}
+
+	fs := l.factories[r.FactoryID]
+	if fs == nil {
+		fs = &FactorySpendNow{FactoryID: r.FactoryID}
+		l.factories[r.FactoryID] = fs
+	}
+
+	if !d.Before(l.week) {
+		fs.WeekUSD += r.USD
+	}
+
+	if d.Equal(l.today) {
+		fs.TodayUSD += r.USD
+	}
+}
+
+func (l *spendLayout) addMerged(m DayCount) {
+	d := dayStart(m.Day)
+	if !d.Before(l.since) {
+		l.out.Merged += m.Count
+	}
+
+	if i, ok := l.weekOf(d); ok {
+		l.out.Weekly[i].Merged += m.Count
+	}
+}
+
+// finish sorts what it laid out and divides.
+func (l *spendLayout) finish(agents []AgentSpend, models []ModelSpend) OrgSpend {
+	out := l.out
 
 	for i := range out.Days {
 		slices.SortFunc(out.Days[i].ByFactory, func(a, b FactorySpend) int { return cmp.Compare(a.FactoryID, b.FactoryID) })
@@ -276,14 +307,14 @@ func NewOrgSpend(w SpendWindow, f SpendFacts) OrgSpend {
 	out.CostPerMergedUSD = share(out.TotalUSD, float64(out.Merged))
 	out.ReworkShare = share(out.ReworkUSD, out.TotalUSD)
 
-	out.ByAgent = slices.SortedFunc(slices.Values(f.ByAgent), func(a, b AgentSpend) int {
+	out.ByAgent = slices.SortedFunc(slices.Values(agents), func(a, b AgentSpend) int {
 		return cmp.Or(cmp.Compare(b.USD, a.USD), cmp.Compare(a.FactoryID, b.FactoryID), cmp.Compare(a.Agent, b.Agent))
 	})
-	out.ByModel = slices.SortedFunc(slices.Values(f.ByModel), func(a, b ModelSpend) int {
+	out.ByModel = slices.SortedFunc(slices.Values(models), func(a, b ModelSpend) int {
 		return cmp.Or(cmp.Compare(b.USD, a.USD), cmp.Compare(a.Model, b.Model))
 	})
 
-	for _, fs := range factories {
+	for _, fs := range l.factories {
 		out.Factories = append(out.Factories, *fs)
 	}
 

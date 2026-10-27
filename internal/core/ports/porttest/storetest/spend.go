@@ -65,7 +65,8 @@ func testOrgSpend(f *fixture) {
 		return slices.SortedFunc(slices.Values(fs), func(x, y domain.FactorySpend) int { return cmp.Compare(x.FactoryID, y.FactoryID) })
 	}
 	agents := []domain.AgentSpend{
-		{FactoryID: f1, Agent: agWorker, USD: 6.75}, {FactoryID: f2, Agent: agReviewer, USD: 2},
+		{FactoryID: f1, Agent: agWorker, USD: 6.75},
+		{FactoryID: f2, Agent: agReviewer, USD: 2},
 		{FactoryID: f2, Agent: agWorker, USD: 0},
 	}
 	factories := []domain.FactorySpendNow{{FactoryID: f1, TodayUSD: 5, WeekUSD: 6.75}, {FactoryID: f2, WeekUSD: 2}}
@@ -83,9 +84,12 @@ func testOrgSpend(f *fixture) {
 		ByModel: []domain.ModelSpend{{Model: modelB, USD: 7}, {Model: model, USD: 1.75}},
 		Merged:  1, CostPerMergedUSD: 8.75,
 		Weekly: []domain.WeekCost{
-			{WeekStart: day(9, 7)}, {WeekStart: day(9, 14)}, {WeekStart: day(9, 21)},
+			{WeekStart: day(9, 7)},
+			{WeekStart: day(9, 14)},
+			{WeekStart: day(9, 21)},
 			{WeekStart: day(9, 28), SpendUSD: 4},
-			{WeekStart: day(10, 5)}, {WeekStart: day(10, 12)},
+			{WeekStart: day(10, 5)},
+			{WeekStart: day(10, 12)},
 			{WeekStart: day(10, 19), SpendUSD: 4.5, Merged: 1, CostPerMergedUSD: 4.5},
 			{WeekStart: day(10, 26), SpendUSD: 8.75, Merged: 1, CostPerMergedUSD: 8.75},
 		},
