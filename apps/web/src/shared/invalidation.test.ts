@@ -97,6 +97,11 @@ describe('invalidationsFor an item event', () => {
     expect(stale.filter((k) => k[1] === labs)).toEqual([]);
   });
 
+  test("a milestone event re-reads the factory's activity, and a tool call does not (its feed lists no run events)", async () => {
+    expect(invalidationsFor(acme, event('moved'))).toContainEqual(keys.activity(acme, goal));
+    expect(invalidationsFor(acme, event('tool_call'))).not.toContainEqual(keys.activity(acme, goal));
+  });
+
   test("never re-reads the factory's whole prefix", async () => {
     const stale = await staleAfter(cache(), invalidationsFor(acme, event('moved')));
 
