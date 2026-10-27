@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -57,4 +58,75 @@ type JudgeRun struct {
 	Reason  string
 	CostUSD float64
 	RunID   domain.RunID
+}
+
+// EvalSuites reads the cases an eval run runs (ADR 0025 decision 4), for the organization in ctx:
+// each evals/cases/<name>.yaml of the run's content, resolved with its judge or its reference
+// patch. It reads the content the run names, a published version's or a draft's by its content
+// hash, so a draft's run reads the same files the publish gate compares.
+type EvalSuites interface {
+	// EvalSuite is every case of run's content, by name. ErrNotFound when the content is gone.
+	EvalSuite(ctx context.Context, run domain.EvalRun) ([]EvalSuiteCase, error)
+}
+
+// EvalSuiteCase is one case of an eval run's content and what its check needs: the judge it
+// names, or the bytes of its reference patch.
+type EvalSuiteCase struct {
+	Case  domain.EvalCaseSpec
+	Judge domain.Judge
+	Patch []byte
+}
+
+// EvalRunner runs one try of an eval case for the organization in ctx: an ordinary agent run of
+// the case's agent, with its prompt, skills, tools and contract, pinned to the eval run's content,
+// that starts from the case's input in a box. The box clones runtime.repository on a throwaway
+// branch at the input's ref; the agent gets the model connection only, and the task token is of
+// Kind eval and names no connection, so the gateway serves it only the knowledge tools and the try
+// never pushes, comments or calls an outside API. For a case checked by a judge, the runner also
+// makes the judge run (goal-agent judge) on the try's output and returns its answer.
+type EvalRunner interface {
+	// RunEvalTry returns how the try's run ended. An error means only an infrastructure failure
+	// (the box, the model provider, the gateway), never a failing try: an agent run that failed or
+	// gave no valid output is an EvalTry with Failure set. The EvalTry returned with an error still
+	// carries what the try cost and its run when it had one.
+	RunEvalTry(ctx context.Context, t EvalTask) (EvalTry, error)
+}
+
+// EvalTask is one try to run: try Try (from 1) of Case in Run, with the judge or reference patch
+// its check names. Kind is always domain.TaskKindEval, and the runner signs the try's task token
+// with it and no connections.
+type EvalTask struct {
+	Run   domain.EvalRun
+	Case  domain.EvalCaseSpec
+	Try   int
+	Judge domain.Judge
+	Patch []byte
+	Kind  domain.TaskKind
+}
+
+// EvalTry is how one try's run ended.
+type EvalTry struct {
+	// Failure is why the agent run ended without a valid output (it failed, ran out of turns or
+	// answered nothing that parsed); empty when it gave one.
+	Failure string
+	// Output is the agent's final JSON output.
+	Output json.RawMessage
+	// ContractProblem is what makes Output break the agent's contract; empty means it satisfies it.
+	ContractProblem string
+	// ChangedFiles are the paths the try's change touches against the ref it started from.
+	ChangedFiles []string
+	// Checks are the factory's checks run on the try's change, with their exit codes.
+	Checks []EvalCheck
+	// Outcome and Reason are the judge's answer, for a case checked by a judge.
+	Outcome string
+	Reason  string
+	CostUSD float64
+	Turns   int
+	RunID   domain.RunID
+}
+
+// EvalCheck is one check run on an eval try's change and its exit code.
+type EvalCheck struct {
+	Command  string
+	ExitCode int
 }

@@ -43,7 +43,8 @@ type Deps struct {
 	Log *slog.Logger
 }
 
-// Config sets the loop's times.
+// Config sets the loops' times; the eval loop reads Timeout and Margin as the judge loop does,
+// for one eval try instead of one judge run.
 type Config struct {
 	// Lookback is how far back a sweep reads finished runs; each sweep re-reads it, and a run that
 	// ended while no goald swept for longer than it is never sampled.
@@ -52,6 +53,9 @@ type Config struct {
 	Timeout time.Duration
 	// Margin is the lease's time beyond the judge runs, for reading and recording.
 	Margin time.Duration
+	// Poll is how often the eval loop reads a running try's eval run to see whether it was
+	// cancelled; it must be positive.
+	Poll time.Duration
 }
 
 // attempts is how many judge runs a score gets: the first and one retry after an
