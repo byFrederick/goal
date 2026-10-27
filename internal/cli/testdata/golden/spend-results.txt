@@ -1,0 +1,8 @@
+This month (2026-10-01 to 2026-10-23): $84.00
+  This month $84.00, last month $120.50
+  Per merged item $21.00 (4 merged)
+  Rework $21.00 (25%)
+
+Budgets
+  docs  stopped  today $1.00  $3.00 in 7 days  rework rate over 40%  models: claude (anthropic)
+  web  over_budget  today $0.00  $71.00 in 7 days of $70.00  spent $71.00 of the $70.00 weekly budget in the last 7 days
