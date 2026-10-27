@@ -23,7 +23,7 @@ async function showTrace(page: Page) {
 }
 
 for (const [name, path, heading] of [
-  ['factories', '/o/acme', 'Factories'],
+  ['factories', '/o/acme', /^Good /],
   ['floor', '/o/acme/f/goal', 'Floor'],
   ['board', '/o/acme/f/goal/board', 'Goal board'],
   ['item', '/o/acme/f/goal/items/6', 'Floor: throughput bars per day'],
@@ -44,94 +44,49 @@ for (const [name, path, heading] of [
 test('the root opens the factories of the first organization', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveURL(/\/o\/acme$/);
-  await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeVisible();
-  await expect(page.getByRole('article')).toHaveCount(3);
-  await expect(page).toHaveTitle('Factories · Acme · Goal');
+  await expect(page.getByRole('heading', { level: 1, name: /^Good / })).toBeVisible();
+  await expect(page.getByRole('article')).toHaveCount(4);
+  await expect(page).toHaveTitle('Home · Acme · Goal');
 });
 
 test('the root returns to the organization used last', async ({ page }) => {
   await page.goto('/o/goal');
-  await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /^Good / })).toBeVisible();
   await page.goto('/');
   await expect(page).toHaveURL(/\/o\/goal$/);
   await expect(page.getByRole('article')).toHaveCount(1);
   await expect(orgNav(page).getByRole('link', { name: /, \S+ factory/ })).toHaveCount(1);
 });
 
-test('the factories home shows each factory’s week and what waits on you', async ({ page, request }) => {
+test('the factories home shows each factory’s line, what needs you and the week’s spend', async ({ page }) => {
   await page.goto('/o/acme');
-  const card = (name: string) => page.getByRole('article', { name, exact: true });
-  await expect(card('goal').getByText('Running')).toBeVisible();
-  await expect(card('support').getByText('Andon pulled')).toBeVisible();
+  const row = (name: string) =>
+    page.getByRole('article').filter({ has: page.getByRole('heading', { name, exact: true }) });
+  await expect(row('software').getByText('Running')).toBeVisible();
+  await expect(row('sre').getByText('Andon pulled')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'sre line' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Needs you first' })).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Needs you first' }).getByRole('link', { name: 'Open all' }),
+  ).toHaveAttribute('href', '/o/acme/needs-you');
 
-  if (!isPhone(page)) {
-    await expect(
-      page.getByText(
-        /^Acme’s factories\. 5 items are waiting on you, and \$\d+\.\d\d of the \$80 weekly budget is spent\.$/,
-      ),
-    ).toBeVisible();
-    await expect(card('goal').getByRole('meter', { name: /^\$\d+\.\d\d of \$60 weekly budget, \d+%$/ })).toBeVisible();
-    await expect(card('goal').getByRole('img', { name: /^Items done per day, .+: (\d+, ){6}\d+$/ })).toBeVisible();
-    await expect(card('goal').getByText(/^[+−]\d\.\d vs last week$|^Same as last week$/)).toBeVisible();
-    await expect(card('support').getByText('No budget set')).toBeVisible();
-    // The definition editor and the New factory wizard are linked.
-    await expect(card('goal').getByRole('link', { name: 'Definition' })).toHaveAttribute(
-      'href',
-      '/o/acme/f/goal/definition',
-    );
-    await expect(page.getByRole('main').getByRole('link', { name: 'Import YAML' }).first()).toHaveAttribute(
-      'href',
-      '/o/acme/new/start?from=yaml',
-    );
-  }
-
-  const waiting = page.getByRole('region', { name: 'Waiting on you', exact: true });
-  await expect(waiting.getByRole('listitem')).toHaveCount(5);
-  const newest = waiting.getByRole('link', { name: /^Open \S+#\d+$/ });
-  const ref = (await newest.textContent())?.replace('Open ', '') ?? '';
-  await expect(waiting.getByRole('listitem').first()).toContainText(ref);
-
-  // Someone else approves (the CLI, another tab): the stream brings the change.
-  await request.post('/v1/orgs/acme/items/goal%2312/approve');
-  await expect(waiting.getByRole('listitem')).toHaveCount(4);
-
-  await waiting.getByRole('listitem').filter({ hasText: 'goal#6' }).getByRole('link').click();
-  await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/items\/6$/);
-  await expect(page.getByRole('heading', { level: 1, name: 'Floor: throughput bars per day' })).toBeVisible();
+  const spend = page.getByRole('region', { name: 'Spend this week' });
+  await expect(spend.getByText('Last 7 days')).toBeVisible();
+  // Not built yet: the link is disabled and never navigates.
+  await expect(spend.getByRole('button', { name: 'Spend and billing' })).toHaveAttribute('aria-disabled', 'true');
 });
 
-test('on a phone: the banner leads to what waits, a card to its floor', async ({ page }) => {
+test('on a phone: a factory’s name opens its floor, and its line scrolls in its own box', async ({ page }) => {
   test.skip(!isPhone(page), 'the phone layout of the factories home');
   await page.goto('/o/acme');
-  const banner = page.getByRole('link', { name: /^5 waiting on you/ });
-  await expect(banner).toContainText('goal 2, sre 3');
-  await expect(page.getByText(/^\$\d+\.\d\d of Acme’s \$80 weekly budget spent$/)).toBeVisible();
-  await expect(page.getByRole('main').getByRole('link', { name: 'New factory' })).toHaveAttribute(
-    'href',
-    '/o/acme/new/start',
-  );
-
-  await banner.click();
-  await expect(page).toHaveURL(/\/o\/acme#waiting$/);
-  await expect(page.getByRole('region', { name: 'Waiting on you', exact: true })).toBeInViewport();
-
-  // The whole card is the link: a tap on its stats opens the factory.
-  await page.getByRole('article', { name: 'sre', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'sre line' })).toBeVisible();
+  await page.getByRole('link', { name: 'sre', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
 });
 
 test('an organization without budgets or factories says so', async ({ page, request }) => {
   await page.goto('/o/goal');
-  await expect(
-    page.getByText(
-      isPhone(page)
-        ? /^\$\d+\.\d\d spent this week, no budget set$/
-        : /^Goal’s factories\. Nothing is waiting on you, and \$\d+\.\d\d was spent this week\.$/,
-    ),
-  ).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Waiting on you', exact: true })).toContainText(
-    'Nothing is waiting on you.',
-  );
+  await expect(page.getByRole('region', { name: 'Needs you first' })).toContainText('Nothing is waiting on you.');
 
   await request.post('/v1/orgs', { data: { name: 'Empty Co', slug: 'empty-co' } });
   await page.goto('/o/empty-co');
@@ -175,7 +130,7 @@ test('pages are titled most specific first', async ({ page }) => {
 test('the sidebar opens a factory and marks its pages', async ({ page }) => {
   test.skip(isPhone(page), 'the sidebar is the 768 px and wider navigation');
   await page.goto('/o/acme');
-  await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /^Good / })).toBeVisible();
 
   const sidebar = orgNav(page);
   const sre = sidebar.getByRole('link', { name: 'S, sre factory, 3 waiting on you' });
@@ -227,7 +182,7 @@ test('a decision made elsewhere updates the badges without a reload', async ({ p
   await expectBoardLive(page);
   const goal = orgNav(page).getByRole('link', { name: /^G, goal factory/ });
   await expect(goal).toHaveAccessibleName('G, goal factory, 2 waiting on you, 1 item blocked');
-  await expect(orgNav(page).getByRole('link', { name: 'Su, support factory, blocked: andon pulled' })).toBeVisible();
+  await expect(orgNav(page).getByRole('link', { name: /^\S+, sre factory, blocked: andon pulled$/ })).toBeVisible();
 
   // Someone else approves (the CLI, another tab): the stream brings the change.
   await request.post('/v1/orgs/acme/items/goal%2312/approve');
@@ -244,7 +199,7 @@ test('the sidebar marks Home on the organization pages', async ({ page }) => {
   await expect(page).toHaveURL(/\/o\/acme$/);
   const sidebar = orgNav(page);
   await expect(sidebar.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeFocused();
+  await expect(page.getByRole('heading', { level: 1, name: /^Good / })).toBeFocused();
 
   await page.getByRole('link', { name: 'Open sre' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
@@ -253,90 +208,63 @@ test('the sidebar marks Home on the organization pages', async ({ page }) => {
 test('the floor says what waits on you and leads to it', async ({ page }) => {
   await page.goto('/o/acme/f/goal');
 
-  // What waits on you is the Inbox: the decisions, then blocked work, each a row that leads to its item.
-  await page.getByRole('button', { name: /^Inbox/ }).click();
-  const drawer = page.getByRole('dialog', { name: 'Inbox' });
-  await expect(drawer.getByRole('heading', { name: 'Needs a decision' })).toBeVisible();
-  await expect(drawer.getByRole('link', { name: /goal#5 .*Blocked at Build/ })).toBeVisible();
-  await expect(drawer.getByRole('link', { name: /goal#16/ })).toHaveCount(0);
+  // What waits on you is the Needs you page, filtered to this factory: the decisions and blocked work,
+  // each a row that leads to its item.
+  await page.getByRole('link', { name: /^Needs you/ }).click();
+  await expect(page).toHaveURL(/\/o\/acme\/needs-you\?factory=goal$/);
+  await expect(page.getByRole('link', { name: /goal#5 .*Blocked at Build/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /goal#16/ })).toHaveCount(0);
   await expectAccessible(page);
 
-  await drawer.getByRole('link', { name: /goal#5 .*Blocked at Build/ }).click();
+  await page.getByRole('link', { name: /goal#5 .*Blocked at Build/ }).click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/items\/5$/);
 });
 
 test('a stopped line is what its floor needs first, and clears from it', async ({ page, request }) => {
-  await page.goto('/o/acme/f/support');
-  await page.getByRole('button', { name: /^Inbox/ }).click();
-  const drawer = page.getByRole('dialog', { name: 'Inbox' });
+  await page.goto('/o/acme/needs-you?factory=support');
   await expect(
-    drawer.getByRole('link', { name: /^Line stopped: Answers sent back 4 of the last 10 times/ }),
+    page.getByRole('link', { name: /^Line stopped: Answers sent back 4 of the last 10 times/ }),
   ).toBeVisible();
 
   // Someone clears it (the CLI, another tab): the stream brings the change.
   await request.post('/v1/orgs/acme/factories/support/andon/clear', { data: {} });
-  await expect(drawer.getByRole('link', { name: /^Line stopped/ })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /^Line stopped/ })).toHaveCount(0);
 });
 
-test('approve from the phone: the Inbox drawer decides the oldest decision', async ({ page }) => {
-  test.skip(!isPhone(page), 'the phone Board is the one that opens the Inbox drawer (the Items header has none)');
-  await page.goto('/o/acme/f/sre/board');
-  await expect(page.getByRole('heading', { name: 'Needs you' })).toHaveCount(0);
+test('approve from the phone: the Needs you page decides the oldest decision', async ({ page }) => {
+  test.skip(!isPhone(page), 'the approve view is the phone layout of the Needs you page');
+  await page.goto('/o/acme/needs-you?factory=sre');
 
-  await page.getByRole('button', { name: /^Inbox/ }).click();
-  const drawer = page.getByRole('dialog', { name: 'Inbox' });
-  await expect(drawer.getByRole('link', { name: /sre#4/ })).toBeVisible();
+  await page.getByRole('link', { name: /sre#4/ }).click();
+  await expect(page).toHaveURL(/\/o\/acme\/needs-you\?.*factory=sre/);
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
-  await drawer.getByRole('button', { name: 'Approve sre#4' }).click();
+  await page.getByRole('button', { name: 'Approve', exact: true }).click();
   await expectToast(page, 'Approved sre#4.');
-  await expect(drawer.getByRole('button', { name: 'Approve sre#4' })).toHaveCount(0);
 });
 
 test('merging from the phone names every pull request the merge lands', async ({ page, request }) => {
-  test.skip(!isPhone(page), 'the phone Board is the one that opens the Inbox drawer (the Items header has none)');
+  test.skip(!isPhone(page), 'the approve view is the phone layout of the Needs you page');
   // goal#12 is older; once approved, goal#6 (two pull requests, at Merge) is the one to decide.
   await request.post('/v1/orgs/acme/items/goal%2312/approve', { data: {} });
-  await page.goto('/o/acme/f/goal/board');
-  await page.getByRole('button', { name: /^Inbox/ }).click();
-  const drawer = page.getByRole('dialog', { name: 'Inbox' });
-  await drawer.getByRole('button', { name: 'Merge goal#6' }).click();
+  await page.goto('/o/acme/needs-you?factory=goal');
+  await page.getByRole('link', { name: /goal#6/ }).click();
+  await page.getByRole('button', { name: 'Merge', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Merge 2 pull requests?' });
   await expect(dialog.getByRole('link', { name: /Review acme\/goal PR #38 first/ })).toBeVisible();
   await expect(dialog.getByRole('link', { name: /Review acme\/design-tokens MR !12 first/ })).toBeVisible();
   await expectAccessible(page);
 });
 
-test('an item shows its time at each station against its target', async ({ page }) => {
+test('an item shows its stepper: each station with its time, and the step it is at', async ({ page }) => {
   // goal#16: an expedite fix created 38 minutes ago, its spec being written now.
   await page.goto('/o/acme/f/goal/items/16');
-  const time = page.getByRole('region', { name: /so far$/ });
-  await expect(time.getByRole('heading', { name: /^3[89] min so far$/ })).toBeVisible();
-  await expect(
-    time.getByRole('img', {
-      name: /^Inbox \d+ min, Spec \d+ min \(\d+ min waiting, \d+ min working\), 2[12] min left/,
-    }),
-  ).toBeVisible();
-  await expect(time.getByText(/^Inbox \d+ min$/)).toBeVisible();
-  await expect(time.getByText('60 min', { exact: true })).toBeVisible();
-
-  // Below 720 px of content (phones, and tablets beside the sidebar) the card is compact.
-  if ((await page.locator('main').evaluate((main) => main.clientWidth)) < 720) {
-    await expect(time.getByText('target 60 min')).toBeVisible();
-    await expect(time.getByText('spec-writer-1 on turn 3 of 80, $0.31 of $12.00')).toBeVisible();
-  } else {
-    await expect(time.getByText('Expedite target: within 60 minutes')).toBeVisible();
-    await expect(time.getByText('3 of 80', { exact: true })).toBeVisible();
-    await expect(time.getByText('$0.31 of $12.00', { exact: true })).toBeVisible();
-    await expect(time.getByText('spec', { exact: true })).toBeVisible();
-  }
-
-  const path = page.getByRole('region', { name: 'Path' });
-  await expect(path.locator('[aria-current="step"]')).toContainText('spec-writer-1 working');
-  await expect(path.getByRole('listitem').filter({ hasText: 'Inbox' })).toContainText(/Spent \d+ min/);
-  // A station not reached yet is named, never given a state it does not have ("Finished").
-  await expect(path.getByRole('listitem').last()).toHaveText('Done');
+  const steps = page.getByRole('list', { name: 'Progress through the line' });
+  await expect(steps.locator('[aria-current="step"]')).toContainText('Spec');
+  await expect(steps.getByRole('listitem').first()).toContainText(/\d+ min/);
+  // The done station says the lead time: the expedite target and the time so far.
+  await expect(steps.getByRole('listitem').last()).toContainText(/Target 60 min, \d+ min so far/);
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
@@ -358,7 +286,7 @@ test('send an item back with a reason', async ({ page }) => {
   await expect(page.getByText('At Spec', { exact: true })).toBeVisible();
   await showTrace(page);
   await expect(
-    page.getByRole('region', { name: 'Trace' }).getByText('Cover the empty-bucket case with a test.'),
+    page.getByRole('region', { name: 'Timeline' }).getByText('Cover the empty-bucket case with a test.'),
   ).toBeVisible();
   // The send-back is a person's touch: the Human touches card says it with its reason too.
   await expect(
@@ -429,20 +357,24 @@ test('retry a blocked item', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Retry' })).toHaveCount(0);
 });
 
-test('the trace heads each run with its agent copy, model, turns, cost and version', async ({ page }) => {
+test('each run card names its station, role, outcome, turns and cost', async ({ page }) => {
   await page.goto('/o/acme/f/goal/items/8');
   await expect(page.getByRole('heading', { level: 1, name: 'Worker: report usage per message' })).toBeVisible();
   await showTrace(page);
-  const trace = page.getByRole('region', { name: 'Trace' });
+  const trace = page.getByRole('region', { name: 'Timeline' });
 
-  const spec = trace.getByRole('listitem').filter({ hasText: 'spec-writer-1 worked at Spec' });
+  const spec = trace.getByRole('article', { name: 'Spec writer' });
+  await expect(spec.getByText('Spec', { exact: true })).toBeVisible();
   await expect(spec.getByText('Finished', { exact: true })).toBeVisible();
-  await expect(spec.getByText(/^claude-sonnet-5-5, 6 turns, \$0\.24, .+, ran on v9$/)).toBeVisible();
+  await expect(spec.getByText('6 turns')).toBeVisible();
+  await expect(spec.getByText('$0.24')).toBeVisible();
 
-  const build = trace.getByRole('listitem').filter({ hasText: 'builder-2 worked at Build' });
+  const build = trace.getByRole('article', { name: 'Builder' });
+  await expect(build.getByText('Build', { exact: true })).toBeVisible();
   await expect(build.getByText('Running', { exact: true })).toBeVisible();
-  await expect(build.getByText(/ran on v9$/)).toBeVisible();
-  await expect(build.getByRole('list', { name: 'Tool calls by builder-2' })).toBeVisible();
+  await expect(build.getByText('22 turns')).toBeVisible();
+  await expect(build.getByText('$1.12')).toBeVisible();
+  await expect(build.getByRole('list', { name: 'Events by Builder' })).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
@@ -452,7 +384,7 @@ test('leave a note for the agent: it will be in the next run', async ({ page }) 
   await expect(page.getByRole('heading', { level: 1, name: 'Worker: report usage per message' })).toBeVisible();
 
   // One composer per layout: in the trace from 720 px, at the end of the page on a phone.
-  const field = page.getByLabel('Note to the builder').filter({ visible: true });
+  const field = page.getByLabel('Note for the agent').filter({ visible: true });
   await expect(field).toHaveCount(1);
   await field.fill('Also report the cache tokens.');
   await page
@@ -465,7 +397,7 @@ test('leave a note for the agent: it will be in the next run', async ({ page }) 
   await expectAccessible(page);
 
   await showTrace(page);
-  const trace = page.getByRole('region', { name: 'Trace' });
+  const trace = page.getByRole('region', { name: 'Timeline' });
   await expect(trace.getByText('Local user left a note for the next run')).toBeVisible();
   await expect(trace.getByText('Also report the cache tokens.')).toBeVisible();
 });
@@ -473,7 +405,7 @@ test('leave a note for the agent: it will be in the next run', async ({ page }) 
 test('a done item takes no notes', async ({ page }) => {
   await page.goto('/o/acme/f/goal/items/4');
   await expect(page.getByText('At Done', { exact: true })).toBeVisible();
-  await expect(page.getByLabel(/^Note to the/)).toHaveCount(0);
+  await expect(page.getByLabel(/^Note for the agent/)).toHaveCount(0);
 });
 
 test('the board updates live when an item moves elsewhere', async ({ page, request }) => {
@@ -537,20 +469,17 @@ test('on a phone the board opens where a person is needed, then picks any statio
   // Items waiting on a person come first: the board opens on Approve, not the constraint.
   const picker = page.getByRole('tablist', { name: 'Stations' });
   await expect(picker.getByRole('tab', { name: /^Approve/ })).toHaveAttribute('aria-selected', 'true');
-  // The line's WIP stays one phrase on one line ("WIP 1 / of 2" read badly).
-  const wip = page.getByText(/^WIP \d+( of \d+)?$/).filter({ visible: true });
-  expect(await wip.evaluate((el) => el.getClientRects().length)).toBe(1);
-  await picker.getByRole('tab', { name: 'Investigate 3 of 3, 2 ready' }).click();
+  // The phone has no status line: the picked station's column names the constraint.
+  await picker.getByRole('tab', { name: /^Investigate/ }).click();
   await expect(page).toHaveURL(/station=investigate/);
-  await expect(page.getByText('Investigate is the constraint: 3 of 3 busy, 2 waiting')).toBeVisible();
-  await expect(page.getByRole('article').filter({ hasText: 'billing-svc' })).toContainText(
-    'sre#8, Incident, 1 hbilling-svc deploy rolled back twiceinvestigator-1, turn 3',
-  );
+  await expect(page.getByRole('tabpanel').getByRole('heading', { name: 'Investigate' })).toBeVisible();
+  await expect(page.getByRole('tabpanel').getByText('Constraint', { exact: true })).toBeVisible();
+  await expect(page.getByRole('article').filter({ hasText: 'billing-svc' })).toContainText('sre#8');
   await expect(page.getByRole('tabpanel').getByRole('article').filter({ hasText: 'Checkout API p95' })).toContainText(
     'Expedite',
   );
 
-  await picker.getByRole('tab', { name: 'Done 1 today' }).click();
+  await picker.getByRole('tab', { name: /^Done/ }).click();
   await expect(page).toHaveURL(/station=done/);
   await expect(page.getByRole('article').filter({ hasText: 'Redis evictions' })).not.toContainText('Postmortem filed');
   await expectAccessible(page);
@@ -630,7 +559,7 @@ test('on a phone: More opens the drawer, which leads to the organization pages',
   await more.click();
   await drawer.getByRole('link', { name: 'Home' }).click();
   await expect(page).toHaveURL(/\/o\/acme$/);
-  await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /^Good / })).toBeVisible();
   await expect(drawer).toBeHidden();
   // The tab bar stays on the organization's pages; with no factory open it follows the last one visited.
   await expect(page.getByRole('navigation', { name: 'Tabs' }).getByRole('link', { name: 'Board' })).toHaveAttribute(
@@ -675,7 +604,7 @@ test('switch organization from the menu by keyboard', async ({ page }) => {
   await expect(menu.getByRole('menuitem', { name: /^Goal/ })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/o\/goal$/);
-  await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeFocused();
+  await expect(page.getByRole('heading', { level: 1, name: /^Good / })).toBeFocused();
   await expect(orgNav(page).getByRole('link', { name: /, \S+ factory/ })).toHaveCount(1);
   await expect(orgMarkOf(page, 'Goal')).toBeVisible();
 
@@ -697,7 +626,7 @@ test('switch organization from the drawer on a phone', async ({ page }) => {
   await menu.getByRole('menuitem', { name: /^Goal/ }).click();
   await expect(page).toHaveURL(/\/o\/goal$/);
   await expect(page.getByRole('dialog', { name: 'Acme' })).toBeHidden();
-  await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeFocused();
+  await expect(page.getByRole('heading', { level: 1, name: /^Good / })).toBeFocused();
   await expect(orgNav(page).getByRole('link', { name: /, \S+ factory/ })).toHaveCount(1);
 });
 
@@ -735,7 +664,7 @@ test('create an organization and land on its empty factories', async ({ page }) 
 
   await expect(page).toHaveURL(/\/o\/acme-two$/);
   await expect(dialog).toBeHidden();
-  await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /^Good / })).toBeVisible();
   await expect(orgNav(page).getByRole('link', { name: /, \S+ factory/ })).toHaveCount(0);
   const newMark = orgMarkOf(page, 'Acme Two');
   await expect(newMark).toBeVisible();

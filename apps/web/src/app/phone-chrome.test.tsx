@@ -23,6 +23,7 @@ import type { Factory, FactoryOverviewList, Me, Org, OrgAttention, OrgSummary } 
 import { TooltipProvider } from '../ui/tooltip';
 import { AccountProvider } from './account-menu';
 import { ShellFrame } from './app-shell';
+import { PhoneTopBar } from './phone-chrome';
 import { TopBarSlot } from './top-bar';
 
 const org: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'Ac', factory_count: 2, role: 'owner' };
@@ -90,7 +91,7 @@ function renderShell({ at, list = factories }: { at: string; list?: Factory[] })
     path: '/o/$org',
     beforeLoad: () => ({ org }),
     component: () => (
-      <AccountProvider org={org}>
+      <AccountProvider>
         <Outlet />
       </AccountProvider>
     ),
@@ -171,6 +172,39 @@ describe('the phone top bar', () => {
     await screen.findByText('Floor page');
     expect(screen.queryByRole('navigation', { name: 'Tabs' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Open menu' })).toBeNull();
+  });
+});
+
+describe('the phone top bar with a Back link', () => {
+  it('puts the Back link after the Goal mark and before the title', () => {
+    render(
+      <PhoneTopBar
+        title="#147"
+        actions={undefined}
+        back={<a href="/o/acme/f/goal/board">Back to Board</a>}
+        onMenu={() => {}}
+        drawerOpen={false}
+        menuRef={{ current: null }}
+      />,
+    );
+    const mark = screen.getByRole('button', { name: 'Open menu' });
+    const back = screen.getByRole('link', { name: 'Back to Board' });
+    const title = screen.getByText('#147');
+    expect(mark.compareDocumentPosition(back) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('draws no Back link when the page sets none', () => {
+    render(
+      <PhoneTopBar
+        title="Floor"
+        actions={undefined}
+        onMenu={() => {}}
+        drawerOpen={false}
+        menuRef={{ current: null }}
+      />,
+    );
+    expect(screen.queryByRole('link', { name: 'Back to Board' })).toBeNull();
   });
 });
 

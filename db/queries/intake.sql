@@ -59,6 +59,22 @@ WHERE endpoint_id = sqlc.arg(endpoint_id)
 ORDER BY received_at DESC, id DESC
 LIMIT sqlc.arg(max_rows);
 
+-- name: WebhookDelivery :one
+SELECT id, endpoint_id, received_at, headers, body, outcome, reason, item_id FROM webhook_deliveries
+WHERE endpoint_id = sqlc.arg(endpoint_id) AND id = sqlc.arg(id);
+
+-- name: WebhookDeliveryDays :many
+-- The factory's endpoints' deliveries since the instant, per endpoint and UTC day; each endpoint's
+-- rows come from webhook_deliveries_endpoint_idx (endpoint_id, received_at).
+SELECT d.endpoint_id, date_trunc('day', d.received_at, 'UTC')::timestamptz AS day,
+       count(*) FILTER (WHERE d.outcome <> 'refused') AS delivered,
+       count(*) FILTER (WHERE d.outcome = 'refused') AS refused
+FROM webhook_endpoints e
+JOIN webhook_deliveries d ON d.endpoint_id = e.id AND d.received_at >= sqlc.arg(since)
+WHERE e.factory_id = sqlc.arg(factory_id)
+GROUP BY 1, 2
+ORDER BY 1, 2;
+
 -- name: PruneWebhookDeliveries :one
 -- Every organization's deliveries received before the instant, through the definer.
 SELECT goal_prune_webhook_deliveries(sqlc.arg(before)::timestamptz)::bigint AS deleted;

@@ -53,6 +53,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Delivery_SignatureHeadersNeverKept", testSignatureHeaders},
 		{"Delivery_NewestFirstInPages", testDeliveryPages},
 		{"Delivery_RulesRefused", testDeliveryRules},
+		{"Delivery_ReadOneWithItsRequest", testDeliveryRead},
+		{"Delivery_DaysCountedPerEndpointAndUTCDay", testDeliveryDays},
 		{"Delivery_PruneDeletesOnlyOlderRows", testPrune},
 		{"Firing_SecondWithTheSameKeyIsANoOp", testFiringIdempotent},
 		{"Firing_RulesRefused", testFiringRules},
@@ -436,6 +438,96 @@ func ids(ds []domain.WebhookDelivery) []domain.WebhookDeliveryID {
 	}
 
 	return out
+}
+
+// A delivery is read by its endpoint and id with its headers and body; another endpoint, an
+// unknown id and another organization read none.
+func testDeliveryRead(f *fixture) {
+	t := f.t
+	s := f.endpoint(hooks, domain.WebhookGeneric)
+	other := f.endpoint("deploys", domain.WebhookGeneric)
+	made := f.deliver(s.Endpoint.ID, t0)
+
+	got, err := f.in.Delivery(f.ctx(), s.Endpoint.ID, made.ID)
+	if err != nil || got.ID != made.ID || got.EndpointID != s.Endpoint.ID || !got.ReceivedAt.Equal(t0) ||
+		!maps.Equal(got.Headers, map[string]string{"content-type": jsonCT}) || string(got.Body) != `{"event":"deploy"}` ||
+		got.Outcome != domain.DeliveryAccepted {
+		t.Errorf("Delivery = %+v, %v; want the delivery made", got, err)
+	}
+
+	labs := domain.WithOrg(t.Context(), f.NewOrg(t))
+
+	for name, read := range map[string]func() error{
+		"another endpoint's": func() error { _, err := f.in.Delivery(f.ctx(), other.Endpoint.ID, made.ID); return err },
+		"an unknown": func() error {
+			_, err := f.in.Delivery(f.ctx(), s.Endpoint.ID, "019a0000-0000-7000-8000-000000000000")
+			return err
+		},
+		"another organization's": func() error { _, err := f.in.Delivery(labs, s.Endpoint.ID, made.ID); return err },
+	} {
+		if err := read(); !errors.Is(err, ports.ErrNotFound) {
+			t.Errorf("Delivery of %s delivery = %v; want ErrNotFound", name, err)
+		}
+	}
+}
+
+// DeliveryDays counts the factory's deliveries since an instant per endpoint and UTC day, accepted
+// and created ones as delivered, by endpoint then day; another factory's and another
+// organization's count nothing.
+func testDeliveryDays(f *fixture) {
+	t := f.t
+	a := f.endpoint(hooks, domain.WebhookGeneric).Endpoint.ID
+	b := f.endpoint("deploys", domain.WebhookGitHub).Endpoint.ID
+	day := time.Date(t0.Year(), t0.Month(), t0.Day(), 0, 0, 0, 0, time.UTC)
+	since := day.Add(-24 * time.Hour)
+
+	f.deliver(a, since.Add(-time.Minute)) // before since
+	f.deliver(a, since)
+	f.deliver(a, t0)
+	f.refuse(a, t0.Add(time.Hour))
+	f.refuse(a, day.Add(24*time.Hour-time.Microsecond))
+	f.refuse(b, t0)
+
+	it := f.item(domain.ItemFromWebhook, "", t0)
+	if _, err := f.in.RecordDelivery(f.ctx(), domain.NewWebhookDelivery{EndpointID: b, ReceivedAt: t0, Outcome: domain.DeliveryCreated, ItemID: it.ID}); err != nil {
+		t.Fatal(err)
+	}
+
+	elsewhere := f.factory
+	f.factory = f.NewFactory(t, f.org)
+	f.deliver(f.endpoint(hooks, domain.WebhookGeneric).Endpoint.ID, t0)
+	f.factory = elsewhere
+
+	want := []domain.DeliveryDay{
+		{EndpointID: a, Day: since, Delivered: 1},
+		{EndpointID: a, Day: day, Delivered: 1, Refused: 2},
+		{EndpointID: b, Day: day, Delivered: 1, Refused: 1},
+	}
+	if b < a {
+		want = []domain.DeliveryDay{want[2], want[0], want[1]}
+	}
+
+	got, err := f.in.DeliveryDays(f.ctx(), f.factory, since)
+	if err != nil || !slices.EqualFunc(got, want, func(x, y domain.DeliveryDay) bool {
+		return x.EndpointID == y.EndpointID && x.Day.Equal(y.Day) && x.Delivered == y.Delivered && x.Refused == y.Refused
+	}) {
+		t.Errorf("DeliveryDays = %+v, %v; want %+v", got, err, want)
+	}
+
+	labs := domain.WithOrg(t.Context(), f.NewOrg(t))
+	if got, err := f.in.DeliveryDays(labs, f.factory, since); err != nil || len(got) != 0 {
+		t.Errorf("labs DeliveryDays = %+v, %v; want none", got, err)
+	}
+}
+
+// refuse records a refused delivery to endpoint id at at.
+func (f *fixture) refuse(id domain.WebhookEndpointID, at time.Time) {
+	f.t.Helper()
+
+	_, err := f.in.RecordDelivery(f.ctx(), domain.NewWebhookDelivery{EndpointID: id, ReceivedAt: at, Outcome: domain.DeliveryRefused, Reason: "signature did not match"})
+	if err != nil {
+		f.t.Fatalf("RecordDelivery: %v", err)
+	}
 }
 
 // A delivery to an unknown endpoint is ErrNotFound; one with a bad outcome, an item on a refusal
@@ -986,6 +1078,8 @@ func testNoOrg(f *fixture) {
 			return err
 		},
 		"ListDeliveries": func() error { _, err := f.in.ListDeliveries(ctx, id, domain.DeliveryCursor{}, 10); return err },
+		"Delivery":       func() error { _, err := f.in.Delivery(ctx, id, "019a0000-0000-7000-8000-000000000000"); return err },
+		"DeliveryDays":   func() error { _, err := f.in.DeliveryDays(ctx, f.factory, t0); return err },
 		"RecordFiring": func() error {
 			_, _, err := f.in.RecordFiring(ctx, domain.TriggerFiring{
 				FactoryID: f.factory, Trigger: flaky, Source: domain.TriggerSchedule, EventKey: "schedule", IdempotencyKey: "k", Outcome: domain.FiringSkipped, At: t0,

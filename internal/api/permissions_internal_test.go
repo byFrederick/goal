@@ -175,7 +175,7 @@ func TestPermissions_KeysNeverHoldThese(t *testing.T) {
 
 	never := []string{
 		"member:read", "member:manage", "invitation:read", "api_key:read", "api_key:manage",
-		"org:delete", "org:transfer", "org:manage", "org:create", "platform:read", "platform:manage",
+		"org:delete", "org:transfer", "org:manage", "org:create", "platform:read", "platform:manage", "webhook:manage",
 	}
 
 	for name, r := range permissionRules {

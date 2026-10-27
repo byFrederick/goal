@@ -76,6 +76,7 @@ import { createKeys } from './keys.ts';
 import { createKnowledge } from './knowledge.ts';
 import { membersFor, orgCanOf } from './people.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
+import { orgRunsOf } from './runs.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
 
 type Next = (err?: unknown) => void;
@@ -1431,6 +1432,11 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return json(res, 200, { factories });
     }
 
+    if (rest === '/runs' && method === 'GET') {
+      const result = orgRunsOf(state, org.id, url.searchParams);
+      return 'body' in result ? json(res, 200, result.body) : problem(res, result.status, result.title, result.detail);
+    }
+
     if (rest === '/attention' && method === 'GET') {
       const factories = factoriesOf(org.id).map(attentionOf);
       const body: OrgAttention = { waiting_on_you: factories.reduce((n, a) => n + a.waiting_on_you, 0), factories };
@@ -1508,6 +1514,43 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       if (stats === null)
         return problem(res, 404, 'Not Found', `factory ${factory.name} has no such agent`, 'agent-not-found');
       return typeof stats === 'string' ? problem(res, 400, 'Bad Request', stats) : json(res, 200, stats);
+    }
+
+    // GET …/activity: the factory's milestone events, newest first (listFactoryActivity). Run events are
+    // never listed, and each event carries its item's ref, number and title.
+    m = rest.match(/^\/factories\/([^/]+)\/activity$/);
+    if (m && method === 'GET') {
+      const key = decodeURIComponent(m[1] ?? '');
+      const factory = findFactory(key, org.id);
+      if (!factory) return problem(res, 404, 'Factory not found', key);
+      const limit = Number(url.searchParams.get('limit') ?? 20);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+        return problem(res, 400, 'Bad Request', 'limit must be in [1, 50]');
+      }
+      const milestones = new Set([
+        'created',
+        'moved',
+        'gate_approved',
+        'gate_rejected',
+        'approved',
+        'rejected',
+        'blocked',
+        'check_failed',
+        'merged',
+        'done',
+        'assembled',
+        'cancelled',
+      ]);
+      const events = state.events
+        .flatMap((e) => {
+          const it = state.items.find((o) => o.id === e.item_id);
+          return it && it.factory === factory.name && milestones.has(e.kind)
+            ? [{ ...e, ref: ref(it), number: it.number, title: it.title }]
+            : [];
+        })
+        .sort((a, b) => b.at.localeCompare(a.at) || b.id - a.id)
+        .slice(0, limit);
+      return json(res, 200, { events });
     }
 
     m = rest.match(

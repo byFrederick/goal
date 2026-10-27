@@ -163,6 +163,16 @@ type DeliveryCursor struct {
 	ID         WebhookDeliveryID
 }
 
+// DeliveryDay counts one endpoint's deliveries received on one UTC day: Delivered the accepted
+// ones, with or without an item created, Refused the refused ones.
+type DeliveryDay struct {
+	EndpointID WebhookEndpointID
+	// Day is the day's midnight, UTC.
+	Day       time.Time
+	Delivered int
+	Refused   int
+}
+
 // ItemSource is where a work item came from, for Intake.
 type ItemSource string
 

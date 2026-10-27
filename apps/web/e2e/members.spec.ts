@@ -53,15 +53,15 @@ const personOf = (page: Page, name: string) =>
     ? people(page).getByRole('button', { name: new RegExp(`^${name}`) })
     : people(page).getByRole('row', { name: new RegExp(name) });
 
-/** Opens a person's details: their sheet on a phone, the factory panel from the row's menu wider. */
+/** Opens a person's details: their sheet, from the card on a phone or the row's More menu wider. */
 async function openPerson(page: Page, name: string) {
   if (listsCards(page)) {
     await personOf(page, name).click();
     return page.getByRole('dialog', { name });
   }
-  await page.getByRole('button', { name: `Actions for ${name}` }).click();
+  await page.getByRole('button', { name: `More for ${name}` }).click();
   await page.getByRole('menuitem', { name: 'Factory roles…' }).click();
-  return page.getByRole('region', { name: `${name} in each factory` });
+  return page.getByRole('dialog', { name });
 }
 
 test('an owner sees everyone, why a role cannot change, and changes factory roles at once', async ({ page }) => {
@@ -69,7 +69,7 @@ test('an owner sees everyone, why a role cannot change, and changes factory role
   await page.goto('/o/acme/members');
   await expect(heading(page)).toBeVisible();
   await expect(page).toHaveTitle('Members and roles · Acme · Goal');
-  await expect(people(page).getByRole('heading', { name: '6 members, 1 invite' })).toBeVisible();
+  await expect(page.getByText('4 members, 2 invites waiting')).toBeVisible();
   await expect(page.getByText('3 factories. You’re an owner.')).toBeVisible({ visible: !isPhone(page) });
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
@@ -80,18 +80,18 @@ test('an owner sees everyone, why a role cannot change, and changes factory role
     await expect(own).toBeDisabled();
     await expect(own).toHaveAccessibleDescription('Acme needs at least one owner');
     await expect(page.getByRole('combobox', { name: 'Role of M. Okafor in Acme' })).toBeEnabled();
-    await expect(personOf(page, 'J. Lindqvist')).toContainText('sre approver, support viewer');
-    await expect(personOf(page, 'd.ross@example.com')).toContainText('Invited');
+    await expect(personOf(page, 'J. Lindqvist')).toContainText('goal editor, sre editor');
   }
+  await expect(page.getByRole('region', { name: /Waiting to join/ })).toContainText('d.ross@example.com');
 
-  // Lindqvist becomes an editor of goal: the panel (or sheet) changes at once and the list follows.
+  // Lindqvist becomes a viewer of goal: the sheet changes at once and the list follows.
   const details = await openPerson(page, 'J. Lindqvist');
   const goal = details.getByRole('group', { name: 'goal: role of J. Lindqvist' });
-  await goal.getByText('Editor').click();
-  await expect(goal.getByRole('radio', { name: 'Editor' })).toBeChecked();
+  await goal.getByText('Viewer').click();
+  await expect(goal.getByRole('radio', { name: 'Viewer' })).toBeChecked();
   await expectAccessible(page);
-  if (listsCards(page)) await page.keyboard.press('Escape');
-  await expect(personOf(page, 'J. Lindqvist')).toContainText('goal editor, sre approver, support viewer');
+  await page.keyboard.press('Escape');
+  await expect(personOf(page, 'J. Lindqvist')).toContainText('goal viewer, sre editor');
 
   // An owner's factory roles are the organization's: every factory, Editor, not changeable.
   const okafor = await openPerson(page, 'M. Okafor');
@@ -114,14 +114,14 @@ test('an owner invites people with factory roles, resends and cancels an invitat
   await expect(dialog.getByLabel('Email addresses')).toHaveAccessibleDescription(/^Not an email address: nobody\./);
 
   // An existing member is refused by name; the other address goes, with its factory role.
-  await dialog.getByLabel('Email addresses').fill('k.ito@example.com\ns.lee@example.com');
+  await dialog.getByLabel('Email addresses').fill('k.ito@example.com\na.ortiz@example.com');
   await dialog.getByLabel('sre').selectOption('approver');
   await dialog.getByRole('button', { name: 'Send invitations' }).click();
-  await expect(dialog.getByText('Not sent to s.lee@example.com: Already a member of Acme.')).toBeVisible();
-  await expect(dialog.getByLabel('Email addresses')).toHaveValue('s.lee@example.com');
+  await expect(dialog.getByText('Not sent to a.ortiz@example.com: Already a member of Acme.')).toBeVisible();
+  await expect(dialog.getByLabel('Email addresses')).toHaveValue('a.ortiz@example.com');
   await expectToast(page, '1 invitation sent');
   await page.keyboard.press('Escape');
-  await expect(people(page).getByRole('heading', { name: '6 members, 2 invites' })).toBeVisible();
+  await expect(page.getByText('4 members, 3 invites waiting')).toBeVisible();
 
   // Admins and owners hold every factory role: inviting one asks for none.
   await page.getByRole('button', { name: /^Invite/ }).click();
@@ -131,46 +131,46 @@ test('an owner invites people with factory roles, resends and cancels an invitat
 
   await page.getByRole('button', { name: 'Resend the invitation to k.ito@example.com' }).click();
   await expectToast(page, 'Sent the invitation to k.ito@example.com again');
-  await page.getByRole('button', { name: 'Cancel the invitation to k.ito@example.com' }).click();
+  await page.getByRole('button', { name: 'Revoke the invitation to k.ito@example.com' }).click();
   await expectToast(page, 'Cancelled the invitation to k.ito@example.com');
-  await expect(people(page).getByRole('heading', { name: '6 members, 1 invite' })).toBeVisible();
+  await expect(page.getByText('4 members, 2 invites waiting')).toBeVisible();
 });
 
 test('an owner makes someone an admin and removes someone, after confirming', async ({ page }) => {
   await signedInAs(page.request);
   await page.goto('/o/acme/members');
   if (listsCards(page)) {
-    const sheet = await openPerson(page, 'S. Lee');
-    await sheet.getByLabel('Role of S. Lee in Acme').selectOption('admin');
+    const sheet = await openPerson(page, 'A. Ortiz');
+    await sheet.getByLabel('Role of A. Ortiz in Acme').selectOption('admin');
   } else {
-    await page.getByRole('combobox', { name: 'Role of S. Lee in Acme' }).selectOption('admin');
+    await page.getByRole('combobox', { name: 'Role of A. Ortiz in Acme' }).selectOption('admin');
   }
-  await expectToast(page, 'S. Lee is now an admin');
+  await expectToast(page, 'A. Ortiz is now an admin');
   if (listsCards(page)) {
-    await page.getByRole('dialog', { name: 'S. Lee' }).getByRole('button', { name: 'Remove from Acme…' }).click();
+    await page.getByRole('dialog', { name: 'A. Ortiz' }).getByRole('button', { name: 'Remove from Acme…' }).click();
   } else {
-    await page.getByRole('button', { name: 'Actions for S. Lee' }).click();
+    await page.getByRole('button', { name: 'More for A. Ortiz' }).click();
     await page.getByRole('menuitem', { name: 'Remove from Acme…' }).click();
   }
-  const confirm = page.getByRole('dialog', { name: 'Remove S. Lee from Acme?' });
+  const confirm = page.getByRole('dialog', { name: 'Remove A. Ortiz from Acme?' });
   await expect(confirm.getByRole('button', { name: 'Cancel' })).toBeFocused();
   await expectAccessible(page);
   await confirm.getByRole('button', { name: 'Remove' }).click();
-  await expectToast(page, 'Removed S. Lee from Acme');
-  await expect(people(page).getByRole('heading', { name: '5 members, 1 invite' })).toBeVisible();
+  await expectToast(page, 'Removed A. Ortiz from Acme');
+  await expect(page.getByText('3 members, 2 invites waiting')).toBeVisible();
 });
 
 test('a change with an old sign-in asks to confirm it’s you, then goes through', async ({ page }) => {
   await signedInAs(page.request, 'f.cruz@example.com', false);
   await page.goto('/o/acme/members');
-  const details = await openPerson(page, 'P. Nair');
-  await details.getByRole('group', { name: 'goal: role of P. Nair' }).getByText('Viewer').click();
+  const details = await openPerson(page, 'A. Ortiz');
+  await details.getByRole('group', { name: 'goal: role of A. Ortiz' }).getByText('Viewer').click();
   const reauth = page.getByRole('dialog', { name: 'Confirm it’s you' });
   await reauth.getByRole('button', { name: 'Email me a code' }).click();
   await reauth.getByLabel('Code').fill('000000');
   await expect(reauth).toBeHidden();
-  if (listsCards(page)) await page.keyboard.press('Escape');
-  await expect(personOf(page, 'P. Nair')).toContainText('goal viewer, support editor');
+  await page.keyboard.press('Escape');
+  await expect(personOf(page, 'A. Ortiz')).toContainText('goal viewer, support viewer');
 });
 
 test('a member sees everyone read-only, and leaves', async ({ page }) => {
@@ -179,7 +179,7 @@ test('a member sees everyone read-only, and leaves', async ({ page }) => {
   await expect(page.getByText('View only. Owners and admins of Acme invite people and change roles.')).toBeVisible();
   await expect(page.getByRole('button', { name: /^Invite/ })).toHaveCount(0);
   await expect(page.getByRole('combobox', { name: /^Role of/ })).toHaveCount(0);
-  await expect(personOf(page, 'd.ross@example.com')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: /Waiting to join/ })).toHaveCount(0);
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
@@ -207,7 +207,7 @@ test('an invitee signs in from the link, sees the invitation and joins', async (
   await expect(
     page.getByRole('heading', { level: 1, name: 'M. Okafor invited you to join Acme as a member.' }),
   ).toBeVisible();
-  await expect(page.getByText('sre, viewer')).toBeVisible();
+  await expect(page.getByText('sre, editor')).toBeVisible();
   await expect(page.getByText('d.ross@example.com')).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
@@ -226,7 +226,7 @@ test('an invitee signs in from the link, sees the invitation and joins', async (
 
   // Joined as a member with the invitation's factory role.
   await page.goto('/o/acme/members');
-  await expect(personOf(page, 'd.ross')).toContainText('sre viewer');
+  await expect(personOf(page, 'd.ross')).toContainText('sre editor');
   await expect(personOf(page, 'd.ross')).toContainText('DR');
 });
 

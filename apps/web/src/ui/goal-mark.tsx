@@ -5,11 +5,13 @@ import { cn } from './cn';
 
 /**
  * `shell` is the sidebar's square (shell.html's 26 px, snapped to the 4 px scale: 28 px, 16 px glyph);
- * `brand` is the sign-up page's (sign-up.html's 30 px, snapped to 32 px, 20 px glyph).
+ * `brand` is the sign-up page's (sign-up.html's 30 px, snapped to 32 px, 20 px glyph);
+ * `hero` is the phone sign-in's (mobile/sign-in.html's 56 px square, 32 px glyph).
  */
 const sizes = {
   shell: { square: 'size-7', glyph: 'size-4' },
   brand: { square: 'size-8', glyph: 'size-5' },
+  hero: { square: 'size-14', glyph: 'size-8' },
 } as const;
 
 interface GoalMarkProps {

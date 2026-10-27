@@ -39,14 +39,14 @@ const entry = (section: ReturnType<Page['locator']>, name: string) =>
 
 test('your own tokens and every member’s are listed, and the page fits the screen', async ({ page }) => {
   await signIn(page.request);
-  await page.goto('/o/acme/api-keys');
+  await page.goto('/account');
   await expect(own(page).getByRole('heading', { name: 'Personal tokens' })).toBeVisible();
   await expect(
     own(page).getByText(
       'A personal token lets the CLI or a script on your machine act as you in Acme, with no more than your role allows. Tokens expire after at most 90 days.',
     ),
   ).toBeVisible();
-  const laptop = entry(own(page), 'laptop');
+  const laptop = entry(own(page), 'laptop-cli');
   await expect(laptop.getByText('goal_pat_Q7mk…')).toBeVisible();
   await expect(laptop.getByText('See factories')).toBeVisible();
   await expect(laptop.getByText('+2 more')).toBeVisible();
@@ -60,6 +60,7 @@ test('your own tokens and every member’s are listed, and the page fits the scr
     ).toBeVisible();
   }
 
+  await page.goto('/o/acme/api-keys');
   const box = entry(members(page), 'build-box');
   await expect(box.getByText('M. Okafor')).toBeVisible();
   await expect(box.getByText('in 5 days')).toBeVisible();
@@ -71,7 +72,7 @@ test('your own tokens and every member’s are listed, and the page fits the scr
 test('a new token takes nothing from the link, warns, and shows its secret once', async ({ page }) => {
   await signIn(page.request);
   // A link that tries to set a token up for someone else's use: the dialog ignores all of it.
-  await page.goto('/o/acme/api-keys?name=evil&scopes=definition:publish&expires_in_days=90#personal-tokens');
+  await page.goto('/account?name=evil&scopes=definition:publish&expires_in_days=90#personal-tokens');
   await expect(own(page).getByRole('heading', { name: 'Personal tokens' })).toBeFocused();
   await own(page).getByRole('button', { name: 'New token' }).click();
   const d = dialog(page);
@@ -117,7 +118,7 @@ test('a new token takes nothing from the link, warns, and shows its secret once'
 
 test('a token needs a name and something to do, and a live token’s name is taken', async ({ page }) => {
   await signIn(page.request);
-  await page.goto('/o/acme/api-keys');
+  await page.goto('/account');
   await own(page).getByRole('button', { name: 'New token' }).click();
   const d = dialog(page);
   await d.getByRole('button', { name: 'Create token' }).click();
@@ -133,21 +134,21 @@ test('a token needs a name and something to do, and a live token’s name is tak
 
 test('revoking your own token needs no recent sign-in', async ({ page }) => {
   await signIn(page.request, {}, 'stale');
-  await page.goto('/o/acme/api-keys');
-  await entry(own(page), 'laptop').getByRole('button', { name: 'Revoke laptop…' }).click();
-  const confirm = page.getByRole('dialog', { name: 'Revoke laptop?' });
+  await page.goto('/account');
+  await entry(own(page), 'laptop-cli').getByRole('button', { name: 'Revoke laptop-cli…' }).click();
+  const confirm = page.getByRole('dialog', { name: 'Revoke laptop-cli?' });
   await expect(confirm.getByText('Anything using it stops working at once.')).toBeVisible();
   await expect(confirm.getByRole('button', { name: 'Cancel' })).toBeFocused();
   await confirm.getByRole('button', { name: 'Revoke token' }).click();
 
-  await expectToast(page, 'Revoked laptop');
+  await expectToast(page, 'Revoked laptop-cli');
   await expect(page.getByRole('dialog', { name: 'Confirm it’s you' })).toHaveCount(0);
-  await expect(own(page).getByRole('button', { name: 'Revoke laptop…' })).toHaveCount(0);
+  await expect(own(page).getByRole('button', { name: 'Revoke laptop-cli…' })).toHaveCount(0);
 });
 
 test('creating a token with an older sign-in confirms it’s you, then creates it', async ({ page }) => {
   await signIn(page.request, {}, 'stale');
-  await page.goto('/o/acme/api-keys');
+  await page.goto('/account');
   await own(page).getByRole('button', { name: 'New token' }).click();
   const d = dialog(page);
   await d.getByLabel('Name').fill('headless');
@@ -207,14 +208,14 @@ test('the account menu opens your personal tokens', async ({ page }) => {
   await openNavigation(page);
   await orgNav(page).getByRole('button', { name: 'FC, F. Cruz, account' }).click();
   await page.getByRole('dialog', { name: 'Account' }).getByRole('link', { name: 'Personal tokens' }).click();
-  await expect(page).toHaveURL(/\/o\/acme\/api-keys#personal-tokens$/);
+  await expect(page).toHaveURL(/\/account#personal-tokens$/);
   await expect(own(page).getByRole('heading', { name: 'Personal tokens' })).toBeFocused();
   await expect(own(page).getByRole('heading', { name: 'Personal tokens' })).toBeInViewport();
 });
 
 test('with sign-in off there are no personal tokens to make', async ({ page, request }) => {
   await request.post('/__mock/reset');
-  await page.goto('/o/acme/api-keys');
+  await page.goto('/account');
   await expect(
     own(page).getByText('Personal tokens need sign-in. With sign-in off, the CLI acts as the local user without one.'),
   ).toBeVisible();

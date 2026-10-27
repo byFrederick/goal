@@ -233,6 +233,8 @@ type probe struct {
 const (
 	submitFix  = `{"title":"t","type":"fix"}`
 	noDocument = "00000000-0000-7000-8000-fffffffffffd"
+	// probeHooks are acme's webhook endpoints.
+	probeHooks = "/v1/orgs/acme/factories/acme/webhooks"
 )
 
 var probes = map[string]probe{
@@ -335,6 +337,16 @@ var probes = map[string]probe{
 	"deleteCredential":  {method: http.MethodDelete, path: "/v1/orgs/acme/credentials/acme-token", org: testOrg},
 	"importCredentials": {method: http.MethodPost, path: "/v1/orgs/acme/credentials/import", body: `{"format":"env","text":"A_B=c","dry_run":true}`, org: testOrg},
 
+	"listWebhookEndpoints": {method: http.MethodGet, path: probeHooks, org: testOrg, factory: acmeID},
+	"createWebhookEndpoint": {
+		method: http.MethodPost, path: probeHooks, body: `{"name":"ci-hooks","kind":"generic"}`, org: testOrg, factory: acmeID,
+	},
+	"rotateWebhookSecret":   {method: http.MethodPost, path: probeHooks + "/" + noDocument + "/rotate", org: testOrg, factory: acmeID},
+	"deleteWebhookEndpoint": {method: http.MethodDelete, path: probeHooks + "/" + noDocument, org: testOrg, factory: acmeID},
+	"listWebhookDeliveries": {method: http.MethodGet, path: probeHooks + "/" + noDocument + "/deliveries", org: testOrg, factory: acmeID},
+	"getWebhookDelivery": {
+		method: http.MethodGet, path: probeHooks + "/" + noDocument + "/deliveries/" + noDocument, org: testOrg, factory: acmeID,
+	},
 	"listKnowledgeSources": {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/sources?factory=acme", org: testOrg, factory: acmeID},
 	"createKnowledgeSource": {
 		method: http.MethodPost, path: "/v1/orgs/acme/knowledge/sources", org: testOrg, body: `{"name":"notes","title":"Notes","kind":"upload"}`,

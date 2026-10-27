@@ -308,6 +308,76 @@ func newerFirst(d domain.WebhookDelivery, c domain.DeliveryCursor) int {
 	return cmp.Or(c.ReceivedAt.Compare(d.ReceivedAt), cmp.Compare(c.ID, d.ID))
 }
 
+// Delivery implements ports.Intake.
+func (in *Intake) Delivery(ctx context.Context, endpoint domain.WebhookEndpointID, id domain.WebhookDeliveryID) (domain.WebhookDelivery, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.WebhookDelivery{}, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	for _, r := range in.d.deliveries {
+		if r.org == org && r.d.EndpointID == endpoint && r.d.ID == id {
+			return cloneDelivery(r.d), nil
+		}
+	}
+
+	return domain.WebhookDelivery{}, fmt.Errorf("delivery %s of endpoint %s: %w", id, endpoint, ports.ErrNotFound)
+}
+
+// DeliveryDays implements ports.Intake.
+func (in *Intake) DeliveryDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.DeliveryDay, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	type key struct {
+		endpoint domain.WebhookEndpointID
+		day      time.Time
+	}
+
+	counts := map[key]*domain.DeliveryDay{}
+
+	for _, r := range in.d.deliveries {
+		e, ok := in.d.endpoints[r.d.EndpointID]
+		if r.org != org || !ok || e.e.FactoryID != factory || r.d.ReceivedAt.Before(since) {
+			continue
+		}
+
+		at := r.d.ReceivedAt.UTC()
+		k := key{r.d.EndpointID, time.Date(at.Year(), at.Month(), at.Day(), 0, 0, 0, 0, time.UTC)}
+
+		c, ok := counts[k]
+		if !ok {
+			c = &domain.DeliveryDay{EndpointID: k.endpoint, Day: k.day}
+			counts[k] = c
+		}
+
+		if r.d.Outcome == domain.DeliveryRefused {
+			c.Refused++
+		} else {
+			c.Delivered++
+		}
+	}
+
+	out := make([]domain.DeliveryDay, 0, len(counts))
+	for _, c := range counts {
+		out = append(out, *c)
+	}
+
+	slices.SortFunc(out, func(a, b domain.DeliveryDay) int {
+		return cmp.Or(cmp.Compare(a.EndpointID, b.EndpointID), a.Day.Compare(b.Day))
+	})
+
+	return out, nil
+}
+
 // PruneDeliveries implements ports.Intake.
 func (in *Intake) PruneDeliveries(_ context.Context, before time.Time) (int, error) {
 	in.d.mu.Lock()
