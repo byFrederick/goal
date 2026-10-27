@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { Bundle, type GitCredential } from './spec.js';
@@ -36,6 +37,8 @@ export interface Prepared {
    * The repository's own, which mise installs from its config, are not counted.
    */
   tools: number;
+  /** Definition mode: how many of the draft's files were written into the workspace. */
+  definition_files?: number;
 }
 
 type FreshBase = NonNullable<NonNullable<Bundle['repository']>['fresh_base']>;
@@ -49,6 +52,8 @@ type FreshBase = NonNullable<NonNullable<Bundle['repository']>['fresh_base']>;
  * merge; a conflict is aborted and reported, not failed), and installs tools with mise: the
  * repository's own (mise.toml, .tool-versions, …), then the definition's runtime.tools. The factory's rules
  * go to the user-level rules in the config dir, never into /workspace, so they cannot be committed.
+ * In definition mode (the bundle's definition, ADR 0021) /workspace gets the factory's draft files
+ * instead, /goal/definition.json their starting sha256, and no git command runs.
  * Any failure throws; nothing is retried.
  */
 export async function prepare(deps: PrepareDeps): Promise<Prepared> {
@@ -63,7 +68,8 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
   for (const rule of bundle.spec.rules ?? []) {
     await put(join(deps.dirs.claude, 'rules', `${rule.name}.md`), rule.content);
   }
-  for (const c of bundle.git_credentials) {
+  // Definition mode has no repository: nothing signs git in.
+  for (const c of bundle.definition ? [] : bundle.git_credentials) {
     // --add: two connections may sign git in to one host; git asks each helper until one answers.
     await must(deps, 'git', [
       'config',
@@ -75,6 +81,16 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
   }
 
   const out: Prepared = { type: 'prepared', at: '', seconds: 0, tools: bundle.tools.length };
+  if (bundle.definition) {
+    const baseline: Record<string, string> = {};
+    for (const [path, content] of Object.entries(bundle.definition.files)) {
+      const bytes = Buffer.from(content, 'base64');
+      await put(join(deps.dirs.workspace, path), bytes);
+      baseline[path] = createHash('sha256').update(bytes).digest('hex');
+    }
+    await put(join(deps.dirs.goal, 'definition.json'), JSON.stringify(baseline));
+    out.definition_files = Object.keys(baseline).length;
+  }
   const repo = bundle.repository;
   if (repo) {
     const ws = deps.dirs.workspace;

@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -418,6 +419,62 @@ describe('prepare', () => {
       await expect(prepare(depsWith(gatewayServing(bundle).fake, exec))).rejects.toThrow();
       expect(calls).toEqual([]);
     }
+  });
+
+  describe('definition mode', () => {
+    const draftSpec = { ...spec, item_id: '', station: '', draft_request: { id: 'd1', text: 'Give review a 4th reviewer' } };
+    const sha = (s: string) => createHash('sha256').update(s).digest('hex');
+    const factory = 'apiVersion: goal/v1\nkind: Factory\n';
+    const prompt = '# Reviewer\n';
+
+    it("writes the draft's files into the workspace and their sha256 into /goal/definition.json, with no git or mise", async () => {
+      const bundle = {
+        spec: draftSpec,
+        files: { 'agent/prompt.md': b64('unused\n') },
+        git_credentials: [{ host: 'github.com', username: 'x-access-token', password_env: 'GH_TOKEN' }],
+        definition: { files: { 'factory.yaml': b64(factory), 'agents/reviewer.md': b64(prompt) } },
+      };
+      const { exec, calls } = recorder();
+
+      const prepared = await prepare(depsWith(gatewayServing(bundle).fake, exec));
+
+      expect(await readFile(join(dirs.workspace, 'factory.yaml'), 'utf8')).toBe(factory);
+      expect(await readFile(join(dirs.workspace, 'agents/reviewer.md'), 'utf8')).toBe(prompt);
+      expect(JSON.parse(await readFile(join(dirs.goal, 'definition.json'), 'utf8'))).toEqual({
+        'factory.yaml': sha(factory),
+        'agents/reviewer.md': sha(prompt),
+      });
+      expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8')).draft_request).toEqual(
+        draftSpec.draft_request,
+      );
+      expect(prepared).toEqual({ type: 'prepared', at: later.toISOString(), seconds: 12.3, tools: 0, definition_files: 2 });
+      // No clone, no credential helper, no mise install for a repository.
+      expect(calls).toEqual([]);
+    });
+
+    it('refuses a definition with a repository, without a draft request, or with a path that leaves the workspace', async () => {
+      const files = { 'factory.yaml': b64(factory) };
+      for (const bundle of [
+        { spec: draftSpec, files: {}, definition: { files }, repository: { url: 'https://example.com/a.git', branch: 'goal/1-x' } },
+        { spec, files: {}, definition: { files } },
+        { spec: draftSpec, files: {} },
+        { spec: draftSpec, files: {}, definition: { files: { '../x': b64('x') } } },
+        { spec: draftSpec, files: {}, definition: { files: { 'agents/../../x': b64('x') } } },
+        { spec: draftSpec, files: {}, definition: { files: { '/etc/profile': b64('x') } } },
+        { spec: draftSpec, files: { 'definition.json': b64('{}') }, definition: { files } },
+      ]) {
+        const { exec, calls } = recorder();
+        await expect(prepare(depsWith(gatewayServing(bundle).fake, exec))).rejects.toThrow();
+        expect(calls).toEqual([]);
+        expect(existsSync(join(dirs.workspace, 'factory.yaml'))).toBe(false);
+      }
+    });
+
+    it('still needs an item outside definition mode', async () => {
+      const { exec } = recorder();
+      const bundle = { spec: { ...spec, item_id: '' }, files: {} };
+      await expect(prepare(depsWith(gatewayServing(bundle).fake, exec))).rejects.toThrow('item_id');
+    });
   });
 
   it('fails when the clone fails', async () => {
