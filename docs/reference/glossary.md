@@ -25,6 +25,7 @@ The words Goal's code, API and UI use, one sentence each, with the place in the 
 | Drum-buffer-rope | A release policy that lets work in at the pace of the constraint; the policy can be chosen, but its enforcement is not built yet. | `internal/core/domain/policy.go` (`ReleaseDBR`) |
 | Edge, need | A stored dependency between two items: an item needs another item before it can be pulled. | `internal/core/domain/edge.go` (`Edge`, `OpenNeed`) |
 | Event | One recorded change of an item, run or factory, which the stream and the audit read. | `internal/core/domain/event.go` (`Event`) |
+| Export | A CSV file of one list (such as runs or spend), streamed by a `GET` at the list's path plus `/export` with the same filters and permission, and capped at 100000 rows; planned, not built yet. | `internal/api` (planned); [ADR 0020](../adr/0020-saved-views-and-csv-exports.md) |
 | Factory | One organization's configured production line of stations and agents, keyed by its `metadata.id` UUID and never by name. | `internal/core/domain/item.go` (`FactoryID`), `internal/factorymodel` |
 | Floor | The UI screen that shows a factory's line live: its stations, their load and what needs people. | `apps/web/src/features/floor`, `apps/web/src/app/screens.ts` |
 | Gate | A check at a station that sends rejected work back to an earlier station, at most a set number of times per item. | `internal/core/domain/line.go` (`Gate`), `internal/core/domain/andon.go` (`GateVerdict`) |
@@ -47,6 +48,7 @@ The words Goal's code, API and UI use, one sentence each, with the place in the 
 | Rework | A round in which a gate sends an item back for another try. | `internal/core/domain/line.go` (`Gate.MaxRework`), `internal/core/domain/flowstats.go` (`ReworkRound`) |
 | Rule | Always-on guidance a factory gives the agents, stations, lanes or work types it targets, from a `rules/<name>.md` file of the definition. | `internal/core/domain/rule.go` (`Rule`), `internal/config/rules.go` |
 | Run | One agent's work on one item at one station, in its own box. | `internal/core/domain/run.go` (`Run`), `internal/core/engine` |
+| Saved view | A name plus the Items page's URL search params, stored in PostgreSQL per factory, personal to its owner or shared with the factory, so that it reopens exactly that URL; planned, not built yet. | `internal/adapters/store/postgres` (planned); [ADR 0020](../adr/0020-saved-views-and-csv-exports.md) |
 | Skill | A folder of instructions an agent loads, from the definition or a skills.sh source. | `internal/core/domain/line.go` (`SkillRef`), `internal/core/domain/skill.go` |
 | Station | One step of the line, worked by a queue, agents, people or nobody (done). | `internal/core/domain/line.go` (`Station`, `StationKind`) |
 | Task token | The short-lived token a run uses to reach Goal, scoped to its organization, factory, item, station and connections. | `internal/core/domain/token.go` (`TaskClaims`) |
