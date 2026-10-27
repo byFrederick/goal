@@ -217,6 +217,15 @@ func (j *JudgeScores) Recent(ctx context.Context, factory domain.FactoryID, judg
 	return out, nil
 }
 
+// inSummary reports whether s is an ended production score of org's factory queued from since
+// to now.
+func inSummary(s domain.JudgeScore, org domain.OrgID, factory domain.FactoryID, since, now time.Time) bool {
+	ended := s.State == domain.JudgeScoreScored || s.State == domain.JudgeScoreError
+	production := s.OrgID == org && s.FactoryID == factory && s.RunID != ""
+
+	return production && ended && !s.CreatedAt.Before(since) && !s.CreatedAt.After(now)
+}
+
 // Summary implements ports.JudgeScores.
 func (j *JudgeScores) Summary(ctx context.Context, factory domain.FactoryID, now time.Time) ([]domain.JudgeSummary, error) {
 	org, err := orgOf(ctx)
@@ -234,9 +243,7 @@ func (j *JudgeScores) Summary(ctx context.Context, factory domain.FactoryID, now
 
 	for _, r := range j.rows {
 		s := r.score
-		ended := s.State == domain.JudgeScoreScored || s.State == domain.JudgeScoreError
-
-		if s.OrgID != org || s.FactoryID != factory || s.RunID == "" || !ended || s.CreatedAt.Before(since) || s.CreatedAt.After(now) {
+		if !inSummary(s, org, factory, since, now) {
 			continue
 		}
 

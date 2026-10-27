@@ -137,17 +137,10 @@ type JudgeResult struct {
 
 // Check reports the first rule r breaks, wrapping ErrInvalid.
 func (r JudgeResult) Check() error {
-	var err error
+	err := r.checkState()
 
 	switch {
-	case r.State == JudgeScoreScored && r.Outcome == "":
-		err = errors.New("a score has an outcome")
-	case r.State == JudgeScoreScored && (r.Score < 0 || r.Score > 1):
-		err = fmt.Errorf("score %v is not from 0 to 1", r.Score)
-	case r.State == JudgeScoreError && (r.Outcome != "" || r.Score != 0 || r.Passed):
-		err = errors.New("an error has no outcome, score or pass")
-	case r.State != JudgeScoreScored && r.State != JudgeScoreError:
-		err = fmt.Errorf("state %q is not a result", r.State)
+	case err != nil:
 	case len(r.Outcome) > MaxJudgeOutcome:
 		err = fmt.Errorf("outcome longer than %d bytes", MaxJudgeOutcome)
 	case len(r.Reason) > MaxJudgeReason:
@@ -163,6 +156,33 @@ func (r JudgeResult) Check() error {
 	}
 
 	return nil
+}
+
+// checkState checks what r's state needs: an outcome and a score from 0 to 1 when scored, none
+// of outcome, score or pass for an error.
+func (r JudgeResult) checkState() error {
+	switch r.State {
+	case JudgeScoreScored:
+		if r.Outcome == "" {
+			return errors.New("a score has an outcome")
+		}
+
+		if r.Score < 0 || r.Score > 1 {
+			return fmt.Errorf("score %v is not from 0 to 1", r.Score)
+		}
+
+		return nil
+	case JudgeScoreError:
+		if r.Outcome != "" || r.Score != 0 || r.Passed {
+			return errors.New("an error has no outcome, score or pass")
+		}
+
+		return nil
+	case JudgeScoreQueued, JudgeScoreRunning:
+		return fmt.Errorf("state %q is not a result", r.State)
+	default:
+		return fmt.Errorf("state %q is not a result", r.State)
+	}
 }
 
 // JudgeSummary is one judge's production scores over JudgeSummaryWindow: how many runs it scored

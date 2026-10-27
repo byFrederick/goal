@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -39,7 +40,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 
 	tests := []struct {
 		name string
-		test func(t *testing.T, f *fixture)
+		test func(f *fixture)
 	}{
 		{"Enqueue_Queued", testEnqueue},
 		{"Enqueue_SameJudgeAndRunIsOneScore", testEnqueueTwice},
@@ -63,7 +64,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 			h := newHarness(t)
 			org := h.NewOrg(t)
 			factory := h.NewFactory(t, org)
-			tc.test(t, &fixture{Harness: h, org: org, factory: factory, version: h.NewVersion(t, org, factory)})
+			tc.test(&fixture{Harness: h, t: t, org: org, factory: factory, version: h.NewVersion(t, org, factory)})
 		})
 	}
 }
@@ -82,9 +83,37 @@ var t0 = time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 type fixture struct {
 	Harness
 
+	t       *testing.T
 	org     domain.OrgID
 	factory domain.FactoryID
 	version domain.DefinitionVersionID
+	// others are the versions of the other factories the test made, by factory.
+	others map[domain.FactoryID]domain.DefinitionVersionID
+}
+
+// otherFactory returns another factory of the fixture's organization and its version.
+func (f *fixture) otherFactory(t *testing.T) (domain.FactoryID, domain.DefinitionVersionID) {
+	t.Helper()
+
+	id := f.NewFactory(t, f.org)
+	v := f.NewVersion(t, f.org, id)
+
+	if f.others == nil {
+		f.others = map[domain.FactoryID]domain.DefinitionVersionID{}
+	}
+
+	f.others[id] = v
+
+	return id, v
+}
+
+// versionOf is factory's version.
+func (f *fixture) versionOf(factory domain.FactoryID) domain.DefinitionVersionID {
+	if v, ok := f.others[factory]; ok {
+		return v
+	}
+
+	return f.version
 }
 
 func (f *fixture) ctx(t *testing.T) context.Context {
@@ -113,7 +142,7 @@ func (f *fixture) run(t *testing.T, it domain.Item) domain.RunID {
 	t.Helper()
 
 	id, err := f.Store.StartRun(f.ctx(t), ports.NewRun{
-		FactoryID: it.FactoryID, DefinitionVersionID: f.version, ItemID: it.ID, Station: station, Agent: agent,
+		FactoryID: it.FactoryID, DefinitionVersionID: f.versionOf(it.FactoryID), ItemID: it.ID, Station: station, Agent: agent,
 		Model: "claude-test", StartedAt: t0.Add(-time.Hour),
 	})
 	if err != nil {
@@ -200,14 +229,56 @@ func (f *fixture) score(t *testing.T, n domain.NewJudgeScore, r domain.JudgeResu
 	return f.record(t, c.Lease, r)
 }
 
-func testEnqueue(t *testing.T, f *fixture) {
+// diffScore names the fields in which got differs from want.
+func diffScore(got, want domain.JudgeScore) []string {
+	fields := []struct {
+		name string
+		same bool
+	}{
+		{"ID", got.ID == want.ID},
+		{"OrgID", got.OrgID == want.OrgID},
+		{"FactoryID", got.FactoryID == want.FactoryID},
+		{"VersionID", got.VersionID == want.VersionID},
+		{"Judge", got.Judge == want.Judge},
+		{"RunID", got.RunID == want.RunID},
+		{"ItemID", got.ItemID == want.ItemID},
+		{"ItemNumber", got.ItemNumber == want.ItemNumber},
+		{"ItemTitle", got.ItemTitle == want.ItemTitle},
+		{"State", got.State == want.State},
+		{"Outcome", got.Outcome == want.Outcome},
+		{"Score", got.Score == want.Score},
+		{"Passed", got.Passed == want.Passed},
+		{"Reason", got.Reason == want.Reason},
+		{"CostUSD", got.CostUSD == want.CostUSD},
+		{"JudgeRunID", got.JudgeRunID == want.JudgeRunID},
+		{"LeaseUntil", got.LeaseUntil.Equal(want.LeaseUntil)},
+		{"CreatedAt", got.CreatedAt.Equal(want.CreatedAt)},
+		{"ScoredAt", got.ScoredAt.Equal(want.ScoredAt)},
+	}
+
+	var out []string
+
+	for _, f := range fields {
+		if !f.same {
+			out = append(out, f.name)
+		}
+	}
+
+	return out
+}
+
+func testEnqueue(f *fixture) {
+	t := f.t
 	n := f.newScore(t, judgeA, t0)
 	s := f.enqueue(t, n)
 
-	if s.ID == "" || s.OrgID != f.org || s.FactoryID != f.factory || s.VersionID != f.version || s.Judge != judgeA ||
-		s.RunID != n.RunID || s.ItemID != n.ItemID || s.State != domain.JudgeScoreQueued || !s.CreatedAt.Equal(t0) ||
-		!s.ScoredAt.IsZero() || !s.LeaseUntil.IsZero() {
-		t.Errorf("Enqueue = %+v; want a queued score of %+v in org %s", s, n, f.org)
+	want := domain.JudgeScore{
+		ID: s.ID, OrgID: f.org, FactoryID: f.factory, VersionID: f.version, Judge: judgeA, RunID: n.RunID, ItemID: n.ItemID,
+		State: domain.JudgeScoreQueued, CreatedAt: t0,
+	}
+
+	if d := diffScore(s, want); s.ID == "" || len(d) > 0 {
+		t.Errorf("Enqueue = %+v; want %+v (differs in %v)", s, want, d)
 	}
 
 	try := f.enqueue(t, domain.NewJudgeScore{FactoryID: f.factory, VersionID: f.version, Judge: judgeA, At: t0})
@@ -216,7 +287,8 @@ func testEnqueue(t *testing.T, f *fixture) {
 	}
 }
 
-func testEnqueueTwice(t *testing.T, f *fixture) {
+func testEnqueueTwice(f *fixture) {
+	t := f.t
 	n := f.newScore(t, judgeA, t0)
 	first := f.enqueue(t, n)
 
@@ -247,7 +319,8 @@ func testEnqueueTwice(t *testing.T, f *fixture) {
 	}
 }
 
-func testEnqueueRules(t *testing.T, f *fixture) {
+func testEnqueueRules(f *fixture) {
+	t := f.t
 	n := f.newScore(t, judgeA, t0)
 
 	bad := n
@@ -273,7 +346,8 @@ func testEnqueueRules(t *testing.T, f *fixture) {
 	}
 }
 
-func testClaimOrder(t *testing.T, f *fixture) {
+func testClaimOrder(f *fixture) {
+	t := f.t
 	b := f.enqueue(t, f.newScore(t, judgeA, t0.Add(time.Minute)))
 	a := f.enqueue(t, f.newScore(t, judgeB, t0))
 
@@ -296,7 +370,8 @@ func testClaimOrder(t *testing.T, f *fixture) {
 	}
 }
 
-func testClaimExpired(t *testing.T, f *fixture) {
+func testClaimExpired(f *fixture) {
+	t := f.t
 	s := f.enqueue(t, f.newScore(t, judgeA, t0))
 	first := f.claimID(t, t0, s.ID)
 
@@ -319,7 +394,8 @@ func testClaimExpired(t *testing.T, f *fixture) {
 	}
 }
 
-func testClaimSkipsHeld(t *testing.T, f *fixture) {
+func testClaimSkipsHeld(f *fixture) {
+	t := f.t
 	a := f.enqueue(t, f.newScore(t, judgeA, t0))
 	b := f.enqueue(t, f.newScore(t, judgeA, t0.Add(time.Minute)))
 
@@ -329,7 +405,8 @@ func testClaimSkipsHeld(t *testing.T, f *fixture) {
 	f.claimID(t, t0, a.ID)
 }
 
-func testRecord(t *testing.T, f *fixture) {
+func testRecord(f *fixture) {
+	t := f.t
 	n := f.newScore(t, judgeA, t0)
 	s := f.enqueue(t, n)
 	c := f.claimID(t, t0, s.ID)
@@ -337,23 +414,28 @@ func testRecord(t *testing.T, f *fixture) {
 	r := scored(t0.Add(30*time.Second), 0.5, false, 0.25)
 	got := f.record(t, c.Lease, r)
 
-	if got.ID != s.ID || got.State != domain.JudgeScoreScored || got.Outcome != r.Outcome || got.Score != r.Score ||
-		got.Passed || got.Reason != r.Reason || got.CostUSD != r.CostUSD || got.JudgeRunID != r.JudgeRunID ||
-		!got.ScoredAt.Equal(r.At) || !got.LeaseUntil.IsZero() || got.RunID != n.RunID || !got.CreatedAt.Equal(t0) {
-		t.Errorf("Record = %+v; want %+v on score %s with its lease released", got, r, s.ID)
+	want := s
+	want.State, want.Outcome, want.Score, want.Reason, want.CostUSD = domain.JudgeScoreScored, r.Outcome, r.Score, r.Reason, r.CostUSD
+	want.JudgeRunID, want.ScoredAt = r.JudgeRunID, r.At
+
+	if d := diffScore(got, want); len(d) > 0 {
+		t.Errorf("Record = %+v; want %+v with its lease released (differs in %v)", got, want, d)
 	}
 
 	failed := f.enqueue(t, f.newScore(t, judgeA, t0))
 	c = f.claimID(t, t0, failed.ID)
 	e := domain.JudgeResult{State: domain.JudgeScoreError, Reason: "The box did not start.", CostUSD: 0.5, At: t0.Add(time.Second)}
 
-	if got := f.record(t, c.Lease, e); got.State != domain.JudgeScoreError || got.Outcome != "" || got.Score != 0 || got.Passed ||
-		got.Reason != e.Reason || got.CostUSD != e.CostUSD || !got.ScoredAt.Equal(e.At) {
-		t.Errorf("Record of an error = %+v; want %+v", got, e)
+	want = failed
+	want.State, want.Reason, want.CostUSD, want.ScoredAt = domain.JudgeScoreError, e.Reason, e.CostUSD, e.At
+
+	if got := f.record(t, c.Lease, e); len(diffScore(got, want)) > 0 {
+		t.Errorf("Record of an error = %+v; want %+v (differs in %v)", got, want, diffScore(got, want))
 	}
 }
 
-func testRecordLeaseLost(t *testing.T, f *fixture) {
+func testRecordLeaseLost(f *fixture) {
+	t := f.t
 	s := f.enqueue(t, f.newScore(t, judgeA, t0))
 	c := f.claimID(t, t0, s.ID)
 
@@ -382,7 +464,8 @@ func testRecordLeaseLost(t *testing.T, f *fixture) {
 	}
 }
 
-func testRecordRules(t *testing.T, f *fixture) {
+func testRecordRules(f *fixture) {
+	t := f.t
 	s := f.enqueue(t, f.newScore(t, judgeA, t0))
 	c := f.claimID(t, t0, s.ID)
 
@@ -395,7 +478,9 @@ func testRecordRules(t *testing.T, f *fixture) {
 	}
 }
 
-func testRecent(t *testing.T, f *fixture) {
+func testRecent(f *fixture) {
+	t := f.t
+
 	var want []domain.JudgeScore
 
 	for i := range 3 {
@@ -415,9 +500,9 @@ func testRecent(t *testing.T, f *fixture) {
 	f.enqueue(t, f.newScore(t, judgeB, t0.Add(time.Hour)))
 	f.enqueue(t, domain.NewJudgeScore{FactoryID: f.factory, VersionID: f.version, Judge: judgeA, At: t0.Add(time.Hour)})
 
-	other := f.NewFactory(t, f.org)
+	other, otherVersion := f.otherFactory(t)
 	oit := f.item(t, other, "elsewhere")
-	f.enqueue(t, domain.NewJudgeScore{FactoryID: other, VersionID: f.version, Judge: judgeA, RunID: f.run(t, oit), ItemID: oit.ID, At: t0.Add(time.Hour)})
+	f.enqueue(t, domain.NewJudgeScore{FactoryID: other, VersionID: otherVersion, Judge: judgeA, RunID: f.run(t, oit), ItemID: oit.ID, At: t0.Add(time.Hour)})
 
 	got, err := f.JudgeScores.Recent(f.ctx(t), f.factory, judgeA, 10)
 	if err != nil {
@@ -429,9 +514,8 @@ func testRecent(t *testing.T, f *fixture) {
 	}
 
 	for i := range want {
-		if g, w := got[i], want[i]; g.ID != w.ID || g.ItemNumber != w.ItemNumber || g.ItemTitle != w.ItemTitle || g.State != w.State ||
-			!g.CreatedAt.Equal(w.CreatedAt) || g.Score != w.Score || g.Outcome != w.Outcome {
-			t.Errorf("Recent[%d] = %+v; want %+v", i, g, w)
+		if d := diffScore(got[i], want[i]); len(d) > 0 {
+			t.Errorf("Recent[%d] = %+v; want %+v (differs in %v)", i, got[i], want[i], d)
 		}
 	}
 
@@ -440,7 +524,8 @@ func testRecent(t *testing.T, f *fixture) {
 	}
 }
 
-func testSummary(t *testing.T, f *fixture) {
+func testSummary(f *fixture) {
+	t := f.t
 	now := t0.Add(10 * 24 * time.Hour)
 	day1, day2 := t0, t0.Add(24*time.Hour)
 
@@ -460,9 +545,9 @@ func testSummary(t *testing.T, f *fixture) {
 	tryN := domain.NewJudgeScore{FactoryID: f.factory, VersionID: f.version, Judge: judgeA, At: day1}
 	f.score(t, tryN, scored(day1.Add(time.Minute), 0, false, 8)) // a try is no production score
 
-	other := f.NewFactory(t, f.org)
+	other, otherVersion := f.otherFactory(t)
 	oit := f.item(t, other, "elsewhere")
-	f.score(t, domain.NewJudgeScore{FactoryID: other, VersionID: f.version, Judge: judgeA, RunID: f.run(t, oit), ItemID: oit.ID, At: day1},
+	f.score(t, domain.NewJudgeScore{FactoryID: other, VersionID: otherVersion, Judge: judgeA, RunID: f.run(t, oit), ItemID: oit.ID, At: day1},
 		scored(day1.Add(time.Minute), 0, false, 16))
 
 	// Last, so the claims above never take it: still queued, it counts for nothing.
@@ -483,28 +568,13 @@ func testSummary(t *testing.T, f *fixture) {
 		}},
 	}
 
-	if len(got) != len(want) {
-		t.Fatalf("Summary = %+v; want %+v", got, want)
-	}
-
-	for i := range want {
-		g, w := got[i], want[i]
-		if g.Judge != w.Judge || g.Scored != w.Scored || g.Passed != w.Passed || g.PassRate != w.PassRate || g.CostUSD != w.CostUSD ||
-			len(g.Days) != len(w.Days) {
-			t.Errorf("Summary[%d] = %+v; want %+v", i, g, w)
-
-			continue
-		}
-
-		for j := range w.Days {
-			if gd, wd := g.Days[j], w.Days[j]; !gd.Day.Equal(wd.Day) || gd.Scored != wd.Scored || gd.Passed != wd.Passed || gd.PassRate != wd.PassRate {
-				t.Errorf("Summary[%d].Days[%d] = %+v; want %+v", i, j, gd, wd)
-			}
-		}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Summary = %+v; want %+v", got, want)
 	}
 }
 
-func testIsolation(t *testing.T, f *fixture) {
+func testIsolation(f *fixture) {
+	t := f.t
 	n := f.newScore(t, judgeA, t0)
 	s := f.enqueue(t, n)
 	c := f.claimID(t, t0, s.ID)
@@ -537,7 +607,8 @@ func testIsolation(t *testing.T, f *fixture) {
 	f.claimID(t, t0, queued.ID)
 }
 
-func testNoOrg(t *testing.T, f *fixture) {
+func testNoOrg(f *fixture) {
+	t := f.t
 	ctx := t.Context()
 	n := f.newScore(t, judgeA, t0)
 

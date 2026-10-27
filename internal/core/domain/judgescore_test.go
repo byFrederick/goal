@@ -15,7 +15,7 @@ func TestJudgeScoreState_Valid(t *testing.T) {
 		}
 	}
 
-	for _, s := range []JudgeScoreState{"", "done", "Scored"} {
+	for _, s := range []JudgeScoreState{"", "finished", "Scored"} {
 		if s.Valid() {
 			t.Errorf("%q.Valid() = true; want false", s)
 		}
