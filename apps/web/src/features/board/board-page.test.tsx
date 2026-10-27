@@ -354,7 +354,7 @@ describe('BoardPage', () => {
       stations: [...board().stations, station({ id: 'done', kind: 'done', items: [done], done_today: 1 })],
     };
     const expectDoneCard = (card: HTMLElement) => {
-      // The phone's list row joins the ref, type and age on one line; the columns split them.
+      // The same card serves the phone and the columns: its ref and age sit on its top line.
       expect(within(card).getByText(/sre#30/)).toBeTruthy();
       expect(within(card).getByText(/2 h/)).toBeTruthy();
       expect(within(card).getByRole('link', { name: REDIS })).toBeTruthy();
