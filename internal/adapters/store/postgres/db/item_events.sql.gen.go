@@ -159,7 +159,7 @@ func (q *Queries) ItemEvents(ctx context.Context, arg ItemEventsParams) ([]ItemE
 }
 
 const mergedItems = `-- name: MergedItems :many
-SELECT DISTINCT ON (e.data->>'sha') (e.data->>'sha')::text AS sha, w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit
+SELECT DISTINCT ON (e.data->>'sha') (e.data->>'sha')::text AS sha, w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.source
 FROM item_events e
 JOIN work_items w ON w.id = e.item_id
 WHERE e.factory_id = $1 AND e.kind = 'merged' AND e.data->>'sha' = ANY ($2::text[])
@@ -213,6 +213,8 @@ func (q *Queries) MergedItems(ctx context.Context, arg MergedItemsParams) ([]Mer
 			&i.WorkItem.PartPaths,
 			&i.WorkItem.Paths,
 			&i.WorkItem.BaseCommit,
+			&i.WorkItem.Trigger,
+			&i.WorkItem.Source,
 		); err != nil {
 			return nil, err
 		}
