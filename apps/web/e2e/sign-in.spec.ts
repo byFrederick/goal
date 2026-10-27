@@ -45,9 +45,9 @@ async function expectNoSessionTokenInScripts(page: Page) {
   expect(answer).not.toContain(token);
 }
 
-const emailField = (page: Page) => page.getByLabel('Email');
+const emailField = (page: Page) => page.getByLabel('Work email');
 const codeField = (page: Page) => page.getByLabel('Code');
-const sendCode = (page: Page) => page.getByRole('button', { name: 'Email me a code' });
+const sendCode = (page: Page) => page.getByRole('button', { name: 'Email me a sign-in code' });
 
 async function askForCode(page: Page, email = owner) {
   await emailField(page).fill(email);
@@ -72,6 +72,8 @@ test('signing in by code returns to the page that asked, and the session stays o
   await expect(page).toHaveTitle('Sign in · Goal');
   await expect(page.getByText('Goal is invite-only. Ask an owner of your organization to invite you.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeVisible();
+  // GitHub sign-in is not built yet: its button is there, disabled.
+  await expect(page.getByRole('button', { name: 'Continue with GitHub' })).toHaveAttribute('aria-disabled', 'true');
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
@@ -108,7 +110,7 @@ test('signing in by code returns to the page that asked, and the session stays o
   await expect(account.getByText('F. Cruz', { exact: true })).toBeVisible();
   await expect(account.getByText('Owner', { exact: true })).toBeVisible();
   await expect(account.getByText('Platform admin')).toBeVisible();
-  await expect(account.getByRole('button', { name: 'Profile' })).toBeVisible();
+  await expect(account.getByRole('link', { name: 'Profile' })).toBeVisible();
   // Pages not built yet are listed, disabled, and do nothing when chosen.
   for (const name of ['Notifications', 'Connected apps', 'Keyboard shortcuts']) {
     await expect(account.getByRole('button', { name: new RegExp(`^${name}`) })).toHaveAttribute(
@@ -145,7 +147,7 @@ test('a wrong code, a used-up code, a new code after the countdown, an expired o
 
   // Three wrong tries void the code: only a new one helps, and it can be asked for at once.
   await expect(message('Send a new code to try again.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Sign in' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Verify' })).toBeDisabled();
   await expect(codeField(page)).toBeDisabled();
   await page.getByRole('button', { name: 'Send a new code' }).click();
   await expect(message('We sent a new code.')).toBeVisible();
@@ -296,19 +298,18 @@ test('edit name, sign out everywhere, sign out', async ({ page }) => {
     return page.getByRole('dialog', { name: 'Account' });
   };
 
-  await (await openAccount('FC, F. Cruz')).getByRole('button', { name: 'Profile' }).click();
-  const edit = page.getByRole('dialog', { name: 'Edit name' });
-  await expect(edit.getByLabel('Name')).toBeFocused();
-  await expect(edit.getByLabel('Name')).toHaveValue('F. Cruz');
-  await expect(edit.getByText('1 to 80 characters. Acme’s members and the audit log show it.')).toBeVisible();
-  await edit.getByLabel('Name').fill('  ');
-  await edit.getByRole('button', { name: 'Save' }).click();
-  await expect(edit.getByLabel('Name')).toHaveAccessibleDescription(/^A name is 1 to 80 characters\./);
+  // Profile opens the account page, where the name is edited and saved with Save changes.
+  await (await openAccount('FC, F. Cruz')).getByRole('link', { name: 'Profile' }).click();
+  await expect(page).toHaveURL(/\/account$/);
+  await expect(page.getByLabel('Name', { exact: true })).toHaveValue('F. Cruz');
+  await page.getByLabel('Name', { exact: true }).fill('  ');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByText('A name is 1 to 80 characters.')).toBeVisible();
   await expectAccessible(page);
-  await edit.getByLabel('Name').fill('Fred Cruz');
-  await edit.getByRole('button', { name: 'Save' }).click();
-  await expect(edit).toBeHidden();
+  await page.getByLabel('Name', { exact: true }).fill('Fred Cruz');
+  await page.getByRole('button', { name: 'Save changes' }).click();
   await expectToast(page, 'Name saved');
+  await page.goto('/o/acme');
 
   // Sign out everywhere asks first; Cancel has focus, so Enter never signs anyone out by accident.
   await (await openAccount('FC, Fred Cruz')).getByRole('button', { name: 'Sign out everywhere' }).click();

@@ -231,7 +231,7 @@ func TestAPI_SignIn_FactoriesByRole(t *testing.T) {
 
 	list := decode[gen.FactoryList](t, h.as(t, viewerToken, http.MethodGet, "/v1/orgs/acme/factories", ""), http.StatusOK)
 	if len(list.Factories) != 1 || list.Factories[0].Name != acmeSlug || list.Factories[0].Role == nil || *list.Factories[0].Role != gen.Viewer ||
-		!slices.Equal(list.Factories[0].Can, []string{"factory:read"}) {
+		!slices.Equal(list.Factories[0].Can, []string{"factory:read", "intake:read"}) {
 		t.Errorf("viewer's factories = %+v, want acme alone, as a viewer who may read it", list.Factories)
 	}
 

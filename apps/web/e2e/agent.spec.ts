@@ -1,38 +1,29 @@
-// E12: an agent's statistics and why review sent its work back (Agent and Mobile-Agent boards).
+// E12 and build/agent: an agent's statistics, why review sent its work back, and its tabs (?view=).
 import { expect, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll } from './support';
-
-/** The page lays out by the room beside the sidebar (256 px from 768 px): the five
- * tiles of the Agent board from 720 px of it, the four of Mobile-Agent below. */
-const wide = (width: number) => width >= 768 && width - 304 >= 720;
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
 });
 
-test('the agent page shows the last 7 days and why work was sent back', async ({ page }) => {
+test('the agent page shows the last 7 days, its station and why work was sent back', async ({ page }) => {
   await page.goto('/o/acme/f/sre/agents/investigator');
   await expect(page.getByRole('heading', { level: 1, name: 'investigator' })).toBeVisible();
   await expect(page).toHaveTitle(/^investigator · sre · Acme · Goal$/);
-  await expect(
-    page.getByText('Three copies run at Investigate, the current constraint, on claude-sonnet-5-5.'),
-  ).toBeVisible();
+  await expect(page.getByText('Investigate station')).toBeVisible();
 
-  const five = wide(page.viewportSize()?.width ?? 0);
-  const stat = (label: string) =>
-    page.getByRole('term').filter({ hasText: label }).locator('xpath=..').getByRole('definition');
-  await expect(stat('Tasks finished')).toHaveText('31');
-  await expect(stat('Sent back')).toHaveText('22%');
-  await expect(stat('Spend per task')).toHaveText('$0.94');
-  await expect(stat(five ? 'Time per task, p85' : 'Time, p85')).toHaveText('24 min');
-  // Mobile-Agent shows four tiles: no median turns in a narrow page.
-  await expect(stat('Median turns')).toHaveCount(five ? 1 : 0);
-  if (five) await expect(stat('Median turns')).toHaveText('18');
+  const measures = page.getByRole('region', { name: 'Last 7 days' });
+  await expect(measures.getByText('31', { exact: true })).toBeVisible();
+  await expect(measures.getByText('22%', { exact: true })).toBeVisible();
+  await expect(measures.getByText('$0.94')).toBeVisible();
+  await expect(measures.getByText('24 min')).toBeVisible();
 
   const reasons = page.getByRole('region', { name: 'Why review sent work back' });
   await expect(reasons.getByRole('listitem')).toHaveCount(3);
   await expect(reasons.getByRole('listitem').first()).toContainText('No CloudWatch evidence for a latency claim');
   await expect(reasons.getByRole('listitem').first()).toContainText('4×');
+
+  await page.getByRole('navigation', { name: 'Agent views' }).getByRole('link', { name: 'Tools and access' }).click();
   await expect(page.getByText('Blocked this week: 2 calls, both aws ssm put-parameter.')).toBeVisible();
 
   await expectAccessible(page);
@@ -43,8 +34,48 @@ test('an agent without history says so, and an unknown agent is not found', asyn
   await page.goto('/o/acme/f/goal/agents/reviewer');
   await expect(page.getByRole('heading', { level: 1, name: 'reviewer' })).toBeVisible();
   await expect(page.getByText('Nothing was sent back in the last 7 days.')).toBeVisible();
+  await page.getByRole('navigation', { name: 'Agent views' }).getByRole('link', { name: 'Tools and access' }).click();
   await expect(page.getByText('Blocked this week: no calls.')).toBeVisible();
 
   await page.goto('/o/acme/f/goal/agents/nobody');
   await expect(page.getByRole('heading', { level: 1, name: 'No such agent' })).toBeVisible();
+});
+
+test('the agent page reads as pictured: the prompt, settings and the Not available controls', async ({ page }) => {
+  await page.goto('/o/acme/f/goal/agents/frontend-engineer');
+  await expect(page.getByRole('heading', { level: 1, name: 'frontend-engineer' })).toBeVisible();
+  await expect(page.getByText('Build station')).toBeVisible();
+  await expect(
+    page.getByText('The React UI in apps/web and the TypeScript packages, following the design system exactly.'),
+  ).toBeVisible();
+
+  const reasons = page.getByRole('region', { name: 'Why review sent work back' });
+  await expect(reasons.getByRole('listitem')).toHaveCount(4);
+  await expect(page.getByText(/You build Goal's web app/)).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Settings' }).getByText('claude-haiku-5-5')).toBeVisible();
+
+  // The Settings aside stacks under the main column below xl (1280 px) and sits beside it at xl and up.
+  const viewport = page.viewportSize();
+  const settings = await page.getByRole('region', { name: 'Settings' }).boundingBox();
+  const measures = await page.getByRole('region', { name: 'Last 7 days' }).boundingBox();
+  expect(viewport && settings && measures).toBeTruthy();
+  if (viewport && settings && measures) {
+    if (viewport.width >= 1280) {
+      expect(settings.x).toBeGreaterThanOrEqual(measures.x + measures.width);
+      expect(settings.y).toBeLessThan(measures.y + measures.height);
+    } else {
+      expect(settings.x).toBeLessThan(measures.x + measures.width / 2);
+      expect(settings.y).toBeGreaterThanOrEqual(measures.y + measures.height);
+    }
+  }
+
+  for (const name of ['Bake off this agent', 'Ask Jonah for a fix']) {
+    const control = page.getByRole('button', { name });
+    await expect(control).toHaveAttribute('aria-disabled', 'true');
+    await control.click();
+    await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/agents\/frontend-engineer$/);
+  }
+
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
 });

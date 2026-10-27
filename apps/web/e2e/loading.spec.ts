@@ -38,7 +38,7 @@ async function openInApp(page: Page, path: string) {
 
 test('an organization and a factory made elsewhere open at once, not as Not found', async ({ page, request }) => {
   await page.goto('/o/acme');
-  await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /^Good / })).toBeVisible();
 
   // The CLI or another tab: the cached organization and factory lists don't have them yet.
   await request.post('/v1/orgs', { data: { name: 'Empty Co', slug: 'empty-co' } });

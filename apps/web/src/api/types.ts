@@ -3,6 +3,8 @@
 import type { components, ItemPage, MergeRequest } from '@goal/api-client';
 
 export type {
+  Activity,
+  ActivityEvent,
   Actor,
   AgentStats,
   AndonPull,
@@ -61,6 +63,7 @@ export type {
   FactoryRole,
   FactoryRoleGrant,
   FactorySlots,
+  FactorySpend,
   FactoryStart,
   FileChange,
   FileContent,
@@ -107,6 +110,8 @@ export type {
   OrgAttention,
   OrgDeleted,
   OrgRole,
+  OrgRun,
+  OrgRunList,
   OrgSettings,
   OrgSettingsPatch,
   OrgSlots,
@@ -123,7 +128,10 @@ export type {
   Ranges,
   RestoreRequest,
   Run,
+  RunItem,
   RunList,
+  RunStatus,
+  RunSummary,
   SaveResult,
   Section,
   SectionETags,

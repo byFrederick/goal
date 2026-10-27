@@ -232,7 +232,7 @@ spec:
       size: 'large',
       tools: ['go@1.26.10'],
       repository: { url: 'https://github.com/acme/line', connection: 'github' },
-      knowledge_sources: ['handbook'],
+      knowledge_sources: ['dashboards'],
     });
     expect(out).toContain('    model: claude-sonnet-5-5\n    modelConnection: claude\n    size: large\n    tools:');
     expect(out).toContain('connection: github');
@@ -243,7 +243,7 @@ spec:
       model_connection: 'claude',
       size: 'large',
       tools: ['go@1.26.10'],
-      knowledge_sources: ['handbook'],
+      knowledge_sources: ['dashboards'],
     });
   });
 

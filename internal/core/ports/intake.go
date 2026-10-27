@@ -39,6 +39,12 @@ type Intake interface {
 	// ListDeliveries are at most limit of the endpoint's deliveries after the cursor, newest
 	// first (received_at, then id).
 	ListDeliveries(ctx context.Context, endpoint domain.WebhookEndpointID, after domain.DeliveryCursor, limit int) ([]domain.WebhookDelivery, error)
+	// Delivery is the endpoint's delivery id, with its headers and body. ErrNotFound when the
+	// endpoint has none with that id.
+	Delivery(ctx context.Context, endpoint domain.WebhookEndpointID, id domain.WebhookDeliveryID) (domain.WebhookDelivery, error)
+	// DeliveryDays counts the deliveries of the factory's endpoints received at or after since,
+	// per endpoint and UTC day, by endpoint then day; a day without deliveries has no entry.
+	DeliveryDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.DeliveryDay, error)
 	// PruneDeliveries deletes the deliveries of every organization received before before, and
 	// returns how many; ctx needs no organization.
 	PruneDeliveries(ctx context.Context, before time.Time) (int, error)
@@ -69,4 +75,13 @@ type Intake interface {
 	// TriggerStats are, for each trigger with items in the factory created at or after since, by
 	// trigger name: how many, how many of those have a merged event, and the sum of their cost.
 	TriggerStats(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.TriggerStat, error)
+	// ItemSources counts the factory's newest last items (by created_at, then id) by source, by
+	// source, with when the oldest and the newest of them were created.
+	ItemSources(ctx context.Context, factory domain.FactoryID, last int) (domain.SourceWindow, error)
+	// TriggerDays count the factory's firings that created an item at or after since, per trigger
+	// and UTC day, by trigger then day; days without one are left out.
+	TriggerDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.TriggerDay, error)
+	// Firings are at most limit of the trigger's firings, newest first (at, then id), each with
+	// its item's number and whether that item has a merged event.
+	Firings(ctx context.Context, factory domain.FactoryID, trigger string, limit int) ([]domain.FiringEntry, error)
 }
