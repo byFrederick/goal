@@ -210,7 +210,7 @@ export function SidebarSearch({ org, onClose }: { org: OrgSummary; onClose: (ret
             Pages
           </p>
           <ResultRow icon={<Activity {...iconProps} />} label="Spend and usage" detail="Organization" />
-          <ResultRow icon={<AlignLeft {...iconProps} />} label="Budget, in Software settings" detail="Settings" />
+          <ResultRow icon={<AlignLeft {...iconProps} />} label="Budget, in factory settings" detail="Settings" />
         </section>
 
         <section aria-labelledby={actionsLabel}>
