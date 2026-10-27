@@ -1,7 +1,7 @@
 // Illustrative data for the mock API: two organizations, as the Org-Switcher board shows them.
 // Acme has three factories (a "goal" factory building itself, a small SRE factory with three
 // decisions waiting, as on the canvas, and an empty support factory whose line is stopped by an
-// andon pull); Example Labs has one, empty. Times are relative to when the mock starts, so ages
+// andon pull); Goal has one, empty. Times are relative to when the mock starts, so ages
 // read like a live floor.
 import type {
   Actor,
@@ -366,7 +366,7 @@ const researchFactory: Factory = {
   can: factoryCan,
   name: 'research',
   title: 'Research',
-  description: 'Reads papers and writes short notes for the Example Labs team.',
+  description: 'Reads papers and writes short notes for the Goal team.',
   work_types: ['question'],
   stations: [
     { id: 'inbox', kind: 'queue' },
@@ -1288,13 +1288,23 @@ export function seed(now = Date.now()): MockState {
   const created = new Date(now - 90 * 86_400_000).toISOString();
   const state: MockState = {
     orgs: [
-      { id: acmeOrg, slug: 'acme', name: 'Acme', mark: 'Ac', factory_count: 0, created_at: created, can: orgCan },
+      {
+        id: acmeOrg,
+        slug: 'acme',
+        name: 'Acme',
+        mark: 'Ac',
+        factory_count: 3,
+        role: 'owner',
+        created_at: created,
+        can: orgCan,
+      },
       {
         id: labsOrg,
-        slug: 'example-labs',
-        name: 'Example Labs',
-        mark: 'EL',
-        factory_count: 0,
+        slug: 'goal',
+        name: 'Goal',
+        mark: 'Go',
+        factory_count: 1,
+        role: 'owner',
         created_at: created,
         can: orgCan,
       },

@@ -9,13 +9,13 @@
 // sheet that opened them, and keeps the session alive while signed in.
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { CircleCheck, KeyRound, LogOut, Pencil } from 'lucide-react';
+import { Bell, CircleCheck, Keyboard, KeyRound, LogOut, Puzzle, UserRound } from 'lucide-react';
 import { createContext, type FormEvent, type ReactNode, use, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { meQuery, orgQuery } from '../api/queries';
 import type { Me, OrgSummary } from '../api/types';
-import { keepSessionAlive, roleLine, roleName, useSignOut, useUpdateName } from '../shared/account';
-import { displayName, hasName, initialsOf } from '../shared/names';
+import { keepSessionAlive, roleName, useSignOut, useUpdateName } from '../shared/account';
+import { displayName, initialsOf } from '../shared/names';
 import { holds } from '../shared/permissions';
 import { Button } from '../ui/button';
 import { Callout } from '../ui/callout';
@@ -26,6 +26,7 @@ import { Dialog, DialogClose, DialogContent } from '../ui/dialog';
 import { Field, Input } from '../ui/field';
 import { Avatar } from '../ui/mark';
 import { menuRow } from '../ui/menu';
+import { NotAvailable } from '../ui/not-available';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { AppearanceChoice } from './appearance-choice';
 import { railItem, railItemClass } from './rail-items';
@@ -33,9 +34,13 @@ import { railItem, railItemClass } from './rail-items';
 /** Better Auth extends a session its endpoints see (spec 3 §8.3): on load, then hourly. */
 const keepAliveMs = 60 * 60_000;
 
+/** The account's state: loading the person, unable to load them, the local user (sign-in off), or ready. */
+type AccountStatus = 'loading' | 'error' | 'local' | 'ready';
+
 interface Account {
   /** The signed-in person; undefined with sign-in off (the local user) or while loading. */
   person: NonNullable<Me['user']> | undefined;
+  status: AccountStatus;
   platformAdmin: boolean;
   editName: () => void;
   signOut: () => void;
@@ -51,8 +56,9 @@ function useAccount(): Account {
 }
 
 export function AccountProvider({ org, children }: { org: OrgSummary; children: ReactNode }) {
-  const { data: me } = useQuery(meQuery);
+  const { data: me, isPending, isError } = useQuery(meQuery);
   const person = me?.mode === 'session' ? me.user : undefined;
+  const status: AccountStatus = isPending ? 'loading' : isError ? 'error' : me?.mode === 'session' ? 'ready' : 'local';
   const [dialog, setDialog] = useState<'name' | 'everywhere' | null>(null);
   const { signOut, everywhere } = useSignOut();
   const signedIn = me?.mode === 'session';
@@ -66,6 +72,7 @@ export function AccountProvider({ org, children }: { org: OrgSummary; children: 
 
   const account: Account = {
     person,
+    status,
     platformAdmin: me?.platform_admin ?? false,
     editName: () => setDialog('name'),
     signOut: () => {
@@ -143,7 +150,7 @@ export function AccountMenu({ org, size }: { org: OrgSummary; size: 'sidebar' | 
         align={size === 'sidebar' ? 'start' : 'end'}
         aria-label="Account"
       >
-        <AccountPanel org={org} onAction={() => setOpen(false)} />
+        <AccountBody org={org} onAction={() => setOpen(false)} />
       </PopoverContent>
     </Popover>
   );
@@ -158,39 +165,104 @@ function useTokensLink(org: OrgSummary): boolean {
   return holds(data, 'personal_token:read');
 }
 
-function AccountPanel({ org, onAction }: { org: OrgSummary; onAction: () => void }) {
+/** The role's pill: owners in the ok tone, admins in the you tone, members plain. */
+function rolePillTone(role: OrgSummary['role']): 'ok' | 'you' | 'plain' {
+  if (role === 'owner') return 'ok';
+  if (role === 'admin') return 'you';
+  return 'plain';
+}
+
+const iconProps = { size: 16, strokeWidth: 1.5, 'aria-hidden': true, className: 'shrink-0 text-muted' } as const;
+const actionRow = cn(
+  menuRow,
+  'cursor-pointer border-0 bg-transparent text-body hover:bg-hover data-[highlighted]:bg-hover',
+);
+
+/**
+ * The account's content, in the popover and the phone's sheet alike: the person and their role, the
+ * theme, the account's pages and the two sign-out actions. Loading, error and sign-in off each have
+ * their own state; the error state keeps the theme and the sign-out actions usable.
+ */
+function AccountBody({ org, onAction }: { org: OrgSummary; onAction: () => void }) {
   const account = useAccount();
-  const { person } = account;
+  const { person, status } = account;
+
+  if (status === 'loading') {
+    return (
+      <div aria-busy="true" className="p-2">
+        <span className="sr-only">Loading</span>
+      </div>
+    );
+  }
+  if (status === 'local') return <LocalUser />;
+  return (
+    <>
+      {status === 'error' ? (
+        <div className="p-2">
+          <Callout tone="rework">Can’t reach Goal. Check your connection and try again.</Callout>
+        </div>
+      ) : (
+        <AccountHeader person={person} org={org} platformAdmin={account.platformAdmin} />
+      )}
+      <AccountRows org={org} onAction={onAction} />
+    </>
+  );
+}
+
+/** The person's avatar, name and role pill (and the platform admin pill). */
+function AccountHeader({
+  person,
+  org,
+  platformAdmin,
+}: {
+  person: Account['person'];
+  org: OrgSummary;
+  platformAdmin: boolean;
+}) {
+  if (!person) return null;
+  const role = roleName(org.role);
+  return (
+    <div className="flex items-center gap-3 p-2">
+      <Avatar initials={initialsOf(person)} size="card" />
+      <span className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="min-w-0 truncate text-heading font-medium">{displayName(person)}</span>
+        {role ? <Chip tone={rolePillTone(org.role)}>{role}</Chip> : null}
+        {platformAdmin ? <Chip tone="you">Platform admin</Chip> : null}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The theme, then the rows: Profile opens Edit name, Personal tokens goes to the organization's API
+ * keys page, and the three pages not built yet are disabled. Sign out and Sign out everywhere end it.
+ */
+function AccountRows({ org, onAction }: { org: OrgSummary; onAction: () => void }) {
+  const account = useAccount();
   const tokens = useTokensLink(org);
-  if (!person) return <LocalUser />;
-  const role = roleLine(org.role, org.name);
   const act = (action: () => void) => () => {
     onAction();
     action();
   };
   return (
     <>
-      <div className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-3 p-2">
-        <Avatar initials={initialsOf(person)} size="card" />
-        <span className="min-w-0">
-          <span className="block truncate text-heading font-medium">{displayName(person)}</span>
-          {hasName(person) ? <span className="block truncate text-secondary text-muted">{person.email}</span> : null}
-        </span>
-      </div>
-      {role || account.platformAdmin ? (
-        <p className="m-0 flex flex-wrap items-center gap-2 px-2 pb-2 pl-15 text-secondary text-ink-soft">
-          {role}
-          {account.platformAdmin ? <Chip tone="you">Platform admin</Chip> : null}
-        </p>
-      ) : null}
-      <div aria-hidden="true" className="my-1 h-px bg-line" />
       <AppearanceChoice />
       <ul className="m-0 flex list-none flex-col p-0">
+        {account.person ? (
+          <li>
+            <button type="button" aria-haspopup="dialog" onClick={act(account.editName)} className={actionRow}>
+              <UserRound {...iconProps} />
+              Profile
+            </button>
+          </li>
+        ) : null}
         <li>
-          <button type="button" aria-haspopup="dialog" onClick={act(account.editName)} className={actionRow}>
-            <Pencil {...iconProps} />
-            Edit name…
-          </button>
+          <NotAvailable>
+            <button type="button" className={actionRow}>
+              <Bell {...iconProps} />
+              Notifications
+            </button>
+          </NotAvailable>
         </li>
         {tokens ? (
           <li>
@@ -207,15 +279,42 @@ function AccountPanel({ org, onAction }: { org: OrgSummary; onAction: () => void
           </li>
         ) : null}
         <li>
+          <NotAvailable>
+            <button type="button" className={actionRow}>
+              <Puzzle {...iconProps} />
+              Connected apps
+            </button>
+          </NotAvailable>
+        </li>
+        <li>
+          <NotAvailable>
+            <button type="button" className={actionRow}>
+              <Keyboard {...iconProps} />
+              Keyboard shortcuts
+              <kbd className="ml-auto inline-grid h-5 min-w-5 place-items-center rounded-chip border border-rule px-1 font-sans text-meta font-semibold text-ink-soft">
+                ?
+              </kbd>
+            </button>
+          </NotAvailable>
+        </li>
+      </ul>
+      <div aria-hidden="true" className="my-1 h-px bg-line" />
+      <ul className="m-0 flex list-none flex-col p-0">
+        <li>
           <button type="button" onClick={act(account.signOut)} className={actionRow}>
             <LogOut {...iconProps} />
             Sign out
           </button>
         </li>
         <li>
-          <button type="button" aria-haspopup="dialog" onClick={act(account.signOutEverywhere)} className={actionRow}>
-            <LogOut {...iconProps} />
-            Sign out everywhere…
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            onClick={act(account.signOutEverywhere)}
+            className={cn(actionRow, 'text-rework-ink')}
+          >
+            <LogOut {...iconProps} className="shrink-0 text-rework-ink" />
+            Sign out everywhere
           </button>
         </li>
       </ul>
@@ -223,21 +322,15 @@ function AccountPanel({ org, onAction }: { org: OrgSummary; onAction: () => void
   );
 }
 
-/** The line under the phone's account: "f.cruz@example.com, owner of Acme"; the role alone while the email is the name. */
-function accountLine(person: NonNullable<Account['person']>, role: string | undefined): string {
-  if (!hasName(person)) return role ?? '';
-  return role ? `${person.email}, ${role.charAt(0).toLowerCase()}${role.slice(1)}` : person.email;
-}
-
-const iconProps = { size: 18, strokeWidth: 1.5, 'aria-hidden': true, className: 'text-muted' } as const;
-const actionRow = cn(menuRow, 'cursor-pointer border-0 bg-transparent hover:bg-shell focus-visible:-outline-offset-2');
-
 /** Sign-in is off: the local user of this install, and nothing to sign out of. */
 function LocalUser() {
   return (
     <div className="flex flex-col gap-2 p-2">
-      <div className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-3">
-        <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-full bg-panel text-ink">
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden="true"
+          className="flex size-10 shrink-0 items-center justify-center rounded-full bg-panel text-ink"
+        >
           <CircleCheck size={18} strokeWidth={1.5} />
         </span>
         <span className="min-w-0">
@@ -252,62 +345,13 @@ function LocalUser() {
 }
 
 /**
- * The account at the bottom of the phone's organization sheet: the same person and actions as
- * the panel, as buttons. `onAction` closes the sheet first.
+ * The account at the bottom of the phone's organization sheet: the same person, theme and actions as
+ * the popover. `onAction` closes the sheet first.
  */
 export function AccountBlock({ org, onAction }: { org: OrgSummary; onAction: () => void }) {
-  const account = useAccount();
-  const { person } = account;
-  const tokens = useTokensLink(org);
-  if (!person) return <LocalUser />;
-  const role = roleLine(org.role, org.name);
-  const act = (action: () => void) => () => {
-    onAction();
-    action();
-  };
   return (
-    <section aria-label="Account" className="flex flex-col gap-3 px-1 pt-1">
-      <div className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-3">
-        <Avatar initials={initialsOf(person)} size="card" />
-        <span className="min-w-0">
-          <span className="flex flex-wrap items-center gap-2 text-heading font-medium">
-            <span className="min-w-0 break-words">{displayName(person)}</span>
-            {account.platformAdmin ? <Chip tone="you">Platform admin</Chip> : null}
-          </span>
-          <span className="block text-secondary text-muted">{accountLine(person, role)}</span>
-        </span>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          variant="white"
-          size="lg"
-          aria-haspopup="dialog"
-          onClick={act(account.editName)}
-          className="justify-center"
-        >
-          Edit name…
-        </Button>
-        {tokens ? (
-          <Button asChild variant="white" size="lg" className="col-span-2 justify-center">
-            <Link to="/o/$org/api-keys" params={{ org: org.slug }} hash={tokensAnchor} onClick={onAction}>
-              Personal tokens
-            </Link>
-          </Button>
-        ) : null}
-        <Button variant="white" size="lg" onClick={act(account.signOut)} className="justify-center">
-          Sign out
-        </Button>
-        <Button
-          variant="white"
-          size="lg"
-          aria-haspopup="dialog"
-          onClick={act(account.signOutEverywhere)}
-          className="col-span-2 justify-center"
-        >
-          Sign out everywhere…
-        </Button>
-      </div>
-      <AppearanceChoice />
+    <section aria-label="Account" className="flex flex-col pt-1">
+      <AccountBody org={org} onAction={onAction} />
     </section>
   );
 }
