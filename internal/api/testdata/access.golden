@@ -1690,6 +1690,32 @@ listFactories        pat-demoted      200                      404 org-not-found
 listFactories        pat-removed      401 unauthenticated      401 unauthenticated
 listFactories        pat-platform     200                      404 org-not-found
 listFactories        pat-deleted-org  401 unauthenticated      401 unauthenticated
+listFactoryActivity  anonymous        401 unauthenticated      401 unauthenticated
+listFactoryActivity  owner            200                      404 org-not-found
+listFactoryActivity  admin            200                      404 org-not-found
+listFactoryActivity  viewer           200                      404 org-not-found
+listFactoryActivity  approver         200                      404 org-not-found
+listFactoryActivity  editor           200                      404 org-not-found
+listFactoryActivity  member-no-roles  404 factory-not-found    404 org-not-found
+listFactoryActivity  other-org-owner  404 org-not-found        200
+listFactoryActivity  platform-admin   404 org-not-found        404 org-not-found
+listFactoryActivity  stale-owner      200                      404 org-not-found
+listFactoryActivity  key-scoped       200                      404 org-not-found
+listFactoryActivity  key-restricted   404 factory-not-found    404 org-not-found
+listFactoryActivity  key-other-org    404 org-not-found        200
+listFactoryActivity  key-expired      401 unauthenticated      401 unauthenticated
+listFactoryActivity  key-revoked      401 unauthenticated      401 unauthenticated
+listFactoryActivity  bearer-owner     200                      404 org-not-found
+listFactoryActivity  pat-approver     200                      404 org-not-found
+listFactoryActivity  pat-owner        200                      404 org-not-found
+listFactoryActivity  pat-viewer       200                      404 org-not-found
+listFactoryActivity  pat-other-org    404 org-not-found        200
+listFactoryActivity  pat-expired      401 unauthenticated      401 unauthenticated
+listFactoryActivity  pat-revoked      401 unauthenticated      401 unauthenticated
+listFactoryActivity  pat-demoted      404 factory-not-found    404 org-not-found
+listFactoryActivity  pat-removed      401 unauthenticated      401 unauthenticated
+listFactoryActivity  pat-platform     200                      404 org-not-found
+listFactoryActivity  pat-deleted-org  401 unauthenticated      401 unauthenticated
 listInvitations      anonymous        401 unauthenticated      401 unauthenticated
 listInvitations      owner            200                      404 org-not-found
 listInvitations      admin            200                      404 org-not-found
@@ -2704,6 +2730,32 @@ searchKnowledge      pat-demoted      200                      404 org-not-found
 searchKnowledge      pat-removed      401 unauthenticated      401 unauthenticated
 searchKnowledge      pat-platform     200                      404 org-not-found
 searchKnowledge      pat-deleted-org  401 unauthenticated      401 unauthenticated
+searchOrg            anonymous        401 unauthenticated      401 unauthenticated
+searchOrg            owner            200                      404 org-not-found
+searchOrg            admin            200                      404 org-not-found
+searchOrg            viewer           200                      404 org-not-found
+searchOrg            approver         200                      404 org-not-found
+searchOrg            editor           200                      404 org-not-found
+searchOrg            member-no-roles  200                      404 org-not-found
+searchOrg            other-org-owner  404 org-not-found        200
+searchOrg            platform-admin   404 org-not-found        404 org-not-found
+searchOrg            stale-owner      200                      404 org-not-found
+searchOrg            key-scoped       200                      404 org-not-found
+searchOrg            key-restricted   200                      404 org-not-found
+searchOrg            key-other-org    404 org-not-found        200
+searchOrg            key-expired      401 unauthenticated      401 unauthenticated
+searchOrg            key-revoked      401 unauthenticated      401 unauthenticated
+searchOrg            bearer-owner     200                      404 org-not-found
+searchOrg            pat-approver     403 forbidden            404 org-not-found
+searchOrg            pat-owner        200                      404 org-not-found
+searchOrg            pat-viewer       200                      404 org-not-found
+searchOrg            pat-other-org    404 org-not-found        200
+searchOrg            pat-expired      401 unauthenticated      401 unauthenticated
+searchOrg            pat-revoked      401 unauthenticated      401 unauthenticated
+searchOrg            pat-demoted      200                      404 org-not-found
+searchOrg            pat-removed      401 unauthenticated      401 unauthenticated
+searchOrg            pat-platform     200                      404 org-not-found
+searchOrg            pat-deleted-org  401 unauthenticated      401 unauthenticated
 searchSkills         anonymous        401 unauthenticated      401 unauthenticated
 searchSkills         owner            200                      404 org-not-found
 searchSkills         admin            200                      404 org-not-found

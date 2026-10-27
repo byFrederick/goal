@@ -12,6 +12,62 @@ import (
 	"github.com/google/uuid"
 )
 
+const factoryActivity = `-- name: FactoryActivity :many
+SELECT e.id, e.factory_id, e.item_id, e.run_id, e.at, e.kind, e.station, e.actor, e.data, e.org_id, w.number, w.title
+FROM item_events e
+JOIN work_items w ON w.id = e.item_id
+WHERE e.factory_id = $1 AND e.kind = ANY ($2::text[])
+ORDER BY e.at DESC, e.id DESC
+LIMIT $3::bigint
+`
+
+type FactoryActivityParams struct {
+	FactoryID uuid.UUID
+	Kinds     []string
+	MaxEvents int64
+}
+
+type FactoryActivityRow struct {
+	ItemEvent ItemEvent
+	Number    int64
+	Title     string
+}
+
+// The factory's latest events of the given kinds, newest first, with their item's number and
+// title (item_events_factory_at_idx).
+func (q *Queries) FactoryActivity(ctx context.Context, arg FactoryActivityParams) ([]FactoryActivityRow, error) {
+	rows, err := q.db.Query(ctx, factoryActivity, arg.FactoryID, arg.Kinds, arg.MaxEvents)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FactoryActivityRow
+	for rows.Next() {
+		var i FactoryActivityRow
+		if err := rows.Scan(
+			&i.ItemEvent.ID,
+			&i.ItemEvent.FactoryID,
+			&i.ItemEvent.ItemID,
+			&i.ItemEvent.RunID,
+			&i.ItemEvent.At,
+			&i.ItemEvent.Kind,
+			&i.ItemEvent.Station,
+			&i.ItemEvent.Actor,
+			&i.ItemEvent.Data,
+			&i.ItemEvent.OrgID,
+			&i.Number,
+			&i.Title,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertNote = `-- name: InsertNote :one
 INSERT INTO item_events (factory_id, item_id, run_id, at, kind, station, actor, data)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)

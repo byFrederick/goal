@@ -488,6 +488,75 @@ func (q *Queries) NextItemNumber(ctx context.Context, id uuid.UUID) (int64, erro
 	return last_item_number, err
 }
 
+const searchItems = `-- name: SearchItems :many
+SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit FROM work_items
+WHERE factory_id = ANY ($1::uuid[])
+  AND (($2::text <> '' AND title ILIKE '%' || $2::text || '%' ESCAPE '\')
+       OR ($3::bigint > 0 AND number = $3::bigint))
+ORDER BY (number = $3::bigint) DESC, number DESC, factory_id
+LIMIT $4::bigint
+`
+
+type SearchItemsParams struct {
+	Factories []uuid.UUID
+	Pattern   string
+	Number    int64
+	MaxItems  int64
+}
+
+// The shell's search: the items of the factories whose title contains the pattern (already
+// escaped, with \ as the escape character) or whose number is the one given, that one first.
+// Bounded by factory_id and the limit; no index serves the ILIKE (no trigram index yet).
+func (q *Queries) SearchItems(ctx context.Context, arg SearchItemsParams) ([]WorkItem, error) {
+	rows, err := q.db.Query(ctx, searchItems,
+		arg.Factories,
+		arg.Pattern,
+		arg.Number,
+		arg.MaxItems,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorkItem
+	for rows.Next() {
+		var i WorkItem
+		if err := rows.Scan(
+			&i.ID,
+			&i.FactoryID,
+			&i.Number,
+			&i.ParentID,
+			&i.Type,
+			&i.Lane,
+			&i.Title,
+			&i.Body,
+			&i.Station,
+			&i.State,
+			&i.ClassOfService,
+			&i.Priority,
+			&i.Size,
+			&i.ReworkCount,
+			&i.CostUsd,
+			&i.Outputs,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DoneAt,
+			&i.OrgID,
+			&i.PartKey,
+			&i.PartPaths,
+			&i.Paths,
+			&i.BaseCommit,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const startItem = `-- name: StartItem :one
 UPDATE work_items SET state = 'in_progress', updated_at = $2 WHERE id = $1 RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit
 `

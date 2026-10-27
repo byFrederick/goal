@@ -229,6 +229,10 @@ type Store interface {
 	// ErrNotFound.
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
 
+	// FactoryActivity returns up to limit of the factory's latest events whose kind is one of
+	// domain.ActivityKinds, newest first (by at, then id), each with its item's number and title.
+	FactoryActivity(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ActivityEvent, error)
+
 	// ItemByNumber returns a factory's item by its per-factory number, or ErrNotFound.
 	ItemByNumber(ctx context.Context, factory domain.FactoryID, number int64) (domain.Item, error)
 
@@ -240,6 +244,11 @@ type Store interface {
 	// ListItems returns up to q.Limit of a factory's items that match q, newest (highest
 	// number) first.
 	ListItems(ctx context.Context, q ItemQuery) ([]domain.Item, error)
+
+	// SearchItems returns up to q.Limit of the items of q.Factories whose title contains q.Title
+	// (case-insensitively and literally: % and _ are no wildcards) or whose number is q.Number,
+	// that one first, then newest (highest number) first. No factory finds nothing.
+	SearchItems(ctx context.Context, q ItemSearch) ([]domain.Item, error)
 
 	// Assemblies returns, by id, those of ids that are items of the factory with parts (items
 	// whose ParentID they are), each with every one of its parts in number order, wherever they
@@ -559,6 +568,16 @@ type ItemQuery struct {
 	Station string
 	// Before, when positive, keeps items numbered below it: the cursor of the next page.
 	Before int64
+	Limit  int
+}
+
+// ItemSearch finds items across factories for the shell's search box.
+type ItemSearch struct {
+	Factories []domain.FactoryID
+	// Title is the text a title contains; empty matches no title.
+	Title string
+	// Number, when positive, also finds the item with that number.
+	Number int64
 	Limit  int
 }
 
