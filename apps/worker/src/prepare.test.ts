@@ -422,7 +422,12 @@ describe('prepare', () => {
   });
 
   describe('definition mode', () => {
-    const draftSpec = { ...spec, item_id: '', station: '', draft_request: { id: 'd1', text: 'Give review a 4th reviewer' } };
+    const draftSpec = {
+      ...spec,
+      item_id: '',
+      station: '',
+      draft_request: { id: 'd1', text: 'Give review a 4th reviewer' },
+    };
     const sha = (s: string) => createHash('sha256').update(s).digest('hex');
     const factory = 'apiVersion: goal/v1\nkind: Factory\n';
     const prompt = '# Reviewer\n';
@@ -447,7 +452,13 @@ describe('prepare', () => {
       expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8')).draft_request).toEqual(
         draftSpec.draft_request,
       );
-      expect(prepared).toEqual({ type: 'prepared', at: later.toISOString(), seconds: 12.3, tools: 0, definition_files: 2 });
+      expect(prepared).toEqual({
+        type: 'prepared',
+        at: later.toISOString(),
+        seconds: 12.3,
+        tools: 0,
+        definition_files: 2,
+      });
       // No clone, no credential helper, no mise install for a repository.
       expect(calls).toEqual([]);
     });
@@ -455,7 +466,12 @@ describe('prepare', () => {
     it('refuses a definition with a repository, without a draft request, or with a path that leaves the workspace', async () => {
       const files = { 'factory.yaml': b64(factory) };
       for (const bundle of [
-        { spec: draftSpec, files: {}, definition: { files }, repository: { url: 'https://example.com/a.git', branch: 'goal/1-x' } },
+        {
+          spec: draftSpec,
+          files: {},
+          definition: { files },
+          repository: { url: 'https://example.com/a.git', branch: 'goal/1-x' },
+        },
         { spec, files: {}, definition: { files } },
         { spec: draftSpec, files: {} },
         { spec: draftSpec, files: {}, definition: { files: { '../x': b64('x') } } },

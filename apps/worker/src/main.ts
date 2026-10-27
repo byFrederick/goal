@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { cp, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { runDefinition } from './definition.js';
 import type { WorkerEvent } from './events.js';
 import { type Exec, type Output, type Prepared, prepare } from './prepare.js';
 import { failed, runTask } from './run.js';
@@ -78,6 +79,8 @@ async function runAgent(): Promise<number> {
 
   try {
     const spec = parseSpec(await readFile(paths.spec, 'utf8'));
+    // A draft request's run (ADR 0021) reads no agent files and installs no skills.
+    if (spec.draft_request) return await runDefinition(spec, { query, emit, now, env: process.env, abortController });
     const files = await readAgentFiles();
     await installSkills();
     return await runTask(spec, files, { query, emit, now, env: process.env, abortController, fetch });
