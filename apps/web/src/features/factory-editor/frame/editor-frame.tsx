@@ -1,10 +1,11 @@
-// The Definition editor's frame (D §10.3, canvas Define*): the header (breadcrumb, "Definition"
-// with the draft's chip, Visual | YAML, Versions, Discard draft…, Review and publish), the status
-// line, the section tiles, then the section (children), and the dialogs a draft can need: discard,
-// conflicts, a discard elsewhere and the unsaved-changes guard. It reads the draft session and
-// B's draft; sections render inside it through `section-views.tsx`. View only (no
-// definition:edit, canvas Define-View): the running version's chip, a banner saying who edits
-// (and whose draft is open), no Discard, no Review and publish, no status line.
+// The Definition editor's frame (D §10.3, screens build/definition): the header (the breadcrumb with
+// the Live chip, the Form | YAML toggle in Form, Versions, Review changes and Publish), the draft
+// banner (the change count, the problem sentence, Review changes and Discard draft), the Ask bar
+// (not built yet), the status line, the section tiles in Form, then the section (children), and the
+// dialogs a draft can need: discard, conflicts, a discard elsewhere and the unsaved-changes guard.
+// It reads the draft session and B's draft; sections render inside it through `section-views.tsx`.
+// View only (no definition:edit, canvas Define-View): the running version's chip, a banner saying who
+// edits (and whose draft is open), no draft banner, no Discard, no Review or Publish, no status line.
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { ChevronRight, Clock } from 'lucide-react';
