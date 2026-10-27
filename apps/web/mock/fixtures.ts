@@ -1421,7 +1421,8 @@ export function seed(now = Date.now()): MockState {
         expedite_wip: 1,
       },
     },
-    weeklyBudget: { goal: 60, sre: 20 },
+    // The sidebar's spend (shell.jpg): $512 of $1,400 this week, the budgets of goal and sre.
+    weeklyBudget: { goal: 1000, sre: 400 },
     agentStats: {
       sre: {
         investigator: {
@@ -1501,6 +1502,33 @@ export function seed(now = Date.now()): MockState {
   build(sreFactory, 1, sreSeeds, now, state);
 
   for (const f of state.factories) state.history[f.name] = seedHistory(f, now, state.constraint[f.name] ?? null);
+  fitWeeklySpend(state, ['goal', 'sre', 'support'], now, 512);
 
   return state;
+}
+
+/**
+ * Acme's last seven days cost $512 (the sidebar's picture, shell.jpg). Scales the cost of the finished
+ * work of its factories in that window, the seeded history and the finished items, so they add up to
+ * exactly `target`, the last one taking the rounding. The overview reads the same window: from six days
+ * before today (UTC) up to now.
+ */
+function fitWeeklySpend(state: MockState, names: string[], now: number, target: number) {
+  const day = 86_400_000;
+  const today = Math.floor(now / day) * day;
+  const inWeek = (at: number) => at >= today - 6 * day && at < now;
+  const week: { cost_usd: number }[] = [
+    ...names.flatMap((name) => (state.history[name] ?? []).filter((d) => inWeek(d.done_at))),
+    ...state.items.filter((it) => names.includes(it.factory) && it.done_at && inWeek(Date.parse(it.done_at))),
+  ];
+  const total = week.reduce((n, d) => n + d.cost_usd, 0);
+  if (week.length === 0 || total === 0) return;
+  const cents = (n: number) => Math.round(n * 100);
+  let sum = 0;
+  for (const d of week) {
+    d.cost_usd = Math.round(((d.cost_usd * target) / total) * 100) / 100;
+    sum += cents(d.cost_usd);
+  }
+  const last = week[week.length - 1];
+  if (last) last.cost_usd = (cents(last.cost_usd) + cents(target) - sum) / 100;
 }

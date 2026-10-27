@@ -141,13 +141,11 @@ test.describe('the Knowledge page', () => {
     await expect(page.getByRole('combobox', { name: 'As a factory' })).toHaveValue('sre');
   });
 
-  test("the factory sidebar's Knowledge shows what the factory may search", async ({ page }) => {
-    test.skip(isPhone(page), 'the factory sidebar is the 768 px and wider navigation');
+  test("the sidebar's Knowledge opens the organization's sources", async ({ page }) => {
+    test.skip(isPhone(page), 'the sidebar is the 768 px and wider navigation');
     await page.goto('/o/acme/f/sre');
-    await page.getByRole('navigation', { name: 'sre factory' }).getByRole('link', { name: 'Knowledge' }).click();
-    await expect(page).toHaveURL(/\/o\/acme\/knowledge\?factory=sre$/);
-    await expect(page.getByRole('heading', { level: 2, name: '1 source sre may search' })).toBeVisible();
-    await page.getByRole('link', { name: 'Show every source' }).click();
+    await orgNav(page).getByRole('link', { name: 'Knowledge' }).click();
+    await expect(page).toHaveURL(/\/o\/acme\/knowledge$/);
     await expect(page.getByRole('heading', { level: 2, name: '4 sources' })).toBeVisible();
     await orgNav(page).getByRole('link', { name: 'Knowledge' }).focus();
     await expect(orgNav(page).getByRole('link', { name: 'Knowledge' })).toHaveAttribute('href', '/o/acme/knowledge');

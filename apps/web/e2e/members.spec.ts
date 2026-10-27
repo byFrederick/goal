@@ -301,7 +301,7 @@ test('the organization menu says the caller’s role and opens Members and roles
     await expect(sheet.getByRole('link', { name: /^Acme\s?3 factories, owner/ })).toBeVisible();
     await sheet.getByRole('link', { name: 'Members and roles' }).click();
   } else {
-    const menu = page.getByRole('menu', { name: 'Ac, Acme organization, switch organization' });
+    const menu = page.getByRole('menu', { name: 'Acme organization, switch organization' });
     await expect(menu.getByRole('menuitemradio', { name: /^Acme\s?3 factories, owner$/ })).toBeVisible();
     await menu.getByRole('menuitem', { name: 'Members and roles' }).click();
   }

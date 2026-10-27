@@ -1,4 +1,4 @@
-// The one- or two-letter marks the rail, the phone's top row and the factory cards show (C §10.3).
+// The one- or two-letter marks the sidebar, the phone's top row and the factory cards show (C §10.3).
 
 const titleCase = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 

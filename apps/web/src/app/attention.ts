@@ -1,5 +1,5 @@
-// What each factory of the organization needs from people: the rail's badges and dots, the
-// sidebar's Items count and the factories' accessible names (C §10.3).
+// What each factory of the organization needs from people: the sidebar's and the phone's badges and
+// dots, and the factories' accessible names (C §10.3).
 import { useQuery } from '@tanstack/react-query';
 import { attentionQuery } from '../api/queries';
 import type { OrgAttention } from '../api/types';

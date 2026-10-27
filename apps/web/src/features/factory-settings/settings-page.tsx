@@ -2,7 +2,7 @@
 // the factory's `can`, and is left out for an archived factory (Restore starts it paused). The Danger
 // zone reads the organization's `can` (factory:archive, factory:delete), since those permissions are
 // organization-level. The factory is the detail goald answers, so archived and paused stay current
-// after an action; the rail's factory list leaves archived factories out.
+// after an action; the sidebar's factory list leaves archived factories out.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { toast } from 'sonner';

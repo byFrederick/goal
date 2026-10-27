@@ -1,12 +1,16 @@
-// Every screen the shell links to, in one registry that drives the sidebars, the rail, the tab bar
-// and the More sheet (C §10.5). A factory screen a later phase builds is listed with
-// `available: false` and shows as "Later"; the PR that adds its route flips it to
+// Every screen the shell links to, in one registry that drives the sidebar, the tab bar and the More
+// sheet (C §10.5). A screen a later phase builds is listed with `available: false` and shows as
+// "Later" (the phone) or "Not available yet" (the sidebar); the PR that adds its route flips it to
 // `available: true` with its `to`. Every organization screen exists.
 import {
+  Activity,
   BookOpen,
   Code,
   Factory,
+  House,
+  Inbox,
   Kanban,
+  KeyRound,
   LayoutGrid,
   type LucideIcon,
   Plug,
@@ -163,22 +167,46 @@ export const settingsScreen: OrgScreen = {
   to: '/o/$org/settings',
 };
 
-/** The organization sidebar, top to bottom. */
-export const orgScreens: readonly OrgScreen[] = [
-  factoriesScreen,
-  membersScreen,
-  apiKeysScreen,
-  connectionsScreen,
-  knowledgeScreen,
-  settingsScreen,
+/**
+ * A sidebar entry (sidebar.tsx). With `available: false` it has no page yet: it is listed and disabled,
+ * "Not available yet" (ADR 0016, decision 4), and the item that builds its page flips it.
+ */
+type Listed<Path extends string> = { id: string; label: string; icon?: LucideIcon; permissions?: readonly string[] } & (
+  | { available: true; to: Path; exact?: boolean }
+  | { available: false }
+);
+
+/** The sidebar's organization-wide entries, top to bottom. */
+export const sidebarOrgScreens: readonly Listed<OrgPath>[] = [
+  { id: 'home', label: 'Home', icon: House, available: true, to: '/o/$org', exact: true },
+  { id: 'needs-you', label: 'Needs you', icon: Inbox, available: false },
+  { id: 'runs', label: 'Runs', icon: Activity, available: false },
+  { ...connectionsScreen, available: true },
+  { id: 'credentials', label: 'Credentials', icon: KeyRound, available: false },
+  { ...knowledgeScreen, available: true },
+];
+
+/** The pages the sidebar lists under the open factory, top to bottom. */
+export const sidebarFactoryPages: readonly Listed<FactoryPath>[] = [
+  { id: 'floor', label: 'Floor', available: true, to: '/o/$org/f/$factory', exact: true },
+  { id: 'board', label: 'Board', available: true, to: '/o/$org/f/$factory/board' },
+  { id: 'items', label: 'Items', available: true, to: '/o/$org/f/$factory/items' },
+  { id: 'agents', label: 'Agents', available: false },
+  { id: 'intake', label: 'Intake', available: false },
+  { id: 'jonah', label: 'Jonah', available: false },
+  { id: 'definition', label: 'Definition', available: true, to: '/o/$org/f/$factory/definition' },
+  { id: 'settings', label: 'Settings', available: true, to: '/o/$org/f/$factory/settings' },
 ];
 
 /** The screens of `screens` a person holding `can` sees; none of the gated ones while `can` loads. */
-export function screensFor<S extends OrgScreen>(screens: readonly S[], can: readonly string[] | undefined): S[] {
+export function screensFor<S extends { permissions?: readonly string[] }>(
+  screens: readonly S[],
+  can: readonly string[] | undefined,
+): S[] {
   return screens.filter((s) => !s.permissions || s.permissions.some((p) => can?.includes(p) ?? false));
 }
 
-/** The rail's dashed square: D's New factory wizard, /o/:org/new/:step (no sidebar), from Start. */
+/** New factory: D's wizard, /o/:org/new/:step, from Start (the sidebar's + and the factory picker). */
 export const newFactoryScreen: Screen & { available: true; to: '/o/$org/new/$step' } = {
   id: 'new-factory',
   label: 'New factory',
