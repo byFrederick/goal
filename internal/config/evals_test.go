@@ -291,6 +291,9 @@ func TestCheck_EvalCases(t *testing.T) {
 	})
 }
 
+// caseAgent is the agent of baseFactory that validCase runs.
+const caseAgent = "worker"
+
 func TestEvalCases_ParsesEveryCase(t *testing.T) {
 	t.Parallel()
 
@@ -314,17 +317,17 @@ func TestEvalCases_ParsesEveryCase(t *testing.T) {
 
 	want := []domain.EvalCaseSpec{
 		{
-			Name: "by-patch", SHA256: domain.HashBlob([]byte(patch)), Agent: "worker", Description: "A short request gets a clear answer",
+			Name: "by-patch", SHA256: domain.HashBlob([]byte(patch)), Agent: caseAgent, Description: "A short request gets a clear answer",
 			Input: domain.EvalInput{Title: "Add a version flag", Body: "The CLI prints its version."}, Tries: 3, ReferencePatch: "./" + patchFile,
 		},
 		{
-			Name: "clear-answer", SHA256: domain.HashBlob([]byte(validCase)), Agent: "worker", Description: "A short request gets a clear answer",
+			Name: "clear-answer", SHA256: domain.HashBlob([]byte(validCase)), Agent: caseAgent, Description: "A short request gets a clear answer",
 			Input: domain.EvalInput{Title: "Add a version flag", Body: "The CLI prints its version."}, Tries: 3, Judge: "answer-clear",
 		},
 		{
-			Name: "contract", SHA256: domain.HashBlob([]byte(contract)), Agent: "worker", Description: "A short request gets a clear answer",
+			Name: "contract", SHA256: domain.HashBlob([]byte(contract)), Agent: caseAgent, Description: "A short request gets a clear answer",
 			Input: domain.EvalInput{
-				Title: "Add a version flag", Body: "The CLI prints its version.", Type: "feature", Lane: "backend", Ref: "abc123",
+				Title: "Add a version flag", Body: "The CLI prints its version.", Type: "feature", Lane: laneBackend, Ref: "abc123",
 				Outputs: map[string]any{"spec": map[string]any{"title": "Version"}},
 			},
 			Tries: 1, Contract: true,

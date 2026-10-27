@@ -434,6 +434,20 @@ var definitionStatus = map[string]int{
 	authoring.CodeTooLarge:           http.StatusRequestEntityTooLarge,
 }
 
+// evalGateProblem names, in p, the eval run a publish the eval gate refused waits on or failed,
+// and its failing cases.
+func evalGateProblem(p *gen.Problem, err error) {
+	e, ok := errors.AsType[*authoring.EvalGateError](err)
+	if !ok {
+		return
+	}
+
+	p.EvalRunId = optional(string(e.Run))
+	if len(e.Failing) > 0 {
+		p.FailingCases = &e.Failing
+	}
+}
+
 // definitionProblem is the problem of a definition refusal, with what the client needs to act on
 // it: the problems that block a publish, where factory.yaml stops parsing, the current value of
 // what changed under a stale write, the items at removed stations. ok is false for other errors.
@@ -474,12 +488,7 @@ func definitionProblem(err error) (gen.Problem, bool) {
 		p.Items = &gen.ItemsAtRemovedStations{InProgress: itemsAtOut(e.InProgress), Unmapped: itemsAtOut(e.Unmapped)}
 	}
 
-	if e, ok := errors.AsType[*authoring.EvalGateError](err); ok {
-		p.EvalRunId = optional(string(e.Run))
-		if len(e.Failing) > 0 {
-			p.FailingCases = &e.Failing
-		}
-	}
+	evalGateProblem(&p, err)
 
 	switch code {
 	case authoring.CodeFactoryRunning:

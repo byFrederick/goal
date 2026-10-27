@@ -24,6 +24,9 @@ const (
 	caseByContract = "writes-the-spec"
 	caseByJudge    = "follows-the-spec"
 	evalJudge      = "spec-followed"
+	evalJudgeTitle = "Spec followed"
+	// evalAgent is acme's one agent, which the cases run.
+	evalAgent = "writer"
 )
 
 var (
@@ -106,7 +109,7 @@ func (h *harness) publishCases(t *testing.T) {
 	var rev int64
 
 	for path, content := range map[string]string{
-		config.JudgesDir + "/" + evalJudge + ".md":     evalJudgeFile,
+		config.JudgesDir + "/" + evalJudge + ".md":       evalJudgeFile,
 		config.CasesDir + "/" + caseByContract + ".yaml": evalCaseYAML("contract: true"),
 		config.CasesDir + "/" + caseByJudge + ".yaml":    evalCaseYAML("judge: " + evalJudge),
 	} {
@@ -128,7 +131,7 @@ func (h *harness) publishCases(t *testing.T) {
 		t.Fatalf("publish the cases: %v", err)
 	}
 
-	h.evalJudges.Set(testOrg, acmeID, v.ID, domain.Judge{Slug: evalJudge, Title: "Spec followed"})
+	h.evalJudges.Set(testOrg, acmeID, v.ID, domain.Judge{Slug: evalJudge, Title: evalJudgeTitle})
 }
 
 // pastRun is a finished run of acme's writer on a new item titled title.
@@ -150,7 +153,7 @@ func (h *harness) pastRun(t *testing.T, title string) domain.Run {
 	}
 
 	id, err := h.store.StartRun(ctx, ports.NewRun{
-		FactoryID: acmeID, DefinitionVersionID: rec.Current.ID, ItemID: it.ID, Station: stInbox, Agent: "writer", StartedAt: t0.Add(-time.Minute),
+		FactoryID: acmeID, DefinitionVersionID: rec.Current.ID, ItemID: it.ID, Station: stInbox, Agent: evalAgent, StartedAt: t0.Add(-time.Minute),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -282,26 +285,59 @@ func TestEvals_ListCasesAndSummary(t *testing.T) {
 		t.Fatalf("list = %d", code)
 	}
 
-	sum := got.Summary
-	if valueOf(sum.Version) != 2 || sum.Cases != 2 || sum.CasesPassing != 1 || sum.Tries != 2 || sum.TriesPassed != 1 ||
-		valueOf(sum.FirstTryPassRate) != 0.5 || deref(sum.LatestRunId) != started.Run.Id || valueOf(sum.LatestTriesPerCase) != 1 || sum.LatestRunAt == nil {
-		t.Errorf("summary = %+v, want v2, 1 of 2 cases passing, 1 of 2 tries, the latest run %s with 1 try per case", sum, started.Run.Id)
+	wantEvalSummary(t, got.Summary, started.Run.Id)
+	wantEvalCases(t, got.Cases)
+}
+
+// wantEvalSummary wants the summary of TestEvals_ListCasesAndSummary: v2, 1 of 2 cases and 1 of 2
+// tries passing, and run its latest with 1 try per case.
+func wantEvalSummary(t *testing.T, sum gen.EvalSummary, run string) {
+	t.Helper()
+
+	ok := valueOf(sum.Version) == 2 && sum.Cases == 2 && sum.CasesPassing == 1 && sum.Tries == 2 && sum.TriesPassed == 1 &&
+		valueOf(sum.FirstTryPassRate) == 0.5 && deref(sum.LatestRunId) == run && valueOf(sum.LatestTriesPerCase) == 1 && sum.LatestRunAt != nil
+	if !ok {
+		t.Errorf("summary = %+v, want v2, 1 of 2 cases passing, 1 of 2 tries, the latest run %s with 1 try per case", sum, run)
+	}
+}
+
+// wantEvalCases wants the cases of TestEvals_ListCasesAndSummary: the judged case failed, the
+// contract's passed.
+func wantEvalCases(t *testing.T, cases []gen.EvalCaseEntry) {
+	t.Helper()
+
+	if len(cases) != 2 {
+		t.Fatalf("cases = %+v, want 2", cases)
 	}
 
-	if len(got.Cases) != 2 {
-		t.Fatalf("cases = %+v, want 2", got.Cases)
-	}
+	judged, contract := cases[0], cases[1]
+	wantEvalAll(t, "first case", judged,
+		evalCheck{judged.Name == caseByJudge, caseByJudge},
+		evalCheck{judged.CheckedBy.Kind == gen.EvalCheckedByKindJudge && deref(judged.CheckedBy.Judge) == evalJudge, "checked by " + evalJudge},
+		evalCheck{deref(judged.CheckedBy.Title) == evalJudgeTitle, "the judge's title " + evalJudgeTitle},
+		evalCheck{len(judged.LastTries) == 1 && judged.LastTries[0].State == gen.EvalResultStateFail, "its one try failed"})
+	wantEvalAll(t, "second case", contract,
+		evalCheck{contract.Name == caseByContract && contract.Agent == evalAgent, caseByContract + " of the writer"},
+		evalCheck{contract.Description == "The writer turns a request into a spec", "its description"},
+		evalCheck{contract.CheckedBy.Kind == gen.EvalCheckedByKindContract, "checked by its contract"},
+		evalCheck{valueOf(contract.CostUsd) == 0.25, "costing 0.25"},
+		evalCheck{len(contract.LastTries) == 1 && contract.LastTries[0].State == gen.EvalResultStatePass, "its one try passed"})
+}
 
-	judged, contract := got.Cases[0], got.Cases[1]
-	if judged.Name != caseByJudge || judged.CheckedBy.Kind != gen.EvalCheckedByKindJudge || deref(judged.CheckedBy.Judge) != evalJudge ||
-		deref(judged.CheckedBy.Title) != "Spec followed" || len(judged.LastTries) != 1 || judged.LastTries[0].State != gen.EvalResultState(domain.EvalFail) {
-		t.Errorf("first case = %+v, want %s checked by judge Spec followed, its one try failed", judged, caseByJudge)
-	}
+// evalCheck is one condition of an answer and what it says.
+type evalCheck struct {
+	ok   bool
+	what string
+}
 
-	if contract.Name != caseByContract || contract.Agent != "writer" || contract.Description != "The writer turns a request into a spec" ||
-		contract.CheckedBy.Kind != gen.EvalCheckedByKindContract || valueOf(contract.CostUsd) != 0.25 || len(contract.LastTries) != 1 ||
-		contract.LastTries[0].State != gen.EvalResultState(domain.EvalPass) {
-		t.Errorf("second case = %+v, want %s of the writer, checked by its contract, passed, costing 0.25", contract, caseByContract)
+// wantEvalAll reports each check of v that fails.
+func wantEvalAll(t *testing.T, name string, v any, checks ...evalCheck) {
+	t.Helper()
+
+	for _, c := range checks {
+		if !c.ok {
+			t.Errorf("%s = %+v, want %s", name, v, c.what)
+		}
 	}
 }
 
@@ -420,6 +456,31 @@ func TestEvals_ViewerMayReadButNotStartCancelOrAdd(t *testing.T) {
 	}
 }
 
+// wantWrittenCase wants version number's case name to replay pastRun's writer run, checked by its
+// contract, with 2 tries.
+func (h *harness) wantWrittenCase(t *testing.T, number int, name string) {
+	t.Helper()
+
+	svc, ctx := h.authors(t)
+	path := config.CasesDir + "/" + name + ".yaml"
+
+	f, err := svc.VersionFile(ctx, acmeID, authoring.VersionSelector{Kind: authoring.SelectNumber, Number: number}, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases, err := config.EvalCases(fstest.MapFS{path: {Data: f.Content}})
+	if err != nil || len(cases) != 1 {
+		t.Fatalf("the written case = %v, %v\n%s", cases, err, f.Content)
+	}
+
+	c := cases[0]
+	if c.Agent != evalAgent || c.Tries != 2 || !c.Contract || c.Description != "Add a version flag to the CLI" ||
+		!reflect.DeepEqual(c.Input, domain.EvalInput{Title: "Add a version flag to the CLI", Body: "The CLI prints its version.", Type: typeFeature, Lane: "backend"}) {
+		t.Errorf("the written case = %+v, want the writer's run replayed, checked by its contract, 2 tries", c)
+	}
+}
+
 func TestEvals_AddCaseFromRun(t *testing.T) {
 	t.Parallel()
 
@@ -434,34 +495,18 @@ func TestEvals_AddCaseFromRun(t *testing.T) {
 		t.Fatalf("add case = %d %+v, want 201 and v3", code, v)
 	}
 
-	svc, ctx := h.authors(t)
-
-	f, err := svc.VersionFile(ctx, acmeID, authoring.VersionSelector{Kind: authoring.SelectNumber, Number: 3}, config.CasesDir+"/version-flag.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cases, err := config.EvalCases(fstest.MapFS{config.CasesDir + "/version-flag.yaml": {Data: f.Content}})
-	if err != nil || len(cases) != 1 {
-		t.Fatalf("the written case = %v, %v\n%s", cases, err, f.Content)
-	}
-
-	c := cases[0]
-	if c.Agent != "writer" || c.Tries != 2 || !c.Contract || c.Description != "Add a version flag to the CLI" ||
-		!reflect.DeepEqual(c.Input, domain.EvalInput{Title: "Add a version flag to the CLI", Body: "The CLI prints its version.", Type: typeFeature, Lane: "backend"}) {
-		t.Errorf("the written case = %+v, want the writer's run replayed, checked by its contract, 2 tries", c)
-	}
+	h.wantWrittenCase(t, 3, "version-flag")
 
 	// v3 published through config.Check, so the file passes it; a judge check passes it too.
 	judged := `{"run":"` + string(past.ID) + `","name":"version-judged","judge":"` + evalJudge + `","description":"The spec is followed"}`
-	h.evalJudges.Set(testOrg, acmeID, domain.DefinitionVersionID(v.Id), domain.Judge{Slug: evalJudge, Title: "Spec followed"})
+	h.evalJudges.Set(testOrg, acmeID, domain.DefinitionVersionID(v.Id), domain.Judge{Slug: evalJudge, Title: evalJudgeTitle})
 
 	var v4 gen.Version
 	if code, _ := evalCall(t, h, http.MethodPost, acmeEvals+"/cases", judged, &v4); code != http.StatusCreated {
 		t.Errorf("add a judged case = %d, want 201", code)
 	}
 
-	h.evalJudges.Set(testOrg, acmeID, domain.DefinitionVersionID(v4.Id), domain.Judge{Slug: evalJudge, Title: "Spec followed"})
+	h.evalJudges.Set(testOrg, acmeID, domain.DefinitionVersionID(v4.Id), domain.Judge{Slug: evalJudge, Title: evalJudgeTitle})
 
 	for _, c := range []struct {
 		what, body string
@@ -477,6 +522,7 @@ func TestEvals_AddCaseFromRun(t *testing.T) {
 		wantEvalProblem(t, "add "+c.what, code, p, c.status, c.code)
 	}
 
+	svc, ctx := h.authors(t)
 	if _, _, err := svc.OpenDraft(ctx, acmeID, authoring.OpenDraftRequest{}); err != nil {
 		t.Fatal(err)
 	}
@@ -503,4 +549,15 @@ func TestEvals_AddCaseGateRefusalKeepsTheDraft(t *testing.T) {
 	if _, err := svc.Draft(ctx, acmeID); err != nil {
 		t.Errorf("draft after the gate refused: %v, want it open", err)
 	}
+}
+
+// withEvals is d with h's eval runs and judges, changed by each of opts.
+func (h *harness) withEvals(d api.Deps, tenancy *porttest.Tenancy, opts []func(*harness, *api.Deps)) api.Deps {
+	d.Evals = h.evalDeps(tenancy)
+
+	for _, opt := range opts {
+		opt(h, &d)
+	}
+
+	return d
 }

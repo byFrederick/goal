@@ -135,36 +135,7 @@ func (s *server) ListEvals(ctx context.Context, req gen.ListEvalsRequestObject) 
 	out.Summary = gen.EvalSummary{Version: &rec.Current.Number, Cases: len(content.Cases)}
 
 	for _, c := range content.Cases {
-		h := byCase[c.Name]
-		entry := gen.EvalCaseEntry{
-			Name: c.Name, Description: c.Description, Agent: c.Agent, Tries: &c.Tries,
-			CheckedBy: checkedByOut(c, titles), LastTries: make([]gen.EvalHistoryTry, 0, len(h.Tries)),
-		}
-
-		passed := 0
-
-		for _, t := range h.Tries {
-			entry.LastTries = append(entry.LastTries, gen.EvalHistoryTry{
-				EvalRunId: string(t.EvalRunID), Try: t.Try, State: gen.EvalResultState(t.State), RunId: optional(string(t.RunID)), CostUsd: t.CostUSD,
-			})
-
-			if t.State == domain.EvalPass {
-				passed++
-			}
-		}
-
-		if h.LatestRunID != "" {
-			entry.CostUsd = &h.LatestCostUSD
-		}
-
-		out.Summary.Tries += len(h.Tries)
-		out.Summary.TriesPassed += passed
-
-		if len(h.Tries) > 0 && passed == len(h.Tries) {
-			out.Summary.CasesPassing++
-		}
-
-		out.Cases = append(out.Cases, entry)
+		out.Cases = append(out.Cases, evalCaseOut(c, byCase[c.Name], titles, &out.Summary))
 	}
 
 	if out.Summary.Tries > 0 {
@@ -177,6 +148,39 @@ func (s *server) ListEvals(ctx context.Context, req gen.ListEvalsRequestObject) 
 	}
 
 	return out, nil
+}
+
+// evalCaseOut is case c with its history h as the list answers it, counted into sum.
+func evalCaseOut(c domain.EvalCaseSpec, h domain.EvalCaseHistory, titles map[string]string, sum *gen.EvalSummary) gen.EvalCaseEntry {
+	entry := gen.EvalCaseEntry{
+		Name: c.Name, Description: c.Description, Agent: c.Agent, Tries: &c.Tries,
+		CheckedBy: checkedByOut(c, titles), LastTries: make([]gen.EvalHistoryTry, 0, len(h.Tries)),
+	}
+
+	passed := 0
+
+	for _, t := range h.Tries {
+		entry.LastTries = append(entry.LastTries, gen.EvalHistoryTry{
+			EvalRunId: string(t.EvalRunID), Try: t.Try, State: gen.EvalResultState(t.State), RunId: optional(string(t.RunID)), CostUsd: t.CostUSD,
+		})
+
+		if t.State == domain.EvalPass {
+			passed++
+		}
+	}
+
+	if h.LatestRunID != "" {
+		entry.CostUsd = &h.LatestCostUSD
+	}
+
+	sum.Tries += len(h.Tries)
+	sum.TriesPassed += passed
+
+	if len(h.Tries) > 0 && passed == len(h.Tries) {
+		sum.CasesPassing++
+	}
+
+	return entry
 }
 
 // latestEvalRun sets the summary's latest run: the newest of the content hash sha256, when one
@@ -325,60 +329,20 @@ func (s *server) AddEvalCase(ctx context.Context, req gen.AddEvalCaseRequestObje
 	}
 
 	b := req.Body
-	if !evalCaseSlug.MatchString(b.Name) {
-		return nil, fmt.Errorf("%w: case name %q is not 3 to 40 lowercase letters, digits and hyphens starting with a letter", errInvalid, b.Name)
-	}
 
-	tries := deref(b.Tries)
-	if b.Tries == nil {
-		tries = 1
-	}
-
-	if tries < 1 || tries > maxEvalTries {
-		return nil, fmt.Errorf("%w: tries %d is not 1 to %d", errInvalid, tries, maxEvalTries)
-	}
-
-	if utf8.RuneCountInString(deref(b.Description)) > maxEvalDescription {
-		return nil, fmt.Errorf("%w: a case description has at most %d characters", errInvalid, maxEvalDescription)
-	}
-
-	r, err := s.run(ctx, b.Run)
+	tries, err := evalCaseRequest(*b)
 	if err != nil {
 		return nil, err
 	}
 
-	if r.FactoryID != rec.ID {
-		return nil, errRunNotFound
-	}
-
-	it, err := s.items.Item(ctx, r.ItemID)
-	if err != nil {
-		return nil, fmt.Errorf("read item %s of run %s: %w", r.ItemID, r.ID, err)
-	}
-
-	if rec.Current == nil {
-		return nil, fmt.Errorf("factory %s was never published: %w", rec.ID, authoring.ErrVersionNotFound)
-	}
-
-	current, err := s.defs.EvalContent(ctx, rec.ID, authoring.VersionSelector{Kind: authoring.SelectCurrent})
+	it, r, err := s.pastRun(ctx, rec, b.Run)
 	if err != nil {
 		return nil, err
-	}
-
-	if slices.ContainsFunc(current.Cases, func(c domain.EvalCaseSpec) bool { return c.Name == b.Name }) {
-		return nil, fmt.Errorf("eval case %s: %w", b.Name, errEvalCaseExists)
 	}
 
 	judge := deref(b.Judge)
-	if judge != "" {
-		titles, err := s.judgeTitles(ctx, rec.ID, rec.Current.ID)
-		if err != nil {
-			return nil, err
-		}
-
-		if _, ok := titles[judge]; !ok {
-			return nil, fmt.Errorf("%w: the current version has no judge %q", errInvalid, judge)
-		}
+	if err := s.newEvalCase(ctx, rec, b.Name, judge); err != nil {
+		return nil, err
 	}
 
 	description := deref(b.Description)
@@ -405,6 +369,79 @@ func (s *server) AddEvalCase(ctx context.Context, req gen.AddEvalCaseRequestObje
 	}
 
 	return gen.AddEvalCase201JSONResponse(s.versionOut(published.VersionInfo)), nil
+}
+
+// evalCaseRequest checks an add-case request's name, tries and description, and returns its
+// tries (1 when it names none).
+func evalCaseRequest(b gen.EvalCaseFromRun) (int, error) {
+	if !evalCaseSlug.MatchString(b.Name) {
+		return 0, fmt.Errorf("%w: case name %q is not 3 to 40 lowercase letters, digits and hyphens starting with a letter", errInvalid, b.Name)
+	}
+
+	tries := 1
+	if b.Tries != nil {
+		tries = *b.Tries
+	}
+
+	if tries < 1 || tries > maxEvalTries {
+		return 0, fmt.Errorf("%w: tries %d is not 1 to %d", errInvalid, tries, maxEvalTries)
+	}
+
+	if utf8.RuneCountInString(deref(b.Description)) > maxEvalDescription {
+		return 0, fmt.Errorf("%w: a case description has at most %d characters", errInvalid, maxEvalDescription)
+	}
+
+	return tries, nil
+}
+
+// pastRun is agent run id of rec with its item: errRunNotFound when it is another factory's.
+func (s *server) pastRun(ctx context.Context, rec ports.FactoryRecord, id string) (domain.Item, domain.Run, error) {
+	r, err := s.run(ctx, id)
+	if err != nil {
+		return domain.Item{}, domain.Run{}, err
+	}
+
+	if r.FactoryID != rec.ID {
+		return domain.Item{}, domain.Run{}, errRunNotFound
+	}
+
+	it, err := s.items.Item(ctx, r.ItemID)
+	if err != nil {
+		return domain.Item{}, domain.Run{}, fmt.Errorf("read item %s of run %s: %w", r.ItemID, r.ID, err)
+	}
+
+	return it, r, nil
+}
+
+// newEvalCase refuses a case name rec's current version has, and a judge it lacks.
+func (s *server) newEvalCase(ctx context.Context, rec ports.FactoryRecord, name, judge string) error {
+	if rec.Current == nil {
+		return fmt.Errorf("factory %s was never published: %w", rec.ID, authoring.ErrVersionNotFound)
+	}
+
+	current, err := s.defs.EvalContent(ctx, rec.ID, authoring.VersionSelector{Kind: authoring.SelectCurrent})
+	if err != nil {
+		return err
+	}
+
+	if slices.ContainsFunc(current.Cases, func(c domain.EvalCaseSpec) bool { return c.Name == name }) {
+		return fmt.Errorf("eval case %s: %w", name, errEvalCaseExists)
+	}
+
+	if judge == "" {
+		return nil
+	}
+
+	titles, err := s.judgeTitles(ctx, rec.ID, rec.Current.ID)
+	if err != nil {
+		return err
+	}
+
+	if _, ok := titles[judge]; !ok {
+		return fmt.Errorf("%w: the current version has no judge %q", errInvalid, judge)
+	}
+
+	return nil
 }
 
 // publishEvalCase writes the case file into a draft it opens from rec's current version and

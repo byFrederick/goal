@@ -473,13 +473,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		deps.Auth = api.AuthConfig{Mode: api.AuthSession, EmailCodes: !in.noEmailCodes, Google: in.google}
 	}
 
-	deps.Evals = h.evalDeps(tenancy)
-
-	for _, opt := range opts {
-		opt(h, &deps)
-	}
-
-	handler, err := api.New(deps)
+	handler, err := api.New(h.withEvals(deps, tenancy, opts))
 	if err != nil {
 		t.Fatal(err)
 	}

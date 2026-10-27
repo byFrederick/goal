@@ -160,7 +160,7 @@ func TestEval_RefusalsAndUsage(t *testing.T) {
 		t.Errorf("show of an unknown run = %v, want goald's problem", err)
 	}
 
-	for _, args := range [][]string{{}, {"frobnicate"}, {"show"}, {"show", "a", "b"}, {"run", "extra"}} {
+	for _, args := range [][]string{{}, {"frobnicate"}, {"show"}, {"show", "a", "b"}, {"run", "surplus"}} {
 		if _, err := goalEval(t, srv.URL, args...); !errors.Is(err, errUsage) {
 			t.Errorf("goal eval %q = %v, want the usage", args, err)
 		}

@@ -132,7 +132,7 @@ With `board.flow.assemblies.changedSince: true` (default false), plans bind late
 
 ## Judges and eval cases
 
-Jonah's two file kinds live under `evals/` ([ADR 0025](../adr/0025-judges-and-evals-as-the-screens-show-them.md)). `contracts/definitions/evals.schema.json` defines both, and `config.Check` validates them with the factory (`internal/config/evals.go`). Judge runs, eval runs and the publish gate are not built yet.
+Jonah's two file kinds live under `evals/` ([ADR 0025](../adr/0025-judges-and-evals-as-the-screens-show-them.md)). `contracts/definitions/evals.schema.json` defines both, and `config.Check` validates them with the factory (`internal/config/evals.go`). Judge runs and eval runs are built in `internal/jonah` but goald does not run them yet; the publish eval gate is described under [Publishing with eval cases](#publishing-with-eval-cases).
 
 ### Judges: `evals/judges/<slug>.md`
 
@@ -198,6 +198,20 @@ Each problem is a `DefinitionProblem` in section `files`. Its `File` is the judg
 | A judge's or case's file name is not a slug (3 to 40 lowercase letters, digits and hyphens) | `eval-name-invalid` |
 
 Only files directly in `evals/judges/` (`.md`) and `evals/cases/` (`.yaml`, `.yml`) are judges and cases. Fixtures such as reference patches go elsewhere, for example `evals/fixtures/`.
+
+### Publishing with eval cases
+
+Every publish of a draft that has eval cases runs them on the draft first ([ADR 0025](../adr/0025-judges-and-evals-as-the-screens-show-them.md), decision 4). The gate is in `authoring.Service.Publish` (`internal/authoring/evalgate.go`), after the checks pass, so every way to publish goes through it: `POST …/draft/publish`, `goal factory publish` and push, and adding a case or a judge from the UI. It compares runs by the draft's exact content, `domain.ManifestSHA256` of its files, so any change to any file needs a new run:
+
+- **No cases.** A draft without files in `evals/cases/` publishes as before.
+- **No run yet.** When no run of the content exists, or its newest run ran one case only (`goal eval run --case`), the publish starts a run of every case (trigger `publish`) and refuses with 409 `evals-pending`, naming the run in `eval_run_id`. The draft stays open.
+- **Pending.** While that run is queued or running, the publish refuses with 409 `evals-pending` and starts no other run.
+- **Failing.** When the run finished with a case that has any try that is not `pass` (a `fail`, an `error`, or a try a cancelled run never ran), the publish refuses with 409 `evals-failing`, with `eval_run_id` and `failing_cases`. Fix the case or the definition, which changes the content, and publish again.
+- **Passing.** When every try of every case passed, the draft publishes.
+
+The gate is off while goald does not wire it (`authoring.Deps.EvalGate` is nil): goald has no `EvalSuites` or `EvalRunner` adapter yet, so today a factory with cases publishes without running them, unlike ADR 0025 decision 4. The evals routes answer 503 `evals-unavailable` for the same reason.
+
+`POST …/evals/cases` (and the evals screen's "Add a case from a past run") writes `evals/cases/<name>.yaml` from a past run's agent and item, with `check: {contract: true}` or `{judge: <slug>}` and the requested tries, into a new draft, and publishes it through the same gate.
 
 ## Triggers: `board.triggers`
 
