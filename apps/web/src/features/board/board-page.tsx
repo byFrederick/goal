@@ -1,49 +1,44 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { Users } from 'lucide-react';
 import { Tabs } from 'radix-ui';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { boardQuery, touchesQuery } from '../../api/queries';
-import type { Board, BoardStation, ItemCard, TouchHeadline } from '../../api/types';
+import type { Board, BoardStation, ItemCard } from '../../api/types';
 import { AndonButton, LineStatus } from '../../shared/andon';
 import { factoryTitle, itemKey, useFactory, useFactoryParams } from '../../shared/factory';
-import { formatPercent, humanize } from '../../shared/format';
+import { humanize } from '../../shared/format';
 import { InboxButton } from '../../shared/inbox-drawer';
-import { waitingOnYou } from '../../shared/item-state';
 import { MoveDialog } from '../../shared/move-menu';
 import { NewItemButton } from '../../shared/new-item';
 import { useOrg } from '../../shared/org';
 import { factoryRoleNote, holds, reasons } from '../../shared/permissions';
 import { perItem, stationRates } from '../../shared/touches';
-import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { NativeSelect } from '../../ui/field';
-import { Meter } from '../../ui/hatch';
 import { SegmentedControl, type SegmentedOption } from '../../ui/segmented-control';
 import { StatusIcon } from '../../ui/status-icon';
-import { CardDnd, DropColumn } from './board-dnd';
+import { StationColumn } from './board-column';
+import { CardDnd } from './board-dnd';
 import {
   type AssemblyOption,
   arrangeBoard,
   assemblyOptions,
   type BoardView,
   knownView,
+  laneOptions,
   openAssemblies,
   roleOptions,
   statusChoices,
+  typeOptions,
 } from './board-filters';
 import { type OpenAssemblies, StationBody } from './board-lane';
 import {
-  budgetNote,
-  columnCount,
   constraintSentence,
   expediteHeader,
+  expediteUse,
   firstStation,
   isExpedite,
-  lineSentence,
-  stationMeter,
-  stationNote,
   stationStat,
   wipText,
 } from './stats';
@@ -62,114 +57,27 @@ function stationTouches(rateOf: RateOf, s: BoardStation): string | null {
   return rate === null ? null : `${perItem(rate, 2)} touches per item`;
 }
 
-function LineCard({
+function Columns({
   board,
+  onMove,
   decides,
-  rateOf,
-  expedite,
+  finishedThisWeek,
 }: {
   board: Board;
+  onMove: OnMove;
   decides: boolean;
-  rateOf: RateOf;
-  /** The expedite count for the header, null when there is none to show. */
-  expedite: string | null;
+  finishedThisWeek: number;
 }) {
-  const sentence = lineSentence(board.line);
-  const budget = budgetNote(board.line);
-
-  return (
-    <SectionCard
-      title="The line"
-      description={
-        <>
-          {sentence.text}
-          {sentence.notEnforced ? (
-            <>
-              {' '}
-              <Chip tone="quiet" className="align-[1px] text-muted">
-                Not enforced yet
-              </Chip>
-            </>
-          ) : null}
-          {board.line.touches.finished > 0 ? (
-            <span className="block">Touches per finished item show where people step in.</span>
-          ) : null}
-        </>
-      }
-      aside={
-        <span className="flex flex-wrap justify-end gap-x-3 text-sm text-muted">
-          <span className="whitespace-nowrap">{wipText(board.line)}</span>
-          {expedite ? <span className="whitespace-nowrap">{expedite}</span> : null}
-        </span>
-      }
-    >
-      {budget ? <p className="m-0 -mt-1 text-sm text-rework-ink">{budget}</p> : null}
-      {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a scroll container must take focus so keyboards can scroll it (axe scrollable-region-focusable) */}
-      <section tabIndex={0} aria-label="Stations in line order" className="-mx-1 overflow-x-auto px-1 pb-1">
-        <ol
-          className="m-0 grid list-none gap-2 p-0"
-          style={{ gridTemplateColumns: `repeat(${board.stations.length}, minmax(132px, 1fr))` }}
-        >
-          {board.stations.map((s) => {
-            const drum = s.id === board.constraint;
-            return (
-              <li
-                key={s.id}
-                className={cn(
-                  'flex flex-col gap-2 rounded-control border border-line bg-card p-3',
-                  drum && constraintRing,
-                )}
-              >
-                <div className="flex items-center justify-between gap-1.5">
-                  <span className="truncate text-[15px] font-medium">{humanize(s.id)}</span>
-                  {drum ? <Chip tone="constraint">Constraint</Chip> : null}
-                </div>
-                <Meter className="bg-shell" {...stationMeter(s)} />
-                <span className={cn('text-sm', decides && waitingOnYou(s) > 0 && 'text-you')}>{stationStat(s)}</span>
-                <span className="text-[13px] leading-snug text-muted">{stationNote(s, decides)}</span>
-                <StationTouches rateOf={rateOf} station={s} />
-              </li>
-            );
-          })}
-        </ol>
-      </section>
-    </SectionCard>
+  const columns = (
+    <DesktopColumns board={board} onMove={onMove} decides={decides} finishedThisWeek={finishedThisWeek} />
   );
-}
-
-function StationTouches({ rateOf, station }: { rateOf: RateOf; station: BoardStation }) {
-  const rate = rateOf(station);
-  if (rate === null) return null;
-  return (
-    <span className="mt-auto border-t border-line pt-1.5 text-[13px] tabular-nums">
-      <strong className="font-medium">{perItem(rate, 2)}</strong> touches per item
-    </span>
-  );
-}
-
-/** From 768 px, in the header: the week's touches per finished item, linking to the Floor's panel. */
-function TouchesChip({ touches }: { touches: TouchHeadline }) {
-  const params = useFactoryParams();
-  return (
-    <Link
-      to="/o/$org/f/$factory"
-      params={params}
-      hash="touches"
-      className="hidden h-10 items-center gap-2 rounded-control bg-card px-3.5 text-sm text-ink no-underline transition-shadow duration-200 md:inline-flex"
-    >
-      <Users size={16} strokeWidth={1.5} aria-hidden="true" />
-      {touches.finished === 0 ? (
-        <span>No items finished this week</span>
-      ) : (
-        <>
-          <span className="tabular-nums">
-            <strong className="font-medium">{perItem(touches.per_item_mean)}</strong> touches per item
-            <span className="sr-only">, </span>
-          </span>
-          <span className="text-muted tabular-nums">{formatPercent(touches.touchless_rate)} touchless</span>
-        </>
-      )}
-    </Link>
+  // Cards are dragged only by someone who may move them.
+  return onMove ? (
+    <CardDnd board={board} onDrop={onMove}>
+      {columns}
+    </CardDnd>
+  ) : (
+    columns
   );
 }
 
@@ -188,57 +96,48 @@ function PhoneTouchesLink() {
   );
 }
 
-function Columns({ board, onMove, headers }: { board: Board; onMove: OnMove; headers: OpenAssemblies | undefined }) {
-  const columns = <ColumnGrid board={board} onMove={onMove} headers={headers} />;
-  // Cards are dragged only by someone who may move them.
-  return onMove ? (
-    <CardDnd board={board} onDrop={onMove}>
-      {columns}
-    </CardDnd>
-  ) : (
-    columns
-  );
-}
-
-function ColumnGrid({ board, onMove, headers }: { board: Board; onMove: OnMove; headers: OpenAssemblies | undefined }) {
-  const decides = holds(useFactory(), 'item:decide');
+/** From 768 px: the stations side by side, each a StationColumn, with the expedite lane's caption above them. */
+function DesktopColumns({
+  board,
+  onMove,
+  decides,
+  finishedThisWeek,
+}: {
+  board: Board;
+  onMove: OnMove;
+  decides: boolean;
+  finishedThisWeek: number;
+}) {
+  const expedite = expediteHeader(board.line, board.stations.flatMap((s) => s.items).filter(isExpedite).length);
+  // The expedite zone is drawn when the line has a lane or an expedite item is on the board.
+  const showExpedite = expedite !== null;
   return (
     <section aria-label="Stations" className="-mx-1 hidden overflow-x-auto px-1 pb-2 md:block">
+      {showExpedite ? (
+        <p className="m-0 mb-2 flex items-center gap-2 text-secondary text-muted">
+          <Chip tone="expedite">Expedite</Chip>
+          <span>
+            {expediteUse(board.line, board.stations.flatMap((s) => s.items).filter(isExpedite).length)}, jumps every
+            queue
+          </span>
+        </p>
+      ) : null}
       <div
-        className="grid items-start gap-2"
-        style={{ gridTemplateColumns: `repeat(${board.stations.length}, minmax(144px, 1fr))` }}
+        className="grid items-start gap-3"
+        style={{ gridTemplateColumns: `repeat(${board.stations.length}, minmax(176px, 1fr))` }}
       >
-        {board.stations.map((s) => {
-          const drum = s.id === board.constraint;
-          return (
-            <DropColumn
-              key={s.id}
-              station={s}
-              className={cn(
-                'flex min-w-0 flex-col gap-2 rounded-card border border-line bg-card p-3',
-                drum && constraintRing,
-              )}
-            >
-              {s.kind === 'queue' ? null : (
-                <div className="flex items-baseline justify-between gap-2 px-1 pt-0.5 pb-1">
-                  <h2 className="m-0 text-[15px] font-medium">{humanize(s.id)}</h2>
-                  <span
-                    className={cn(
-                      'text-[13px] whitespace-nowrap text-muted',
-                      decides && waitingOnYou(s) > 0 && 'text-you',
-                    )}
-                  >
-                    {columnCount(s)}
-                  </span>
-                </div>
-              )}
-              {!s.lanes?.length && s.items.length === 0 ? (
-                <p className="m-0 px-1 pb-1 text-[13px] text-muted">Empty</p>
-              ) : null}
-              <StationBody station={s} onMove={onMove} draggable={Boolean(onMove)} headers={headers} />
-            </DropColumn>
-          );
-        })}
+        {board.stations.map((s) => (
+          <StationColumn
+            key={s.id}
+            board={board}
+            station={s}
+            showExpedite={showExpedite}
+            decides={decides}
+            onMove={onMove}
+            draggable={Boolean(onMove)}
+            finishedThisWeek={finishedThisWeek}
+          />
+        ))}
       </div>
     </section>
   );
@@ -323,7 +222,7 @@ function StationTabs({
                 <h2 id={`st-${s.id}`} className="m-0 text-base font-medium">
                   {humanize(s.id)}
                 </h2>
-                <span className="text-[13px] text-muted">{stationStat(s)}</span>
+                <span className="text-secondary text-muted">{stationStat(s)}</span>
               </div>
               <StationNote station={s} rateOf={rateOf} />
               {!s.lanes?.length && s.items.length === 0 ? (
@@ -342,7 +241,7 @@ function StationTabs({
 function StationNote({ station, rateOf }: { station: BoardStation; rateOf: RateOf }) {
   const touches = stationTouches(rateOf, station);
   if (!touches) return null;
-  return <p className="m-0 mb-1 text-[13px] text-ink-soft">{touches}.</p>;
+  return <p className="m-0 mb-1 text-secondary text-ink-soft">{touches}.</p>;
 }
 
 const groupChoices: SegmentedOption<'none' | 'assembly'>[] = [
@@ -356,17 +255,20 @@ function FilterSelect({
   value,
   onChange,
   icon,
+  phoneOnly = false,
   children,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   icon?: ReactNode;
+  /** Status and Group by only the phone's station tabs use; from 768 px the columns do not take them. */
+  phoneOnly?: boolean;
   children: ReactNode;
 }) {
   const id = useId();
   return (
-    <div className="flex min-w-0 max-w-full items-center gap-2 text-sm text-muted">
+    <div className={cn('flex min-w-0 max-w-full items-center gap-2 text-sm text-muted', phoneOnly && 'md:hidden')}>
       <label htmlFor={id} className="shrink-0">
         {label}
       </label>
@@ -400,6 +302,32 @@ function FilterRow({
   return (
     <fieldset className="m-0 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 border-0 p-0">
       <legend className="sr-only">Filter and group the cards</legend>
+      <label className="flex min-w-0 items-center gap-2 text-sm text-muted">
+        <span className="sr-only">Search items</span>
+        <input
+          type="search"
+          value={view.q ?? ''}
+          placeholder="Search items"
+          onChange={(event) => onChange({ q: event.target.value || undefined })}
+          className="h-10 w-56 max-w-full rounded-control border border-line bg-card px-3 text-sm text-ink placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run"
+        />
+      </label>
+      <FilterSelect label="Work type" value={view.type ?? ''} onChange={(v) => onChange({ type: v || undefined })}>
+        <option value="">Any</option>
+        {typeOptions(board).map((type) => (
+          <option key={type} value={type}>
+            {humanize(type)}
+          </option>
+        ))}
+      </FilterSelect>
+      <FilterSelect label="Lane" value={view.lane ?? ''} onChange={(v) => onChange({ lane: v || undefined })}>
+        <option value="">Any</option>
+        {laneOptions(board).map((lane) => (
+          <option key={lane} value={lane}>
+            {humanize(lane)}
+          </option>
+        ))}
+      </FilterSelect>
       <FilterSelect
         label="Assembly"
         value={view.assembly ?? ''}
@@ -422,6 +350,7 @@ function FilterRow({
       </FilterSelect>
       <FilterSelect
         label="Status"
+        phoneOnly
         value={view.status ?? ''}
         onChange={(v) => onChange({ status: statusChoices.find((s) => s.value === v)?.value })}
         icon={view.status ? <StatusIcon status={view.status} /> : null}
@@ -433,12 +362,14 @@ function FilterRow({
           </option>
         ))}
       </FilterSelect>
-      <SegmentedControl
-        label="Group by"
-        options={groupChoices}
-        value={view.group ?? 'none'}
-        onChange={(group) => onChange({ group: group === 'assembly' ? 'assembly' : undefined })}
-      />
+      <div className="md:hidden">
+        <SegmentedControl
+          label="Group by"
+          options={groupChoices}
+          value={view.group ?? 'none'}
+          onChange={(group) => onChange({ group: group === 'assembly' ? 'assembly' : undefined })}
+        />
+      </div>
     </fieldset>
   );
 }
@@ -470,7 +401,6 @@ export function BoardPage() {
     navigate({ search: (prev) => ({ ...prev, ...change }), replace: true, resetScroll: false });
   // Grouped by assembly, each open assembly heads its parts; ungrouped, the parts keep their assembly line.
   const headers = view.group === 'assembly' ? openAssemblies(board) : undefined;
-  const expedite = expediteHeader(board.line, board.stations.flatMap((s) => s.items).filter(isExpedite).length);
   // The phone's status line: the line, its WIP and the week's touches per item, in one truncated line.
   const headline = board.line.touches;
   const touchesHeadline = `${perItem(headline.per_item_mean)} touches per item`;
@@ -490,14 +420,11 @@ export function BoardPage() {
     <>
       <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
-          <h1 className="m-0 text-[34px] leading-[1.05] font-normal tracking-display md:text-5xl">
-            {factoryTitle(factory)} board
-          </h1>
+          <h1 className="m-0 text-page-title tracking-display">{factoryTitle(factory)} board</h1>
           {role ? <Chip tone="plain">{role}</Chip> : null}
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <InboxButton factory={factory} />
-          <TouchesChip touches={board.line.touches} />
           <span className="hidden h-10 max-w-[360px] items-center rounded-control bg-card px-3.5 md:inline-flex">
             <LineStatus andon={board.line.andon} className="text-sm text-ink" />
           </span>
@@ -530,23 +457,25 @@ export function BoardPage() {
         <AndonButton factory={factory} andon={board.line.andon} className="min-h-11" />
       </div>
 
-      <div className="hidden md:block">
-        <LineCard board={board} decides={holds(factory, 'item:decide')} rateOf={rateOf} expedite={expedite} />
-      </div>
       <FilterRow board={board} view={view} onChange={changeView} />
-      <Columns board={shown} onMove={onMove} headers={headers} />
+      <Columns
+        board={shown}
+        onMove={onMove}
+        decides={holds(factory, 'item:decide')}
+        finishedThisWeek={board.line.touches.finished}
+      />
       <StationTabs board={shown} selected={selected} onMove={onMove} rateOf={rateOf} headers={headers} />
       {onMove ? (
         <>
-          <p className="m-0 hidden text-[13px] text-muted md:block">
+          <p className="m-0 hidden text-secondary text-muted md:block">
             Drag a card, or focus it and press M to choose a station. Agents pull work; nobody assigns it.
           </p>
-          <p className="m-0 text-[13px] text-muted md:hidden">
+          <p className="m-0 text-secondary text-muted md:hidden">
             Use the arrow on a card to move it; agents pull the next item themselves.
           </p>
         </>
       ) : (
-        <p className="m-0 text-[13px] text-muted">{reasons.board(factory.name)}</p>
+        <p className="m-0 text-secondary text-muted">{reasons.board(factory.name)}</p>
       )}
       {moving ? (
         <MoveDialog
