@@ -232,6 +232,13 @@ type EvalCaseHistory struct {
 	LatestCostUSD float64
 }
 
+// EvalEstimate is what running some eval cases would cost, about: USD over the cases that could
+// be priced, and the names of those that could not.
+type EvalEstimate struct {
+	USD      float64
+	Unpriced []string
+}
+
 // EvalHistoryTries is how many finished tries EvalCaseHistory keeps per case.
 const EvalHistoryTries = 3
 
