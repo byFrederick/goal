@@ -116,11 +116,14 @@ export function renderOrgPage({
   org,
   seed = [],
   search,
+  path,
 }: {
   page: () => ReactNode;
   org: OrgSummary;
   seed?: readonly Seed[];
   search?: Record<string, string> | undefined;
+  /** The page's own route under /o/$org (say 'credentials/'), when the page navigates to it. */
+  path?: string;
 }) {
   polyfillLayout();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
@@ -131,12 +134,14 @@ export function renderOrgPage({
     getParentRoute: () => rootRoute,
     path: '/o/$org',
     beforeLoad: () => ({ org }),
-    component: page,
+    component: path ? Outlet : page,
   });
+  // With a path, the page is that child route, so a navigation to it still matches.
+  const pageRoute = path ? createRoute({ getParentRoute: () => orgRoute, path, component: page }) : undefined;
   const query = search && Object.keys(search).length > 0 ? `?${new URLSearchParams(search)}` : '';
   const router = createRouter({
-    routeTree: rootRoute.addChildren([orgRoute]),
-    history: createMemoryHistory({ initialEntries: [`/o/${org.slug}${query}`] }),
+    routeTree: rootRoute.addChildren([pageRoute ? orgRoute.addChildren([pageRoute]) : orgRoute]),
+    history: createMemoryHistory({ initialEntries: [`/o/${org.slug}/${path ?? ''}${query}`] }),
   });
 
   return {

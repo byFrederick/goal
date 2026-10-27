@@ -47,6 +47,7 @@ import {
   listConnectionKinds,
   listConnections,
 } from './connections';
+import { listCredentials } from './credentials';
 import {
   getDraft,
   getDraftFile,
@@ -145,6 +146,8 @@ export const keys = {
   /** Audit entries about connections: every one's (`all`) or one's, by its id. */
   connectionActivity: (org: string, id?: string) => ['org', org, 'connections', 'activity', id ?? 'all'] as const,
   connectionKinds: (org: string) => ['org', org, 'connection-kinds'] as const,
+  /** The organization's credentials (ADR 0017): the list, which a connection's change also moves. */
+  credentials: (org: string) => ['org', org, 'credentials'] as const,
   /**
    * The prefix of everything of the organization's knowledge base (spec 4 §10): the source lists
    * by filter, each source and its documents, a document's text, searches. `event: knowledge` re-reads
@@ -285,6 +288,14 @@ export const connectionActivityQuery = (org: string, id?: string) =>
   queryOptions({
     queryKey: keys.connectionActivity(org, id),
     queryFn: ({ signal }) => listConnectionAudit(org, { connection: id, limit: id ? 6 : 5 }, signal),
+    staleTime: 30_000,
+  });
+
+/** The organization's credentials, by name, never a value (credential:read: every member). */
+export const credentialsQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.credentials(org),
+    queryFn: ({ signal }) => listCredentials(org, signal),
     staleTime: 30_000,
   });
 

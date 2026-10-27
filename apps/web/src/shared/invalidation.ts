@@ -130,10 +130,11 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
  * The queries one `connection` event touches (spec 4 §8.3): a connection created, changed, tested
  * or deleted changes the lists, that connection and the audit entries about connections, all
  * under one prefix; it carries no value. The kinds too: a connection of a kind another admin just
- * defined (kinds have no event of their own).
+ * defined (kinds have no event of their own). A credential's "used by" names the connections
+ * that refer to it, so the credentials list moves with them.
  */
 export function connectionInvalidations(org: string): QueryKey[] {
-  return [keys.connections(org), keys.connectionKinds(org)];
+  return [keys.connections(org), keys.connectionKinds(org), keys.credentials(org)];
 }
 
 /**

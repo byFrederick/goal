@@ -58,6 +58,7 @@ import type {
 } from '@goal/api-client';
 import { authSettings, createMockAuth } from './auth.ts';
 import { createConnections } from './connections.ts';
+import { createCredentials } from './credentials.ts';
 import { createDefinitions } from './definitions.ts';
 import { parseFault, sleep, takeFault } from './faults.ts';
 import {
@@ -197,6 +198,14 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       }
     },
     sources: (org, name) => knowledge.readers(org, name),
+    acme: acmeOrg,
+  });
+
+  const credentials = createCredentials({
+    clock,
+    actor: (req) => auth.actor(req),
+    stale: (req, res) => stale(req, res),
+    factories: (org) => state.factories.filter((f) => f.org_id === org),
     acme: acmeOrg,
   });
 
@@ -1283,6 +1292,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       if (grants) withRole(state, grants);
       apiKeys.reset(clock());
       connections.reset(clock());
+      credentials.reset(clock());
       knowledge.reset(clock());
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
       const cookie = auth.reset(authSettings(body.auth));
@@ -1373,6 +1383,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await definitions.handle(org, rest, method, url, req, res)) return;
     if (await apiKeys.handle(forCaller(req, org), rest, method, req, res, () => readBody(req))) return;
     if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
+    if (await credentials.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
 
     if (rest === '' && method === 'GET') return json(res, 200, forCaller(req, withCount(org)));
