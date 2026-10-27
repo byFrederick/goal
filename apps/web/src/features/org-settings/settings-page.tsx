@@ -91,7 +91,7 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
       setSubmitted(false);
       setBlurred({});
       toast.success('Saved');
-      // The rail, the sidebar and the route context read the organization from the list.
+      // The sidebar and the route context read the organization from the list.
       await client.refetchQueries({ queryKey: keys.orgs });
       if (body.slug) {
         leaving.current = true;
@@ -167,7 +167,7 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
           <form id={formId} onSubmit={onSubmit} noValidate className="flex flex-col">
             <SettingsSection
               title="General"
-              lede="The name and short mark people see in the rail, and the address in links."
+              lede="The name people see in the sidebar, the short mark on phones, and the address in links."
             >
               <div className="grid grid-cols-[repeat(auto-fit,minmax(min(240px,100%),1fr))] gap-3.5">
                 <Field label="Name" error={shown('name')}>
@@ -180,7 +180,11 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
                     autoComplete="organization"
                   />
                 </Field>
-                <Field label="Short mark" help="Two letters, shown at the top of the rail" error={shown('mark')}>
+                <Field
+                  label="Short mark"
+                  help="Two letters, shown at the top of the screen on phones"
+                  error={shown('mark')}
+                >
                   <Input
                     value={form.mark}
                     name="mark"

@@ -1,6 +1,6 @@
 # ADR 0008 — Portable deployment, sandboxes, connections and the knowledge base
 
-Status: accepted · 2026-10-24 · Supersedes the deployment targets of [ADR 0003](0003-hexagonal-architecture-and-deployment.md) (decisions 4, 5 and 7) and decisions 2–5 of [ADR 0006](0006-workspaces-and-command-checks.md) · Amends [ADR 0009](0009-agent-network-isolation.md) and [ADR 0005](0005-factory-definitions-in-object-storage.md) · Spec: [phase 4](../history/specs/4-connections-runs-and-knowledge.md) · Amended in phase 6: decision 7 is changed by the [amendment](#amendment--phase-6-one-mcp-server-for-agents-and-clients) at the end ([spec 6](../history/specs/6-goal-mcp-server.md))
+Status: accepted · 2026-10-24 · Supersedes the deployment targets of [ADR 0003](0003-hexagonal-architecture-and-deployment.md) (decisions 4, 5 and 7) and decisions 2–5 of [ADR 0006](0006-workspaces-and-command-checks.md) · Amends [ADR 0009](0009-agent-network-isolation.md) and [ADR 0005](0005-factory-definitions-in-object-storage.md) · Spec: [phase 4](../history/specs/4-connections-runs-and-knowledge.md) · Amended in phase 6: decision 7 is changed by the [amendment](#amendment--phase-6-one-mcp-server-for-agents-and-clients) at the end ([spec 6](../history/specs/6-goal-mcp-server.md)) · Amended by [ADR 0017](0017-credentials.md): decision 5 is extended by the [amendment](#amendment--2026-10-27-connection-secret-fields-may-refer-to-a-credential) at the end
 
 ## Context
 
@@ -47,3 +47,9 @@ Constraints found while designing (research of 2026-10-24): Cloudflare Container
 Owner decision, 2026-10-25. Decision 7 changes: the gateway's MCP endpoint and Goal's MCP server for outside clients ([spec 6](../history/specs/6-goal-mcp-server.md)) become one server with one tool registry, one permission check and one audit, in `internal/api`. Callers decide what they may use: people and outside apps (OAuth through Better Auth, MCP-audience keys and personal tokens) act with their organization role at `/v1/mcp`; a run's task token is a restricted principal at `/mcp` (its organization, factory and item, its factory's `knowledge.sources`, the tools an agent may call, only while the run is live). The gateway's own registry and token check go; its listener (`gateway.internal` on Cloudflare, `goal-egress` locally), `GET /run` and goald minting one task token per run stay, so boxes still reach Goal only through their own route and never hold an OAuth token. Tool names keep the `<server>__<tool>` form agents use (`knowledge__search`).
 
 Rejected: two servers with two registries (each tool written and permission-checked twice, and the agents' set drifting from the people's); OAuth tokens for runs (a run's rights come from its definition and its item, not a person's consent, and must end with the run).
+
+## Amendment — 2026-10-27: connection secret fields may refer to a credential
+
+Status: accepted · 2026-10-27 · Extends decision 5 · Decided in [ADR 0017](0017-credentials.md)
+
+Decision 5 changes in one point: a connection's secret field may hold, instead of a sealed value, a reference `{{name}}` to an organization credential, stored in the clear and opened at run start under the credential's factory scope. Credentials are sealed under the same master key, and agents may also receive them directly. The rules are ADR 0017's decisions 5 to 8.

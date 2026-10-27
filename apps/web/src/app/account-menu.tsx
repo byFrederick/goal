@@ -1,5 +1,5 @@
-// The account (canvas "Account-Menu", "Mobile-Org-Switcher"; spec 3 §10.2): the avatar at the
-// bottom of the rail (and in the phone's top row) opens a panel naming the person, their role in
+// The account (canvas "Account-Menu", "Mobile-Org-Switcher"; spec 3 §10.2): the person at the
+// bottom of the sidebar (and the avatar in the phone's top row) opens a panel naming the person, their role in
 // this organization and whether they are a platform admin, with Edit name…, Personal tokens (to
 // this organization's API keys page, 3-12b), Sign out and Sign out everywhere…; on phones the same
 // block sits at the bottom of the organization sheet. With sign-in off (GOAL_AUTH=none) it names
@@ -14,7 +14,7 @@ import { createContext, type FormEvent, type ReactNode, use, useEffect, useRef, 
 import { toast } from 'sonner';
 import { meQuery, orgQuery } from '../api/queries';
 import type { Me, OrgSummary } from '../api/types';
-import { keepSessionAlive, roleLine, useSignOut, useUpdateName } from '../shared/account';
+import { keepSessionAlive, roleLine, roleName, useSignOut, useUpdateName } from '../shared/account';
 import { displayName, hasName, initialsOf } from '../shared/names';
 import { holds } from '../shared/permissions';
 import { Button } from '../ui/button';
@@ -27,7 +27,6 @@ import { Field, Input } from '../ui/field';
 import { Avatar } from '../ui/mark';
 import { menuRow } from '../ui/menu';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
-import { Tooltip } from '../ui/tooltip';
 import { AppearanceChoice } from './appearance-choice';
 import { railItem, railItemClass } from './rail-items';
 
@@ -110,28 +109,40 @@ export function AccountProvider({ org, children }: { org: OrgSummary; children: 
   );
 }
 
-/** The account's trigger and panel: on the rail (beside it) or in the phone's top row (below). */
-export function AccountMenu({ org, size }: { org: OrgSummary; size: 'rail' | 'phone' }) {
+/**
+ * The account's trigger and panel: the person's name and role at the bottom of the sidebar (the panel
+ * opens above it), or the avatar in the phone's top row (the panel opens below).
+ */
+export function AccountMenu({ org, size }: { org: OrgSummary; size: 'sidebar' | 'phone' }) {
   const { person } = useAccount();
   const [open, setOpen] = useState(false);
   const name = person ? displayName(person) : 'Local user';
   const initials = person ? initialsOf(person) : 'LU';
+  const label = `${initials}, ${name}, account`;
 
-  const trigger = (
-    <PopoverTrigger aria-label={`${initials}, ${name}, account`} className={railItemClass} {...railItem}>
-      <Avatar initials={initials} size={size} />
-    </PopoverTrigger>
-  );
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      {size === 'rail' ? (
-        <Tooltip label={name} detail={person ? (hasName(person) ? person.email : undefined) : 'This install'}>
-          {trigger}
-        </Tooltip>
+      {size === 'sidebar' ? (
+        <PopoverTrigger
+          aria-label={label}
+          className="flex w-full items-center gap-3 rounded-cell p-2 text-left text-ink hover:bg-hover aria-expanded:bg-hover"
+        >
+          <Avatar initials={initials} size="sidebar" />
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate text-body font-semibold">{name}</span>
+            {roleName(org.role) ? <span className="truncate text-meta text-muted">{roleName(org.role)}</span> : null}
+          </span>
+        </PopoverTrigger>
       ) : (
-        trigger
+        <PopoverTrigger aria-label={label} className={railItemClass} {...railItem}>
+          <Avatar initials={initials} size="phone" />
+        </PopoverTrigger>
       )}
-      <PopoverContent side={size === 'rail' ? 'right' : 'bottom'} aria-label="Account">
+      <PopoverContent
+        side={size === 'sidebar' ? 'top' : 'bottom'}
+        align={size === 'sidebar' ? 'start' : 'end'}
+        aria-label="Account"
+      >
         <AccountPanel org={org} onAction={() => setOpen(false)} />
       </PopoverContent>
     </Popover>
@@ -162,12 +173,12 @@ function AccountPanel({ org, onAction }: { org: OrgSummary; onAction: () => void
       <div className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-3 p-2">
         <Avatar initials={initialsOf(person)} size="card" />
         <span className="min-w-0">
-          <span className="block truncate text-[15px] font-medium">{displayName(person)}</span>
-          {hasName(person) ? <span className="block truncate text-[13px] text-muted">{person.email}</span> : null}
+          <span className="block truncate text-heading font-medium">{displayName(person)}</span>
+          {hasName(person) ? <span className="block truncate text-secondary text-muted">{person.email}</span> : null}
         </span>
       </div>
       {role || account.platformAdmin ? (
-        <p className="m-0 flex flex-wrap items-center gap-2 px-2 pb-2 pl-[60px] text-[13px] text-ink-soft">
+        <p className="m-0 flex flex-wrap items-center gap-2 px-2 pb-2 pl-15 text-secondary text-ink-soft">
           {role}
           {account.platformAdmin ? <Chip tone="you">Platform admin</Chip> : null}
         </p>
@@ -230,8 +241,8 @@ function LocalUser() {
           <CircleCheck size={18} strokeWidth={1.5} />
         </span>
         <span className="min-w-0">
-          <span className="block text-[15px] font-medium">Local user</span>
-          <span className="block text-[13px] text-muted">This install</span>
+          <span className="block text-heading font-medium">Local user</span>
+          <span className="block text-secondary text-muted">This install</span>
         </span>
       </div>
       <Callout tone="note">Sign-in is off. Anyone who can reach this address acts as the local user.</Callout>
@@ -259,11 +270,11 @@ export function AccountBlock({ org, onAction }: { org: OrgSummary; onAction: () 
       <div className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-3">
         <Avatar initials={initialsOf(person)} size="card" />
         <span className="min-w-0">
-          <span className="flex flex-wrap items-center gap-2 text-[15px] font-medium">
+          <span className="flex flex-wrap items-center gap-2 text-heading font-medium">
             <span className="min-w-0 break-words">{displayName(person)}</span>
             {account.platformAdmin ? <Chip tone="you">Platform admin</Chip> : null}
           </span>
-          <span className="block text-[13px] text-muted">{accountLine(person, role)}</span>
+          <span className="block text-secondary text-muted">{accountLine(person, role)}</span>
         </span>
       </div>
       <div className="grid grid-cols-2 gap-2">

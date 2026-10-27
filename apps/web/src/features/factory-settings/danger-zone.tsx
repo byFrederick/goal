@@ -114,7 +114,7 @@ export function DangerZone({ org, factory, deletes }: DangerZoneProps) {
       {archived ? (
         <ZoneRow
           title={`Restore ${factory.name}`}
-          description="Lists it on the rail and the Factories home again. It stays paused until you resume it."
+          description="Lists it in the sidebar and the Factories home again. It stays paused until you resume it."
           error={restore.error ? actionError(restore.error) : null}
           action={
             <Button
@@ -130,7 +130,7 @@ export function DangerZone({ org, factory, deletes }: DangerZoneProps) {
       ) : (
         <ZoneRow
           title={`Archive ${factory.name}`}
-          description="Stops its work and takes it off the rail and the Factories home. It stays readable, with its items and versions."
+          description="Stops its work and takes it off the sidebar and the Factories home. It stays readable, with its items and versions."
           action={
             <Button
               variant="raised"
@@ -179,8 +179,8 @@ export function DangerZone({ org, factory, deletes }: DangerZoneProps) {
         title={`Archive ${factory.name}?`}
         description={
           needsPause
-            ? 'It is running. Pause first stops it taking work, then archives it: it leaves the rail and the Factories home and stays readable, with its items and versions.'
-            : 'It stops taking work and leaves the rail and the Factories home. It stays readable, with its items and versions.'
+            ? 'It is running. Pause first stops it taking work, then archives it: it leaves the sidebar and the Factories home and stays readable, with its items and versions.'
+            : 'It stops taking work and leaves the sidebar and the Factories home. It stays readable, with its items and versions.'
         }
         confirmLabel={needsPause ? 'Pause first' : 'Archive factory'}
         pendingLabel={needsPause ? 'Pausing…' : 'Archiving…'}

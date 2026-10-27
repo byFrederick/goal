@@ -8,7 +8,7 @@ export const Popover = P.Root;
 export const PopoverTrigger = P.Trigger;
 export const PopoverClose = P.Close;
 
-/** The white panel, like a menu's: to the right of the rail, below a phone's top row. */
+/** The white panel, like a menu's: to the right of the sidebar, below a phone's top row. */
 export function PopoverContent({
   className,
   side = 'right',
