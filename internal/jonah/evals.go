@@ -434,11 +434,42 @@ func (e *Evals) Cancel(ctx context.Context, id domain.EvalRunID) (domain.EvalRun
 	return r, nil
 }
 
-// EvalEstimate is what running some cases would cost, about: USD over the cases that could be
-// priced, and the names of those that could not.
-type EvalEstimate struct {
-	USD      float64
-	Unpriced []string
+// EvalEstimate is domain.EvalEstimate, what Estimate answers.
+type EvalEstimate = domain.EvalEstimate
+
+// Start queues an eval run of n's content for the organization in ctx, by: every case of cases,
+// or only n.Case when it is set, each with its tries, estimated as Estimate prices them. It
+// returns the queued run and the estimate. domain.ErrInvalid when n.Case is not one of cases or
+// the run does not pass domain.NewEvalRun.Check.
+func (e *Evals) Start(ctx context.Context, n domain.NewEvalRun, cases []domain.EvalCaseSpec, by domain.Actor) (domain.EvalRun, EvalEstimate, error) {
+	if n.Case != "" {
+		i := slices.IndexFunc(cases, func(c domain.EvalCaseSpec) bool { return c.Name == n.Case })
+		if i < 0 {
+			return domain.EvalRun{}, EvalEstimate{}, fmt.Errorf("start eval run: case %q is not one of the content's cases: %w", n.Case, domain.ErrInvalid)
+		}
+
+		cases = cases[i : i+1]
+	}
+
+	est, err := e.Estimate(ctx, n.FactoryID, cases)
+	if err != nil {
+		return domain.EvalRun{}, EvalEstimate{}, err
+	}
+
+	n.EstimateUSD, n.Cases = est.USD, make([]domain.EvalCase, 0, len(cases))
+	for _, c := range cases {
+		n.Cases = append(n.Cases, domain.EvalCase{Name: c.Name, SHA256: c.SHA256, Tries: c.Tries})
+	}
+
+	r, err := e.d.Evals.CreateRun(ctx, n, by)
+	if err != nil {
+		return domain.EvalRun{}, EvalEstimate{}, fmt.Errorf("start eval run: %w", err)
+	}
+
+	e.log.InfoContext(ctx, "eval run queued", slog.String("eval_run_id", string(r.ID)), slog.String("trigger", string(n.Trigger)),
+		slog.Int("cases", len(n.Cases)))
+
+	return r, est, nil
 }
 
 // Estimate prices running cases of factory, for the organization in ctx ("Run all, about $X"):

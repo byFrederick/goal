@@ -20,6 +20,9 @@ var (
 	caseHash    = domain.BlobHash(strings.Repeat("b", 64))
 )
 
+// reviewStep is a case of the reviewer the tests price.
+const reviewStep = "review-step"
+
 // runOne is the agent run of the tests' tries.
 const runOne = domain.RunID("run-1")
 
@@ -436,7 +439,7 @@ func TestEvals_Estimate(t *testing.T) {
 		w.finishedRunCosting("engineer", t0.Add(time.Duration(i)*time.Minute), cost)
 	}
 
-	reviewer := evalCase("review-step", 1)
+	reviewer := evalCase(reviewStep, 1)
 	reviewer.Agent = "reviewer"
 
 	got, err := w.loop.Estimate(w.ctx(), factory, []domain.EvalCaseSpec{evalCase("lease-fix", 3), evalCase("merge-step", 2), reviewer})
@@ -449,7 +452,60 @@ func TestEvals_Estimate(t *testing.T) {
 		t.Errorf("estimate = %v, want 4.9", got.USD)
 	}
 
-	if !slices.Equal(got.Unpriced, []string{"review-step"}) {
+	if !slices.Equal(got.Unpriced, []string{reviewStep}) {
 		t.Errorf("unpriced = %v, want [review-step]", got.Unpriced)
+	}
+}
+
+func TestEvals_StartQueuesEveryCaseWithItsEstimate(t *testing.T) {
+	t.Parallel()
+
+	w := newEvalWorld(t, nil)
+
+	// The engineer's finished runs cost 1 and 3: their median is 2.
+	for i, cost := range []float64{1, 3} {
+		w.finishedRunCosting("engineer", t0.Add(time.Duration(i)*time.Minute), cost)
+	}
+
+	reviewer := evalCase(reviewStep, 1)
+	reviewer.Agent = "reviewer"
+	cases := []domain.EvalCaseSpec{evalCase("lease-fix", 3), reviewer}
+
+	run, est, err := w.loop.Start(w.ctx(), domain.NewEvalRun{
+		FactoryID: factory, ContentSHA256: evalContent, Trigger: domain.EvalOnPublish,
+	}, cases, domain.LocalUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// lease-fix: 3 tries at the engineer's median 2; review-step has no price.
+	if math.Abs(est.USD-6) > 1e-9 || !slices.Equal(est.Unpriced, []string{reviewStep}) {
+		t.Errorf("estimate = %+v, want 6 with review-step unpriced", est)
+	}
+
+	got := w.run(run.ID)
+	if got.State != domain.EvalRunQueued || got.Trigger != domain.EvalOnPublish || math.Abs(got.EstimateUSD-6) > 1e-9 {
+		t.Errorf("run = %s %s estimate %v, want queued publish run estimated at 6", got.State, got.Trigger, got.EstimateUSD)
+	}
+
+	if len(got.Results) != 4 {
+		t.Errorf("results = %d, want 4 (3 tries of lease-fix, 1 of review-step)", len(got.Results))
+	}
+
+	one, _, err := w.loop.Start(w.ctx(), domain.NewEvalRun{
+		FactoryID: factory, ContentSHA256: evalContent, Trigger: domain.EvalManual, Case: reviewStep,
+	}, cases, domain.LocalUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := w.run(one.ID); got.Case != reviewStep || len(got.Results) != 1 {
+		t.Errorf("one-case run = case %q with %d results, want review-step with 1", got.Case, len(got.Results))
+	}
+
+	if _, _, err := w.loop.Start(w.ctx(), domain.NewEvalRun{
+		FactoryID: factory, ContentSHA256: evalContent, Trigger: domain.EvalManual, Case: "no-such-case",
+	}, cases, domain.LocalUser); !errors.Is(err, domain.ErrInvalid) {
+		t.Errorf("Start of an unknown case = %v, want ErrInvalid", err)
 	}
 }
