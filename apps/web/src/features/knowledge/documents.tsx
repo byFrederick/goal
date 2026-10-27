@@ -133,8 +133,14 @@ function DocumentActions({
   if (!upload) {
     const url = externalUrl(d.url);
     return url ? (
-      <Button asChild variant="white" size="icon" className="size-11 md:size-9">
-        <a href={url} target="_blank" rel="noreferrer noopener" aria-label={`Open ${d.title} at its source`}>
+      <Button
+        asChild
+        variant="white"
+        size="icon"
+        className="size-11 md:size-9"
+        aria-label={`Open ${d.title} at its source`}
+      >
+        <a href={url} target="_blank" rel="noreferrer noopener">
           <ExternalLink size={16} strokeWidth={1.5} aria-hidden="true" />
         </a>
       </Button>

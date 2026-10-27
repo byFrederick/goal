@@ -1,37 +1,57 @@
 import type { ReactNode } from 'react';
 import { cn } from './cn';
 
+// MASTER.md, Components: chips are 22 px (28 px large) with the chip radius, a tint fill and the
+// tone's ink text. Neutral chips are panel-coloured with a line border. A status dot takes the
+// tone's colour; only the running dot pulses, and reduced motion turns the pulse off.
 const tones = {
-  plain: 'border-line bg-card text-ink',
-  quiet: 'border-transparent bg-shell text-ink',
-  run: 'border-run-soft bg-run-tint text-run',
-  you: 'border-you-tint bg-you-tint text-you',
-  rework: 'border-rework-tint bg-rework-tint text-rework-ink',
-  /** The constraint (the drum) only: amber with ink text at 600. */
-  constraint: 'border-amber bg-amber font-semibold text-ink',
-  ok: 'border-line bg-card text-ok',
+  plain: { chip: 'border-line bg-panel text-ink', dot: 'bg-muted' },
+  quiet: { chip: 'border-line bg-panel text-ink', dot: 'bg-muted' },
+  run: {
+    chip: 'border-transparent bg-run-tint text-run-ink',
+    dot: 'bg-run animate-pulse-dot motion-reduce:animate-none',
+  },
+  you: { chip: 'border-transparent bg-you-tint text-you-ink', dot: 'bg-you' },
+  rework: { chip: 'border-transparent bg-rework-tint text-rework-ink', dot: 'bg-rework' },
+  /** The constraint (the drum): yellow. */
+  constraint: { chip: 'border-transparent bg-amber-tint text-amber-ink', dot: 'bg-amber' },
+  /** Expedite lane: yellow, like the constraint, so the two read as one kind of urgency. */
+  expedite: { chip: 'border-transparent bg-amber-tint text-amber-ink', dot: 'bg-amber' },
+  ok: { chip: 'border-transparent bg-ok-tint text-ok-ink', dot: 'bg-ok' },
 } as const;
 
 export type ChipTone = keyof typeof tones;
 
-/** A 6px-radius label: work type, lane, state. Never colour alone: the text says it. */
+const sizes = {
+  md: 'h-5.5 px-2 text-xs',
+  lg: 'h-7 px-3 text-secondary',
+} as const;
+
+/** A label: work type, lane, state. Never colour alone: the text says it. */
 export function Chip({
   tone = 'plain',
+  size = 'md',
+  dot = false,
   className,
   children,
 }: {
   tone?: ChipTone;
+  size?: keyof typeof sizes;
+  /** Draws a status dot before the text, in the tone's colour. */
+  dot?: boolean;
   className?: string;
   children: ReactNode;
 }) {
   return (
     <span
       className={cn(
-        'inline-flex h-[22px] shrink-0 items-center gap-1.5 rounded-chip border px-[7px] text-xs font-medium whitespace-nowrap',
-        tones[tone],
+        'inline-flex shrink-0 items-center gap-1 rounded-chip border font-control whitespace-nowrap',
+        sizes[size],
+        tones[tone].chip,
         className,
       )}
     >
+      {dot ? <Dot className={tones[tone].dot} /> : null}
       {children}
     </span>
   );

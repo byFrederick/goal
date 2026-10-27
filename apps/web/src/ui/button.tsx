@@ -2,38 +2,56 @@ import { Slot } from 'radix-ui';
 import type { ComponentProps } from 'react';
 import { cn } from './cn';
 
+// MASTER.md, Components: buttons are 34 px (30 px small) with the control radius and weight. Focus
+// comes from the global :focus-visible rule (2 px cobalt, 2 px offset). On a coarse pointer the hit
+// area grows to 44 px without changing the drawn size.
 const variants = {
-  /** Ink: the one primary action on a surface. */
-  primary: 'bg-ink text-white hover:bg-ink/90',
-  /** Concrete: secondary actions. */
-  secondary: 'bg-panel text-ink hover:bg-hover',
-  /** White on concrete, for toggles and status pills. */
-  raised: 'bg-card text-ink hover:bg-shell',
-  /** White with a hairline: a secondary action beside a primary one in a page header. */
-  white: 'border border-line bg-card text-ink hover:bg-card',
-  /** Sends work back: dark rust text (AA on concrete), never a red fill. */
-  rework: 'bg-panel text-rework-ink hover:bg-hover',
+  /** Cobalt: the one primary action on a surface. */
+  primary: 'border-run bg-run text-white hover:bg-run/90',
+  /** White with a rule border: the secondary action. */
+  secondary: 'border-rule bg-card text-ink hover:bg-panel',
+  /** Alias of secondary, kept so callers do not change. */
+  raised: 'border-rule bg-card text-ink hover:bg-panel',
+  /** Alias of secondary, kept so callers do not change. */
+  white: 'border-rule bg-card text-ink hover:bg-panel',
+  /** Red text: destructive actions that are not the final confirmation. */
+  danger: 'border-transparent bg-transparent text-rework-ink hover:bg-rework-tint',
+  /** Red fill: the final confirmation of a destructive action. */
+  'danger-fill': 'border-rework bg-rework text-white hover:bg-rework/90',
+  /** Violet fill: Approve inside Needs you. */
+  approve: 'border-you bg-you text-white hover:bg-you/90',
+  /** Sends work back. Alias of danger, kept so callers do not change. */
+  rework: 'border-transparent bg-transparent text-rework-ink hover:bg-rework-tint',
   /** Text only, for low-weight actions inside cards. */
-  ghost: 'bg-transparent text-ink hover:bg-hover',
+  ghost: 'border-transparent bg-transparent text-ink hover:bg-hover',
 } as const;
 
 const sizes = {
-  /** Inside cards (32 px; a pointer target, so desktop cards only). */
-  sm: 'h-8 px-2.5 text-[13px]',
-  md: 'h-10 px-3.5 text-sm',
-  lg: 'h-11 px-4 text-[15px]',
-  icon: 'size-10 justify-center',
+  /** Inside cards: 30 px. */
+  sm: 'h-7.5 px-3 text-secondary',
+  /** The default: 34 px. */
+  md: 'h-8.5 px-3 text-body',
+  /** A large target for sign-in and dialogs: 44 px. */
+  lg: 'h-11 px-4 text-body',
+  /** An icon-only button: 32 px square. It must have an accessible name. */
+  icon: 'size-8 justify-center px-0',
 } as const;
 
-export type ButtonProps = ComponentProps<'button'> & {
-  variant?: keyof typeof variants;
-  size?: keyof typeof sizes;
+type Variant = keyof typeof variants;
+
+type ButtonBase = ComponentProps<'button'> & {
+  variant?: Variant;
   asChild?: boolean;
 };
 
+export type ButtonProps =
+  | (ButtonBase & { size?: Exclude<keyof typeof sizes, 'icon'> })
+  | (ButtonBase & { size: 'icon'; 'aria-label': string });
+
 export function Button({ variant = 'secondary', size = 'md', asChild, className, type, ...props }: ButtonProps) {
   const classes = cn(
-    'inline-flex shrink-0 items-center gap-2 rounded-control font-medium no-underline transition-colors duration-200',
+    'relative inline-flex shrink-0 items-center gap-2 rounded-control border font-control no-underline whitespace-nowrap transition-colors duration-200',
+    'pointer-coarse:before:absolute pointer-coarse:before:-inset-2 pointer-coarse:before:content-[""]',
     'disabled:cursor-not-allowed disabled:opacity-55 aria-disabled:cursor-not-allowed aria-disabled:opacity-55 [&_svg]:shrink-0',
     variants[variant],
     sizes[size],
