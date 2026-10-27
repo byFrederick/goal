@@ -268,6 +268,7 @@ var probes = map[string]probe{
 	"submitItem":          {method: http.MethodPost, path: acmeItems, body: submitFix, org: testOrg, factory: acmeID},
 	"getBoard":            {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/board", org: testOrg, factory: acmeID},
 	"getMetrics":          {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/metrics", org: testOrg, factory: acmeID},
+	"listFactoryActivity": {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/activity", org: testOrg, factory: acmeID},
 	"getConstraintReport": {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/constraint", org: testOrg, factory: acmeID},
 	"getLeadTimeBridge":   {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/metrics/lead-time", org: testOrg, factory: acmeID},
 	"getWeeklyThroughput": {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/metrics/weekly", org: testOrg, factory: acmeID},
