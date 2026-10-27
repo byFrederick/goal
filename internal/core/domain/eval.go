@@ -339,51 +339,70 @@ func (c EvalCaseSpec) CheckedBy() string {
 // headers.
 func PatchFiles(diff []byte) []string {
 	seen := map[string]bool{}
-	add := func(p string) {
-		if p != "" && p != "/dev/null" {
-			seen[p] = true
-		}
-	}
 
-	var oldLeft, newLeft int
+	var h hunk
 
-	for _, line := range strings.Split(string(diff), "\n") {
+	for line := range strings.SplitSeq(string(diff), "\n") {
 		line = strings.TrimSuffix(line, "\r")
 
-		if oldLeft > 0 || newLeft > 0 {
-			switch {
-			case strings.HasPrefix(line, "-"):
-				oldLeft--
-			case strings.HasPrefix(line, "+"):
-				newLeft--
-			case strings.HasPrefix(line, `\`):
-			default:
-				oldLeft--
-				newLeft--
-			}
+		if h.inside() {
+			h.consume(line)
 
 			continue
 		}
 
-		switch {
-		case strings.HasPrefix(line, "@@ "):
-			oldLeft, newLeft = hunkLengths(line)
-		case strings.HasPrefix(line, "--- "), strings.HasPrefix(line, "+++ "):
-			add(patchPath(line[4:]))
-		case strings.HasPrefix(line, "rename from "):
-			add(line[len("rename from "):])
-		case strings.HasPrefix(line, "rename to "):
-			add(line[len("rename to "):])
-		case strings.HasPrefix(line, "diff --git a/"):
-			// A mode change or a binary file has no --- and +++ lines.
-			if a, b, ok := strings.Cut(line[len("diff --git a/"):], " b/"); ok {
-				add(a)
-				add(b)
+		if strings.HasPrefix(line, "@@ ") {
+			h.old, h.new = hunkLengths(line)
+
+			continue
+		}
+
+		for _, p := range headerPaths(line) {
+			if p != "" && p != "/dev/null" {
+				seen[p] = true
 			}
 		}
 	}
 
 	return slices.Sorted(maps.Keys(seen))
+}
+
+// hunk counts the old and new lines a hunk has left.
+type hunk struct{ old, new int }
+
+func (h hunk) inside() bool { return h.old > 0 || h.new > 0 }
+
+// consume counts one hunk line: removed, added, a "\ No newline" note or context.
+func (h *hunk) consume(line string) {
+	switch {
+	case strings.HasPrefix(line, "-"):
+		h.old--
+	case strings.HasPrefix(line, "+"):
+		h.new--
+	case strings.HasPrefix(line, `\`):
+	default:
+		h.old--
+		h.new--
+	}
+}
+
+// headerPaths are the paths a header line outside a hunk names.
+func headerPaths(line string) []string {
+	switch {
+	case strings.HasPrefix(line, "--- "), strings.HasPrefix(line, "+++ "):
+		return []string{patchPath(line[4:])}
+	case strings.HasPrefix(line, "rename from "):
+		return []string{line[len("rename from "):]}
+	case strings.HasPrefix(line, "rename to "):
+		return []string{line[len("rename to "):]}
+	case strings.HasPrefix(line, "diff --git a/"):
+		// A mode change or a binary file has no --- and +++ lines.
+		if a, b, ok := strings.Cut(line[len("diff --git a/"):], " b/"); ok {
+			return []string{a, b}
+		}
+	}
+
+	return nil
 }
 
 // patchPath is the path of a --- or +++ header: without a timestamp after a tab and without the

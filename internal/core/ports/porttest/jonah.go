@@ -16,6 +16,8 @@ var (
 	_ ports.Judges       = (*Judges)(nil)
 	_ ports.FinishedRuns = (*FinishedRuns)(nil)
 	_ ports.JudgeRunner  = (*JudgeRunner)(nil)
+	_ ports.EvalSuites   = (*EvalSuites)(nil)
+	_ ports.EvalRunner   = (*EvalRunner)(nil)
 )
 
 // Judges keeps each definition version's judges in memory, by organization.
@@ -160,4 +162,74 @@ func (j *JudgeRunner) RunJudge(ctx context.Context, t ports.JudgeTask) (ports.Ju
 	j.mu.Unlock()
 
 	return j.run(ctx, call, t)
+}
+
+// EvalSuites keeps each eval run's cases in memory, by organization and content hash.
+type EvalSuites struct {
+	mu     sync.Mutex
+	suites map[suiteKey][]ports.EvalSuiteCase
+}
+
+type suiteKey struct {
+	org     domain.OrgID
+	content domain.BlobHash
+}
+
+// NewEvalSuites returns no content.
+func NewEvalSuites() *EvalSuites { return &EvalSuites{suites: map[suiteKey][]ports.EvalSuiteCase{}} }
+
+// Set makes cases the cases of org's content with hash content.
+func (e *EvalSuites) Set(org domain.OrgID, content domain.BlobHash, cases ...ports.EvalSuiteCase) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	e.suites[suiteKey{org, content}] = slices.Clone(cases)
+}
+
+// EvalSuite implements ports.EvalSuites.
+func (e *EvalSuites) EvalSuite(ctx context.Context, run domain.EvalRun) ([]ports.EvalSuiteCase, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	cases, ok := e.suites[suiteKey{org, run.ContentSHA256}]
+	if !ok {
+		return nil, fmt.Errorf("eval suite of content %s: %w", run.ContentSHA256, ports.ErrNotFound)
+	}
+
+	return slices.Clone(cases), nil
+}
+
+// EvalRunner answers eval tries with a function a test sets, and keeps the tasks it was given.
+type EvalRunner struct {
+	mu    sync.Mutex
+	run   func(ctx context.Context, call int, t ports.EvalTask) (ports.EvalTry, error)
+	tasks []ports.EvalTask
+}
+
+// NewEvalRunner answers each eval try with run, given the call's number from 1.
+func NewEvalRunner(run func(ctx context.Context, call int, t ports.EvalTask) (ports.EvalTry, error)) *EvalRunner {
+	return &EvalRunner{run: run}
+}
+
+// Tasks returns every task it was given, in order.
+func (e *EvalRunner) Tasks() []ports.EvalTask {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	return slices.Clone(e.tasks)
+}
+
+// RunEvalTry implements ports.EvalRunner.
+func (e *EvalRunner) RunEvalTry(ctx context.Context, t ports.EvalTask) (ports.EvalTry, error) {
+	e.mu.Lock()
+	e.tasks = append(e.tasks, t)
+	call := len(e.tasks)
+	e.mu.Unlock()
+
+	return e.run(ctx, call, t)
 }

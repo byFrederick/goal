@@ -120,7 +120,7 @@ func TestTaskToken_EvalNamesNoConnection(t *testing.T) {
 	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
 	key := []byte("gateway-key")
 	claims := TaskClaims{
-		Kind: TaskKindEval, OrgID: "o1", FactoryID: "f1", VersionID: "v1", Station: "build", Agent: "backend", RunID: "r1",
+		Kind: TaskKindEval, OrgID: "o1", FactoryID: "f1", VersionID: "v1", Station: stationBuild, Agent: "backend", RunID: "r1",
 		ExpiresAt: now.Add(time.Hour).Unix(),
 	}
 
@@ -139,7 +139,7 @@ func TestTaskToken_EvalNamesNoConnection(t *testing.T) {
 	}
 
 	withConnection := claims
-	withConnection.Connections = []string{"github"}
+	withConnection.Connections = []string{"acme-host"}
 
 	if _, err := SignTaskToken(key, withConnection); !errors.Is(err, ErrBadTaskToken) {
 		t.Errorf("signing an eval token with a connection: err = %v, want ErrBadTaskToken", err)
