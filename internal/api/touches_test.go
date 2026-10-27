@@ -236,3 +236,35 @@ func TestAPI_TouchesOfTheOrgBoardAndOverview(t *testing.T) {
 		}
 	}
 }
+
+// The daily series is the headline in each of the 7 UTC days ending on to, oldest first; a day
+// with no finished item reports none.
+func TestAPI_TouchMetricsDaily(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.touchedLine(t)
+
+	var m gen.TouchMetrics
+	if code := h.call(t, http.MethodGet, lineTouches+"?from=2026-10-17&to=2026-10-23", "", &m); code != http.StatusOK {
+		t.Fatalf("touch metrics = %d", code)
+	}
+
+	want := map[string]gen.TouchDay{
+		"2026-10-20": {Finished: 1, PerItemMean: 1, TouchlessRate: 0},
+		"2026-10-21": {Finished: 1, PerItemMean: 0, TouchlessRate: 1},
+	}
+
+	if len(m.Daily) != 7 {
+		t.Fatalf("daily %s; want 7 days", asJSON(t, m.Daily))
+	}
+
+	for i, d := range m.Daily {
+		day := oct(17+i, 0).Format(time.DateOnly)
+		w := want[day]
+
+		if d.Day.Format(time.DateOnly) != day || d.Finished != w.Finished || d.PerItemMean != w.PerItemMean || d.TouchlessRate != w.TouchlessRate {
+			t.Errorf("daily[%d] = %s; want %s with %d finished, %v touchless", i, asJSON(t, d), day, w.Finished, w.TouchlessRate)
+		}
+	}
+}

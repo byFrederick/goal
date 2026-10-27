@@ -3142,6 +3142,18 @@ export interface components {
             /** Format: double */
             touchless_rate: number;
         };
+        TouchDay: {
+            /**
+             * Format: date
+             * @description The UTC day
+             */
+            day: string;
+            finished: number;
+            /** Format: double */
+            per_item_mean: number;
+            /** Format: double */
+            touchless_rate: number;
+        };
         TouchMetrics: {
             /**
              * Format: date
@@ -3160,6 +3172,8 @@ export interface components {
             stats: components["schemas"]["TouchStats"];
             /** @description The headline in each of the weeks ending on to, oldest first */
             weekly: components["schemas"]["TouchWeek"][];
+            /** @description The headline in each of the 7 UTC days ending on to, oldest first */
+            daily: components["schemas"]["TouchDay"][];
         };
         OrgTouchMetrics: {
             /** Format: date */
@@ -3739,6 +3753,11 @@ export interface components {
              */
             mean_service_minutes: number | null;
             leases: number;
+            /**
+             * Format: double
+             * @description An estimate of what one more agent at the station costs a day: its agent runs' spend over the measured range divided by its slots and by the range in days; null when the range is empty or no run cost was recorded there
+             */
+            spend_per_slot_day_usd: number | null;
             /** @description How much mean wait one more slot would save (an M/M/c approximation, capped at the observed wait); null when busy ≥ 99%, with under 20 leases or no waiting */
             estimate: {
                 /** Format: double */

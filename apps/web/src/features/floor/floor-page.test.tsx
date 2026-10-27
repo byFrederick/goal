@@ -156,6 +156,7 @@ const touches: TouchMetrics = {
   type: null,
   version: null,
   weekly: [],
+  daily: [],
   stats: {
     finished: 0,
     touches: 0,

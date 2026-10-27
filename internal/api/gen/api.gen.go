@@ -1848,7 +1848,10 @@ type ConstraintCandidate struct {
 	// MeanWaitMinutes Mean wait of an item that waited there; null when none did
 	MeanWaitMinutes *float64 `json:"mean_wait_minutes"`
 	Slots           int      `json:"slots"`
-	Station         string   `json:"station"`
+
+	// SpendPerSlotDayUsd An estimate of what one more agent at the station costs a day: its agent runs' spend over the measured range divided by its slots and by the range in days; null when the range is empty or no run cost was recorded there
+	SpendPerSlotDayUsd *float64 `json:"spend_per_slot_day_usd"`
+	Station            string   `json:"station"`
 }
 
 // ConstraintReport defines model for ConstraintReport.
@@ -3937,6 +3940,15 @@ type TouchCount struct {
 	Unplanned int    `json:"unplanned"`
 }
 
+// TouchDay defines model for TouchDay.
+type TouchDay struct {
+	// Day The UTC day
+	Day           openapi_types.Date `json:"day"`
+	Finished      int                `json:"finished"`
+	PerItemMean   float64            `json:"per_item_mean"`
+	TouchlessRate float64            `json:"touchless_rate"`
+}
+
 // TouchHeadline Human touches of the items finished in a window, in brief
 type TouchHeadline struct {
 	// Finished Items finished (done) in the window
@@ -3952,6 +3964,9 @@ type TouchHeadline struct {
 
 // TouchMetrics defines model for TouchMetrics.
 type TouchMetrics struct {
+	// Daily The headline in each of the 7 UTC days ending on to, oldest first
+	Daily []TouchDay `json:"daily"`
+
 	// From The range's first UTC day
 	From  openapi_types.Date `json:"from"`
 	Stats TouchStats         `json:"stats"`
