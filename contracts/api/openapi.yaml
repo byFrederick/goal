@@ -72,6 +72,11 @@ tags:
       Factory definitions: creating factories, the one shared draft per factory (Visual
       sections, single files and the whole tree, each write under an If-Match precondition),
       validation, publishing, versions, compare, restore and the template catalog
+  - name: spend
+    description: >-
+      What the organization's agent runs cost (agent_runs.cost_usd), over the factories the caller
+      sees, with each factory's budget from its current version (runtime.budget). Box compute time
+      is not recorded, so it is not counted.
 paths:
   /v1/health:
     get:
@@ -799,6 +804,35 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/FactoryOverviewList" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/spend:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: getOrgSpend
+      x-goal-scope: org:read
+      tags: [spend]
+      summary: What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
+      description: >-
+        A run counts on the UTC day it started, with its cost so far (a running run counts). Only
+        the factories the caller sees are shown and summed. When a factory the caller does not see
+        spent since the start of last month or of the weekly series, complete is false and the
+        figures the store does not split by factory (this_month_usd, last_month_usd, by_model,
+        merged, cost_per_merged_usd, weekly, rework_usd and rework_share) are null or empty, so
+        they never show what a hidden factory spent. A window outside the enum is a 400 problem.
+      parameters:
+        - name: window
+          in: query
+          description: >-
+            week starts on Monday 00:00 UTC, month on the 1st 00:00 UTC, 90d at 00:00 UTC 89 days
+            before today; each ends now
+          schema: { $ref: "#/components/schemas/SpendWindow" }
+      responses:
+        "200":
+          description: The organization's spend over the window and its factories' budgets
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrgSpend" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/metrics/touches:
     parameters:
@@ -5412,6 +5446,151 @@ components:
       properties:
         name: { type: string }
         kind: { type: string }
+    SpendWindow:
+      type: string
+      enum: [week, month, 90d]
+      default: week
+    OrgSpend:
+      type: object
+      required:
+        - window
+        - since
+        - until
+        - complete
+        - total_usd
+        - this_month_usd
+        - last_month_usd
+        - days
+        - by_agent
+        - by_model
+        - merged
+        - cost_per_merged_usd
+        - weekly
+        - rework_usd
+        - rework_share
+        - budgets
+      properties:
+        window: { $ref: "#/components/schemas/SpendWindow" }
+        since: { type: string, format: date-time, description: "The window's start, 00:00 UTC" }
+        until: { type: string, format: date-time, description: "The window's end, the time measured (now)" }
+        complete:
+          type: boolean
+          description: >-
+            False when a factory the caller does not see spent: the figures the store does not
+            split by factory are then null or empty
+        total_usd: { type: number, format: double, description: "The window's spend, the sum of days[].usd" }
+        this_month_usd: { type: number, format: double, nullable: true, description: This UTC month so far; null when not complete }
+        last_month_usd: { type: number, format: double, nullable: true, description: The UTC month before; null when not complete }
+        days:
+          type: array
+          description: Every UTC day of the window, oldest first
+          items: { $ref: "#/components/schemas/SpendDay" }
+        by_agent:
+          type: array
+          description: The window's spend by agent of a factory, most first
+          items: { $ref: "#/components/schemas/AgentSpend" }
+        by_model:
+          type: array
+          description: The window's spend by model, most first; empty when not complete
+          items: { $ref: "#/components/schemas/ModelSpend" }
+        merged: { type: integer, nullable: true, description: The items that reached done in the window and are still done; null when not complete }
+        cost_per_merged_usd:
+          type: number
+          format: double
+          nullable: true
+          description: total_usd over merged, 0 when none merged; null when not complete
+        weekly:
+          type: array
+          description: The cost per merged item of the last 8 UTC weeks (from Monday), this week last; empty when not complete
+          items: { $ref: "#/components/schemas/WeekCost" }
+        rework_usd:
+          type: number
+          format: double
+          nullable: true
+          description: >-
+            The window's spend on runs that started after their item was sent back (a rework round
+            of 1 or more); null when not complete
+        rework_share: { type: number, format: double, nullable: true, description: "rework_usd over total_usd, 0 when nothing was spent; null when not complete" }
+        budgets:
+          type: array
+          description: One per factory goald runs that the caller sees and that is not archived, by name
+          items: { $ref: "#/components/schemas/SpendBudget" }
+    SpendDay:
+      type: object
+      required: [day, usd, by_factory]
+      properties:
+        day: { type: string, format: date }
+        usd: { type: number, format: double }
+        by_factory:
+          type: array
+          description: The factories that spent that day, by id
+          items: { $ref: "#/components/schemas/DayFactorySpend" }
+    DayFactorySpend:
+      type: object
+      required: [factory_id, usd]
+      properties:
+        factory_id: { type: string }
+        usd: { type: number, format: double }
+    AgentSpend:
+      type: object
+      required: [factory_id, agent, usd]
+      properties:
+        factory_id: { type: string }
+        agent: { type: string, description: The agent's name in its factory }
+        usd: { type: number, format: double }
+    ModelSpend:
+      type: object
+      required: [model, usd]
+      properties:
+        model: { type: string }
+        usd: { type: number, format: double }
+    WeekCost:
+      type: object
+      required: [week_start, spend_usd, merged, cost_per_merged_usd]
+      properties:
+        week_start: { type: string, format: date, description: The week's Monday }
+        spend_usd: { type: number, format: double }
+        merged: { type: integer }
+        cost_per_merged_usd: { type: number, format: double, description: 0 when none merged }
+    SpendBudget:
+      type: object
+      required: [factory, daily_usd, weekly_usd, today_usd, week_usd, state, reason, model_connections]
+      properties:
+        factory: { $ref: "#/components/schemas/FactoryHit" }
+        daily_usd:
+          type: number
+          format: double
+          nullable: true
+          description: runtime.budget.dailyUsd, shown and not enforced; null when unset
+        weekly_usd:
+          type: number
+          format: double
+          nullable: true
+          description: runtime.budget.weeklyUsd, the cap the engine enforces; null when unset
+        today_usd: { type: number, format: double, description: The cost of the factory's runs started this UTC day }
+        week_usd:
+          type: number
+          format: double
+          description: >-
+            The cost of the factory's runs started in the last 7×24 hours, rolling: the window the
+            engine enforces weekly_usd over, not the UTC week since Monday
+        state: { $ref: "#/components/schemas/SpendBudgetState" }
+        reason:
+          type: string
+          nullable: true
+          description: The open andon pull's reason when stopped, the spend against the cap when over_budget, else null
+        model_connections:
+          type: array
+          description: >-
+            The organization's connections that give the factory's runs their model
+            (runtime.modelConnection), for "Who pays for models"; empty when it names none
+          items: { $ref: "#/components/schemas/ConnectionHit" }
+    SpendBudgetState:
+      type: string
+      description: >-
+        stopped while an andon pull is open, over_budget while week_usd is at or over weekly_usd
+        (no new agent work starts), else running
+      enum: [running, stopped, over_budget]
     FactoryOverviewList:
       type: object
       required: [window, since, until, waiting_on_you, spend_usd, budget_usd, factories]
