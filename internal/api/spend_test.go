@@ -3,6 +3,7 @@ package api_test
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -56,24 +57,28 @@ func (h *harness) seedSpend(t *testing.T) {
 	h.finished(t, at(time.October, 21), at(time.October, 22), false)
 }
 
-// spendLine renders a spend answer's window and totals as one line.
-func spendLine(s gen.OrgSpend) string {
-	num := func(v *float64) string {
-		if v == nil {
-			return "null"
-		}
+// unsetUSD stands for a figure the answer leaves null.
+const unsetUSD = "null"
 
-		return fmt.Sprintf("%.2f", *v)
+// usdOf renders an optional figure in dollars, or unsetUSD.
+func usdOf(v *float64) string {
+	if v == nil {
+		return unsetUSD
 	}
 
-	merged := "null"
+	return fmt.Sprintf("%.2f", *v)
+}
+
+// spendLine renders a spend answer's window and totals as one line.
+func spendLine(s gen.OrgSpend) string {
+	merged := unsetUSD
 	if s.Merged != nil {
-		merged = fmt.Sprint(*s.Merged)
+		merged = strconv.Itoa(*s.Merged)
 	}
 
 	return fmt.Sprintf("%s %s..%s complete=%t days=%d total=%.2f month=%s last=%s merged=%s per=%s rework=%s/%s weeks=%d",
 		s.Window, s.Since.UTC().Format(time.RFC3339), s.Until.UTC().Format(time.RFC3339), s.Complete, len(s.Days), s.TotalUsd,
-		num(s.ThisMonthUsd), num(s.LastMonthUsd), merged, num(s.CostPerMergedUsd), num(s.ReworkUsd), num(s.ReworkShare), len(s.Weekly))
+		usdOf(s.ThisMonthUsd), usdOf(s.LastMonthUsd), merged, usdOf(s.CostPerMergedUsd), usdOf(s.ReworkUsd), usdOf(s.ReworkShare), len(s.Weekly))
 }
 
 // rowsLine renders the per-factory and per-model rows: each day that spent, by agent, by model.
@@ -102,21 +107,13 @@ func budgetLines(s gen.OrgSpend) []string {
 	out := make([]string, 0, len(s.Budgets))
 
 	for _, b := range s.Budgets {
-		num := func(v *float64) string {
-			if v == nil {
-				return "none"
-			}
-
-			return fmt.Sprintf("%.2f", *v)
-		}
-
 		var conns []string
 		for _, c := range b.ModelConnections {
 			conns = append(conns, c.Name+" ("+c.Kind+")")
 		}
 
 		out = append(out, fmt.Sprintf("%s daily=%s weekly=%s today=%.2f week=%.2f %s (%s) models [%s]",
-			b.Factory.Name, num(b.DailyUsd), num(b.WeeklyUsd), b.TodayUsd, b.WeekUsd, b.State, deref(b.Reason), strings.Join(conns, ", ")))
+			b.Factory.Name, usdOf(b.DailyUsd), usdOf(b.WeeklyUsd), b.TodayUsd, b.WeekUsd, b.State, deref(b.Reason), strings.Join(conns, ", ")))
 	}
 
 	return out
@@ -142,6 +139,8 @@ func TestGetOrgSpend_Windows(t *testing.T) {
 		{"?window=90d", "90d 2026-07-26T00:00:00Z..2026-10-23T09:00:00Z complete=true days=90 total=10.00 month=6.00 last=4.00 merged=1 per=10.00 rework=0.00/0.00 weeks=8"},
 	} {
 		t.Run("window"+c.query, func(t *testing.T) {
+			t.Parallel()
+
 			var got gen.OrgSpend
 			if code := h.call(t, http.MethodGet, orgSpendPath+c.query, "", &got); code != http.StatusOK {
 				t.Fatalf("GET spend%s = %d; want 200", c.query, code)
@@ -152,8 +151,8 @@ func TestGetOrgSpend_Windows(t *testing.T) {
 			}
 
 			want := []string{
-				"acme daily=none weekly=none today=1.00 week=1.00 stopped (" + andonReason + ") models [claude (anthropic)]",
-				"line daily=none weekly=70.00 today=0.00 week=2.00 running () models [claude (anthropic)]",
+				"acme daily=null weekly=null today=1.00 week=1.00 stopped (" + andonReason + ") models [claude (anthropic)]",
+				"line daily=null weekly=70.00 today=0.00 week=2.00 running () models [claude (anthropic)]",
 			}
 			if lines := budgetLines(got); strings.Join(lines, "\n") != strings.Join(want, "\n") {
 				t.Errorf("budgets\n  %s\nwant\n  %s", strings.Join(lines, "\n  "), strings.Join(want, "\n  "))
@@ -189,8 +188,8 @@ func TestGetOrgSpend_OverBudget(t *testing.T) {
 	}
 
 	want := []string{
-		"acme daily=none weekly=none today=0.00 week=0.00 running () models []",
-		"line daily=none weekly=70.00 today=0.00 week=71.00 over_budget (spent $71.00 of the $70.00 weekly budget in the last 7 days) models []",
+		"acme daily=null weekly=null today=0.00 week=0.00 running () models []",
+		"line daily=null weekly=70.00 today=0.00 week=71.00 over_budget (spent $71.00 of the $70.00 weekly budget in the last 7 days) models []",
 	}
 	if lines := budgetLines(got); strings.Join(lines, "\n") != strings.Join(want, "\n") {
 		t.Errorf("budgets\n  %s\nwant\n  %s", strings.Join(lines, "\n  "), strings.Join(want, "\n  "))

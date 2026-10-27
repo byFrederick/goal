@@ -14,6 +14,9 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 )
 
+// flagWindow is goal spend's window flag.
+const flagWindow = "--window"
+
 // spendGoald answers GET /v1/orgs/acme/spend with body, and records the query it was sent.
 func spendGoald(t *testing.T, body []byte) (*httptest.Server, func() url.Values) {
 	t.Helper()
@@ -89,7 +92,7 @@ func TestSpend_Text(t *testing.T) {
 		},
 	}))
 
-	out, err := goalSpend(t, srv.URL, "--window", "month")
+	out, err := goalSpend(t, srv.URL, flagWindow, "month")
 	if err != nil {
 		t.Fatalf("goal spend --window month = %v", err)
 	}
@@ -133,7 +136,7 @@ func TestSpend_JSONAsSent(t *testing.T) {
 func TestSpend_BadWindowIsUsage(t *testing.T) {
 	t.Parallel()
 
-	for _, args := range [][]string{{"--window", "year"}, {"--window", "7d"}, {"now"}} {
+	for _, args := range [][]string{{flagWindow, "year"}, {flagWindow, "7d"}, {"extra"}} {
 		if _, err := goalSpend(t, "http://127.0.0.1:1", args...); !errors.Is(err, errUsage) {
 			t.Errorf("goal spend %q = %v; want the usage", args, err)
 		}

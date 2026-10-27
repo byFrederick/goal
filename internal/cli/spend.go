@@ -84,26 +84,32 @@ func printSpend(out *printer, s *gen.OrgSpend) {
 	out.printf("\nBudgets\n")
 
 	for _, b := range s.Budgets {
-		week := usd(b.WeekUsd) + " in 7 days"
-		if b.WeeklyUsd != nil {
-			week += " of " + usd(*b.WeeklyUsd)
-		}
-
-		parts := []string{b.Factory.Name, string(b.State), "today " + usd(b.TodayUsd), week}
-
-		if b.Reason != nil {
-			parts = append(parts, oneLine(*b.Reason))
-		}
-
-		var models []string
-		for _, m := range b.ModelConnections {
-			models = append(models, fmt.Sprintf("%s (%s)", m.Name, m.Kind))
-		}
-
-		if len(models) > 0 {
-			parts = append(parts, "models: "+strings.Join(models, ", "))
-		}
-
-		out.printf("  %s\n", strings.Join(parts, "  "))
+		out.printf("  %s\n", budgetLine(b))
 	}
+}
+
+// budgetLine is a factory's budget on one line: its name, state, spend today and in the last 7
+// days against its weekly cap, the reason of its state and the connections paying for its models.
+func budgetLine(b gen.SpendBudget) string {
+	week := usd(b.WeekUsd) + " in 7 days"
+	if b.WeeklyUsd != nil {
+		week += " of " + usd(*b.WeeklyUsd)
+	}
+
+	parts := []string{b.Factory.Name, string(b.State), "today " + usd(b.TodayUsd), week}
+
+	if b.Reason != nil {
+		parts = append(parts, oneLine(*b.Reason))
+	}
+
+	models := make([]string, 0, len(b.ModelConnections))
+	for _, m := range b.ModelConnections {
+		models = append(models, fmt.Sprintf("%s (%s)", m.Name, m.Kind))
+	}
+
+	if len(models) > 0 {
+		parts = append(parts, "models: "+strings.Join(models, ", "))
+	}
+
+	return strings.Join(parts, "  ")
 }
