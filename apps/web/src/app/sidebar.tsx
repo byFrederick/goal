@@ -1,39 +1,71 @@
 // The sidebar (≥ 768 px, MASTER.md "The shell"): 256 px, pinned left at full height beside the content
 // on every organization page and on the New factory wizard. Top to bottom: the Goal mark and the
-// organization's name (its menu), Search and Collapse (not built yet); New item (new-item.tsx, with C); the
-// organization-wide pages; Factories (sidebar-factories.tsx); and at the bottom the spend this week and
-// the person (account-menu.tsx). Below 768 px the top row and the tab bar take its place (phone-chrome.tsx).
+// organization's name (its menu), Search (sidebar-search.tsx) and Collapse (the 60 px rail: sidebar-rail.tsx);
+// New item (new-item.tsx, with C); the organization-wide pages; Factories (sidebar-factories.tsx); and at the
+// bottom the spend this week and the person (account-menu.tsx). Search replaces that body with its input and
+// results. Command K expands the rail into search. Below 768 px the same content opens as the phone's drawer
+// from the Goal mark (phone-chrome.tsx), so SidebarContent is the one list of entries for both.
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ChevronsUpDown, PanelLeft, Search } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { attentionQuery, overviewQuery } from '../api/queries';
 import type { FactoryOverviewList, OrgSummary } from '../api/types';
 import { useConnectionTrouble } from '../shared/connections';
 import { formatUsdCompact } from '../shared/format';
 import { NewItemFromSidebar } from '../shared/new-item';
 import { useOrgGrants } from '../shared/org';
+import { useSidebarCollapsed } from '../shared/sidebar-choice';
 import { Count } from '../ui/count';
 import { GoalMark } from '../ui/goal-mark';
 import { Menu, MenuTrigger } from '../ui/menu';
 import { NotAvailable } from '../ui/not-available';
+import { Tooltip } from '../ui/tooltip';
 import { AccountMenu } from './account-menu';
 import { CreateOrgDialog } from './create-org-dialog';
 import { OrgMenuContent } from './org-menu';
 import { screensFor, sidebarOrgScreens } from './screens';
 import { FactoryGroups, rowClass } from './sidebar-factories';
+import { SidebarRail } from './sidebar-rail';
+import { iconButton, SidebarSearch, useSearchShortcut } from './sidebar-search';
 
 const iconProps = { size: 18, strokeWidth: 1.5, 'aria-hidden': true } as const;
 
-const iconButton =
-  'flex size-8 flex-none items-center justify-center rounded-control text-ink-soft hover:bg-hover hover:text-ink aria-disabled:cursor-default aria-disabled:text-muted aria-disabled:hover:bg-transparent';
-
+/**
+ * The 256 px sidebar from 768 px, or the 60 px rail once Collapse folds it (the choice is saved:
+ * sidebar-choice.ts). Its content is SidebarContent, which the phone's drawer renders too.
+ */
 export function Sidebar({ org }: { org: OrgSummary }) {
-  const can = useOrgGrants()?.can;
-  const attention = useQuery(attentionQuery(org.id));
-  const overview = useQuery(overviewQuery(org.id));
-  const trouble = useConnectionTrouble(org.id);
-  const busy = attention.isPending || overview.isPending;
+  const busy = useSidebarBusy(org.id);
+  const [collapsed, setCollapsed] = useSidebarCollapsed();
+  // The control that was pressed hands focus to its counterpart, so the keyboard does not fall to the page.
+  const focus = useRef<'rail' | 'top' | null>(null);
+  // Command K on the rail expands the sidebar straight into search.
+  const [searchOnExpand, setSearchOnExpand] = useState(false);
+
+  const expand = useCallback(
+    (search: boolean) => {
+      focus.current = 'top';
+      setSearchOnExpand(search);
+      setCollapsed(false);
+    },
+    [setCollapsed],
+  );
+  const collapse = useCallback(() => {
+    focus.current = 'rail';
+    setSearchOnExpand(false);
+    setCollapsed(true);
+  }, [setCollapsed]);
+
+  if (collapsed) {
+    return (
+      <>
+        {/* C keeps working with the rail shown, and on phones where the sidebar is hidden. */}
+        <NewItemFromSidebar button={false} />
+        <SidebarRail org={org} busy={busy} focusOnMount={focus.current === 'rail'} onExpand={expand} />
+      </>
+    );
+  }
 
   return (
     <nav
@@ -41,33 +73,143 @@ export function Sidebar({ org }: { org: OrgSummary }) {
       aria-busy={busy}
       className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col overflow-y-auto border-r border-line bg-sidebar px-2 pt-2 pb-3 md:flex"
     >
-      {busy ? <span className="sr-only">Loading</span> : null}
-      <SidebarTop org={org} />
-      <NewItemFromSidebar />
-      <ul className="m-0 mt-2 flex list-none flex-col gap-1 p-0">
-        {screensFor(sidebarOrgScreens, can).map((screen) => (
-          <li key={screen.id}>
-            <OrgEntry org={org} screen={screen} waiting={attention.data?.waiting_on_you ?? 0} trouble={trouble} />
-          </li>
-        ))}
-      </ul>
-      <div className="mt-4">
-        <FactoryGroups org={org} />
-      </div>
-      <div className="mt-auto flex flex-col gap-2 pt-4">
-        <SpendThisWeek overview={overview.data} />
-        <AccountMenu org={org} size="sidebar" />
-      </div>
+      <SidebarContent
+        org={org}
+        onCollapse={collapse}
+        focusCollapse={focus.current === 'top'}
+        startSearching={searchOnExpand}
+      />
     </nav>
   );
 }
 
-/** The organization's name opens its menu; Search and Collapse are not built yet (ADR 0016, decision 4). */
-function SidebarTop({ org }: { org: OrgSummary }) {
+interface SidebarContentProps {
+  org: OrgSummary;
+  /** Called when a link in the content is followed (the phone's drawer closes). */
+  onNavigate?: () => void;
+  /** Folds the sidebar into the rail (the sidebar's Collapse). The drawer passes `close` instead. */
+  onCollapse?: () => void;
+  /** Collapse takes focus on mount: the rail's Expand was pressed. */
+  focusCollapse?: boolean;
+  /** Opens straight into search: Command K on the rail expanded the sidebar. */
+  startSearching?: boolean;
+  /** Replaces Collapse in the top row (the drawer's Close). */
+  close?: ReactNode;
+}
+
+/**
+ * The sidebar's content: the organization's menu, Search, New item, the organization pages,
+ * Factories, the spend and the person. Shared by the sidebar and the phone's drawer (phone-chrome.tsx).
+ * Search lives here, so the drawer searches the same way the sidebar does.
+ */
+export function SidebarContent({
+  org,
+  onNavigate,
+  onCollapse,
+  focusCollapse = false,
+  startSearching = false,
+  close,
+}: SidebarContentProps) {
+  const can = useOrgGrants()?.can;
+  const attention = useQuery(attentionQuery(org.id));
+  const overview = useQuery(overviewQuery(org.id));
+  const trouble = useConnectionTrouble(org.id);
+  const busy = useSidebarBusy(org.id);
+  const [searching, setSearching] = useState(startSearching);
+  const searchIcon = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef(false);
+
+  const openSearch = useCallback(() => setSearching(true), []);
+  useSearchShortcut(openSearch);
+
+  const closeSearch = useCallback((focusIcon: boolean) => {
+    returnFocus.current = focusIcon;
+    setSearching(false);
+  }, []);
+  // The Search icon is back in the DOM once the search closes; Escape and Close search return focus to it.
+  useEffect(() => {
+    if (!searching && returnFocus.current) {
+      returnFocus.current = false;
+      searchIcon.current?.focus();
+    }
+  }, [searching]);
+
+  return (
+    <div className="flex min-h-full flex-1 flex-col">
+      {busy ? <span className="sr-only">Loading</span> : null}
+      {searching ? (
+        <SidebarSearch org={org} onClose={closeSearch} />
+      ) : (
+        <>
+          <SidebarTop
+            org={org}
+            close={close}
+            onCollapse={onCollapse}
+            focusCollapse={focusCollapse}
+            searchIcon={searchIcon}
+            onSearch={openSearch}
+          />
+          <NewItemFromSidebar />
+          <ul className="m-0 mt-2 flex list-none flex-col gap-1 p-0">
+            {screensFor(sidebarOrgScreens, can).map((screen) => (
+              <li key={screen.id}>
+                <OrgEntry
+                  org={org}
+                  screen={screen}
+                  waiting={attention.data?.waiting_on_you ?? 0}
+                  trouble={trouble}
+                  onNavigate={onNavigate}
+                />
+              </li>
+            ))}
+          </ul>
+          <div className="mt-4">
+            <FactoryGroups org={org} onNavigate={onNavigate} />
+          </div>
+          <div className="mt-auto flex flex-col gap-2 pt-4">
+            <SpendThisWeek overview={overview.data} />
+            <AccountMenu org={org} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Whether the sidebar's attention or overview is still loading (the sidebar is aria-busy then). */
+export function useSidebarBusy(orgId: string): boolean {
+  const attention = useQuery(attentionQuery(orgId));
+  const overview = useQuery(overviewQuery(orgId));
+  return attention.isPending || overview.isPending;
+}
+
+/**
+ * The organization's name opens its menu, and Search opens search; Collapse folds the sidebar into the
+ * rail (ADR 0016, decision 4), unless `close` takes its place (the drawer).
+ */
+function SidebarTop({
+  org,
+  close,
+  onCollapse,
+  focusCollapse,
+  searchIcon,
+  onSearch,
+}: {
+  org: OrgSummary;
+  close?: ReactNode;
+  onCollapse?: (() => void) | undefined;
+  focusCollapse: boolean;
+  searchIcon: RefObject<HTMLButtonElement | null>;
+  onSearch: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const navigating = useRef(false);
+  const collapse = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (focusCollapse) collapse.current?.focus();
+  }, [focusCollapse]);
 
   return (
     <div className="flex items-center gap-1">
@@ -90,16 +232,29 @@ function SidebarTop({ org }: { org: OrgSummary }) {
           navigating={navigating}
         />
       </Menu>
-      <NotAvailable>
-        <button type="button" aria-label="Search" aria-keyshortcuts="Meta+K" className={iconButton}>
-          <Search {...iconProps} />
-        </button>
-      </NotAvailable>
-      <NotAvailable>
-        <button type="button" aria-label="Collapse sidebar" className={iconButton}>
-          <PanelLeft {...iconProps} />
-        </button>
-      </NotAvailable>
+      <button
+        ref={searchIcon}
+        type="button"
+        aria-label="Search"
+        aria-keyshortcuts="Meta+K Control+K"
+        onClick={onSearch}
+        className={iconButton}
+      >
+        <Search {...iconProps} />
+      </button>
+      {close ?? (
+        <Tooltip label="Collapse sidebar">
+          <button
+            ref={collapse}
+            type="button"
+            aria-label="Collapse sidebar"
+            onClick={onCollapse}
+            className={iconButton}
+          >
+            <PanelLeft {...iconProps} />
+          </button>
+        </Tooltip>
+      )}
       <CreateOrgDialog open={creating} onOpenChange={setCreating} returnFocus={trigger} />
     </div>
   );
@@ -111,11 +266,13 @@ function OrgEntry({
   screen,
   waiting,
   trouble,
+  onNavigate,
 }: {
   org: OrgSummary;
   screen: (typeof sidebarOrgScreens)[number];
   waiting: number;
   trouble: number;
+  onNavigate?: (() => void) | undefined;
 }) {
   const body = (
     <>
@@ -140,6 +297,7 @@ function OrgEntry({
       to={screen.to}
       params={{ org: org.slug }}
       activeOptions={{ exact: screen.exact ?? false }}
+      onClick={onNavigate}
       className={rowClass}
     >
       {body}

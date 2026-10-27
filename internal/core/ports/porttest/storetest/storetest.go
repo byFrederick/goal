@@ -23,6 +23,8 @@ type Harness struct {
 	Store ports.Store
 	// Flow reads the same store's flow statistics.
 	Flow ports.FlowStats
+	// Spend reads the same store's organization spend.
+	Spend ports.Spend
 	// NewOrg returns a new organization.
 	NewOrg func(t *testing.T) domain.OrgID
 	// NewFactory returns a factory of org the store accepts items for.
@@ -92,6 +94,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Notes_AppendToOpenItemsReadSinceTheLatestRun", testNotes},
 		{"Notes_RefusedOnClosedItems", testNotesOnClosedItems},
 		{"ItemEvents_PagesInAppendOrder", testItemEvents},
+		{"FactoryActivity_NewestMilestonesOfOneFactory", testFactoryActivity},
 		{"ItemByNumber_PerFactory", testItemByNumber},
 		{"ListItems_NewestFirstFilteredAndPaged", testListItems},
 		{"SearchItems_MatchesTitleAndNumber", testSearchItems},
@@ -111,6 +114,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"RequeueExpiredLeases_OnlyTheCurrentOrg", testRequeueOneOrg},
 		{"FinishLostRuns_OnlyTheCurrentOrg", testFinishLostRunsOneOrg},
 		{"SpendSince_OnlyTheCurrentOrg", testSpendSinceOneOrg},
+		{"OrgSpend", testOrgSpend},
 		{"ClaimNext_OrgAndFactorySlotCaps", testSlotCaps},
 		{"Concurrent_ClaimsNeverExceedTheOrgCap", testConcurrentClaimsCapped},
 		{"ItemSpans_FollowEveryTransition", testSpansFollowEveryTransition},

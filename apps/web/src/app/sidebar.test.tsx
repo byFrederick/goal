@@ -152,7 +152,19 @@ const nav = () => screen.findByRole('navigation', { name: 'Organization and fact
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  window.localStorage.clear();
 });
+
+const collapse = async () => {
+  fireEvent.click(within(await nav()).getByRole('button', { name: 'Collapse sidebar' }));
+  return screen.findByRole('button', { name: 'Expand sidebar' });
+};
+
+/** The names of the rail's controls and images, in the order they sit on the rail. */
+const railNames = (rail: HTMLElement) =>
+  Array.from(rail.querySelectorAll('a[aria-label], button[aria-label], [role="img"]')).map((el) =>
+    el.getAttribute('aria-label'),
+  );
 
 describe('the sidebar', () => {
   it('names the organization in its top row, which opens the organization menu', async () => {
@@ -177,8 +189,6 @@ describe('the sidebar', () => {
   });
 
   it.each([
-    ['Search', /^Search$/],
-    ['Collapse', /^Collapse sidebar$/],
     ['Needs you', /^Needs you/],
     ['Runs', /^Runs$/],
     ['Credentials', /^Credentials$/],
@@ -382,5 +392,140 @@ describe('the sidebar', () => {
       fireEvent.keyDown(document.body, { key: 'c' });
       expect(screen.queryByRole('dialog')).toBeNull();
     });
+  });
+});
+
+describe('the collapsed rail', () => {
+  it('lists its entries in order with accessible names', async () => {
+    renderSidebar({ can: ['connection:read', 'knowledge:read', 'factory:create'] });
+    await collapse();
+    const names = railNames(await nav());
+
+    expect(names.slice(0, 8)).toEqual([
+      'Expand sidebar',
+      'New item',
+      'Home',
+      'Needs you, 3 waiting on you',
+      'Runs',
+      'Connections',
+      'Credentials',
+      'Knowledge',
+    ]);
+    expect(names.slice(8, 11).map((name) => name?.match(/, (\w+) factory/)?.[1])).toEqual(['goal', 'sre', 'support']);
+    expect(names.slice(11)).toEqual(['New factory', 'Spend this week, 37% of budget', 'FC, Freddy Cruz, account']);
+  });
+
+  it.each(['New item', 'Needs you', 'Runs', 'Credentials'])(
+    'keeps %s disabled, and says what it is and why',
+    async (name) => {
+      renderSidebar();
+      await collapse();
+      const control = within(await nav()).getByRole('button', { name: new RegExp(`^${name}`) });
+
+      expect(control.getAttribute('aria-disabled')).toBe('true');
+      fireEvent.focus(control);
+      expect(await screen.findByText(name)).toBeTruthy();
+      expect(await screen.findByText('Not available yet')).toBeTruthy();
+    },
+  );
+
+  it('gives each enabled entry a tooltip with its label', async () => {
+    renderSidebar({ can: ['connection:read'] });
+    await collapse();
+    fireEvent.focus(within(await nav()).getByRole('link', { name: 'Connections' }));
+
+    expect(await screen.findByText('Connections')).toBeTruthy();
+  });
+
+  it('the collapsed choice survives a remount', async () => {
+    const { unmount } = renderSidebar();
+    await collapse();
+    unmount();
+
+    renderSidebar();
+    const expand = await screen.findByRole('button', { name: 'Expand sidebar' });
+    expect(within(await nav()).queryByRole('button', { name: 'Collapse sidebar' })).toBeNull();
+    fireEvent.click(expand);
+    expect(await screen.findByRole('button', { name: 'Collapse sidebar' })).toBeTruthy();
+    unmount();
+
+    renderSidebar();
+    expect(await screen.findByRole('button', { name: 'Collapse sidebar' })).toBeTruthy();
+  });
+
+  it('opens the composer with C when the saved choice is the rail', async () => {
+    const list = [factory('goal', { can: ['item:create'] })];
+    const { unmount } = renderSidebar({ list });
+    await collapse();
+    unmount();
+
+    renderSidebar({ list });
+    await screen.findByRole('button', { name: 'Expand sidebar' });
+    fireEvent.keyDown(document.body, { key: 'c' });
+
+    expect(await screen.findByRole('dialog', { name: 'New item' })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Factory' })).toBeTruthy();
+  });
+
+  it('expands the rail into search with Command K', async () => {
+    renderSidebar();
+    await collapse();
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+
+    expect(await screen.findByRole('combobox', { name: 'Search' })).toBeTruthy();
+    expect(within(await nav()).queryByRole('button', { name: 'Expand sidebar' })).toBeNull();
+    expect(window.localStorage.getItem('goal.sidebar')).toBe('expanded');
+  });
+
+  it('moves focus to the other control when the choice changes by the keyboard', async () => {
+    renderSidebar();
+    const expand = await collapse();
+    expect(document.activeElement).toBe(expand);
+
+    fireEvent.click(expand);
+    expect(document.activeElement).toBe(await screen.findByRole('button', { name: 'Collapse sidebar' }));
+  });
+
+  it('expands when the saved choice cannot be read', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    renderSidebar();
+
+    expect(await screen.findByRole('button', { name: 'Collapse sidebar' })).toBeTruthy();
+  });
+
+  it('renders loading as busy with a spoken “Loading” and no spend ring', async () => {
+    window.localStorage.setItem('goal.sidebar', 'collapsed');
+    renderSidebar({ attention: 'pending', overview: 'pending' });
+    const rail = await nav();
+
+    expect(rail.getAttribute('aria-busy')).toBe('true');
+    expect(within(rail).getByText('Loading')).toBeTruthy();
+    expect(within(rail).queryByRole('img', { name: /Spend/ })).toBeNull();
+  });
+
+  it('shows the icons without counts and no spend ring on an error', async () => {
+    window.localStorage.setItem('goal.sidebar', 'collapsed');
+    renderSidebar({ attention: 'error', overview: 'error' });
+    const rail = await nav();
+
+    await waitFor(() => expect(rail.getAttribute('aria-busy')).toBe('false'));
+    expect(within(rail).getByRole('button', { name: 'Needs you' })).toBeTruthy();
+    expect(within(rail).queryByRole('img', { name: /Spend/ })).toBeNull();
+    expect(within(rail).getByRole('link', { name: /sre factory/ })).toBeTruthy();
+  });
+
+  it('shows only New factory with no factories', async () => {
+    window.localStorage.setItem('goal.sidebar', 'collapsed');
+    renderSidebar({ list: [], can: ['factory:create'] });
+    const rail = await nav();
+
+    expect(
+      within(rail)
+        .getAllByRole('link', { name: /factory/ })
+        .map((el) => el.getAttribute('aria-label')),
+    ).toEqual(['New factory']);
   });
 });
