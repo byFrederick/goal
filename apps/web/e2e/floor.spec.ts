@@ -1,5 +1,5 @@
 // The Floor over a range (E4): throughput against the range before and the target, the last 12
-// weeks, and the header's range and work-type controls writing the URL.
+// weeks, the header's window control writing the URL, and the line and the flow tiles of the top.
 import { expect, type Page, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll, isPhone } from './support';
 
@@ -27,7 +27,7 @@ const throughput = (page: Page) => page.getByRole('region', { name: 'Throughput'
 
 test('the floor shows throughput against last week and its target, and the last 12 weeks', async ({ page }) => {
   await page.goto('/o/acme/f/sre');
-  await expect(page.getByRole('heading', { level: 1, name: 'SRE floor' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
 
   const card = throughput(page);
   await expect(card.getByText(/^\d+\.\d a day$/)).toBeVisible();
@@ -86,42 +86,47 @@ test('the constraint card pages through the busiest stations over the range', as
   await expectAccessible(page);
 });
 
-test('a range and a work type change the URL and the cards', async ({ page }) => {
-  test.skip(isPhone(page), 'phones show the range the URL names; the controls are on wider screens');
+test('the window control writes the URL, and the cards follow it', async ({ page }) => {
   await page.goto('/o/acme/f/sre');
-  await expect(page.getByRole('heading', { level: 1, name: 'SRE floor' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
 
-  await page.getByRole('button', { name: new RegExp(`^${dayLabel(6)} to `) }).click();
-  await page.getByRole('button', { name: 'Last 14 days' }).click();
-  await expect(page).toHaveURL(new RegExp(`\\?from=${utcDay(13)}$`));
-  await expect(throughput(page).getByText('vs the 14 days before')).toBeVisible();
-  await expect(throughput(page).getByText(`Items finished per day, ${dayLabel(13)} to`)).toBeVisible();
+  await page.getByRole('radio', { name: '30 days' }).click();
+  await expect(page).toHaveURL(new RegExp(`\\?from=${utcDay(29)}$`));
+  await expect(page.getByRole('radio', { name: '30 days' })).toBeChecked();
+  await expect(page.getByText('compared with the 30 days before')).toBeVisible();
+  await expect(throughput(page).getByText('vs the 30 days before')).toBeVisible();
 
-  await page.getByRole('button', { name: /^[A-Z][a-z]{2} \d+ to / }).click();
-  const panel = page.getByRole('dialog', { name: 'Date range' });
-  await panel.getByLabel('From').fill(utcDay(40));
-  await panel.getByLabel('To').fill(utcDay(10));
-  await panel.getByRole('button', { name: 'Show these days' }).click();
-  await expect(page).toHaveURL(new RegExp(`from=${utcDay(40)}&to=${utcDay(10)}`));
-  await expect(throughput(page).getByText('vs the 31 days before')).toBeVisible();
+  await page.getByRole('radio', { name: 'Today' }).click();
+  await expect(page).toHaveURL(new RegExp(`\\?from=${utcDay(0)}$`));
+  await expect(page.getByText('compared with the day before')).toBeVisible();
 
-  await page.getByRole('button', { name: /^[A-Z][a-z]{2} \d+ to / }).click();
-  await panel.getByLabel('From').fill(utcDay(120));
-  await panel.getByRole('button', { name: 'Show these days' }).click();
-  await expect(panel.getByRole('alert')).toHaveText('A range is at most 90 days.');
-  await page.keyboard.press('Escape');
+  await page.getByRole('radio', { name: '7 days' }).click();
+  await expect(page).toHaveURL(/\/o\/acme\/f\/sre\/?$/);
+  await expect(page.getByText(`${dayLabel(6)} to`)).toBeVisible();
+  await expectAccessible(page);
+});
 
-  await page.getByRole('button', { name: 'Work type: all work types' }).click();
-  await page.getByRole('menuitemradio', { name: 'incident' }).click();
-  await expect(page).toHaveURL(/type=incident/);
-  await expect(page).toHaveURL(new RegExp(`from=${utcDay(40)}`));
-  await expect(page.getByRole('button', { name: 'Work type: incident' })).toBeVisible();
+test('the line and the flow tiles show on the Floor', async ({ page }) => {
+  await page.goto('/o/acme/f/software');
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
+  await expect(page.getByText('Line running')).toBeVisible();
+
+  const line = page.getByRole('region', { name: 'The line, now' });
+  await expect(line.getByRole('list', { name: 'Stations from intake to done' })).toBeVisible();
+  await expect(line.getByRole('img', { name: 'Engineer: 5 working, 1 waiting on you, 0 free' })).toBeVisible();
+  await expect(line.getByText('Constraint')).toBeVisible();
+
+  const flow = page.getByRole('region', { name: 'Flow against targets' });
+  await expect(flow.getByRole('meter', { name: /of the target of 10 a day$/ })).toBeVisible();
+  // The phone shows four tiles; Hands-off is one of the two hidden on it.
+  test.skip(isPhone(page), 'the phone shows four tiles');
+  await expect(flow.getByRole('button', { name: 'Hands-off' })).toHaveAttribute('aria-disabled', 'true');
   await expectAccessible(page);
 });
 
 test('a phone shows the range the URL names', async ({ page }) => {
   test.skip(!isPhone(page), 'the caption is the phone header');
-  await page.goto(`/o/acme/f/sre?from=${utcDay(29)}&type=incident`);
-  await expect(page.getByText(/, vs the 30 days before, incident only$/)).toBeVisible();
+  await page.goto(`/o/acme/f/sre?from=${utcDay(29)}`);
+  await expect(page.getByText(/, compared with the 30 days before$/)).toBeVisible();
   await expectNoHorizontalScroll(page);
 });
