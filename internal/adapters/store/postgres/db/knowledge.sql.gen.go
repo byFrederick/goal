@@ -281,6 +281,61 @@ func (q *Queries) KnowledgeConnection(ctx context.Context, name string) (Knowled
 	return i, err
 }
 
+const knowledgeDocumentUses = `-- name: KnowledgeDocumentUses :many
+SELECT u.run_id, u.item_id, u.factory_id, array_agg(u.kind ORDER BY u.kind)::text[] AS kinds, min(u.at)::timestamptz AS at
+FROM knowledge_uses u
+WHERE u.document_id = $1
+GROUP BY u.run_id, u.item_id, u.factory_id
+HAVING $2::uuid IS NULL
+    OR (min(u.at), u.run_id) < ((SELECT min(a.at) FROM knowledge_uses a
+                                 WHERE a.document_id = $1 AND a.run_id = $2::uuid),
+                                $2::uuid)
+ORDER BY min(u.at) DESC, u.run_id DESC
+LIMIT $3
+`
+
+type KnowledgeDocumentUsesParams struct {
+	DocumentID uuid.UUID
+	After      *uuid.UUID
+	MaxRows    int32
+}
+
+type KnowledgeDocumentUsesRow struct {
+	RunID     uuid.UUID
+	ItemID    uuid.UUID
+	FactoryID uuid.UUID
+	Kinds     []string
+	At        time.Time
+}
+
+// A page of the runs that used a document, by their first use newest first (ties by run id
+// descending), after the run after: those before its first use of the document.
+func (q *Queries) KnowledgeDocumentUses(ctx context.Context, arg KnowledgeDocumentUsesParams) ([]KnowledgeDocumentUsesRow, error) {
+	rows, err := q.db.Query(ctx, knowledgeDocumentUses, arg.DocumentID, arg.After, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []KnowledgeDocumentUsesRow
+	for rows.Next() {
+		var i KnowledgeDocumentUsesRow
+		if err := rows.Scan(
+			&i.RunID,
+			&i.ItemID,
+			&i.FactoryID,
+			&i.Kinds,
+			&i.At,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const knowledgeDocuments = `-- name: KnowledgeDocuments :many
 SELECT d.id, d.source_id, d.external_id, d.version, d.title, d.url, d.mime, d.bytes, d.blob_sha256, d.status, d.error,
        d.seen_at, d.indexed_at, d.embed_model, d.created_by, s.kind AS source_kind
@@ -364,6 +419,53 @@ func (q *Queries) KnowledgeDocuments(ctx context.Context, arg KnowledgeDocuments
 	return items, nil
 }
 
+const knowledgeRunUses = `-- name: KnowledgeRunUses :many
+SELECT factory_id, item_id, run_id, source_id, document_id, kind, chunk_ids, at
+FROM knowledge_uses
+WHERE run_id = $1
+ORDER BY at, document_id, kind
+`
+
+type KnowledgeRunUsesRow struct {
+	FactoryID  uuid.UUID
+	ItemID     uuid.UUID
+	RunID      uuid.UUID
+	SourceID   uuid.UUID
+	DocumentID uuid.UUID
+	Kind       string
+	ChunkIds   []int64
+	At         time.Time
+}
+
+func (q *Queries) KnowledgeRunUses(ctx context.Context, runID uuid.UUID) ([]KnowledgeRunUsesRow, error) {
+	rows, err := q.db.Query(ctx, knowledgeRunUses, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []KnowledgeRunUsesRow
+	for rows.Next() {
+		var i KnowledgeRunUsesRow
+		if err := rows.Scan(
+			&i.FactoryID,
+			&i.ItemID,
+			&i.RunID,
+			&i.SourceID,
+			&i.DocumentID,
+			&i.Kind,
+			&i.ChunkIds,
+			&i.At,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const knowledgeSourceKind = `-- name: KnowledgeSourceKind :one
 SELECT kind FROM knowledge_sources WHERE id = $1
 `
@@ -373,6 +475,78 @@ func (q *Queries) KnowledgeSourceKind(ctx context.Context, id uuid.UUID) (string
 	var kind string
 	err := row.Scan(&kind)
 	return kind, err
+}
+
+const knowledgeSourceUsage = `-- name: KnowledgeSourceUsage :many
+WITH uses AS (
+  SELECT u.document_id, count(DISTINCT u.run_id) AS runs
+  FROM knowledge_uses u
+  WHERE u.source_id = $2 AND u.at >= now() - make_interval(days => $3::int)
+  GROUP BY u.document_id
+), verdicts AS (
+  SELECT v.document_id,
+         count(*) FILTER (WHERE v.actor LIKE 'agent:%' AND v.verdict = 'helped') AS agents_helped,
+         count(*) FILTER (WHERE v.actor LIKE 'agent:%' AND v.verdict = 'misled') AS agents_misled,
+         count(*) FILTER (WHERE v.actor LIKE 'user:%' AND v.verdict = 'helped') AS people_helped,
+         count(*) FILTER (WHERE v.actor LIKE 'user:%' AND v.verdict = 'misled') AS people_misled
+  FROM knowledge_verdicts v
+  WHERE v.source_id = $2 AND v.at >= now() - make_interval(days => $3::int)
+  GROUP BY v.document_id
+)
+SELECT d.id, d.title, coalesce(u.runs, 0)::bigint AS runs,
+       coalesce(v.agents_helped, 0)::bigint AS agents_helped, coalesce(v.agents_misled, 0)::bigint AS agents_misled,
+       coalesce(v.people_helped, 0)::bigint AS people_helped, coalesce(v.people_misled, 0)::bigint AS people_misled
+FROM uses u
+FULL JOIN verdicts v ON v.document_id = u.document_id
+JOIN knowledge_documents d ON d.id = coalesce(u.document_id, v.document_id)
+ORDER BY runs DESC, d.id
+LIMIT $1
+`
+
+type KnowledgeSourceUsageParams struct {
+	MaxRows  int32
+	SourceID uuid.UUID
+	Days     int32
+}
+
+type KnowledgeSourceUsageRow struct {
+	ID           uuid.UUID
+	Title        string
+	Runs         int64
+	AgentsHelped int64
+	AgentsMisled int64
+	PeopleHelped int64
+	PeopleMisled int64
+}
+
+// Per document of a source with a use or a verdict in the last days days: the distinct runs with a use
+// and the verdicts given, agents' and people's apart; the most used first, then by id.
+func (q *Queries) KnowledgeSourceUsage(ctx context.Context, arg KnowledgeSourceUsageParams) ([]KnowledgeSourceUsageRow, error) {
+	rows, err := q.db.Query(ctx, knowledgeSourceUsage, arg.MaxRows, arg.SourceID, arg.Days)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []KnowledgeSourceUsageRow
+	for rows.Next() {
+		var i KnowledgeSourceUsageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.Runs,
+			&i.AgentsHelped,
+			&i.AgentsMisled,
+			&i.PeopleHelped,
+			&i.PeopleMisled,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const knowledgeSources = `-- name: KnowledgeSources :many
@@ -921,4 +1095,91 @@ func (q *Queries) UpsertKnowledgeDocument(ctx context.Context, arg UpsertKnowled
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const upsertKnowledgeUse = `-- name: UpsertKnowledgeUse :execrows
+
+INSERT INTO knowledge_uses AS u (factory_id, item_id, run_id, source_id, document_id, kind, chunk_ids, at)
+VALUES ($1, $2, $3, $4, $5, $6,
+        ARRAY(SELECT DISTINCT c FROM unnest($7::bigint[]) c ORDER BY c), $8)
+ON CONFLICT (org_id, run_id, document_id, kind) DO UPDATE
+SET chunk_ids = ARRAY(SELECT DISTINCT c FROM unnest(u.chunk_ids || excluded.chunk_ids) c ORDER BY c),
+    at = least(u.at, excluded.at)
+WHERE u.source_id = excluded.source_id
+`
+
+type UpsertKnowledgeUseParams struct {
+	FactoryID  uuid.UUID
+	ItemID     uuid.UUID
+	RunID      uuid.UUID
+	SourceID   uuid.UUID
+	DocumentID uuid.UUID
+	Kind       string
+	ChunkIds   []int64
+	At         time.Time
+}
+
+// Knowledge use and verdicts (00067, ADR 0027).
+// One use per run, document and kind: a second merges its chunk ids into the first's, sorted
+// and distinct, and keeps the earlier time. A document of another source or organization fails
+// the document key, or changes no row when the use exists (ports.ErrNotFound); a merge past
+// 1,000 chunks fails its check.
+func (q *Queries) UpsertKnowledgeUse(ctx context.Context, arg UpsertKnowledgeUseParams) (int64, error) {
+	result, err := q.db.Exec(ctx, upsertKnowledgeUse,
+		arg.FactoryID,
+		arg.ItemID,
+		arg.RunID,
+		arg.SourceID,
+		arg.DocumentID,
+		arg.Kind,
+		arg.ChunkIds,
+		arg.At,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const upsertKnowledgeVerdict = `-- name: UpsertKnowledgeVerdict :one
+INSERT INTO knowledge_verdicts AS v (source_id, document_id, run_id, item_id, verdict, note, actor, at)
+SELECT d.source_id, d.id, $1, $2, $3, $4, $5,
+       coalesce($6::timestamptz, now())
+FROM knowledge_documents d WHERE d.id = $7
+ON CONFLICT ON CONSTRAINT knowledge_verdicts_actor_key DO UPDATE
+SET verdict = excluded.verdict, note = excluded.note, item_id = excluded.item_id, at = excluded.at
+RETURNING v.source_id, v.at
+`
+
+type UpsertKnowledgeVerdictParams struct {
+	RunID      *uuid.UUID
+	ItemID     *uuid.UUID
+	Verdict    string
+	Note       string
+	Actor      string
+	At         *time.Time
+	DocumentID uuid.UUID
+}
+
+type UpsertKnowledgeVerdictRow struct {
+	SourceID uuid.UUID
+	At       time.Time
+}
+
+// One verdict per actor, document and run (a verdict without a run counting as its own:
+// NULLS NOT DISTINCT); a later one replaces its verdict, note, item and time. The source is
+// the document's; no row when the document is not the organization's (ports.ErrNotFound).
+func (q *Queries) UpsertKnowledgeVerdict(ctx context.Context, arg UpsertKnowledgeVerdictParams) (UpsertKnowledgeVerdictRow, error) {
+	row := q.db.QueryRow(ctx, upsertKnowledgeVerdict,
+		arg.RunID,
+		arg.ItemID,
+		arg.Verdict,
+		arg.Note,
+		arg.Actor,
+		arg.At,
+		arg.DocumentID,
+	)
+	var i UpsertKnowledgeVerdictRow
+	err := row.Scan(&i.SourceID, &i.At)
+	return i, err
 }
