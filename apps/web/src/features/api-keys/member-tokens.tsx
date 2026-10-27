@@ -35,13 +35,13 @@ export function MemberTokensSection({ org }: { org: OrgSummary }) {
   return (
     <section
       aria-labelledby="member-tokens-heading"
-      className="flex flex-col gap-4 rounded-card border border-line bg-card p-4 md:p-5"
+      className="flex flex-col gap-4 rounded-card border border-line bg-card p-5"
     >
       <div className="flex max-w-[680px] min-w-0 flex-col gap-2">
-        <h2 id="member-tokens-heading" className="m-0 text-xl font-medium">
+        <h2 id="member-tokens-heading" className="m-0 text-heading">
           Members’ tokens
         </h2>
-        <p className="m-0 text-sm leading-normal text-muted">
+        <p className="m-0 text-body text-muted">
           Every member’s personal tokens in {org.name}. Each acts as its owner, so removing someone from {org.name}{' '}
           deletes theirs.
         </p>

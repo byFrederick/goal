@@ -2,7 +2,7 @@
 // and DELETE …/api-keys/{key}, refusing as goald does (scope-not-allowed, api-key-name-taken,
 // factory-not-found, 400 for a malformed key). A created key's secret is answered once with
 // Cache-Control: no-store and kept nowhere; the mock keeps its hint. acme starts with the
-// board's keys: three live ones and one revoked.
+// keys the API keys screen pictures: three live ones.
 //
 // Personal tokens (3-12b) too: GET, POST /v1/orgs/{org}/personal-tokens and DELETE …/{token}, the
 // signed-in person's own (another's is 404; with sign-in off there are none and creating one is
@@ -13,6 +13,7 @@ import type { Actor, ApiKey, Factory, FactoryRole, Org, PersonalToken, User } fr
 import { directory, type MockPerson } from './people.ts';
 
 const dayMs = 86_400_000;
+const minuteMs = 60_000;
 const hourMs = 3_600_000;
 
 /** The permissions keys may carry and, for a factory permission, the lowest role holding it. */
@@ -162,66 +163,52 @@ function seedTokens(now: number): PersonalToken[] {
   ];
 }
 
-/** The board's keys of acme, dated from now. */
+/** The keys of acme as the API keys screen pictures them, dated from now. */
 function seedKeys(now: number, factories: Factory[]): ApiKey[] {
   const id = (name: string) => factories.find((f) => f.name === name)?.id ?? name;
   const at = (ms: number) => new Date(now + ms).toISOString();
   return [
     {
       id: '019a1c00-0000-7000-8000-0000000000e1',
-      name: 'ci-deploy',
+      name: 'ci-items',
       hint: 'goal_sk_Ab3x',
-      scopes: ['item:create', 'item:decide', 'org:read'],
+      scopes: ['item:create'],
       role_ceiling: 'approver',
-      factories: [id('goal')],
+      factories: null,
       created_by: cruz,
-      created_at: at(-22 * dayMs),
-      expires_at: at(68 * dayMs),
-      last_used_at: at(-2 * hourMs),
+      created_at: at(-30 * dayMs),
+      expires_at: at(60 * dayMs),
+      last_used_at: at(-14 * minuteMs),
       revoked_at: null,
       revoked_by: null,
     },
     {
       id: '019a1c00-0000-7000-8000-0000000000e2',
-      name: 'nightly-evals',
+      name: 'grafana-metrics',
       hint: 'goal_sk_Q7mz',
-      scopes: ['factory:read', 'audit:read'],
+      scopes: ['factory:read', 'org:read'],
       role_ceiling: 'viewer',
       factories: null,
       created_by: okafor,
-      created_at: at(-81 * dayMs),
-      expires_at: at(9 * dayMs),
-      last_used_at: at(-6 * hourMs),
+      created_at: at(-40 * dayMs),
+      expires_at: at(50 * dayMs),
+      last_used_at: at(-2 * hourMs),
       revoked_at: null,
       revoked_by: null,
     },
     {
       id: '019a1c00-0000-7000-8000-0000000000e3',
-      name: 'definitions-sync',
+      name: 'deploy-bot',
       hint: 'goal_sk_t0Rk',
-      scopes: ['definition:edit', 'definition:publish', 'factory:read'],
-      role_ceiling: 'editor',
+      scopes: ['item:create', 'item:operate'],
+      role_ceiling: 'approver',
       factories: [id('goal')],
       created_by: cruz,
-      created_at: at(-3 * dayMs),
-      expires_at: at(87 * dayMs),
+      created_at: at(-minuteMs),
+      expires_at: at(85 * dayMs),
       last_used_at: null,
       revoked_at: null,
       revoked_by: null,
-    },
-    {
-      id: '019a1c00-0000-7000-8000-0000000000e4',
-      name: 'support-bot',
-      hint: 'goal_sk_9fLe',
-      scopes: ['item:create', 'factory:read', 'org:read'],
-      role_ceiling: 'approver',
-      factories: [id('support')],
-      created_by: okafor,
-      created_at: at(-24 * dayMs),
-      expires_at: at(66 * dayMs),
-      last_used_at: at(-5 * dayMs),
-      revoked_at: at(-4 * dayMs),
-      revoked_by: cruz,
     },
   ];
 }

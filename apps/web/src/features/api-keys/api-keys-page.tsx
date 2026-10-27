@@ -1,28 +1,33 @@
-// API keys (spec 3 §10.2, canvas "Api-Keys" and "Mobile-Api-Keys"): the organization's keys with
-// what each can do, where it reaches, how far it acts, who made it, when it expires and when it
-// was last used; New key (with api_key:manage) and Revoke…. Revoked keys stay listed for 30 days,
-// greyed (on phones they are counted, not shown). The list loads on its own: when it fails the
-// page keeps its header and New key. The secret of a new key is shown once (shared/tokens/created-dialog.tsx).
-// Below them, for owners and admins (api_key:read), the members' tokens (member-tokens.tsx). A
-// person's own personal tokens are on the account page (/account, features/account/personal-tokens.tsx).
+// API keys (spec 3 §10.2, canvas "Api-Keys" and "Mobile-Api-Keys", docs/design/screens/organization/api-keys.jpg):
+// the organization's keys with what each can do, where it reaches, how far it acts, who made it,
+// when it expires and when it was last used; New key (with api_key:manage, in the top bar) and
+// Revoke. Revoked keys stay listed for 30 days, greyed (on phones they are counted, not shown). The
+// list loads on its own: when it fails the page keeps its header and New key. Beside the keys: how
+// to sign in from a terminal, and the Goal MCP server for other agents (not built yet, so disabled).
+// The secret of a new key is shown once (shared/tokens/created-dialog.tsx). Below them, for owners
+// and admins (api_key:read), the members' tokens (member-tokens.tsx). A person's own personal tokens
+// are on the account page (/account, features/account/personal-tokens.tsx).
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SquareTerminal } from 'lucide-react';
+import { Plus, SquareTerminal } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '../../api/client';
 import { revokeApiKey } from '../../api/keys';
 import { apiKeysQuery, factoriesQuery, keys } from '../../api/queries';
 import type { ApiKey, CreatedApiKey } from '../../api/types';
-import { formatDay, plural } from '../../shared/format';
+import { TopBarSlot } from '../../app/top-bar';
+import { formatDay } from '../../shared/format';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { CreatedKeyDialog } from '../../shared/tokens/created-dialog';
 import { ceilings, expiryText, lastUsedText } from '../../shared/tokens/scopes';
 import { Scopes, Soon } from '../../shared/tokens/shared';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
+import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { EmptyState } from '../../ui/empty-state';
+import { NotAvailable } from '../../ui/not-available';
 import { MemberTokensSection } from './member-tokens';
 import { NewKeyDialog } from './new-key-dialog';
 
@@ -41,6 +46,10 @@ export function ApiKeysPage() {
 
   const names = new Map((factories.data ?? []).map((f) => [f.id, f.name]));
   const where = (k: ApiKey) => (k.factories ? k.factories.map((id) => names.get(id) ?? id).join(', ') : 'All');
+  // The terminal lines name the first factory, so the commands fit this organization.
+  const sample = factories.data?.[0]?.name ?? 'factory';
+  // The Goal MCP server lives at the address this app is served from.
+  const mcpAddress = `${window.location.origin}/mcp`;
 
   const revoke = useMutation({
     mutationFn: (k: ApiKey) => revokeApiKey(org.id, k.id),
@@ -52,217 +61,214 @@ export function ApiKeysPage() {
   });
 
   const newKey = manage ? (
-    <Button variant="primary" className="h-11 md:h-10" onClick={() => setCreating(true)}>
-      <span aria-hidden="true">+</span> New key
+    <Button variant="primary" className="h-11 md:h-8.5" onClick={() => setCreating(true)}>
+      <Plus size={15} strokeWidth={1.75} aria-hidden="true" />
+      New key
     </Button>
   ) : null;
 
   const live = (list.data ?? []).filter((k) => !k.revoked_at);
   const revoked = (list.data ?? []).filter((k) => k.revoked_at);
   const now = Date.now();
-  const sample = factories.data?.[0]?.name ?? 'sre';
 
   return (
     <>
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex max-w-[760px] min-w-0 flex-col gap-2">
-          <p className="m-0 text-[13px] text-muted md:hidden">{org.name}</p>
-          <h1 className="m-0 text-[34px] leading-[1.05] font-normal tracking-display md:text-5xl">API keys</h1>
-          {readKeys ? (
-            <p className="m-0 text-[15px] leading-normal text-muted">
-              Keys let scripts and CI act for {org.name}. A key never manages people, keys or ownership. Keys expire
-              after at most 90 days.
-            </p>
-          ) : null}
-        </div>
-        {newKey}
-      </header>
+      <TopBarSlot actions={newKey} />
+      <div className="flex min-w-0 flex-col gap-1 md:gap-2">
+        <h1 className="m-0 text-page-title tracking-display">API keys</h1>
+        {readKeys ? (
+          <p className="m-0 text-body text-ink-soft">
+            For scripts and services that use Goal’s API as the organization, not as a person.
+          </p>
+        ) : null}
+      </div>
 
-      {!readKeys ? null : list.isPending ? (
-        <div aria-busy="true" className="rounded-card border border-line bg-card p-5">
-          <span role="status" className="sr-only">
-            Loading API keys
-          </span>
-          <div className="flex flex-col gap-3">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="grid grid-cols-[1fr_2fr_1fr] gap-4">
-                <div className="h-3 rounded-chip bg-panel" />
-                <div className="h-3 rounded-chip bg-panel" />
-                <div className="h-3 rounded-chip bg-panel" />
+      {!readKeys ? null : (
+        <div className="grid gap-4 @[960px]:grid-cols-[minmax(0,1fr)_360px] @[960px]:items-start">
+          <div className="flex min-w-0 flex-col">
+            {list.isPending ? (
+              <div aria-busy="true" className="flex flex-1 flex-col">
+                <span role="status" className="sr-only">
+                  Loading
+                </span>
               </div>
-            ))}
-          </div>
-        </div>
-      ) : list.isError ? (
-        <div
-          className="flex max-w-xl flex-col items-start gap-3 rounded-card border border-line bg-card p-5"
-          role="alert"
-        >
-          <Callout tone="rework">Couldn’t load API keys. Check your connection and try again.</Callout>
-          <Button variant="white" onClick={() => void list.refetch()}>
-            Try again
-          </Button>
-        </div>
-      ) : live.length === 0 && revoked.length === 0 ? (
-        <EmptyState icon={<SquareTerminal size={20} strokeWidth={1.5} />} title="No keys yet" actions={newKey}>
-          Create one for CI or a script.
-        </EmptyState>
-      ) : (
-        <section aria-labelledby="active-keys" className="rounded-card border border-line bg-card p-4 md:p-5">
-          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-            <h2 id="active-keys" className="m-0 text-lg font-medium">
-              {live.length === 0 ? 'No active keys' : plural(live.length, 'active key')}
-            </h2>
-            <p className="m-0 hidden text-[13px] text-muted @[960px]:block">Revoked keys stay listed for 30 days</p>
-          </div>
+            ) : list.isError ? (
+              <div
+                className="flex max-w-xl flex-col items-start gap-3 rounded-card border border-line bg-card p-5"
+                role="alert"
+              >
+                <Callout tone="rework">Couldn’t load API keys. Check your connection and try again.</Callout>
+                <Button variant="white" onClick={() => void list.refetch()}>
+                  Try again
+                </Button>
+              </div>
+            ) : live.length === 0 && revoked.length === 0 ? (
+              <EmptyState icon={<SquareTerminal size={20} strokeWidth={1.5} />} title="No keys yet" actions={newKey}>
+                Create one for CI or a script.
+              </EmptyState>
+            ) : (
+              <section aria-labelledby="active-keys" className="rounded-card border border-line bg-card px-2 pt-4 pb-2">
+                <div className="flex items-center gap-2 px-3 pb-3">
+                  <h2 id="active-keys" className="m-0 text-heading">
+                    Keys
+                  </h2>
+                  <Chip tone="quiet">{live.length}</Chip>
+                </div>
 
-          <table className="hidden w-full border-collapse text-sm @[960px]:table">
-            <caption className="sr-only">API keys of {org.name}</caption>
-            <thead>
-              <tr className="text-left text-[13px] text-muted [&>th]:pb-2 [&>th]:font-normal">
-                <th scope="col">Key</th>
-                <th scope="col">Can</th>
-                <th scope="col">Factories</th>
-                <th scope="col">Acts at most as</th>
-                <th scope="col">Created</th>
-                <th scope="col">Expires</th>
-                <th scope="col">Last used</th>
-                <th scope="col">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...live, ...revoked].map((k) => {
-                const expiry = expiryText(k.expires_at, now);
-                return (
-                  <tr
-                    key={k.id}
-                    className={cn(
-                      'border-t border-line align-middle [&>td]:py-3 [&>td]:pr-3',
-                      k.revoked_at && 'text-muted',
-                    )}
-                  >
-                    <td>
-                      <KeyName apiKey={k} />
-                    </td>
-                    <td>
-                      <Scopes scopes={k.scopes} />
-                    </td>
-                    <td className="max-w-40 truncate">{where(k)}</td>
-                    <td>{roleLabel(k.role_ceiling)}</td>
-                    <td className="whitespace-nowrap">
-                      <span className="block">{k.created_by.name}</span>
-                      <span className="block text-[13px] text-muted">{formatDay(k.created_at)}</span>
-                    </td>
-                    {k.revoked_at ? (
-                      <td colSpan={3} className="text-[13px]">
-                        {revokedText(k)}
-                      </td>
-                    ) : (
-                      <>
-                        <td className="whitespace-nowrap">
-                          <span className="block">{expiry.day}</span>
-                          {expiry.soon ? <Soon text={expiry.soon} /> : null}
-                        </td>
-                        <td className="whitespace-nowrap text-muted">{lastUsedText(k.last_used_at, now)}</td>
-                        <td className="text-right">
+                <table className="hidden w-full border-collapse text-body @[960px]:table">
+                  <caption className="sr-only">API keys of {org.name}</caption>
+                  <thead>
+                    <tr className="border-b border-line text-left text-secondary text-muted [&>th]:px-3 [&>th]:pb-2 [&>th]:font-semibold">
+                      <th scope="col">Name</th>
+                      <th scope="col">Can</th>
+                      <th scope="col">Factories</th>
+                      <th scope="col">Acts at most as</th>
+                      <th scope="col">Created by</th>
+                      <th scope="col">Last used</th>
+                      <th scope="col">Expires</th>
+                      <th scope="col">
+                        <span className="sr-only">Actions</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...live, ...revoked].map((k) => {
+                      const expiry = expiryText(k.expires_at, now);
+                      return (
+                        <tr
+                          key={k.id}
+                          className={cn(
+                            'border-b border-line align-middle last:border-b-0 [&>td]:px-3 [&>td]:py-3',
+                            k.revoked_at && 'text-muted',
+                          )}
+                        >
+                          <td>
+                            <KeyName apiKey={k} />
+                          </td>
+                          <td>
+                            <Scopes scopes={k.scopes} />
+                          </td>
+                          <td className="max-w-40 truncate">{where(k)}</td>
+                          <td>{roleLabel(k.role_ceiling)}</td>
+                          <td className="whitespace-nowrap">{k.created_by.name}</td>
+                          {k.revoked_at ? (
+                            <td colSpan={3} className="text-secondary">
+                              {revokedText(k)}
+                            </td>
+                          ) : (
+                            <>
+                              <td className="whitespace-nowrap text-muted">{lastUsedText(k.last_used_at, now)}</td>
+                              <td className="whitespace-nowrap">
+                                <span className="block">{expiry.day}</span>
+                                {expiry.soon ? <Soon text={expiry.soon} /> : null}
+                              </td>
+                              <td className="text-right">
+                                {manage ? (
+                                  <Button
+                                    variant="danger"
+                                    size="sm"
+                                    onClick={() => setRevoking(k)}
+                                    aria-label={`Revoke ${k.name}`}
+                                  >
+                                    Revoke
+                                  </Button>
+                                ) : null}
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+
+                <ul className="m-0 flex list-none flex-col gap-2 p-0 px-1 @[960px]:hidden">
+                  {live.map((k) => {
+                    const expiry = expiryText(k.expires_at, now);
+                    return (
+                      <li key={k.id} className="flex flex-col gap-2 rounded-control border border-line bg-card p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <KeyName apiKey={k} />
                           {manage ? (
                             <Button
-                              variant="white"
-                              size="sm"
+                              variant="danger"
+                              className="h-11"
                               onClick={() => setRevoking(k)}
-                              aria-label={`Revoke ${k.name}…`}
+                              aria-label={`Revoke ${k.name}`}
                             >
-                              Revoke…
+                              Revoke
                             </Button>
                           ) : null}
-                        </td>
-                      </>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                        </div>
+                        <Scopes scopes={k.scopes} />
+                        <p className="m-0 text-body">
+                          {roleLabel(k.role_ceiling)} at most, {k.factories ? where(k) : 'all factories'}. Expires{' '}
+                          {expiry.day}
+                          {expiry.soon ? <Soon text={expiry.soon} /> : null}
+                        </p>
+                        <p className="m-0 text-secondary text-muted">
+                          By {k.created_by.name}, {formatDay(k.created_at)}. Last used{' '}
+                          {lastUsedText(k.last_used_at, now).toLowerCase()}
+                        </p>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {revoked.length > 0 ? (
+                  <p className="m-0 mt-3 px-3 text-secondary text-muted @[960px]:hidden">
+                    {revoked.length === 1 ? '1 revoked key is hidden.' : `${revoked.length} revoked keys are hidden.`}{' '}
+                    Revoked keys stay listed for 30 days.
+                  </p>
+                ) : null}
+              </section>
+            )}
+          </div>
 
-          <ul className="m-0 flex list-none flex-col gap-3 p-0 @[960px]:hidden">
-            {live.map((k) => {
-              const expiry = expiryText(k.expires_at, now);
-              return (
-                <li key={k.id} className="flex flex-col gap-2 rounded-control border border-line bg-card p-3.5">
-                  <div className="flex items-start justify-between gap-3">
-                    <KeyName apiKey={k} />
-                    {manage ? (
-                      <Button
-                        variant="white"
-                        className="h-11"
-                        onClick={() => setRevoking(k)}
-                        aria-label={`Revoke ${k.name}…`}
-                      >
-                        Revoke…
-                      </Button>
-                    ) : null}
-                  </div>
-                  <Scopes scopes={k.scopes} />
-                  <p className="m-0 text-sm">
-                    {roleLabel(k.role_ceiling)} at most, {k.factories ? where(k) : 'all factories'}. Expires{' '}
-                    {expiry.day}
-                    {expiry.soon ? <Soon text={expiry.soon} /> : null}
-                  </p>
-                  <p className="m-0 text-[13px] text-muted">
-                    By {k.created_by.name}, {formatDay(k.created_at)}. Last used{' '}
-                    {lastUsedText(k.last_used_at, now).toLowerCase()}
-                  </p>
-                </li>
-              );
-            })}
-          </ul>
-          {revoked.length > 0 ? (
-            <p className="m-0 mt-3 text-[13px] text-muted @[960px]:hidden">
-              {revoked.length === 1 ? '1 revoked key is hidden.' : `${revoked.length} revoked keys are hidden.`} Revoked
-              keys stay listed for 30 days.
-            </p>
-          ) : null}
-        </section>
+          <aside className="flex min-w-0 flex-col gap-4">
+            <section
+              aria-labelledby="cli-h"
+              className="flex flex-col gap-2 rounded-card border border-line bg-card p-5"
+            >
+              <h2 id="cli-h" className="m-0 text-heading">
+                From your terminal
+              </h2>
+              <p className="m-0 text-secondary text-ink-soft">People sign in as themselves instead of using a key.</p>
+              <pre className="m-0 overflow-x-auto rounded-cell bg-andon p-3 font-mono text-secondary leading-relaxed whitespace-pre text-andon-text">
+                <span aria-hidden="true" className="text-run-soft">
+                  ${' '}
+                </span>
+                goal login
+                {'\n'}
+                <span aria-hidden="true" className="text-run-soft">
+                  ${' '}
+                </span>
+                goal item create --factory {sample}
+              </pre>
+            </section>
+            <section
+              aria-labelledby="mcp-h"
+              className="flex flex-col gap-2 rounded-card border border-line bg-card p-5"
+            >
+              <h2 id="mcp-h" className="m-0 text-heading">
+                Goal for other agents
+              </h2>
+              <p className="m-0 text-secondary text-ink-soft">
+                Agents outside Goal can create items and read the board through Goal’s MCP server.
+              </p>
+              <div className="flex h-9 items-center gap-2 rounded-control border border-rule bg-panel pr-2 pl-3">
+                <span className="min-w-0 flex-1 truncate font-mono text-secondary">{mcpAddress}</span>
+                <NotAvailable>
+                  <Button variant="white" size="sm">
+                    Copy
+                  </Button>
+                </NotAvailable>
+              </div>
+            </section>
+          </aside>
+        </div>
       )}
 
       {readKeys ? <MemberTokensSection org={org} /> : null}
-
-      {readKeys ? (
-        <div className="grid gap-4 @[960px]:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-          <section
-            aria-labelledby="key-ci"
-            className="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-card p-5"
-          >
-            <h2 id="key-ci" className="m-0 text-lg font-medium">
-              Use a key from CI
-            </h2>
-            <p className="m-0 text-sm leading-normal text-muted">
-              Put the secret in your CI’s secret store as GOAL_API_KEY. The CLI reads it from the environment and never
-              writes it anywhere.
-            </p>
-            <pre className="m-0 rounded-control border border-line bg-card p-3.5 font-mono text-[13px] leading-relaxed break-words whitespace-pre-wrap">
-              {`export GOAL_API_KEY="$GOAL_KEY_FROM_CI"\ngoal factory list\ngoal run ${sample} "Deploy 1.4.2 to staging" --detach`}
-            </pre>
-          </section>
-          <section
-            aria-labelledby="key-never"
-            className="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-card p-5"
-          >
-            <h2 id="key-never" className="m-0 text-lg font-medium">
-              What a key can never do
-            </h2>
-            <p className="m-0 text-sm leading-normal text-muted">
-              Invite or remove people, change roles, see invitations, manage keys, transfer or delete {org.name}, or
-              create organizations. Those need a person signed in.
-            </p>
-            <p className="m-0 text-sm leading-normal text-muted">
-              Creating or revoking a key needs a sign-in from the last 10 minutes. Both go into the audit log.
-            </p>
-          </section>
-        </div>
-      ) : null}
 
       {creating ? (
         <NewKeyDialog
@@ -276,7 +282,7 @@ export function ApiKeysPage() {
           }}
         />
       ) : null}
-      <CreatedKeyDialog created={created} onDone={() => setCreated(null)} />
+      <CreatedKeyDialog created={created} factoryNames={names} onDone={() => setCreated(null)} />
       <ConfirmDialog
         open={revoking !== null}
         onOpenChange={(open) => {
@@ -296,7 +302,7 @@ export function ApiKeysPage() {
         }}
       >
         {revoke.error ? (
-          <p role="alert" className="m-0 text-sm text-rework-ink">
+          <p role="alert" className="m-0 text-body text-rework-ink">
             {revoke.error instanceof ApiError
               ? (revoke.error.detail ?? revoke.error.title)
               : 'goald is not answering. Try again once it is running.'}
@@ -315,8 +321,8 @@ function revokedText(k: ApiKey): string {
 function KeyName({ apiKey }: { apiKey: ApiKey }) {
   return (
     <span className="flex min-w-0 flex-col">
-      <span className="truncate text-[15px] font-medium">{apiKey.name}</span>
-      <span className="font-mono text-xs text-muted">{apiKey.hint}…</span>
+      <span className="truncate font-semibold">{apiKey.name}</span>
+      <span className="font-mono text-meta text-muted">{apiKey.hint}…</span>
     </span>
   );
 }
