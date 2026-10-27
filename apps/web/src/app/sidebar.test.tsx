@@ -189,7 +189,6 @@ describe('the sidebar', () => {
   });
 
   it.each([
-    ['Search', /^Search$/],
     ['Needs you', /^Needs you/],
     ['Runs', /^Runs$/],
     ['Credentials', /^Credentials$/],
@@ -466,6 +465,17 @@ describe('the collapsed rail', () => {
 
     expect(await screen.findByRole('dialog', { name: 'New item' })).toBeTruthy();
     expect(screen.getByRole('combobox', { name: 'Factory' })).toBeTruthy();
+  });
+
+  it('expands the rail into search with Command K', async () => {
+    renderSidebar();
+    await collapse();
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+
+    expect(await screen.findByRole('combobox', { name: 'Search' })).toBeTruthy();
+    expect(within(await nav()).queryByRole('button', { name: 'Expand sidebar' })).toBeNull();
+    expect(window.localStorage.getItem('goal.sidebar')).toBe('expanded');
   });
 
   it('moves focus to the other control when the choice changes by the keyboard', async () => {
