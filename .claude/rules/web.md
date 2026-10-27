@@ -10,7 +10,7 @@ The UI is one product, so its look comes from one design system: [MASTER.md](../
 
 ## Design
 
-- Follow `docs/design/MASTER.md` exactly: its tokens, Inter, radii and spacing. Drift between screens is what users notice first.
+- Follow `docs/design/MASTER.md` exactly: its tokens, Archivo, radii, spacing, vocabulary and components. The Goal UI canvas's "Revamp" pages (`V2-*` artboards) are the reference for each screen. Drift between screens is what users notice first.
 - Use token names only, never a hex, `rgb()` or `hsl()` value, and no gradients. A theme switch then needs no edits, and `apps/web/src/ui/raw-colors.test.ts` enforces it.
 - Support light and dark from the same tokens. People choose the theme, so both must read well.
 - Lay out for a phone first and check 375, 768 and 1440 px by reasoning about the CSS. The app fills the viewport with no framed shell.

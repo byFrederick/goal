@@ -10,6 +10,7 @@ The words Goal's code, API and UI use, one sentence each, with the place in the 
 | API key | An organization's service account, acting with its scopes and at most its role ceiling on the factories it reaches. | `internal/core/domain/apikey.go` (`APIKey`) |
 | Assembly | An item split into parts that are worked as separate items and ship together. | `internal/core/domain/item.go` (`Assembly`, `StateAssembly`), `internal/core/domain/part.go`; [ADR 0012](../adr/0012-assemblies-and-parts.md) |
 | Attention | What a factory needs from people right now, as the counts behind the app's badges. | `internal/core/domain/attention.go` (`Attention`) |
+| Bake-off | A planned Jonah comparison of agent configurations (model, harness) on the same eval cases, by pass rate against cost; it is not built yet. | [MASTER.md](../design/MASTER.md) ("Vocabulary") |
 | Board | The UI screen that shows a factory's items in columns by station. | `apps/web/src/features/board`, `apps/web/src/app/screens.ts` |
 | Box | The disposable container one run works in, started through the `Sandboxes` port. | `internal/core/ports/sandboxes.go`; `apps/worker` (the image) |
 | Bridge | The explanation of the gap between a factory's actual lead time and its target, largest step first. | `internal/core/domain/bridge.go` (`Bridge`) |
@@ -26,14 +27,17 @@ The words Goal's code, API and UI use, one sentence each, with the place in the 
 | Factory | One organization's configured production line of stations and agents, keyed by its `metadata.id` UUID and never by name. | `internal/core/domain/item.go` (`FactoryID`), `internal/factorymodel` |
 | Floor | The UI screen that shows a factory's line live: its stations, their load and what needs people. | `apps/web/src/features/floor`, `apps/web/src/app/screens.ts` |
 | Gate | A check at a station that sends rejected work back to an earlier station, at most a set number of times per item. | `internal/core/domain/line.go` (`Gate`), `internal/core/domain/andon.go` (`GateVerdict`) |
+| Hands-off | The share of a factory's merged items that no person touched, shown on the Floor; planned in the revamp. | [MASTER.md](../design/MASTER.md); `internal/core/domain/touch.go` (the touches it counts) |
 | Inbox | The list of an organization's open items that may need a person: waiting for a decision, blocked or expedite. | `internal/core/domain/inbox.go` (`AttentionItem`), `apps/web/src/shared/inbox.ts` |
 | Item | One unit of work flowing through a factory's line, with a state at its current station. | `internal/core/domain/item.go` (`Item`, `ItemState`) |
 | Jonah | Goal's planned continuous-learning loop (retros, evals and proposed changes to a definition); it is designed but not built. | [ADR 0002](../adr/0002-jonah-evals.md), [docs/history/](../history/); the `jonah` entry in `apps/web/src/app/screens.ts` |
+| Judge | A planned Jonah LLM judge that scores a sample of runs into labelled outcomes against a pass threshold; it is not built yet. | [MASTER.md](../design/MASTER.md) ("Vocabulary"), [ADR 0002](../adr/0002-jonah-evals.md) |
 | Knowledge source | One source of an organization's knowledge base (uploads or a synced connection), searched by agents through the gateway. | `internal/core/domain/knowledge.go` (`KnowledgeSource`), `internal/knowledge` |
 | Lane | A route through a station that an earlier output chooses, so that items of one lane go to that lane's agents. | `internal/core/domain/run.go` (`LaneFrom`), `internal/core/domain/line.go` (`ErrNoRoute`) |
 | Lease | An agent slot's hold on an item; it expires unless renewed, so the work of a crashed instance returns to the queue. | `internal/core/domain/run.go` (`Lease`) |
 | Learned | The planned built-in knowledge source of facts learned from retros; it is not built yet. | [architecture.md](../engineering/architecture.md) ("Phases 5 and 6") |
 | Line | A factory's stations in order, with its agents and flow policy, as the engine reads them. | `internal/core/domain/line.go` (`Line`) |
+| Needs you | The revamp's name in the UI for the inbox, with four types: approvals, decisions, questions and alerts; the screens still say Inbox until it lands. | [MASTER.md](../design/MASTER.md); `apps/web/src/shared/inbox.ts` |
 | Organization | The tenant: every org-owned row carries its id and is scoped by row-level security. | `internal/core/domain/org.go` (`Org`, `OrgID`) |
 | Part | One item of an assembly, counted in the assembly's progress. | `internal/core/domain/item.go` (`Part`), `internal/core/domain/part.go` |
 | Personal token | A member's own token for scripts, limited to the scopes it was created with. | `internal/core/domain/personaltoken.go` (`PersonalToken`) |
@@ -45,6 +49,7 @@ The words Goal's code, API and UI use, one sentence each, with the place in the 
 | Station | One step of the line, worked by a queue, agents, people or nobody (done). | `internal/core/domain/line.go` (`Station`, `StationKind`) |
 | Task token | The short-lived token a run uses to reach Goal, scoped to its organization, factory, item, station and connections. | `internal/core/domain/token.go` (`TaskClaims`) |
 | Touch | One action by a person on an item, counted to show how much human help work needed. | `internal/core/domain/touch.go` (`Touch`) |
+| Trigger | A planned intake rule that turns an event, schedule or webhook into a work item of a type at a station, with checks and limits; today intake has sources only. | [MASTER.md](../design/MASTER.md) ("Vocabulary"); `board.intake` in `contracts/definitions/factory.schema.json` |
 | Version | One saved state of a factory's definition, draft or published, with its manifest. | `internal/core/domain/definition.go` (`DefinitionVersion`) |
 | Waiting | Why a waiting item is held: the open needs that hold it and the file paths that overlap. | `internal/core/domain/waiting.go` (`Waiting`) |
 | WIP | The number of items in progress, capped per station and, for expedite items, per factory. | `internal/core/domain/line.go` (`Station.WIP`), `internal/core/domain/policy.go` (`ExpediteWIP`) |

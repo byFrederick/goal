@@ -1,321 +1,223 @@
-# Design System Master File
+# Goal design system
 
-> **Goal overrides (user decisions — these take precedence over the generated values below)**
->
-> - **Palette:** the user's original "control room" palette replaces the generated navy/green one. No pink anywhere.
->
-> | Token | Hex | Use |
-> |---|---|---|
-> | `--ground` | `#E6E9E7` | Concrete; reserved (no longer the page background) |
-> | `--shell` | `#EEF1EF` | Page background: the app fills the viewport |
-> | `--card` | `#F6F7F5` | Cards |
-> | `--surface` | `#FFFFFF` | Items inside cards, inputs |
-> | `--ink` | `#1D2733` | Text, primary buttons, active nav |
-> | `--muted` | `#556270` | Secondary text (5.6:1 on card) |
-> | `--rule` | `#CBD2CE` | Borders, dividers |
-> | `--run` | `#1F6F8B` | Running / actual / positive data (teal) |
-> | `--amber` | `#F0A202` | The constraint (drum) only |
-> | `--you` | `#5B4BB7` | Waiting on a human |
-> | `--rework` | `#B4441C` | Rework, delays, losses, andon (replaces red/pink) |
-> | `--ok` | `#2E6B4E` | Healthy, done |
-> | `--ok-tint` | `#E3EFE8` | Background behind healthy states |
-> | `--ok-ink` | `#24563E` | Healthy text ("Running", positive deltas) |
-> | `--you-ink` | `#4A3C9E` | Text on the violet tint (waiting-on-you banners) |
-> | `--ink-soft` | `#3A4654` | Rail icons; a count's background on the active nav item |
-> | `--rule-strong` | `#6F7B77` | Dashed "new" squares, hover borders, switch borders |
->
-> - **Navigation (user decision, 2026-10-23; phases 4–6 update):** a 72px rail on the far left with the organization mark at the top (opens the organization menu: switch organization, then Members and roles, API keys, Connections, Knowledge, Organization settings, and Create organization for platform admins), then one square per factory of that organization only (current one ink-filled; violet count = waiting on you, rust dot = blocked), a dashed + for New factory, and at the bottom Connections, Knowledge and the user (account menu: Edit name, Personal tokens, Connected apps, Sign out, Sign out everywhere). Organization pages use an organization sidebar: Factories, Members and roles, API keys, Connections, Knowledge, Settings. Inside a factory a 232px sidebar groups Work (Floor, Board, Items), Build (Definition, Connections) and Learn (Knowledge, Jonah); its Connections and Knowledge open the organization pages filtered to the factory. On a phone: a top row with the organization mark, factory squares and the user, a bottom tab bar (Floor, Board, Items, Build, Jonah), and the organization and account menus as one bottom sheet. Planned, not built yet: Connections and Knowledge (phase 4), Jonah and Knowledge's Learned view (phase 5), Connected apps and the OAuth consent page (phase 6). The UI canvas is the reference.
-> - **Layout:** the app takes the whole viewport like a normal web app: rail and sidebar pinned to the left edge (full height, right borders), content beside it. No framed, floating or rounded outer shell and no outer margin around the app; the framed box in the reference video was only its presentation. (User override, 2026-10-23.)
-> - **Radii (softer, not pill-shaped):** cards 12px, inner rows 8px, buttons and inputs 8px, chips 6px. No 999px pills except status dots.
-> - **Data marks:** hatched teal = actual, hatched rust = delay/loss, hatched gray = target; every value is signed and labelled, never color alone (charts.csv: waterfall).
-> - **Drag and drop:** every card also has a Move menu (ux-guidelines: Dragging Movements, WCAG 2.2).
-> - **Typography:** Inter with optical sizing (`opsz` 14..32, so large text renders as Inter Display), weights 400 for display and numerals, 500 for headings, 400 body; tracking −0.035em on display sizes; `font-feature-settings: "cv11","ss01"`; tabular numerals. Fira Code only for code, YAML and file paths. (User override: match the reference font.)
-> - **No gradients** on any background or card. Solid fills only.
-> - **Reference look:** the "Margin" dashboard by @nizamdesign: large numerals, insight card, "Needs you" list.
+The one source for how Goal looks, reads and behaves. It replaces the "control room" system of 2026-10-23: the user approved this revamp on 2026-10-26. The reference is the **Goal UI canvas** artifact, on its "Revamp" pages, where every screen is an artboard named `V2-<Screen>.dc.html`. The pages called "Current" show the old screens and are history.
 
+> **LOGIC:** when building a page, check `docs/design/pages/<page>.md` first. A rule there overrides this file. Otherwise, follow this file exactly.
 
-> **LOGIC:** When building a specific page, first check `docs/design/pages/[page-name].md`.
-> If that file exists, its rules **override** this Master file.
-> If not, strictly follow the rules below.
+## Principles
 
----
+- **The line is the product.** A factory's stations, their load and their agents appear as a line wherever flow matters. The Floor's andon panel is the one bold element; everything around it stays quiet.
+- **Each colour has one meaning everywhere** (see Colour). Colour is never the only signal: a word, an icon or a number says the same thing.
+- **Show it, don't write it.** Use a number with its target, a bar, a chip, a list or a timeline before a sentence. Insight text is one line. There are no paragraphs of explanation on working screens.
+- **People act where they read.** Approve, Deny, Reply and Add sit on the row or card that asks for them. One primary action per screen.
+- **Plain words, Goal's words.** Sentence case, plain verbs, and the vocabulary below. Name an agent by its role, never by a copy number.
 
-**Project:** Goal
-**Generated:** 2026-10-23 13:08:32
-**Category:** E-signature / Document Workflow
-**Design Dials:** Variance 4/10 (Balanced / Modern) | Motion 3/10 (Subtle) | Density 8/10 (Dense / Dashboard)
+## Colour
 
----
+Tokens keep their names across themes, and components use token names only. `apps/web/src/ui/raw-colors.test.ts` fails on a raw hex, `rgb()` or `hsl()`. No gradients, no decorative shadows.
 
-## Dark theme (Goal override, 2026-10-25)
-
-The app follows the device's color scheme by default, and a person can choose System, Light or Dark (account menu, Appearance). The dark values below are the same tokens redefined, so no component names a color: `apps/web/src/styles.css` defines them under `:root[data-theme="dark"]` and under `prefers-color-scheme: dark` for `:root:not([data-theme="light"])`. Meaning does not change: teal runs, amber is the constraint only, violet waits on you, rust is rework and loss, green is healthy or done. Every text pair meets 4.5:1 and every UI mark 3:1 (WCAG AA), measured against the surface it sits on.
-
-| Token | Light | Dark | Use and contrast (dark) |
+| Token | Light | Dark | Use |
 |---|---|---|---|
-| `--color-white` | `#FFFFFF` | `#0F161D` | Text on an ink fill: 15.2:1 on ink; on the status colors 6.9 to 9.8:1 |
-| `--color-shell` | `#EEF1EF` | `#0F161D` | Page background |
-| `--color-card` | `#F6F7F5` | `#18212A` | Cards |
-| `--color-surface` | `#FFFFFF` | `#1E2A35` | Items in cards, inputs: ink 12.2:1 |
-| `--color-control` | `#E3E7E5` | `#26323E` | Segmented controls: ink 10.9:1 |
-| `--color-control-hover` | `#D8DEDB` | `#2E3B48` | Hover on controls |
-| `--color-nav-hover` | `#E1E6E3` | `#223039` | Hover on rail icons |
-| `--color-ink` | `#1D2733` | `#E6ECEA` | Text, primary buttons, active nav: 13.6:1 on card, 15.2:1 on shell |
-| `--color-ink-soft` | `#3A4654` | `#C2CBC7` | Rail icons, secondary labels: 9.8:1 on card |
-| `--color-muted` | `#556270` | `#B0BBB6` | Secondary text: 8.2:1 on card; 5.7:1 on the run tint, 6.4 to 7.6:1 on the other tints |
-| `--color-faint` | `#9AA5A0` | `#8A9690` | Disabled text, scrollbars: 4.8:1 on surface |
-| `--color-rule` | `#CBD2CE` | `#75838C` | Input borders, dashed new squares: 4.2:1 on card, 3.7:1 on surface (UI 3:1) |
-| `--color-rule-strong` | `#6F7B77` | `#9AA6AE` | Hover borders, switch borders: 6.5:1 on card |
-| `--color-line` | `#DDE2DF` | `#2C3741` | Dividers (decorative; the text carries the meaning) |
-| `--color-hairline` | `#E3E7E5` | `#242E37` | Hairlines (decorative) |
-| `--color-run` | `#1F6F8B` | `#6CC0DC` | Running, actual, teal text: 7.9:1 on card; teal marks 3:1+ |
-| `--color-run-tint` | `#DCEEF3` | `#173F4D` | Background behind run states; the text on it is ink 9.5:1 |
-| `--color-run-hatch` | `#BFE0EA` | `#3A7A92` | Hatched teal fill (actual): 3.4:1 against card |
-| `--color-amber` | `#F0A202` | `#F5B21A` | The constraint (drum) only: mark 8.7:1 on card |
-| `--color-amber-tint` | `#FFF6E0` | `#3A2D0C` | Background of the constraint callout |
-| `--color-amber-line` | `#F2D58A` | `#6B5216` | Border on the amber tint (decorative) |
-| `--color-amber-ink` | `#8A5D00` | `#F5C75A` | Text on the amber tint: 8.5:1 |
-| `--color-you` | `#5B4BB7` | `#A99BEA` | Waiting on a human: 6.6:1 on card |
-| `--color-you-tint` | `#ECE9F8` | `#2A2647` | Waiting-on-you banners; the text on it is you-ink 9.0:1 |
-| `--color-you-line` | `#C9C1EE` | `#4B4290` | Border on the violet tint (decorative) |
-| `--color-you-ink` | `#4A3C9E` | `#CFC8F5` | Text on the violet tint: 9.0:1 |
-| `--color-rework` | `#B4441C` | `#F07F5C` | Rework, delays, losses, andon: 6.1:1 on card; rust stays apart from amber by hue and by its label |
-| `--color-rework-tint` | `#FBEFE9` | `#3D1F17` | Background of rework callouts |
-| `--color-rework-line` | `#EBC3B2` | `#6E3524` | Border on the rust tint (decorative) |
-| `--color-rework-ink` | `#8A3313` | `#F7A68D` | Text on the rust tint: 7.7:1 |
-| `--color-rework-hatch` | `#F1CDBE` | `#B45A38` | Hatched rust fill (delay, loss): 3.5:1 against card |
-| `--color-ok` | `#2E6B4E` | `#6FCB9C` | Healthy, done: 8.3:1 on card |
-| `--color-ok-tint` | `#E3EFE8` | `#173A2A` | Background behind healthy states |
-| `--color-ok-ink` | `#24563E` | `#8FDDB5` | Healthy text: 7.9:1 on the ok tint |
-| `--color-ok-dot` | `#2E8B5E` | `#4FBF86` | Status dots: 7.1:1 on card |
-| `--color-target` | `#8A958F` | `#8E9B95` | Hatched gray target and its tick: 5.6:1 on card |
-| `--color-shadow` | `#1D2733` | `#000000` | The tint of every shadow (`--shadow-*` mix it at their opacity) |
+| `--color-shell` | `#FFFFFF` | `#0E1120` | Page and content background |
+| `--color-sidebar` | `#F3F4F9` | `#13172A` | Sidebar and rail |
+| `--color-panel` | `#F7F8FC` | `#161A2F` | Quiet panels, board cells, table hover, segmented controls |
+| `--color-hover` | `#E9EBF4` | `#1E2340` | Hover on nav and icon buttons |
+| `--color-card` | `#FFFFFF` | `#0E1120` | Cards (white with a rule border, no fill change) |
+| `--color-line` | `#E3E6EF` | `#252A45` | Card borders, dividers |
+| `--color-rule` | `#CBD0DF` | `#3A4066` | Input and button borders, dashed "new" outlines |
+| `--color-ink` | `#14182B` | `#ECEEF7` | Text and headings |
+| `--color-ink-soft` | `#464D6A` | `#B7BCD4` | Secondary text, nav labels (8.3:1 on white) |
+| `--color-muted` | `#626986` | `#9096B3` | Meta text, captions (5.3:1 on white, 4.8:1 on the sidebar) |
+| `--color-run` | `#2742F5` | `#4A63F5` | Brand, primary buttons, links, running, the selected nav (white text on it 6.6:1) |
+| `--color-run-ink` | `#1B33C9` | `#A3B2FF` | Link hover; text on the run tint |
+| `--color-run-tint` | `#E8ECFF` | `#1D2556` | Selected nav item, "running" chips, the selection |
+| `--color-run-soft` | `#9AA6FF` | `#5B6BC9` | Secondary data bars (past weeks, other stations) |
+| `--color-you` | `#7B3FE4` | `#9061F5` | Waiting on a person: counts, approve buttons in Needs you (white text 5.7:1) |
+| `--color-you-tint` | `#F1EBFE` | `#2A1E4F` | Questions, selected Needs you row |
+| `--color-you-ink` | `#5A24B8` | `#CDB4FF` | Text on the violet tint |
+| `--color-rework` | `#D63A1F` | `#E2512F` | Sent back, andon, loss, destructive actions (white text 4.7:1) |
+| `--color-rework-tint` | `#FDECE8` | `#3B1C16` | Background of sent-back and alert chips |
+| `--color-rework-ink` | `#AE2C14` | `#FFA08A` | Text in red (5.7:1 on its tint) |
+| `--color-amber` | `#FFC21A` | `#FFC21A` | The constraint only: its tag, ring and busy bar (ink text on it) |
+| `--color-amber-tint` | `#FFF4D1` | `#3A3013` | The expedite lane and constraint callouts |
+| `--color-amber-ink` | `#6E4B00` | `#FFD666` | Text on the amber tint |
+| `--color-ok` | `#0FA36B` | `#22C17F` | Done and healthy marks (bars, dots; never small text) |
+| `--color-ok-tint` | `#E1F5EB` | `#10301F` | "Line running", "merged" chips |
+| `--color-ok-ink` | `#0A7A4F` | `#62DDA5` | Healthy text, positive deltas |
+| `--color-andon` | `#121633` | `#090C1A` | The andon panel (the line, now) |
+| `--color-andon-raised` | `#1C2147` | `#151A36` | Station nodes on the andon panel |
+| `--color-andon-line` | `#262C58` | `#272D58` | Dividers on the andon panel |
+| `--color-andon-text` | `#C3C8EA` | `#C3C8EA` | Secondary text on the andon panel (9.5:1) |
 
-Rules that go with the table:
+**Factory colours** are a factory's identity on its letter badge only (white letter, at least 4.5:1). A factory picks one when it is created: cobalt `#2742F5`, teal `#0E8576`, orange `#C24E17`, green `#1F7A3A`, ocean `#0B6E99`, ochre `#8A5A00`, slate `#5B6170`, indigo `#3F3AB8`. Pink is never used.
 
-- The selection highlight is `run-tint` (ink on it 9.5:1), not `run-hatch`, so selected text meets 4.5:1 in both themes.
-- Native controls and scrollbars follow `color-scheme`, set from the choice by `apps/web/public/theme.js` before first paint and by `apps/web/src/shared/theme.ts` afterwards.
-- `meta theme-color` has a light and a dark variant by the device's scheme (`apps/web/index.html`).
-- No raw color (hex, `rgb()`, `hsl()`) in a component: `apps/web/src/ui/raw-colors.test.ts` fails on one. The Monaco theme is the one allow-listed exception until its own item maps it to these tokens.
+Rules:
+- Running is cobalt. Waiting on you is violet. Sent back, andon and destructive are red. The constraint is yellow, and nothing else is. Done is green.
+- A delta's arrow and sign carry its direction. Green or red only says whether that direction is good.
+- Charts: the current period in `run`, past periods in `run-soft`, the target as a dashed `muted` line with its label, and the constraint in `amber`. Categorical series (where work came from) use the factory colours in order.
+- The Goal mark is a cobalt square holding a white G that ends in a yellow node: a line arriving at its station. It is the product's sign. It sits at the top of the sidebar and on sign-in and onboarding.
 
----
+## Typography
 
-## Global Rules
+- **Archivo** (variable, `wdth` 62–125, `wght` 100–900), self-hosted with `@fontsource-variable/archivo` (the `wdth` axis file), for all text. UI text is at width 100%. Page titles are at 108%, and numbers and factory letters at 112%, which gives the factory-signage feel.
+- **JetBrains Mono** (`@fontsource-variable/jetbrains-mono`) only for code, file paths, commands, YAML and tool names. It is never used for labels.
+- Tabular numerals everywhere (`font-variant-numeric: tabular-nums`).
+- Scale:
+  - 12px: meta and captions.
+  - 13–13.5px: secondary lines and tables.
+  - 14px: body and controls.
+  - 16px at weight 620: section headings.
+  - 22px: detail titles.
+  - 26px at weight 650, letter-spacing −0.015em: page titles.
+  - 28px at weight 600: KPI numbers.
+- Weights: 520–580 for nav and buttons, 600–650 for titles and emphasis.
+- Never ALL CAPS labels, never eyebrow labels above headings, never "A · B" strings.
 
-### Color Palette
+## Shape, space and motion
 
-| Role | Hex | CSS Variable |
-|------|-----|--------------|
-| Primary | `#1E3A5F` | `--color-primary` |
-| On Primary | `#FFFFFF` | `--color-on-primary` |
-| Secondary | `#2563EB` | `--color-secondary` |
-| On Secondary | `#FFFFFF` | `--color-on-secondary` |
-| Accent/CTA | `#16A34A` | `--color-accent` |
-| On Accent/CTA | `#000000` | `--color-on-accent` |
-| Background | `#F8FAFC` | `--color-background` |
-| Foreground | `#0F172A` | `--color-foreground` |
-| Card | `#FFFFFF` | `--color-card` |
-| Card Foreground | `#0F172A` | `--color-card-foreground` |
-| Muted | `#E9EEF5` | `--color-muted` |
-| Muted Foreground | `#475569` | `--color-muted-foreground` |
-| Border | `#CBD5E1` | `--color-border` |
-| Destructive | `#DC2626` | `--color-destructive` |
-| On Destructive | `#FFFFFF` | `--color-on-destructive` |
-| Ring | `#1E3A5F` | `--color-ring` |
+- Radii:
+  - 18px for the andon panel;
+  - 14px for cards, popovers, dialogs and the KPI tiles;
+  - 10px for item cards and board cells;
+  - 8px for buttons, inputs and nav items;
+  - 6px for chips and badges;
+  - 50% only for dots, avatars and station nodes.
+- Spacing: a 4px base, with 8, 12, 16, 20 and 28px between blocks. Content padding is 22px 28px on desktop and 16px on phones.
+- Elevation: borders, not shadows. Popovers and dialogs get one shadow (`0 20px 44px -18px` of ink at 40%).
+- Motion: the only ambient motion is the pulsing dot on running things (1.6s ease). Everything else moves because someone acted (opening, expanding, confirming), at 150–250ms. `prefers-reduced-motion` turns all of it off.
 
-**Color Notes:** Trust navy + signature green + audit trail
+## The shell
 
-### Typography
+- The app fills the viewport. The sidebar is pinned left at full height, and the content sits beside it. There is no framed shell and no outer margin.
+- **Sidebar** (256px; collapses to a 60px rail):
+  - **Top row:**
+    - The Goal mark and the organization's name open the **organization menu**:
+      - the organizations, with factory count and role (organizations have no image or letter square);
+      - Create organization;
+      - Members and roles, Spend and billing, Models and policies, API keys, Organization settings.
+    - Search (⌘K) and Collapse sit at the right of the row.
+  - **New item:** a cobalt button with the shortcut C. It opens the composer with a factory picker.
+  - **Organization-wide:** Home, Needs you (violet count), Runs, Connections, Credentials, Knowledge.
+  - **Factories:**
+    - The section label has a quiet `+` (New factory). Each factory is a collapsible group: its letter badge, its name, and a violet count (needs you) or a red count or dot (andon).
+    - Only the open factory is expanded. Its pages are Floor, Board, Items, Agents, Intake, Jonah, Definition and Settings, as plain text under a thin guide line. The current page is a white chip.
+  - **Bottom:** "Spend this week" with a bar (it opens Spend and billing), then the person: avatar, name, role.
+    - The **account menu** holds:
+      - the name with a role pill and the GitHub identity;
+      - Theme (Auto, Light, Dark) inline;
+      - Profile, Notifications, Personal tokens, Connected apps, Keyboard shortcuts;
+      - Sign out and Sign out everywhere (red).
+- **Collapsed rail:** the Goal mark, expand, New item, the organization icons, the factory badges with their counts, `+`, a spend ring and the avatar.
+- **Top bar** (56px):
+  - On the left, a breadcrumb starting with the factory badge (Software / Intake / Flaky test on main).
+  - On the right, the page's actions, with the primary one last.
+- **Search** turns the sidebar's top row into an input. Results are grouped (Items, Pages, Actions) and use the arrow keys.
+- **Phones** (below 768px):
+  - a top bar with the Goal mark (which opens the same sidebar as a drawer), the page title and the page's actions;
+  - a bottom tab bar: Needs you, Floor, Board, Items, More.
+  - Primary buttons sit above the tab bar. Hover-only controls are always visible on touch. Targets are at least 44px.
 
-- **Heading Font:** Fira Code
-- **Body Font:** Fira Sans
-- **Mood:** dashboard, data, analytics, code, technical, precise
-- **Google Fonts:** [Fira Code + Fira Sans](https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap)
+## Vocabulary
 
-**CSS Import:**
-```css
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
-```
+| Say | Not | Meaning |
+|---|---|---|
+| New item | New chat, New request | The one way a person adds work; a factory picker chooses where |
+| Needs you | Inbox | What waits on a person, typed **Approval** (an agent's write outside its item), **Decision** (a gate or rework limit), **Question** (an agent asks) and **Alert** (andon, budget, a refused trigger event) |
+| Intake | Automations | Where a factory's work comes from |
+| Trigger | Automation | An event, schedule or webhook that creates a work item of a type at a station, with "only if" checks and limits |
+| Agents | Org chart | The line with each station's agents |
+| Jonah | Self-improvement | The learning loop: **Proposals** (definition changes for a person to approve), **Judges** (LLM judges that score sampled runs), **Evals** (fixed cases), **Bake-offs** (configurations compared on cost and quality) |
+| Credentials | Secrets | Stored secrets that connections and agents use |
+| Connections | MCPs and apps, Integrations | Code hosts, apps, MCP servers and model providers |
+| Hands-off | Autonomy | The share of items merged with no human touch |
+| Sent back | Rejected | A gate returned the item for rework |
+| frontend-engineer | frontend-engineer-1 | Agents are named by role; copies show as slots or counts |
 
-### Spacing Variables
+Keep using Floor, Board, Items, line, station, lane, WIP, buffer, expedite lane, constraint, andon, assembly, part, touch and definition, as the [glossary](../reference/glossary.md) defines them.
 
-*Density: 8/10 — Dense / Dashboard*
+## Components
 
-| Token | Value | Usage |
-|-------|-------|-------|
-| `--space-xs` | `2px` / `0.125rem` | Tight gaps |
-| `--space-sm` | `4px` / `0.25rem` | Icon gaps, inline spacing |
-| `--space-md` | `8px` / `0.5rem` | Standard padding |
-| `--space-lg` | `12px` / `0.75rem` | Section padding |
-| `--space-xl` | `16px` / `1rem` | Large gaps |
-| `--space-2xl` | `24px` / `1.5rem` | Section margins |
-| `--space-3xl` | `32px` / `2rem` | Hero padding |
+- **Buttons:** 34px tall (30px small).
+  - Primary: cobalt fill with white text.
+  - Secondary: white with a rule border.
+  - Danger: red text, or a red fill for the final confirmation.
+  - Approve inside Needs you: violet fill.
+  - Icon buttons: 32px, with an `aria-label`.
+- **Chips:** 22px tall (28px large), 6px radius, a tint fill and ink text. Neutral chips are panel-coloured with a line border.
+  - Status chips have a dot: running (cobalt, pulsing), needs you (violet), sent back (red), constraint and expedite (yellow), done (green).
+- **Segmented control:** a panel track with a white raised selected segment. Used for time windows, views and filters with counts.
+- **KPI tile:**
+  - a label, the number at 28px with its unit at 14px;
+  - a bar against the target, or a sparkline;
+  - a meta line: the target on the left, the signed delta on the right.
+  - Six tiles in a row on the Floor.
+- **Andon panel:** a navy panel, "The line, now".
+  - Each station is a 54px node on a cobalt track. Its number is the items at the station.
+  - The constraint gets a yellow ring and a Constraint tag; Done gets a check.
+  - Under each node: the name, what waits, the agent slots (14px squares: cobalt for working, violet for waiting on you, an outline for free), and its busy share.
+  - A footer gives in progress, release, the expedite lane and the andon state.
+- **Board column:** a header card with the name, "n of WIP", a segmented WIP meter, the agent count and busy share. The constraint's header has a yellow border.
+  - The expedite lane is a yellow row above the standard lane.
+  - Build splits into Ready (buffer) and In progress.
+- **Item card:**
+  - the ref, the work type and lane chips, the age;
+  - the title, clamped to two lines;
+  - the assembly line ("Usage and budgets", part pips, "2 of 4");
+  - the agent (role) with the cost;
+  - one state line or chip.
+  - A card waiting on you has a violet ring.
+- **Run timeline:**
+  - Each run is a card: the station chip, the agent and the outcome chip, then duration, turns and cost.
+  - Events are rows: time, a 22px icon tile, the text and a meta column on the right. Red and green tiles mark failed and passed checks; violet marks people.
+- **Needs you list:**
+  - Each row has the factory badge, the type in its colour, the title, the item and station, and the age. The selected row is violet-tinted with a 3px violet edge.
+  - The detail shows exactly what will happen (the comment text, the tool, where, why it asks).
+  - The action bar holds Approve (A), "Edit, then approve", Deny (D), and an optional standing approval.
+- **Sentence builder** (triggers): rows of inline token buttons.
+  - "When [GitHub] [a check run fails] on [main ×] in [repo ×]";
+  - then "Only if", "Create" and "Limits" sections;
+  - template variables as violet mono tokens.
+- **Two-pane picker** (connections, triggers, credentials): a searchable catalog on the left, the chosen item's details and its factory scope on the right. On phones it is one pane with Back.
+- **Definition editor:** a file tree, tabs (a preview tab in italics), a YAML editor with schema errors and a problems panel, a Form/YAML switch, and a draft banner with Review changes and Publish.
+- **Stepper** (an item's progress, onboarding): circles joined by a track. Done ones are cobalt with a check; the current one has a violet ring when it waits on you.
+- **Empty states:** a line icon, one sentence that says what to do, and one action.
 
-### Shadow Depths
+## Screens
 
-| Level | Value | Usage |
-|-------|-------|-------|
-| `--shadow-sm` | `0 1px 2px rgba(0,0,0,0.05)` | Subtle lift |
-| `--shadow-md` | `0 4px 6px rgba(0,0,0,0.1)` | Cards, buttons |
-| `--shadow-lg` | `0 10px 15px rgba(0,0,0,0.1)` | Modals, dropdowns |
-| `--shadow-xl` | `0 20px 25px rgba(0,0,0,0.15)` | Hero images, featured cards |
+The canvas's "Revamp" pages hold the screens, one page per flow:
 
----
+- **Get started:** sign up, the email code, then eight steps:
+  1. name the organization;
+  2. connect GitHub and choose repositories;
+  3. the first factory from a template;
+  4. shape the line;
+  5. budget and targets;
+  6. starter triggers;
+  7. invite people;
+  8. the first item, running end to end.
 
-## Component Specs
+  The flow ends on the new factory's Floor with a setup checklist.
+- **Daily work:** Home (every factory), Floor, Board, Work item, Needs you, Items, Runs.
+- **Intake:** Intake, New trigger, Trigger, Webhooks.
+- **Build a factory:** Agents, Agent, Definition, Review and publish, Factory settings.
+- **Jonah:** Overview, Proposal, Judges, Judge, Evals, Bake-off.
+- **Connections and knowledge:** Connections, Add a connection, Credentials, New credential, Knowledge.
+- **Organization:** Members and roles, Spend and billing, Models and policies, API keys, Organization settings.
+- **Sidebar and account:** the sidebar states (collapsed, search, organization menu, account menu), Account, and approving an app or a CLI sign-in.
+- **Mobile:** Sign in, the drawer, Needs you, Approve, Floor, Board, Work item, Intake.
 
-### Buttons
+Buttons for features that are not built yet appear on these screens. They are described in the item that builds them, never as working features:
+- Watch live;
+- Trace and Teardown on an item;
+- Always allow on an approval;
+- trying a trigger on a past event;
+- a model check in a trigger's "Only if";
+- Add a build agent from the constraint;
+- Bake off this agent.
 
-```css
-/* Primary Button */
-.btn-primary {
-  background: #16A34A;
-  color: #000000;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
+## Accessibility and checks
 
-.btn-primary:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-/* Secondary Button */
-.btn-secondary {
-  background: transparent;
-  color: #1E3A5F;
-  border: 2px solid #1E3A5F;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-```
-
-### Cards
-
-```css
-.card {
-  background: #F8FAFC;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: var(--shadow-md);
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-
-.card:hover {
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-2px);
-}
-```
-
-### Inputs
-
-```css
-.input {
-  padding: 12px 16px;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  font-size: 16px;
-  transition: border-color 200ms ease;
-}
-
-.input:focus {
-  border-color: #1E3A5F;
-  outline: none;
-  box-shadow: 0 0 0 3px #1E3A5F20;
-}
-```
-
-### Modals
-
-```css
-.modal-overlay {
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
-}
-
-.modal {
-  background: white;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: var(--shadow-xl);
-  max-width: 500px;
-  width: 90%;
-}
-```
-
----
-
-## Style Guidelines
-
-**Style:** Minimalism & Swiss Style
-
-**Keywords:** Clean, simple, spacious, functional, white space, high contrast, geometric, sans-serif, grid-based, essential
-
-**Best For:** Enterprise apps, dashboards, documentation sites, SaaS platforms, professional tools
-
-**Key Effects:** Subtle hover (200-250ms), smooth transitions, sharp shadows if any, clear type hierarchy, fast loading
-
-### Page Pattern
-
-**Pattern Name:** Enterprise Gateway
-
-- **Conversion Strategy:** Path selection (I am a...). Mega menu navigation. Trust signals prominent. Provide pause/stop for video and rotating logos; stop on focus and reduced motion. Logo carousel controls must be keyboard operable; pause moving media offscreen/hidden and render a static final state under reduced motion.
-- **CTA Placement:** Contact Sales (Primary) + Login (Secondary)
-- **Section Order:** Hero (Video/Mission) > Solutions by Industry > Solutions by Role > Client Logos > Contact Sales
-
----
-
-## Motion
-
-**Scroll Reveal** (Subtle) — Trigger: scroll (viewport enter) | Duration: 300-400ms | Easing: `power1.out`
-
-```js
-gsap.from(el, { opacity: 0, y: 12, duration: 0.35, ease: 'power1.out', scrollTrigger: { trigger: el, start: 'top 90%', toggleActions: 'play none none reverse' } });
-```
-
-**Framework notes:** Requires the ScrollTrigger plugin registered once via gsap.registerPlugin(ScrollTrigger); Use matchMedia('(prefers-reduced-motion: reduce)') to skip non-essential motion and render the final state immediately
-
-- ✅ Keep the y offset small (8-16px) so it reads as a fade, not a slide
-- ❌ Don't reveal below-the-fold content needed for SEO/crawlers as invisible-by-default without a no-JS fallback
-- ⚡ toggleActions 'play none none reverse' avoids re-triggering on every scroll direction change
-
----
-
-## Anti-Patterns (Do NOT Use)
-
-- ❌ Confusing signing flow
-- ❌ weak audit trail
-- ❌ hidden consent
-
-### Additional Forbidden Patterns
-
-- ❌ **Emojis as icons** — Use SVG icons (Heroicons, Lucide, Simple Icons)
-- ❌ **Missing cursor:pointer** — All clickable elements must have cursor:pointer
-- ❌ **Layout-shifting hovers** — Avoid scale transforms that shift layout
-- ❌ **Low contrast text** — Maintain 4.5:1 minimum contrast ratio
-- ❌ **Instant state changes** — Always use transitions (150-300ms)
-- ❌ **Invisible focus states** — Focus states must be visible for a11y
-
----
-
-## Pre-Delivery Checklist
-
-Before delivering any UI code, verify:
-
-- [ ] No emojis used as icons (use SVG instead)
-- [ ] All icons from consistent icon set (Heroicons/Lucide)
-- [ ] `cursor-pointer` on all clickable elements
-- [ ] Hover states with smooth transitions (150-300ms)
-- [ ] Light mode: text contrast 4.5:1 minimum
-- [ ] Focus states visible for keyboard navigation
-- [ ] `prefers-reduced-motion` respected
-- [ ] Responsive: 375px, 768px, 1024px, 1440px
-- [ ] No content hidden behind fixed navbars
-- [ ] No horizontal scroll on mobile
+- WCAG 2.2 AA in both themes. Text is at least 4.5:1 (3:1 at 24px and up), and controls are at least 3:1. Colours that must be told apart also differ in lightness.
+- Use real elements: `<button>`, `<a href>`, `<input>` with `<label>`, and `role="switch"` on toggles. Focus rings are 2px cobalt with a 2px offset. Every drag has a Move menu, and every keyboard shortcut is shown where its action is.
+- Lay out phone-first and check 375, 768 and 1440px. A wide table scrolls in its own box, and the page never scrolls sideways.
+- Run the ui-ux-pro-max pre-delivery checklist on every visual change.
