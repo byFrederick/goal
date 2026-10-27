@@ -235,6 +235,12 @@ export function createWebhooks({ clock, factories }: Deps): MockWebhooks {
         send(res, 200, view(found));
         return true;
       }
+      if (tail === '' && method === 'DELETE') {
+        // Its address stops accepting requests, and its deliveries go with it.
+        list.splice(list.indexOf(found), 1);
+        send(res, 204, undefined);
+        return true;
+      }
       if (tail === '/deliveries' && method === 'GET') {
         const deliveries = [...found.deliveries]
           .sort((a, b) => b.received_at.localeCompare(a.received_at))
