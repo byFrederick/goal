@@ -108,7 +108,7 @@ test('signing in by code returns to the page that asked, and the session stays o
   await expect(account.getByText('F. Cruz', { exact: true })).toBeVisible();
   await expect(account.getByText('Owner', { exact: true })).toBeVisible();
   await expect(account.getByText('Platform admin')).toBeVisible();
-  await expect(account.getByRole('button', { name: 'Profile' })).toBeVisible();
+  await expect(account.getByRole('link', { name: 'Profile' })).toBeVisible();
   // Pages not built yet are listed, disabled, and do nothing when chosen.
   for (const name of ['Notifications', 'Connected apps', 'Keyboard shortcuts']) {
     await expect(account.getByRole('button', { name: new RegExp(`^${name}`) })).toHaveAttribute(
@@ -296,8 +296,8 @@ test('edit name, sign out everywhere, sign out', async ({ page }) => {
     return page.getByRole('dialog', { name: 'Account' });
   };
 
-  // Profile opens the account page, where the name is edited and saved from the top bar.
-  await (await openAccount('FC, F. Cruz')).getByRole('button', { name: 'Profile' }).click();
+  // Profile opens the account page, where the name is edited and saved with Save changes.
+  await (await openAccount('FC, F. Cruz')).getByRole('link', { name: 'Profile' }).click();
   await expect(page).toHaveURL(/\/account$/);
   await expect(page.getByLabel('Name', { exact: true })).toHaveValue('F. Cruz');
   await page.getByLabel('Name', { exact: true }).fill('  ');
