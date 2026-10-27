@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -110,6 +111,16 @@ func inOrg(t *testing.T) context.Context {
 }
 
 var t0 = time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
+
+// testBoxSizes are the harness's sandbox sizes, as the docker backend's; testEgress its one egress
+// address (GOAL_EGRESS_ADDRESSES).
+var testBoxSizes = []domain.BoxSize{
+	{Size: domain.SandboxSmall, VCPUs: 1, MemoryBytes: 2 << 30},
+	{Size: domain.SandboxMedium, VCPUs: 2, MemoryBytes: 4 << 30},
+	{Size: domain.SandboxLarge, VCPUs: 4, MemoryBytes: 8 << 30},
+}
+
+const testEgress = "203.0.113.0/24"
 
 type harness struct {
 	srv      *httptest.Server
@@ -457,6 +468,8 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
 		// GitLab's code host lists no repositories, as the gitlab adapter.
 		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()},
 		Knowledge: h.kb, KnowledgeUploads: h.uploads, KnowledgeSearch: knowledge.NewSearcher(h.kb, nil, nil), UploadMaxBytes: testUploadMax, Clock: h.clock,
+		OrgPolicies: porttest.NewOrgPolicies([]string{"claude-opus-5-5", "claude-haiku-5-5"}, tenancy, h.clock.Now),
+		BoxSizes:    testBoxSizes, EgressAddresses: []netip.Prefix{netip.MustParsePrefix(testEgress)},
 	}
 	if in != nil {
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity
