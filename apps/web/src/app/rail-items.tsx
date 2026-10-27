@@ -1,10 +1,11 @@
-// The pieces the phone's top row shares: one stop of the arrow-key movement, a factory's square and
-// New factory (the account is account-menu.tsx, the organization's mark is org-mark.tsx). The
-// sidebar of 768 px and up is sidebar.tsx.
+// The pieces the phone's top row and the collapsed rail share: one stop of the arrow-key movement, a
+// factory's square and New factory (the account is account-menu.tsx, the organization's mark is
+// org-mark.tsx). The sidebar of 768 px and up is sidebar.tsx; its collapsed rail is sidebar-rail.tsx.
 import { Link, useRouterState } from '@tanstack/react-router';
 import { type KeyboardEvent, type ReactNode, useCallback } from 'react';
 import type { OrgSummary } from '../api/types';
 import { Mark } from '../ui/mark';
+import { Tooltip } from '../ui/tooltip';
 import type { FactorySquare } from './factory-squares';
 import { type RailAxis, railFocusTarget } from './rail-focus';
 import { newFactoryScreen } from './screens';
@@ -34,10 +35,21 @@ export function useRailKeys(axis: RailAxis) {
   );
 }
 
-/** A factory's square: its floor, current (ink, aria-current) on any of its pages. */
-export function FactorySquareLink({ org, square }: { org: OrgSummary; square: FactorySquare }) {
+/**
+ * A factory's square: its floor, current (ink, aria-current) on any of its pages. `tip` shows the
+ * square's name and status on hover and focus, for the collapsed rail; the phone's row has none.
+ */
+export function FactorySquareLink({
+  org,
+  square,
+  tip = false,
+}: {
+  org: OrgSummary;
+  square: FactorySquare;
+  tip?: boolean;
+}) {
   const { factory, mark, attention } = square;
-  return (
+  const link = (
     <Link
       to="/o/$org/f/$factory"
       params={{ org: org.slug, factory: factory.name }}
@@ -57,12 +69,27 @@ export function FactorySquareLink({ org, square }: { org: OrgSummary; square: Fa
       )}
     </Link>
   );
+  return tip ? (
+    <Tooltip label={factory.name} detail={square.detail}>
+      {link}
+    </Tooltip>
+  ) : (
+    link
+  );
 }
 
-/** New factory: the dashed square, solid and ink while the wizard is open. */
-export function NewFactoryLink({ org, children }: { org: OrgSummary; children: ReactNode }) {
+/** New factory: the dashed square, solid and ink while the wizard is open. `tip` as for FactorySquareLink. */
+export function NewFactoryLink({
+  org,
+  children,
+  tip = false,
+}: {
+  org: OrgSummary;
+  children: ReactNode;
+  tip?: boolean;
+}) {
   const open = useIsWizard();
-  return (
+  const link = (
     <Link
       to={newFactoryScreen.to}
       params={{ org: org.slug, step: 'start' }}
@@ -75,6 +102,7 @@ export function NewFactoryLink({ org, children }: { org: OrgSummary; children: R
       </Mark>
     </Link>
   );
+  return tip ? <Tooltip label={newFactoryScreen.label}>{link}</Tooltip> : link;
 }
 
 /** Whether a page of the New factory wizard is open (any of its steps). */

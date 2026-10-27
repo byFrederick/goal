@@ -113,7 +113,7 @@ export function AccountProvider({ org, children }: { org: OrgSummary; children: 
  * The account's trigger and panel: the person's name and role at the bottom of the sidebar (the panel
  * opens above it), or the avatar in the phone's top row (the panel opens below).
  */
-export function AccountMenu({ org, size }: { org: OrgSummary; size: 'sidebar' | 'phone' }) {
+export function AccountMenu({ org, size }: { org: OrgSummary; size: 'sidebar' | 'rail' | 'phone' }) {
   const { person } = useAccount();
   const [open, setOpen] = useState(false);
   const name = person ? displayName(person) : 'Local user';
@@ -133,13 +133,18 @@ export function AccountMenu({ org, size }: { org: OrgSummary; size: 'sidebar' | 
             {roleName(org.role) ? <span className="truncate text-meta text-muted">{roleName(org.role)}</span> : null}
           </span>
         </PopoverTrigger>
+      ) : size === 'rail' ? (
+        // The collapsed rail is a column at the window's left edge: the panel opens to its right.
+        <PopoverTrigger aria-label={label} className={railItemClass}>
+          <Avatar initials={initials} size="sidebar" />
+        </PopoverTrigger>
       ) : (
         <PopoverTrigger aria-label={label} className={railItemClass} {...railItem}>
           <Avatar initials={initials} size="phone" />
         </PopoverTrigger>
       )}
       <PopoverContent
-        side={size === 'sidebar' ? 'top' : 'bottom'}
+        side={size === 'sidebar' ? 'top' : size === 'rail' ? 'right' : 'bottom'}
         align={size === 'sidebar' ? 'start' : 'end'}
         aria-label="Account"
       >

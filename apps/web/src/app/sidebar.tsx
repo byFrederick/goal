@@ -1,26 +1,29 @@
 // The sidebar (≥ 768 px, MASTER.md "The shell"): 256 px, pinned left at full height beside the content
 // on every organization page and on the New factory wizard. Top to bottom: the Goal mark and the
-// organization's name (its menu), Search and Collapse (not built yet); New item (not built yet); the
+// organization's name (its menu), Search (not built yet) and Collapse (the 60 px rail: sidebar-rail.tsx); New item (not built yet); the
 // organization-wide pages; Factories (sidebar-factories.tsx); and at the bottom the spend this week and
 // the person (account-menu.tsx). Below 768 px the top row and the tab bar take its place (phone-chrome.tsx).
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ChevronsUpDown, PanelLeft, Plus, Search } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { attentionQuery, overviewQuery } from '../api/queries';
 import type { FactoryOverviewList, OrgSummary } from '../api/types';
 import { useConnectionTrouble } from '../shared/connections';
 import { formatUsdCompact } from '../shared/format';
 import { useOrgGrants } from '../shared/org';
+import { useSidebarCollapsed } from '../shared/sidebar-choice';
 import { Count } from '../ui/count';
 import { GoalMark } from '../ui/goal-mark';
 import { Menu, MenuTrigger } from '../ui/menu';
 import { NotAvailable } from '../ui/not-available';
+import { Tooltip } from '../ui/tooltip';
 import { AccountMenu } from './account-menu';
 import { CreateOrgDialog } from './create-org-dialog';
 import { OrgMenuContent } from './org-menu';
 import { screensFor, sidebarOrgScreens } from './screens';
 import { FactoryGroups, rowClass } from './sidebar-factories';
+import { SidebarRail } from './sidebar-rail';
 
 const iconProps = { size: 18, strokeWidth: 1.5, 'aria-hidden': true } as const;
 
@@ -33,6 +36,26 @@ export function Sidebar({ org }: { org: OrgSummary }) {
   const overview = useQuery(overviewQuery(org.id));
   const trouble = useConnectionTrouble(org.id);
   const busy = attention.isPending || overview.isPending;
+  const [collapsed, setCollapsed] = useSidebarCollapsed();
+  // The control that was pressed hands focus to its counterpart, so the keyboard does not fall to the page.
+  const focus = useRef<'rail' | 'top' | null>(null);
+
+  if (collapsed) {
+    return (
+      <SidebarRail
+        org={org}
+        busy={busy}
+        waiting={attention.data?.waiting_on_you ?? 0}
+        trouble={trouble}
+        overview={overview.data}
+        focusOnMount={focus.current === 'rail'}
+        onExpand={() => {
+          focus.current = 'top';
+          setCollapsed(false);
+        }}
+      />
+    );
+  }
 
   return (
     <nav
@@ -41,7 +64,14 @@ export function Sidebar({ org }: { org: OrgSummary }) {
       className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col overflow-y-auto border-r border-line bg-sidebar px-2 pt-2 pb-3 md:flex"
     >
       {busy ? <span className="sr-only">Loading</span> : null}
-      <SidebarTop org={org} />
+      <SidebarTop
+        org={org}
+        focusOnMount={focus.current === 'top'}
+        onCollapse={() => {
+          focus.current = 'rail';
+          setCollapsed(true);
+        }}
+      />
       <NewItem />
       <ul className="m-0 mt-2 flex list-none flex-col gap-1 p-0">
         {screensFor(sidebarOrgScreens, can).map((screen) => (
@@ -61,12 +91,24 @@ export function Sidebar({ org }: { org: OrgSummary }) {
   );
 }
 
-/** The organization's name opens its menu; Search and Collapse are not built yet (ADR 0016, decision 4). */
-function SidebarTop({ org }: { org: OrgSummary }) {
+/** The organization's name opens its menu; Search is not built yet (ADR 0016, decision 4). */
+function SidebarTop({
+  org,
+  focusOnMount,
+  onCollapse,
+}: {
+  org: OrgSummary;
+  focusOnMount: boolean;
+  onCollapse: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const navigating = useRef(false);
+  const collapse = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (focusOnMount) collapse.current?.focus();
+  }, [focusOnMount]);
 
   return (
     <div className="flex items-center gap-1">
@@ -94,11 +136,11 @@ function SidebarTop({ org }: { org: OrgSummary }) {
           <Search {...iconProps} />
         </button>
       </NotAvailable>
-      <NotAvailable>
-        <button type="button" aria-label="Collapse sidebar" className={iconButton}>
+      <Tooltip label="Collapse sidebar">
+        <button ref={collapse} type="button" aria-label="Collapse sidebar" onClick={onCollapse} className={iconButton}>
           <PanelLeft {...iconProps} />
         </button>
-      </NotAvailable>
+      </Tooltip>
       <CreateOrgDialog open={creating} onOpenChange={setCreating} returnFocus={trigger} />
     </div>
   );
