@@ -97,6 +97,18 @@ describe('invalidationsFor an item event', () => {
     expect(stale.filter((k) => k[1] === labs)).toEqual([]);
   });
 
+  test.each(['tool_call', 'tool_result', 'agent_message', 'approved'])(
+    'refreshes the organization runs page on a %s event, run progress included',
+    async (kind) => {
+      const client = cache();
+      client.setQueryData(keys.runs(acme, { status: 'running' }), {});
+      client.setQueryData(keys.runs(labs, {}), {});
+      const stale = await staleAfter(client, invalidationsFor(acme, event(kind)));
+
+      expect(stale).toContainEqual(keys.runs(acme, { status: 'running' }));
+      expect(stale.filter((k) => k[1] === labs)).toEqual([]);
+    },
+  );
   test("a milestone event re-reads the factory's activity, and a tool call does not (its feed lists no run events)", async () => {
     expect(invalidationsFor(acme, event('moved'))).toContainEqual(keys.activity(acme, goal));
     expect(invalidationsFor(acme, event('tool_call'))).not.toContainEqual(keys.activity(acme, goal));

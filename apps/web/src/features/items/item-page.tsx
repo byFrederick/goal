@@ -1,13 +1,12 @@
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
-import { Link, useParams } from '@tanstack/react-router';
+import { Link, useParams, useSearch } from '@tanstack/react-router';
 import { ChevronLeft, Eye, LayoutGrid } from 'lucide-react';
-import { type ReactNode, useMemo, useState } from 'react';
-import { eventsQuery, itemQuery, runsQuery } from '../../api/queries';
-import type { Item, Station } from '../../api/types';
+import { useMemo, useRef, useState } from 'react';
+import { eventsQuery, inboxQuery, itemQuery, itemRunsQuery } from '../../api/queries';
+import type { Station } from '../../api/types';
 import { usePhone } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
 import { factoryTitle, itemKey, refParam, useFactory, useFactoryParams } from '../../shared/factory';
-import { humanize } from '../../shared/format';
 import { type ItemControls, ItemDecisions } from '../../shared/item-actions';
 import { pausedNow, pullRequestsOf } from '../../shared/item-state';
 import { useOrg } from '../../shared/org';
@@ -17,46 +16,32 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { NotAvailable } from '../../ui/not-available';
 import { Stepper } from '../../ui/stepper';
+import { ItemTabs } from './item-tabs';
 import { NoteComposer } from './note-composer';
 import { OutputsCard } from './outputs';
+import { QuestionCard } from './question-card';
 import { CostCard, DetailsCard, OverlapsCard, RulesCard } from './side-cards';
 import { noFlow, stepsOf } from './steps';
-import { activeRun, buildTrace, latestToolCalls, noteRecipient, runRole, type Trace } from './timeline';
+import { activeRun, buildTrace, criteriaOf, editedFiles, latestToolCalls, runRole, type Trace } from './timeline';
 import { TouchesCard } from './touches-card';
-import { ToolRow, TraceList } from './trace-view';
+import { EventList, type TimelineStatus, ToolRow, TraceList } from './trace-view';
 
-function TraceCard({
-  item,
-  trace,
-  className,
-  children,
-}: {
-  item: Item;
-  trace: Trace;
-  className?: string;
-  children?: ReactNode;
-}) {
-  const run = item.state === 'in_progress' ? activeRun(trace) : undefined;
+/** The spec's acceptance criteria, as the Spec tab lists them. */
+function SpecCriteria({ criteria }: { criteria: string[] }) {
   return (
-    <SectionCard
-      title="Trace"
-      className={className}
-      aside={
-        <span aria-live="polite" className="inline-flex items-center gap-2 text-sm text-run">
-          {run ? (
-            <>
-              <span
-                aria-hidden="true"
-                className="size-2 rounded-full bg-run shadow-[0_0_0_4px_var(--color-run-tint)]"
-              />
-              {runRole(run)} working, {run.tools.length} tool calls
-            </>
-          ) : null}
-        </span>
-      }
-    >
-      <TraceList entries={trace.entries} itemState={item.state} />
-      {children}
+    <SectionCard title="Acceptance criteria">
+      {criteria.length > 0 ? (
+        <ul className="m-0 flex list-none flex-col gap-2 p-0">
+          {criteria.map((c) => (
+            <li key={c} className="flex items-start gap-3 text-body leading-normal">
+              <span aria-hidden="true" className="mt-1 size-4 shrink-0 rounded-chip border border-rule" />
+              <span>{c}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="m-0 text-body text-muted">No acceptance criteria yet. The spec adds them when it is written.</p>
+      )}
     </SectionCard>
   );
 }
@@ -95,11 +80,23 @@ export function ItemPage() {
   const { data: item } = useSuspenseQuery(itemQuery(org.id, key));
   const { data: events } = useSuspenseQuery(eventsQuery(client, org.id, key));
   // The run records refine the trace when they arrive; the events alone already draw it.
-  const { data: runs } = useQuery(runsQuery(org.id, key));
+  const runsQ = useQuery(itemRunsQuery(org.id, key));
+  const runs = runsQ.data;
   const trace = useMemo(() => buildTrace(events, runs?.runs), [events, runs]);
   const [fullTrace, setFullTrace] = useState(false);
-  const recipientAgent = noteRecipient(trace, item.station);
-  const recipient = recipientAgent ? humanize(recipientAgent) : undefined;
+  const { tab = 'timeline' } = useSearch({ from: '/o/$org/f/$factory/items/$ref' });
+  const noteField = useRef<HTMLTextAreaElement>(null);
+  const compactNoteField = useRef<HTMLTextAreaElement>(null);
+  // The wide field is hidden on phones and the compact one elsewhere, so the focus goes to the one shown.
+  const focusNote = () => (noteField.current?.offsetParent ? noteField.current : compactNoteField.current)?.focus();
+  // The question: this item's open decision in the inbox.
+  const { data: inbox } = useQuery(inboxQuery(org.id, factory.id));
+  const question = inbox?.entries.find((e) => e.kind === 'decision' && e.item?.id === item.id);
+  const latest = trace.entries.findLast((e) => e.kind === 'run');
+  const runsStatus: TimelineStatus = runsQ.isPending ? 'loading' : runsQ.isError ? 'error' : 'ready';
+  const files = editedFiles(trace).length;
+  const checks = trace.entries.filter((e) => e.kind === 'check');
+  const run = item.state === 'in_progress' ? activeRun(trace) : undefined;
   const station = factory.stations.find((s) => s.id === item.station);
   const decidable = useMemo(
     () => ({
@@ -213,6 +210,15 @@ export function ItemPage() {
           />
         </div>
         <div className="contents @[720px]:col-span-2 @[720px]:flex @[720px]:flex-col @[720px]:gap-4">
+          {question ? (
+            <QuestionCard
+              entry={question}
+              agent={latest ? runRole(latest) : null}
+              paused={controls.paused}
+              onWriteAnswer={focusNote}
+              className="order-2 @[720px]:order-none"
+            />
+          ) : null}
           {fullTrace ? null : (
             <LatestSteps
               trace={trace}
@@ -220,36 +226,65 @@ export function ItemPage() {
               className={cn(deciding ? 'order-4' : 'order-3', '@[720px]:hidden')}
             />
           )}
-          <OutputsCard
-            factory={factory}
-            outputs={item.outputs}
-            className={cn(deciding ? 'order-3' : 'order-4', '@[720px]:order-none')}
-          />
-          {item.body ? (
-            <SectionCard title="Request" className="order-5 @[720px]:order-none">
-              <p className="m-0 text-body leading-relaxed whitespace-pre-wrap">{item.body}</p>
+          <ItemTabs tab={tab} files={files} checks={checks.length} className="order-5 @[720px]:order-none" />
+          {tab === 'timeline' ? (
+            <section
+              aria-label="Timeline"
+              className={cn('order-6 flex flex-col gap-4 @[720px]:order-none', !fullTrace && 'hidden @[720px]:flex')}
+            >
+              <p aria-live="polite" className="m-0 inline-flex items-center gap-2 text-sm text-run">
+                {run ? (
+                  <>
+                    <span aria-hidden="true" className="size-2 rounded-full bg-run ring-4 ring-run-tint" />
+                    {runRole(run)} working, {run.tools.length} tool calls
+                  </>
+                ) : null}
+              </p>
+              <TraceList entries={trace.entries} itemState={item.state} status={runsStatus} />
+            </section>
+          ) : null}
+          {tab === 'spec' ? (
+            <div className="order-6 flex flex-col gap-4 @[720px]:order-none">
+              {item.body ? (
+                <SectionCard title="Request">
+                  <p className="m-0 text-body leading-relaxed whitespace-pre-wrap">{item.body}</p>
+                </SectionCard>
+              ) : null}
+              <SpecCriteria criteria={criteriaOf(item.outputs.spec)} />
+            </div>
+          ) : null}
+          {tab === 'changes' ? (
+            <div className="order-6 flex flex-col gap-4 @[720px]:order-none">
+              {Object.keys(item.outputs).length > 0 ? (
+                <OutputsCard factory={factory} outputs={item.outputs} />
+              ) : (
+                <p className="m-0 text-body text-muted">Nothing has been produced yet.</p>
+              )}
+            </div>
+          ) : null}
+          {tab === 'checks' ? (
+            <SectionCard title="Checks" className="order-6 @[720px]:order-none">
+              {checks.length > 0 ? (
+                <EventList entries={checks} />
+              ) : (
+                <p className="m-0 text-body text-muted">No checks have run yet.</p>
+              )}
             </SectionCard>
           ) : null}
-          <TraceCard
-            item={item}
-            trace={trace}
-            className={cn('order-6 @[720px]:order-none', !fullTrace && 'hidden @[720px]:flex')}
-          >
-            <NoteComposer
-              itemKey={key}
-              factory={factory}
-              state={item.state}
-              agent={recipient}
-              className="mt-1 hidden @[720px]:flex"
-            />
-          </TraceCard>
+          <NoteComposer
+            itemKey={key}
+            factory={factory}
+            state={item.state}
+            fieldRef={noteField}
+            className="hidden @[720px]:flex"
+          />
         </div>
         <NoteComposer
           itemKey={key}
           factory={factory}
           state={item.state}
-          agent={recipient}
           compact
+          fieldRef={compactNoteField}
           className="order-8 @[720px]:hidden"
         />
       </div>

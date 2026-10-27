@@ -27,7 +27,7 @@ const workKeys = [
 const runProgress = new Set(['tool_call', 'tool_result', 'agent_message']);
 
 /**
- * The queries one item event touches: the organization's attention counts, inboxes and factory
+ * The queries one item event touches: the organization's attention counts, inboxes, runs and factory
  * overviews, the factory's work keys (only its board for run progress) and the item, by ref and
  * by id, all within the organization.
  */
@@ -35,6 +35,8 @@ export function invalidationsFor(org: string, event: StreamEvent): QueryKey[] {
   return [
     keys.attention(org),
     keys.inboxes(org),
+    // Every item event can start, end or change a run, so the Runs page's queries are all stale.
+    keys.runs(org),
     ...(runProgress.has(event.kind)
       ? [keys.board(org, event.factory_id)]
       : factoryWorkInvalidations(org, event.factory_id)),

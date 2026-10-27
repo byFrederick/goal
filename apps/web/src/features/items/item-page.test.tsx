@@ -2,11 +2,11 @@
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { type ReactNode, useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { keys } from '../../api/queries';
-import type { Factory, Item, ItemEvent, OrgSummary } from '../../api/types';
+import { inboxQuery, keys } from '../../api/queries';
+import type { Factory, InboxEntry, Item, ItemEvent, OrgSummary } from '../../api/types';
 import { TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { itemKey } from '../../shared/factory';
-import { renderFactoryPage } from '../../test/route';
+import { renderFactoryPage, type Seed } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
 import { ItemPage } from './item-page';
 
@@ -132,7 +132,7 @@ function renderPage(it: Item, events: ItemEvent[] = [approval]) {
     seed: [
       [keys.item(org.id, key), it],
       [keys.events(org.id, key), events],
-      [keys.runs(org.id, key), { runs: [] }],
+      [keys.itemRuns(org.id, key), { runs: [] }],
     ],
   });
 }
@@ -234,5 +234,78 @@ describe('the stepper', () => {
     expect(items[2]?.textContent).toContain('waiting on you');
     expect(items[2]?.getAttribute('aria-current')).toBe('step');
     expect(items[4]?.textContent).toContain('Target 48 h');
+  });
+});
+
+/** The open decision on the item: the question card's source. */
+const question = {
+  id: 'decision:item-147',
+  kind: 'decision',
+  factory: { id: factory.id, name: factory.name, title: null },
+  since: new Date(Date.now() - 12 * 60_000).toISOString(),
+  item: { id: 'item-147' },
+  station: 'build',
+  action: null,
+  approval: { summary: 'Should the sidebar show the whole organization?', facts: [], pull_request: null, spend_usd: 2 },
+  blocked: null,
+  andon: null,
+  rework: null,
+} as unknown as InboxEntry;
+
+function renderTab(location: string, it: Item, inbox: InboxEntry[] = [question]) {
+  const seed: Seed[] = [
+    [keys.item(org.id, key), it],
+    [keys.events(org.id, key), [approval]],
+    [keys.itemRuns(org.id, key), { runs: [] }],
+    [inboxQuery(org.id, factory.id).queryKey, { entries: inbox }],
+  ];
+  return renderFactoryPage({
+    page: () => (
+      <TooltipProvider>
+        <ItemPage />
+      </TooltipProvider>
+    ),
+    path: 'items/$ref',
+    location,
+    org,
+    factory,
+    seed,
+  });
+}
+
+describe('the question, the tabs and the spec', () => {
+  it('asks the question from the open decision on the Timeline tab', async () => {
+    renderTab('items/147', item());
+
+    expect(await screen.findByText('Should the sidebar show the whole organization?')).toBeTruthy();
+  });
+
+  it('shows no question card without an open decision', async () => {
+    renderTab('items/147', item(), []);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: "Show this week's spend in the sidebar" }),
+    ).toBeTruthy();
+    expect(screen.queryByText('Should the sidebar show the whole organization?')).toBeNull();
+  });
+
+  it('focuses the note field from Write an answer', async () => {
+    renderTab('items/147', item());
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Write an answer' }));
+
+    // Both composers (the wide one and the phone one) carry the same field name; the focus lands in one of them.
+    const fields = screen.getAllByRole('textbox', { name: 'Note for the agent' });
+    expect(fields).toContain(document.activeElement);
+  });
+
+  it('lists the spec acceptance criteria on the Spec tab', async () => {
+    renderTab(
+      'items/147?tab=spec',
+      item({ outputs: { spec: { acceptance: ['The sidebar shows the week’s spend', 'It reads in dark mode'] } } }),
+    );
+
+    expect(await screen.findByText('The sidebar shows the week’s spend')).toBeTruthy();
+    expect(screen.getByText('It reads in dark mode')).toBeTruthy();
   });
 });
