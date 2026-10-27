@@ -258,6 +258,27 @@ The header's actions (`AssemblyActions`, `features/items/assembly-actions.tsx`) 
 
 Board cards show the assembly line: on the desktop with its pips, on the phone as the line the card carries (see Desktop columns and Phone Board).
 
+### Agents page
+
+`/o/$org/f/$factory/agents` (`routes/o.$org.f.$factory.agents.index.tsx`, `features/agents/agents-page.tsx`), listed in the sidebar's factory section; the single agent is `agents/$agent`. The loader awaits the running version's model (`versionModelQuery`, `'current'`) and one `agentStatsQuery` per agent its model defines, so the page renders whole. The component reads the same queries and shows the pending screen, the route's error screen with a retry, or the page. Nothing on the page names a station, lane or agent: `agents-line.ts` only arranges what the model says.
+
+- **Header**: the h1 "Agents" and the summary sentence (roles, agents and the factory's title, `lineSentence`). The top bar's actions are "View as files" (the definition's Agents section, since the definition has no files view yet) and "New agent", which is disabled through `NotAvailable` with the tooltip "Not available yet".
+- **Factory defaults**: the model's `agents.default_model`, the runtime `basics.size` (medium when absent), the review budget's `per_item_usd` and `max_turns_per_task`, and the model's connection names. "Edit defaults" opens the definition's basics section.
+- **The line**: the stations in the model's order. Each shows a ring with its WIP limit, its name, "WIP n, buffer m", and a "Constraint" chip when `flow.constraint` names it. A station that routes by lane (`route`) lists its agents under their lane names. A queue says what its items wait for (the next station's agent); a station with no agent, a human station and the done station show their text. Phones stack the stations; from 768 px they sit in a row, scrolled sideways when they do not fit.
+- **Agent cards** (`AgentCard`): the agent's name, its description, its model chip (the statistics' model, else the agent's own, else the default), "Own model" or "Default", its cap (`per_item_usd`, when set), and from the statistics the sent-back ratio (in rework ink above the factory's `flow.andon.rework_rate`), the tasks finished, and from the definition the skill and connection counts. A card links to the agent page. A copy number is never shown.
+
+Differences from `docs/design/screens/build/agents.jpg`, each for a reason:
+
+- "Accepted" and "Approves" rates are not in `AgentStats`, so each card shows "Sent back" and "Tasks finished" instead (the contract has no Accepted rate; adding one is an API change).
+- "7 triggers" under a queue with no agent is left out: Intake triggers are not built.
+- The reviewer's "Read only" is left out; the page does not read the agent's tool policy yet.
+- Agent cards show no copy count and no slot marks: the brief forbids a copy number.
+- Station rings show the WIP limit, not the items in the station: the page does not read the live board.
+- The "53 merged this week" cell under Done is left out: the statistics do not count merged items per factory.
+- Agent marks are one colour, not one per agent: the design tokens have no per-agent palette.
+- The summary counts the agents' positions at stations, not copies, so it reads "4 agents" where the picture reads 15.
+- The Factory defaults' connections read the mock seed (github, playwright), not the picture's (github, cloudflare, context7): the seed has no cloudflare or context7 connection.
+
 ### Factory settings
 
 `/o/$org/f/$factory/settings` (`features/factory-settings/`), reached from the factory's Settings in the sidebar and, on phones, from the drawer (More or the Goal mark). The Work section is Pause or Resume (`pauseFactory`, `resumeFactory`) and shows only with `factory:manage` in the factory's `can`; it is left out for an archived factory, which Restore starts paused. The Danger zone (`danger-zone.tsx`, modelled on the organization's) reads the organization's `can`, because `factory:archive` and `factory:delete` are organization-level: it is hidden without `factory:archive`. Archive asks first; a running factory offers "Pause first", which pauses, then archives, and a `factory-busy` answer shows goald's detail ("N items are being worked"). Restore replaces Archive once the factory is archived and says it stays paused. Delete is disabled with "Archive the factory first" until the factory is archived, and its dialog takes the factory's name typed exactly before it enables; after a delete the page opens the Factories home and the factory's queries leave the cache. Every action refreshes the factory list, the factory's detail and the rail's attention and overview queries (`refreshFactory`); the archived and paused state on the page comes from the factory's detail, since the list leaves archived factories out.
