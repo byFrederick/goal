@@ -1782,7 +1782,7 @@ export function seed(now = Date.now()): MockState {
     },
     history: {},
     andon: {
-      support: [
+      sre: [
         {
           id: 1,
           kind: 'manual',
