@@ -23,7 +23,7 @@ INSERT INTO work_items (
   $9, $10, $11, 'queued', $12,
   $13::bigint, $14::text, $15, $15
 )
-RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit
+RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source
 `
 
 type InsertPartParams struct {
@@ -93,12 +93,14 @@ func (q *Queries) InsertPart(ctx context.Context, arg InsertPartParams) (WorkIte
 		&i.PartPaths,
 		&i.Paths,
 		&i.BaseCommit,
+		&i.Trigger,
+		&i.Source,
 	)
 	return i, err
 }
 
 const itemParts = `-- name: ItemParts :many
-SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit FROM work_items WHERE parent_id = $1::uuid AND part_key IS NOT NULL ORDER BY number
+SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source FROM work_items WHERE parent_id = $1::uuid AND part_key IS NOT NULL ORDER BY number
 `
 
 // An assembly's parts in plan order: they are numbered in that order (work_items_parent_part_key_idx).
@@ -136,6 +138,8 @@ func (q *Queries) ItemParts(ctx context.Context, parentID uuid.UUID) ([]WorkItem
 			&i.PartPaths,
 			&i.Paths,
 			&i.BaseCommit,
+			&i.Trigger,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}

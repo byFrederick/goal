@@ -222,6 +222,7 @@ func (s *Store) CreateItem(ctx context.Context, n domain.NewItem) (domain.Item, 
 		ParentID: n.ParentID, Type: n.Type, Lane: n.Lane, Title: n.Title, Body: n.Body,
 		Station: n.Station, State: n.State, Class: n.Class, Priority: n.Priority,
 		Outputs: map[string]json.RawMessage{}, CreatedAt: n.CreatedAt, UpdatedAt: n.CreatedAt,
+		Source: n.Source, Trigger: n.Trigger,
 	}
 	s.items[it.ID] = it
 	s.trackSpan(it, nil, n.CreatedAt)
