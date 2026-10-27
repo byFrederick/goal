@@ -29,7 +29,7 @@ import {
 } from './definition-seed.ts';
 import type { MockFault } from './faults.ts';
 import { type MockDone, seedHistory } from './flow.ts';
-import { type MockPeople, seedPeople } from './people.ts';
+import { directory, type MockPeople, seedPeople } from './people.ts';
 import type { MockReason } from './touches.ts';
 
 export interface MockItem {
@@ -194,12 +194,12 @@ type Step =
       run: string;
       tools: Tool[];
       message?: string;
+      /** The run's model; the mock's default when absent. */
+      model?: string;
       cost: number;
       turns: number;
       status?: 'succeeded' | 'failed' | 'running' | 'cancelled';
       error?: string;
-      /** The model the run used; the seed's model when absent. */
-      model?: string;
     }
   | { check: string; exit: number; ms: number }
   | { gate: 'approve' | 'reject'; agent: string; reason?: string }
@@ -220,6 +220,8 @@ interface Seed {
   agent?: string;
   rework?: number;
   pr?: number;
+  /** The person who created the item (a key of the directory): the item's owner. */
+  owner?: keyof typeof directory;
   createdMin: number;
   updatedMin: number;
   outputs?: Record<string, unknown>;
@@ -526,18 +528,45 @@ const specRun = (tools: Tool[], cost: number, turns: number): Step => ({
 
 const goalSeeds: Seed[] = [
   // The sidebar search's "spend" (shell.jpg s2): items whose titles match it at the Build station.
+  // The item page's side cards (daily-work/item): a spec of $0.62 and a build of $2.38 against a $12 cap, its
+  // pull request, and an overlap with #145 on features/usage/, which it waits for.
   {
     number: 147,
     title: "Show this week's spend",
     type: 'feature',
+    lane: 'frontend',
     body: 'The sidebar shows the spend of the week against the budget, with the factories it is spent on.',
     station: 'build',
     state: 'queued',
-    createdMin: 175,
+    owner: 'owner',
+    pr: 318,
+    paths: ['features/usage/'],
+    waitsOn: { kind: 'files', number: 145 },
+    createdMin: 95,
     updatedMin: 12,
+    outputs: {
+      spec: specOutput('Show this week’s spend in the sidebar.', ['The sidebar shows the week’s spend'], 'frontend'),
+      build: {
+        pull_request: `${repo}/pull/318`,
+        branch: 'goal/147-sidebar-spend',
+        summary: 'Show the week’s spend in the sidebar.',
+      },
+    },
     steps: [
+      { move: 'spec' },
+      specRun([['Read', 'apps/web/src/features/usage', 'Read 6 files']], 0.62, 14),
       { move: 'build' },
-      { run: 'frontend-engineer', model: 'claude-haiku-5-5', cost: 2.38, turns: 41, tools: [] },
+      {
+        run: 'frontend-engineer',
+        model: 'claude-haiku-5-5',
+        tools: [
+          ['Read', 'apps/web/src/shared/sidebar.tsx', 'Read 180 lines'],
+          ['Edit', 'apps/web/src/features/usage/spend.tsx', 'Edited 6 files, +212 −40'],
+        ],
+        message: 'Opened the pull request with the spend in the sidebar.',
+        cost: 2.38,
+        turns: 41,
+      },
     ],
   },
   {
@@ -547,6 +576,7 @@ const goalSeeds: Seed[] = [
     body: 'Compare the week’s spend with each factory’s budget and say which ones are close.',
     station: 'build',
     state: 'queued',
+    paths: ['features/usage/'],
     createdMin: 120,
     updatedMin: 30,
     steps: [],
@@ -1370,7 +1400,7 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
       at += dt;
     };
 
-    push('created', 'engine');
+    push('created', 'engine', seed.owner ? { actor: `user:${directory[seed.owner].id}` } : {});
     let runs = 0;
     for (const step of seed.steps) {
       if ('move' in step) {
@@ -1383,7 +1413,8 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
         push('claimed', 'engine', { slot, agent });
         const startedAt = new Date(Math.round(at)).toISOString();
         push('run_started', agent, {}, run);
-        push('agent_started', agent, { model: step.model ?? model, session_id: run }, run);
+        const runModel = step.model ?? model;
+        push('agent_started', agent, { model: runModel, session_id: run }, run);
         step.tools.forEach(([tool, input, summary, isError], i) => {
           push('tool_call', agent, { id: `t${i}`, tool, input: JSON.stringify({ arg: input }) }, run);
           push('tool_result', agent, { id: `t${i}`, is_error: Boolean(isError), summary }, run);
@@ -1397,7 +1428,7 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
           item_id: id,
           station,
           agent,
-          model: step.model ?? model,
+          model: runModel,
           status,
           turns: status === 'running' ? 0 : step.turns,
           input_tokens: step.turns * 4_000,
@@ -1575,7 +1606,7 @@ export function seed(now = Date.now()): MockState {
         throughput_per_day: 3,
         lead_time: 6 * 3600,
         expedite_lead_time: 3600,
-        per_item_usd: 4,
+        per_item_usd: 12,
         max_turns_per_task: 80,
         expedite_wip: null,
       },
