@@ -160,7 +160,7 @@ function note(e: ItemEvent): Omit<NoteEntry, 'kind' | 'key' | 'at' | 'station' |
     case 'note':
       return {
         text: `${actor} left a note for the next run`,
-        tone: 'muted',
+        tone: 'you',
         ...(str(e.data.text) ? { detail: str(e.data.text) as string } : {}),
       };
     case 'merged':
@@ -326,6 +326,35 @@ export function buildTrace(events: readonly ItemEvent[], records: readonly Run[]
   }
 
   return { entries, costUsd, turns, ...(model ? { model } : {}) };
+}
+
+/**
+ * The acceptance criteria an output names: a string list under `acceptance` (this factory's spec
+ * contract) or `acceptance_criteria`. Anything else is no criteria.
+ */
+export function criteriaOf(value: unknown): string[] {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return [];
+  const obj = value as Record<string, unknown>;
+  const list = obj.acceptance ?? obj.acceptance_criteria;
+  return Array.isArray(list) && list.every((c) => typeof c === 'string') ? list : [];
+}
+
+/** The criteria a run's final reply lists, if the run replied with an output. */
+export function runCriteria(run: RunEntry): string[] {
+  return run.reply?.kind === 'output' ? criteriaOf(run.reply.value) : [];
+}
+
+/** The tools that change a file, by the name the agents call them. */
+const editTools = new Set(['Edit', 'Write', 'MultiEdit']);
+
+/** The distinct files the trace's edits touched: the Changes tab's count. */
+export function editedFiles(trace: Trace): string[] {
+  const files = new Set<string>();
+  for (const e of trace.entries) {
+    if (e.kind !== 'run') continue;
+    for (const t of e.tools) if (editTools.has(t.tool) && t.argument) files.add(t.argument);
+  }
+  return [...files];
 }
 
 /** The last `n` tool calls across runs, newest last: the mobile "latest steps". */

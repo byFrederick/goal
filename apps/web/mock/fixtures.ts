@@ -200,6 +200,7 @@ type Step =
       error?: string;
     }
   | { check: string; exit: number; ms: number }
+  | { note: string; by: string }
   | { gate: 'approve' | 'reject'; agent: string; reason?: string }
   | { human: 'approved' | 'rejected'; by: string; reason?: string }
   | { waiting: true; reason?: string }
@@ -401,10 +402,66 @@ const goalSeeds: Seed[] = [
     type: 'feature',
     body: 'The sidebar shows the spend of the week against the budget, with the factories it is spent on.',
     station: 'build',
-    state: 'queued',
+    state: 'waiting_human',
     createdMin: 95,
     updatedMin: 12,
-    steps: [],
+    // The question the agent asks a person: the open decision's summary (ADR 0016's question card).
+    outputs: {
+      spec: specOutput(
+        'Show the spend of this week in the sidebar, with the weekly budget.',
+        [
+          'The sidebar shows "Spend this week" with the amount and the weekly budget.',
+          'The bar fills to spend divided by budget and turns amber at 80%.',
+          'Choosing it opens the usage page.',
+          'It reads correctly in light and dark themes.',
+        ],
+        'web',
+      ),
+      build: {
+        summary:
+          'Should the sidebar show this week’s spend for the whole organization, or only for the factory you are in?',
+      },
+    },
+    steps: [
+      { move: 'spec' },
+      {
+        run: 'architect',
+        tools: [
+          ['Read', 'docs/design/MASTER.md', 'Read 230 lines'],
+          ['Read', 'apps/web/src/features/usage/sidebar.tsx', 'Read 88 lines'],
+        ],
+        // The reply is the spec's output: the run card lists its acceptance criteria from it.
+        message: JSON.stringify(
+          specOutput(
+            'Show the spend of this week in the sidebar, with the weekly budget.',
+            [
+              'The sidebar shows "Spend this week" with the amount and the weekly budget.',
+              'The bar fills to spend divided by budget and turns amber at 80%.',
+              'Choosing it opens the usage page.',
+              'It reads correctly in light and dark themes.',
+            ],
+            'web',
+          ),
+        ),
+        cost: 0.62,
+        turns: 14,
+      },
+      { move: 'build' },
+      {
+        run: 'frontend-engineer',
+        tools: [
+          ['Read', 'apps/web/src', 'Read 18 files'],
+          ['Edit', 'apps/web/src/features/usage/sidebar-usage.tsx', 'Edited 1 file, +48 −12'],
+          ['Write', 'apps/web/src/features/usage/sidebar-usage.test.tsx', 'Wrote 1 file'],
+        ],
+        cost: 2.38,
+        turns: 41,
+      },
+      { check: 'task check:changed', exit: 1, ms: 190_000 },
+      { note: 'Use the weekly budget, not the daily one.', by: 'Freddy Cruz' },
+      { check: 'task check:changed', exit: 0, ms: 220_000 },
+      { waiting: true },
+    ],
   },
   {
     number: 145,
@@ -1284,6 +1341,8 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
           exit_code: step.exit,
           duration_ms: step.ms,
         });
+      } else if ('note' in step) {
+        push('note', step.by, { text: step.note });
       } else if ('gate' in step) {
         push(
           step.gate === 'approve' ? 'gate_approved' : 'gate_rejected',

@@ -356,7 +356,7 @@ test('send an item back with a reason', async ({ page }) => {
   await expect(page.getByText('At Spec', { exact: true })).toBeVisible();
   await showTrace(page);
   await expect(
-    page.getByRole('region', { name: 'Trace' }).getByText('Cover the empty-bucket case with a test.'),
+    page.getByRole('region', { name: 'Timeline' }).getByText('Cover the empty-bucket case with a test.'),
   ).toBeVisible();
   // The send-back is a person's touch: the Human touches card says it with its reason too.
   await expect(
@@ -431,7 +431,7 @@ test('the trace heads each run with its agent copy, model, turns, cost and versi
   await page.goto('/o/acme/f/goal/items/8');
   await expect(page.getByRole('heading', { level: 1, name: 'Worker: report usage per message' })).toBeVisible();
   await showTrace(page);
-  const trace = page.getByRole('region', { name: 'Trace' });
+  const trace = page.getByRole('region', { name: 'Timeline' });
 
   const spec = trace.getByRole('listitem').filter({ hasText: 'spec-writer-1 worked at Spec' });
   await expect(spec.getByText('Finished', { exact: true })).toBeVisible();
@@ -450,7 +450,7 @@ test('leave a note for the agent: it will be in the next run', async ({ page }) 
   await expect(page.getByRole('heading', { level: 1, name: 'Worker: report usage per message' })).toBeVisible();
 
   // One composer per layout: in the trace from 720 px, at the end of the page on a phone.
-  const field = page.getByLabel('Note to the builder').filter({ visible: true });
+  const field = page.getByLabel('Note for the agent').filter({ visible: true });
   await expect(field).toHaveCount(1);
   await field.fill('Also report the cache tokens.');
   await page
@@ -463,7 +463,7 @@ test('leave a note for the agent: it will be in the next run', async ({ page }) 
   await expectAccessible(page);
 
   await showTrace(page);
-  const trace = page.getByRole('region', { name: 'Trace' });
+  const trace = page.getByRole('region', { name: 'Timeline' });
   await expect(trace.getByText('Local user left a note for the next run')).toBeVisible();
   await expect(trace.getByText('Also report the cache tokens.')).toBeVisible();
 });
@@ -471,7 +471,7 @@ test('leave a note for the agent: it will be in the next run', async ({ page }) 
 test('a done item takes no notes', async ({ page }) => {
   await page.goto('/o/acme/f/goal/items/4');
   await expect(page.getByText('At Done', { exact: true })).toBeVisible();
-  await expect(page.getByLabel(/^Note to the/)).toHaveCount(0);
+  await expect(page.getByLabel(/^Note for the agent/)).toHaveCount(0);
 });
 
 test('the board updates live when an item moves elsewhere', async ({ page, request }) => {

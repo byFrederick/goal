@@ -75,7 +75,7 @@ function Output({ station, value }: { station: string; value: unknown }) {
                 href={pr}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex h-9 items-center gap-1.5 rounded-control bg-panel px-3 text-sm no-underline hover:bg-hover"
+                className="inline-flex h-9 items-center gap-2 rounded-control bg-panel px-3 text-sm no-underline hover:bg-hover"
               >
                 {pullRequestLabel(pr, prs.length > 1)}
                 <ExternalLink size={14} strokeWidth={1.5} aria-hidden="true" />
