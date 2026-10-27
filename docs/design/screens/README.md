@@ -20,7 +20,7 @@ How to use them:
 | Screen | Route | Status | Not built yet |
 |---|---|---|---|
 | `shell`: sidebar expanded and collapsed, search, organization menu, account menu | the layout of every page (`/o/$org`) | restyle (replaces the rail and the factory sidebar) | search results for pages and actions |
-| `account`: profile, theme, notifications, tokens, connected apps, sessions | `/account` (new route; today in the account menu) | new | Slack and email notification routing, daily digest |
+| `account`: profile, theme, notifications, tokens, connected apps, sessions | `/account` (new route; today in the account menu) | new | Notification routing for Slack and email, the daily digest, the email for notifications, connected apps (no endpoint yet), the session list with per-session sign-out (goald's /api/auth does not forward list-sessions or revoke-session) |
 | `consent`: allow an app (OAuth), approve a CLI sign-in | `/device`, `/oauth/consent` | restyle (device), new feature (OAuth consent, phase 6) | |
 
 ## Get started (`get-started/`)

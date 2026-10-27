@@ -10,12 +10,6 @@ import { ApiError } from '../../api/client';
 import { createApiKey } from '../../api/keys';
 import type { CreatedApiKey, Factory, FactoryRole, OrgSummary } from '../../api/types';
 import { formatDay } from '../../shared/format';
-import { Button } from '../../ui/button';
-import { Callout } from '../../ui/callout';
-import { cn } from '../../ui/cn';
-import { Dialog, DialogContent } from '../../ui/dialog';
-import { Field, Input } from '../../ui/field';
-import { SegmentedControl } from '../../ui/segmented-control';
 import {
   allows,
   ceilings,
@@ -31,7 +25,13 @@ import {
   presets,
   scopeGroups,
   withinCeiling,
-} from './scopes';
+} from '../../shared/tokens/scopes';
+import { Button } from '../../ui/button';
+import { Callout } from '../../ui/callout';
+import { cn } from '../../ui/cn';
+import { Dialog, DialogContent } from '../../ui/dialog';
+import { Field, Input } from '../../ui/field';
+import { SegmentedControl } from '../../ui/segmented-control';
 
 interface NewKeyDialogProps {
   org: OrgSummary;

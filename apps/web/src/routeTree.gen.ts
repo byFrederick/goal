@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AccountRouteImport } from './routes/account'
 import { Route as DeviceRouteImport } from './routes/device'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as FSplatRouteImport } from './routes/f.$'
@@ -43,6 +44,11 @@ import { Route as OOrgFFactoryItemsRefRouteImport } from './routes/o.$org.f.$fac
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DeviceRoute = DeviceRouteImport.update({
@@ -195,6 +201,7 @@ const OOrgFFactoryItemsRefRoute = OOrgFFactoryItemsRefRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/device': typeof DeviceRoute
   '/sign-in': typeof SignInRoute
   '/f/$': typeof FSplatRoute
@@ -226,6 +233,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/device': typeof DeviceRoute
   '/sign-in': typeof SignInRoute
   '/f/$': typeof FSplatRoute
@@ -255,6 +263,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/device': typeof DeviceRoute
   '/sign-in': typeof SignInRoute
   '/f/$': typeof FSplatRoute
@@ -289,6 +298,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/account'
     | '/device'
     | '/sign-in'
     | '/f/$'
@@ -320,6 +330,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/account'
     | '/device'
     | '/sign-in'
     | '/f/$'
@@ -348,6 +359,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/account'
     | '/device'
     | '/sign-in'
     | '/f/$'
@@ -381,6 +393,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountRoute: typeof AccountRoute
   DeviceRoute: typeof DeviceRoute
   SignInRoute: typeof SignInRoute
   FSplatRoute: typeof FSplatRoute
@@ -396,6 +409,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/device': {
@@ -691,6 +711,7 @@ const OOrgRouteWithChildren = OOrgRoute._addFileChildren(OOrgRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountRoute: AccountRoute,
   DeviceRoute: DeviceRoute,
   SignInRoute: SignInRoute,
   FSplatRoute: FSplatRoute,
