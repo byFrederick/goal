@@ -32,7 +32,9 @@ for (const [name, path, heading] of [
 ] as const) {
   test(`${name} is accessible and fits the screen`, async ({ page }) => {
     await page.goto(path);
-    await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
+    // From 768 px the Board's title is Board; its phone header keeps the factory's name.
+    const title = name === 'board' && !isPhone(page) ? 'Board' : heading;
+    await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
     await expect(orgNav(page)).toBeVisible();
     await expectAccessible(page);
     await expectNoHorizontalScroll(page);
@@ -472,14 +474,13 @@ test('the board shows how each station is doing and who works each card', async 
   test.skip(isPhone(page), 'the line and the columns are the desktop board');
   await page.goto('/o/acme/f/sre/board');
 
-  const line = page.getByRole('region', { name: 'Stations in line order' });
-  await expect(line.getByRole('listitem').filter({ hasText: 'Inbox' })).toContainText(/3 waiting\s*Oldest 2 h/);
-  await expect(line.getByRole('listitem').filter({ hasText: 'Triage' })).toContainText('1 of 4Idle 62% of the time');
-  await expect(line.getByRole('listitem').filter({ hasText: 'Investigate' })).toContainText(
-    '3 of 3, 2 readyBusy 94%, queue growing',
-  );
-  await expect(line.getByRole('listitem').filter({ hasText: 'Approve' })).toContainText('3 of 5Waiting on you');
-  await expect(line.getByRole('listitem').filter({ hasText: 'Done' })).toContainText('1 today');
+  // Each station's column header card: its name, its count and what it says of its load.
+  const columns = page.getByRole('region', { name: 'Stations', exact: true });
+  await expect(columns.getByRole('region', { name: 'Inbox', exact: true })).toContainText('No limit');
+  await expect(columns.getByRole('region', { name: 'Triage', exact: true })).toContainText('1 of 4');
+  await expect(columns.getByRole('region', { name: 'Investigate', exact: true })).toContainText('3 of 3');
+  await expect(columns.getByRole('region', { name: 'Approve', exact: true })).toContainText('3 of 5');
+  await expect(columns.getByRole('region', { name: 'Done', exact: true })).toContainText('Merged pull requests');
 
   const investigate = page.getByRole('region', { name: 'Investigate', exact: true });
   await expect(investigate.getByRole('article').filter({ hasText: 'billing-svc' })).toContainText(
@@ -494,24 +495,16 @@ test('the board shows how each station is doing and who works each card', async 
   await expectAccessible(page);
 });
 
-test('the line shows its rope, not enforced yet, its work in progress and the expedite lane in use', async ({
-  page,
-}) => {
+test('the line shows its work in progress and the expedite lane in use', async ({ page }) => {
   await page.goto('/o/acme/f/sre/board');
   if (isPhone(page)) {
     await expect(page.getByText('Line running, WIP 7 of 12')).toBeVisible();
     return;
   }
 
-  const line = page.getByRole('region', { name: 'The line' });
-  await expect(line).toContainText('New work enters only when Investigate’s buffer drops below 2 Not enforced yet');
-  await expect(line).toContainText('WIP 7 of 12');
-  await expect(line).toContainText('Expedite 1 of 1 in use');
-
-  // A push line names its constraint and has no rope.
-  await page.goto('/o/acme/f/goal/board');
-  await expect(page.getByRole('region', { name: 'The line' })).toContainText(
-    'Build is the constraint; the line moves at its pace.',
+  // The desktop board has no line card: the expedite lane is captioned above the columns.
+  await expect(page.getByRole('region', { name: 'Stations', exact: true })).toContainText(
+    '1 of 1 in use, jumps every queue',
   );
   await expect(page.getByText('Not enforced yet')).toHaveCount(0);
 });

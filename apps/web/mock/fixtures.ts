@@ -16,7 +16,6 @@ import type {
   ItemSpan,
   ItemState,
   Org,
-  PartOf,
   Run,
   VersionRef,
 } from '@goal/api-client';
@@ -59,8 +58,8 @@ export interface MockItem {
   paths?: string[];
   /** The open need it waits for while queued or ready (Item.waiting). Not on Item. */
   waitsOn?: MockWaitsOn;
-  /** The assembly it is a part of, and its place (Item.assembly, getItem only). */
-  assembly?: PartOf;
+  /** The assembly it is a part of (the assembly's item id) and its place among the parts, 1-based. */
+  partOf?: { id: string; part: number };
 }
 
 /** The need a queued item waits for: an item of the factory by number, by its order (after) or its files (files). */
@@ -230,8 +229,9 @@ interface Seed {
   outputs?: Record<string, unknown>;
   paths?: string[];
   waitsOn?: MockWaitsOn;
-  /** The assembly the item is a part of: its number, title and the part's place. */
-  assembly?: { number: number; title: string; part: number; parts: number };
+  /** The assembly the item is a part of (its seed number) and its place among the parts. */
+  assembly?: number;
+  part?: number;
   steps: Step[];
 }
 
@@ -438,6 +438,101 @@ const goalSeeds: Seed[] = [
     updatedMin: 60,
     steps: [],
   },
+  // Parts 1 to 3 of "Usage and budgets", merged, so the assembly counts 4 parts in all.
+  {
+    number: 141,
+    title: 'Add the usage meter',
+    type: 'feature',
+    body: 'Count the usage each run spends, per factory.',
+    station: 'done',
+    state: 'done',
+    pr: 310,
+    assembly: 144,
+    part: 1,
+    createdMin: 580,
+    updatedMin: 500,
+    steps: [{ move: 'spec' }, { move: 'build' }, { move: 'review' }, { move: 'merge' }, { move: 'done' }],
+  },
+  {
+    number: 142,
+    title: 'Add the budget per factory',
+    type: 'feature',
+    body: 'Each factory gets a weekly budget, set by its owner.',
+    station: 'done',
+    state: 'done',
+    pr: 312,
+    assembly: 144,
+    part: 2,
+    createdMin: 400,
+    updatedMin: 380,
+    steps: [{ move: 'spec' }, { move: 'build' }, { move: 'review' }, { move: 'merge' }, { move: 'done' }],
+  },
+  {
+    number: 143,
+    title: 'Warn when a factory nears its budget',
+    type: 'feature',
+    body: 'Show a warning on the factory when the week’s spend passes 80 % of the budget.',
+    station: 'done',
+    state: 'done',
+    pr: 314,
+    assembly: 144,
+    part: 3,
+    createdMin: 260,
+    updatedMin: 240,
+    steps: [{ move: 'spec' }, { move: 'build' }, { move: 'review' }, { move: 'merge' }, { move: 'done' }],
+  },
+  // An assembly of three parts across three columns: one merged, one in review, one in spec.
+  {
+    number: 17,
+    title: 'Canvas screens for the UI revamp',
+    type: 'feature',
+    body: 'Restyle the screens the revamp covers to the canvas pictures, one part at a time.',
+    station: 'inbox',
+    state: 'assembly',
+    createdMin: 4320,
+    updatedMin: 240,
+    steps: [],
+  },
+  {
+    number: 18,
+    title: 'Restyle the Floor header and andon panel',
+    type: 'feature',
+    body: 'The Floor page, as the canvas picture draws it.',
+    station: 'done',
+    state: 'done',
+    pr: 42,
+    assembly: 17,
+    part: 1,
+    createdMin: 4300,
+    updatedMin: 300,
+    steps: [{ move: 'spec' }, { move: 'build' }, { move: 'review' }, { move: 'merge' }, { move: 'done' }],
+  },
+  {
+    number: 19,
+    title: 'Restyle the Board columns and cards',
+    type: 'feature',
+    body: 'The Board page at 768 px and up, as the canvas picture draws it.',
+    station: 'review',
+    state: 'queued',
+    assembly: 17,
+    part: 2,
+    createdMin: 200,
+    updatedMin: 20,
+    steps: [{ move: 'spec' }, { move: 'build' }, { move: 'review' }],
+  },
+  {
+    number: 20,
+    title: 'Restyle the Items list to the canvas screen',
+    type: 'feature',
+    body: 'The Items list, as the canvas picture draws it.',
+    station: 'spec',
+    state: 'queued',
+    assembly: 17,
+    part: 3,
+    createdMin: 120,
+    updatedMin: 15,
+    steps: [{ move: 'spec' }],
+  },
   // The sidebar search's "spend" (shell.jpg s2): items whose titles match it. At Build, waiting on you
   // (the item page's picture, item.jpg): spec accepted at Approve spec, part 4 of 4 of an assembly. Its spec and
   // build costs against a $12 cap and its pull request feed the item page's side cards (daily-work/item).
@@ -454,7 +549,8 @@ const goalSeeds: Seed[] = [
     paths: ['features/usage/'],
     createdMin: 190,
     updatedMin: 8,
-    assembly: { number: 144, title: 'Usage and budgets', part: 4, parts: 4 },
+    assembly: 144,
+    part: 4,
     outputs: {
       spec: specOutput('Show this week’s spend in the sidebar.', ['The sidebar shows the week’s spend'], 'frontend'),
       build: {
@@ -488,7 +584,7 @@ const goalSeeds: Seed[] = [
     title: 'Check the spend against the budget',
     type: 'refactor',
     body: 'Compare the week’s spend with each factory’s budget and say which ones are close.',
-    station: 'build',
+    station: 'inbox',
     state: 'queued',
     paths: ['features/usage/'],
     createdMin: 120,
@@ -1404,18 +1500,8 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
       pr_url: seed.pr ? `${repo}/pull/${seed.pr}` : null,
       ...(seed.paths ? { paths: seed.paths } : {}),
       ...(seed.waitsOn ? { waitsOn: seed.waitsOn } : {}),
+      ...(seed.assembly ? { partOf: { id: uuid(factoryIndex + 1, seed.assembly), part: seed.part ?? 1 } } : {}),
       spans: [],
-      ...(seed.assembly
-        ? {
-            assembly: {
-              id: uuid(factoryIndex + 1, seed.assembly.number),
-              ref: `${factory.name}#${seed.assembly.number}`,
-              title: seed.assembly.title,
-              part: seed.assembly.part,
-              parts: seed.assembly.parts,
-            },
-          }
-        : {}),
     };
 
     if (seed.state === 'done') item.done_at = item.updated_at;
@@ -1574,6 +1660,7 @@ export function seed(now = Date.now()): MockState {
           agents: ['builder-1', 'builder-2'],
           wip_limit: 2,
           copies: 2,
+          buffer: 2,
           output: 'change',
           checks: ['schema', 'task check'],
         },
