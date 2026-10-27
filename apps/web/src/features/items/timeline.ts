@@ -366,9 +366,3 @@ export function latestToolCalls(trace: Trace, n: number): ToolCall[] {
 export function activeRun(trace: Trace): RunEntry | undefined {
   return trace.entries.findLast((e): e is RunEntry => e.kind === 'run' && e.status === 'running');
 }
-
-/** Whom a note reaches: the agent working the item, else the last one that worked at its station. */
-export function noteRecipient(trace: Trace, station: string): string | undefined {
-  const runs = trace.entries.filter((e): e is RunEntry => e.kind === 'run');
-  return (activeRun(trace) ?? runs.findLast((r) => r.station === station))?.agent;
-}

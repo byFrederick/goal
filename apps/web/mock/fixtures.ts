@@ -496,58 +496,29 @@ const goalSeeds: Seed[] = [
     waitsOn: { kind: 'files', number: 145 },
     createdMin: 95,
     updatedMin: 12,
-    // The question the agent asks a person: the open decision's summary (ADR 0016's question card).
     outputs: {
-      spec: specOutput(
-        'Show the spend of this week in the sidebar, with the weekly budget.',
-        [
-          'The sidebar shows "Spend this week" with the amount and the weekly budget.',
-          'The bar fills to spend divided by budget and turns amber at 80%.',
-          'Choosing it opens the usage page.',
-          'It reads correctly in light and dark themes.',
-        ],
-        'web',
-      ),
+      spec: specOutput('Show this week’s spend in the sidebar.', ['The sidebar shows the week’s spend'], 'frontend'),
+      build: {
+        pull_request: `${repo}/pull/318`,
+        branch: 'goal/147-sidebar-spend',
+        summary: 'Show the week’s spend in the sidebar.',
+      },
     },
     steps: [
       { move: 'spec' },
-      {
-        run: 'architect',
-        tools: [
-          ['Read', 'docs/design/MASTER.md', 'Read 230 lines'],
-          ['Read', 'apps/web/src/features/usage/sidebar.tsx', 'Read 88 lines'],
-        ],
-        // The reply is the spec's output: the run card lists its acceptance criteria from it.
-        message: JSON.stringify(
-          specOutput(
-            'Show the spend of this week in the sidebar, with the weekly budget.',
-            [
-              'The sidebar shows "Spend this week" with the amount and the weekly budget.',
-              'The bar fills to spend divided by budget and turns amber at 80%.',
-              'Choosing it opens the usage page.',
-              'It reads correctly in light and dark themes.',
-            ],
-            'web',
-          ),
-        ),
-        cost: 0.62,
-        turns: 14,
-      },
+      specRun([['Read', 'apps/web/src/features/usage', 'Read 6 files']], 0.62, 14),
       { move: 'build' },
       {
         run: 'frontend-engineer',
+        model: 'claude-haiku-5-5',
         tools: [
-          ['Read', 'apps/web/src', 'Read 18 files'],
-          ['Edit', 'apps/web/src/features/usage/sidebar-usage.tsx', 'Edited 1 file, +48 −12'],
-          ['Write', 'apps/web/src/features/usage/sidebar-usage.test.tsx', 'Wrote 1 file'],
+          ['Read', 'apps/web/src/shared/sidebar.tsx', 'Read 180 lines'],
+          ['Edit', 'apps/web/src/features/usage/spend.tsx', 'Edited 6 files, +212 −40'],
         ],
+        message: 'Opened the pull request with the spend in the sidebar.',
         cost: 2.38,
         turns: 41,
       },
-      { check: 'task check:changed', exit: 1, ms: 190_000 },
-      { note: 'Use the weekly budget, not the daily one.', by: 'Freddy Cruz' },
-      { check: 'task check:changed', exit: 0, ms: 220_000 },
-      { waiting: true },
     ],
   },
   {
@@ -1391,22 +1362,72 @@ const softwareSeeds: Seed[] = [
   })),
   {
     number: 14,
-    title: 'Rework the export schema',
-    type: 'refactor',
-    body: 'The engineer needs a decision on the export schema.',
+    title: 'Show the sidebar spend for the organization',
+    type: 'feature',
+    body: 'The sidebar shows the spend of the week. The frontend engineer needs a decision on its scope.',
     station: 'build',
     state: 'waiting_human',
-    agent: 'engineer',
+    agent: 'frontend-engineer',
     createdMin: 210,
     updatedMin: 35,
-    // The question the agent asks a person: the open decision's summary (ADR 0016's question card).
+    // The pictured item (daily-work/item): an architect spec with four criteria, a frontend build with
+    // its events, and the open decision whose summary is the question the card asks.
     outputs: {
+      spec: specOutput(
+        'Show the spend of this week in the sidebar, with the weekly budget.',
+        [
+          'The sidebar shows "Spend this week" with the amount and the weekly budget.',
+          'The bar fills to spend divided by budget and turns amber at 80%.',
+          'Choosing it opens the usage page.',
+          'It reads correctly in light and dark themes.',
+        ],
+        'web',
+      ),
       build: {
         summary:
           'Should the sidebar show this week’s spend for the whole organization, or only for the factory you are in?',
       },
     },
-    steps: [],
+    steps: [
+      { move: 'spec' },
+      {
+        run: 'architect',
+        tools: [
+          ['Read', 'docs/design/MASTER.md', 'Read 230 lines'],
+          ['Read', 'apps/web/src/features/usage/sidebar.tsx', 'Read 88 lines'],
+        ],
+        // The reply is the spec's output: the run card lists its acceptance criteria from it.
+        message: JSON.stringify(
+          specOutput(
+            'Show the spend of this week in the sidebar, with the weekly budget.',
+            [
+              'The sidebar shows "Spend this week" with the amount and the weekly budget.',
+              'The bar fills to spend divided by budget and turns amber at 80%.',
+              'Choosing it opens the usage page.',
+              'It reads correctly in light and dark themes.',
+            ],
+            'web',
+          ),
+        ),
+        cost: 0.62,
+        turns: 14,
+      },
+      { move: 'build' },
+      {
+        run: 'frontend-engineer',
+        tools: [
+          ['Read', 'apps/web/src', 'Read 18 files'],
+          ['Edit', 'apps/web/src/features/usage/sidebar-usage.tsx', 'Edited 1 file, +48 −12'],
+          ['Write', 'apps/web/src/features/usage/sidebar-usage.test.tsx', 'Wrote 1 file'],
+        ],
+        cost: 2.38,
+        turns: 41,
+      },
+      { check: 'task check:changed', exit: 1, ms: 190_000 },
+      { note: 'Use the weekly budget, not the daily one.', by: 'Freddy Cruz' },
+      { check: 'task check:changed', exit: 0, ms: 220_000 },
+      { waiting: true },
+    ],
   },
   {
     number: 15,

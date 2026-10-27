@@ -6,7 +6,6 @@ import {
   criteriaOf,
   editedFiles,
   latestToolCalls,
-  noteRecipient,
   type RunEntry,
   runRole,
   toolArgument,
@@ -87,21 +86,6 @@ describe('buildTrace', () => {
     expect(trace.entries).toMatchObject([
       { kind: 'note', text: 'Local user left a note for the next run', detail: 'Also check the pool.' },
     ]);
-  });
-
-  it('addresses a note to the agent working the item, or the last one at its station', () => {
-    const spec = { run_id: 's', actor: 'spec-writer', station: 'spec' };
-    const build = { run_id: 'b', actor: 'builder', station: 'build' };
-    const working = buildTrace([ev('run_started', {}, spec), ev('run_started', {}, build)]);
-    expect(noteRecipient(working, 'build')).toBe('builder');
-
-    const waiting = buildTrace([
-      ev('run_started', {}, spec),
-      ev('run_finished', { status: 'succeeded' }, spec),
-      ev('moved', { from: 'spec', to: 'approve' }),
-    ]);
-    expect(noteRecipient(waiting, 'spec')).toBe('spec-writer');
-    expect(noteRecipient(waiting, 'approve')).toBeUndefined();
   });
 
   it('shows event kinds it does not know instead of dropping them', () => {
