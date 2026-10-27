@@ -328,15 +328,19 @@ describe('the collapsed rail', () => {
     expect(names.slice(11)).toEqual(['New factory', 'Spend this week, 37% of budget', 'FC, Freddy Cruz, account']);
   });
 
-  it.each(['New item', 'Needs you', 'Runs', 'Credentials'])('keeps %s disabled, and says why', async (name) => {
-    renderSidebar();
-    await collapse();
-    const control = within(await nav()).getByRole('button', { name: new RegExp(`^${name}`) });
+  it.each(['New item', 'Needs you', 'Runs', 'Credentials'])(
+    'keeps %s disabled, and says what it is and why',
+    async (name) => {
+      renderSidebar();
+      await collapse();
+      const control = within(await nav()).getByRole('button', { name: new RegExp(`^${name}`) });
 
-    expect(control.getAttribute('aria-disabled')).toBe('true');
-    fireEvent.focus(control);
-    expect(await screen.findByText('Not available yet')).toBeTruthy();
-  });
+      expect(control.getAttribute('aria-disabled')).toBe('true');
+      fireEvent.focus(control);
+      expect(await screen.findByText(name)).toBeTruthy();
+      expect(await screen.findByText('Not available yet')).toBeTruthy();
+    },
+  );
 
   it('gives each enabled entry a tooltip with its label', async () => {
     renderSidebar({ can: ['connection:read'] });

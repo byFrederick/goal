@@ -61,7 +61,7 @@ export function SidebarRail({ org, busy, waiting, trouble, overview, focusOnMoun
           <PanelLeft {...iconProps} />
         </button>
       </Tooltip>
-      <NotAvailable>
+      <NotAvailable label="New item">
         <button
           type="button"
           aria-label="New item"
@@ -130,7 +130,7 @@ function RailEntry({
   );
   if (!screen.available) {
     return (
-      <NotAvailable>
+      <NotAvailable label={screen.label}>
         <button type="button" aria-label={name} className={railButton}>
           {body}
         </button>
