@@ -46,7 +46,7 @@ test('an organization and a factory made elsewhere open at once, not as Not foun
   await expect(page.getByRole('heading', { level: 2, name: 'No factories in Empty Co yet' })).toBeVisible();
 
   await page.goto('/o/acme/f/goal');
-  await expect(page.getByRole('heading', { level: 1, name: 'Goal floor' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
   const created = await request.post('/v1/orgs/acme/factories', {
     data: { name: 'triage', title: 'Triage', start: { kind: 'blank' } },
   });
