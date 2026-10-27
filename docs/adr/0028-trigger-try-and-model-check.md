@@ -1,4 +1,4 @@
-# ADR 0027 — Trying a trigger with a past event, and the model check in Only if
+# ADR 0028 — Trying a trigger with a past event, and the model check in Only if
 
 Status: proposed · 2026-10-27 · Builds on [ADR 0016](0016-ui-revamp.md) (the screens are the contract, controls for features not built yet), [ADR 0017](0017-credentials.md) (organization credentials that connections refer to as `{{name}}`) and [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (connections, sealed secrets, the factory's model connection)
 
