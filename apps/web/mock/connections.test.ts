@@ -158,7 +158,7 @@ spec:
     tools: [go@1.26.10, "rm -rf /"]
     repository: { url: "https://gitlab.example.com/acme/infra", connection: github }
   connections: [aws-prod, nothing]
-  knowledge: { sources: [handbook, ghost] }
+  knowledge: { sources: [dashboards, ghost] }
   agents:
     - { name: worker, connections: [aws-prod] }
   board:
