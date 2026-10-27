@@ -18,13 +18,15 @@ import (
 const (
 	acmeJudges   = "/v1/orgs/acme/factories/acme/judges"
 	specFollowed = "spec-followed"
+	// writerAgent is acme's one agent.
+	writerAgent = "writer"
 )
 
 var _ api.JudgeTries = (*jonah.Loop)(nil)
 
 // followedJudge is acme's judge of the writer's runs.
 var followedJudge = domain.Judge{
-	Slug: specFollowed, Title: "Spec followed", Criterion: "The change does what the spec asks.", Agents: []string{"writer"},
+	Slug: specFollowed, Title: "Spec followed", Criterion: "The change does what the spec asks.", Agents: []string{writerAgent},
 	Outcomes: []domain.JudgeOutcome{{Score: 1, Label: "yes", Meaning: "All of it"}, {Score: 0, Label: "no", Meaning: "Not all"}},
 	PassMark: 0.5, Sample: 0.2, Enabled: true, Rubric: "# Spec followed\n",
 }
@@ -59,13 +61,13 @@ func (h *harness) finishedRun(t *testing.T, title string, endedAt time.Time) dom
 
 	ctx := inOrg(t)
 
-	it, err := h.store.CreateItem(ctx, domain.NewItem{FactoryID: acmeID, Title: title, Station: "inbox", CreatedAt: endedAt.Add(-time.Hour)})
+	it, err := h.store.CreateItem(ctx, domain.NewItem{FactoryID: acmeID, Title: title, Station: stInbox, CreatedAt: endedAt.Add(-time.Hour)})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	id, err := h.store.StartRun(ctx, ports.NewRun{
-		FactoryID: acmeID, DefinitionVersionID: h.acmeRecord(t).Current.ID, ItemID: it.ID, Station: "inbox", Agent: "writer",
+		FactoryID: acmeID, DefinitionVersionID: h.acmeRecord(t).Current.ID, ItemID: it.ID, Station: stInbox, Agent: writerAgent,
 		StartedAt: endedAt.Add(-time.Minute),
 	})
 	if err != nil {
@@ -133,7 +135,7 @@ func acmeMember(role domain.FactoryRole) domain.Principal {
 func orgReader() domain.Principal {
 	return domain.Principal{
 		Kind: domain.PrincipalService, Key: "019a0000-0000-7000-8000-0000000000kk", Name: "ci", Org: testOrg,
-		Scopes: []domain.Permission{"org:read"}, KeyCeiling: domain.FactoryViewer,
+		Scopes: []domain.Permission{scopeOrgRead}, KeyCeiling: domain.FactoryViewer,
 	}
 }
 
@@ -153,6 +155,44 @@ func wantProblem(t *testing.T, what string, code int, p gen.Problem, status int,
 	if code != status || deref(p.Code) != pcode {
 		t.Errorf("%s = %d %q, want %d %q", what, code, deref(p.Code), status, pcode)
 	}
+}
+
+// check is one condition of an answer and what it says.
+type check struct {
+	ok   bool
+	what string
+}
+
+// wantAll reports each check of v that fails.
+func wantAll(t *testing.T, name string, v any, checks ...check) {
+	t.Helper()
+
+	for _, c := range checks {
+		if !c.ok {
+			t.Errorf("%s = %+v, want %s", name, v, c.what)
+		}
+	}
+}
+
+// wantListed checks the list of TestJudges_List: spec-followed with its two scores, then
+// tests-added, paused, with none.
+func wantListed(t *testing.T, got gen.JudgeList) {
+	t.Helper()
+
+	f, p := got.Judges[0], got.Judges[1]
+	wantAll(t, "first judge", f,
+		check{f.Slug == specFollowed && f.Title == followedJudge.Title, "spec-followed"},
+		check{f.PassMark == 0.5 && f.Sample == 0.2 && f.Enabled, "its pass mark, sample and enabled"},
+		check{slices.Equal(f.Agents, []string{writerAgent}), "its agents"})
+
+	sum := f.Summary
+	wantAll(t, "spec-followed's summary", sum,
+		check{sum.Scored == 2 && sum.Passed == 1 && sum.PassRate == 0.5, "2 scored, 1 passed"},
+		check{len(sum.Days) == 1 && sum.Days[0].Day.Equal(domain.JudgeDayOf(t0)), "one day, t0's"})
+	wantAll(t, "second judge", p,
+		check{p.Slug == "tests-added" && !p.Enabled, "tests-added, disabled"},
+		check{p.Agents != nil && p.Summary.Days != nil && p.Summary.Scored == 0, "no agents and nothing scored, as []"})
+	wantAll(t, "judge cost", got.JudgeCostUsd, check{got.JudgeCostUsd > 0.0499 && got.JudgeCostUsd < 0.0501, "0.05"})
 }
 
 func TestJudges_List(t *testing.T) {
@@ -182,23 +222,7 @@ func TestJudges_List(t *testing.T) {
 		t.Fatalf("list = %+v, want version 1 and two judges", got)
 	}
 
-	f, p := got.Judges[0], got.Judges[1]
-	if f.Slug != specFollowed || f.Title != followedJudge.Title || f.PassMark != 0.5 || f.Sample != 0.2 || !f.Enabled ||
-		!slices.Equal(f.Agents, []string{"writer"}) {
-		t.Errorf("first judge = %+v, want spec-followed as its file says", f)
-	}
-
-	if s := f.Summary; s.Scored != 2 || s.Passed != 1 || s.PassRate != 0.5 || len(s.Days) != 1 || s.Days[0].Day.Format(time.DateOnly) != "2026-10-23" {
-		t.Errorf("spec-followed's summary = %+v, want 2 scored, 1 passed on 2026-10-23", s)
-	}
-
-	if p.Slug != "tests-added" || p.Enabled || p.Agents == nil || p.Summary.Scored != 0 || p.Summary.Days == nil {
-		t.Errorf("second judge = %+v, want tests-added, disabled, no agents and nothing scored", p)
-	}
-
-	if got.JudgeCostUsd < 0.0499 || got.JudgeCostUsd > 0.0501 {
-		t.Errorf("judge cost = %v, want 0.05", got.JudgeCostUsd)
-	}
+	wantListed(t, got)
 
 	// A viewer reads; a key without factory:read is refused.
 	h.as(acmeMember(domain.FactoryViewer))
@@ -211,6 +235,31 @@ func TestJudges_List(t *testing.T) {
 
 	code, pr := problemOfCall(t, h, http.MethodGet, acmeJudges, "")
 	wantProblem(t, "list without factory:read", code, pr, http.StatusForbidden, "forbidden")
+}
+
+// wantGot checks the judge of TestJudges_Get: spec-followed of v1 with its one score.
+func wantGot(t *testing.T, j gen.Judge) {
+	t.Helper()
+
+	wantAll(t, "get", j,
+		check{j.Slug == specFollowed && j.Rubric == followedJudge.Rubric && j.Version == 1, "spec-followed of v1 with its rubric"},
+		check{len(j.Outcomes) == 2 && j.Outcomes[0].Label == "yes" && j.Model == nil, "its outcomes and no model"},
+		check{j.Summary.Scored == 1 && j.Summary.CostUsd == 0.02, "one score, $0.02"},
+		check{len(j.Recent) == 1, "one recent score"})
+
+	if len(j.Recent) == 1 {
+		r := j.Recent[0]
+		wantAll(t, "recent score", r,
+			check{r.ItemTitle == "Add a flag" && strings.HasPrefix(r.ItemRef, "acme#"), "an acme item's"},
+			check{deref(r.Outcome) == "yes" && r.Score != nil && *r.Score == 1 && deref(r.Reason) == "Because.", "yes, 1, its reason"})
+	}
+
+	// acme names no size, and its connection is its model connection.
+	r := j.RunsOn
+	wantAll(t, "runs on", r,
+		check{r.Size == "medium" && r.Inherited, "medium, inherited"},
+		check{slices.Equal(r.Connections, []string{"claude"}), "claude"},
+		check{slices.Equal(r.Sees, []gen.JudgeRunsOnSees{gen.Events, gen.Spec, gen.PullRequest}), "events, spec and pull request"})
 }
 
 func TestJudges_Get(t *testing.T) {
@@ -226,21 +275,7 @@ func TestJudges_Get(t *testing.T) {
 		t.Fatalf("get = %d, want 200", code)
 	}
 
-	if j.Slug != specFollowed || j.Rubric != followedJudge.Rubric || len(j.Outcomes) != 2 || j.Outcomes[0].Label != "yes" ||
-		j.Version != 1 || j.Model != nil || j.Summary.Scored != 1 || j.Summary.CostUsd != 0.02 {
-		t.Errorf("get = %+v, want spec-followed of v1 with its file and one score", j)
-	}
-
-	if len(j.Recent) != 1 || j.Recent[0].ItemTitle != "Add a flag" || !strings.HasPrefix(j.Recent[0].ItemRef, "acme#") ||
-		deref(j.Recent[0].Outcome) != "yes" || j.Recent[0].Score == nil || *j.Recent[0].Score != 1 || deref(j.Recent[0].Reason) != "Because." {
-		t.Errorf("recent = %+v, want the one score of an acme item", j.Recent)
-	}
-
-	// acme names no size, and its connection is its model connection.
-	if r := j.RunsOn; r.Size != "medium" || !slices.Equal(r.Connections, []string{"claude"}) || !r.Inherited ||
-		!slices.Equal(r.Sees, []gen.JudgeRunsOnSees{gen.Events, gen.Spec, gen.PullRequest}) {
-		t.Errorf("runs on = %+v, want medium, claude, inherited", r)
-	}
+	wantGot(t, j)
 
 	code, p := problemOfCall(t, h, http.MethodGet, acmeJudges+"/nobody-here", "")
 	wantProblem(t, "get of an unknown judge", code, p, http.StatusNotFound, "judge-not-found")

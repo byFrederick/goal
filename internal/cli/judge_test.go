@@ -28,6 +28,7 @@ func judgeGoald(t *testing.T, routes map[string]func(w http.ResponseWriter)) (*h
 	for pattern, answer := range routes {
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
 			mu.Lock()
+
 			sent = append(sent, r.Method+" "+r.URL.Path)
 			mu.Unlock()
 
@@ -194,8 +195,7 @@ func TestJudgeCommand_Problems(t *testing.T) {
 
 	_, err := goalJudge(t, srv.URL, "list", "--factory", searchFactory)
 
-	var refused *accessError
-	if !errors.As(err, &refused) {
+	if _, ok := errors.AsType[*accessError](err); !ok {
 		t.Errorf("goal judge list refused = %v, want an access error (exit 77)", err)
 	}
 }

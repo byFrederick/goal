@@ -469,18 +469,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ap
 		deps.Auth = api.AuthConfig{Mode: api.AuthSession, EmailCodes: !in.noEmailCodes, Google: in.google}
 	}
 
-	h.judges, h.judgeScores = porttest.NewJudges(), porttest.NewJudgeScores(h.store)
-	deps.Judges = &api.JudgeDeps{
-		Judges: h.judges, Scores: h.judgeScores,
-		Tries: jonah.New(jonah.Deps{
-			Orgs: tenancy, Runs: h.store, Finished: porttest.NewFinishedRuns(h.store), Judges: h.judges, Scores: h.judgeScores,
-			Runner: porttest.NewJudgeRunner(nil), Clock: h.clock,
-		}, jonah.Config{}),
-	}
-
-	for _, opt := range opts {
-		opt(&deps)
-	}
+	h.withJudges(&deps, tenancy, opts)
 
 	handler, err := api.New(deps)
 	if err != nil {
@@ -500,6 +489,29 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ap
 	})
 
 	return h
+}
+
+// withJudges gives d h's judges, then changes d with each of opts.
+func (h *harness) withJudges(d *api.Deps, tenancy *porttest.Tenancy, opts []func(*api.Deps)) {
+	d.Judges = h.judgeDeps(tenancy)
+
+	for _, opt := range opts {
+		opt(d)
+	}
+}
+
+// judgeDeps are h's judges and their scores, with a jonah loop over them and the store's finished
+// runs for tries.
+func (h *harness) judgeDeps(tenancy *porttest.Tenancy) *api.JudgeDeps {
+	h.judges, h.judgeScores = porttest.NewJudges(), porttest.NewJudgeScores(h.store)
+
+	return &api.JudgeDeps{
+		Judges: h.judges, Scores: h.judgeScores,
+		Tries: jonah.New(jonah.Deps{
+			Orgs: tenancy, Runs: h.store, Finished: porttest.NewFinishedRuns(h.store), Judges: h.judges, Scores: h.judgeScores,
+			Runner: porttest.NewJudgeRunner(nil), Clock: h.clock,
+		}, jonah.Config{}),
+	}
 }
 
 // engineConnections are the connections the engine's runs and merges get: acme's model connection
