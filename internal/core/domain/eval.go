@@ -8,6 +8,8 @@ import (
 	"maps"
 	"regexp"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -244,4 +246,186 @@ func ManifestSHA256(m Manifest) BlobHash {
 	}
 
 	return BlobHash(hex.EncodeToString(h.Sum(nil)))
+}
+
+// EvalInput is an eval case's item as it reaches the agent: its title, body, work type and lane,
+// earlier stations' outputs by station id, and the commit of runtime.repository the try starts
+// from (empty: the default branch).
+type EvalInput struct {
+	Title   string
+	Body    string
+	Type    string
+	Lane    string
+	Outputs map[string]any
+	Ref     string
+}
+
+// EvalCaseSpec is an eval case as the eval loop reads it from evals/cases/<name>.yaml (the schema
+// contracts/definitions/evals.schema.json describes): the agent it runs, its input, how many tries
+// and exactly one check. Contract checks the output against the agent's contract, Judge names a
+// judge of evals/judges by slug, and ReferencePatch is the path of a known-good patch in the
+// definition.
+type EvalCaseSpec struct {
+	Name        string
+	SHA256      BlobHash
+	Agent       string
+	Description string
+	Input       EvalInput
+	Tries       int
+
+	Contract       bool
+	Judge          string
+	ReferencePatch string
+}
+
+// The checked_by of an eval result: the contract, judge:<slug> or reference-patch:<path>.
+const (
+	EvalCheckedByContract       = "contract"
+	EvalCheckedByJudge          = "judge:"
+	EvalCheckedByReferencePatch = "reference-patch:"
+)
+
+// Check reports what makes c impossible to run, wrapping ErrInvalid: a name that is not a case
+// file's, no agent, no tries, or not exactly one check.
+func (c EvalCaseSpec) Check() error {
+	var errs []error
+
+	bad := func(format string, args ...any) {
+		errs = append(errs, fmt.Errorf("eval case %q: "+format+": %w", append(append([]any{c.Name}, args...), ErrInvalid)...))
+	}
+
+	if !evalCaseName.MatchString(c.Name) {
+		bad("the name is not a case file's name")
+	}
+
+	if c.Agent == "" {
+		bad("no agent")
+	}
+
+	if c.Tries < 1 {
+		bad("%d tries, want at least 1", c.Tries)
+	}
+
+	checks := 0
+
+	for _, set := range []bool{c.Contract, c.Judge != "", c.ReferencePatch != ""} {
+		if set {
+			checks++
+		}
+	}
+
+	if checks != 1 {
+		bad("%d checks, want exactly one of contract, judge and reference patch", checks)
+	}
+
+	return errors.Join(errs...)
+}
+
+// CheckedBy is what an eval result of c records as its checked_by.
+func (c EvalCaseSpec) CheckedBy() string {
+	switch {
+	case c.Judge != "":
+		return EvalCheckedByJudge + c.Judge
+	case c.ReferencePatch != "":
+		return EvalCheckedByReferencePatch + c.ReferencePatch
+	default:
+		return EvalCheckedByContract
+	}
+}
+
+// PatchFiles lists the paths a unified diff touches, sorted and each once: the old and new names
+// of its file headers (--- and +++, git's diff --git and rename lines), with a/ and b/ stripped
+// and /dev/null skipped, so a rename counts under both names. Lines inside hunks are never read as
+// headers.
+func PatchFiles(diff []byte) []string {
+	seen := map[string]bool{}
+	add := func(p string) {
+		if p != "" && p != "/dev/null" {
+			seen[p] = true
+		}
+	}
+
+	var oldLeft, newLeft int
+
+	for _, line := range strings.Split(string(diff), "\n") {
+		line = strings.TrimSuffix(line, "\r")
+
+		if oldLeft > 0 || newLeft > 0 {
+			switch {
+			case strings.HasPrefix(line, "-"):
+				oldLeft--
+			case strings.HasPrefix(line, "+"):
+				newLeft--
+			case strings.HasPrefix(line, `\`):
+			default:
+				oldLeft--
+				newLeft--
+			}
+
+			continue
+		}
+
+		switch {
+		case strings.HasPrefix(line, "@@ "):
+			oldLeft, newLeft = hunkLengths(line)
+		case strings.HasPrefix(line, "--- "), strings.HasPrefix(line, "+++ "):
+			add(patchPath(line[4:]))
+		case strings.HasPrefix(line, "rename from "):
+			add(line[len("rename from "):])
+		case strings.HasPrefix(line, "rename to "):
+			add(line[len("rename to "):])
+		case strings.HasPrefix(line, "diff --git a/"):
+			// A mode change or a binary file has no --- and +++ lines.
+			if a, b, ok := strings.Cut(line[len("diff --git a/"):], " b/"); ok {
+				add(a)
+				add(b)
+			}
+		}
+	}
+
+	return slices.Sorted(maps.Keys(seen))
+}
+
+// patchPath is the path of a --- or +++ header: without a timestamp after a tab and without the
+// a/ or b/ prefix.
+func patchPath(s string) string {
+	s, _, _ = strings.Cut(s, "\t")
+	s = strings.TrimSpace(s)
+
+	if s == "/dev/null" {
+		return s
+	}
+
+	for _, prefix := range []string{"a/", "b/"} {
+		if rest, ok := strings.CutPrefix(s, prefix); ok {
+			return rest
+		}
+	}
+
+	return s
+}
+
+// hunkLengths reads the old and new line counts of a hunk header, @@ -l[,s] +l[,s] @@; a count
+// left out is 1.
+func hunkLengths(header string) (int, int) {
+	fields := strings.Fields(header)
+	if len(fields) < 3 {
+		return 0, 0
+	}
+
+	length := func(r string) int {
+		_, s, ok := strings.Cut(r[1:], ",")
+		if !ok {
+			return 1
+		}
+
+		n, err := strconv.Atoi(s)
+		if err != nil || n < 0 {
+			return 0
+		}
+
+		return n
+	}
+
+	return length(fields[1]), length(fields[2])
 }
