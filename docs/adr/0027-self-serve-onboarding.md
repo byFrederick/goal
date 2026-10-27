@@ -1,4 +1,4 @@
-# ADR 0026 — Self-serve onboarding: anyone signed in creates an organization, and progress comes from existing data
+# ADR 0027 — Self-serve onboarding: anyone signed in creates an organization, and progress comes from existing data
 
 Status: accepted · 2026-10-27 · Builds on [ADR 0016](0016-ui-revamp.md) (decision 6 orders onboarding among the new features built end to end) · Amends [ADR 0007](0007-identity-better-auth.md) decision 5 (only platform admins created organizations)
 
@@ -21,7 +21,7 @@ The work is split into the parts of one assembly (the permission, repositories, 
 2. **Onboarding progress comes from existing data, with no new table.** The steps are done when, in order: the organization exists, a GitHub connection exists, a factory exists, its budgets and targets are set, it has triggers, it has invitations, its first item is done, a Slack connection exists, and a knowledge source exists. The last two are only on the Floor's setup checklist. The current step is in the URL: `/get-started` for step 1, then `/o/$org/get-started/$step` with the step keys `code`, `factory`, `line`, `budget`, `intake`, `people` and `first-item`, and `?factory=<id>` once the factory exists. Dismissing the Floor's setup checklist is remembered per browser, not on the server.
 3. **The first item comes from an optional `starter.item` section of `factory.yaml`.** It has `title`, `type` and `body`, and a template carries it. It is submitted once, through the existing `submitItem`, when the factory has no items yet; a factory with items gets none.
 4. **The factory is created from the template at step 3, and published when the person continues from step 5.** Steps 4 and 5 edit its draft. Publishing at the end of step 5 means triggers and the first item run on a published version.
-5. **The starter triggers are the template's triggers, off until the person turns them on.** They are triggers as the Intake triggers feature defines them; step 6 only shows them and turns the chosen ones on.
+5. **The starter triggers are the template's triggers, off until the person turns them on.** They are triggers as [ADR 0026](0026-intake-triggers.md) defines them, and a template writes each one with `enabled: false` (the field defaults to `true`); step 6 only shows them and turns the chosen ones on.
 
 ## Consequences
 

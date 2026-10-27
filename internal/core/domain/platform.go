@@ -9,7 +9,7 @@ type User struct {
 }
 
 // PlatformAdmin is a person who may manage platform admins and read the install's security log.
-// Like every signed-in person they may create organizations (ADR 0026). Inside an organization
+// Like every signed-in person they may create organizations (ADR 0027). Inside an organization
 // they have only the rights of their membership there.
 type PlatformAdmin struct {
 	User User
