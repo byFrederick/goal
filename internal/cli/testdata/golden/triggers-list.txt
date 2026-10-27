@@ -1,0 +1,4 @@
+NAME         STATE  WHEN                            CREATES                          7 DAYS
+nightly      on     0 8 * * MON-FRI, Europe/Berlin  task → triage                    5
+ci-failures  off    github.check_run.failed         bug → ship, expedite, lane fast  0
+! ci-failures: the factory has no webhook endpoint of kind github
