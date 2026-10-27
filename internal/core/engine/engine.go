@@ -95,6 +95,9 @@ type Deps struct {
 	// Connections give each run its organization's connections (spec 4 §4.5), and merges the
 	// line's connections whose kind has a code host (§4.7).
 	Connections ports.Connections
+	// Credentials fill the connections' secret fields that refer to one and give each agent the
+	// ones listed for it (ADR 0017 decisions 5 and 6).
+	Credentials ports.Credentials
 	// CodeHosts are the code host adapters by the name a connection kind gives (KindSpec.CodeHost).
 	CodeHosts map[string]ports.CodeHost
 	// Minters are the minters by the name a connection kind gives (KindSpec.Mint): a run of a
@@ -106,7 +109,7 @@ type Deps struct {
 
 func (d Deps) complete() bool {
 	return d.Store != nil && d.Orgs != nil && d.Sandboxes != nil && d.Contracts != nil && d.Secrets != nil &&
-		d.Connections != nil && d.CodeHosts != nil && d.Clock != nil
+		d.Connections != nil && d.Credentials != nil && d.CodeHosts != nil && d.Clock != nil
 }
 
 // Config is the engine's behaviour; zero durations take the defaults below.
@@ -180,6 +183,7 @@ type Engine struct {
 	contracts   ports.Contracts
 	secrets     ports.Secrets
 	connections ports.Connections
+	credentials ports.Credentials
 	codehosts   map[string]ports.CodeHost
 	minters     map[string]ports.Minter
 	clock       ports.Clock
@@ -238,7 +242,7 @@ func New(d Deps, cfg Config) (*Engine, error) {
 
 	return &Engine{
 		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, connections: d.Connections,
-		codehosts: d.CodeHosts, minters: d.Minters, clock: d.Clock, log: log, cfg: cfg, lines: lines,
+		credentials: d.Credentials, codehosts: d.CodeHosts, minters: d.Minters, clock: d.Clock, log: log, cfg: cfg, lines: lines,
 		active: map[domain.ItemID]*activeRun{}, exhausted: map[domain.FactoryID]bool{},
 	}, nil
 }
