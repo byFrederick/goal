@@ -1,10 +1,11 @@
 import { cn } from './cn';
+import { GoalMark } from './goal-mark';
 
-/** The mark and the name, atop the sign-in pages. */
+/** The Goal mark and the name, top left of the sign-in pages (sign-up.html's brand). */
 export function Wordmark() {
   return (
-    <span className="flex items-center gap-2.5 text-xl font-medium tracking-[-0.02em] text-ink">
-      <LogoMark className="size-8" />
+    <span className="flex items-center gap-3 text-detail-title tracking-display text-ink">
+      <GoalMark size="brand" />
       Goal
     </span>
   );

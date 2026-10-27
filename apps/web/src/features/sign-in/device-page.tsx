@@ -6,13 +6,13 @@
 // re-auth dialog asks for.
 import { useMutation, useSuspenseQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Check, TriangleAlert } from 'lucide-react';
+import { Check, Terminal, TriangleAlert } from 'lucide-react';
 import { type FormEvent, type Ref, useEffect, useRef, useState } from 'react';
 import { AuthFailure, authMutations, claimDeviceCode } from '../../api/auth';
 import { ApiError, getDeviceRequest } from '../../api/client';
 import { meQuery } from '../../api/queries';
 import type { DeviceRequest, Me } from '../../api/types';
-import { displayName, hasName } from '../../shared/names';
+import { displayName } from '../../shared/names';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
@@ -86,14 +86,14 @@ export function DevicePage() {
         <AuthPage>
           <Callout tone="ok">Approved for {me.user ? displayName(me.user) : 'you'}</Callout>
           <AuthHeading ref={heading}>The CLI is signed in</AuthHeading>
-          <p className="m-0 text-[15px] leading-normal text-ink-soft">You can close this tab.</p>
+          <p className="m-0 text-body text-ink-soft">You can close this tab.</p>
         </AuthPage>
       );
     case 'denied':
       return (
         <AuthPage>
           <AuthHeading ref={heading}>Denied</AuthHeading>
-          <p className="m-0 text-[15px] leading-normal text-ink-soft">The CLI was not signed in.</p>
+          <p className="m-0 text-body text-ink-soft">The CLI was not signed in.</p>
         </AuthPage>
       );
   }
@@ -138,9 +138,11 @@ function CodeStep({ heading, invalid, onFound }: CodeStepProps) {
 
   return (
     <AuthPage>
-      <AuthHeading ref={heading}>Sign in to the Goal CLI</AuthHeading>
-      <p className="m-0 text-[15px] leading-normal text-ink-soft">Enter the code shown in your terminal.</p>
-      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-3.5">
+      <div className="flex flex-col gap-2">
+        <AuthHeading ref={heading}>Sign in to the Goal CLI</AuthHeading>
+        <p className="m-0 text-body text-ink-soft">Enter the code shown in your terminal.</p>
+      </div>
+      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-3">
         <Field label="Code" error={error}>
           <Input
             name="user_code"
@@ -156,7 +158,7 @@ function CodeStep({ heading, invalid, onFound }: CodeStepProps) {
             {...(failed ? { 'aria-invalid': true, 'aria-describedby': 'device-code-message' } : {})}
             // The page is for the code: it takes focus as the page opens.
             autoFocus
-            className="h-14 text-center font-mono text-2xl tracking-[0.12em] md:h-14 md:text-2xl"
+            className="h-14 text-center font-mono text-kpi tracking-[0.12em]"
           />
         </Field>
         <LiveMessage>
@@ -171,12 +173,13 @@ function CodeStep({ heading, invalid, onFound }: CodeStepProps) {
           variant="primary"
           size="lg"
           aria-busy={find.isPending || undefined}
-          className="h-12 w-full justify-center aria-busy:cursor-progress"
+          className="w-full justify-center aria-busy:cursor-progress"
         >
           {find.isPending ? (
             <>
               <Spinner />
               Checking…
+              <span className="sr-only">Loading</span>
             </>
           ) : (
             'Continue'
@@ -197,7 +200,32 @@ interface ReviewStepProps {
   onInvalid: () => void;
 }
 
-/** Step 2: who asks, from where and when; approve or deny. */
+/** The code as the terminal shows it: letters in boxes, split by a dash (consent.html's right card). */
+function CodeBoxes({ code }: { code: string }) {
+  const [first, second] = code.split('-');
+  const box =
+    'flex h-14 w-9 items-center justify-center rounded-control border border-line bg-sidebar text-kpi text-ink sm:w-10';
+  // The cells are a fixed row of characters, so the position is their identity.
+  const cells = (chars: string) =>
+    [...chars].map((letter, i) => (
+      // biome-ignore lint/suspicious/noArrayIndexKey: a fixed row of characters
+      <span key={i} className={box} aria-hidden="true">
+        {letter}
+      </span>
+    ));
+  return (
+    <div className="flex items-center gap-1 sm:gap-2">
+      {cells(first ?? '')}
+      <span aria-hidden="true" className="text-kpi text-muted">
+        –
+      </span>
+      {cells(second ?? '')}
+      <span className="sr-only">{code}</span>
+    </div>
+  );
+}
+
+/** Step 2: what is asked, from where and when; approve or deny. */
 function ReviewStep({ heading, me, code, request, onApproved, onDenied, onInvalid }: ReviewStepProps) {
   const [now] = useState(() => Date.now());
   const onError = (err: unknown) => {
@@ -208,27 +236,34 @@ function ReviewStep({ heading, me, code, request, onApproved, onDenied, onInvali
   const deny = useMutation({ ...authMutations.denyDevice, onSuccess: onDenied, onError });
   const busy = approve.isPending || deny.isPending;
   const failed = approve.error ?? deny.error;
+  const who = me.user ? displayName(me.user) : 'you';
 
   return (
     <AuthPage wide>
-      <AuthHeading ref={heading}>Sign in to the Goal CLI</AuthHeading>
-      <p className="m-0 text-base leading-normal text-ink sm:text-[17px]">
-        {request.client_name} wants to sign in as{' '}
-        <strong className="font-medium">{me.user ? displayName(me.user) : 'you'}</strong>
-        {me.user && hasName(me.user) ? ` (${me.user.email})` : null}
-      </p>
-      <p className="m-0 flex flex-wrap items-center gap-2.5 text-sm text-ink-soft">
-        Code you entered
-        <span className="inline-flex h-8 items-center rounded-chip border border-line bg-card px-2.5 font-mono text-[15px] tracking-[0.06em] text-ink">
-          {code}
-        </span>
-      </p>
-      <dl className="m-0 grid grid-cols-1 gap-x-4 gap-y-0.5 rounded-control border border-line bg-card px-3.5 py-3 text-sm leading-snug sm:grid-cols-[140px_minmax(0,1fr)] sm:gap-y-2.5 sm:px-4 sm:py-3.5">
+      <span className="inline-grid size-12 flex-none place-items-center rounded-cell bg-andon text-white">
+        <Terminal size={20} strokeWidth={1.8} aria-hidden="true" />
+      </span>
+      <div className="flex flex-col gap-2">
+        <AuthHeading ref={heading}>Sign in the goal CLI?</AuthHeading>
+        <p className="m-0 text-body text-ink-soft">Check that this code matches the one in your terminal.</p>
+      </div>
+      <CodeBoxes code={code} />
+      <dl className="m-0 grid grid-cols-1 gap-x-4 gap-y-1 rounded-control bg-panel px-4 py-3 text-secondary leading-snug sm:grid-cols-[120px_minmax(0,1fr)] sm:gap-y-3">
+        <dt className="text-muted">Device</dt>
+        <dd className="m-0 mb-2 min-w-0 break-words text-ink sm:mb-0">
+          {[request.client_name, request.user_agent].filter(Boolean).join(', ')}
+        </dd>
+        <dt className="text-muted">Asked</dt>
+        <dd className="m-0 mb-2 min-w-0 text-ink sm:mb-0">
+          {requestTimes(request.requested_at, request.expires_at, now)}
+        </dd>
+        <dt className="text-muted">Gets</dt>
+        <dd className="m-0 min-w-0 text-ink">Full access as {who}, in Goal</dd>
         {request.ip ? (
           <>
             <dt className="text-muted">Requested from</dt>
-            <dd className="m-0 mb-2 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5 sm:mb-0">
-              <span className="font-mono">{request.ip}</span>
+            <dd className="m-0 mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2 sm:mt-0">
+              <span className="font-mono text-ink">{request.ip}</span>
               {request.same_ip ? (
                 <Chip tone="ok">
                   <Check size={14} strokeWidth={1.8} aria-hidden="true" />
@@ -242,25 +277,7 @@ function ReviewStep({ heading, me, code, request, onApproved, onDenied, onInvali
             </dd>
           </>
         ) : null}
-        {request.user_agent ? (
-          <>
-            <dt className="text-muted">Browser or tool</dt>
-            <dd className="m-0 mb-2 min-w-0 font-mono break-words sm:mb-0">{request.user_agent}</dd>
-          </>
-        ) : null}
-        <dt className="text-muted">Requested</dt>
-        <dd className="m-0 min-w-0">{requestTimes(request.requested_at, request.expires_at, now)}</dd>
       </dl>
-      <p
-        role="note"
-        className="m-0 flex items-start gap-2.5 rounded-control border border-rework-tint bg-rework-tint px-3 py-2.5 text-sm leading-snug text-rework-ink"
-      >
-        <TriangleAlert size={16} strokeWidth={1.6} aria-hidden="true" className="mt-0.5 shrink-0" />
-        <span>
-          Only approve if you just ran <span className="font-mono text-[13px]">goal login</span> yourself. Never approve
-          a code someone sent you.
-        </span>
-      </p>
       <LiveMessage>
         {failed && !(failed instanceof AuthFailure && failed.kind === 'refused') ? (
           <Callout tone="rework">{failureText(failed)}</Callout>
@@ -268,28 +285,32 @@ function ReviewStep({ heading, me, code, request, onApproved, onDenied, onInvali
       </LiveMessage>
       <div className="flex gap-2">
         <Button
-          variant="primary"
-          size="lg"
-          aria-busy={approve.isPending || undefined}
-          disabled={busy}
-          onClick={() => approve.mutate(code)}
-          className="h-12 flex-1 justify-center aria-busy:cursor-progress"
-        >
-          {approve.isPending ? <Spinner /> : null}
-          Approve
-        </Button>
-        <Button
           variant="white"
           size="lg"
           aria-busy={deny.isPending || undefined}
           disabled={busy}
           onClick={() => deny.mutate(code)}
-          className="h-12 flex-1 justify-center aria-busy:cursor-progress"
+          className="flex-1 justify-center text-rework-ink aria-busy:cursor-progress"
         >
           {deny.isPending ? <Spinner tone="dark" /> : null}
           Deny
         </Button>
+        <Button
+          variant="primary"
+          size="lg"
+          aria-busy={approve.isPending || undefined}
+          disabled={busy}
+          onClick={() => approve.mutate(code)}
+          className="flex-1 justify-center aria-busy:cursor-progress"
+        >
+          {approve.isPending ? <Spinner /> : null}
+          Approve
+        </Button>
+        {busy ? <span className="sr-only">Loading</span> : null}
       </div>
+      <p className="m-0 text-meta text-muted">
+        Didn’t run <span className="font-mono">goal login</span> just now? Deny it. Nothing else happens.
+      </p>
     </AuthPage>
   );
 }
@@ -299,11 +320,11 @@ export function SignInToApprove() {
   return (
     <AuthPage>
       <AuthHeading>Sign in to approve the Goal CLI</AuthHeading>
-      <p className="m-0 text-[15px] leading-normal text-ink-soft">You’ll come back to this page after signing in.</p>
+      <p className="m-0 text-body text-ink-soft">You’ll come back to this page after signing in.</p>
       <Link
         to="/sign-in"
         search={{ next: '/device' }}
-        className="inline-flex h-12 w-full items-center justify-center rounded-control bg-ink px-4 text-[15px] font-medium text-white no-underline transition-colors duration-200 hover:bg-ink/90"
+        className="inline-flex h-11 w-full items-center justify-center rounded-control bg-run px-4 font-control text-white no-underline transition-colors duration-200 hover:bg-run/90"
       >
         Sign in
       </Link>
