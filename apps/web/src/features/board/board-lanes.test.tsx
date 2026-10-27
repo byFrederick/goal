@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, screen, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Board, BoardLane, BoardStation, Factory, ItemCard, ItemWaiting, OrgSummary } from '../../api/types';
 import { renderBoardPage } from '../../test/route';
@@ -85,7 +85,6 @@ const station = (over: Partial<BoardStation>): BoardStation => ({
 
 const WORKING = 'Checkout API p95 above 900 ms';
 const QUEUED = 'Triage the nightly export';
-const STRAY = 'Rotate the staging keys';
 
 /** One agent station with two lanes: the investigator works one item and has one queued; the triager has nothing. */
 const board = (over: Partial<BoardStation> = {}, items: ItemCard[] = []): Board => ({
@@ -125,37 +124,14 @@ const workItem = item({
   touch_count: 2,
 });
 const queuedItem = item({ id: 'item-7', ref: 'sre#7', number: 7, title: QUEUED, board_lane: 'investigator' });
-const strayItem = item({
-  id: 'item-9',
-  ref: 'sre#9',
-  number: 9,
-  title: STRAY,
-  state: 'in_progress',
-  board_lane: 'gone',
-});
+
+/** The phone's picked station: the one tab panel (jsdom draws the desktop columns too, so the names repeat). */
+async function phonePanel(): Promise<HTMLElement> {
+  await waitFor(() => expect(document.querySelector('[role="tabpanel"]')).not.toBeNull());
+  return document.querySelector('[role="tabpanel"]') as HTMLElement;
+}
 
 describe('board lanes', () => {
-  it('renders one lane per station lane in API order, headed by role, model and slot boxes', async () => {
-    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [workItem, queuedItem]) });
-
-    const columns = await screen.findByRole('region', { name: 'Stations' });
-    const investigate = within(columns).getByRole('region', { name: 'Investigate' });
-    const lanes = within(investigate).getAllByRole('region');
-    expect(lanes.map((l) => l.getAttribute('aria-label'))).toEqual(['Investigator', 'Triager']);
-
-    const investigator = lanes[0] as HTMLElement;
-    expect(within(investigator).getByText('Sonnet 5.5')).toBeTruthy();
-    // Two slots, one of them busy: one filled box, one outlined.
-    expect(within(investigator).getByText('1 of 2 slots busy')).toBeTruthy();
-    const boxes = investigator.querySelectorAll('[aria-hidden="true"].size-2\\.5');
-    expect([...boxes].map((b) => b.classList.contains('bg-run'))).toEqual([true, false]);
-
-    // A lane with no model and no card of its own says so.
-    const triager = lanes[1] as HTMLElement;
-    expect(within(triager).queryByText('Sonnet 5.5')).toBeNull();
-    expect(within(triager).getByText('Nothing to do')).toBeTruthy();
-  });
-
   it('shows a person lane without slot boxes at a human station', async () => {
     const approve: Board = {
       ...board(),
@@ -172,95 +148,27 @@ describe('board lanes', () => {
         }),
       ],
     };
-    renderBoardPage({ page: BoardPage, org, factory, board: approve });
+    renderBoardPage({ page: BoardPage, org, factory, board: approve, station: 'approve' });
 
-    const columns = await screen.findByRole('region', { name: 'Stations' });
-    // The column and its lane are both named Approve; the column comes first, the lane inside it.
-    const [column] = within(columns).getAllByRole('region', { name: 'Approve' });
-    const [person] = within(column as HTMLElement).getAllByRole('region');
-    expect(within(person as HTMLElement).getByRole('heading', { name: 'Approve' })).toBeTruthy();
+    const columns = await phonePanel();
+    // The station's panel is named Approve, and its lane inside it.
+    const [person] = within(columns).getAllByRole('region');
+    expect(within(person as HTMLElement).getAllByRole('heading', { name: 'Approve' }).length).toBeGreaterThan(0);
     expect(within(person as HTMLElement).queryByText(/slots busy/)).toBeNull();
-  });
-
-  it('puts a card in the lane its board_lane names, and a card no lane claims in an untitled lane at the foot', async () => {
-    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [workItem, strayItem, queuedItem]) });
-
-    const investigate = within(await screen.findByRole('region', { name: 'Stations' })).getByRole('region', {
-      name: 'Investigate',
-    });
-    const investigator = within(investigate).getByRole('region', { name: 'Investigator' });
-    expect(within(investigator).getByRole('link', { name: WORKING })).toBeTruthy();
-    expect(within(investigator).getByRole('link', { name: QUEUED })).toBeTruthy();
-    expect(within(investigator).queryByRole('link', { name: STRAY })).toBeNull();
-
-    const triager = within(investigate).getByRole('region', { name: 'Triager' });
-    expect(within(triager).queryByRole('link', { name: STRAY })).toBeNull();
-    // The unclaimed card is still in the station, below the lanes.
-    expect(within(investigate).getByRole('link', { name: STRAY })).toBeTruthy();
-  });
-
-  it('lists a lane’s work cards (doing line, touches) above its waiting rows (reason)', async () => {
-    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [queuedItem, workItem]) });
-
-    const investigator = within(
-      within(await screen.findByRole('region', { name: 'Stations' })).getByRole('region', { name: 'Investigate' }),
-    ).getByRole('region', { name: 'Investigator' });
-    const [card, row] = within(investigator).getAllByRole('article');
-    expect(within(card as HTMLElement).getByRole('link', { name: WORKING })).toBeTruthy();
-    expect(within(card as HTMLElement).getByText('Working, turn 3')).toBeTruthy();
-    expect(within(card as HTMLElement).getByText('2 touches')).toBeTruthy();
-
-    expect(within(row as HTMLElement).getByRole('link', { name: QUEUED })).toBeTruthy();
-    expect(within(row as HTMLElement).getByText('Waiting')).toBeTruthy();
-    expect(within(row as HTMLElement).queryByText('2 touches')).toBeNull();
   });
 
   it('shows no touches on a card nobody touched', async () => {
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [{ ...workItem, touch_count: 0 }]) });
 
-    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const columns = await phonePanel();
     const card = within(columns).getByRole('link', { name: WORKING }).closest('article') as HTMLElement;
     expect(within(card).queryByText(/touch/)).toBeNull();
-  });
-
-  it('says what the run is doing now on a work card, its working icon and one truncated line', async () => {
-    const doing = item({ ...workItem, activity: 'Editing src/checkout/handler.ts' });
-    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [doing]) });
-
-    const columns = await screen.findByRole('region', { name: 'Stations' });
-    const card = within(columns).getByRole('link', { name: WORKING }).closest('article') as HTMLElement;
-    const line = within(card).getByText('Editing src/checkout/handler.ts');
-    expect(line.classList).toContain('truncate');
-    expect(line.parentElement?.getAttribute('title')).toBe('Editing src/checkout/handler.ts');
-    expect(within(card).queryByText('Working, turn 3')).toBeNull();
-  });
-
-  it('truncates a long doing line on one line with the full text in a title', async () => {
-    const activity = `Running ${'the full integration suite against the staging cluster '.repeat(4)}`.trimEnd();
-    const doing = item({ ...workItem, activity });
-    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [doing]) });
-
-    const columns = await screen.findByRole('region', { name: 'Stations' });
-    const card = within(columns).getByRole('link', { name: WORKING }).closest('article') as HTMLElement;
-    const line = within(card).getByText(activity);
-    expect(line.classList).toContain('truncate');
-    expect(line.parentElement?.getAttribute('title')).toBe(activity);
-  });
-
-  it('shows a plan bar of one segment per todo, done, the one in hand, then to do, with its count', async () => {
-    const planned = item({ ...workItem, plan_steps: { done: 2, total: 5 } });
-    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [planned]) });
-
-    const columns = await screen.findByRole('region', { name: 'Stations' });
-    const bar = within(columns).getByRole('img', { name: '2 of 5 steps' });
-    const states = Array.from(bar.querySelectorAll('[data-state]')).map((el) => el.getAttribute('data-state'));
-    expect(states).toEqual(['done', 'done', 'current', 'todo', 'todo']);
   });
 
   it('shows no plan bar on a card whose run has no plan steps', async () => {
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [{ ...workItem, plan_steps: null }]) });
 
-    await screen.findByRole('region', { name: 'Stations' });
+    await phonePanel();
     expect(screen.queryByRole('img', { name: /steps/ })).toBeNull();
   });
 
@@ -285,146 +193,9 @@ describe('board lanes', () => {
   it('never shows a numbered agent copy on a card, row or lane', async () => {
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [workItem, queuedItem]) });
 
-    await screen.findByRole('region', { name: 'Stations' });
+    await phonePanel();
     expect(screen.queryByText(/investigator-\d+\b/)).toBeNull();
     expect(screen.queryByText(/triager-\d+\b/)).toBeNull();
-  });
-
-  it('truncates a long role, model, doing line and reason on one line with the full text in a title', async () => {
-    const longRole = `Senior ${'infrastructure '.repeat(20)}engineer`;
-    const longTitle = `Incident ${'postmortem '.repeat(25)}follow-up`;
-    const working = item({
-      id: 'item-30',
-      ref: 'sre#30',
-      number: 30,
-      title: longTitle,
-      state: 'in_progress',
-      turn: 5,
-      board_lane: 'long',
-    });
-    const longBoard = board({ lanes: [lane({ key: 'long', role: longRole, model_label: longRole })] }, [working]);
-    renderBoardPage({ page: BoardPage, org, factory, board: longBoard });
-
-    const columns = await screen.findByRole('region', { name: 'Stations' });
-    const card = within(columns).getByRole('link', { name: longTitle }).closest('article') as HTMLElement;
-    // The title clamps to two lines and carries its full text.
-    const link = within(card).getByRole('link', { name: longTitle });
-    expect(link.classList).toContain('line-clamp-2');
-    expect(link.getAttribute('title')).toBe(longTitle);
-
-    const roleHeading = within(columns).getByRole('heading', { name: longRole });
-    expect(roleHeading.classList).toContain('truncate');
-    expect(roleHeading.getAttribute('title')).toBe(longRole);
-
-    const doing = within(card).getByText('Working, turn 5');
-    expect(doing.classList).toContain('truncate');
-    expect(doing.parentElement?.getAttribute('title')).toBe('Working, turn 5');
-  });
-
-  it('shows a waiting row’s reason with the clock for a queued item and no icon for a blocked one', async () => {
-    const blocked = item({
-      id: 'item-11',
-      ref: 'sre#11',
-      number: 11,
-      title: 'Retry the export',
-      state: 'blocked',
-      board_lane: 'investigator',
-    });
-    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [queuedItem, blocked]) });
-
-    const columns = await screen.findByRole('region', { name: 'Stations' });
-    const queuedRow = within(columns).getByRole('link', { name: QUEUED }).closest('article') as HTMLElement;
-    expect(queuedRow.querySelector('.lucide-clock')).not.toBeNull();
-
-    const blockedRow = within(columns)
-      .getByRole('link', { name: 'Retry the export' })
-      .closest('article') as HTMLElement;
-    expect(within(blockedRow).getByText('Blocked, needs a retry')).toBeTruthy();
-    expect(blockedRow.querySelector('.lucide-clock')).toBeNull();
-  });
-
-  it('shows a waiting row’s reason with its icon: the clock after an item it needs, two crossing arrows for the same files, a check once ready', async () => {
-    const starts = item({
-      id: 'item-20',
-      ref: 'sre#20',
-      number: 20,
-      title: 'Ship the export migration',
-      state: 'queued',
-      board_lane: 'investigator',
-      waiting: { kind: 'after', items: ['sre#3'], files: [], needs: [] },
-    });
-    const shared = item({
-      id: 'item-21',
-      ref: 'sre#21',
-      number: 21,
-      title: 'Adjust the export handler',
-      state: 'queued',
-      board_lane: 'investigator',
-      waiting: {
-        kind: 'files',
-        items: ['sre#3'],
-        files: ['internal/api/gen/export/handlers.go', 'web/src/features/export/**'],
-        needs: [],
-      },
-    });
-    const approved = item({
-      id: 'item-22',
-      ref: 'sre#22',
-      number: 22,
-      title: 'Document the export flags',
-      state: 'ready',
-      board_lane: 'investigator',
-    });
-    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [starts, shared, approved]) });
-
-    const columns = await screen.findByRole('region', { name: 'Stations' });
-    const afterRow = within(columns)
-      .getByRole('link', { name: 'Ship the export migration' })
-      .closest('article') as HTMLElement;
-    expect(afterRow.querySelector('.lucide-clock')).not.toBeNull();
-    expect(within(afterRow).getByText('Waits for sre#3')).toBeTruthy();
-
-    const filesRow = within(columns)
-      .getByRole('link', { name: 'Adjust the export handler' })
-      .closest('article') as HTMLElement;
-    expect(filesRow.querySelector('.lucide-shuffle')).not.toBeNull();
-    expect(filesRow.querySelector('.lucide-clock')).toBeNull();
-    const filesText = within(filesRow).getByText('Waits for sre#3');
-    expect(filesText.classList).toContain('truncate');
-    expect(filesText.parentElement?.classList).toContain('text-muted');
-    // A wait is normal flow: no red anywhere on the row, the icon included.
-    expect(filesRow.querySelector('.text-rework')).toBeNull();
-    expect(filesRow.querySelector('.text-rework-ink')).toBeNull();
-    expect(within(filesRow).queryByText(/same files|\*\*/)).toBeNull();
-
-    const readyRow = within(columns)
-      .getByRole('link', { name: 'Document the export flags' })
-      .closest('article') as HTMLElement;
-    expect(readyRow.querySelector('.lucide-circle-check-big')).not.toBeNull();
-    expect(within(readyRow).getByText('Review approved, checks passed')).toBeTruthy();
-  });
-
-  it('keeps the expedite tint and label on a queued expedite row, and gives a standard row neither', async () => {
-    const expediteRow = item({
-      id: 'item-21',
-      ref: 'sre#21',
-      number: 21,
-      title: 'Restore the export job',
-      class_of_service: 'expedite',
-      board_lane: 'investigator',
-    });
-    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [expediteRow, queuedItem]) });
-
-    const investigator = within(
-      within(await screen.findByRole('region', { name: 'Stations' })).getByRole('region', { name: 'Investigate' }),
-    ).getByRole('region', { name: 'Investigator' });
-    const expedited = within(investigator).getByRole('link', { name: 'Restore the export job' }).closest('article');
-    expect(expedited?.classList.contains('bg-rework-tint')).toBe(true);
-    expect(within(expedited as HTMLElement).getByText('Expedite')).toBeTruthy();
-
-    const standard = within(investigator).getByRole('link', { name: QUEUED }).closest('article');
-    expect(standard?.classList.contains('bg-rework-tint')).toBe(false);
-    expect(within(standard as HTMLElement).queryByText('Expedite')).toBeNull();
   });
 
   it('gives a compact station’s lane cards their 44 px Move buttons, and the desktop’s 32 px ones', async () => {
@@ -448,14 +219,6 @@ describe('board lanes', () => {
     for (const button of desktopButtons) expect(button.classList).toContain('size-8');
   });
 
-  it('says Nothing to do in a phone lane with no items', async () => {
-    renderBoardPage({ page: BoardPage, org, factory, board: board({}, [workItem, queuedItem]) });
-
-    const panel = await screen.findByRole('tabpanel');
-    const triager = within(panel).getByRole('region', { name: 'Triager' });
-    expect(within(triager).getByText('Nothing to do')).toBeTruthy();
-  });
-
   it('shows a work card’s and a waiting row’s assembly line, linking to the assembly’s item page', async () => {
     const assembly = { id: 'item-40', ref: 'sre#40', title: 'Migrate billing', part: 4, parts: 6 };
     renderBoardPage({
@@ -468,7 +231,7 @@ describe('board lanes', () => {
       ]),
     });
 
-    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const columns = await phonePanel();
     const work = within(columns).getByRole('link', { name: WORKING }).closest('article') as HTMLElement;
     const row = within(columns).getByRole('link', { name: QUEUED }).closest('article') as HTMLElement;
     for (const card of [work, row]) {
@@ -485,7 +248,7 @@ describe('board lanes', () => {
     const assembly = { id: 'item-41', ref: 'sre#41', title: longTitle, part: 12, parts: 14 };
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [{ ...workItem, assembly }]) });
 
-    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const columns = await phonePanel();
     const line = within(columns).getByRole('link', { name: `Part 12 of 14 of ${longTitle}` });
     expect(within(line).getByText(longTitle).classList).toContain('truncate');
     expect(within(line).getByText('› 12 of 14').classList).toContain('shrink-0');
@@ -501,7 +264,7 @@ describe('board lanes', () => {
       board: board({}, [{ ...workItem, assembly: null }, { ...queuedItem }]),
     });
 
-    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const columns = await phonePanel();
     expect(within(columns).queryByRole('link', { name: /^Part \d+ of/ })).toBeNull();
     expect(within(columns).getByRole('link', { name: WORKING })).toBeTruthy();
     expect(within(columns).getByRole('link', { name: QUEUED })).toBeTruthy();

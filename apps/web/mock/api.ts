@@ -23,6 +23,7 @@ import type {
   AndonPull,
   AndonState,
   ApprovalBrief,
+  AssemblyPart,
   AssemblyParts,
   AuditPage,
   Board,
@@ -49,6 +50,8 @@ import type {
   OrgRole,
   OrgSettings,
   OrgTouchMetrics,
+  PartOf,
+  PartsSummary,
   RunList,
   StreamEvent,
   TouchMetrics,
@@ -63,6 +66,7 @@ import {
   type MockItem,
   type MockSlots,
   type MockState,
+  type MockStationConfig,
   orgCan,
   seed,
   trackSpan,
@@ -268,6 +272,39 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     return { kind: it.waitsOn.kind, items: [needed.ref], files, needs: [needed] };
   };
 
+  /** The assembly an item is a part of, and its place among the parts (the card's assembly line). */
+  const partOfOf = (it: MockItem): { assembly?: PartOf } => {
+    const assembly = it.partOf ? state.items.find((o) => o.id === it.partOf?.id) : undefined;
+    if (!it.partOf || !assembly) return {};
+    const parts = partsOf(assembly.id);
+    return {
+      assembly: {
+        id: assembly.id,
+        ref: ref(assembly),
+        title: assembly.title,
+        part: it.partOf.part,
+        parts: parts.length,
+      },
+    };
+  };
+
+  /** An assembly's parts in plan order. */
+  const partsOf = (id: string): MockItem[] =>
+    state.items.filter((o) => o.partOf?.id === id).sort((a, b) => (a.partOf?.part ?? 0) - (b.partOf?.part ?? 0));
+
+  /** Where an assembly's parts stand: a cancelled part counts in no other field (the contract's PartsSummary). */
+  const partsSummary = (id: string): PartsSummary => {
+    const parts = partsOf(id);
+    const open = parts.filter((p) => p.state !== 'done' && p.state !== 'cancelled');
+    return {
+      total: parts.length,
+      merged: parts.filter((p) => p.state === 'done').length,
+      in_progress: open.filter((p) => p.state === 'in_progress').length,
+      waiting: open.filter((p) => p.state !== 'in_progress').length,
+      stations: [...new Set(open.map((p) => p.station))],
+    };
+  };
+
   const card = (it: MockItem): ItemCard => {
     const run = liveRun(it);
     const waiting = waitingOf(it);
@@ -297,6 +334,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       rope_held: false,
       touch_count: itemTouches(it).length,
       ...(waiting ? { waiting } : {}),
+      ...partOfOf(it),
+      ...(it.state === 'assembly' ? { parts: partsSummary(it.id) } : {}),
     };
   };
 
@@ -1012,6 +1051,45 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     return { ...measured, agent, from: day(range.from), to: day(range.to), stations };
   };
 
+  /**
+   * A station's lanes as goald describes them: one per agent that works there, its slots and the
+   * leases it holds (the items in progress); a person's lane at a human station counts the items
+   * waiting on them. Stations with neither (queue and done) have none.
+   */
+  const lanesOf = (
+    s: { id: string; kind: BoardStation['kind'] },
+    config: MockStationConfig | undefined,
+    here: MockItem[],
+  ): NonNullable<BoardStation['lanes']> => {
+    if (s.kind === 'agent') {
+      const slots = config?.copies ?? config?.wip_limit ?? Math.max(config?.agents.length ?? 0, 1);
+      const busy = here.filter((it) => it.state === 'in_progress').length;
+      return (config?.agents ?? []).map((agent) => ({
+        key: agent,
+        kind: 'agent',
+        role: agent.replace(/-\d+$/, '').replace(/^./, (c) => c.toUpperCase()),
+        model: null,
+        model_label: null,
+        slots,
+        busy,
+      }));
+    }
+    if (s.kind === 'human') {
+      return [
+        {
+          key: s.id,
+          kind: 'person',
+          role: s.id.replace(/^./, (c) => c.toUpperCase()),
+          model: null,
+          model_label: null,
+          slots: null,
+          busy: here.filter((it) => it.state === 'waiting_human').length,
+        },
+      ];
+    }
+    return [];
+  };
+
   const board = (name: string): Board | undefined => {
     const factory = findFactory(name);
     if (!factory) return undefined;
@@ -1033,6 +1111,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         // In progress, and waiting for a person's decision (a human station's work).
         in_progress: here.filter((it) => it.state === 'in_progress' || it.state === 'waiting_human').length,
         items: here.map(card),
+        lanes: lanesOf(s, config[s.id], here),
         ...stationStats(factory.name, s, here),
       };
     });
@@ -1431,6 +1510,43 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return typeof stats === 'string' ? problem(res, 400, 'Bad Request', stats) : json(res, 200, stats);
     }
 
+    // GET …/activity: the factory's milestone events, newest first (listFactoryActivity). Run events are
+    // never listed, and each event carries its item's ref, number and title.
+    m = rest.match(/^\/factories\/([^/]+)\/activity$/);
+    if (m && method === 'GET') {
+      const key = decodeURIComponent(m[1] ?? '');
+      const factory = findFactory(key, org.id);
+      if (!factory) return problem(res, 404, 'Factory not found', key);
+      const limit = Number(url.searchParams.get('limit') ?? 20);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+        return problem(res, 400, 'Bad Request', 'limit must be in [1, 50]');
+      }
+      const milestones = new Set([
+        'created',
+        'moved',
+        'gate_approved',
+        'gate_rejected',
+        'approved',
+        'rejected',
+        'blocked',
+        'check_failed',
+        'merged',
+        'done',
+        'assembled',
+        'cancelled',
+      ]);
+      const events = state.events
+        .flatMap((e) => {
+          const it = state.items.find((o) => o.id === e.item_id);
+          return it && it.factory === factory.name && milestones.has(e.kind)
+            ? [{ ...e, ref: ref(it), number: it.number, title: it.title }]
+            : [];
+        })
+        .sort((a, b) => b.at.localeCompare(a.at) || b.id - a.id)
+        .slice(0, limit);
+      return json(res, 200, { events });
+    }
+
     m = rest.match(
       /^\/factories\/([^/]+)\/(board|items|constraint|metrics|metrics\/weekly|metrics\/lead-time|metrics\/touches|andon|andon\/clear)$/,
     );
@@ -1595,7 +1711,37 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     }
     // The mock has no assemblies: an item has no parts, and adding one is refused as the API refuses it.
     if (action === 'parts' && method === 'GET') {
-      const body: AssemblyParts = { done: 0, total: 0, lead_time_seconds: 0, parts: [] };
+      const parts = it.state === 'assembly' ? partsOf(it.id) : [];
+      const done = parts.filter((p) => p.state === 'done');
+      const closed = parts.every((p) => p.state === 'done');
+      const last = done.reduce((latest, p) => Math.max(latest, Date.parse(p.updated_at)), 0);
+      const end = closed && last > 0 ? last : clock();
+      const body: AssemblyParts = {
+        done: done.length,
+        total: parts.length,
+        lead_time_seconds: parts.length > 0 ? Math.round((end - Date.parse(it.created_at)) / 1000) : 0,
+        parts: parts.map(
+          (p): AssemblyPart => ({
+            id: p.id,
+            ref: ref(p),
+            number: p.number,
+            index: p.partOf?.part ?? 0,
+            key: `part-${p.partOf?.part ?? 0}`,
+            title: p.title,
+            paths: p.paths ?? [],
+            station: p.station,
+            state: p.state,
+            needs: [],
+            waiting_on: [],
+            wave: 0,
+            cost_usd: p.cost_usd,
+            pr_url: p.pr_url,
+            agent: p.agent,
+            created_at: p.created_at,
+            done_at: p.done_at ?? null,
+          }),
+        ),
+      };
       return json(res, 200, body);
     }
     if (method !== 'POST') return problem(res, 405, 'Method not allowed');
