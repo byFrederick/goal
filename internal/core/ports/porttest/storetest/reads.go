@@ -110,6 +110,74 @@ func testListItems(f *fixture) {
 	}
 }
 
+func testSearchItems(f *fixture) {
+	t := f.t
+
+	// This factory's #1..#5; another factory's #1 and #2; another organization's #1.
+	for _, title := range []string{"Fix the login page", "Cut cost by 50%", "Cut cost by 50 dollars", "rename user_id", `rename user\id`} {
+		f.create(t, domain.NewItem{Title: title})
+	}
+
+	other := f.newFactory(t)
+	f.create(t, domain.NewItem{FactoryID: other, Title: "Plan the week"})
+	f.create(t, domain.NewItem{FactoryID: other, Title: "Login for the other factory"})
+
+	foreign := f.otherOrg(t)
+	foreign.create(t, domain.NewItem{Title: "login abroad"})
+
+	search := func(q ports.ItemSearch) []string {
+		t.Helper()
+
+		if q.Factories == nil {
+			q.Factories = []domain.FactoryID{f.factory, other, foreign.factory}
+		}
+
+		if q.Limit == 0 {
+			q.Limit = 100
+		}
+
+		items, err := f.Store.SearchItems(f.ctx(t), q)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		out := []string{}
+		for _, it := range items {
+			at := "this"
+			if it.FactoryID == other {
+				at = "other"
+			}
+
+			out = append(out, fmt.Sprintf("%s#%d", at, it.Number))
+		}
+
+		return out
+	}
+
+	tests := []struct {
+		name string
+		q    ports.ItemSearch
+		want []string
+	}{
+		{"title, case-insensitive, newest first", ports.ItemSearch{Title: "LOGIN"}, []string{"other#2", "this#1"}},
+		{"% matches literally", ports.ItemSearch{Title: "50%"}, []string{"this#2"}},
+		{"_ matches literally", ports.ItemSearch{Title: "user_id"}, []string{"this#4"}},
+		{"a backslash matches literally", ports.ItemSearch{Title: `user\id`}, []string{"this#5"}},
+		{"number first, then titles", ports.ItemSearch{Title: "cut", Number: 4}, []string{"this#4", "this#3", "this#2"}},
+		{"number alone", ports.ItemSearch{Number: 4}, []string{"this#4"}},
+		{"only the factories asked", ports.ItemSearch{Title: "login", Factories: []domain.FactoryID{other}}, []string{"other#2"}},
+		{"no factory finds nothing", ports.ItemSearch{Title: "login", Factories: []domain.FactoryID{}}, []string{}},
+		{"limited", ports.ItemSearch{Title: "rename", Limit: 1}, []string{"this#5"}},
+		{"nothing matches", ports.ItemSearch{Title: "nope"}, []string{}},
+	}
+
+	for _, tt := range tests {
+		if got := search(tt.q); !slices.Equal(got, tt.want) {
+			t.Errorf("%s: %v; want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
 func testStationLoads(f *fixture) {
 	t := f.t
 

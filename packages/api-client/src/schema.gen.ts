@@ -515,6 +515,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Find the organization's items, agents, factories and connections, for the shell's search box
+         * @description One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Connections are searched only for a caller who holds connection:read; for anyone else the group is empty.
+         */
+        get: operations["searchOrg"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/overview": {
         parameters: {
             query?: never;
@@ -3905,6 +3928,46 @@ export interface components {
             /** @description Connections that stop work; always 0 until connections exist */
             connections_blocked: number;
         };
+        /** @description What a search found in the organization, by group, each best first */
+        OrgSearch: {
+            items: components["schemas"]["SearchItem"][];
+            agents: components["schemas"]["AgentHit"][];
+            factories: components["schemas"]["FactoryHit"][];
+            /** @description Empty unless the caller holds connection:read */
+            connections: components["schemas"]["ConnectionHit"][];
+        };
+        SearchItem: {
+            id: string;
+            /** Format: int64 */
+            number: number;
+            /** @description The factory's metadata.id */
+            factory_id: string;
+            factory_name: string;
+            title: string;
+            state: components["schemas"]["ItemState"];
+            /** @description The id of the station the item is at */
+            station: string;
+        };
+        /** @description An agent of a factory's current definition; never one of its copies */
+        AgentHit: {
+            name: string;
+            /** @description The ids of the stations the agent works at, in line order */
+            stations: string[];
+            /** @description The factory's metadata.id */
+            factory_id: string;
+            factory_name: string;
+        };
+        FactoryHit: {
+            /** @description The factory's metadata.id */
+            id: string;
+            name: string;
+            /** @description The factory's title */
+            title: string;
+        };
+        ConnectionHit: {
+            name: string;
+            kind: string;
+        };
         FactoryOverviewList: {
             /** @description The window asked for, as in 7d */
             window: string;
@@ -5717,6 +5780,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrgAttention"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    searchOrg: {
+        parameters: {
+            query: {
+                /** @description What to find, 1 to 200 characters once trimmed; anything else is a 400 problem */
+                q: string;
+                /** @description How many results each group holds at most */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The results, by group */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgSearch"];
                 };
             };
             default: components["responses"]["Problem"];
