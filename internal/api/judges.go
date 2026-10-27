@@ -284,7 +284,9 @@ func (s *server) judgeSummaries(ctx context.Context, factory domain.FactoryID) (
 }
 
 // publishJudge writes j's file into a draft it opens from rec's current version and publishes
-// it, refusing when another draft is open. A draft it opened that does not publish is discarded.
+// it, refusing when another draft is open. A draft it opened that does not publish is discarded,
+// unless the eval gate refused it: that draft stays open, so it publishes once a run of its cases
+// passes.
 func (s *server) publishJudge(ctx context.Context, rec ports.FactoryRecord, j domain.Judge, expected string, create bool) (gen.Judge, error) {
 	if rec.Draft != nil {
 		return gen.Judge{}, fmt.Errorf("judge %s: %w", j.Slug, errDraftOpen)
@@ -329,12 +331,16 @@ func (s *server) publishJudge(ctx context.Context, rec ports.FactoryRecord, j do
 			Revision: revision, ExpectedCurrent: domain.DefinitionVersionID(expected), Message: verb + " judge " + j.Slug,
 		})
 	}()
-	if err != nil {
+
+	_, gated := errors.AsType[*authoring.EvalGateError](err)
+	if err != nil && !gated {
 		if derr := s.defs.DiscardDraft(ctx, rec.ID, revision); derr != nil {
 			s.log.WarnContext(ctx, "judge draft not discarded", slog.String("factory", string(rec.ID)),
 				slog.String("judge", j.Slug), slog.Any("error", derr))
 		}
+	}
 
+	if err != nil {
 		return gen.Judge{}, err
 	}
 

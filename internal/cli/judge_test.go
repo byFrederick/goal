@@ -13,6 +13,9 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 )
 
+// listFactoriesRoute is goald's route of an organization's factories.
+const listFactoriesRoute = "GET /v1/orgs/acme/factories"
+
 // judgeGoald serves acme's judges routes and its factories with routes, recording the paths it
 // was sent.
 func judgeGoald(t *testing.T, routes map[string]func(w http.ResponseWriter)) (*httptest.Server, func() []string) {
@@ -85,7 +88,7 @@ func TestJudgeCommand_List(t *testing.T) {
 
 	version := 3
 	srv, sent := judgeGoald(t, map[string]func(http.ResponseWriter){
-		"GET /v1/orgs/acme/factories": answerJSON(t, http.StatusOK, "application/json", acmeFactories),
+		listFactoriesRoute: answerJSON(t, http.StatusOK, "application/json", acmeFactories),
 		webJudges: answerJSON(t, http.StatusOK, "application/json", gen.JudgeList{
 			Version: &version, JudgeCostUsd: 1.234,
 			Judges: []gen.JudgeListEntry{
@@ -141,7 +144,7 @@ func TestJudgeCommand_ListNeedsAFactory(t *testing.T) {
 	t.Parallel()
 
 	srv, _ := judgeGoald(t, map[string]func(http.ResponseWriter){
-		"GET /v1/orgs/acme/factories": answerJSON(t, http.StatusOK, "application/json", gen.FactoryList{
+		listFactoriesRoute: answerJSON(t, http.StatusOK, "application/json", gen.FactoryList{
 			Factories: []gen.Factory{{Id: "f1", Name: "web"}, {Id: "f2", Name: "api"}},
 		}),
 	})
@@ -182,7 +185,7 @@ func TestJudgeCommand_Problems(t *testing.T) {
 	tryPath := "POST /v1/orgs/acme/factories/web/judges/nobody/try"
 	srv, _ := judgeGoald(t, map[string]func(http.ResponseWriter){
 		tryPath: answerJSON(t, http.StatusNotFound, "application/problem+json", gen.Problem{
-			Title: "Not Found", Status: http.StatusNotFound, Detail: new("judge \"nobody\": judge not found"), Code: new("judge-not-found"),
+			Title: http.StatusText(http.StatusNotFound), Status: http.StatusNotFound, Detail: new("judge \"nobody\": judge not found"), Code: new("judge-not-found"),
 		}),
 		webJudges: answerJSON(t, http.StatusForbidden, "application/problem+json", gen.Problem{
 			Title: "Forbidden", Status: http.StatusForbidden, Code: new("forbidden"),

@@ -1,184 +1,398 @@
-import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { ChevronRight } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
+import { useId, useMemo } from 'react';
 import { itemsQuery } from '../../api/queries';
-import type { ItemCard, ItemState } from '../../api/types';
-import { factoryTitle, refParam, useFactory, useFactoryParams } from '../../shared/factory';
-import { formatAge, formatUsd, humanize } from '../../shared/format';
-import { InboxButton } from '../../shared/inbox-drawer';
-import { describeState, itemStatus, toneText } from '../../shared/item-state';
+import type { ItemState } from '../../api/types';
+import { TopBarSlot } from '../../app/top-bar';
+import { useFactory, useFactoryParams } from '../../shared/factory';
+import { humanize } from '../../shared/format';
 import { NewItemButton } from '../../shared/new-item';
 import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
-import { Chip } from '../../ui/chip';
+import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
-import { SegmentedControl } from '../../ui/segmented-control';
-import { StatusIcon } from '../../ui/status-icon';
-import { AssemblyRow, listRows } from './assembly-rows';
+import { Menu, MenuChoice, MenuContent, MenuRadioGroup, MenuTrigger } from '../../ui/menu';
+import { NotAvailable } from '../../ui/not-available';
+import { descriptionClass } from '../../ui/page-header';
+import { Switch } from '../../ui/switch';
+import { AssemblyTableRow, ItemTableRow, listRows } from './assembly-rows';
+import { BulkActions } from './bulk-actions';
+import {
+  applyFilters,
+  countsOf,
+  type ItemsFilters,
+  type ItemsView,
+  isAssemblyCard,
+  optionsOf,
+  selectedIds,
+  selectionParam,
+  stateChoices,
+} from './items-filters';
 
-export const itemFilters: { state?: ItemState; label: string }[] = [
-  { label: 'All' },
-  { state: 'waiting_human', label: 'Waiting on you' },
-  { state: 'in_progress', label: 'In progress' },
-  { state: 'blocked', label: 'Blocked' },
-  { state: 'done', label: 'Done' },
-];
+/** The value a filter menu shows for "any": no filter in the URL. */
+const any = '*';
 
-/** The Show switch: assemblies with their parts (the default, no search param) or every item flat. */
-type Show = 'assemblies' | 'flat';
+/** A filter button: dashed while it is unset, a tinted solid button once a value is chosen. 44 px on a phone. */
+const filterButton =
+  'inline-flex min-h-11 items-center gap-2 rounded-control border border-dashed border-rule bg-card px-3 text-secondary font-medium text-ink-soft transition-colors hover:bg-panel hover:text-ink md:min-h-8';
+const chosenButton = 'border-solid border-transparent bg-run-tint text-run-ink hover:bg-run-tint hover:text-run-ink';
 
-const showOptions: { value: Show; label: string }[] = [
-  { value: 'assemblies', label: 'Assemblies with parts' },
-  { value: 'flat', label: 'Every item flat' },
-];
+/** A saved view or a grouping's link: 44 px on a phone. */
+const tabLink =
+  'inline-flex min-h-11 items-center gap-2 border-b-2 px-3 text-body no-underline transition-colors md:min-h-9';
 
-const footnotes: Record<Show, string> = {
-  assemblies: 'Parts are grouped under their assembly. Filters apply to parts.',
-  flat: 'Every item is listed on its own, assemblies and parts included. Filters apply to every item.',
-};
-
-/** One plain row: an item that is neither an assembly nor a part, or any item in the flat view. */
-function ItemRow({ item, decides }: { item: ItemCard; decides: boolean }) {
-  const params = useFactoryParams();
-  const label = describeState(item, { decides });
-  const status = itemStatus(item);
+/** One filter menu: the chosen value (or "any"), and a radio list of the values the list offers. */
+function FilterMenu({
+  name,
+  chosen,
+  choices,
+  onChoose,
+}: {
+  name: string;
+  chosen: string | undefined;
+  choices: { value: string; label: string }[];
+  onChoose: (value: string | undefined) => void;
+}) {
+  const shown = choices.find((c) => c.value === chosen)?.label ?? chosen;
   return (
-    <li className="border-t border-line first:border-t-0">
-      <Link
-        to="/o/$org/f/$factory/items/$ref"
-        params={{ ...params, ref: refParam(item.ref) }}
-        className="grid grid-cols-[minmax(0,1fr)_12px] items-center gap-3 px-4 py-3 no-underline transition-colors hover:bg-shell md:grid-cols-[72px_minmax(0,1fr)_150px_170px_90px_12px] md:gap-4"
-      >
-        <span className="hidden text-sm text-muted md:block">{item.ref}</span>
-        <span className="flex min-w-0 flex-col gap-1">
-          <span className="text-[15px] leading-snug font-medium">{item.title}</span>
-          <span className="flex min-w-0 items-center gap-1.5 text-[13px] text-muted md:hidden">
-            <span className="min-w-0 truncate">
-              {item.ref}, {humanize(item.station)},
-            </span>
-            <span className={cn('flex min-w-0 items-center gap-1.5', toneText[label.tone])} title={label.text}>
-              {status ? <StatusIcon status={status} /> : null}
-              <span className="truncate">{label.text}</span>
-            </span>
-          </span>
-          {item.class_of_service === 'expedite' ? (
-            <span className="hidden flex-wrap gap-1.5 md:flex">
-              <Chip tone="rework">Expedite</Chip>
-            </span>
-          ) : null}
-        </span>
-        <span className="hidden text-sm md:block">{humanize(item.station)}</span>
-        <span
-          className={cn('hidden min-w-0 items-center gap-1.5 text-sm md:flex', toneText[label.tone])}
-          title={label.text}
-        >
-          {status ? <StatusIcon status={status} /> : null}
-          <span className="truncate">{label.text}</span>
-        </span>
-        <span className="hidden text-right text-sm text-muted tabular-nums md:block">
-          {formatAge(item.age_seconds)}
-          <br />
-          {formatUsd(item.cost_usd)}
-        </span>
-        <ChevronRight size={12} strokeWidth={1.75} aria-hidden="true" className="text-muted" />
-      </Link>
-    </li>
+    <Menu>
+      <MenuTrigger asChild>
+        <button type="button" className={cn(filterButton, chosen !== undefined && chosenButton)}>
+          {chosen === undefined ? name : `${name}: ${shown}`}
+          <ChevronDown size={12} strokeWidth={1.75} aria-hidden="true" />
+        </button>
+      </MenuTrigger>
+      <MenuContent>
+        <MenuRadioGroup value={chosen ?? any} onValueChange={(v) => onChoose(v === any ? undefined : v)}>
+          <MenuChoice value={any}>{`Any ${name.toLowerCase()}`}</MenuChoice>
+          {choices.map((c) => (
+            <MenuChoice key={c.value} value={c.value}>
+              {c.label}
+            </MenuChoice>
+          ))}
+        </MenuRadioGroup>
+      </MenuContent>
+    </Menu>
   );
 }
+
+/** The Board | List control and New item, in the top bar. List is the page, so it is pressed. */
+function ItemsActions() {
+  const factory = useFactory();
+  const params = useFactoryParams();
+  return (
+    <>
+      <fieldset className="m-0 inline-flex items-center gap-1 rounded-control border border-line bg-panel p-1">
+        <legend className="sr-only">View</legend>
+        <Link
+          to="/o/$org/f/$factory/board"
+          params={params}
+          className="inline-flex min-h-9 items-center rounded-chip px-3 text-secondary font-medium text-ink-soft no-underline hover:text-ink md:min-h-7"
+        >
+          Board
+        </Link>
+        <button
+          type="button"
+          aria-pressed="true"
+          className="inline-flex min-h-9 items-center rounded-chip border border-line bg-card px-3 text-secondary font-semibold text-ink md:min-h-7"
+        >
+          List
+        </button>
+      </fieldset>
+      <NewItemButton factory={factory} />
+    </>
+  );
+}
+
+const columns = ['Ref', 'Title', 'Type', 'Lane', 'Station', 'State', 'Agent', 'Age', 'Cost'] as const;
 
 export function ItemsPage() {
   const factory = useFactory();
   const params = useFactoryParams();
-  const { state, show } = useSearch({ from: '/o/$org/f/$factory/items/' });
+  const { state, show, view, type, lane, assembly, sel } = useSearch({ from: '/o/$org/f/$factory/items/' });
   const org = useOrg();
   const navigate = useNavigate({ from: '/o/$org/f/$factory/items/' });
-  const { data } = useSuspenseQuery(itemsQuery(org.id, factory.id, { state, limit: 200 }));
-  // A filter also reads the assemblies, so a part's row has its assembly's progress (listRows).
-  const { data: assemblies } = useQuery({
-    ...itemsQuery(org.id, factory.id, { state: 'assembly', limit: 200 }),
-    enabled: state !== undefined,
-  });
+  const groupedId = useId();
+  // The Done this week view lists the done items; its seven-day window is applied in the browser.
+  const listState = view === 'done-week' ? 'done' : state;
+  const everything = useQuery(itemsQuery(org.id, factory.id, { limit: 200 }));
+  const listed = useQuery(itemsQuery(org.id, factory.id, { state: listState, limit: 200 }));
+  const actions = useMemo(() => <ItemsActions />, []);
+
+  const canOperate = holds(factory, 'item:operate');
   const decides = holds(factory, 'item:decide');
   const flat = show === 'flat';
-  const rows = flat ? [] : listRows(data.items, assemblies?.items ?? [], state !== undefined);
+
+  // Every hook is above the early returns. The top bar gets the page's actions, whatever the state.
+  const all = everything.data?.items ?? [];
+  const filters: ItemsFilters = { view, type, lane, assembly };
+  const narrowed =
+    state !== undefined || view !== undefined || type !== undefined || lane !== undefined || assembly !== undefined;
+  const now = Date.now();
+  const shown = applyFilters(listed.data?.items ?? [], filters, now);
+  const rows = flat ? [] : listRows(shown, all, narrowed);
+  const counts = countsOf(all, now);
+  const selected = new Set(selectedIds(sel));
+  const checked = shown.filter((it) => !isAssemblyCard(it) && selected.has(it.id));
+
+  const setSearch = (patch: {
+    state?: ItemState | undefined;
+    view?: ItemsView | undefined;
+    type?: string | undefined;
+    lane?: string | undefined;
+    assembly?: string | undefined;
+    show?: 'flat' | undefined;
+    sel?: string | undefined;
+  }) => navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true, resetScroll: false });
+
+  // The URL's selection is read when the navigation runs, so two quick checks both stick.
+  const toggle = (ids: string[]) =>
+    navigate({
+      search: (prev) => {
+        const next = new Set(selectedIds(prev.sel));
+        const allChecked = ids.every((id) => next.has(id));
+        for (const id of ids) {
+          if (allChecked) next.delete(id);
+          else next.add(id);
+        }
+        return { ...prev, sel: selectionParam([...next]) };
+      },
+      replace: true,
+      resetScroll: false,
+    });
+
+  if (everything.isPending || listed.isPending) {
+    return (
+      <main aria-busy="true" className="min-h-40">
+        <p className="sr-only">Loading</p>
+      </main>
+    );
+  }
+
+  if (everything.error || listed.error) {
+    const error = everything.error ?? listed.error;
+    return (
+      <div role="alert" className="flex flex-col items-start gap-3 rounded-card border border-line bg-card p-5">
+        <h1 className="m-0 text-page-title tracking-display">Items</h1>
+        <p className="m-0 text-body text-ink-soft">Could not load the items. {error?.message}</p>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            void everything.refetch();
+            void listed.refetch();
+          }}
+        >
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  const types = optionsOf(all, (it) => (isAssemblyCard(it) ? null : it.type));
+  const lanes = optionsOf(all, (it) => it.lane ?? null);
+  const assemblies = [
+    ...new Map(all.flatMap((it) => (it.assembly ? [[it.assembly.id, it.assembly] as const] : []))).values(),
+  ];
+  const visible = shown.filter((it) => !isAssemblyCard(it)).length;
+
+  const viewKeep = {
+    ...(flat ? { show: 'flat' as const } : {}),
+    ...(type ? { type } : {}),
+    ...(lane ? { lane } : {}),
+    ...(assembly ? { assembly } : {}),
+  };
+  const views = [
+    { key: 'open', label: 'Open', count: counts.open, current: !view && state === undefined, search: viewKeep },
+    {
+      key: 'waiting',
+      label: 'Waiting on you',
+      count: counts.waiting,
+      current: !view && state === 'waiting_human',
+      search: { ...viewKeep, state: 'waiting_human' as const },
+    },
+    {
+      key: 'expedite',
+      label: 'Expedite',
+      count: counts.expedite,
+      current: view === 'expedite',
+      search: { ...viewKeep, view: 'expedite' as const },
+    },
+    {
+      key: 'done-week',
+      label: 'Done this week',
+      count: counts.doneThisWeek,
+      current: view === 'done-week',
+      search: { ...viewKeep, view: 'done-week' as const },
+    },
+  ];
 
   return (
-    <>
-      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <h1 className="m-0 text-[34px] leading-[1.05] font-normal tracking-display md:text-5xl">
-          {factoryTitle(factory)} items
-        </h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <InboxButton factory={factory} />
-          <span className="md:hidden">
-            <NewItemButton factory={factory} compact />
-          </span>
-          <span className="hidden md:inline-flex">
-            <NewItemButton factory={factory} />
-          </span>
+    <div className="flex flex-col gap-5">
+      <TopBarSlot actions={actions} />
+      <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-col gap-1">
+          <h1 className="m-0 text-page-title tracking-display">Items</h1>
+          <p className={descriptionClass}>
+            {counts.open} open, {counts.doneThisWeek} done this week
+          </p>
         </div>
       </header>
 
-      <nav aria-label="Filter items" className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
-        <ul className="m-0 flex list-none gap-1 p-0">
-          {itemFilters.map((f) => {
-            const active = f.state === state;
-            return (
-              <li key={f.label}>
-                <Link
-                  to="/o/$org/f/$factory/items"
-                  params={params}
-                  search={{ ...(f.state ? { state: f.state } : {}), ...(flat ? { show: 'flat' as const } : {}) }}
-                  aria-current={active ? 'page' : undefined}
-                  className={cn(
-                    'inline-flex h-10 items-center rounded-control px-3.5 text-sm whitespace-nowrap no-underline transition-colors',
-                    active ? 'bg-ink text-white' : 'bg-panel text-ink hover:bg-hover',
-                  )}
-                >
-                  {f.label}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+      <nav
+        aria-label="Saved views"
+        className="-mx-4 flex gap-1 overflow-x-auto border-b border-line px-4 md:mx-0 md:px-0"
+      >
+        {/* A tab is active by its whole search, and inactive tabs take their aria-current from the view. */}
+        {views.map((v) => (
+          <Link
+            key={v.key}
+            to="/o/$org/f/$factory/items"
+            params={params}
+            search={v.search}
+            activeOptions={{ exact: true, includeSearch: true }}
+            inactiveProps={{ 'aria-current': v.current ? 'page' : 'false' }}
+            className={cn(
+              tabLink,
+              '-mb-px',
+              v.current ? 'border-run font-semibold text-ink' : 'border-transparent text-ink-soft hover:text-ink',
+            )}
+          >
+            {v.label}
+            <span className="text-meta text-muted tabular-nums">{v.count}</span>
+          </Link>
+        ))}
+        <NotAvailable>
+          <button type="button" className={cn(tabLink, 'border-transparent text-run-ink')}>
+            + Save view
+          </button>
+        </NotAvailable>
       </nav>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-sm text-muted">Show:</span>
-        <SegmentedControl<Show>
-          label="Show"
-          options={showOptions}
-          value={flat ? 'flat' : 'assemblies'}
-          onChange={(value) =>
-            navigate({
-              search: (prev) => ({ ...prev, show: value === 'flat' ? ('flat' as const) : undefined }),
-              replace: true,
-              resetScroll: false,
-            })
+      <fieldset className="m-0 flex min-w-0 flex-wrap items-center gap-2 border-0 p-0">
+        <legend className="sr-only">Filters</legend>
+        <FilterMenu
+          name="State"
+          chosen={listState}
+          choices={stateChoices.flatMap((c) => (c.state ? [{ value: c.state, label: c.label }] : []))}
+          onChoose={(value) =>
+            // Choosing a State leaves the Done this week view, so the State shown is the list shown.
+            setSearch({ state: value as ItemState | undefined, ...(view === 'done-week' ? { view: undefined } : {}) })
           }
         />
-      </div>
+        <FilterMenu
+          name="Type"
+          chosen={type}
+          choices={types.map((t) => ({ value: t, label: humanize(t) }))}
+          onChoose={(value) => setSearch({ type: value })}
+        />
+        <FilterMenu
+          name="Lane"
+          chosen={lane}
+          choices={lanes.map((l) => ({ value: l, label: l }))}
+          onChoose={(value) => setSearch({ lane: value })}
+        />
+        <FilterMenu
+          name="Assembly"
+          chosen={assembly}
+          choices={assemblies.map((a) => ({ value: a.id, label: `${a.ref} ${a.title}` }))}
+          onChoose={(value) => setSearch({ assembly: value })}
+        />
+        <NotAvailable>
+          <button type="button" className={filterButton}>
+            Source
+            <ChevronDown size={12} strokeWidth={1.75} aria-hidden="true" />
+          </button>
+        </NotAvailable>
+        <div className="ml-auto flex items-center gap-2 text-secondary text-muted">
+          <span id={groupedId}>Grouped by assembly</span>
+          <Switch
+            checked={!flat}
+            aria-labelledby={groupedId}
+            onCheckedChange={(on) => setSearch({ show: on ? undefined : 'flat' })}
+          />
+        </div>
+      </fieldset>
 
-      {data.items.length === 0 ? (
-        <p className="m-0 rounded-card border border-line bg-card p-5 text-[15px] text-muted">
-          No items here. {state ? 'Try another filter.' : 'Create one with New item.'}
+      {checked.length > 0 ? (
+        <BulkActions
+          items={checked}
+          factory={factory}
+          canOperate={canOperate}
+          onClear={() => setSearch({ sel: undefined })}
+        />
+      ) : null}
+
+      {all.length === 0 ? (
+        <div className="flex flex-col items-start gap-3 rounded-card border border-line bg-card p-5">
+          <p className="m-0 text-body text-ink-soft">No items here. Create one with New item.</p>
+          <NewItemButton factory={factory} />
+        </div>
+      ) : shown.length === 0 ? (
+        <p className="m-0 rounded-card border border-line bg-card p-5 text-body text-ink-soft">
+          No items match these filters. Try another view or filter.
         </p>
       ) : (
         <>
-          <ul className="m-0 flex list-none flex-col overflow-hidden rounded-card border border-line bg-card p-0">
-            {flat
-              ? data.items.map((it) => <ItemRow key={it.id} item={it} decides={decides} />)
-              : rows.map((row) =>
-                  row.kind === 'item' ? (
-                    <ItemRow key={row.key} item={row.item} decides={decides} />
-                  ) : (
-                    <AssemblyRow key={row.key} row={row} decides={decides} />
-                  ),
-                )}
-          </ul>
-          <p className="m-0 text-[13px] text-muted">{footnotes[flat ? 'flat' : 'assemblies']}</p>
+          <div className="overflow-x-auto rounded-card border border-line bg-card">
+            <table aria-label="Items" className="w-full min-w-max border-collapse text-body">
+              <thead className="bg-panel text-secondary font-medium text-muted">
+                <tr>
+                  <th scope="col" className="w-px px-3 py-2 text-left">
+                    <span className="sr-only">Select</span>
+                  </th>
+                  {columns.map((column) => (
+                    <th
+                      key={column}
+                      scope="col"
+                      className={cn(
+                        'px-3 py-2 text-left font-medium whitespace-nowrap',
+                        column === 'Cost' && 'text-right',
+                      )}
+                    >
+                      {column}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {flat
+                  ? shown.map((it) => (
+                      <ItemTableRow
+                        key={it.id}
+                        item={it}
+                        decides={decides}
+                        selected={selected.has(it.id)}
+                        onSelect={(id) => toggle([id])}
+                      />
+                    ))
+                  : rows.map((row) =>
+                      row.kind === 'item' ? (
+                        <ItemTableRow
+                          key={row.key}
+                          item={row.item}
+                          decides={decides}
+                          selected={selected.has(row.item.id)}
+                          onSelect={(id) => toggle([id])}
+                        />
+                      ) : (
+                        <AssemblyTableRow
+                          key={row.key}
+                          row={row}
+                          decides={decides}
+                          selected={selected}
+                          onSelect={toggle}
+                        />
+                      ),
+                    )}
+              </tbody>
+            </table>
+          </div>
+          <p className="m-0 text-secondary text-muted">
+            Showing {visible} of {all.length} items. Moving items skips their station's checks, so Goal asks first.
+          </p>
         </>
       )}
-    </>
+    </div>
   );
 }

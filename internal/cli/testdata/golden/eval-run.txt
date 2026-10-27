@@ -1,0 +1,3 @@
+started eval run er1 of 2 cases, about $2.40
+not priced, with no tries and no runs of their agent yet: review-step
+follow it with: goal eval show er1 --factory web

@@ -1,13 +1,14 @@
 import { Link } from '@tanstack/react-router';
 import { ExternalLink, Users, Zap } from 'lucide-react';
 import type { CSSProperties, KeyboardEvent, PointerEvent, Ref } from 'react';
-import type { ItemCard } from '../../api/types';
+import type { ItemCard, PartsSummary } from '../../api/types';
 import { refParam, useFactory, useFactoryParams } from '../../shared/factory';
-import { formatAge, humanize, plural } from '../../shared/format';
+import { formatAge, formatUsd, humanize, plural } from '../../shared/format';
 import { itemStatus, pullRequestLabel, toneText } from '../../shared/item-state';
 import { isMoveShortcut, MoveButton, moveShortcut } from '../../shared/move-menu';
 import { holds } from '../../shared/permissions';
 import { WaitLine } from '../../shared/waiting-for';
+import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import type { OpenAssembly } from './board-filters';
 import { cardState, isExpedite, waitsOn } from './stats';
@@ -49,11 +50,14 @@ export function BoardCard({
   onMove,
   drag,
   compact = false,
+  assemblyParts,
 }: {
   item: ItemCard;
   onMove?: (() => void) | undefined;
   drag?: CardDrag | undefined;
   compact?: boolean;
+  /** The assembly's parts summary from the board: the pips of the assembly line (desktop cards). */
+  assemblyParts?: PartsSummary | undefined;
 }) {
   // A decision waits on "you" only for someone who decides here.
   const decides = holds(useFactory(), 'item:decide');
@@ -65,14 +69,15 @@ export function BoardCard({
   // A done card has no state line: its summary is on the item page. A wait is one line (its full list
   // is the tooltip); any other state line is two lines at most, so a card stays about as tall as its neighbours.
   const wait = waitsOn(item);
-  const stateLine =
+  const stateLine = compact ? (
     item.state === 'done' ? null : wait ? (
-      <WaitLine waiting={wait} status={itemStatus(item)} className={compact ? 'text-[13px]' : 'text-xs'} />
+      <WaitLine waiting={wait} status={itemStatus(item)} className="text-secondary" />
     ) : (
-      <span className={cn('line-clamp-2', compact ? 'text-[13px]' : 'text-xs', toneText[state.tone])}>
-        {state.text}
-      </span>
-    );
+      <span className={cn('line-clamp-2 text-secondary', toneText[state.tone])}>{state.text}</span>
+    )
+  ) : (
+    <DeskState item={item} state={state} decides={decides} wait={wait} />
+  );
   const touches = <TouchCount item={item} />;
   const prLink = <PrLink item={item} />;
 
@@ -86,16 +91,21 @@ export function BoardCard({
       className={cn(
         'relative flex rounded-control border bg-card transition-[border-color,box-shadow,opacity] duration-200',
         'hover:border-muted has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-run',
-        compact ? 'items-center gap-2 p-3' : 'flex-col gap-2 p-3',
-        expedite
-          ? 'border-rework-tint bg-rework-tint'
-          : item.in_buffer
-            ? 'border-amber-tint bg-amber-tint'
-            : item.state === 'waiting_human' && decides
-              ? 'border-you-tint'
-              : item.state === 'blocked'
-                ? 'border-rework-tint'
-                : 'border-line',
+        compact ? 'items-center gap-2 p-3' : 'flex-col gap-2 rounded-cell p-3',
+        // The desktop card keeps its border plain: an expedite item is tinted by its column's zone.
+        !compact
+          ? item.state === 'waiting_human' && decides
+            ? 'border-you ring-1 ring-you'
+            : 'border-line'
+          : expedite
+            ? 'border-rework-tint bg-rework-tint'
+            : item.in_buffer
+              ? 'border-amber-tint bg-amber-tint'
+              : item.state === 'waiting_human' && decides
+                ? 'border-you-tint'
+                : item.state === 'blocked'
+                  ? 'border-rework-tint'
+                  : 'border-line',
         drag?.dragging && 'opacity-40',
       )}
     >
@@ -117,14 +127,18 @@ export function BoardCard({
         </>
       ) : (
         <>
-          {expediteLabel}
-          <div className="flex justify-between gap-2 text-xs text-muted tabular-nums">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 text-meta text-muted tabular-nums">
             <span>{item.ref}</span>
-            <span className="whitespace-nowrap">{age}</span>
+            {item.type ? <Chip tone="plain">{humanize(item.type)}</Chip> : null}
+            {item.lane ? <Chip tone="plain">{humanize(item.lane)}</Chip> : null}
+            <span className="ml-auto whitespace-nowrap">{age}</span>
           </div>
+          {expediteLabel}
           <CardTitle item={item} describedBy={drag?.describedBy} movable={Boolean(onMove)} />
+          {item.assembly ? <AssemblyLine item={item} parts={assemblyParts} /> : null}
+          {item.agent ? <AgentLine item={item} /> : null}
           <div className="flex items-end gap-2">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-2 gap-y-1">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
               {stateLine}
               {prLink}
               {touches}
@@ -135,6 +149,17 @@ export function BoardCard({
       )}
     </article>
   );
+}
+
+/** The role mark's letters: "Infra engineer" → "IE". Decorative; the role says the same. */
+export function roleMark(role: string): string {
+  return role
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join('')
+    .toUpperCase();
 }
 
 /** The expedite label: text with an icon, so the tint is not the only sign (WCAG 1.4.1). */
@@ -180,7 +205,14 @@ export function PrLink({ item }: { item: Pick<ItemCard, 'pr_url'> }) {
  * assembly's item page. The title may shrink to one line; the part count never does. Nothing when
  * the item is no part of an assembly.
  */
-export function AssemblyLine({ item }: { item: Pick<ItemCard, 'assembly'> }) {
+export function AssemblyLine({
+  item,
+  parts,
+}: {
+  item: Pick<ItemCard, 'assembly'>;
+  /** The assembly's parts from the board: one pip per part, the merged ones filled (desktop cards). */
+  parts?: PartsSummary | undefined;
+}) {
   const params = useFactoryParams();
   const assembly = item.assembly;
   if (!assembly) return null;
@@ -190,15 +222,80 @@ export function AssemblyLine({ item }: { item: Pick<ItemCard, 'assembly'> }) {
       params={{ ...params, ref: refParam(assembly.ref) }}
       draggable={false}
       aria-label={`Part ${assembly.part} of ${assembly.parts} of ${assembly.title}`}
-      className="relative z-10 flex min-w-0 items-center gap-1 text-xs text-muted no-underline hover:text-run"
+      className={cn(
+        'relative z-10 flex min-w-0 items-center no-underline hover:text-run',
+        parts ? 'gap-2 text-meta font-medium text-ok-ink' : 'gap-1 text-xs text-muted',
+      )}
     >
       <span className="min-w-0 truncate" title={assembly.title}>
         {assembly.title}
       </span>
+      {parts ? <PartPips total={parts.total} merged={parts.merged} /> : null}
       <span className="shrink-0 whitespace-nowrap">
         › {assembly.part} of {assembly.parts}
       </span>
     </Link>
+  );
+}
+
+/** One pip per part of the assembly; the merged parts are filled. Decorative: the count says the same. */
+function PartPips({ total, merged }: { total: number; merged: number }) {
+  return (
+    <span aria-hidden="true" className="flex shrink-0 gap-1">
+      {Array.from({ length: total }, (_, i) => (
+        <i
+          // biome-ignore lint/suspicious/noArrayIndexKey: the pips are fixed slots by position, never reordered
+          key={i}
+          className={cn('block h-1.5 w-2 rounded-chip', i < merged ? 'bg-ok' : 'bg-ok-tint')}
+        />
+      ))}
+    </span>
+  );
+}
+
+/** The state line of a desktop card: a chip for a decision or a rework, a pulsing run line, else muted text. */
+function DeskState({
+  item,
+  state,
+  decides,
+  wait,
+}: {
+  item: ItemCard;
+  state: { text: string; tone: keyof typeof toneText };
+  decides: boolean;
+  wait: ItemCard['waiting'];
+}) {
+  if (item.state === 'done') return null;
+  if (wait) return <WaitLine waiting={wait} status={itemStatus(item)} className="text-meta" />;
+  if (item.state === 'waiting_human' && decides) return <Chip tone="you">{state.text}</Chip>;
+  if (state.tone === 'rework') return <Chip tone="rework">{state.text}</Chip>;
+  if (item.state === 'in_progress') {
+    return (
+      <span className="flex min-w-0 items-center gap-2 text-meta text-run-ink">
+        <span
+          aria-hidden="true"
+          className="size-1.5 shrink-0 rounded-full bg-run animate-pulse-dot motion-reduce:animate-none"
+        />
+        <span className="line-clamp-2">{state.text}</span>
+      </span>
+    );
+  }
+  return <span className={cn('line-clamp-2 text-meta', toneText[state.tone])}>{state.text}</span>;
+}
+
+/** The agent working the item now: its role mark (the run colour for every role), its name and its cost. */
+function AgentLine({ item }: { item: ItemCard }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2 text-meta text-ink-soft">
+      <span
+        aria-hidden="true"
+        className="flex size-5 shrink-0 items-center justify-center rounded-full bg-run text-meta font-bold text-white"
+      >
+        {roleMark(item.agent ?? '')}
+      </span>
+      <span className="min-w-0 truncate">{item.agent}</span>
+      <span className="ml-auto shrink-0 whitespace-nowrap text-muted tabular-nums">{formatUsd(item.cost_usd)}</span>
+    </div>
   );
 }
 
@@ -209,13 +306,13 @@ export function AssemblyLine({ item }: { item: Pick<ItemCard, 'assembly'> }) {
 export function AssemblyHeader({ assembly, compact }: { assembly: OpenAssembly; compact: boolean }) {
   const params = useFactoryParams();
   return (
-    <h3 className="m-0 flex min-w-0 px-1 text-[13px] font-medium">
+    <h3 className="m-0 flex min-w-0 px-1 text-secondary font-medium">
       <Link
         to="/o/$org/f/$factory/items/$ref"
         params={{ ...params, ref: refParam(assembly.ref) }}
         draggable={false}
         className={cn(
-          'flex min-w-0 flex-1 items-center gap-1.5 rounded-control text-ink no-underline hover:text-run',
+          'flex min-w-0 flex-1 items-center gap-2 rounded-control text-ink no-underline hover:text-run',
           'outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run',
           compact ? 'min-h-11' : 'min-h-8',
         )}
@@ -245,7 +342,7 @@ export function CardTitle({
 }) {
   const params = useFactoryParams();
   return (
-    <h3 className={cn('m-0 leading-snug font-medium', compact ? 'text-[15px]' : 'text-sm')}>
+    <h3 className={cn('m-0 leading-snug font-medium', compact ? 'text-heading' : 'text-secondary')}>
       <Link
         to="/o/$org/f/$factory/items/$ref"
         params={{ ...params, ref: refParam(item.ref) }}

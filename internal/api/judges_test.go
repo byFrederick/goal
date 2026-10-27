@@ -299,7 +299,7 @@ func TestJudges_Get(t *testing.T) {
 func TestJudges_Unavailable(t *testing.T) {
 	t.Parallel()
 
-	h := newHarnessLogged(t, nil, nil, func(d *api.Deps) { d.Judges = nil })
+	h := newHarnessLogged(t, nil, nil, func(_ *harness, d *api.Deps) { d.Judges = nil })
 
 	for _, r := range []struct{ method, path, body string }{
 		{http.MethodGet, acmeJudges, ""},
@@ -406,6 +406,25 @@ func TestJudges_Create(t *testing.T) {
 
 	code, p = problemOfCall(t, h, http.MethodPost, acmeJudges, `{"slug":"third-judge",`+judgeBody[1:]+`}`)
 	wantProblem(t, "a viewer's create", code, p, http.StatusForbidden, "forbidden")
+}
+
+func TestJudges_CreateGateRefusalKeepsTheDraft(t *testing.T) {
+	t.Parallel()
+
+	h := newHarnessLogged(t, nil, nil, withEvalGate)
+	h.publishCases(t) // v2 has eval cases, so every publish waits on a run of them
+	h.setJudges(t, followedJudge)
+
+	code, p := problemOfCall(t, h, http.MethodPost, acmeJudges, `{"slug":"tests-added",`+judgeBody[1:]+`}`)
+	wantProblem(t, "create under the gate", code, p, http.StatusConflict, "evals-pending")
+
+	if p.EvalRunId == nil {
+		t.Errorf("gate problem = %+v, want the eval run it waits on", p)
+	}
+
+	if h.acmeRecord(t).Draft == nil {
+		t.Error("after the gate refused acme has no draft, want the judge's draft open")
+	}
 }
 
 func TestJudges_Update(t *testing.T) {

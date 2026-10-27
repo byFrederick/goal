@@ -42,7 +42,7 @@ func judgeList(ctx context.Context, out *printer, getenv func(string) string, ar
 		return err
 	}
 
-	f, err := judgeFactory(ctx, c, *factory)
+	f, err := commandFactory(ctx, c, *factory)
 	if err != nil {
 		return err
 	}
@@ -112,7 +112,7 @@ func judgeTry(ctx context.Context, out *printer, getenv func(string) string, arg
 		return err
 	}
 
-	f, err := judgeFactory(ctx, c, *factory)
+	f, err := commandFactory(ctx, c, *factory)
 	if err != nil {
 		return err
 	}
@@ -147,37 +147,6 @@ func judgeTry(ctx context.Context, out *printer, getenv func(string) string, arg
 	out.printf("queued %d tries of %s: %s\n", len(tries), pos[0], strings.Join(refs, ", "))
 
 	return nil
-}
-
-// judgeFactory is the factory a judge command acts on: --factory, else the organization's only
-// factory.
-func judgeFactory(ctx context.Context, c orgClient, factory string) (string, error) {
-	if factory != "" {
-		return factory, nil
-	}
-
-	res, err := c.ListFactoriesWithResponse(ctx, c.org, nil)
-	if err != nil {
-		return "", apiDown(err)
-	}
-
-	if res.JSON200 == nil {
-		return "", problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
-	}
-
-	names := make([]string, 0, len(res.JSON200.Factories))
-	for _, f := range res.JSON200.Factories {
-		names = append(names, f.Name)
-	}
-
-	switch len(names) {
-	case 0:
-		return "", fmt.Errorf("%s has no factories", c.org)
-	case 1:
-		return names[0], nil
-	default:
-		return "", fmt.Errorf("%s has factories %s: pass --factory", c.org, strings.Join(names, ", "))
-	}
 }
 
 // percent is a share from 0 to 1 as a whole percentage.

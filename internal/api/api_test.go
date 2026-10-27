@@ -155,6 +155,11 @@ type harness struct {
 	// queued by a jonah loop over them and the store's finished runs.
 	judges      *porttest.Judges
 	judgeScores *porttest.JudgeScores
+	// evals are the factories' eval runs, evalJudges the versions' judges as tests set them, and
+	// evalLoop the jonah eval loop that starts, prices and cancels runs over them.
+	evals      *porttest.Evals
+	evalJudges *porttest.Judges
+	evalLoop   *jonah.Evals
 }
 
 // acme's one prompt and its path.
@@ -374,7 +379,7 @@ func (h *harness) addIdentity(in *signIn) {
 
 // newHarnessLogged is newHarnessWith with goald's log written to logs (JSON) when it is set, and
 // the API's collaborators changed by each of opts.
-func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*api.Deps)) *harness {
+func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*harness, *api.Deps)) *harness {
 	t.Helper()
 
 	tenancy := newTenancy(t)
@@ -476,9 +481,9 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ap
 		deps.Auth = api.AuthConfig{Mode: api.AuthSession, EmailCodes: !in.noEmailCodes, Google: in.google}
 	}
 
-	h.withJudges(&deps, tenancy, opts)
+	deps.Judges = h.judgeDeps(tenancy)
 
-	handler, err := api.New(deps)
+	handler, err := api.New(h.withEvals(deps, tenancy, opts))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -496,15 +501,6 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ap
 	})
 
 	return h
-}
-
-// withJudges gives d h's judges, then changes d with each of opts.
-func (h *harness) withJudges(d *api.Deps, tenancy *porttest.Tenancy, opts []func(*api.Deps)) {
-	d.Judges = h.judgeDeps(tenancy)
-
-	for _, opt := range opts {
-		opt(d)
-	}
 }
 
 // judgeDeps are h's judges and their scores, with a jonah loop over them and the store's finished

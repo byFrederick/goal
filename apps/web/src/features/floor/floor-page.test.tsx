@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   boardQuery,
@@ -7,6 +7,7 @@ import {
   inboxQuery,
   leadTimeQuery,
   metricsQuery,
+  overviewQuery,
   touchesQuery,
   weeklyQuery,
 } from '../../api/queries';
@@ -14,17 +15,21 @@ import type {
   Board,
   ConstraintReport,
   Factory,
+  FactoryOverview,
+  FactoryOverviewList,
   InboxEntry,
   ItemCard,
   LeadTimeBridge,
   Metrics,
+  MetricsSummary,
   OrgSummary,
   TouchMetrics,
   WeeklyThroughput,
 } from '../../api/types';
 import { renderFactoryPage } from '../../test/route';
+import { TooltipProvider } from '../../ui/tooltip';
 import { FloorPage } from './floor-page';
-import { previousRange, rangeOf } from './range';
+import { addDays, previousRange, rangeOf, todayUtc } from './range';
 
 afterEach(cleanup);
 
@@ -175,30 +180,106 @@ const touches: TouchMetrics = {
   },
 };
 
+/** The Floor's flow metrics of the range before, for the deltas: last week's figures. */
+const before: MetricsSummary = {
+  from: '2026-10-13',
+  to: '2026-10-19',
+  items_done: 9,
+  throughput_per_day: 8.2,
+  lead_time_hours: { p50: 20, p85: 35 },
+  assembly_lead_time_hours: null,
+  rework_rate: 0.12,
+};
+
+/** The week's figures the header and tiles read: 7.6 a day against a target of 10, 31 h p85, 14% sent back. */
+const flow: Metrics = {
+  ...metrics,
+  throughput: [
+    { day: '2026-10-20', done: 8 },
+    { day: '2026-10-21', done: 7 },
+  ],
+  throughput_per_day: 7.6,
+  lead_time_hours: { p50: 18, p85: 31 },
+  rework_rate: 0.14,
+  spend_usd: 31,
+  items_done: 10,
+  previous: before,
+  targets: { throughput_per_day: 10, lead_time_hours: 48, expedite_lead_time_minutes: null },
+};
+
+/** The factory's row of the overview for a window: its spend and the day's or week's budget. */
+function overviewRow(spend: number, budget: number | null): FactoryOverview {
+  return {
+    factory,
+    health: 'running',
+    andon: null,
+    throughput: { per_day: 0, previous_per_day: 0, days: [{ day: '2026-10-26', done: 7 }] },
+    constraint: null,
+    waiting: { on_you: 0, items_by_type: [], tool_approvals: [] },
+    spend_usd: spend,
+    budget_usd: budget,
+    touches: {
+      current: { finished: 0, per_item_mean: 0, per_item_median: 0, touchless_rate: 0 },
+      previous: { finished: 0, per_item_mean: 0, per_item_median: 0, touchless_rate: 0 },
+    },
+  };
+}
+
+function overviewList(window: string, factories: FactoryOverview[]): FactoryOverviewList {
+  return {
+    window,
+    since: '2026-10-20',
+    until: '2026-10-26',
+    waiting_on_you: 0,
+    spend_usd: 0,
+    budget_usd: null,
+    factories,
+  };
+}
+
 /** The Floor at its default range (the last seven days), with every query it reads seeded. */
-function renderFloor(entries: InboxEntry[] = []) {
+function renderFloor({
+  entries = [],
+  line = board,
+  flowMetrics = metrics,
+  today = overviewList('1d', [overviewRow(96, 150)]),
+  week = overviewList('7d', [overviewRow(412, 1050)]),
+}: {
+  entries?: InboxEntry[];
+  line?: Board;
+  flowMetrics?: Metrics;
+  today?: FactoryOverviewList;
+  week?: FactoryOverviewList;
+} = {}) {
   const range = rangeOf({});
   return renderFactoryPage({
-    page: FloorPage,
+    // The app provides the tooltips at its root; the Hands-off tile's tip needs them here too.
+    page: () => (
+      <TooltipProvider>
+        <FloorPage />
+      </TooltipProvider>
+    ),
     path: '/',
     org,
     factory,
     seed: [
-      [boardQuery(org.id, factory.id).queryKey, board],
-      [metricsQuery(org.id, factory.id, range).queryKey, metrics],
+      [boardQuery(org.id, factory.id).queryKey, line],
+      [metricsQuery(org.id, factory.id, range).queryKey, flowMetrics],
       [weeklyQuery(org.id, factory.id, range).queryKey, weekly],
       [leadTimeQuery(org.id, factory.id, range).queryKey, bridge],
       [constraintQuery(org.id, factory.id, range).queryKey, constraint],
       [touchesQuery(org.id, factory.id, range).queryKey, touches],
       [touchesQuery(org.id, factory.id, previousRange(range)).queryKey, touches],
       [inboxQuery(org.id, factory.id).queryKey, { entries, truncated: false }],
+      [overviewQuery(org.id, '1d').queryKey, today],
+      [overviewQuery(org.id, '7d').queryKey, week],
     ],
   });
 }
 
 describe('FloorPage', () => {
   it('the Inbox button opens the drawer with what waits on this factory', async () => {
-    renderFloor([ship]);
+    renderFloor({ entries: [ship] });
 
     fireEvent.click(await screen.findByRole('button', { name: /^Inbox/ }));
     const drawer = await screen.findByRole('dialog', { name: 'Inbox' });
@@ -207,10 +288,91 @@ describe('FloorPage', () => {
   });
 
   it('has no Needs you card, with or without waiting entries', async () => {
-    renderFloor([ship]);
+    renderFloor({ entries: [ship] });
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'SRE floor' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Floor' })).toBeTruthy();
     expect(screen.queryByRole('region', { name: 'Needs you' })).toBeNull();
     expect(screen.queryByText('Needs you')).toBeNull();
+  });
+
+  it('shows the line running and the range it covers, against the 7 days before', async () => {
+    renderFloor();
+
+    expect(await screen.findByText('Line running')).toBeTruthy();
+    expect(screen.getByText('Oct 20 to 26, compared with the 7 days before')).toBeTruthy();
+  });
+
+  it('shows the andon state in place of the running chip while an andon pull is open', async () => {
+    const stopped: Board = {
+      ...board,
+      line: {
+        ...board.line,
+        status: 'stopped',
+        andon: {
+          id: 1,
+          kind: 'manual',
+          station: null,
+          reason: 'Answers cite a retired runbook',
+          pulled_by: 'user:local',
+          pulled_at: '2026-10-26T09:00:00Z',
+          cleared_by: null,
+          cleared_at: null,
+          note: null,
+          data: {},
+        },
+      },
+    };
+    renderFloor({ line: stopped });
+
+    expect(await screen.findByText(/Line stopped/)).toBeTruthy();
+    expect(screen.queryByText('Line running')).toBeNull();
+  });
+
+  it('writes the 30-day window to the URL and presses it', async () => {
+    const { router } = renderFloor();
+
+    fireEvent.click(await screen.findByRole('radio', { name: '30 days' }));
+    await waitFor(() => expect(router.state.location.search).toEqual({ from: addDays(todayUtc(), -29) }));
+  });
+
+  it('shows the flow figures against their targets, with the change since last week', async () => {
+    renderFloor({ flowMetrics: flow });
+
+    const tiles = within(await screen.findByRole('region', { name: 'Flow against targets' }));
+    expect(tiles.getByRole('meter', { name: '76% of the target of 10 a day' })).toBeTruthy();
+    expect(tiles.getByRole('meter', { name: '65% of the 48 hour target' })).toBeTruthy();
+    expect(tiles.getByText('Target 10')).toBeTruthy();
+    expect(tiles.getByText('Target 48 h')).toBeTruthy();
+    expect(tiles.getByText(/−0\.6/)).toBeTruthy();
+    expect(tiles.getByText('No target set')).toBeTruthy();
+  });
+
+  it('shows cost per item from the spend over the finished items', async () => {
+    renderFloor({ flowMetrics: flow });
+
+    expect(await screen.findByText('$3.10')).toBeTruthy();
+  });
+
+  it('spend today against its budget and the week beside it', async () => {
+    renderFloor({ flowMetrics: flow });
+
+    expect(await screen.findByRole('meter', { name: "64% of today's budget" })).toBeTruthy();
+    expect(screen.getByText(/^\$96/, { selector: 'p' })).toBeTruthy();
+    expect(screen.getByText('of $150')).toBeTruthy();
+    expect(screen.getByText('Week $412')).toBeTruthy();
+  });
+
+  it('hands-off is disabled and shows no number, as it is not built yet', async () => {
+    renderFloor({ flowMetrics: flow });
+
+    const handsOff = await screen.findByRole('button', { name: 'Hands-off' });
+    expect(handsOff.getAttribute('aria-disabled')).toBe('true');
+    expect(within(handsOff).getByText('Not built yet')).toBeTruthy();
+  });
+
+  it('spend today shows not enough data when the factory has no overview row', async () => {
+    renderFloor({ flowMetrics: flow, today: overviewList('1d', []) });
+
+    expect(await screen.findByText('Not enough data')).toBeTruthy();
   });
 });

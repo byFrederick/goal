@@ -1034,7 +1034,7 @@ export interface paths {
         put?: never;
         /**
          * Publish the open draft as the factory's next version
-         * @description One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken.
+         * @description One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken, and with eval cases evals-pending or evals-failing (the eval gate, with eval_run_id; the draft stays open).
          */
         post: operations["publishDraft"];
         delete?: never;
@@ -1291,6 +1291,160 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/evals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The eval cases of the current version, with their last tries and a summary
+         * @description Each case of the current version's evals/cases/, by name, with what checks it, its last 3 finished tries (newest first) and what it cost in the latest run that ran it. The summary counts the cases whose last tries all passed and the share of those tries that passed, and names the latest run of the current version's content. A factory never published has no cases and no version. 503 evals-unavailable while this goald does not run evals.
+         */
+        get: operations["listEvals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/evals/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start an eval run of every case, or of one, on the current version or the draft
+         * @description Queues a run (trigger manual) with one try per case and try, priced as estimateEvalRun prices it, and answers at once; goald's eval loop works the tries. 400 invalid-request for a case name that is not a slug, eval-case-unknown for a case the content does not have and for content without cases; 404 version-not-found for a factory never published (on current), no-draft for one without a draft (on draft); 503 evals-unavailable.
+         */
+        post: operations["startEvalRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/evals/estimate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What an eval run would cost, about, without starting it
+         * @description Each try at the mean cost of its case's last finished tries or, for a case with none, at the median cost of its agent's newest finished runs; a case with neither is unpriced. The same refusals as startEvalRun.
+         */
+        post: operations["estimateEvalRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The eval run's id */
+                eval_run: components["parameters"]["EvalRunRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One eval run with its results by case and try
+         * @description 404 eval-run-not-found for a run that is not the factory's; 503 evals-unavailable.
+         */
+        get: operations["getEvalRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The eval run's id */
+                eval_run: components["parameters"]["EvalRunRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel an eval run
+         * @description No further try of it starts and a try that is running stops at its next poll. 404 eval-run-not-found; 409 eval-run-finished for a run that is done, failed or cancelled; 503 evals-unavailable.
+         */
+        post: operations["cancelEvalRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/evals/cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add an eval case from a past run and publish it
+         * @description Writes evals/cases/{name}.yaml from the past agent run: its agent, and its item's title, body, type and lane as the input, checked by the agent's contract or by judge, with tries tries (default 1). The file goes into a new draft of the current version, which publishes as the next version through the same checks and eval gate as publishDraft (ADR 0025 decision 5). 400 invalid-request for a name that is not a slug; 404 run-not-found for a run that is not the factory's; 409 eval-case-exists when the current version has the case, draft-open when the factory already has a draft (the draft this call opened is discarded), and the publish's own conflicts. When the eval gate refuses (evals-pending, evals-failing) the draft stays open, so it publishes once its run passes. 503 evals-unavailable.
+         */
+        post: operations["addEvalCase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/items": {
         parameters: {
             query?: never;
@@ -1536,7 +1690,7 @@ export interface paths {
         put?: never;
         /**
          * Add a judge and publish it as the factory's next version
-         * @description Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version); 503 judges-unavailable.
+         * @description Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version). When the factory has eval cases and the eval gate refuses (evals-pending, evals-failing), the draft stays open, so it publishes once its run passes. 503 judges-unavailable.
          */
         post: operations["createJudge"];
         delete?: never;
@@ -1566,7 +1720,7 @@ export interface paths {
         get: operations["getJudge"];
         /**
          * Replace a judge's file and publish it as the factory's next version
-         * @description As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers.
+         * @description As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers, and the same eval gate.
          */
         put: operations["updateJudge"];
         post?: never;
@@ -2607,7 +2761,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -2623,6 +2777,158 @@ export interface components {
             /** @description draft-conflict on a file write only, the file's sha256 now; absent when the file is gone */
             sha256?: string;
             items?: components["schemas"]["ItemsAtRemovedStations"];
+            /** @description evals-pending and evals-failing only, the eval run of the draft's content the publish waits on or that failed */
+            eval_run_id?: string;
+            /** @description evals-failing only, the cases of that run with a try that did not pass */
+            failing_cases?: string[];
+        };
+        EvalList: {
+            summary: components["schemas"]["EvalSummary"];
+            cases: components["schemas"]["EvalCaseEntry"][];
+        };
+        EvalSummary: {
+            /** @description The current version's number; absent for a factory never published */
+            version?: number;
+            /** @description How many cases the current version has */
+            cases: number;
+            /** @description The cases whose last tries all passed (a case with no try does not pass) */
+            cases_passing: number;
+            /** @description The last tries of every case */
+            tries: number;
+            /** @description Of those */
+            tries_passed: number;
+            /**
+             * Format: double
+             * @description tries_passed of tries, 0 to 1; absent while no case has a try
+             */
+            first_try_pass_rate?: number;
+            /** @description The newest eval run of the current version's content */
+            latest_run_id?: string;
+            /**
+             * Format: date-time
+             * @description When that run finished, or started while it runs
+             */
+            latest_run_at?: string;
+            /** @description The most tries that run gave a case */
+            latest_tries_per_case?: number;
+        };
+        EvalCaseEntry: {
+            /** @description The case's file name under evals/cases/ */
+            name: string;
+            description: string;
+            agent: string;
+            /** @description How many tries a run gives it */
+            tries?: number;
+            checked_by: components["schemas"]["EvalCheckedBy"];
+            /** @description Its last finished tries, newest first, at most 3 */
+            last_tries: components["schemas"]["EvalHistoryTry"][];
+            /**
+             * Format: double
+             * @description What its tries cost in the latest run that ran it; absent when none did
+             */
+            cost_usd?: number;
+        };
+        EvalCheckedBy: {
+            /** @enum {string} */
+            kind: "contract" | "judge" | "reference_patch";
+            /** @description judge only */
+            judge?: string;
+            /** @description judge only */
+            title?: string;
+            /** @description reference_patch only */
+            path?: string;
+        };
+        EvalHistoryTry: {
+            eval_run_id: string;
+            try: number;
+            state: components["schemas"]["EvalResultState"];
+            /** @description The agent run of the try */
+            run_id?: string;
+            /** Format: double */
+            cost_usd: number;
+        };
+        /**
+         * @description pass, fail and error are finished; a try that failed for an infrastructure reason is error, never fail
+         * @enum {string}
+         */
+        EvalResultState: "pending" | "running" | "pass" | "fail" | "error";
+        EvalRunRequest: {
+            /** @description The one case to run; absent runs every case */
+            case?: string;
+            /**
+             * @description The content to run the cases of, the current version's or the open draft's
+             * @default current
+             * @enum {string}
+             */
+            on?: "current" | "draft";
+        };
+        EvalEstimate: {
+            /**
+             * Format: double
+             * @description About what the priced cases' tries cost
+             */
+            usd: number;
+            /** @description The cases with no tries and whose agent has no finished run to price them by */
+            unpriced: string[];
+        };
+        EvalRunStarted: {
+            run: components["schemas"]["EvalRun"];
+            estimate: components["schemas"]["EvalEstimate"];
+        };
+        EvalRun: {
+            id: string;
+            /** @enum {string} */
+            state: "queued" | "running" | "done" | "failed" | "cancelled";
+            /** @enum {string} */
+            trigger: "manual" | "publish";
+            /** @description The one case it was asked for; absent when it runs every case */
+            case?: string;
+            /** @description The published version it runs; absent for a draft's content */
+            version?: number;
+            /** @description The hash of the content it runs */
+            content_sha256: string;
+            /** Format: double */
+            estimate_usd: number;
+            /**
+             * Format: double
+             * @description What its recorded tries cost
+             */
+            cost_usd: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            finished_at?: string;
+            /** @description By case, then try */
+            results: components["schemas"]["EvalResult"][];
+        };
+        EvalResult: {
+            case: string;
+            try: number;
+            state: components["schemas"]["EvalResultState"];
+            /** @description contract, judge:<slug> or reference-patch:<path>, once checked */
+            checked_by?: string;
+            run_id?: string;
+            /** Format: double */
+            cost_usd: number;
+            turns: number;
+            /** @description What the check found (a reason, a contract problem, the judge's outcome and score, missing files) */
+            detail?: {
+                [key: string]: unknown;
+            };
+        };
+        EvalCaseFromRun: {
+            /** @description The past agent run whose agent and item the case replays */
+            run: string;
+            /** @description The case's name, its file name: 3 to 40 lowercase letters, digits and hyphens */
+            name: string;
+            /** @description What the agent must get right; the item's title when absent */
+            description?: string;
+            /** @default 1 */
+            tries?: number;
+            /** @description A judge of the current version checks it; absent */
+            judge?: string;
+            /** @description The version the caller saw running; the current one when absent */
+            expected_current_version_id?: string;
         };
         /**
          * @description session: people sign in and every request carries a session or an API key. none: sign-in is off (GOAL_AUTH=none, a loopback install), every request acts as the local user.
@@ -5760,6 +6066,8 @@ export interface components {
         FactoryRef: string;
         /** @description The judge's slug: its file name in evals/judges without .md */
         JudgeRef: string;
+        /** @description The eval run's id */
+        EvalRunRef: string;
         /** @description The first UTC day of the range; 6 days before `to` when absent */
         RangeFrom: string;
         /** @description The last UTC day of the range, included; today when absent */
@@ -7574,6 +7882,178 @@ export interface operations {
                 };
                 content: {
                     "text/yaml": string;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listEvals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The cases and their summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvalList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    startEvalRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvalRunRequest"];
+            };
+        };
+        responses: {
+            /** @description The queued run and its estimate */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvalRunStarted"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    estimateEvalRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvalRunRequest"];
+            };
+        };
+        responses: {
+            /** @description The estimate */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvalEstimate"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getEvalRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The eval run's id */
+                eval_run: components["parameters"]["EvalRunRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvalRun"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    cancelEvalRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The eval run's id */
+                eval_run: components["parameters"]["EvalRunRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The cancelled run */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvalRun"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    addEvalCase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvalCaseFromRun"];
+            };
+        };
+        responses: {
+            /** @description The new version */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Version"];
                 };
             };
             default: components["responses"]["Problem"];
