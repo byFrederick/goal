@@ -152,6 +152,8 @@ var problemCodes = []struct {
 	{ErrImportInvalid, CodeImportInvalid},
 	{ErrBadPath, CodeBadPath},
 	{ErrTooLarge, CodeTooLarge},
+	{ErrEvalsPending, CodeEvalsPending},
+	{ErrEvalsFailing, CodeEvalsFailing},
 }
 
 // ProblemCode is the problem detail code of a refusal (a *ParseError is yaml-invalid, unless
@@ -234,7 +236,10 @@ type Deps struct {
 	// Credentials is the connections check: ConnectionsCheck; nil skips it.
 	// Nil leaves the credentials check out.
 	Credentials Credentials
-	Clock       ports.Clock
+	// EvalGate, when set, gates every publish of a draft with eval cases on their run
+	// (evalgate.go); nil publishes as if no draft had cases.
+	EvalGate *EvalGate
+	Clock    ports.Clock
 	// NewID returns a new factory id (a UUIDv7); uuid.NewV7 when nil.
 	NewID func() string
 }
@@ -245,6 +250,7 @@ type Service struct {
 	store       ports.DefinitionStore
 	loads       Loads
 	credentials Credentials
+	evals       *EvalGate
 	clock       ports.Clock
 	newID       func() string
 	templates   *TemplateCatalog
@@ -258,7 +264,7 @@ func New(d Deps) *Service {
 	}
 
 	return &Service{
-		store: d.Store, loads: d.Loads, credentials: d.Credentials,
+		store: d.Store, loads: d.Loads, credentials: d.Credentials, evals: d.EvalGate,
 		clock: d.Clock, newID: newID,
 		templates: NewTemplateCatalog(d.Templates, d.Clock),
 	}
