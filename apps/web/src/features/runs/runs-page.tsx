@@ -30,10 +30,19 @@ const pageSize = 50;
 /** The search waits this long after the last keystroke before the URL, and the query, follow. */
 const searchDelayMs = 250;
 
-/** The outcome chips, in the picture's order. "Finished" is the API's succeeded status. */
-const outcomes: { label: string; status?: RunStatus; tone: 'run' | 'rework' | 'ok' | 'plain' }[] = [
+/**
+ * The outcome chips, in the picture's order. "Finished" is the API's succeeded status. "Waiting on you" has no
+ * status in the API yet, so it renders disabled through NotAvailable.
+ */
+const outcomes: {
+  label: string;
+  status?: RunStatus;
+  tone: 'run' | 'rework' | 'ok' | 'you' | 'plain';
+  notBuilt?: true;
+}[] = [
   { label: 'All', tone: 'plain' },
   { label: 'Running', status: 'running', tone: 'run' },
+  { label: 'Waiting on you', tone: 'you', notBuilt: true },
   { label: 'Failed', status: 'failed', tone: 'rework' },
   { label: 'Finished', status: 'succeeded', tone: 'ok' },
 ];
@@ -133,12 +142,12 @@ export function RunsPage() {
   const searchId = useId();
 
   // The window is the UTC day (or the day before): stable within the day, so the query key is too.
-  const window = runsWindow(search.range);
+  const day = runsWindow(search.range);
   const filter = {
     ...(search.factory ? { factory: search.factory } : {}),
     ...(search.status ? { status: search.status } : {}),
-    since: window.since,
-    until: window.until,
+    since: day.since,
+    until: day.until,
     ...(search.q ? { q: search.q } : {}),
     limit: pageSize,
   };
@@ -284,6 +293,19 @@ export function RunsPage() {
             <fieldset className="m-0 flex min-w-0 flex-wrap gap-2 border-0 p-0">
               <legend className="sr-only">Show</legend>
               {outcomes.map((o) => {
+                if (o.notBuilt) {
+                  return (
+                    <NotAvailable key={o.label} label={o.label}>
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center gap-2 rounded-control border border-rule bg-card px-3 text-secondary font-control text-ink-soft"
+                      >
+                        <span className="size-2 rounded-full bg-you" aria-hidden="true" />
+                        {o.label}
+                      </button>
+                    </NotAvailable>
+                  );
+                }
                 const active = o.status === search.status;
                 const count =
                   o.label === 'All'
@@ -308,7 +330,13 @@ export function RunsPage() {
                       <span
                         className={cn(
                           'size-2 rounded-full',
-                          o.tone === 'run' ? 'bg-run' : o.tone === 'rework' ? 'bg-rework' : 'bg-ok',
+                          o.tone === 'run'
+                            ? 'bg-run'
+                            : o.tone === 'rework'
+                              ? 'bg-rework'
+                              : o.tone === 'you'
+                                ? 'bg-you'
+                                : 'bg-ok',
                         )}
                         aria-hidden="true"
                       />
@@ -318,15 +346,6 @@ export function RunsPage() {
                   </button>
                 );
               })}
-              <NotAvailable label="Waiting on you">
-                <button
-                  type="button"
-                  className="inline-flex h-8 items-center gap-2 rounded-control border border-rule bg-card px-3 text-secondary font-control text-ink-soft"
-                >
-                  <span className="size-2 rounded-full bg-you" aria-hidden="true" />
-                  Waiting on you
-                </button>
-              </NotAvailable>
             </fieldset>
             <div className="relative ml-auto w-full min-w-0 sm:w-60">
               <label htmlFor={searchId} className="sr-only">

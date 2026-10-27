@@ -73,7 +73,7 @@ function LatestSteps({ trace, onShowAll, className }: { trace: Trace; onShowAll:
       {steps.length === 0 ? (
         <p className="m-0 text-sm text-muted">No tool calls yet.</p>
       ) : (
-        <ol className="m-0 flex list-none flex-col gap-1.5 p-0">
+        <ol className="m-0 flex list-none flex-col gap-2 p-0">
           {steps.map((t) => (
             <ToolRow key={`${t.at}-${t.id}`} call={t} />
           ))}
@@ -81,7 +81,7 @@ function LatestSteps({ trace, onShowAll, className }: { trace: Trace; onShowAll:
       )}
       <Button
         variant="ghost"
-        className="h-11 self-start px-2 text-[15px] underline underline-offset-3"
+        className="h-11 self-start px-2 text-body underline underline-offset-3"
         onClick={onShowAll}
       >
         Full trace
@@ -135,17 +135,17 @@ export function ItemPage() {
     <>
       <TopBarSlot crumb={`#${item.number}`} />
       <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex max-w-[820px] min-w-0 flex-col gap-2.5">
+        <div className="flex max-w-3xl min-w-0 flex-col gap-3">
           <Link
             to="/o/$org/f/$factory/board"
             params={params}
-            className="inline-flex min-h-11 items-center gap-1.5 self-start text-[15px] text-muted no-underline md:hidden"
+            className="inline-flex min-h-11 items-center gap-2 self-start text-body text-muted no-underline md:hidden"
           >
             <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" />
             {board}
           </Link>
           <nav aria-label="Breadcrumb" className="hidden text-sm text-muted md:block">
-            <ol className="m-0 flex list-none gap-1.5 p-0">
+            <ol className="m-0 flex list-none gap-2 p-0">
               <li>
                 <Link to="/o/$org/f/$factory/board" params={params} className="text-muted hover:text-run">
                   {board}
@@ -155,7 +155,7 @@ export function ItemPage() {
               <li aria-current="page">{item.ref}</li>
             </ol>
           </nav>
-          <div className="flex flex-wrap gap-1.5 md:order-last">
+          <div className="flex flex-wrap gap-2 md:order-last">
             {item.class_of_service === 'expedite' ? <Chip tone="rework">Expedite</Chip> : null}
             {item.type ? <Chip tone="plain">{humanize(item.type)}</Chip> : null}
             {item.lane ? <Chip tone="plain">{item.lane}</Chip> : null}
@@ -170,9 +170,7 @@ export function ItemPage() {
               {item.ref}
             </Chip>
           </div>
-          <h1 className="m-0 text-[26px] leading-[1.15] font-normal tracking-display text-balance md:text-[42px] md:leading-[1.08]">
-            {item.title}
-          </h1>
+          <h1 className="m-0 text-page-title font-normal tracking-display text-balance">{item.title}</h1>
         </div>
         <ItemDecisions
           item={decidable}
@@ -221,7 +219,7 @@ export function ItemPage() {
           />
           {item.body ? (
             <SectionCard title="Request" className="order-5 @[720px]:order-none">
-              <p className="m-0 text-[15px] leading-relaxed whitespace-pre-wrap">{item.body}</p>
+              <p className="m-0 text-body leading-relaxed whitespace-pre-wrap">{item.body}</p>
             </SectionCard>
           ) : null}
           <TraceCard
@@ -272,7 +270,7 @@ function ItemDecisionsCard({
       station={station}
       controls={controls}
       layout="stack"
-      className={cn(className, 'rounded-card border border-line bg-card p-3.5 @[720px]:hidden')}
+      className={cn(className, 'rounded-card border border-line bg-card p-4 @[720px]:hidden')}
     />
   );
 }

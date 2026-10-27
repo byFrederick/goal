@@ -222,7 +222,7 @@ Board cards do not show assembly lines yet.
 
 - **URL**: `factory` (a factory's name), `status` (a `RunStatus`), `range` (`yesterday`; absent is today) and `q`. `runsSearch` in `search.ts` drops unknown values. The window is sent as `since` and `until` at UTC midnights.
 - **KPI tiles and chips**: the window's `summary` (total, running, failed, finished, spend and its factories). The summary ignores `status` and `q`, so the counts do not move with the filter.
-- **Outcome**: only `RunStatus` is shown. `running` is the cobalt chip with the pulsing dot, `failed` the red chip, `succeeded` "Finished". The Finished chip shows the summary's finished count (succeeded and stopped runs), but its filter lists only the succeeded runs; the pull request lists that difference, `cancelled` "Stopped".
+- **Outcome**: only `RunStatus` is shown. `running` is the cobalt chip with the pulsing dot, `failed` the red chip, `succeeded` "Finished", and `cancelled` "Stopped" in the neutral chip. The Finished chip shows the summary's finished count, which adds succeeded and cancelled runs together, but its filter lists only the succeeded runs. The pull request lists that difference.
 - **Controls not built yet** (Export CSV, the Waiting on you tile and chip, and a failed row's Open transcript and Send to Jonah) render through `NotAvailable`.
 - **Table**: in its own horizontal scroll box on every width. One page of 50 rows; paging is not built yet, and the footer counts the rows shown.
 
