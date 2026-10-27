@@ -60,9 +60,11 @@ const (
 	searchTool  = "knowledge__search"
 	readTool    = "knowledge__read"
 	verdictTool = "knowledge__verdict"
-	kbQuery    = "deploy"
-	kbStation  = "build"
-	argQuery   = "query"
+	kbQuery     = "deploy"
+	kbStation   = "build"
+	argQuery    = "query"
+	argDoc      = "document"
+	helped      = "helped"
 )
 
 var kbAdmin = domain.Actor{Kind: domain.ActorUser, ID: "00000000-0000-7000-8000-000000000001", Name: "Ada"}
@@ -319,17 +321,17 @@ func TestGateway_KnowledgeReadOnlyTheFactorysSources(t *testing.T) {
 	h := newKBHarness(t)
 	cs := h.connect(t, factoryID, version)
 
-	if text, isErr := knowledgeCall(t, cs, readTool, map[string]any{"document": string(h.docs["deploy.md"])}); isErr || !strings.Contains(text, "Deploys go out on Tuesdays.") {
+	if text, isErr := knowledgeCall(t, cs, readTool, map[string]any{argDoc: string(h.docs["deploy.md"])}); isErr || !strings.Contains(text, "Deploys go out on Tuesdays.") {
 		t.Errorf("read of a listed document = %q (error %v); want its text", text, isErr)
 	}
 
 	for _, title := range []string{"keys.md", "labs.md"} {
-		if text, isErr := knowledgeCall(t, cs, readTool, map[string]any{"document": string(h.docs[title])}); !isErr || strings.Contains(text, kbQuery) {
+		if text, isErr := knowledgeCall(t, cs, readTool, map[string]any{argDoc: string(h.docs[title])}); !isErr || strings.Contains(text, kbQuery) {
 			t.Errorf("read of %s = %q (error %v); want a tool error that reveals nothing", title, text, isErr)
 		}
 	}
 
-	big, _ := knowledgeCall(t, cs, readTool, map[string]any{"document": string(h.docs["big.md"])})
+	big, _ := knowledgeCall(t, cs, readTool, map[string]any{argDoc: string(h.docs["big.md"])})
 	if len(big) > maxReadBytes+512 || !strings.Contains(big, "truncated") {
 		t.Errorf("read of a large document = %d bytes; want at most %d of text and a truncation note", len(big), maxReadBytes)
 	}
@@ -462,12 +464,12 @@ func TestGateway_KnowledgeReadRecordsAUse(t *testing.T) {
 	h := newKBHarness(t)
 	cs := h.connect(t, factoryID, version)
 
-	if _, isErr := knowledgeCall(t, cs, readTool, map[string]any{"document": string(h.docs["deploy.md"])}); isErr {
+	if _, isErr := knowledgeCall(t, cs, readTool, map[string]any{argDoc: string(h.docs["deploy.md"])}); isErr {
 		t.Fatal("read failed")
 	}
 
 	// A refused read records nothing.
-	knowledgeCall(t, cs, readTool, map[string]any{"document": string(h.docs["keys.md"])})
+	knowledgeCall(t, cs, readTool, map[string]any{argDoc: string(h.docs["keys.md"])})
 
 	uses := h.uses(t)
 	if len(uses) != 1 || uses[0].Document != h.docs["deploy.md"] || uses[0].Kind != domain.KnowledgeRead || uses[0].Item != itemID || len(uses[0].Chunks) != 0 {
@@ -499,7 +501,7 @@ func TestGateway_KnowledgeUseFailureKeepsTheHits(t *testing.T) {
 		t.Errorf("search = %v (error %v); want its hits", got, isErr)
 	}
 
-	if text, isErr := knowledgeCall(t, cs, readTool, map[string]any{"document": string(h.docs["deploy.md"])}); isErr || !strings.Contains(text, "Tuesdays") {
+	if text, isErr := knowledgeCall(t, cs, readTool, map[string]any{argDoc: string(h.docs["deploy.md"])}); isErr || !strings.Contains(text, "Tuesdays") {
 		t.Errorf("read = %q (error %v); want the document", text, isErr)
 	}
 
@@ -525,12 +527,12 @@ func TestGateway_KnowledgeVerdictOnlyOnUsedDocuments(t *testing.T) {
 		args map[string]any
 		want string
 	}{
-		{map[string]any{"document": deploy, "verdict": "helped"}, "has not searched or read"},
-		{map[string]any{"document": string(h.docs["keys.md"]), "verdict": "helped"}, "no document"},
-		{map[string]any{"document": string(h.docs["labs.md"]), "verdict": "helped"}, "no document"},
-		{map[string]any{"document": "no-such-document", "verdict": "helped"}, "no document"},
-		{map[string]any{"document": deploy, "verdict": "loved"}, "helped or misled"},
-		{map[string]any{"document": deploy, "verdict": "misled", "note": strings.Repeat("n", 501)}, "500"},
+		{map[string]any{argDoc: deploy, toolVerdict: helped}, "has not searched or read"},
+		{map[string]any{argDoc: string(h.docs["keys.md"]), toolVerdict: helped}, "no document"},
+		{map[string]any{argDoc: string(h.docs["labs.md"]), toolVerdict: helped}, "no document"},
+		{map[string]any{argDoc: "no-such-document", toolVerdict: helped}, "no document"},
+		{map[string]any{argDoc: deploy, toolVerdict: "loved"}, "helped or misled"},
+		{map[string]any{argDoc: deploy, toolVerdict: "misled", "note": strings.Repeat("n", 501)}, "500"},
 	}
 
 	for _, r := range refusals {
@@ -539,23 +541,14 @@ func TestGateway_KnowledgeVerdictOnlyOnUsedDocuments(t *testing.T) {
 		}
 	}
 
-	knowledgeCall(t, cs, readTool, map[string]any{"document": deploy})
+	knowledgeCall(t, cs, readTool, map[string]any{argDoc: deploy})
 
-	text, isErr := knowledgeCall(t, cs, verdictTool, map[string]any{"document": deploy, "verdict": "misled", "note": "Deploys moved to Wednesdays."})
+	text, isErr := knowledgeCall(t, cs, verdictTool, map[string]any{argDoc: deploy, toolVerdict: "misled", "note": "Deploys moved to Wednesdays."})
 	if isErr {
 		t.Fatalf("verdict on a read document = %q; want it stored", text)
 	}
 
-	var got struct {
-		Document, Run, Item, Verdict, Note, By string
-	}
-	if err := json.Unmarshal([]byte(text), &got); err != nil {
-		t.Fatalf("verdict answer %q: %v", text, err)
-	}
-
-	if got.Document != deploy || got.Run != "run-kb" || got.Item != string(itemID) || got.Verdict != "misled" || got.By != "agent:"+agentEngineer {
-		t.Errorf("verdict = %+v; want the engineer's misled on deploy.md in run-kb", got)
-	}
+	checkVerdict(t, text, deploy)
 
 	calls := h.toolCalls()
 	if n := len(calls); n == 0 || calls[n-1] != "knowledge__verdict:ok" || !slices.Contains(calls, "knowledge__verdict:tool_error") {
@@ -593,4 +586,20 @@ func (l *lockedWriter) Write(p []byte) (int, error) {
 	defer l.mu.Unlock()
 
 	return l.w.Write(p)
+}
+
+// checkVerdict checks a knowledge__verdict answer is the engineer's misled on document in run-kb.
+func checkVerdict(t *testing.T, text, document string) {
+	t.Helper()
+
+	var got struct {
+		Document, Run, Item, Verdict, Note, By string
+	}
+	if err := json.Unmarshal([]byte(text), &got); err != nil {
+		t.Fatalf("verdict answer %q: %v", text, err)
+	}
+
+	if got.Document != document || got.Run != "run-kb" || got.Item != string(itemID) || got.Verdict != "misled" || got.By != "agent:"+agentEngineer {
+		t.Errorf("verdict = %+v; want the engineer's misled on %s in run-kb", got, document)
+	}
 }
