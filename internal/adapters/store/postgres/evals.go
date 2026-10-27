@@ -157,7 +157,7 @@ func (e *Evals) RecordResult(ctx context.Context, claimed domain.EvalResult, o d
 	err = e.s.inTx(ctx, func(q *db.Queries) error {
 		n, err := q.RecordEvalResult(ctx, db.RecordEvalResultParams{
 			State: string(o.State), RunID: agentRun, CheckedBy: o.CheckedBy, Detail: detail, CostUsd: o.CostUSD,
-			Turns: int32(o.Turns), //nolint:gosec // Check keeps turns non-negative; a try's turns are small
+			Turns:     int32(o.Turns),                                                                       //nolint:gosec // Check keeps turns non-negative; a try's turns are small
 			EvalRunID: run, CaseName: claimed.Case, Try: int32(claimed.Try), LeaseUntil: claimed.LeaseUntil, //nolint:gosec // a claimed try
 		})
 		if isForeignKeyViolation(err) {

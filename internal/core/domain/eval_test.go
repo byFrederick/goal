@@ -6,6 +6,14 @@ import (
 	"testing"
 )
 
+// Names the eval tests use: a case, and a definition file.
+const (
+	testEvalCase     = "merge-step"
+	testEngineerPath = "agents/engineer.md"
+	testCasePath     = "evals/cases/merge-step.yaml"
+	testFactoryPath  = "factory.yaml"
+)
+
 func TestNewEvalRun_Check(t *testing.T) {
 	t.Parallel()
 
@@ -13,7 +21,7 @@ func TestNewEvalRun_Check(t *testing.T) {
 	valid := func() NewEvalRun {
 		return NewEvalRun{
 			FactoryID: "00000000-0000-7000-8000-0000000000f1", ContentSHA256: hash, Trigger: EvalManual, EstimateUSD: 0.5,
-			Cases: []EvalCase{{Name: "merge-step", SHA256: hash, Tries: 3}, {Name: "spec-review", SHA256: hash, Tries: 1}},
+			Cases: []EvalCase{{Name: testEvalCase, SHA256: hash, Tries: 3}, {Name: "spec-review", SHA256: hash, Tries: 1}},
 		}
 	}
 
@@ -24,17 +32,17 @@ func TestNewEvalRun_Check(t *testing.T) {
 	}{
 		{"valid", func(*NewEvalRun) {}, true},
 		{"on publish of a version", func(n *NewEvalRun) { n.Trigger, n.VersionID = EvalOnPublish, "00000000-0000-7000-8000-0000000000a1" }, true},
-		{"the one case named", func(n *NewEvalRun) { n.Case, n.Cases = "merge-step", n.Cases[:1] }, true},
+		{"the one case named", func(n *NewEvalRun) { n.Case, n.Cases = testEvalCase, n.Cases[:1] }, true},
 		{"no factory", func(n *NewEvalRun) { n.FactoryID = "" }, false},
 		{"bad content hash", func(n *NewEvalRun) { n.ContentSHA256 = "ABC" }, false},
 		{"unknown trigger", func(n *NewEvalRun) { n.Trigger = "auto" }, false},
 		{"no cases", func(n *NewEvalRun) { n.Cases = nil }, false},
 		{"zero tries", func(n *NewEvalRun) { n.Cases[1].Tries = 0 }, false},
-		{"duplicate case", func(n *NewEvalRun) { n.Cases[1].Name = "merge-step" }, false},
+		{"duplicate case", func(n *NewEvalRun) { n.Cases[1].Name = testEvalCase }, false},
 		{"bad case name", func(n *NewEvalRun) { n.Cases[0].Name = "Merge_Step" }, false},
 		{"bad case hash", func(n *NewEvalRun) { n.Cases[0].SHA256 = "" }, false},
 		{"negative estimate", func(n *NewEvalRun) { n.EstimateUSD = -1 }, false},
-		{"one case named but several run", func(n *NewEvalRun) { n.Case = "merge-step" }, false},
+		{"one case named but several run", func(n *NewEvalRun) { n.Case = testEvalCase }, false},
 		{"one case named but another runs", func(n *NewEvalRun) { n.Case, n.Cases = "spec-review", n.Cases[:1] }, false},
 	}
 
@@ -61,8 +69,11 @@ func TestEvalOutcome_Check(t *testing.T) {
 	t.Parallel()
 
 	for _, o := range []EvalOutcome{
-		{State: EvalRunning}, {State: EvalPending}, {State: "skipped"},
-		{State: EvalPass, CostUSD: -0.1}, {State: EvalFail, Turns: -1},
+		{State: EvalRunning},
+		{State: EvalPending},
+		{State: "skipped"},
+		{State: EvalPass, CostUSD: -0.1},
+		{State: EvalFail, Turns: -1},
 	} {
 		if err := o.Check(); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%+v: Check = %v, want ErrInvalid", o, err)
@@ -80,7 +91,7 @@ func TestManifestSHA256(t *testing.T) {
 	t.Parallel()
 
 	a, b := BlobHash(strings.Repeat("a", 64)), BlobHash(strings.Repeat("b", 64))
-	m := Manifest{"factory.yaml": a, "agents/engineer.md": b, "evals/cases/merge-step.yaml": a}
+	m := Manifest{testFactoryPath: a, testEngineerPath: b, testCasePath: a}
 
 	got := ManifestSHA256(m)
 	if !got.Valid() {
@@ -89,7 +100,7 @@ func TestManifestSHA256(t *testing.T) {
 
 	// The same pairs built in another order hash the same, whatever map order range gives.
 	same := Manifest{}
-	for _, p := range []string{"evals/cases/merge-step.yaml", "factory.yaml", "agents/engineer.md"} {
+	for _, p := range []string{testCasePath, testFactoryPath, testEngineerPath} {
 		same[p] = m[p]
 	}
 
@@ -106,10 +117,10 @@ func TestManifestSHA256(t *testing.T) {
 	}
 
 	for name, other := range map[string]Manifest{
-		"a file's content changed": {"factory.yaml": b, "agents/engineer.md": b, "evals/cases/merge-step.yaml": a},
-		"a file renamed":           {"factory.yaml": a, "agents/backend.md": b, "evals/cases/merge-step.yaml": a},
-		"a file removed":           {"factory.yaml": a, "agents/engineer.md": b},
-		"two files swapped":        {"factory.yaml": a, "agents/engineer.md": a, "evals/cases/merge-step.yaml": b},
+		"a file's content changed": {testFactoryPath: b, testEngineerPath: b, testCasePath: a},
+		"a file renamed":           {testFactoryPath: a, "agents/backend.md": b, testCasePath: a},
+		"a file removed":           {testFactoryPath: a, testEngineerPath: b},
+		"two files swapped":        {testFactoryPath: a, testEngineerPath: a, testCasePath: b},
 	} {
 		if ManifestSHA256(other) == got {
 			t.Errorf("%s: hash unchanged", name)

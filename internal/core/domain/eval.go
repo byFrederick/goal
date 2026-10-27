@@ -38,7 +38,9 @@ const (
 )
 
 // Final reports whether s is a finished run's state.
-func (s EvalRunState) Final() bool { return s == EvalRunDone || s == EvalRunFailed || s == EvalRunCancelled }
+func (s EvalRunState) Final() bool {
+	return s == EvalRunDone || s == EvalRunFailed || s == EvalRunCancelled
+}
 
 // EvalResultState is where one try of a case is. Values match eval_results.state. A try that
 // failed for an infrastructure reason is error, never fail (ADR 0025 decision 4).
@@ -107,32 +109,40 @@ func (n NewEvalRun) Check() error {
 		bad("estimate %v is negative", n.EstimateUSD)
 	}
 
-	if len(n.Cases) == 0 {
-		bad("no cases")
-	}
-
 	if n.Case != "" && (len(n.Cases) != 1 || n.Cases[0].Name != n.Case) {
 		bad("case %q was asked for, so it is the only case to run", n.Case)
 	}
 
-	seen := make(map[string]bool, len(n.Cases))
+	return errors.Join(append(errs, checkEvalCases(n.Cases))...)
+}
 
-	for _, c := range n.Cases {
+// checkEvalCases reports what makes an eval run's case list impossible to run, wrapping
+// ErrInvalid: none, a name that is not a case file's, one listed twice, a bad hash or no tries.
+func checkEvalCases(cases []EvalCase) error {
+	if len(cases) == 0 {
+		return fmt.Errorf("eval run: no cases: %w", ErrInvalid)
+	}
+
+	var errs []error
+
+	seen := make(map[string]bool, len(cases))
+
+	for _, c := range cases {
 		switch {
 		case !evalCaseName.MatchString(c.Name):
-			bad("case name %q is not a case file's name", c.Name)
+			errs = append(errs, fmt.Errorf("eval run: case name %q is not a case file's name: %w", c.Name, ErrInvalid))
 		case seen[c.Name]:
-			bad("case %q is listed twice", c.Name)
+			errs = append(errs, fmt.Errorf("eval run: case %q is listed twice: %w", c.Name, ErrInvalid))
 		}
 
 		seen[c.Name] = true
 
 		if !c.SHA256.Valid() {
-			bad("case %q: hash %q is not 64 lowercase hex", c.Name, c.SHA256)
+			errs = append(errs, fmt.Errorf("eval run: case %q: hash %q is not 64 lowercase hex: %w", c.Name, c.SHA256, ErrInvalid))
 		}
 
 		if c.Tries < 1 {
-			bad("case %q: %d tries, want at least 1", c.Name, c.Tries)
+			errs = append(errs, fmt.Errorf("eval run: case %q: %d tries, want at least 1: %w", c.Name, c.Tries, ErrInvalid))
 		}
 	}
 
