@@ -97,7 +97,7 @@ func TestAPI_PersonalTokens_ActAsTheirOwner(t *testing.T) {
 		{"never creates a token", http.MethodPost, tokensPath, laptop, http.StatusForbidden},
 		{"never reads members", http.MethodGet, "/v1/orgs/acme/members", "", http.StatusForbidden},
 		{"never deletes the org", http.MethodDelete, acmePath, `{"confirm":"Acme"}`, http.StatusForbidden},
-		{"never creates an org, though its owner may", http.MethodPost, "/v1/orgs", `{"slug":"new","name":"New"}`, http.StatusForbidden},
+		{"never creates an org, though its owner may", http.MethodPost, orgsPath, `{"slug":"new","name":"New"}`, http.StatusForbidden},
 		{"never reads the security log", http.MethodGet, "/v1/platform/auth-events", "", http.StatusForbidden},
 		{"never approves a CLI sign-in", http.MethodGet, "/v1/auth/device/ABCD-EFGH", "", http.StatusForbidden},
 		{"is unknown to its owner's other org", http.MethodGet, "/v1/orgs/example-labs", "", http.StatusNotFound},
@@ -137,7 +137,7 @@ func checkTokenOrgs(t *testing.T, h signedIn, pat http.Header) {
 	t.Helper()
 
 	var orgs gen.OrgList
-	if res := h.request(t, http.MethodGet, "/v1/orgs", "", pat); json.Unmarshal(res.body, &orgs) != nil || len(orgs.Orgs) != 1 ||
+	if res := h.request(t, http.MethodGet, orgsPath, "", pat); json.Unmarshal(res.body, &orgs) != nil || len(orgs.Orgs) != 1 ||
 		orgs.Orgs[0].Id != string(testOrg) {
 		t.Errorf("orgs with the token = %d %s; want acme alone", res.status, res.body)
 	}

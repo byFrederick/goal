@@ -13,7 +13,7 @@ import (
 )
 
 const connection = `-- name: Connection :one
-SELECT c.id, c.name, k.name AS kind, c.description, c.fields, c.secret_fields, c.created_by, c.created_at, c.updated_by,
+SELECT c.id, c.name, k.name AS kind, c.description, c.fields, c.secret_fields, c.secret_refs, c.created_by, c.created_at, c.updated_by,
        c.updated_at, c.last_used_at, c.last_test_at, c.last_test_ok, c.last_test_error
 FROM connections c JOIN connection_kinds k ON k.id = c.kind_id
 WHERE c.name = $1
@@ -26,6 +26,7 @@ type ConnectionRow struct {
 	Description   string
 	Fields        []byte
 	SecretFields  []string
+	SecretRefs    []byte
 	CreatedBy     string
 	CreatedAt     time.Time
 	UpdatedBy     string
@@ -46,6 +47,7 @@ func (q *Queries) Connection(ctx context.Context, name string) (ConnectionRow, e
 		&i.Description,
 		&i.Fields,
 		&i.SecretFields,
+		&i.SecretRefs,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedBy,
@@ -136,7 +138,7 @@ func (q *Queries) ConnectionKinds(ctx context.Context) ([]ConnectionKindsRow, er
 }
 
 const connections = `-- name: Connections :many
-SELECT c.id, c.name, k.name AS kind, c.description, c.fields, c.secret_fields, c.created_by, c.created_at, c.updated_by,
+SELECT c.id, c.name, k.name AS kind, c.description, c.fields, c.secret_fields, c.secret_refs, c.created_by, c.created_at, c.updated_by,
        c.updated_at, c.last_used_at, c.last_test_at, c.last_test_ok, c.last_test_error
 FROM connections c JOIN connection_kinds k ON k.id = c.kind_id
 ORDER BY c.name
@@ -149,6 +151,7 @@ type ConnectionsRow struct {
 	Description   string
 	Fields        []byte
 	SecretFields  []string
+	SecretRefs    []byte
 	CreatedBy     string
 	CreatedAt     time.Time
 	UpdatedBy     string
@@ -175,6 +178,7 @@ func (q *Queries) Connections(ctx context.Context) ([]ConnectionsRow, error) {
 			&i.Description,
 			&i.Fields,
 			&i.SecretFields,
+			&i.SecretRefs,
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedBy,
@@ -223,9 +227,10 @@ func (q *Queries) DeleteConnectionKind(ctx context.Context, name string) (uuid.U
 }
 
 const insertConnection = `-- name: InsertConnection :one
-INSERT INTO connections (id, name, kind_id, description, fields, secret_fields, key_id, nonce, ciphertext, created_by, updated_by)
+INSERT INTO connections (id, name, kind_id, description, fields, secret_fields, secret_refs, key_id, nonce, ciphertext, created_by,
+                         updated_by)
 VALUES ($1, $2, $3, $4, $5, $6::text[],
-        $7, $8, $9, $10, $10)
+        $7, $8, $9, $10, $11, $11)
 RETURNING created_at
 `
 
@@ -236,6 +241,7 @@ type InsertConnectionParams struct {
 	Description  string
 	Fields       []byte
 	SecretFields []string
+	SecretRefs   []byte
 	KeyID        *string
 	Nonce        []byte
 	Ciphertext   []byte
@@ -251,6 +257,7 @@ func (q *Queries) InsertConnection(ctx context.Context, arg InsertConnectionPara
 		arg.Description,
 		arg.Fields,
 		arg.SecretFields,
+		arg.SecretRefs,
 		arg.KeyID,
 		arg.Nonce,
 		arg.Ciphertext,
@@ -393,7 +400,7 @@ func (q *Queries) ResealConnection(ctx context.Context, arg ResealConnectionPara
 
 const sealedConnections = `-- name: SealedConnections :many
 SELECT c.id, c.name, k.name AS kind, k.org_id AS kind_org_id, k.spec AS kind_spec, c.description, c.fields, c.secret_fields,
-       c.key_id, c.nonce, c.ciphertext, c.created_by, c.created_at, c.updated_by, c.updated_at, c.last_used_at,
+       c.secret_refs, c.key_id, c.nonce, c.ciphertext, c.created_by, c.created_at, c.updated_by, c.updated_at, c.last_used_at,
        c.last_test_at, c.last_test_ok, c.last_test_error
 FROM connections c JOIN connection_kinds k ON k.id = c.kind_id
 WHERE c.name = ANY ($1::text[])
@@ -410,6 +417,7 @@ type SealedConnectionsRow struct {
 	Description   string
 	Fields        []byte
 	SecretFields  []string
+	SecretRefs    []byte
 	KeyID         *string
 	Nonce         []byte
 	Ciphertext    []byte
@@ -443,6 +451,7 @@ func (q *Queries) SealedConnections(ctx context.Context, names []string) ([]Seal
 			&i.Description,
 			&i.Fields,
 			&i.SecretFields,
+			&i.SecretRefs,
 			&i.KeyID,
 			&i.Nonce,
 			&i.Ciphertext,
@@ -463,6 +472,18 @@ func (q *Queries) SealedConnections(ctx context.Context, names []string) ([]Seal
 		return nil, err
 	}
 	return items, nil
+}
+
+const shareReferencedCredentials = `-- name: ShareReferencedCredentials :exec
+SELECT id FROM credentials WHERE name = ANY ($1::text[]) ORDER BY id FOR KEY SHARE
+`
+
+// Locks the credentials a connection's write refers to (ADR 0017 decision 8) against their
+// deletion until it commits: a credential's delete locks it FOR UPDATE and then counts its users.
+// A name that is no credential locks nothing; a reference may name one that does not exist yet.
+func (q *Queries) ShareReferencedCredentials(ctx context.Context, names []string) error {
+	_, err := q.db.Exec(ctx, shareReferencedCredentials, names)
+	return err
 }
 
 const staleSealedConnections = `-- name: StaleSealedConnections :many
@@ -526,9 +547,9 @@ func (q *Queries) SyncPlatformKinds(ctx context.Context, kinds []byte) error {
 const updateConnection = `-- name: UpdateConnection :one
 UPDATE connections
 SET name = $1, description = $2, fields = $3, secret_fields = $4::text[],
-    key_id = $5, nonce = $6, ciphertext = $7,
-    updated_by = $8, updated_at = now()
-WHERE id = $9
+    secret_refs = $5, key_id = $6, nonce = $7, ciphertext = $8,
+    updated_by = $9, updated_at = now()
+WHERE id = $10
 RETURNING updated_at
 `
 
@@ -537,6 +558,7 @@ type UpdateConnectionParams struct {
 	Description  string
 	Fields       []byte
 	SecretFields []string
+	SecretRefs   []byte
 	KeyID        *string
 	Nonce        []byte
 	Ciphertext   []byte
@@ -550,6 +572,7 @@ func (q *Queries) UpdateConnection(ctx context.Context, arg UpdateConnectionPara
 		arg.Description,
 		arg.Fields,
 		arg.SecretFields,
+		arg.SecretRefs,
 		arg.KeyID,
 		arg.Nonce,
 		arg.Ciphertext,

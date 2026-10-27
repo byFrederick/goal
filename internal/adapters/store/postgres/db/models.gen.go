@@ -80,6 +80,37 @@ type DefinitionVersion struct {
 	PublishedAt   *time.Time
 }
 
+type EvalResult struct {
+	EvalRunID  uuid.UUID
+	OrgID      uuid.UUID
+	CaseName   string
+	CaseSha256 string
+	Try        int32
+	State      string
+	LeaseUntil *time.Time
+	RunID      *uuid.UUID
+	CheckedBy  string
+	Detail     []byte
+	CostUsd    float64
+	Turns      int32
+}
+
+type EvalRun struct {
+	ID            uuid.UUID
+	OrgID         uuid.UUID
+	FactoryID     uuid.UUID
+	VersionID     *uuid.UUID
+	ContentSha256 string
+	Trigger       string
+	Cases         *string
+	State         string
+	EstimateUsd   float64
+	CostUsd       float64
+	CreatedBy     string
+	CreatedAt     time.Time
+	FinishedAt    *time.Time
+}
+
 type FactoryRecord struct {
 	ID                uuid.UUID
 	OrgID             uuid.UUID

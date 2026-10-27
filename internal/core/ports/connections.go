@@ -51,11 +51,15 @@ type Connections interface {
 	Get(ctx context.Context, name string) (domain.Connection, error)
 	// Create creates a connection (connection.created). Its values must pass its kind's
 	// CheckValues (domain.ErrInvalid); ErrNotFound for an unknown kind, ErrNameTaken for a name
-	// in use, ErrNoMasterKey for secrets without a master key.
+	// in use, ErrNoMasterKey for secrets to seal without a master key. A secret value that is
+	// exactly {{name}} is stored as a reference to credential name in SecretRefs, never sealed;
+	// one that holds {{…}} anywhere else, or a non-secret field with one, is domain.ErrInvalid
+	// (domain.ConnectionSecrets). The credential need not exist: a run fails without it.
 	Create(ctx context.Context, c domain.NewConnection, by domain.Actor) (domain.Connection, error)
 	// Update renames a connection and changes its metadata and fields (connection.updated); Secrets
-	// replaces the named secret fields only (connection.secret_replaced). ErrNotFound when there is
-	// none, ErrNameTaken when another connection has the new name.
+	// replaces the named secret fields only (connection.secret_replaced), each one moving between
+	// sealed and a reference as its new value is one or the other, as Create. ErrNotFound when
+	// there is none, ErrNameTaken when another connection has the new name.
 	Update(ctx context.Context, name string, p domain.ConnectionPatch, by domain.Actor) (domain.Connection, error)
 	// Delete deletes a connection (connection.deleted). ErrNotFound when there is none;
 	// ErrConflict while a knowledge source uses it.
@@ -65,7 +69,8 @@ type Connections interface {
 
 	// Resolve opens the named connections for use (a run, a merge, a sync), audits each as
 	// connection.used by use's actor with what it is for, and sets last_used_at. ErrNotFound
-	// names the first unknown connection.
+	// names the first unknown connection. References to credentials come back unopened in
+	// SecretRefs, for the engine to open.
 	Resolve(ctx context.Context, names []string, use domain.ConnectionUse) ([]domain.ResolvedConnection, error)
 	// Open opens one connection for its test, whose outcome RecordTest records: its values, secret
 	// ones included, with no use recorded. ErrNotFound when there is none.

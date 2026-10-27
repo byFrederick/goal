@@ -90,7 +90,7 @@ export interface paths {
         };
         /**
          * The install's platform admins, earliest first
-         * @description Platform admins create organizations and manage platform admins; inside an organization they have only the rights of their membership there. Platform admins only.
+         * @description Platform admins manage platform admins and, like every signed-in person, create organizations; inside an organization they have only the rights of their membership there. Platform admins only.
          */
         get: operations["listPlatformAdmins"];
         put?: never;
@@ -163,7 +163,7 @@ export interface paths {
         put?: never;
         /**
          * Create an organization
-         * @description The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
+         * @description The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Any person signed in with a session (in the browser or through the CLI's device sign-in) may create one and becomes its owner; API keys and personal tokens may not.
          */
         post: operations["createOrg"];
         delete?: never;

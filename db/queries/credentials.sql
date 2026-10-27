@@ -69,6 +69,25 @@ SET name = sqlc.arg(name), type = sqlc.arg(type), description = sqlc.arg(descrip
 WHERE id = sqlc.arg(id)
 RETURNING updated_at;
 
+-- name: LockCredential :one
+-- The credential name, locked for its deletion: connection writes that refer to it
+-- (ShareReferencedCredentials) wait for it, and it waits for them.
+SELECT id FROM credentials WHERE name = sqlc.arg(name) FOR UPDATE;
+
+-- name: CredentialUsers :many
+-- The connections that refer to credential name as {{name}} (00066's secret_refs), by name.
+SELECT c.name FROM connections c
+WHERE EXISTS (SELECT 1 FROM jsonb_each_text(c.secret_refs) AS r (field, credential) WHERE r.credential = sqlc.arg(name)::text)
+ORDER BY c.name;
+
+-- name: CredentialUserCounts :many
+-- How many connections refer to each of names, for an import's dry run; a name no connection
+-- refers to has no row.
+SELECT r.credential::text AS name, count(DISTINCT c.id)::integer AS connections
+FROM connections c CROSS JOIN LATERAL jsonb_each_text(c.secret_refs) AS r (field, credential)
+WHERE r.credential = ANY (sqlc.arg(names)::text[])
+GROUP BY r.credential;
+
 -- name: DeleteCredential :one
 DELETE FROM credentials WHERE name = sqlc.arg(name) RETURNING id;
 
