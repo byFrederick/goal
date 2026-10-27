@@ -14,6 +14,10 @@ info:
     from one of the Worker's named images, with the internet on, and arms an alarm at the
     deadline that destroys it even if no goald is left. A command's environment is the image's,
     then the sandbox's `env`, then the command's own: never one of the Worker's bindings.
+
+    A draft request's sandbox (ADR 0021) has an empty `item` and `station`: it belongs to no item,
+    and goal-agent runs in definition mode on the factory's draft files (apps/worker/README.md,
+    "Definition mode").
 servers:
   - url: http://sandbox.internal
 security:

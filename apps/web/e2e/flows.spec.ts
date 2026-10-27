@@ -169,44 +169,22 @@ test('pages are titled most specific first', async ({ page }) => {
   await expect(page).toHaveTitle('goal#12 · goal · Acme · Goal');
 });
 
-test('the rail moves by arrow keys and opens a factory', async ({ page }) => {
-  test.skip(isPhone(page), 'the rail is the 768 px and wider navigation');
+test('the sidebar opens a factory and marks its pages', async ({ page }) => {
+  test.skip(isPhone(page), 'the sidebar is the 768 px and wider navigation');
   await page.goto('/o/acme');
   await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeVisible();
 
-  const rail = orgNav(page);
-  const mark = orgMarkOf(page);
-  await page.keyboard.press('Tab'); // skip link
-  await page.keyboard.press('Tab');
-  await expect(mark).toBeFocused();
-
-  await page.keyboard.press('ArrowDown');
-  await page.keyboard.press('ArrowDown');
-  const sre = rail.getByRole('link', { name: 'S, sre factory, 3 waiting on you' });
-  await expect(sre).toBeFocused();
-  const tip = page.locator('[data-radix-popper-content-wrapper]');
-  await expect(tip).toContainText('sre');
-  await expect(tip).toContainText('3 waiting on you');
-
-  await page.keyboard.press('End');
-  await expect(rail.getByRole('button', { name: 'LU, Local user, account' })).toBeFocused();
-  await page.keyboard.press('ArrowUp');
-  await expect(rail.getByRole('link', { name: 'Knowledge' })).toBeFocused();
-  await page.keyboard.press('ArrowUp');
-  // A connection's test failed (pagerduty): the rail's Connections says so.
-  await expect(rail.getByRole('link', { name: 'Connections, 1 failing' })).toBeFocused();
-  await page.keyboard.press('Home');
-  await expect(mark).toBeFocused();
-
-  await page.keyboard.press('ArrowDown');
-  await page.keyboard.press('ArrowDown');
-  await page.keyboard.press('Enter');
+  const sidebar = orgNav(page);
+  const sre = sidebar.getByRole('link', { name: 'S, sre factory, 3 waiting on you' });
+  await sre.click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/sre$/);
   await expect(sre).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('heading', { level: 1, name: 'SRE floor' })).toBeFocused();
-  await expect(
-    page.getByRole('navigation', { name: 'sre factory' }).getByRole('link', { name: 'Floor' }),
-  ).toHaveAttribute('aria-current', 'page');
+  await expect(sidebar.getByRole('link', { name: 'Floor' })).toHaveAttribute('aria-current', 'page');
+  // Agents has no page yet: listed, disabled, and it says so.
+  await expect(sidebar.getByRole('button', { name: 'Agents' })).toHaveAttribute('aria-disabled', 'true');
+  // A connection's test failed (pagerduty): the sidebar's Connections says so.
+  await expect(sidebar.getByRole('link', { name: 'Connections, 1 failing' })).toBeVisible();
 });
 
 test('the top row opens a factory on a phone', async ({ page }) => {
@@ -226,28 +204,22 @@ test('a decision made elsewhere updates the badges without a reload', async ({ p
   const goal = orgNav(page).getByRole('link', { name: /^G, goal factory/ });
   await expect(goal).toHaveAccessibleName('G, goal factory, 2 waiting on you, 1 item blocked');
   await expect(orgNav(page).getByRole('link', { name: 'Su, support factory, blocked: andon pulled' })).toBeVisible();
-  const items = page.getByRole('navigation', { name: 'goal factory' }).getByRole('link', { name: /^Items/ });
-  if (!isPhone(page)) await expect(items).toHaveAccessibleName(/^Items\s?2 waiting on you$/);
 
   // Someone else approves (the CLI, another tab): the stream brings the change.
   await request.post('/v1/orgs/acme/items/goal%2312/approve');
 
   await expect(goal).toHaveAccessibleName('G, goal factory, 1 waiting on you, 1 item blocked');
-  if (!isPhone(page)) await expect(items).toHaveAccessibleName(/^Items\s?1 waiting on you$/);
 });
 
-test('the organization pages have the organization sidebar', async ({ page }) => {
+test('the sidebar marks Home on the organization pages', async ({ page }) => {
   test.skip(isPhone(page), 'sidebars are the 768 px and wider navigation');
   await page.goto('/o/acme/f/goal');
   // The current organization in the menu opens its Factories home.
   await orgMarkOf(page).click();
   await page.getByRole('menuitemradio', { name: /^Acme/ }).click();
   await expect(page).toHaveURL(/\/o\/acme$/);
-  const sidebar = page.getByRole('navigation', { name: 'Acme organization' });
-  await expect(sidebar.getByRole('link', { name: /^Factories\s?3 factories$/ })).toHaveAttribute(
-    'aria-current',
-    'page',
-  );
+  const sidebar = orgNav(page);
+  await expect(sidebar.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeFocused();
 
   await page.getByRole('link', { name: 'Open sre' }).click();
@@ -659,7 +631,7 @@ test('switch organization from the menu by keyboard', async ({ page }) => {
 
   // Escape closes the menu and returns focus to the mark.
   await page.keyboard.press('Enter');
-  const menu = page.getByRole('menu', { name: 'Ac, Acme organization, switch organization' });
+  const menu = page.getByRole('menu', { name: 'Acme organization, switch organization' });
   await expect(menu).toBeVisible();
   await expect(mark).toHaveAttribute('aria-expanded', 'true');
   await expect(menu.getByRole('menuitemradio', { name: /^Acme\s?3 factories$/ })).toHaveAttribute(
@@ -682,7 +654,7 @@ test('switch organization from the menu by keyboard', async ({ page }) => {
   await expect(menu).toBeHidden();
   await expect(mark).toBeFocused();
 
-  // Arrow keys and Enter choose another organization: its Factories home, its rail.
+  // Arrow keys and Enter choose another organization: its Factories home, its sidebar.
   await page.keyboard.press('Enter');
   await expect(menu.getByRole('menuitemradio', { name: /^Acme/ })).toBeFocused();
   await page.keyboard.press('ArrowDown');
@@ -691,7 +663,7 @@ test('switch organization from the menu by keyboard', async ({ page }) => {
   await expect(page).toHaveURL(/\/o\/example-labs$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeFocused();
   await expect(orgNav(page).getByRole('link', { name: /, \S+ factory/ })).toHaveCount(1);
-  await expect(orgMarkOf(page, 'EL, Example Labs organization, switch organization')).toBeVisible();
+  await expect(orgMarkOf(page, 'Example Labs')).toBeVisible();
 
   // The organization used last is where / returns.
   await page.goto('/');
@@ -765,7 +737,7 @@ test('create an organization and land on its empty factories', async ({ page }) 
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeVisible();
   await expect(orgNav(page).getByRole('link', { name: /, \S+ factory/ })).toHaveCount(0);
-  const newMark = orgMarkOf(page, 'AT, Acme Two organization, switch organization');
+  const newMark = orgMarkOf(page, 'Acme Two');
   await expect(newMark).toBeVisible();
   await expectNoHorizontalScroll(page);
 

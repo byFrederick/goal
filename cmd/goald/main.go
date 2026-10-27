@@ -129,11 +129,15 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	}
 
 	// Connections and their kinds (spec 4): definitions are validated against them, the API serves
-	// them, runs get them and the gateway describes them in run bundles.
-	connections, err := openConnections(ctx, store, os.Getenv, log)
+	// them, runs get them and the gateway describes them in run bundles. Credentials (ADR 0017) are
+	// sealed under the same master keys.
+	connections, credentials, err := openConnections(ctx, store, os.Getenv, log)
 	if err != nil {
 		return err
 	}
+
+	// The engine and the API take the credentials in their own parts (software#216, #217).
+	_ = credentials
 
 	s3cfg, err := s3.ConfigFromEnv(os.Getenv)
 	if err != nil {
@@ -177,13 +181,16 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
+	// The code host adapters: the engine merges with them, the API lists what a connection reaches.
+	hosts := codeHosts(s.AllowPrivateUpstreams)
+
 	// The engine runs each claim in a sandbox with the run's connections, merges with the
 	// factory's code host connections and, at its start and every ReapEvery, deletes the
 	// sandboxes of runs that are over, whichever goald on this Docker host or this Worker
 	// started them.
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
-		Contracts: defs, Secrets: secrets, Connections: connections, CodeHosts: codeHosts(s.AllowPrivateUpstreams), Clock: clock,
+		Contracts: defs, Secrets: secrets, Connections: connections, CodeHosts: hosts, Clock: clock,
 		Minters: minters(s), Logger: log,
 	}, engine.Config{
 		TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: boxes.gateway, GatewayKeyRef: s.GatewayKeyRef, MaxRuns: s.MaxRuns,
@@ -215,7 +222,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 			Mode: api.AuthMode(s.Auth), EmailCodes: s.EmailCodes, Google: s.Google, SecureCookies: s.strictTransport(),
 		},
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
-		Connections: connections, ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams),
+		Connections: connections, ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes,
 		Clock: clock, Logger: log,
 	})
@@ -286,30 +293,32 @@ func openKnowledge(s settings, store *postgres.Store, connections *postgres.Conn
 }
 
 // openConnections loads the platform's master keys (GOAL_MASTER_KEYS or GOAL_MASTER_KEY_FILE),
-// refuses to start while a connection is sealed under a key id they lack (spec 4 §5.2, threat row
-// 12), and makes the kinds goald ships the platform's. Without a master key goald serves
-// everything but connections with secrets, and says so.
-func openConnections(ctx context.Context, store *postgres.Store, getenv func(string) string, log *slog.Logger) (*postgres.Connections, error) {
+// refuses to start while a connection or credential is sealed under a key id they lack (spec 4
+// §5.2, threat row 12, ADR 0017), makes the kinds goald ships the platform's, and returns the
+// connections and the credentials sealed with those keys. Without a master key goald serves
+// everything but connections with secrets and credentials' values, and says so.
+func openConnections(ctx context.Context, store *postgres.Store, getenv func(string) string, log *slog.Logger,
+) (*postgres.Connections, *postgres.Credentials, error) {
 	keys, err := masterkey.Load(getenv)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	sealed, err := postgres.ConnectionKeyIDs(ctx, store)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	have := keys.IDs()
 
 	if missing := slices.DeleteFunc(sealed, func(id string) bool { return slices.Contains(have, id) }); len(missing) > 0 {
-		return nil, fmt.Errorf("connections are sealed under master key %s, which %s and %s do not hold: "+
-			"give goald every key a connection is sealed under (goal db rekey reseals them under the active one, "+
+		return nil, nil, fmt.Errorf("connections or credentials are sealed under master key %s, which %s and %s do not hold: "+
+			"give goald every key a connection or credential is sealed under (goal db rekey reseals them under the active one, "+
 			"after which an old key can go)", strings.Join(missing, ", "), masterkey.KeysEnv, masterkey.FileEnv)
 	}
 
 	if len(have) == 0 {
-		log.WarnContext(ctx, "no master key: connections with secrets are unavailable until one is set; add "+
+		log.WarnContext(ctx, "no master key: connections with secrets and credentials are unavailable until one is set; add "+
 			masterkey.KeysEnv+"=k1:<the output of openssl rand -base64 32> to .env and keep a copy offline")
 	} else {
 		log.InfoContext(ctx, "master keys loaded", slog.String("active", keys.Active()), slog.Int("count", len(have)))
@@ -317,17 +326,17 @@ func openConnections(ctx context.Context, store *postgres.Store, getenv func(str
 
 	kinds, err := connkind.Platform()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	connections := postgres.NewConnections(store, keys)
 	if err := connections.SyncPlatformKinds(ctx, kinds); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	log.InfoContext(ctx, "connection kinds synced", slog.Int("platform", len(kinds)))
 
-	return connections, nil
+	return connections, postgres.NewCredentials(store, keys), nil
 }
 
 // minters are the minters by the name connection kinds give them (mint): AWS STS for the aws and

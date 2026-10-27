@@ -162,7 +162,8 @@ func dbMigrate(ctx context.Context, out *printer, getenv func(string) string) er
 	return nil
 }
 
-// dbRekey reseals every organization's connections under the active master key (spec 4 §5.2):
+// dbRekey reseals every organization's connections and credentials under the active master key
+// (spec 4 §5.2, ADR 0017):
 // the step between adding a new key in front of GOAL_MASTER_KEYS (and restarting goald) and
 // dropping the old one. It connects as goal_owner (GOAL_MIGRATE_DATABASE_URL), whom row-level
 // security does not bind, with the master keys of GOAL_MASTER_KEYS or GOAL_MASTER_KEY_FILE; goald
@@ -189,7 +190,7 @@ func dbRekey(ctx context.Context, out *printer, getenv func(string) string) erro
 		return fmt.Errorf("%w (%d resealed before it stopped; run it again once fixed)", err, n)
 	}
 
-	out.printf("✓ %d connections resealed under master key %s; the other keys can go once every goald runs with it first\n", n, keys.Active())
+	out.printf("✓ %d connections and credentials resealed under master key %s; the other keys can go once every goald runs with it first\n", n, keys.Active())
 
 	return nil
 }

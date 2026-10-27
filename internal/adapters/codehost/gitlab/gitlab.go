@@ -394,3 +394,8 @@ func (cl *Client) BranchHead(context.Context, domain.ResolvedConnection, string,
 func (cl *Client) Compare(context.Context, domain.ResolvedConnection, string, string, string) (ports.Comparison, error) {
 	return ports.Comparison{}, fmt.Errorf("gitlab: compare: %w", errors.ErrUnsupported)
 }
+
+// Repositories implements ports.CodeHost: GitLab does not support it yet, and nothing is sent.
+func (cl *Client) Repositories(context.Context, domain.ResolvedConnection, string) (ports.RepositoryList, error) {
+	return ports.RepositoryList{}, fmt.Errorf("gitlab: repositories: %w", errors.ErrUnsupported)
+}

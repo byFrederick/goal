@@ -5,7 +5,15 @@
 // a member's token, a member who sees only their own tokens, the account menu's link, and the
 // page with sign-in off.
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll, expectToast, isPhone, orgNav, recordToasts } from './support';
+import {
+  expectAccessible,
+  expectNoHorizontalScroll,
+  expectToast,
+  isPhone,
+  orgMarkOf,
+  orgNav,
+  recordToasts,
+} from './support';
 
 /** Signs in as F. Cruz, the owner (or `email`, a person of the mock's people.ts). */
 async function signIn(request: APIRequestContext, auth: Record<string, unknown> = {}, signedIn = 'fresh') {
@@ -168,8 +176,8 @@ test('a member without api_key:read sees only their own tokens', async ({ page }
   await signIn(page.request, { email: 'j.lindqvist@example.com' });
   await page.goto('/o/acme');
   if (!isPhone(page)) {
-    const sidebar = page.getByRole('navigation', { name: 'Acme organization' });
-    await sidebar.getByRole('link', { name: 'API keys' }).click();
+    await orgMarkOf(page).click();
+    await page.getByRole('menuitem', { name: 'API keys' }).click();
   } else {
     await page.goto('/o/acme/api-keys');
   }

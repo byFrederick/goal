@@ -15,7 +15,7 @@ const hiddenEnv = [
 ];
 
 /** Settings that keep everything Claude Code brings or syncs on its own out of the agent's session. */
-const isolation = {
+export const isolation = {
   disableBundledSkills: true,
   syncClaudeAiSkills: false,
   syncClaudeAiPlugins: false,
@@ -220,7 +220,7 @@ function isGuidance(rel: string): boolean {
 }
 
 /** The absolute path with its nearest existing ancestor's symlinks resolved. */
-async function realTarget(path: string): Promise<string> {
+export async function realTarget(path: string): Promise<string> {
   const rest: string[] = [];
   for (let dir = path; ; dir = posix.dirname(dir)) {
     try {

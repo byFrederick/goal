@@ -24,20 +24,20 @@ export function PhoneTopRow({ org }: { org: OrgSummary }) {
     <nav
       aria-label="Organization and factories"
       onKeyDown={onKeyDown}
-      className="flex min-h-14 items-center gap-1.5 bg-shell px-3 pt-[calc(8px_+_env(safe-area-inset-top))] md:hidden"
+      className="flex min-h-14 items-center gap-2 bg-shell px-3 pt-[calc(8px_+_env(safe-area-inset-top))] md:hidden"
     >
-      <OrgMark org={org} size="phone" />
-      <span aria-hidden="true" className="mx-0.5 h-[26px] w-px shrink-0 bg-rule" />
+      <OrgMark org={org} />
+      <span aria-hidden="true" className="mx-1 h-7 w-px shrink-0 bg-rule" />
       {/* The squares scroll inside the row, never the page; the padding keeps badges unclipped. */}
-      <ul className="m-0 -my-1.5 flex min-w-0 flex-1 list-none items-center gap-1.5 overflow-x-auto py-1.5 pr-1.5 pl-0">
+      <ul className="m-0 -my-2 flex min-w-0 flex-1 list-none items-center gap-2 overflow-x-auto py-2 pr-2 pl-0">
         {squares.map((square) => (
           <li key={square.factory.id}>
-            <FactorySquareLink org={org} square={square} size="phone" />
+            <FactorySquareLink org={org} square={square} />
           </li>
         ))}
         {mayCreate ? (
           <li>
-            <NewFactoryLink org={org} size="phone">
+            <NewFactoryLink org={org}>
               <Plus size={16} strokeWidth={1.5} aria-hidden="true" />
             </NewFactoryLink>
           </li>
@@ -51,7 +51,7 @@ export function PhoneTopRow({ org }: { org: OrgSummary }) {
 /** "Acme / sre" above a factory page's heading on phones. */
 export function PhoneCrumb({ org, factory }: { org: OrgSummary; factory: Factory }) {
   return (
-    <p className="m-0 mx-4 mt-1 flex gap-1.5 text-[13px] text-muted md:hidden">
+    <p className="m-0 mx-4 mt-1 flex gap-2 text-secondary text-muted md:hidden">
       <span>{org.name}</span>
       <span aria-hidden="true">/</span>
       <span className="font-medium text-ink">{factory.name}</span>
@@ -112,7 +112,7 @@ export function TabBar({ org, factory }: { org: OrgSummary; factory: Factory }) 
 }
 
 const sheetRow =
-  'flex min-h-12 items-center gap-3 rounded-control px-2.5 text-base text-ink no-underline transition-colors duration-200';
+  'flex min-h-12 items-center gap-3 rounded-control px-3 text-base text-ink no-underline transition-colors duration-200';
 
 function MoreSheet({ org, factory }: { org: OrgSummary; factory: Factory }) {
   const [open, setOpen] = useState(false);
@@ -128,7 +128,7 @@ function MoreSheet({ org, factory }: { org: OrgSummary; factory: Factory }) {
       </SheetTrigger>
       <SheetContent title="More">
         <SheetLabel id="more-learn">Learn</SheetLabel>
-        <ul aria-labelledby="more-learn" className="m-0 flex list-none flex-col gap-0.5 p-0">
+        <ul aria-labelledby="more-learn" className="m-0 flex list-none flex-col gap-1 p-0">
           {learn.map((s) =>
             s.available && 'filters' in s ? (
               <li key={s.id}>
@@ -157,7 +157,7 @@ function MoreSheet({ org, factory }: { org: OrgSummary; factory: Factory }) {
         {settings?.available && 'to' in settings ? (
           <>
             <SheetLabel id="more-factory">{factory.name}</SheetLabel>
-            <ul aria-labelledby="more-factory" className="m-0 flex list-none flex-col gap-0.5 p-0">
+            <ul aria-labelledby="more-factory" className="m-0 flex list-none flex-col gap-1 p-0">
               <li>
                 <Link
                   to={settings.to}
@@ -175,7 +175,7 @@ function MoreSheet({ org, factory }: { org: OrgSummary; factory: Factory }) {
           </>
         ) : null}
         <SheetLabel id="more-org">{org.name}</SheetLabel>
-        <ul aria-labelledby="more-org" className="m-0 flex list-none flex-col gap-0.5 p-0">
+        <ul aria-labelledby="more-org" className="m-0 flex list-none flex-col gap-1 p-0">
           <li>
             <Link
               to="/o/$org"

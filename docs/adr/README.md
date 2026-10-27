@@ -23,4 +23,7 @@ One line per ADR: its number, its title and the first part of its status. To add
 - [ADR 0017](0017-credentials.md): Credentials: organization-owned sealed secrets, scoped to factories and agents, that connections refer to as {{name}}. Status: accepted.
 - [ADR 0018](0018-agents-ask-questions.md): Agents ask questions: the run ends until a person answers. Status: accepted.
 - [ADR 0019](0019-item-watch-live-trace-teardown.md): Watch live, Trace and Teardown on an item, and OAuth consent with phase 6. Status: proposed.
-- [ADR 0021](0021-trigger-try-and-model-check.md): Trying a trigger with a past event, and the model check in Only if. Status: proposed.
+- [ADR 0020](0020-saved-views-and-csv-exports.md): Saved views and CSV exports. Status: accepted.
+- [ADR 0021](0021-asked-definition-changes-draft-requests.md): Asked definition changes: draft requests. Status: accepted.
+- [ADR 0022](0022-model-presets-in-the-new-factory-wizard.md): Model presets in the new-factory wizard. Status: accepted.
+- [ADR 0023](0023-trigger-try-and-model-check.md): Trying a trigger with a past event, and the model check in Only if. Status: proposed.

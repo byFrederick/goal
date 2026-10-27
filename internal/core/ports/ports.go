@@ -740,10 +740,61 @@ type CodeHost interface {
 	// returns at most MaxCompareCommits, the oldest ones, and sets Comparison.Truncated when there
 	// are more. An unknown repository or commit is an error wrapping ErrNotFound. It only reads.
 	Compare(ctx context.Context, c domain.ResolvedConnection, repo, base, head string) (Comparison, error)
+
+	// Repositories returns the account c's credential signs in as, the owners it can list
+	// repositories of (the account and its organizations) and the repositories of owner (the
+	// account when owner is empty): at most MaxRepositories, the most recently updated first, with
+	// RepositoryList.Truncated set when there are more. An unknown owner is an error wrapping
+	// ErrNotFound; a host that cannot list them, one wrapping errors.ErrUnsupported. It only reads.
+	Repositories(ctx context.Context, c domain.ResolvedConnection, owner string) (RepositoryList, error)
 }
 
 // MaxCompareCommits bounds the commits one CodeHost.Compare returns.
 const MaxCompareCommits = 100
+
+// MaxRepositories bounds the repositories one CodeHost.Repositories returns.
+const MaxRepositories = 100
+
+// MaxRepositoryLanguages bounds the languages of one Repository.
+const MaxRepositoryLanguages = 3
+
+// RepositoryList is what CodeHost.Repositories found.
+type RepositoryList struct {
+	// Login is the account the connection's credential signs in as.
+	Login string
+	// Owners are the account first, then its organizations.
+	Owners []RepositoryOwner
+	// Owner is the owner Repositories lists.
+	Owner string
+	// Repositories are the most recently updated first, at most MaxRepositories of them.
+	Repositories []Repository
+	// Truncated reports that Owner has more repositories than Repositories holds.
+	Truncated bool
+}
+
+// RepositoryOwner is an account or organization that owns repositories.
+type RepositoryOwner struct {
+	Login string
+	// Kind is RepositoryOwnerUser or RepositoryOwnerOrganization.
+	Kind string
+}
+
+// The kinds of a RepositoryOwner.
+const (
+	RepositoryOwnerUser         = "user"
+	RepositoryOwnerOrganization = "organization"
+)
+
+// Repository is one repository of a RepositoryList.
+type Repository struct {
+	// FullName is <owner>/<name>.
+	FullName string
+	// CloneURL is its https clone URL.
+	CloneURL string
+	// Languages are the largest first, at most MaxRepositoryLanguages.
+	Languages []string
+	UpdatedAt time.Time
+}
 
 // Comparison is what CodeHost.Compare found between two commits.
 type Comparison struct {

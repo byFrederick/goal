@@ -18,7 +18,7 @@ export async function expectNoHorizontalScroll(page: Page) {
   expect(overflow).toBeLessThanOrEqual(0);
 }
 
-/** The rail from 768 px, the top row below: the same landmark, one of them shown. */
+/** The sidebar from 768 px, the top row below: the same landmark, one of them shown. */
 export const orgNav = (page: Page) => page.getByRole('navigation', { name: 'Organization and factories' });
 
 /**
@@ -80,6 +80,11 @@ export async function pressUntilHeard(page: Page, key: string, before: Locator, 
     .toBe(true);
 }
 
-/** The organization mark of the shown navigation: it opens the organization menu or sheet. */
-export const orgMarkOf = (page: Page, name = 'Ac, Acme organization, switch organization') =>
-  orgNav(page).filter({ visible: true }).getByRole('button', { name });
+/**
+ * The organization's menu trigger of the shown navigation: the sidebar's name or the top row's mark
+ * (which says the same name after its letters). It opens the organization menu or sheet.
+ */
+export const orgMarkOf = (page: Page, org = 'Acme') =>
+  orgNav(page)
+    .filter({ visible: true })
+    .getByRole('button', { name: new RegExp(`${org} organization, switch organization`) });

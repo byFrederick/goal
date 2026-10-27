@@ -1,5 +1,6 @@
-// The organization's factories as the rail and the phone's top row show them: ordered by name,
-// each with its mark, what it needs from people and the accessible name that says so.
+// The organization's factories as the phone's top row shows them: ordered by name, each with its
+// mark, what it needs from people and the accessible name that says so. The sidebar lists the same
+// factories (sidebar-factories.tsx).
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { factoriesQuery } from '../api/queries';
 import type { Factory, OrgSummary } from '../api/types';
@@ -16,7 +17,7 @@ export interface FactorySquare {
   detail: string;
 }
 
-/** The rail's squares: the organization's factories that are not archived (an archived one leaves the rail). */
+/** The organization's factories that are not archived (an archived one leaves the list and the top row). */
 export function useFactorySquares(org: OrgSummary): FactorySquare[] {
   const { data } = useSuspenseQuery(factoriesQuery(org.id));
   const factories = data.filter((f) => !f.archived_at).toSorted((a, b) => a.name.localeCompare(b.name));
