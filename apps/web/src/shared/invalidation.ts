@@ -21,6 +21,8 @@ const workKeys = [
   'touches',
   'andon',
   'agent',
+  // The intake reads the newest items' sources, so every item move can change it.
+  'intake',
 ] as const;
 
 /** Run progress: it changes a card on the board, not where work is or what waits on people. */
@@ -118,6 +120,8 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
         defKeys.compares(org, f),
         keys.board(org, f),
         keys.overviews(org),
+        // The triggers of the running definition (what the intake shows).
+        keys.intake(org, f),
         // What uses a connection or a knowledge source is read from the current versions.
         keys.connections(org),
         keys.knowledge(org),

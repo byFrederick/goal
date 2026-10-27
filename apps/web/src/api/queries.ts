@@ -64,6 +64,7 @@ import {
   listVersions,
   validateDraft,
 } from './definitions';
+import { getIntake } from './intake';
 import { listApiKeys, listMemberTokens, listPersonalTokens } from './keys';
 import {
   getKnowledgeDocument,
@@ -195,7 +196,16 @@ export const keys = {
   runs: (org: string, filter?: RunsFilter) =>
     filter ? (['org', org, 'runs', filter] as const) : (['org', org, 'runs'] as const),
   parts: (org: string, item: string) => ['org', org, 'item', item, 'parts'] as const,
+  /** The factory's intake (sources and triggers); item and definition events refresh it. */
+  intake: (org: string, factory: string) => ['org', org, 'factory', factory, 'intake'] as const,
 };
+
+export const intakeQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: keys.intake(org, factory),
+    queryFn: ({ signal }) => getIntake(org, factory, undefined, signal),
+    staleTime: 10_000,
+  });
 
 /** Fixed while the app runs: goald's GOAL_AUTH changes only with a restart. */
 export const authConfigQuery = queryOptions({

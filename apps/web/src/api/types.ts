@@ -72,6 +72,8 @@ export type {
   Inbox,
   InboxEntry,
   InboxEntryKind,
+  Intake,
+  IntakeTrigger,
   Invitation,
   Item,
   ItemAt,
