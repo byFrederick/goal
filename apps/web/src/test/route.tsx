@@ -14,6 +14,7 @@ import { render } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { boardQuery, builderMetaQuery, factoriesQuery, itemQuery, partsQuery } from '../api/queries';
 import type { AssemblyParts, Board, BuilderMeta, Factory, Item, OrgSummary } from '../api/types';
+import { TooltipProvider } from '../ui/tooltip';
 
 /** jsdom has no CSS.escape, scrollIntoView or scrollTo, which the board's picker and the router call. */
 function polyfillLayout() {
@@ -142,7 +143,9 @@ export function renderOrgPage({
   return {
     ...render(
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <TooltipProvider>
+          <RouterProvider router={router} />
+        </TooltipProvider>
       </QueryClientProvider>,
     ),
     router,

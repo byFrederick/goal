@@ -129,7 +129,7 @@ function Legend({ swatch, children }: { swatch: string; children: ReactNode }) {
 }
 
 /** The constraint rings in yellow, Done gets its check, and every other station is plain. */
-function toneOf(s: BoardStation, constraint: string | null): StationNodeTone {
+export function toneOf(s: BoardStation, constraint: string | null): StationNodeTone {
   if (s.kind === 'done') return 'done';
   return s.id === constraint ? 'constraint' : 'plain';
 }
@@ -165,7 +165,7 @@ function busyOf(s: BoardStation): string | null {
  * outline for the free. Violet is capped at the slots that are not busy, so the squares never
  * outnumber the slots. Named by the role, never by a copy.
  */
-function Slots({ station }: { station: BoardStation }) {
+export function Slots({ station, compact = false }: { station: BoardStation; compact?: boolean }) {
   const agents: BoardLane[] = (station.lanes ?? []).filter((lane) => lane.kind === 'agent');
   const total = agents.find((lane) => lane.slots !== null)?.slots;
   const role = agents[0]?.role;
@@ -180,14 +180,14 @@ function Slots({ station }: { station: BoardStation }) {
   const label = `${role}: ${busy} working, ${waiting} waiting on you, ${free} free`;
 
   return (
-    <span role="img" aria-label={label} className="flex flex-wrap gap-1 md:justify-center">
+    <span role="img" aria-label={label} className={cn('flex flex-wrap gap-1 md:justify-center', compact && 'gap-0.5')}>
       {Array.from({ length: total }, (_, i) => (
         <span
           // biome-ignore lint/suspicious/noArrayIndexKey: the squares are fixed by the slot count and never reorder
           key={i}
           aria-hidden="true"
           className={cn(
-            'size-3.5 rounded-chip',
+            compact ? 'size-2 rounded-sm' : 'size-3.5 rounded-chip',
             i < busy ? 'bg-run-soft' : i < busy + waiting ? 'bg-you' : 'border border-andon-text',
           )}
         />
