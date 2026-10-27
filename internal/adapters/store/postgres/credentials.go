@@ -17,7 +17,7 @@ import (
 
 var _ ports.Credentials = (*Credentials)(nil)
 
-// Credentials implements ports.Credentials over 00064's credentials, as goal_app under row-level
+// Credentials implements ports.Credentials over 00065's credentials, as goal_app under row-level
 // security: every statement sees the organization in ctx, and every change and use appends its
 // audit entry in its transaction. Each value is sealed with key under domain.CredentialAAD
 // (organization, credential id and key id) and opened only by Resolve; a rename keeps the sealed

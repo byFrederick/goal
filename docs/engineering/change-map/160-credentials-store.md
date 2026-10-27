@@ -1,6 +1,6 @@
 ## When you change
 
-The credentials store: the `credentials` table (`db/migrations/00064_credentials.sql` and the migrations after it), its queries (`db/queries/credentials.sql`) or the adapter (`internal/adapters/store/postgres/credentials.go`)
+The credentials store: the `credentials` table (`db/migrations/00065_credentials.sql` and the migrations after it), its queries (`db/queries/credentials.sql`) or the adapter (`internal/adapters/store/postgres/credentials.go`)
 
 ## Also change
 

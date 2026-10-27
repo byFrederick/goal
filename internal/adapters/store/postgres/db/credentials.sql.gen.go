@@ -128,7 +128,7 @@ type CredentialsRow struct {
 	UpdatedByName string
 }
 
-// Credentials (00064), under row-level security: every statement sees the transaction's
+// Credentials (00065), under row-level security: every statement sees the transaction's
 // organization only. Who created and last changed a credential are named as their audit entries
 // name them (a person's name at that moment), as api_keys.sql does. goal db rekey reseals as
 // goal_owner, in no organization.
