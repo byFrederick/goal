@@ -231,6 +231,15 @@ linters:
             - github.com/byFrederick/goal/internal/core/domain
             - github.com/byFrederick/goal/internal/core/ports
             - golang.org/x/net/html
+        jonah:
+          # Jonah's judge loop reaches runs, judges, scores and judge runs through ports only
+          # (ADR 0025 decision 2); cmd/goald wires its adapters.
+          list-mode: strict
+          files: ["**/internal/jonah/**", "!$test"]
+          allow:
+            - $gostd
+            - github.com/byFrederick/goal/internal/core/domain
+            - github.com/byFrederick/goal/internal/core/ports
         builder:
           files: ["**/internal/builder/**"]
           deny:
