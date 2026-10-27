@@ -49,6 +49,11 @@ export async function keepSessionAlive(): Promise<void> {
 
 const roleNames: Record<OrgRole, string> = { owner: 'Owner', admin: 'Admin', member: 'Member' };
 
+/** "Owner"; undefined without a role (sign-in off, an API key). */
+export function roleName(role: OrgRole | null | undefined): string | undefined {
+  return role ? roleNames[role] : undefined;
+}
+
 /** "Owner of Acme"; undefined without a role (sign-in off, an API key). */
 export function roleLine(role: OrgRole | null | undefined, orgName: string): string | undefined {
   return role ? `${roleNames[role]} of ${orgName}` : undefined;

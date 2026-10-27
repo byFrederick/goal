@@ -1,30 +1,27 @@
-// The pieces the rail and the phone's top row share: one stop of the arrow-key movement, a
-// factory's square, the organization's Connections and Knowledge (the account is
-// account-menu.tsx).
+// The pieces the phone's top row shares: one stop of the arrow-key movement, a factory's square and
+// New factory (the account is account-menu.tsx, the organization's mark is org-mark.tsx). The
+// sidebar of 768 px and up is sidebar.tsx.
 import { Link, useRouterState } from '@tanstack/react-router';
 import { type KeyboardEvent, type ReactNode, useCallback } from 'react';
 import type { OrgSummary } from '../api/types';
-import { useConnectionTrouble } from '../shared/connections';
-import { useOrgHolds } from '../shared/org';
 import { Mark } from '../ui/mark';
-import { Tooltip } from '../ui/tooltip';
 import type { FactorySquare } from './factory-squares';
 import { type RailAxis, railFocusTarget } from './rail-focus';
-import { connectionsScreen, knowledgeScreen, newFactoryScreen } from './screens';
+import { newFactoryScreen } from './screens';
 
 /** A 44px target around a mark; `group` passes hover to the mark. */
 export const railItemClass =
-  'group relative flex size-11 shrink-0 items-center justify-center rounded-[10px] text-ink no-underline';
+  'group relative flex size-11 shrink-0 items-center justify-center rounded-cell text-ink no-underline';
 
-/** Marks an element as one stop of the rail's arrow-key movement. */
+/** Marks an element as one stop of the top row's arrow-key movement. */
 export const railItem = { 'data-rail-item': '' } as const;
 
-/** Arrow keys, Home and End move focus between the rail's items (every item stays in tab order). */
+/** Arrow keys, Home and End move focus between the top row's items (every item stays in tab order). */
 export function useRailKeys(axis: RailAxis) {
   return useCallback(
     (e: KeyboardEvent<HTMLElement>) => {
-      // Keys pressed in a menu, sheet or dialog a rail item opened bubble here through React's
-      // portals; they are not the rail's.
+      // Keys pressed in a menu, sheet or dialog a row item opened bubble here through React's
+      // portals; they are not the row's.
       if (!e.currentTarget.contains(e.target as Node)) return;
       const items = [...e.currentTarget.querySelectorAll<HTMLElement>('[data-rail-item]')];
       const index = items.indexOf(document.activeElement as HTMLElement);
@@ -37,23 +34,20 @@ export function useRailKeys(axis: RailAxis) {
   );
 }
 
-type Size = 'rail' | 'phone';
-
 /** A factory's square: its floor, current (ink, aria-current) on any of its pages. */
-export function FactorySquareLink({ org, square, size }: { org: OrgSummary; square: FactorySquare; size: Size }) {
-  const { factory, mark, attention, label, detail } = square;
-  const link = (
+export function FactorySquareLink({ org, square }: { org: OrgSummary; square: FactorySquare }) {
+  const { factory, mark, attention } = square;
+  return (
     <Link
       to="/o/$org/f/$factory"
       params={{ org: org.slug, factory: factory.name }}
-      aria-label={label}
+      aria-label={square.label}
       className={railItemClass}
       {...railItem}
     >
       {({ isActive }) => (
         <Mark
           kind="factory"
-          size={size}
           current={isActive}
           badge={attention.waiting}
           dot={attention.andon !== null || attention.blocked > 0}
@@ -63,19 +57,12 @@ export function FactorySquareLink({ org, square, size }: { org: OrgSummary; squa
       )}
     </Link>
   );
-  return size === 'rail' ? (
-    <Tooltip label={factory.name} detail={detail}>
-      {link}
-    </Tooltip>
-  ) : (
-    link
-  );
 }
 
 /** New factory: the dashed square, solid and ink while the wizard is open. */
-export function NewFactoryLink({ org, size, children }: { org: OrgSummary; size: Size; children: ReactNode }) {
+export function NewFactoryLink({ org, children }: { org: OrgSummary; children: ReactNode }) {
   const open = useIsWizard();
-  const link = (
+  return (
     <Link
       to={newFactoryScreen.to}
       params={{ org: org.slug, step: 'start' }}
@@ -83,77 +70,14 @@ export function NewFactoryLink({ org, size, children }: { org: OrgSummary; size:
       className={railItemClass}
       {...railItem}
     >
-      <Mark kind="add" size={size} current={open}>
+      <Mark kind="add" current={open}>
         {children}
       </Mark>
     </Link>
   );
-  return size === 'rail' ? <Tooltip label={newFactoryScreen.label}>{link}</Tooltip> : link;
 }
 
 /** Whether a page of the New factory wizard is open (any of its steps). */
 function useIsWizard(): boolean {
   return useRouterState({ select: (s) => s.matches.some((m) => m.routeId === '/o/$org/new/$step') });
-}
-
-/**
- * The organization's Connections (rail only): ink while one of its pages is open, a rust dot when
- * a connection's last test failed, said in the name ("Connections, 1 failing"). A missing secret
- * is said on the Connections page and the connection's own. Only for whoever may read connections.
- */
-export function ConnectionsRailLink({ org }: { org: OrgSummary }) {
-  const read = useOrgHolds('connection:read');
-  const trouble = useConnectionTrouble(org.id);
-  if (!read) return null;
-  const Icon = connectionsScreen.icon;
-  const detail = trouble > 0 ? `${trouble} failing` : undefined;
-  return (
-    <Tooltip label={connectionsScreen.label} detail={detail}>
-      <Link
-        to="/o/$org/connections"
-        params={{ org: org.slug }}
-        aria-label={detail ? `${connectionsScreen.label}, ${detail}` : connectionsScreen.label}
-        className={railItemClass}
-        {...railItem}
-      >
-        {({ isActive }) => (
-          <Mark kind="icon" size="rail" current={isActive} dot={trouble > 0}>
-            <Icon size={20} strokeWidth={1.5} aria-hidden="true" />
-          </Mark>
-        )}
-      </Link>
-    </Tooltip>
-  );
-}
-
-/** The organization's Knowledge (rail only): ink while one of its pages is open. Only for whoever may read it. */
-export function KnowledgeRailLink({ org }: { org: OrgSummary }) {
-  const read = useOrgHolds('knowledge:read');
-  if (!read) return null;
-  const Icon = knowledgeScreen.icon;
-  return (
-    <Tooltip label={knowledgeScreen.label}>
-      <Link
-        to="/o/$org/knowledge"
-        params={{ org: org.slug }}
-        aria-label={knowledgeScreen.label}
-        className={railItemClass}
-        {...railItem}
-      >
-        {({ isActive }) => (
-          <Mark kind="icon" size="rail" current={isActive}>
-            <Icon size={20} strokeWidth={1.5} aria-hidden="true" />
-          </Mark>
-        )}
-      </Link>
-    </Tooltip>
-  );
-}
-
-/**
- * A menu trigger on the rail opens its menu with Enter or Space; ArrowDown keeps moving along the
- * rail, as on every other rail item (Radix would open the menu on it).
- */
-export function keepArrowsOnRail(e: KeyboardEvent<HTMLElement>) {
-  if (e.key === 'ArrowDown') e.preventDefault();
 }
