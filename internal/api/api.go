@@ -69,6 +69,7 @@ type Engine interface {
 	Cancel(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
 	Merge(ctx context.Context, id domain.ItemID, by domain.Actor, method string) (domain.Item, error)
 	Note(ctx context.Context, id domain.ItemID, by domain.Actor, text string) (domain.Event, error)
+	Answer(ctx context.Context, id domain.ItemID, by domain.Actor, answer string, choiceIndex *int) (domain.Item, error)
 	Link(ctx context.Context, id, needs domain.ItemID, by domain.Actor) (domain.Edge, error)
 	Unlink(ctx context.Context, id, needs domain.ItemID, by domain.Actor) error
 	AddPart(ctx context.Context, assembly domain.ItemID, by domain.Actor, part domain.NewPart) (domain.Item, domain.Parts, error)
@@ -467,6 +468,10 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 
 	out.Waiting = waiting[it.ID]
 
+	if out.Question, err = s.openQuestion(ctx, it.ID); err != nil {
+		return nil, err
+	}
+
 	return gen.GetItem200JSONResponse(out), nil
 }
 
@@ -604,7 +609,7 @@ func problemOf(err error) gen.Problem {
 	// wrap ports.ErrNameTaken); the credentials' before the connections' (both wrap
 	// ports.ErrNoMasterKey).
 	for _, answer := range []func(error) (gen.Problem, bool){
-		fixedProblem, edgeProblem, partProblem, credentialProblem, connectionProblem, knowledgeProblem, evalProblem, definitionProblem, controlProblem, agentProblem, apiKeyProblem, personalTokenProblem,
+		fixedProblem, edgeProblem, partProblem, credentialProblem, connectionProblem, knowledgeProblem, evalProblem, definitionProblem, controlProblem, questionProblem, agentProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {
 			return p

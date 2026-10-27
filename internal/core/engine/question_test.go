@@ -217,10 +217,18 @@ func TestAnswer_ResumesTheItemWithoutRework(t *testing.T) {
 		t.Error("the question is still open after its answer")
 	}
 
+	checkAnswerAudit(t, h, it.ID, "map[choice_index:1 length:7]")
+}
+
+// checkAnswerAudit checks that the item has one item.answered entry by the person, with data
+// (printed) holding the answer's length and choice index, never its text.
+func checkAnswerAudit(t *testing.T, h *harness, id domain.ItemID, data string) {
+	t.Helper()
+
 	audited := h.audited(t, domain.AuditItemAnswered)
-	if len(audited) != 1 || audited[0].TargetID != string(it.ID) || audited[0].Actor.Ref() != human.Ref() ||
-		fmt.Sprint(audited[0].Data) != "map[choice_index:1 length:7]" {
-		t.Errorf("audit %+v; want one item.answered with the answer's length and the choice index, never its text", audited)
+	if len(audited) != 1 || audited[0].TargetID != string(id) || audited[0].Actor.Ref() != human.Ref() ||
+		fmt.Sprint(audited[0].Data) != data {
+		t.Errorf("audit %+v; want one item.answered with %s, never the answer's text", audited, data)
 	}
 }
 

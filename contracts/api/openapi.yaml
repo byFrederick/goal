@@ -817,14 +817,15 @@ paths:
       description: >-
         The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no
         identity, so every entry is everyone's. decision: an item waiting for a person's decision,
-        with its approval brief; andon: a factory's open andon pull, its line stopped;
+        with its approval brief; question: an item whose agent asked a person a question (ADR
+        0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped;
         rework_warning: a gate one rejection away from its andon policy's rework rate (display
         only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that
-        waits on nothing else. An item has at most one entry (decision, then blocked, then
-        expedite). Later phases add kinds (tool_approval, sync_failed, proposal), which clients
+        waits on nothing else. An item has at most one entry (question, then decision, then blocked,
+        then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients
         that do not know them render as a generic row. When more entries exist than limit, the
-        most recent ones are kept and truncated is true. Entries are ordered by kind (decision,
-        andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is
+        most recent ones are kept and truncated is true. Entries are ordered by kind (decision and
+        question together, then andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is
         enough for every screen to count what it groups (the Floor's Needs you card, the phone's
         Items view).
       parameters:
@@ -2371,6 +2372,37 @@ paths:
       responses:
         "200":
           description: The item after the decision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/items/{item}/answer:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/ItemRef"
+    post:
+      operationId: answerItem
+      x-goal-scope: item:decide
+      summary: Answer the question an item's agent asked
+      description: >-
+        Answers the item's open question (Item.question) with one of its choices or in the
+        caller's own words, as ADR 0018 decides. The engine records question_answered and puts the
+        item back in its station's arrival state, rework_count unchanged; its next run's brief
+        carries the question and the answer. Audited as item.answered with the answer's length and
+        the choice index, never its text. 400 when the body has both answer and choice or neither,
+        or the answer is not 1 to 2000 characters; 400 bad-choice for a choice outside the
+        question's choices; 409 no-open-question when the item has none (none was asked, it was
+        answered, or a move, pause or rejection withdrew it), item-closed for a done or cancelled
+        item, item-changed when it moved meanwhile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ItemAnswer" }
+      responses:
+        "200":
+          description: The item after the answer
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
@@ -4241,6 +4273,38 @@ components:
         waiting:
           description: Why the item is not claimed yet; getItem only, absent unless it is queued or ready with an open need
           allOf: [{ $ref: "#/components/schemas/ItemWaiting" }]
+        question:
+          description: >-
+            The question the item's agent asked a person and nobody has answered yet (ADR 0018);
+            getItem and answerItem only, absent or null when there is none
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/ItemQuestion" }]
+    ItemQuestion:
+      type: object
+      description: An agent's open question about an item, read from its question_asked event
+      required: [text, choices, asked_at, agent, run_id]
+      properties:
+        text: { type: string, description: The question, 1 to 500 characters }
+        choices:
+          type: array
+          description: The quick answers the agent offered, 0 to 4; empty for a free answer only
+          items: { type: string }
+        asked_at: { type: string, format: date-time }
+        agent: { type: string, description: "The asking agent's role name, as in frontend-engineer; never its copy number" }
+        run_id: { type: string, description: The run that asked; it ended when it asked }
+    ItemAnswer:
+      type: object
+      description: A person's answer to an item's open question; exactly one of answer and choice
+      properties:
+        answer:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: The answer in the person's own words, 1 to 2000 characters (surrounding space is trimmed)
+        choice:
+          type: integer
+          minimum: 0
+          description: The index of the picked choice in Item.question.choices
     ItemWaiting:
       type: object
       description: >-
@@ -5295,7 +5359,14 @@ components:
         item_id: { type: string }
         run_id: { type: string }
         at: { type: string, format: date-time }
-        kind: { type: string }
+        kind:
+          type: string
+          description: >-
+            What happened, as in submitted, moved, note or lease_taken. question_asked: the
+            item's agent asked a person (data question, choices, agent as the role name, run_id);
+            the run ends and the item waits at its station. question_answered: a person answered
+            (data answer, the picked choice's text or their words; choice_index only when a
+            choice was picked; actor); the item goes back to its station's queue
         station: { type: string }
         actor: { type: string }
         data:
@@ -5838,7 +5909,7 @@ components:
     InboxEntryKind:
       type: string
       description: What waits; later phases add kinds, which clients that do not know them show as a generic row
-      enum: [decision, andon, rework_warning, blocked, expedite]
+      enum: [decision, question, andon, rework_warning, blocked, expedite]
     InboxEntry:
       type: object
       required: [id, kind, factory, since, item, station, action, approval, blocked, andon, rework]
@@ -5846,8 +5917,8 @@ components:
         id:
           type: string
           description: >-
-            "<kind>:<id of what waits>": decision:, blocked: and expedite:<item id>, andon:<pull id>,
-            rework_warning:<factory id>:<gate station>
+            "<kind>:<id of what waits>": decision:, question:, blocked: and expedite:<item id>,
+            andon:<pull id>, rework_warning:<factory id>:<gate station>
         kind: { $ref: "#/components/schemas/InboxEntryKind" }
         factory:
           type: object
@@ -5860,7 +5931,7 @@ components:
           type: string
           format: date-time
           description: >-
-            Since when it waits: the item's last change (decision, blocked), its creation
+            Since when it waits: the item's last change (decision, question, blocked), its creation
             (expedite), the pull (andon), now (rework_warning)
         item:
           description: The item it is about, or null for an entry that is about no item
@@ -5883,6 +5954,11 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/InboxBlocked"
+        question:
+          description: A question entry's open question; absent or null for other kinds
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/ItemQuestion"
         andon:
           description: The open pull of an andon entry; null for other kinds
           nullable: true
