@@ -94,6 +94,67 @@ func (q *Queries) CredentialNames(ctx context.Context, names []string) ([]string
 	return items, nil
 }
 
+const credentialUserCounts = `-- name: CredentialUserCounts :many
+SELECT r.credential::text AS name, count(DISTINCT c.id)::integer AS connections
+FROM connections c CROSS JOIN LATERAL jsonb_each_text(c.secret_refs) AS r (field, credential)
+WHERE r.credential = ANY ($1::text[])
+GROUP BY r.credential
+`
+
+type CredentialUserCountsRow struct {
+	Name        string
+	Connections int32
+}
+
+// How many connections refer to each of names, for an import's dry run; a name no connection
+// refers to has no row.
+func (q *Queries) CredentialUserCounts(ctx context.Context, names []string) ([]CredentialUserCountsRow, error) {
+	rows, err := q.db.Query(ctx, credentialUserCounts, names)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CredentialUserCountsRow
+	for rows.Next() {
+		var i CredentialUserCountsRow
+		if err := rows.Scan(&i.Name, &i.Connections); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const credentialUsers = `-- name: CredentialUsers :many
+SELECT c.name FROM connections c
+WHERE EXISTS (SELECT 1 FROM jsonb_each_text(c.secret_refs) AS r (field, credential) WHERE r.credential = $1::text)
+ORDER BY c.name
+`
+
+// The connections that refer to credential name as {{name}} (00066's secret_refs), by name.
+func (q *Queries) CredentialUsers(ctx context.Context, name string) ([]string, error) {
+	rows, err := q.db.Query(ctx, credentialUsers, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		items = append(items, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const credentials = `-- name: Credentials :many
 
 SELECT c.id, c.name, c.type, c.description, c.all_factories, c.factory_ids, c.agents, c.expires_at, c.remind_days,
@@ -225,6 +286,19 @@ func (q *Queries) InsertCredential(ctx context.Context, arg InsertCredentialPara
 	var created_at time.Time
 	err := row.Scan(&created_at)
 	return created_at, err
+}
+
+const lockCredential = `-- name: LockCredential :one
+SELECT id FROM credentials WHERE name = $1 FOR UPDATE
+`
+
+// The credential name, locked for its deletion: connection writes that refer to it
+// (ShareReferencedCredentials) wait for it, and it waits for them.
+func (q *Queries) LockCredential(ctx context.Context, name string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockCredential, name)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const markCredentialsUsed = `-- name: MarkCredentialsUsed :many

@@ -72,11 +72,11 @@ func (s *server) spendOut(ctx context.Context, sp domain.OrgSpend) gen.OrgSpend 
 	}
 
 	for _, d := range sp.Days {
-		day := gen.SpendDay{Day: openapi_types.Date{Time: d.Day}, ByFactory: []gen.FactorySpend{}}
+		day := gen.SpendDay{Day: openapi_types.Date{Time: d.Day}, ByFactory: []gen.DayFactorySpend{}}
 
 		for _, f := range d.ByFactory {
 			if sees(f.FactoryID) {
-				day.ByFactory = append(day.ByFactory, gen.FactorySpend{FactoryId: string(f.FactoryID), Usd: f.USD})
+				day.ByFactory = append(day.ByFactory, gen.DayFactorySpend{FactoryId: string(f.FactoryID), Usd: f.USD})
 				day.Usd += f.USD
 			}
 		}
