@@ -16,7 +16,7 @@ const ShellBoard = () => (
   </TooltipProvider>
 );
 
-// The header's Inbox button reads the inbox; the board tests see an empty one.
+// The header's Needs you link reads the inbox for its count; the board tests see an empty one.
 vi.mock(import('../../api/client'), async (original) => ({
   ...(await original()),
   getInbox: vi.fn(async () => ({ entries: [], truncated: false })),
@@ -224,12 +224,11 @@ describe('BoardPage', () => {
     expect(within(columns).getByRole('heading', { name: 'Build' })).toBeTruthy();
   });
 
-  it('the header Inbox button opens the inbox drawer over the board', async () => {
+  it('the header Needs you link leads to the Needs you page filtered to this factory', async () => {
     renderBoardPage({ page: ShellBoard, org, factory, board: board() });
 
-    fireEvent.click(await screen.findByRole('button', { name: /^Inbox/ }));
-    const drawer = await screen.findByRole('dialog', { name: 'Inbox' });
-    expect(await within(drawer).findByText('Nothing needs you')).toBeTruthy();
+    const link = await screen.findByRole('link', { name: /^Needs you/ });
+    expect(link.getAttribute('href')).toBe('/o/acme/needs-you?factory=sre');
   });
 
   it('lays the phone picker out as one-line tabs, the constraint’s with its amber edge and the picked one ink-filled', async () => {

@@ -10,8 +10,8 @@ import { TopBarSlot } from '../../app/top-bar';
 import { LineStatus } from '../../shared/andon';
 import { itemKey, useFactory } from '../../shared/factory';
 import { humanize } from '../../shared/format';
-import { InboxButton } from '../../shared/inbox-drawer';
 import { MoveDialog } from '../../shared/move-menu';
+import { NeedsYouLink } from '../../shared/needs-you-link';
 import { NewItemButton } from '../../shared/new-item';
 import { useOrg } from '../../shared/org';
 import { factoryRoleNote, holds, reasons } from '../../shared/permissions';
@@ -398,7 +398,7 @@ export function BoardPage() {
             </span>
           </div>
           <div className="ml-auto flex min-w-0 flex-wrap items-center gap-2">
-            <InboxButton factory={factory} />
+            <NeedsYouLink factory={factory} />
             <SearchItems value={view.q ?? ''} onChange={(q) => changeView({ q: q || undefined })} />
             <BoardViewControl />
             {filters}

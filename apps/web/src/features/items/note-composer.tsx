@@ -2,6 +2,7 @@
 // the item and the item's next run reads it in its brief; the composer says so.
 // Notes need item:operate (approvers and editors); without it the composer says who sends them.
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { ArrowUp } from 'lucide-react';
 import { type FormEvent, type Ref, useId, useState } from 'react';
 import { noteItem } from '../../api/client';
 import { keys } from '../../api/queries';
@@ -25,7 +26,7 @@ interface Props {
   /** The item's factory: its name and what the caller may do there. */
   factory: Pick<Factory, 'name' | 'can'>;
   state: ItemState;
-  /** Wide screens send with "Send note"; phones with a 48 px "Send" beside the field. */
+  /** Phones: a pill field with a round send button, 44 px each, that the page pins above the tab bar. */
   compact?: boolean;
   /** Where "Write an answer" puts the focus: the field. */
   fieldRef?: Ref<HTMLTextAreaElement>;
@@ -49,12 +50,62 @@ export function NoteComposer({ itemKey, factory, state, compact = false, fieldRe
     return <p className={cn('m-0 text-secondary text-muted', className)}>{reasons.note(factory.name)}</p>;
   }
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
+  const send = () => {
     const t = text.trim();
     if (t) note.mutate(t);
   };
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    send();
+  };
   const statusId = `${id}-status`;
+
+  if (compact) {
+    return (
+      <form onSubmit={submit} aria-label="Note for the agent" className={cn('flex flex-col gap-1', className)}>
+        <div className="flex items-center gap-2">
+          <label htmlFor={id} className="sr-only">
+            Note for the agent
+          </label>
+          {/* One line: Enter sends, Shift+Enter starts a new line in the note. */}
+          <textarea
+            id={id}
+            ref={fieldRef}
+            value={text}
+            maxLength={maxNote}
+            rows={1}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            placeholder="Note for the agent"
+            aria-describedby={statusId}
+            className="min-h-11 min-w-0 flex-1 resize-none rounded-full border border-rule bg-panel px-4 py-2 text-body text-ink placeholder:text-muted"
+          />
+          <Button
+            type="submit"
+            variant="primary"
+            aria-label="Send note"
+            className="size-11 flex-none rounded-full p-0"
+            disabled={note.isPending || text.trim() === ''}
+          >
+            <ArrowUp size={18} strokeWidth={1.75} aria-hidden="true" />
+          </Button>
+        </div>
+        <p id={statusId} role="status" className="m-0 min-h-5 px-4 text-secondary text-muted">
+          {note.isSuccess ? delivered[note.data.delivery] : ''}
+        </p>
+        {note.isError ? (
+          <p role="alert" className="m-0 px-4 text-secondary text-rework-ink">
+            Could not send the note: {note.error.message}
+          </p>
+        ) : null}
+      </form>
+    );
+  }
 
   return (
     <form

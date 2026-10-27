@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { linesText } from './blocks';
-import { changedLines, fileGroups, fileNameProblem, groupOf, newFileText } from './files';
+import { changedLines, fileNameProblem, fileTree, folderOf, isReadOnlyPath, newFileText, type TreeNode } from './files';
 
 const info = (path: string) => ({ path, sha256: path, size: 10 });
 
-describe('fileGroups', () => {
-  it('groups the tree as the tabs show it: factory.yaml, agents, each skill folder, contracts, evals, the rest', () => {
-    const groups = fileGroups(
+describe('fileTree', () => {
+  it('lists factory.yaml first, then folders by name with their file counts, then the other files', () => {
+    const tree = fileTree(
       [
         'skills/acme/SKILL.md',
         'agents/b.md',
@@ -19,31 +19,36 @@ describe('fileGroups', () => {
         'README.md',
       ].map(info),
     );
+    const names = (nodes: TreeNode[]): unknown[] =>
+      nodes.map((n) => (n.kind === 'file' ? n.path : [n.path, n.count, names(n.children)]));
 
-    expect(groups.map((g) => [g.label, g.files.map((f) => f.path)])).toEqual([
-      ['factory.yaml', ['factory.yaml']],
-      ['agents/ (2)', ['agents/a.md', 'agents/b.md']],
-      ['skills/acme', ['skills/acme/SKILL.md', 'skills/acme/notes.md']],
-      ['skills/web', ['skills/web/SKILL.md']],
-      ['contracts/ (1)', ['contracts/spec.json']],
-      ['evals/ (1)', ['evals/smoke.yaml']],
-      ['other files (1)', ['README.md']],
+    expect(names(tree)).toEqual([
+      'factory.yaml',
+      ['agents', 2, ['agents/a.md', 'agents/b.md']],
+      ['contracts', 1, ['contracts/spec.json']],
+      ['evals', 1, ['evals/smoke.yaml']],
+      [
+        'skills',
+        3,
+        [
+          ['skills/acme', 2, ['skills/acme/SKILL.md', 'skills/acme/notes.md']],
+          ['skills/web', 1, ['skills/web/SKILL.md']],
+        ],
+      ],
+      'README.md',
     ]);
-    expect(groups.find((g) => g.id === 'evals')?.readOnly).toBe(true);
   });
 
   it('keeps agents/ and contracts/ when empty, so New file… has a place', () => {
-    expect(fileGroups([info('factory.yaml')]).map((g) => g.label)).toEqual([
-      'factory.yaml',
-      'agents/ (0)',
-      'contracts/ (0)',
-    ]);
+    expect(fileTree([info('factory.yaml')]).map((n) => n.name)).toEqual(['factory.yaml', 'agents', 'contracts']);
   });
 
-  it('finds the group of a file the list does not have yet by its folder', () => {
-    const groups = fileGroups([info('factory.yaml'), info('agents/a.md')]);
-    expect(groupOf(groups, 'agents/new.md')?.id).toBe('agents');
-    expect(groupOf(groups, 'factory.yaml')?.id).toBe('factory.yaml');
+  it('knows which folders are read only and which folder a file is in', () => {
+    expect(isReadOnlyPath('evals')).toBe(true);
+    expect(isReadOnlyPath('evals/smoke.yaml')).toBe(true);
+    expect(isReadOnlyPath('evalsx/smoke.yaml')).toBe(false);
+    expect(folderOf('agents/a.md')).toBe('agents');
+    expect(folderOf('factory.yaml')).toBe('');
   });
 });
 
