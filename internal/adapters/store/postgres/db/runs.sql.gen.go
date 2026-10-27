@@ -262,6 +262,103 @@ func (q *Queries) ItemRuns(ctx context.Context, arg ItemRunsParams) ([]AgentRun,
 	return items, nil
 }
 
+const listOrgRuns = `-- name: ListOrgRuns :many
+SELECT r.id, r.factory_id, r.item_id, r.station, r.agent, r.model, r.session_id, r.status, r.turns, r.input_tokens, r.output_tokens, r.cost_usd, r.error, r.started_at, r.ended_at, r.org_id, r.definition_version_id, w.number AS item_number, w.title AS item_title
+FROM agent_runs r
+JOIN work_items w ON w.id = r.item_id
+WHERE r.factory_id = ANY ($1::uuid[])
+  AND r.started_at >= $2 AND r.started_at < $3
+  AND ($4::text = '' OR r.status = $4::text)
+  AND ($5::text = ''
+       OR w.title ILIKE '%' || $5::text || '%' ESCAPE '\'
+       OR r.agent ILIKE '%' || $5::text || '%' ESCAPE '\'
+       OR r.model ILIKE '%' || $5::text || '%' ESCAPE '\'
+       OR ($6::bigint > 0 AND w.number = $6::bigint
+           AND ($7::uuid IS NULL OR r.factory_id = $7::uuid)))
+  AND (NOT $8::boolean
+       OR (r.started_at, r.id) < ($9::timestamptz, $10::uuid))
+ORDER BY r.started_at DESC, r.id DESC
+LIMIT $11::bigint
+`
+
+type ListOrgRunsParams struct {
+	Factories      []uuid.UUID
+	Since          time.Time
+	Until          time.Time
+	Status         string
+	Pattern        string
+	Number         int64
+	NumberOf       *uuid.UUID
+	Paged          bool
+	AfterStartedAt time.Time
+	AfterID        uuid.UUID
+	MaxRuns        int64
+}
+
+type ListOrgRunsRow struct {
+	AgentRun   AgentRun
+	ItemNumber int64
+	ItemTitle  string
+}
+
+// The organization's run list: the runs of the factories that started in [since, until), newest
+// first, after the cursor (after_started_at, after_id) when paged. agent_runs_factory_started_idx
+// serves the range per factory; status and the pattern (already escaped, with \ as the escape
+// character, matched against the item's title, the agent and the model, or the item's number,
+// of number_of's factory when set)
+// filter within it. Row-level security scopes it to the organization.
+func (q *Queries) ListOrgRuns(ctx context.Context, arg ListOrgRunsParams) ([]ListOrgRunsRow, error) {
+	rows, err := q.db.Query(ctx, listOrgRuns,
+		arg.Factories,
+		arg.Since,
+		arg.Until,
+		arg.Status,
+		arg.Pattern,
+		arg.Number,
+		arg.NumberOf,
+		arg.Paged,
+		arg.AfterStartedAt,
+		arg.AfterID,
+		arg.MaxRuns,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrgRunsRow
+	for rows.Next() {
+		var i ListOrgRunsRow
+		if err := rows.Scan(
+			&i.AgentRun.ID,
+			&i.AgentRun.FactoryID,
+			&i.AgentRun.ItemID,
+			&i.AgentRun.Station,
+			&i.AgentRun.Agent,
+			&i.AgentRun.Model,
+			&i.AgentRun.SessionID,
+			&i.AgentRun.Status,
+			&i.AgentRun.Turns,
+			&i.AgentRun.InputTokens,
+			&i.AgentRun.OutputTokens,
+			&i.AgentRun.CostUsd,
+			&i.AgentRun.Error,
+			&i.AgentRun.StartedAt,
+			&i.AgentRun.EndedAt,
+			&i.AgentRun.OrgID,
+			&i.AgentRun.DefinitionVersionID,
+			&i.ItemNumber,
+			&i.ItemTitle,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockLostRuns = `-- name: LockLostRuns :many
 WITH lost AS (
   SELECT r.id, coalesce((
@@ -306,6 +403,64 @@ func (q *Queries) LockLostRuns(ctx context.Context, arg LockLostRunsParams) ([]u
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const orgRunsSummary = `-- name: OrgRunsSummary :many
+SELECT factory_id,
+       count(*)                                                  AS total,
+       count(*) FILTER (WHERE status = 'running')                AS running,
+       count(*) FILTER (WHERE status = 'failed')                 AS failed,
+       count(*) FILTER (WHERE status IN ('succeeded', 'cancelled')) AS finished,
+       coalesce(sum(cost_usd), 0)::float8                        AS spend_usd
+FROM agent_runs
+WHERE factory_id = ANY ($1::uuid[])
+  AND started_at >= $2 AND started_at < $3
+GROUP BY factory_id
+ORDER BY factory_id
+`
+
+type OrgRunsSummaryParams struct {
+	Factories []uuid.UUID
+	Since     time.Time
+	Until     time.Time
+}
+
+type OrgRunsSummaryRow struct {
+	FactoryID uuid.UUID
+	Total     int64
+	Running   int64
+	Failed    int64
+	Finished  int64
+	SpendUsd  float64
+}
+
+// Each factory's runs that started in [since, until), whatever their status, for the run list's
+// summary; agent_runs_factory_started_idx serves the range. Factories without a run have no row.
+func (q *Queries) OrgRunsSummary(ctx context.Context, arg OrgRunsSummaryParams) ([]OrgRunsSummaryRow, error) {
+	rows, err := q.db.Query(ctx, orgRunsSummary, arg.Factories, arg.Since, arg.Until)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrgRunsSummaryRow
+	for rows.Next() {
+		var i OrgRunsSummaryRow
+		if err := rows.Scan(
+			&i.FactoryID,
+			&i.Total,
+			&i.Running,
+			&i.Failed,
+			&i.Finished,
+			&i.SpendUsd,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
