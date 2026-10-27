@@ -10,6 +10,7 @@ import type {
   AndonState,
   AuditEntry,
   ClassOfService,
+  EvalCaseEntry,
   Factory,
   GateTally,
   ItemEvent,
@@ -2135,3 +2136,78 @@ function fitWeeklySpend(state: MockState, names: string[], now: number, target: 
   const last = week[week.length - 1];
   if (last) last.cost_usd = (cents(last.cost_usd) + cents(target) - sum) / 100;
 }
+
+/** The Software factory's current version in the evals picture (v21). */
+export const softwareEvalVersion = 21;
+
+/**
+ * The five cases of the Jonah evals picture, newest try last in the row: 3 of 5 cases passed every try
+ * and 13 of 15 tries passed. The cost is what the latest run paid for each case.
+ */
+export const softwareEvalCases: EvalCaseEntry[] = [
+  {
+    name: 'architect-frontend-lane',
+    description: 'A request about the sidebar gets the frontend lane',
+    agent: 'architect',
+    tries: 3,
+    checked_by: { kind: 'contract' },
+    last_tries: [
+      { eval_run_id: 'run-9', try: 3, state: 'pass', cost_usd: 0.1 },
+      { eval_run_id: 'run-9', try: 2, state: 'pass', cost_usd: 0.1 },
+      { eval_run_id: 'run-9', try: 1, state: 'pass', cost_usd: 0.1 },
+    ],
+    cost_usd: 0.3,
+  },
+  {
+    name: 'architect-splits-oversized-request',
+    description: 'A 900-line request becomes an assembly of parts',
+    agent: 'architect',
+    tries: 3,
+    checked_by: { kind: 'judge', judge: 'spec-criteria-testable', title: 'Spec criteria testable' },
+    last_tries: [
+      { eval_run_id: 'run-9', try: 3, state: 'pass', cost_usd: 0.2 },
+      { eval_run_id: 'run-9', try: 2, state: 'fail', cost_usd: 0.2 },
+      { eval_run_id: 'run-9', try: 1, state: 'pass', cost_usd: 0.3 },
+    ],
+    cost_usd: 0.7,
+  },
+  {
+    name: 'backend-adds-migration-never-edits',
+    description: 'A schema change adds a migration and leaves old ones alone',
+    agent: 'backend-engineer',
+    tries: 3,
+    checked_by: { kind: 'reference_patch', path: 'evals/patches/migration.patch' },
+    last_tries: [
+      { eval_run_id: 'run-9', try: 3, state: 'pass', cost_usd: 0.3 },
+      { eval_run_id: 'run-9', try: 2, state: 'pass', cost_usd: 0.3 },
+      { eval_run_id: 'run-9', try: 1, state: 'pass', cost_usd: 0.2 },
+    ],
+    cost_usd: 0.8,
+  },
+  {
+    name: 'reviewer-approves-clean-change',
+    description: 'A change with full evidence is approved first time',
+    agent: 'reviewer',
+    tries: 3,
+    checked_by: { kind: 'contract' },
+    last_tries: [
+      { eval_run_id: 'run-9', try: 3, state: 'pass', cost_usd: 0.08 },
+      { eval_run_id: 'run-9', try: 2, state: 'pass', cost_usd: 0.08 },
+      { eval_run_id: 'run-9', try: 1, state: 'pass', cost_usd: 0.09 },
+    ],
+    cost_usd: 0.25,
+  },
+  {
+    name: 'reviewer-rejects-unevidenced-criterion',
+    description: 'A criterion without evidence is sent back with a clear reason',
+    agent: 'reviewer',
+    tries: 3,
+    checked_by: { kind: 'judge', judge: 'review-reason-actionable', title: 'Review reason actionable' },
+    last_tries: [
+      { eval_run_id: 'run-9', try: 3, state: 'fail', cost_usd: 0.12 },
+      { eval_run_id: 'run-9', try: 2, state: 'pass', cost_usd: 0.11 },
+      { eval_run_id: 'run-9', try: 1, state: 'pass', cost_usd: 0.12 },
+    ],
+    cost_usd: 0.35,
+  },
+];

@@ -35,7 +35,8 @@ export type FactoryPath =
   | '/o/$org/f/$factory/items'
   | '/o/$org/f/$factory/agents'
   | '/o/$org/f/$factory/definition'
-  | '/o/$org/f/$factory/settings';
+  | '/o/$org/f/$factory/settings'
+  | '/o/$org/f/$factory/jonah/evals';
 /** Paths of the organization's screens; their only param is its slug. */
 export type OrgPath =
   | '/o/$org'
@@ -103,7 +104,7 @@ export const factoryScreens: readonly FactoryScreen[] = [
     available: true,
     filters: '/o/$org/connections',
   },
-  // The organization's Knowledge, filtered to the factory (spec 4 §10). Later: /jonah (phase 5).
+  // The organization's Knowledge, filtered to the factory (spec 4 §10).
   {
     id: 'knowledge',
     label: 'Knowledge',
@@ -112,7 +113,15 @@ export const factoryScreens: readonly FactoryScreen[] = [
     available: true,
     filters: '/o/$org/knowledge',
   },
-  { id: 'jonah', label: 'Jonah', icon: SearchCheck, group: 'learn', available: false },
+  // Jonah's Evals (ADR 0025); its other tabs (Overview, Proposals, Judges, Bake-offs) are not built yet.
+  {
+    id: 'jonah',
+    label: 'Jonah',
+    icon: SearchCheck,
+    group: 'learn',
+    available: true,
+    to: '/o/$org/f/$factory/jonah/evals',
+  },
 ];
 
 export const factoryGroups = [
@@ -209,7 +218,7 @@ export const sidebarFactoryPages: readonly Listed<FactoryPath>[] = [
   { id: 'items', label: 'Items', available: true, to: '/o/$org/f/$factory/items' },
   { id: 'agents', label: 'Agents', available: true, to: '/o/$org/f/$factory/agents' },
   { id: 'intake', label: 'Intake', available: false },
-  { id: 'jonah', label: 'Jonah', available: false },
+  { id: 'jonah', label: 'Jonah', available: true, to: '/o/$org/f/$factory/jonah/evals' },
   { id: 'definition', label: 'Definition', available: true, to: '/o/$org/f/$factory/definition' },
   { id: 'settings', label: 'Settings', available: true, to: '/o/$org/f/$factory/settings' },
 ];

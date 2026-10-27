@@ -59,6 +59,7 @@ import type {
 import { authSettings, createMockAuth } from './auth.ts';
 import { createConnections } from './connections.ts';
 import { createDefinitions } from './definitions.ts';
+import { createEvals } from './evals.ts';
 import { parseFault, sleep, takeFault } from './faults.ts';
 import {
   acmeOrg,
@@ -214,6 +215,11 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       }
     },
     acme: acmeOrg,
+  });
+
+  const evals = createEvals({
+    clock,
+    factory: (org, key) => findFactory(key, org),
   });
 
   const ref = (it: MockItem) => `${it.factory}#${it.number}`;
@@ -1285,6 +1291,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       apiKeys.reset(clock());
       connections.reset(clock());
       knowledge.reset(clock());
+      evals.reset();
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
       const cookie = auth.reset(authSettings(body.auth));
       if (cookie) res.setHeader('Set-Cookie', cookie);
@@ -1375,6 +1382,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await apiKeys.handle(forCaller(req, org), rest, method, req, res, () => readBody(req))) return;
     if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
+    if (await evals.handle(org, rest, method, res, () => readBody(req))) return;
 
     if (rest === '' && method === 'GET') return json(res, 200, forCaller(req, withCount(org)));
     if (rest === '' && method === 'DELETE') {

@@ -41,6 +41,7 @@ import { Route as OOrgFFactoryDefinitionIndexRouteImport } from './routes/o.$org
 import { Route as OOrgFFactoryDefinitionSectionRouteImport } from './routes/o.$org.f.$factory.definition.$section'
 import { Route as OOrgFFactoryItemsIndexRouteImport } from './routes/o.$org.f.$factory.items.index'
 import { Route as OOrgFFactoryItemsRefRouteImport } from './routes/o.$org.f.$factory.items.$ref'
+import { Route as OOrgFFactoryJonahEvalsRouteImport } from './routes/o.$org.f.$factory.jonah.evals'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -204,6 +205,11 @@ const OOrgFFactoryItemsRefRoute = OOrgFFactoryItemsRefRouteImport.update({
   path: '/items/$ref',
   getParentRoute: () => OOrgFFactoryRoute,
 } as any)
+const OOrgFFactoryJonahEvalsRoute = OOrgFFactoryJonahEvalsRouteImport.update({
+  id: '/jonah/evals',
+  path: '/jonah/evals',
+  getParentRoute: () => OOrgFFactoryRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -234,6 +240,7 @@ export interface FileRoutesByFullPath {
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
   '/o/$org/f/$factory/items/$ref': typeof OOrgFFactoryItemsRefRoute
+  '/o/$org/f/$factory/jonah/evals': typeof OOrgFFactoryJonahEvalsRoute
   '/o/$org/f/$factory/agents/': typeof OOrgFFactoryAgentsIndexRoute
   '/o/$org/f/$factory/definition/': typeof OOrgFFactoryDefinitionIndexRoute
   '/o/$org/f/$factory/items/': typeof OOrgFFactoryItemsIndexRoute
@@ -264,6 +271,7 @@ export interface FileRoutesByTo {
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
   '/o/$org/f/$factory/items/$ref': typeof OOrgFFactoryItemsRefRoute
+  '/o/$org/f/$factory/jonah/evals': typeof OOrgFFactoryJonahEvalsRoute
   '/o/$org/f/$factory/agents': typeof OOrgFFactoryAgentsIndexRoute
   '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionIndexRoute
   '/o/$org/f/$factory/items': typeof OOrgFFactoryItemsIndexRoute
@@ -299,6 +307,7 @@ export interface FileRoutesById {
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
   '/o/$org/f/$factory/items/$ref': typeof OOrgFFactoryItemsRefRoute
+  '/o/$org/f/$factory/jonah/evals': typeof OOrgFFactoryJonahEvalsRoute
   '/o/$org/f/$factory/agents/': typeof OOrgFFactoryAgentsIndexRoute
   '/o/$org/f/$factory/definition/': typeof OOrgFFactoryDefinitionIndexRoute
   '/o/$org/f/$factory/items/': typeof OOrgFFactoryItemsIndexRoute
@@ -334,6 +343,7 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
     | '/o/$org/f/$factory/items/$ref'
+    | '/o/$org/f/$factory/jonah/evals'
     | '/o/$org/f/$factory/agents/'
     | '/o/$org/f/$factory/definition/'
     | '/o/$org/f/$factory/items/'
@@ -364,6 +374,7 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
     | '/o/$org/f/$factory/items/$ref'
+    | '/o/$org/f/$factory/jonah/evals'
     | '/o/$org/f/$factory/agents'
     | '/o/$org/f/$factory/definition'
     | '/o/$org/f/$factory/items'
@@ -398,6 +409,7 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
     | '/o/$org/f/$factory/items/$ref'
+    | '/o/$org/f/$factory/jonah/evals'
     | '/o/$org/f/$factory/agents/'
     | '/o/$org/f/$factory/definition/'
     | '/o/$org/f/$factory/items/'
@@ -639,6 +651,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OOrgFFactoryItemsRefRouteImport
       parentRoute: typeof OOrgFFactoryRoute
     }
+    '/o/$org/f/$factory/jonah/evals': {
+      id: '/o/$org/f/$factory/jonah/evals'
+      path: '/jonah/evals'
+      fullPath: '/o/$org/f/$factory/jonah/evals'
+      preLoaderRoute: typeof OOrgFFactoryJonahEvalsRouteImport
+      parentRoute: typeof OOrgFFactoryRoute
+    }
   }
 }
 
@@ -698,6 +717,7 @@ interface OOrgFFactoryRouteChildren {
   OOrgFFactoryIndexRoute: typeof OOrgFFactoryIndexRoute
   OOrgFFactoryAgentsAgentRoute: typeof OOrgFFactoryAgentsAgentRoute
   OOrgFFactoryItemsRefRoute: typeof OOrgFFactoryItemsRefRoute
+  OOrgFFactoryJonahEvalsRoute: typeof OOrgFFactoryJonahEvalsRoute
   OOrgFFactoryAgentsIndexRoute: typeof OOrgFFactoryAgentsIndexRoute
   OOrgFFactoryItemsIndexRoute: typeof OOrgFFactoryItemsIndexRoute
 }
@@ -709,6 +729,7 @@ const OOrgFFactoryRouteChildren: OOrgFFactoryRouteChildren = {
   OOrgFFactoryIndexRoute: OOrgFFactoryIndexRoute,
   OOrgFFactoryAgentsAgentRoute: OOrgFFactoryAgentsAgentRoute,
   OOrgFFactoryItemsRefRoute: OOrgFFactoryItemsRefRoute,
+  OOrgFFactoryJonahEvalsRoute: OOrgFFactoryJonahEvalsRoute,
   OOrgFFactoryAgentsIndexRoute: OOrgFFactoryAgentsIndexRoute,
   OOrgFFactoryItemsIndexRoute: OOrgFFactoryItemsIndexRoute,
 }

@@ -218,13 +218,24 @@ describe('the sidebar', () => {
     expect(await screen.findByText('Not available yet')).toBeTruthy();
   });
 
-  it('keeps Intake and Jonah disabled in the open factory', async () => {
+  it('keeps Intake disabled and lists Jonah as a link in the open factory', async () => {
     renderSidebar({ at: '/o/acme/f/goal' });
     const sidebar = await nav();
 
-    for (const name of ['Intake', 'Jonah']) {
-      expect(within(sidebar).getByRole('button', { name }).getAttribute('aria-disabled')).toBe('true');
-    }
+    expect(within(sidebar).getByRole('button', { name: 'Intake' }).getAttribute('aria-disabled')).toBe('true');
+    expect(within(sidebar).getByRole('link', { name: 'Jonah' }).getAttribute('href')).toBe(
+      '/o/acme/f/goal/jonah/evals',
+    );
+  });
+
+  it('keeps Jonah current on its Evals page', async () => {
+    renderSidebar({ at: '/o/acme/f/goal/jonah/evals' });
+
+    expect(
+      within(await nav())
+        .getByRole('link', { name: 'Jonah' })
+        .getAttribute('aria-current'),
+    ).toBe('page');
   });
 
   it('lists Agents as a link in the open factory, current on its index and on each agent', async () => {
