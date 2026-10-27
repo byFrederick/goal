@@ -34,8 +34,11 @@ func (k *Knowledge) RecordUse(ctx context.Context, u domain.KnowledgeUse) error 
 		kind string
 		id   string
 	}{
-		{&p.FactoryID, "factory", string(u.Factory)}, {&p.ItemID, "item", string(u.Item)}, {&p.RunID, "run", string(u.Run)},
-		{&p.SourceID, "knowledge source", string(u.Source)}, {&p.DocumentID, "knowledge document", string(u.Document)},
+		{&p.FactoryID, "factory", string(u.Factory)},
+		{&p.ItemID, "item", string(u.Item)},
+		{&p.RunID, "run", string(u.Run)},
+		{&p.SourceID, "knowledge source", string(u.Source)},
+		{&p.DocumentID, "knowledge document", string(u.Document)},
 	} {
 		parsed, err := parseID(id.kind, id.id)
 		if err != nil {

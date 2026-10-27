@@ -69,8 +69,10 @@ func TestKnowledgeUse_Check(t *testing.T) {
 		"an unknown kind": {Factory: "f", Item: "i", Run: "r", Source: "s", Document: "d", Kind: "browse"},
 		"no run":          {Factory: "f", Item: "i", Source: "s", Document: "d", Kind: KnowledgeRead},
 		"no document":     {Factory: "f", Item: "i", Run: "r", Source: "s", Kind: KnowledgeRead},
-		"too many chunks": {Factory: "f", Item: "i", Run: "r", Source: "s", Document: "d", Kind: KnowledgeSearched,
-			Chunks: make([]int64, MaxUseChunks+1)},
+		"too many chunks": {
+			Factory: "f", Item: "i", Run: "r", Source: "s", Document: "d", Kind: KnowledgeSearched,
+			Chunks: make([]int64, MaxUseChunks+1),
+		},
 	} {
 		if err := u.Check(); !errors.Is(err, ErrInvalid) {
 			t.Errorf("Check of a use with %s = %v, want ErrInvalid", what, err)

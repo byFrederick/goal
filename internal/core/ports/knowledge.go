@@ -97,7 +97,7 @@ type Knowledge interface {
 	// earlier one's verdict, note, item and time. Its rules are KnowledgeVerdict.Check's
 	// (domain.ErrInvalid); ErrNotFound for an unknown document.
 	GiveVerdict(ctx context.Context, v domain.KnowledgeVerdict) (domain.KnowledgeVerdict, error)
-	// SourceUsage is the use of the source name's documents over the last days days (1 to
+	// SourceUsage is the use of the source name's documents over a window of the last days (1 to
 	// domain.MaxUsageDays, else domain.ErrInvalid): per document with a use or a verdict in the
 	// window, the distinct runs with a use and the verdicts given, at most
 	// domain.MaxUsageDocuments, by runs descending then id. ErrNotFound for an unknown source.

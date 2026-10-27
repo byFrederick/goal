@@ -94,8 +94,8 @@ func (f *fixture) twoDocs(org domain.OrgID) (src domain.KnowledgeSource, a, b do
 	f.t.Helper()
 
 	src = f.synced(org, runbooks)
-	f.put(org, src.ID, docA, "v1", []string{"alpha"}, nil)
-	f.put(org, src.ID, docB, "v1", []string{"beta"}, nil)
+	f.put(org, src.ID, docA, "v1", []string{"apple"}, nil)
+	f.put(org, src.ID, docB, "v1", []string{"banana"}, nil)
 
 	if org == f.org {
 		return src, f.docNamed(runbooks, docA), f.docNamed(runbooks, docB)
