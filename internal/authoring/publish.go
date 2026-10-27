@@ -34,7 +34,9 @@ type PublishRequest struct {
 // moved since Revision (ErrDraftConflict), a current version other than ExpectedCurrent
 // (ErrBaseMoved), a draft with error problems (*InvalidError), a name another factory took
 // (ErrNameTaken) and open items at removed stations that no move maps
-// (*ports.ItemsAtRemovedStationError). Items at removed stations move in the same transaction.
+// (*ports.ItemsAtRemovedStationError) and, with an eval gate, a draft whose eval cases have not
+// passed on its content (*EvalGateError, evalgate.go). Items at removed stations move in the same
+// transaction.
 func (s *Service) Publish(ctx context.Context, f domain.FactoryID, r PublishRequest) (domain.DefinitionVersion, error) {
 	by, err := actor(ctx)
 	if err != nil {
@@ -57,6 +59,10 @@ func (s *Service) Publish(ctx context.Context, f domain.FactoryID, r PublishRequ
 
 	removed, moves, err := s.lineChange(ctx, rec, c.factory, r.StationMoves)
 	if err != nil {
+		return domain.DefinitionVersion{}, err
+	}
+
+	if err := s.evalGate(ctx, f, d, by); err != nil {
 		return domain.DefinitionVersion{}, err
 	}
 

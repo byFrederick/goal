@@ -1,6 +1,7 @@
 package config
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -288,4 +289,67 @@ func TestCheck_EvalCases(t *testing.T) {
 			code:  codeYAMLInvalid, file: caseFile, noLine: true,
 		},
 	})
+}
+
+// caseAgent is the agent of baseFactory that validCase runs.
+const caseAgent = "worker"
+
+func TestEvalCases_ParsesEveryCase(t *testing.T) {
+	t.Parallel()
+
+	contract := replaced(validCase, "judge: answer-clear", "contract: true", "tries: 3", "tries: 1",
+		"    body: The CLI prints its version.\n", "    body: The CLI prints its version.\n    type: feature\n    lane: backend\n    ref: abc123\n    outputs:\n      spec: {title: Version}\n")
+	patch := replaced(validCase, "judge: answer-clear", "referencePatch: ./"+patchFile)
+
+	files := checkTree(baseFactory, map[string]string{
+		judgeFile:                   validJudge,
+		caseFile:                    validCase,
+		"evals/cases/contract.yaml": contract,
+		"evals/cases/by-patch.yml":  patch,
+		"evals/cases/.hidden.yaml":  validCase,
+		patchFile:                   "--- a/x\n+++ b/x\n",
+	})
+
+	got, err := EvalCases(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []domain.EvalCaseSpec{
+		{
+			Name: "by-patch", SHA256: domain.HashBlob([]byte(patch)), Agent: caseAgent, Description: "A short request gets a clear answer",
+			Input: domain.EvalInput{Title: "Add a version flag", Body: "The CLI prints its version."}, Tries: 3, ReferencePatch: "./" + patchFile,
+		},
+		{
+			Name: "clear-answer", SHA256: domain.HashBlob([]byte(validCase)), Agent: caseAgent, Description: "A short request gets a clear answer",
+			Input: domain.EvalInput{Title: "Add a version flag", Body: "The CLI prints its version."}, Tries: 3, Judge: "answer-clear",
+		},
+		{
+			Name: "contract", SHA256: domain.HashBlob([]byte(contract)), Agent: caseAgent, Description: "A short request gets a clear answer",
+			Input: domain.EvalInput{
+				Title: "Add a version flag", Body: "The CLI prints its version.", Type: "feature", Lane: laneBackend, Ref: "abc123",
+				Outputs: map[string]any{"spec": map[string]any{"title": "Version"}},
+			},
+			Tries: 1, Contract: true,
+		},
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("EvalCases =\n%+v\nwant\n%+v", got, want)
+	}
+
+	for _, c := range got {
+		if err := c.Check(); err != nil {
+			t.Errorf("case %s: %v", c.Name, err)
+		}
+	}
+
+	none, err := EvalCases(checkTree(baseFactory, nil))
+	if err != nil || len(none) != 0 {
+		t.Errorf("EvalCases of a definition without cases = %v, %v; want none", none, err)
+	}
+
+	if _, err := EvalCases(checkTree(baseFactory, map[string]string{caseFile: "spec: [unclosed"})); err == nil {
+		t.Error("EvalCases of a case that does not parse: no error")
+	}
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
 	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/egress"
+	"github.com/byFrederick/goal/internal/jonah"
 	"github.com/byFrederick/goal/internal/knowledge"
 )
 
@@ -150,6 +151,11 @@ type harness struct {
 	kb        *porttest.Knowledge
 	kbObjects *porttest.ObjectStore
 	uploads   *knowledge.Uploads
+	// evals are the factories' eval runs, evalJudges the versions' judges as tests set them, and
+	// evalLoop the jonah eval loop that starts, prices and cancels runs over them.
+	evals      *porttest.Evals
+	evalJudges *porttest.Judges
+	evalLoop   *jonah.Evals
 }
 
 // acme's one prompt and its path.
@@ -351,8 +357,9 @@ func jsonLog(w io.Writer) *slog.Logger {
 	return slog.New(slog.NewJSONHandler(w, nil))
 }
 
-// newHarnessLogged is newHarnessWith with goald's log written to logs (JSON) when it is set.
-func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
+// newHarnessLogged is newHarnessWith with goald's log written to logs (JSON) when it is set, and
+// the API's collaborators changed by each of opts.
+func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*harness, *api.Deps)) *harness {
 	t.Helper()
 
 	tenancy := newTenancy(t)
@@ -466,7 +473,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
 		deps.Auth = api.AuthConfig{Mode: api.AuthSession, EmailCodes: !in.noEmailCodes, Google: in.google}
 	}
 
-	handler, err := api.New(deps)
+	handler, err := api.New(h.withEvals(deps, tenancy, opts))
 	if err != nil {
 		t.Fatal(err)
 	}
