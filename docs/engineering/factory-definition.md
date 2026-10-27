@@ -250,3 +250,18 @@ Each problem is located at its key under `spec.board.triggers` in `factory.yaml`
 | A `{{` in `create.title` or `create.brief` is unclosed, empty or not a dotted field name | `placeholder-invalid` |
 
 The time zone check reads the host's zoneinfo, so a process without tzdata refuses every zone but `UTC`.
+
+## Organization policy
+
+The organization policy ([ADR 0024](../adr/0024-organization-policy.md)) is a ceiling over every factory definition. A definition or an agent can choose less, never more. Goal applies it in two places.
+
+**When a version is validated or published.** Check `policy` (`config.ModelProblems`) compares `spec.runtime.model` and each agent's `model` with the policy's allowed models. A model outside them is an error, code `model-not-allowed`, located at that key; its message names the agent (or `runtime`) and the model. A definition that names no model passes. A definition that published before can fail its next publish once the policy narrows.
+
+**When a run starts.** The engine reads the policy once per claim, before the first run:
+
+- The run's model is the agent's `model`, else `spec.runtime.model`, else the policy's default model. An organization that never saved a policy has the first of `GOAL_MODELS` as its default. The run records that model.
+- When that model is no longer allowed, no run starts and no box is created. The item waits for a person at its station (`waiting_human`), and the reason names the model.
+- The policy's denied commands are added to the agent's `tools.deny` rules in the run bundle, whatever the version says. A denied command fails its tool call and shows on the item's timeline as a denied tool call (`tool_denied`).
+- The policy's box time limit caps the run: each run's timeout is the smaller of goald's task timeout and the limit, and the box lives no longer than the limit.
+
+The engine signs the model and the denied commands into the run's task token, so a policy change never reaches a run already in its box. A run keeps the policy it started with.
