@@ -26,6 +26,7 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
 	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/egress"
+	"github.com/byFrederick/goal/internal/jonah"
 	"github.com/byFrederick/goal/internal/knowledge"
 )
 
@@ -148,6 +149,10 @@ type harness struct {
 	kb        *porttest.Knowledge
 	kbObjects *porttest.ObjectStore
 	uploads   *knowledge.Uploads
+	// judges are the versions' judges as tests set them, judgeScores their scores; tries are
+	// queued by a jonah loop over them and the store's finished runs.
+	judges      *porttest.Judges
+	judgeScores *porttest.JudgeScores
 }
 
 // acme's one prompt and its path.
@@ -349,8 +354,9 @@ func jsonLog(w io.Writer) *slog.Logger {
 	return slog.New(slog.NewJSONHandler(w, nil))
 }
 
-// newHarnessLogged is newHarnessWith with goald's log written to logs (JSON) when it is set.
-func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
+// newHarnessLogged is newHarnessWith with goald's log written to logs (JSON) when it is set, and
+// the API's collaborators changed by each of opts.
+func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*api.Deps)) *harness {
 	t.Helper()
 
 	tenancy := newTenancy(t)
@@ -461,6 +467,19 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
 	if in != nil {
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity
 		deps.Auth = api.AuthConfig{Mode: api.AuthSession, EmailCodes: !in.noEmailCodes, Google: in.google}
+	}
+
+	h.judges, h.judgeScores = porttest.NewJudges(), porttest.NewJudgeScores(h.store)
+	deps.Judges = &api.JudgeDeps{
+		Judges: h.judges, Scores: h.judgeScores,
+		Tries: jonah.New(jonah.Deps{
+			Orgs: tenancy, Runs: h.store, Finished: porttest.NewFinishedRuns(h.store), Judges: h.judges, Scores: h.judgeScores,
+			Runner: porttest.NewJudgeRunner(nil), Clock: h.clock,
+		}, jonah.Config{}),
+	}
+
+	for _, opt := range opts {
+		opt(&deps)
 	}
 
 	handler, err := api.New(deps)

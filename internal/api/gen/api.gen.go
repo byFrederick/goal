@@ -612,6 +612,51 @@ func (e ItemWaitingKind) Valid() bool {
 	}
 }
 
+// Defines values for JudgeRunsOnSees.
+const (
+	Events      JudgeRunsOnSees = "events"
+	PullRequest JudgeRunsOnSees = "pull_request"
+	Spec        JudgeRunsOnSees = "spec"
+)
+
+// Valid indicates whether the value is a known member of the JudgeRunsOnSees enum.
+func (e JudgeRunsOnSees) Valid() bool {
+	switch e {
+	case Events:
+		return true
+	case PullRequest:
+		return true
+	case Spec:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for JudgeScoreState.
+const (
+	JudgeScoreStateError   JudgeScoreState = "error"
+	JudgeScoreStateQueued  JudgeScoreState = "queued"
+	JudgeScoreStateRunning JudgeScoreState = "running"
+	JudgeScoreStateScored  JudgeScoreState = "scored"
+)
+
+// Valid indicates whether the value is a known member of the JudgeScoreState enum.
+func (e JudgeScoreState) Valid() bool {
+	switch e {
+	case JudgeScoreStateError:
+		return true
+	case JudgeScoreStateQueued:
+		return true
+	case JudgeScoreStateRunning:
+		return true
+	case JudgeScoreStateScored:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for KnowledgeDocumentStatus.
 const (
 	KnowledgeDocumentStatusFailed  KnowledgeDocumentStatus = "failed"
@@ -1907,6 +1952,36 @@ type ConstraintSummary struct {
 	Station string   `json:"station"`
 }
 
+// CreateJudgeRequest defines model for CreateJudgeRequest.
+type CreateJudgeRequest struct {
+	// Agents The agents whose runs it scores; empty or absent, every agent
+	Agents *[]string `json:"agents,omitempty"`
+
+	// Criterion What it checks
+	Criterion string `json:"criterion"`
+	Enabled   *bool  `json:"enabled,omitempty"`
+
+	// ExpectedCurrentVersionId The version the caller saw running; the publish is refused (draft-base-moved) when another one runs
+	ExpectedCurrentVersionId *string `json:"expected_current_version_id,omitempty"`
+
+	// Model The judge run's model; absent, the factory's runtime.model
+	Model    *string        `json:"model,omitempty"`
+	Outcomes []JudgeOutcome `json:"outcomes"`
+
+	// PassMark The lowest score that passes
+	PassMark float64 `json:"pass_mark"`
+
+	// Rubric The file's Markdown body
+	Rubric string `json:"rubric"`
+
+	// Sample The share of the agents' finished runs it scores
+	Sample float64 `json:"sample"`
+
+	// Slug The judge's file name without .md: 3 to 40 lowercase letters, digits and hyphens, starting with a letter
+	Slug  string `json:"slug"`
+	Title string `json:"title"`
+}
+
 // CreatedApiKey defines model for CreatedApiKey.
 type CreatedApiKey struct {
 	// Key An organization's API key, never its secret
@@ -2737,6 +2812,176 @@ type ItemsAtRemovedStations struct {
 
 	// Unmapped Open items no station move maps
 	Unmapped []ItemAt `json:"unmapped"`
+}
+
+// Judge defines model for Judge.
+type Judge struct {
+	// Agents Empty means every agent
+	Agents    []string `json:"agents"`
+	Criterion string   `json:"criterion"`
+	Enabled   bool     `json:"enabled"`
+
+	// Model Absent: the factory's runtime.model
+	Model    *string        `json:"model,omitempty"`
+	Outcomes []JudgeOutcome `json:"outcomes"`
+	PassMark float64        `json:"pass_mark"`
+
+	// Recent The newest production scores, newest first
+	Recent []JudgeScore `json:"recent"`
+	Rubric string       `json:"rubric"`
+
+	// RunsOn Where the judge's runs run; a judge inherits the factory's defaults
+	RunsOn JudgeRunsOn `json:"runs_on"`
+	Sample float64     `json:"sample"`
+	Slug   string      `json:"slug"`
+
+	// Summary A judge's production scores over the last 30 days; tries never count
+	Summary JudgeSummary `json:"summary"`
+	Title   string       `json:"title"`
+
+	// Version The number of the version the judge is read from
+	Version int `json:"version"`
+}
+
+// JudgeDay defines model for JudgeDay.
+type JudgeDay struct {
+	// Day The UTC day
+	Day      openapi_types.Date `json:"day"`
+	PassRate float64            `json:"pass_rate"`
+	Passed   int                `json:"passed"`
+	Scored   int                `json:"scored"`
+}
+
+// JudgeList defines model for JudgeList.
+type JudgeList struct {
+	// JudgeCostUsd What the factory's judge runs cost over the last 30 days
+	JudgeCostUsd float64 `json:"judge_cost_usd"`
+
+	// Judges By slug
+	Judges []JudgeListEntry `json:"judges"`
+
+	// Version The number of the version the judges are read from; null before the first publish
+	Version *int `json:"version"`
+}
+
+// JudgeListEntry defines model for JudgeListEntry.
+type JudgeListEntry struct {
+	// Agents Empty means every agent
+	Agents    []string `json:"agents"`
+	Criterion string   `json:"criterion"`
+	Enabled   bool     `json:"enabled"`
+	PassMark  float64  `json:"pass_mark"`
+	Sample    float64  `json:"sample"`
+	Slug      string   `json:"slug"`
+
+	// Summary A judge's production scores over the last 30 days; tries never count
+	Summary JudgeSummary `json:"summary"`
+	Title   string       `json:"title"`
+}
+
+// JudgeOutcome defines model for JudgeOutcome.
+type JudgeOutcome struct {
+	Label   string  `json:"label"`
+	Meaning string  `json:"meaning"`
+	Score   float64 `json:"score"`
+}
+
+// JudgeRunsOn Where the judge's runs run; a judge inherits the factory's defaults
+type JudgeRunsOn struct {
+	// Connections The connections of the factory's current version, read only
+	Connections []string `json:"connections"`
+
+	// Inherited True while these are the factory's defaults
+	Inherited bool `json:"inherited"`
+
+	// Sees What a judge run reads of the run it scores
+	Sees []JudgeRunsOnSees `json:"sees"`
+
+	// Size The box: the factory's runtime.size, medium when it says none
+	Size string `json:"size"`
+}
+
+// JudgeRunsOnSees defines model for JudgeRunsOn.Sees.
+type JudgeRunsOnSees string
+
+// JudgeScore One production score of a judge; outcome, score and passed once it is scored
+type JudgeScore struct {
+	Id string `json:"id"`
+
+	// ItemRef <factory name>#<number>
+	ItemRef   string `json:"item_ref"`
+	ItemTitle string `json:"item_title"`
+
+	// Outcome The label of the outcome the judge gave
+	Outcome *string `json:"outcome,omitempty"`
+	Passed  *bool   `json:"passed,omitempty"`
+
+	// Reason The judge's one sentence
+	Reason   *string         `json:"reason,omitempty"`
+	Score    *float64        `json:"score,omitempty"`
+	ScoredAt *time.Time      `json:"scored_at,omitempty"`
+	State    JudgeScoreState `json:"state"`
+}
+
+// JudgeScoreState defines model for JudgeScoreState.
+type JudgeScoreState string
+
+// JudgeSummary A judge's production scores over the last 30 days; tries never count
+type JudgeSummary struct {
+	// CostUsd What its judge runs cost
+	CostUsd float64 `json:"cost_usd"`
+
+	// Days One point per UTC day with a scored run, oldest first
+	Days []JudgeDay `json:"days"`
+
+	// PassRate Passed over scored
+	PassRate float64 `json:"pass_rate"`
+	Passed   int     `json:"passed"`
+
+	// Scored The runs scored
+	Scored int `json:"scored"`
+}
+
+// JudgeTries defines model for JudgeTries.
+type JudgeTries struct {
+	Tries []JudgeTry `json:"tries"`
+}
+
+// JudgeTry defines model for JudgeTry.
+type JudgeTry struct {
+	Id string `json:"id"`
+
+	// ItemRef <factory name>#<number>
+	ItemRef   string          `json:"item_ref"`
+	ItemTitle string          `json:"item_title"`
+	State     JudgeScoreState `json:"state"`
+}
+
+// JudgeWrite A judge's file as evals.schema.json has its front matter, with the Markdown rubric that follows it. Validated when it is published, as every definition file is.
+type JudgeWrite struct {
+	// Agents The agents whose runs it scores; empty or absent, every agent
+	Agents *[]string `json:"agents,omitempty"`
+
+	// Criterion What it checks
+	Criterion string `json:"criterion"`
+	Enabled   *bool  `json:"enabled,omitempty"`
+
+	// ExpectedCurrentVersionId The version the caller saw running; the publish is refused (draft-base-moved) when another one runs
+	ExpectedCurrentVersionId *string `json:"expected_current_version_id,omitempty"`
+
+	// Model The judge run's model; absent, the factory's runtime.model
+	Model    *string        `json:"model,omitempty"`
+	Outcomes []JudgeOutcome `json:"outcomes"`
+
+	// PassMark The lowest score that passes
+	PassMark float64 `json:"pass_mark"`
+
+	// Rubric The file's Markdown body
+	Rubric string `json:"rubric"`
+
+	// Sample The share of the agents' finished runs it scores
+	Sample float64 `json:"sample"`
+	Title  string  `json:"title"`
 }
 
 // KnowledgeDocument defines model for KnowledgeDocument.
@@ -4345,6 +4590,9 @@ type IfNoneMatch = string
 // ItemRef defines model for ItemRef.
 type ItemRef = string
 
+// JudgeRef defines model for JudgeRef.
+type JudgeRef = string
+
 // KindRef defines model for KindRef.
 type KindRef = string
 
@@ -4732,6 +4980,12 @@ type ValidateDraftJSONRequestBody = ValidateDraftRequest
 
 // SubmitItemJSONRequestBody defines body for SubmitItem for application/json ContentType.
 type SubmitItemJSONRequestBody = NewItem
+
+// CreateJudgeJSONRequestBody defines body for CreateJudge for application/json ContentType.
+type CreateJudgeJSONRequestBody = CreateJudgeRequest
+
+// UpdateJudgeJSONRequestBody defines body for UpdateJudge for application/json ContentType.
+type UpdateJudgeJSONRequestBody = JudgeWrite
 
 // RestoreVersionJSONRequestBody defines body for RestoreVersion for application/json ContentType.
 type RestoreVersionJSONRequestBody = RestoreRequest
@@ -5658,6 +5912,63 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
 	SubmitItem(ctx context.Context, org OrgRef, factory FactoryRef, body SubmitItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListJudges The judges of the factory's current version, each with its last 30 days
+	//
+	// One entry per evals/judges/<slug>.md of the current version, by slug, each with its production scores of the last 30 days (runs scored, pass rate, cost and a daily pass-rate series by UTC day; tries never count). judge_cost_usd is what every judge run of the factory cost in those 30 days. Empty, with version null, before the first publish. 503 judges-unavailable when this goald does not serve judges.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/judges (the `ListJudges` operationId).
+	ListJudges(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateJudgeWithBody Add a judge and publish it as the factory's next version
+	//
+	// Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version); 503 judges-unavailable.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges (the `CreateJudge` operationId).
+	CreateJudgeWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateJudge Add a judge and publish it as the factory's next version
+	//
+	// Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version); 503 judges-unavailable.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges (the `CreateJudge` operationId).
+	CreateJudge(ctx context.Context, org OrgRef, factory FactoryRef, body CreateJudgeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetJudge One judge of the current version, its last 30 days, its recent scores and where it runs
+	//
+	// Everything in its file, its 30-day summary, its newest production scores (every state, newest first) and runs_on: the box and connections of the factory's defaults it inherits. 404 judge-not-found; 503 judges-unavailable.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `GetJudge` operationId).
+	GetJudge(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateJudgeWithBody Replace a judge's file and publish it as the factory's next version
+	//
+	// As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `UpdateJudge` operationId).
+	UpdateJudgeWithBody(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateJudge Replace a judge's file and publish it as the factory's next version
+	//
+	// As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `UpdateJudge` operationId).
+	UpdateJudge(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, body UpdateJudgeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TryJudge Queue the judge on the 10 newest finished runs of its agents
+	//
+	// Each try names the run's item and is scored like any other score, but never counts in the judge's 30-day figures. Tries cost model spend, so only those who may publish queue them. 404 judge-not-found; 503 judges-unavailable.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges/{judge}/try (the `TryJudge` operationId).
+	TryJudge(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetMetrics The factory's flow over a range of UTC days
 	//
@@ -7572,6 +7883,133 @@ func (c *Client) SubmitItemWithBody(ctx context.Context, org OrgRef, factory Fac
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
 func (c *Client) SubmitItem(ctx context.Context, org OrgRef, factory FactoryRef, body SubmitItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSubmitItemRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListJudges The judges of the factory's current version, each with its last 30 days
+//
+// One entry per evals/judges/<slug>.md of the current version, by slug, each with its production scores of the last 30 days (runs scored, pass rate, cost and a daily pass-rate series by UTC day; tries never count). judge_cost_usd is what every judge run of the factory cost in those 30 days. Empty, with version null, before the first publish. 503 judges-unavailable when this goald does not serve judges.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/judges (the `ListJudges` operationId).
+func (c *Client) ListJudges(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListJudgesRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateJudgeWithBody Add a judge and publish it as the factory's next version
+//
+// Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version); 503 judges-unavailable.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges (the `CreateJudge` operationId).
+func (c *Client) CreateJudgeWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateJudgeRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateJudge Add a judge and publish it as the factory's next version
+//
+// Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version); 503 judges-unavailable.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges (the `CreateJudge` operationId).
+func (c *Client) CreateJudge(ctx context.Context, org OrgRef, factory FactoryRef, body CreateJudgeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateJudgeRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetJudge One judge of the current version, its last 30 days, its recent scores and where it runs
+//
+// Everything in its file, its 30-day summary, its newest production scores (every state, newest first) and runs_on: the box and connections of the factory's defaults it inherits. 404 judge-not-found; 503 judges-unavailable.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `GetJudge` operationId).
+func (c *Client) GetJudge(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetJudgeRequest(c.Server, org, factory, judge)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateJudgeWithBody Replace a judge's file and publish it as the factory's next version
+//
+// As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `UpdateJudge` operationId).
+func (c *Client) UpdateJudgeWithBody(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateJudgeRequestWithBody(c.Server, org, factory, judge, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateJudge Replace a judge's file and publish it as the factory's next version
+//
+// As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `UpdateJudge` operationId).
+func (c *Client) UpdateJudge(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, body UpdateJudgeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateJudgeRequest(c.Server, org, factory, judge, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TryJudge Queue the judge on the 10 newest finished runs of its agents
+//
+// Each try names the run's item and is scored like any other score, but never counts in the judge's 30-day figures. Tries cost model spend, so only those who may publish queue them. 404 judge-not-found; 503 judges-unavailable.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges/{judge}/try (the `TryJudge` operationId).
+func (c *Client) TryJudge(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTryJudgeRequest(c.Server, org, factory, judge)
 	if err != nil {
 		return nil, err
 	}
@@ -12014,6 +12452,258 @@ func NewSubmitItemRequestWithBody(server string, org OrgRef, factory FactoryRef,
 	return req, nil
 }
 
+// NewListJudgesRequest constructs an http.Request for the ListJudges method
+func NewListJudgesRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/judges", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateJudgeRequest calls the generic CreateJudge builder with application/json body
+func NewCreateJudgeRequest(server string, org OrgRef, factory FactoryRef, body CreateJudgeJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateJudgeRequestWithBody(server, org, factory, "application/json", bodyReader)
+}
+
+// NewCreateJudgeRequestWithBody constructs an http.Request for the CreateJudge method, with any body, and a specified content type
+func NewCreateJudgeRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/judges", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetJudgeRequest constructs an http.Request for the GetJudge method
+func NewGetJudgeRequest(server string, org OrgRef, factory FactoryRef, judge JudgeRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "judge", judge, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/judges/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateJudgeRequest calls the generic UpdateJudge builder with application/json body
+func NewUpdateJudgeRequest(server string, org OrgRef, factory FactoryRef, judge JudgeRef, body UpdateJudgeJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateJudgeRequestWithBody(server, org, factory, judge, "application/json", bodyReader)
+}
+
+// NewUpdateJudgeRequestWithBody constructs an http.Request for the UpdateJudge method, with any body, and a specified content type
+func NewUpdateJudgeRequestWithBody(server string, org OrgRef, factory FactoryRef, judge JudgeRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "judge", judge, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/judges/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewTryJudgeRequest constructs an http.Request for the TryJudge method
+func NewTryJudgeRequest(server string, org OrgRef, factory FactoryRef, judge JudgeRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "judge", judge, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/judges/%s/try", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetMetricsRequest constructs an http.Request for the GetMetrics method
 func NewGetMetricsRequest(server string, org OrgRef, factory FactoryRef, params *GetMetricsParams) (*http.Request, error) {
 	var err error
@@ -16299,6 +16989,69 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
 	SubmitItemWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body SubmitItemJSONRequestBody, reqEditors ...RequestEditorFn) (*SubmitItemResponse, error)
 
+	// ListJudgesWithResponse The judges of the factory's current version, each with its last 30 days
+	//
+	// One entry per evals/judges/<slug>.md of the current version, by slug, each with its production scores of the last 30 days (runs scored, pass rate, cost and a daily pass-rate series by UTC day; tries never count). judge_cost_usd is what every judge run of the factory cost in those 30 days. Empty, with version null, before the first publish. 503 judges-unavailable when this goald does not serve judges.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/judges (the `ListJudges` operationId).
+	ListJudgesWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListJudgesResponse, error)
+
+	// CreateJudgeWithBodyWithResponse Add a judge and publish it as the factory's next version
+	//
+	// Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version); 503 judges-unavailable.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges (the `CreateJudge` operationId).
+	CreateJudgeWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateJudgeResponse, error)
+
+	// CreateJudgeWithResponse Add a judge and publish it as the factory's next version
+	//
+	// Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version); 503 judges-unavailable.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges (the `CreateJudge` operationId).
+	CreateJudgeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body CreateJudgeJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateJudgeResponse, error)
+
+	// GetJudgeWithResponse One judge of the current version, its last 30 days, its recent scores and where it runs
+	//
+	// Everything in its file, its 30-day summary, its newest production scores (every state, newest first) and runs_on: the box and connections of the factory's defaults it inherits. 404 judge-not-found; 503 judges-unavailable.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `GetJudge` operationId).
+	GetJudgeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, reqEditors ...RequestEditorFn) (*GetJudgeResponse, error)
+
+	// UpdateJudgeWithBodyWithResponse Replace a judge's file and publish it as the factory's next version
+	//
+	// As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `UpdateJudge` operationId).
+	UpdateJudgeWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateJudgeResponse, error)
+
+	// UpdateJudgeWithResponse Replace a judge's file and publish it as the factory's next version
+	//
+	// As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `UpdateJudge` operationId).
+	UpdateJudgeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, body UpdateJudgeJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateJudgeResponse, error)
+
+	// TryJudgeWithResponse Queue the judge on the 10 newest finished runs of its agents
+	//
+	// Each try names the run's item and is scored like any other score, but never counts in the judge's 30-day figures. Tries cost model spend, so only those who may publish queue them. 404 judge-not-found; 503 judges-unavailable.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges/{judge}/try (the `TryJudge` operationId).
+	TryJudgeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, reqEditors ...RequestEditorFn) (*TryJudgeResponse, error)
+
 	// GetMetricsWithResponse The factory's flow over a range of UTC days
 	//
 	// Items count when they reached done in the range; spend counts agent runs started in it; wip is the line now. The range is from to to, both included, at most 90 days, to not after today; without one it is the last 7 days. 400 for a bad range, both a window and a range, or a type the factory does not declare.
@@ -19707,6 +20460,246 @@ func (r SubmitItemResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r SubmitItemResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListJudgesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *JudgeList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListJudgesResponse) GetJSON200() *JudgeList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListJudgesResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListJudgesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListJudgesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListJudgesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListJudgesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateJudgeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Judge
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateJudgeResponse) GetJSON201() *Judge {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateJudgeResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateJudgeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateJudgeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateJudgeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateJudgeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetJudgeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Judge
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetJudgeResponse) GetJSON200() *Judge {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetJudgeResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetJudgeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetJudgeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetJudgeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetJudgeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateJudgeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Judge
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UpdateJudgeResponse) GetJSON200() *Judge {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r UpdateJudgeResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateJudgeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateJudgeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateJudgeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateJudgeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type TryJudgeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *JudgeTries
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r TryJudgeResponse) GetJSON202() *JudgeTries {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TryJudgeResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TryJudgeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TryJudgeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TryJudgeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TryJudgeResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -23965,6 +24958,111 @@ func (c *ClientWithResponses) SubmitItemWithResponse(ctx context.Context, org Or
 	return ParseSubmitItemResponse(rsp)
 }
 
+// ListJudgesWithResponse The judges of the factory's current version, each with its last 30 days
+//
+// One entry per evals/judges/<slug>.md of the current version, by slug, each with its production scores of the last 30 days (runs scored, pass rate, cost and a daily pass-rate series by UTC day; tries never count). judge_cost_usd is what every judge run of the factory cost in those 30 days. Empty, with version null, before the first publish. 503 judges-unavailable when this goald does not serve judges.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/judges (the `ListJudges` operationId).
+func (c *ClientWithResponses) ListJudgesWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListJudgesResponse, error) {
+	rsp, err := c.ListJudges(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListJudgesResponse(rsp)
+}
+
+// CreateJudgeWithBodyWithResponse Add a judge and publish it as the factory's next version
+//
+// Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version); 503 judges-unavailable.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges (the `CreateJudge` operationId).
+func (c *ClientWithResponses) CreateJudgeWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateJudgeResponse, error) {
+	rsp, err := c.CreateJudgeWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateJudgeResponse(rsp)
+}
+
+// CreateJudgeWithResponse Add a judge and publish it as the factory's next version
+//
+// Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version); 503 judges-unavailable.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges (the `CreateJudge` operationId).
+func (c *ClientWithResponses) CreateJudgeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body CreateJudgeJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateJudgeResponse, error) {
+	rsp, err := c.CreateJudge(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateJudgeResponse(rsp)
+}
+
+// GetJudgeWithResponse One judge of the current version, its last 30 days, its recent scores and where it runs
+//
+// Everything in its file, its 30-day summary, its newest production scores (every state, newest first) and runs_on: the box and connections of the factory's defaults it inherits. 404 judge-not-found; 503 judges-unavailable.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `GetJudge` operationId).
+func (c *ClientWithResponses) GetJudgeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, reqEditors ...RequestEditorFn) (*GetJudgeResponse, error) {
+	rsp, err := c.GetJudge(ctx, org, factory, judge, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetJudgeResponse(rsp)
+}
+
+// UpdateJudgeWithBodyWithResponse Replace a judge's file and publish it as the factory's next version
+//
+// As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `UpdateJudge` operationId).
+func (c *ClientWithResponses) UpdateJudgeWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateJudgeResponse, error) {
+	rsp, err := c.UpdateJudgeWithBody(ctx, org, factory, judge, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateJudgeResponse(rsp)
+}
+
+// UpdateJudgeWithResponse Replace a judge's file and publish it as the factory's next version
+//
+// As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `UpdateJudge` operationId).
+func (c *ClientWithResponses) UpdateJudgeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, body UpdateJudgeJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateJudgeResponse, error) {
+	rsp, err := c.UpdateJudge(ctx, org, factory, judge, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateJudgeResponse(rsp)
+}
+
+// TryJudgeWithResponse Queue the judge on the 10 newest finished runs of its agents
+//
+// Each try names the run's item and is scored like any other score, but never counts in the judge's 30-day figures. Tries cost model spend, so only those who may publish queue them. 404 judge-not-found; 503 judges-unavailable.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges/{judge}/try (the `TryJudge` operationId).
+func (c *ClientWithResponses) TryJudgeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, reqEditors ...RequestEditorFn) (*TryJudgeResponse, error) {
+	rsp, err := c.TryJudge(ctx, org, factory, judge, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTryJudgeResponse(rsp)
+}
+
 // GetMetricsWithResponse The factory's flow over a range of UTC days
 //
 // Items count when they reached done in the range; spend counts agent runs started in it; wip is the line now. The range is from to to, both included, at most 90 days, to not after today; without one it is the last 7 days. 400 for a bad range, both a window and a range, or a type the factory does not declare.
@@ -27075,6 +28173,171 @@ func ParseSubmitItemResponse(rsp *http.Response) (*SubmitItemResponse, error) {
 	return response, nil
 }
 
+// ParseListJudgesResponse parses an HTTP response from a ListJudgesWithResponse call
+func ParseListJudgesResponse(rsp *http.Response) (*ListJudgesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListJudgesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest JudgeList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateJudgeResponse parses an HTTP response from a CreateJudgeWithResponse call
+func ParseCreateJudgeResponse(rsp *http.Response) (*CreateJudgeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateJudgeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Judge
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetJudgeResponse parses an HTTP response from a GetJudgeWithResponse call
+func ParseGetJudgeResponse(rsp *http.Response) (*GetJudgeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetJudgeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Judge
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateJudgeResponse parses an HTTP response from a UpdateJudgeWithResponse call
+func ParseUpdateJudgeResponse(rsp *http.Response) (*UpdateJudgeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateJudgeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Judge
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTryJudgeResponse parses an HTTP response from a TryJudgeWithResponse call
+func ParseTryJudgeResponse(rsp *http.Response) (*TryJudgeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TryJudgeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest JudgeTries
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetMetricsResponse parses an HTTP response from a GetMetricsWithResponse call
 func ParseGetMetricsResponse(rsp *http.Response) (*GetMetricsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -29492,6 +30755,21 @@ type ServerInterface interface {
 	// SubmitItem Submit a work item to a factory's first station
 	// (POST /v1/orgs/{org}/factories/{factory}/items)
 	SubmitItem(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// ListJudges The judges of the factory's current version, each with its last 30 days
+	// (GET /v1/orgs/{org}/factories/{factory}/judges)
+	ListJudges(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// CreateJudge Add a judge and publish it as the factory's next version
+	// (POST /v1/orgs/{org}/factories/{factory}/judges)
+	CreateJudge(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// GetJudge One judge of the current version, its last 30 days, its recent scores and where it runs
+	// (GET /v1/orgs/{org}/factories/{factory}/judges/{judge})
+	GetJudge(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, judge JudgeRef)
+	// UpdateJudge Replace a judge's file and publish it as the factory's next version
+	// (PUT /v1/orgs/{org}/factories/{factory}/judges/{judge})
+	UpdateJudge(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, judge JudgeRef)
+	// TryJudge Queue the judge on the 10 newest finished runs of its agents
+	// (POST /v1/orgs/{org}/factories/{factory}/judges/{judge}/try)
+	TryJudge(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, judge JudgeRef)
 	// GetMetrics The factory's flow over a range of UTC days
 	// (GET /v1/orgs/{org}/factories/{factory}/metrics)
 	GetMetrics(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetMetricsParams)
@@ -31988,6 +33266,208 @@ func (siw *ServerInterfaceWrapper) SubmitItem(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SubmitItem(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListJudges operation middleware
+func (siw *ServerInterfaceWrapper) ListJudges(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListJudges(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateJudge operation middleware
+func (siw *ServerInterfaceWrapper) CreateJudge(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateJudge(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetJudge operation middleware
+func (siw *ServerInterfaceWrapper) GetJudge(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "judge" -------------
+	var judge JudgeRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "judge", r.PathValue("judge"), &judge, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "judge", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetJudge(w, r, org, factory, judge)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateJudge operation middleware
+func (siw *ServerInterfaceWrapper) UpdateJudge(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "judge" -------------
+	var judge JudgeRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "judge", r.PathValue("judge"), &judge, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "judge", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateJudge(w, r, org, factory, judge)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TryJudge operation middleware
+func (siw *ServerInterfaceWrapper) TryJudge(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "judge" -------------
+	var judge JudgeRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "judge", r.PathValue("judge"), &judge, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "judge", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TryJudge(w, r, org, factory, judge)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -34988,6 +36468,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/lead-time", wrapper.GetLeadTimeBridge)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/touches", wrapper.GetTouchMetrics)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/agents/{agent}/stats", wrapper.GetAgentStats)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/judges", wrapper.ListJudges)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/judges", wrapper.CreateJudge)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/judges/{judge}", wrapper.GetJudge)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/judges/{judge}", wrapper.UpdateJudge)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/judges/{judge}/try", wrapper.TryJudge)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.GetAndon)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.PullAndon)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon/clear", wrapper.ClearAndon)
@@ -37330,6 +38815,211 @@ type SubmitItemdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response SubmitItemdefaultApplicationProblemPlusJSONResponse) VisitSubmitItemResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListJudgesRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type ListJudgesResponseObject interface {
+	VisitListJudgesResponse(w http.ResponseWriter) error
+}
+
+type ListJudges200JSONResponse JudgeList
+
+func (response ListJudges200JSONResponse) VisitListJudgesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListJudgesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListJudgesdefaultApplicationProblemPlusJSONResponse) VisitListJudgesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateJudgeRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Body    *CreateJudgeJSONRequestBody
+}
+
+type CreateJudgeResponseObject interface {
+	VisitCreateJudgeResponse(w http.ResponseWriter) error
+}
+
+type CreateJudge201JSONResponse Judge
+
+func (response CreateJudge201JSONResponse) VisitCreateJudgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateJudgedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateJudgedefaultApplicationProblemPlusJSONResponse) VisitCreateJudgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetJudgeRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Judge   JudgeRef   `json:"judge"`
+}
+
+type GetJudgeResponseObject interface {
+	VisitGetJudgeResponse(w http.ResponseWriter) error
+}
+
+type GetJudge200JSONResponse Judge
+
+func (response GetJudge200JSONResponse) VisitGetJudgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetJudgedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetJudgedefaultApplicationProblemPlusJSONResponse) VisitGetJudgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateJudgeRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Judge   JudgeRef   `json:"judge"`
+	Body    *UpdateJudgeJSONRequestBody
+}
+
+type UpdateJudgeResponseObject interface {
+	VisitUpdateJudgeResponse(w http.ResponseWriter) error
+}
+
+type UpdateJudge200JSONResponse Judge
+
+func (response UpdateJudge200JSONResponse) VisitUpdateJudgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateJudgedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UpdateJudgedefaultApplicationProblemPlusJSONResponse) VisitUpdateJudgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TryJudgeRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Judge   JudgeRef   `json:"judge"`
+}
+
+type TryJudgeResponseObject interface {
+	VisitTryJudgeResponse(w http.ResponseWriter) error
+}
+
+type TryJudge202JSONResponse JudgeTries
+
+func (response TryJudge202JSONResponse) VisitTryJudgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TryJudgedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response TryJudgedefaultApplicationProblemPlusJSONResponse) VisitTryJudgeResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -40350,6 +42040,21 @@ type StrictServerInterface interface {
 	// SubmitItem Submit a work item to a factory's first station
 	// (POST /v1/orgs/{org}/factories/{factory}/items)
 	SubmitItem(ctx context.Context, request SubmitItemRequestObject) (SubmitItemResponseObject, error)
+	// ListJudges The judges of the factory's current version, each with its last 30 days
+	// (GET /v1/orgs/{org}/factories/{factory}/judges)
+	ListJudges(ctx context.Context, request ListJudgesRequestObject) (ListJudgesResponseObject, error)
+	// CreateJudge Add a judge and publish it as the factory's next version
+	// (POST /v1/orgs/{org}/factories/{factory}/judges)
+	CreateJudge(ctx context.Context, request CreateJudgeRequestObject) (CreateJudgeResponseObject, error)
+	// GetJudge One judge of the current version, its last 30 days, its recent scores and where it runs
+	// (GET /v1/orgs/{org}/factories/{factory}/judges/{judge})
+	GetJudge(ctx context.Context, request GetJudgeRequestObject) (GetJudgeResponseObject, error)
+	// UpdateJudge Replace a judge's file and publish it as the factory's next version
+	// (PUT /v1/orgs/{org}/factories/{factory}/judges/{judge})
+	UpdateJudge(ctx context.Context, request UpdateJudgeRequestObject) (UpdateJudgeResponseObject, error)
+	// TryJudge Queue the judge on the 10 newest finished runs of its agents
+	// (POST /v1/orgs/{org}/factories/{factory}/judges/{judge}/try)
+	TryJudge(ctx context.Context, request TryJudgeRequestObject) (TryJudgeResponseObject, error)
 	// GetMetrics The factory's flow over a range of UTC days
 	// (GET /v1/orgs/{org}/factories/{factory}/metrics)
 	GetMetrics(ctx context.Context, request GetMetricsRequestObject) (GetMetricsResponseObject, error)
@@ -42220,6 +43925,158 @@ func (sh *strictHandler) SubmitItem(w http.ResponseWriter, r *http.Request, org 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SubmitItemResponseObject); ok {
 		if err := validResponse.VisitSubmitItemResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListJudges operation middleware
+func (sh *strictHandler) ListJudges(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request ListJudgesRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListJudges(ctx, request.(ListJudgesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListJudges")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListJudgesResponseObject); ok {
+		if err := validResponse.VisitListJudgesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateJudge operation middleware
+func (sh *strictHandler) CreateJudge(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request CreateJudgeRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	var body CreateJudgeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateJudge(ctx, request.(CreateJudgeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateJudge")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateJudgeResponseObject); ok {
+		if err := validResponse.VisitCreateJudgeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetJudge operation middleware
+func (sh *strictHandler) GetJudge(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, judge JudgeRef) {
+	var request GetJudgeRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Judge = judge
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetJudge(ctx, request.(GetJudgeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetJudge")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetJudgeResponseObject); ok {
+		if err := validResponse.VisitGetJudgeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateJudge operation middleware
+func (sh *strictHandler) UpdateJudge(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, judge JudgeRef) {
+	var request UpdateJudgeRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Judge = judge
+
+	var body UpdateJudgeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateJudge(ctx, request.(UpdateJudgeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateJudge")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateJudgeResponseObject); ok {
+		if err := validResponse.VisitUpdateJudgeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TryJudge operation middleware
+func (sh *strictHandler) TryJudge(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, judge JudgeRef) {
+	var request TryJudgeRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Judge = judge
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TryJudge(ctx, request.(TryJudgeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TryJudge")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TryJudgeResponseObject); ok {
+		if err := validResponse.VisitTryJudgeResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

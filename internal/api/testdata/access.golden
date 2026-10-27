@@ -260,6 +260,32 @@ createFactory        pat-demoted      403 forbidden            404 org-not-found
 createFactory        pat-removed      401 unauthenticated      401 unauthenticated
 createFactory        pat-platform     200                      404 org-not-found
 createFactory        pat-deleted-org  401 unauthenticated      401 unauthenticated
+createJudge          anonymous        401 unauthenticated      401 unauthenticated
+createJudge          owner            200                      404 org-not-found
+createJudge          admin            200                      404 org-not-found
+createJudge          viewer           403 forbidden            404 org-not-found
+createJudge          approver         403 forbidden            404 org-not-found
+createJudge          editor           200                      404 org-not-found
+createJudge          member-no-roles  404 factory-not-found    404 org-not-found
+createJudge          other-org-owner  404 org-not-found        200
+createJudge          platform-admin   404 org-not-found        404 org-not-found
+createJudge          stale-owner      200                      404 org-not-found
+createJudge          key-scoped       403 forbidden            404 org-not-found
+createJudge          key-restricted   404 factory-not-found    404 org-not-found
+createJudge          key-other-org    404 org-not-found        200
+createJudge          key-expired      401 unauthenticated      401 unauthenticated
+createJudge          key-revoked      401 unauthenticated      401 unauthenticated
+createJudge          bearer-owner     200                      404 org-not-found
+createJudge          pat-approver     403 forbidden            404 org-not-found
+createJudge          pat-owner        200                      404 org-not-found
+createJudge          pat-viewer       403 forbidden            404 org-not-found
+createJudge          pat-other-org    404 org-not-found        200
+createJudge          pat-expired      401 unauthenticated      401 unauthenticated
+createJudge          pat-revoked      401 unauthenticated      401 unauthenticated
+createJudge          pat-demoted      404 factory-not-found    404 org-not-found
+createJudge          pat-removed      401 unauthenticated      401 unauthenticated
+createJudge          pat-platform     200                      404 org-not-found
+createJudge          pat-deleted-org  401 unauthenticated      401 unauthenticated
 createKnowledgeSource anonymous        401 unauthenticated      401 unauthenticated
 createKnowledgeSource owner            200                      404 org-not-found
 createKnowledgeSource admin            200                      404 org-not-found
@@ -988,6 +1014,32 @@ getItem              pat-demoted      404 item-not-found       404 org-not-found
 getItem              pat-removed      401 unauthenticated      401 unauthenticated
 getItem              pat-platform     200                      404 org-not-found
 getItem              pat-deleted-org  401 unauthenticated      401 unauthenticated
+getJudge             anonymous        401 unauthenticated      401 unauthenticated
+getJudge             owner            200                      404 org-not-found
+getJudge             admin            200                      404 org-not-found
+getJudge             viewer           200                      404 org-not-found
+getJudge             approver         200                      404 org-not-found
+getJudge             editor           200                      404 org-not-found
+getJudge             member-no-roles  404 factory-not-found    404 org-not-found
+getJudge             other-org-owner  404 org-not-found        200
+getJudge             platform-admin   404 org-not-found        404 org-not-found
+getJudge             stale-owner      200                      404 org-not-found
+getJudge             key-scoped       200                      404 org-not-found
+getJudge             key-restricted   404 factory-not-found    404 org-not-found
+getJudge             key-other-org    404 org-not-found        200
+getJudge             key-expired      401 unauthenticated      401 unauthenticated
+getJudge             key-revoked      401 unauthenticated      401 unauthenticated
+getJudge             bearer-owner     200                      404 org-not-found
+getJudge             pat-approver     200                      404 org-not-found
+getJudge             pat-owner        200                      404 org-not-found
+getJudge             pat-viewer       200                      404 org-not-found
+getJudge             pat-other-org    404 org-not-found        200
+getJudge             pat-expired      401 unauthenticated      401 unauthenticated
+getJudge             pat-revoked      401 unauthenticated      401 unauthenticated
+getJudge             pat-demoted      404 factory-not-found    404 org-not-found
+getJudge             pat-removed      401 unauthenticated      401 unauthenticated
+getJudge             pat-platform     200                      404 org-not-found
+getJudge             pat-deleted-org  401 unauthenticated      401 unauthenticated
 getKnowledgeDocument anonymous        401 unauthenticated      401 unauthenticated
 getKnowledgeDocument owner            200                      404 org-not-found
 getKnowledgeDocument admin            200                      404 org-not-found
@@ -1846,6 +1898,32 @@ listItems            pat-demoted      404 factory-not-found    404 org-not-found
 listItems            pat-removed      401 unauthenticated      401 unauthenticated
 listItems            pat-platform     200                      404 org-not-found
 listItems            pat-deleted-org  401 unauthenticated      401 unauthenticated
+listJudges           anonymous        401 unauthenticated      401 unauthenticated
+listJudges           owner            200                      404 org-not-found
+listJudges           admin            200                      404 org-not-found
+listJudges           viewer           200                      404 org-not-found
+listJudges           approver         200                      404 org-not-found
+listJudges           editor           200                      404 org-not-found
+listJudges           member-no-roles  404 factory-not-found    404 org-not-found
+listJudges           other-org-owner  404 org-not-found        200
+listJudges           platform-admin   404 org-not-found        404 org-not-found
+listJudges           stale-owner      200                      404 org-not-found
+listJudges           key-scoped       200                      404 org-not-found
+listJudges           key-restricted   404 factory-not-found    404 org-not-found
+listJudges           key-other-org    404 org-not-found        200
+listJudges           key-expired      401 unauthenticated      401 unauthenticated
+listJudges           key-revoked      401 unauthenticated      401 unauthenticated
+listJudges           bearer-owner     200                      404 org-not-found
+listJudges           pat-approver     200                      404 org-not-found
+listJudges           pat-owner        200                      404 org-not-found
+listJudges           pat-viewer       200                      404 org-not-found
+listJudges           pat-other-org    404 org-not-found        200
+listJudges           pat-expired      401 unauthenticated      401 unauthenticated
+listJudges           pat-revoked      401 unauthenticated      401 unauthenticated
+listJudges           pat-demoted      404 factory-not-found    404 org-not-found
+listJudges           pat-removed      401 unauthenticated      401 unauthenticated
+listJudges           pat-platform     200                      404 org-not-found
+listJudges           pat-deleted-org  401 unauthenticated      401 unauthenticated
 listKnowledgeDocuments anonymous        401 unauthenticated      401 unauthenticated
 listKnowledgeDocuments owner            200                      404 org-not-found
 listKnowledgeDocuments admin            200                      404 org-not-found
@@ -2990,6 +3068,32 @@ transferOwnership    pat-demoted      403 forbidden            404 org-not-found
 transferOwnership    pat-removed      401 unauthenticated      401 unauthenticated
 transferOwnership    pat-platform     403 forbidden            404 org-not-found
 transferOwnership    pat-deleted-org  401 unauthenticated      401 unauthenticated
+tryJudge             anonymous        401 unauthenticated      401 unauthenticated
+tryJudge             owner            200                      404 org-not-found
+tryJudge             admin            200                      404 org-not-found
+tryJudge             viewer           403 forbidden            404 org-not-found
+tryJudge             approver         403 forbidden            404 org-not-found
+tryJudge             editor           200                      404 org-not-found
+tryJudge             member-no-roles  404 factory-not-found    404 org-not-found
+tryJudge             other-org-owner  404 org-not-found        200
+tryJudge             platform-admin   404 org-not-found        404 org-not-found
+tryJudge             stale-owner      200                      404 org-not-found
+tryJudge             key-scoped       403 forbidden            404 org-not-found
+tryJudge             key-restricted   404 factory-not-found    404 org-not-found
+tryJudge             key-other-org    404 org-not-found        200
+tryJudge             key-expired      401 unauthenticated      401 unauthenticated
+tryJudge             key-revoked      401 unauthenticated      401 unauthenticated
+tryJudge             bearer-owner     200                      404 org-not-found
+tryJudge             pat-approver     403 forbidden            404 org-not-found
+tryJudge             pat-owner        200                      404 org-not-found
+tryJudge             pat-viewer       403 forbidden            404 org-not-found
+tryJudge             pat-other-org    404 org-not-found        200
+tryJudge             pat-expired      401 unauthenticated      401 unauthenticated
+tryJudge             pat-revoked      401 unauthenticated      401 unauthenticated
+tryJudge             pat-demoted      404 factory-not-found    404 org-not-found
+tryJudge             pat-removed      401 unauthenticated      401 unauthenticated
+tryJudge             pat-platform     200                      404 org-not-found
+tryJudge             pat-deleted-org  401 unauthenticated      401 unauthenticated
 unlinkItem           anonymous        401 unauthenticated      401 unauthenticated
 unlinkItem           owner            200                      404 org-not-found
 unlinkItem           admin            200                      404 org-not-found
@@ -3042,6 +3146,32 @@ updateConnection     pat-demoted      403 forbidden            404 org-not-found
 updateConnection     pat-removed      401 unauthenticated      401 unauthenticated
 updateConnection     pat-platform     403 forbidden            404 org-not-found
 updateConnection     pat-deleted-org  401 unauthenticated      401 unauthenticated
+updateJudge          anonymous        401 unauthenticated      401 unauthenticated
+updateJudge          owner            200                      404 org-not-found
+updateJudge          admin            200                      404 org-not-found
+updateJudge          viewer           403 forbidden            404 org-not-found
+updateJudge          approver         403 forbidden            404 org-not-found
+updateJudge          editor           200                      404 org-not-found
+updateJudge          member-no-roles  404 factory-not-found    404 org-not-found
+updateJudge          other-org-owner  404 org-not-found        200
+updateJudge          platform-admin   404 org-not-found        404 org-not-found
+updateJudge          stale-owner      200                      404 org-not-found
+updateJudge          key-scoped       403 forbidden            404 org-not-found
+updateJudge          key-restricted   404 factory-not-found    404 org-not-found
+updateJudge          key-other-org    404 org-not-found        200
+updateJudge          key-expired      401 unauthenticated      401 unauthenticated
+updateJudge          key-revoked      401 unauthenticated      401 unauthenticated
+updateJudge          bearer-owner     200                      404 org-not-found
+updateJudge          pat-approver     403 forbidden            404 org-not-found
+updateJudge          pat-owner        200                      404 org-not-found
+updateJudge          pat-viewer       403 forbidden            404 org-not-found
+updateJudge          pat-other-org    404 org-not-found        200
+updateJudge          pat-expired      401 unauthenticated      401 unauthenticated
+updateJudge          pat-revoked      401 unauthenticated      401 unauthenticated
+updateJudge          pat-demoted      404 factory-not-found    404 org-not-found
+updateJudge          pat-removed      401 unauthenticated      401 unauthenticated
+updateJudge          pat-platform     200                      404 org-not-found
+updateJudge          pat-deleted-org  401 unauthenticated      401 unauthenticated
 updateKnowledgeSource anonymous        401 unauthenticated      401 unauthenticated
 updateKnowledgeSource owner            200                      404 org-not-found
 updateKnowledgeSource admin            200                      404 org-not-found

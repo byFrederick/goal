@@ -177,6 +177,9 @@ type Deps struct {
 	KnowledgeUploads KnowledgeUploads
 	KnowledgeSearch  KnowledgeSearch
 	UploadMaxBytes   int64
+	// Judges serve Jonah's judges routes (judges.go). Optional: while it is nil those routes
+	// answer 503 judges-unavailable; when set, all three of its collaborators are.
+	Judges *JudgeDeps
 	// Clock dates ages and metric windows and paces stream heartbeats.
 	Clock  ports.Clock
 	Logger *slog.Logger
@@ -189,6 +192,7 @@ func (d Deps) complete() bool {
 		d.Audit == nil, d.Access == nil, d.Authorizer == nil, d.Platform == nil, d.Feed == nil, d.Builder == nil, d.Clock == nil,
 		d.Connections == nil, d.ParseKind == nil, d.ConnectionTransport == nil, d.OrgRetention <= 0,
 		d.Knowledge == nil, d.KnowledgeUploads == nil, d.KnowledgeSearch == nil, d.UploadMaxBytes <= 0,
+		d.Judges != nil && (d.Judges.Judges == nil || d.Judges.Scores == nil || d.Judges.Tries == nil),
 	}
 
 	return !slices.Contains(missing, true)
@@ -231,7 +235,7 @@ func New(d Deps) (http.Handler, error) {
 	if !d.complete() {
 		return nil, errors.New("api: Engine, Items, Factories, Definitions, Versions, Orgs, Audit, Access, Authorizer, Platform, Feed, Builder, Clock, " +
 			"Connections, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeSearch, a positive UploadMaxBytes " +
-			"and a positive OrgRetention are required")
+			"and a positive OrgRetention are required, and Judges, when set, needs Judges, Scores and Tries")
 	}
 
 	if err := d.failsClosed(); err != nil {
@@ -249,7 +253,7 @@ func New(d Deps) (http.Handler, error) {
 		builder: d.Builder, connections: d.Connections, parseKind: d.ParseKind, codehosts: d.CodeHosts,
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
 		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, search: d.KnowledgeSearch, uploadMax: d.UploadMaxBytes,
-		clock: d.Clock, log: log,
+		judges: d.Judges, clock: d.Clock, log: log,
 	}
 	s.inbox = append([]InboxSource{workInbox{s: s}}, d.InboxSources...)
 
@@ -373,8 +377,10 @@ type server struct {
 	uploads   KnowledgeUploads
 	search    KnowledgeSearch
 	uploadMax int64
-	clock     ports.Clock
-	log       *slog.Logger
+	// judges serve the judges routes; nil when this goald does not.
+	judges *JudgeDeps
+	clock  ports.Clock
+	log    *slog.Logger
 }
 
 var _ gen.StrictServerInterface = (*server)(nil)
@@ -589,7 +595,7 @@ func problemOf(err error) gen.Problem {
 	// The connection and knowledge routes' answers come before the definitions' (all wrap
 	// ports.ErrNameTaken).
 	for _, answer := range []func(error) (gen.Problem, bool){
-		fixedProblem, edgeProblem, partProblem, connectionProblem, knowledgeProblem, definitionProblem, controlProblem, agentProblem, apiKeyProblem, personalTokenProblem,
+		fixedProblem, edgeProblem, partProblem, connectionProblem, knowledgeProblem, judgeProblem, definitionProblem, controlProblem, agentProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {
 			return p
