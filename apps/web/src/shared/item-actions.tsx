@@ -330,7 +330,7 @@ function RejectDialog({
               aria-invalid={touched && missing}
               aria-describedby={touched && missing ? `${id}-error` : undefined}
               placeholder="The spec misses the empty-bucket case; cover it with a test."
-              className="min-h-28 w-full resize-y rounded-control border border-rule bg-surface px-3 py-2.5 text-base text-ink placeholder:text-muted aria-[invalid=true]:border-rework"
+              className="min-h-28 w-full resize-y rounded-control border border-rule bg-card px-3 py-2.5 text-base text-ink placeholder:text-muted aria-[invalid=true]:border-rework"
             />
             {touched && missing ? (
               <p id={`${id}-error`} className="m-0 text-sm text-rework">
@@ -379,7 +379,7 @@ function PauseDialog({ item, open, onOpenChange, onConfirm, pending }: DialogPro
               onChange={(e) => setReason(e.target.value)}
               rows={3}
               maxLength={500}
-              className="min-h-20 w-full resize-y rounded-control border border-rule bg-surface px-3 py-2.5 text-base text-ink"
+              className="min-h-20 w-full resize-y rounded-control border border-rule bg-card px-3 py-2.5 text-base text-ink"
             />
           </div>
           <div className="flex flex-wrap justify-end gap-2">
@@ -460,7 +460,7 @@ export function MergeDialog({
           {refusal ? (
             <p
               role="alert"
-              className="m-0 rounded-control border border-rework-line bg-rework-tint px-3 py-2.5 text-sm leading-snug text-rework-ink"
+              className="m-0 rounded-control border border-rework-tint bg-rework-tint px-3 py-2.5 text-sm leading-snug text-rework-ink"
             >
               {refusal}
             </p>

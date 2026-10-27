@@ -95,7 +95,7 @@ function InboxBody({ factory, onNavigate }: { factory: Factory; onNavigate: () =
       {failures.length > 0 ? (
         <div
           role="alert"
-          className="flex flex-col gap-1 rounded-control border border-rework-line bg-rework-tint px-3 py-2.5 text-sm leading-snug text-rework-ink"
+          className="flex flex-col gap-1 rounded-control border border-rework-tint bg-rework-tint px-3 py-2.5 text-sm leading-snug text-rework-ink"
         >
           <p className="m-0 font-medium">Not merged</p>
           <ul className="m-0 flex list-none flex-col gap-1 p-0">

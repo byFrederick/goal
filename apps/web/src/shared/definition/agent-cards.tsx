@@ -98,7 +98,7 @@ function CardSkeleton({ rows, label }: { rows: number; label: string }) {
       <span className="sr-only">{label}</span>
       {Array.from({ length: rows }, (_, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: placeholders without identity.
-        <div key={i} className="h-[52px] rounded-control bg-control/60" />
+        <div key={i} className="h-[52px] rounded-control bg-panel/60" />
       ))}
     </div>
   );
@@ -181,7 +181,7 @@ export function SkillsCard({ agent, className }: { agent: string; className?: st
               return (
                 <li
                   key={name}
-                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2.5 border-t border-line py-[11px] md:rounded-control md:border md:border-hairline md:bg-surface md:px-3 md:py-2.5"
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2.5 border-t border-line py-[11px] md:rounded-control md:border md:border-line md:bg-card md:px-3 md:py-2.5"
                 >
                   <span className="min-w-0">
                     <span translate="no" className="block text-[15px] font-medium break-words">
@@ -194,10 +194,7 @@ export function SkillsCard({ agent, className }: { agent: string; className?: st
                         {description}
                       </span>
                     ) : text?.isPending && text.fetchStatus !== 'idle' ? (
-                      <span
-                        aria-hidden="true"
-                        className="mt-1.5 block h-3 w-40 max-w-full rounded-chip bg-control/70"
-                      />
+                      <span aria-hidden="true" className="mt-1.5 block h-3 w-40 max-w-full rounded-chip bg-panel/70" />
                     ) : null}
                   </span>
                   {source ? (

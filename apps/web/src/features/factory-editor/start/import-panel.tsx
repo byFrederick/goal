@@ -80,7 +80,7 @@ export function ImportPanel({ onResult }: { onResult: (result: ImportResult | un
   const verdict = checked?.verdict;
   const failed = check.error && !check.isPending ? check.error : null;
   const uploadButton =
-    'inline-flex h-11 cursor-pointer items-center gap-2 rounded-control border border-line bg-surface px-3.5 text-sm font-medium text-ink transition-colors duration-200 hover:bg-card has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-run md:h-10';
+    'inline-flex h-11 cursor-pointer items-center gap-2 rounded-control border border-line bg-card px-3.5 text-sm font-medium text-ink transition-colors duration-200 hover:bg-card has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-run md:h-10';
 
   return (
     <section
@@ -117,12 +117,12 @@ export function ImportPanel({ onResult }: { onResult: (result: ImportResult | un
       </div>
 
       {uploadError ? (
-        <p role="alert" className="m-0 rounded-control border border-rework-line bg-rework-tint px-3 py-2.5 text-sm">
+        <p role="alert" className="m-0 rounded-control border border-rework-tint bg-rework-tint px-3 py-2.5 text-sm">
           {uploadError}
         </p>
       ) : null}
 
-      <div className="overflow-hidden rounded-control border border-rule bg-surface">
+      <div className="overflow-hidden rounded-control border border-rule bg-card">
         <CodeEditor
           value={text}
           onChange={(t) => setFiles((prev) => ({ ...prev, [yamlFile]: { text: t } }))}

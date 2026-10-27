@@ -123,7 +123,7 @@ export function Bridge({
                 <div className="relative h-5">
                   {i > 0 ? (
                     <span
-                      className="absolute -top-[42px] h-[42px] border-l-[1.5px] border-dashed border-faint"
+                      className="absolute -top-[42px] h-[42px] border-l-[1.5px] border-dashed border-muted"
                       style={{ left: `${b.kind === 'actual' ? b.end : b.left}%` }}
                     />
                   ) : null}

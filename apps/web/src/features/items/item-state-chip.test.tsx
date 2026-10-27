@@ -42,7 +42,7 @@ describe('ItemStateChip', () => {
     );
 
     expect(screen.getByText('Ready')).toBeTruthy();
-    expect(iconClass(container)).toContain('text-ok-dot');
+    expect(iconClass(container)).toContain('text-ok');
   });
 
   it('shows no icon for a blocked item', () => {

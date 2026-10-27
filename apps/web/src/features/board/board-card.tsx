@@ -84,18 +84,18 @@ export function BoardCard({
       onKeyDown={moveKeys(onMove, drag)}
       style={drag?.style}
       className={cn(
-        'relative flex rounded-control border bg-surface transition-[border-color,box-shadow,opacity] duration-200',
-        'hover:border-faint hover:shadow-lift has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-run',
+        'relative flex rounded-control border bg-card transition-[border-color,box-shadow,opacity] duration-200',
+        'hover:border-muted has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-run',
         compact ? 'items-center gap-2 p-3' : 'flex-col gap-2 p-3',
         expedite
-          ? 'border-rework-line bg-rework-tint'
+          ? 'border-rework-tint bg-rework-tint'
           : item.in_buffer
-            ? 'border-amber-line bg-amber-tint'
+            ? 'border-amber-tint bg-amber-tint'
             : item.state === 'waiting_human' && decides
-              ? 'border-you-line'
+              ? 'border-you-tint'
               : item.state === 'blocked'
-                ? 'border-rework-line'
-                : 'border-hairline',
+                ? 'border-rework-tint'
+                : 'border-line',
         drag?.dragging && 'opacity-40',
       )}
     >

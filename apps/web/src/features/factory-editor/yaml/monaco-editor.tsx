@@ -166,7 +166,7 @@ export default function MonacoEditor({
       hideCursorInOverviewRuler: true,
       fixedOverflowWidgets: true,
       scrollbar: { alwaysConsumeMouseWheel: false, verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
-      fontFamily: '"Fira Code", ui-monospace, monospace',
+      fontFamily: '"JetBrains Mono Variable", ui-monospace, monospace',
       fontSize: 13,
       lineHeight,
       padding: { top: 10, bottom: 10 },

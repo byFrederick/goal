@@ -250,10 +250,10 @@ importers:
       '@dnd-kit/core':
         specifier: 6.3.1
         version: 6.3.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      '@fontsource-variable/inter':
+      '@fontsource-variable/archivo':
         specifier: 5.3.0
         version: 5.3.0
-      '@fontsource/fira-code':
+      '@fontsource-variable/jetbrains-mono':
         specifier: 5.3.0
         version: 5.3.0
       '@goal/api-client':
@@ -1108,11 +1108,11 @@ packages:
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
 
-  '@fontsource-variable/inter@5.3.0':
-    resolution: {integrity: sha512-OupL48va4JNofb97w6NYeF9S7W/kHNKM0Er8Dem5nqi4jeOLrVJDoE8tZEpnMJmtkvNbB1EIPPwHcdkF6b1oUA==}
+  '@fontsource-variable/archivo@5.3.0':
+    resolution: {integrity: sha512-HogK8FJelrD1o7TlZlkIVtHgc20bO5PZRWE7mUeUTdMN055alznQV6/00J00IBeu8FQAH4s3zW9UJNvKExXf+g==}
 
-  '@fontsource/fira-code@5.3.0':
-    resolution: {integrity: sha512-EJL968RJRkakubAj/coU8pSUaeTE5UNoRjtzAr6kGiSZ3jWuN8/AKWHwym/PFUaQL1q7IL/H+EXs4358YhrTBQ==}
+  '@fontsource-variable/jetbrains-mono@5.3.0':
+    resolution: {integrity: sha512-F32xpS2NsGYoQi2ADSkKTgpJj7ozajsGgDJ8woTnqjmIB+dxDIqImjl4pXZVEExu8UFZ2ndhmX18EBS/hdz3Lw==}
 
   '@hono/node-server@2.1.5':
     resolution: {integrity: sha512-MgP/I06GdvsilDspMk/qmRzpk8LOUStP6jFAbSRi40W09DhoyUn+Mj7eyKICPqeYKybOjVFLVIAQzvu1bfIa7Q==}
@@ -5012,9 +5012,9 @@ snapshots:
 
   '@floating-ui/utils@0.2.12': {}
 
-  '@fontsource-variable/inter@5.3.0': {}
+  '@fontsource-variable/archivo@5.3.0': {}
 
-  '@fontsource/fira-code@5.3.0': {}
+  '@fontsource-variable/jetbrains-mono@5.3.0': {}
 
   '@hono/node-server@2.1.5(hono@4.13.13)':
     dependencies:

@@ -48,7 +48,7 @@ export function fieldOf(pointer: string | undefined, index: number): StationFiel
 
 const rule = 'flex min-w-0 flex-wrap items-center gap-2';
 const smallInput = cn(
-  'h-11 rounded-control border border-rule bg-surface px-2 text-base text-ink transition-colors duration-200 hover:border-faint md:h-8 md:text-sm aria-[invalid=true]:border-rework',
+  'h-11 rounded-control border border-rule bg-card px-2 text-base text-ink transition-colors duration-200 hover:border-muted md:h-8 md:text-sm aria-[invalid=true]:border-rework',
   readOnlyControl,
   'disabled:cursor-default disabled:border-line disabled:bg-shell disabled:hover:border-line',
 );
@@ -185,7 +185,7 @@ function Lanes({ station, index }: { station: ModelStation; index: number }) {
       {Object.entries(station.route ?? {}).map(([lane, agent]) => (
         <span
           key={lane}
-          className="inline-flex h-6 items-center gap-1.5 rounded-chip border border-line bg-surface px-2 text-xs font-medium"
+          className="inline-flex h-6 items-center gap-1.5 rounded-chip border border-line bg-card px-2 text-xs font-medium"
         >
           {lane} <span aria-hidden="true">→</span>
           <span className="sr-only"> goes to</span>{' '}
@@ -257,7 +257,7 @@ function Checks({
             key={`${text}#${nth}`}
             className={cn(
               'inline-flex h-7 max-w-full items-center gap-1 rounded-chip border pr-0.5 pl-2 text-xs',
-              isNew ? 'border-ok-tint bg-ok-tint text-ok-ink' : 'border-line bg-surface',
+              isNew ? 'border-ok-tint bg-ok-tint text-ok-ink' : 'border-line bg-card',
             )}
           >
             <span translate="no" className="truncate font-mono">
@@ -478,7 +478,7 @@ function Note({
         }}
         readOnly={editor.viewOnly}
         autoComplete="off"
-        className="h-11 min-w-0 flex-1 rounded-control border border-transparent bg-transparent px-1.5 text-base text-muted transition-colors duration-200 placeholder:text-muted hover:border-rule focus-visible:border-rule focus-visible:bg-surface focus-visible:text-ink md:h-8 md:text-sm"
+        className="h-11 min-w-0 flex-1 rounded-control border border-transparent bg-transparent px-1.5 text-base text-muted transition-colors duration-200 placeholder:text-muted hover:border-rule focus-visible:border-rule focus-visible:bg-card focus-visible:text-ink md:h-8 md:text-sm"
       />
       <EditedMark section="line" pointer={`${at}/description`} label={`the note on ${label}`} />
     </div>

@@ -44,17 +44,15 @@ export function AgentsSection({ place, search }: SectionViewProps) {
                       patch={{ agent: a.name, add: undefined }}
                       aria-current={current ? 'true' : undefined}
                       className={cn(
-                        'grid min-h-11 grid-cols-[36px_minmax(0,1fr)] items-center gap-2.5 rounded-control border bg-surface px-3 py-2.5 text-ink no-underline transition-colors duration-200',
-                        current
-                          ? 'border-ink shadow-[0_0_0_1px_var(--color-ink)]'
-                          : 'border-line hover:border-rule-strong',
+                        'grid min-h-11 grid-cols-[36px_minmax(0,1fr)] items-center gap-2.5 rounded-control border bg-card px-3 py-2.5 text-ink no-underline transition-colors duration-200',
+                        current ? 'border-ink shadow-[0_0_0_1px_var(--color-ink)]' : 'border-line hover:border-rule',
                       )}
                     >
                       <span
                         aria-hidden="true"
                         className={cn(
                           'flex size-9 items-center justify-center rounded-control',
-                          current ? 'bg-ink text-white' : 'bg-control text-ink',
+                          current ? 'bg-ink text-white' : 'bg-panel text-ink',
                         )}
                       >
                         <Bot size={18} strokeWidth={1.5} />

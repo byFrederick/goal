@@ -113,7 +113,7 @@ export function CardDnd({
       <InstructionsId.Provider value={instructions}>{children}</InstructionsId.Provider>
       <DragOverlay dropAnimation={null}>
         {active ? (
-          <div className="flex w-[200px] flex-col gap-1 rounded-control border border-faint bg-surface p-3 shadow-lift">
+          <div className="flex w-[200px] flex-col gap-1 rounded-control border border-muted bg-card p-3 shadow-pop">
             <span className="text-xs text-muted tabular-nums">{active.ref}</span>
             <span className="text-sm leading-snug font-medium">{active.title}</span>
           </div>

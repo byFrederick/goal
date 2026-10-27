@@ -60,7 +60,7 @@ export function StatGrid({ className, children }: { className?: string; children
 /** One cell of a `StatGrid`: its label (`dt`) and the `dd`s the caller passes. */
 export function Stat({ label, className, children }: { label: ReactNode; className?: string; children: ReactNode }) {
   return (
-    <div className={cn('flex min-w-0 flex-col gap-1 bg-surface px-3.5 py-3', className)}>
+    <div className={cn('flex min-w-0 flex-col gap-1 bg-card px-3.5 py-3', className)}>
       <dt className="text-[13px] text-muted">{label}</dt>
       {children}
     </div>

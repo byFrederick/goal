@@ -82,7 +82,7 @@ export function NewFactoryButton({ className }: { className?: string }) {
   return (
     <StartLink
       className={cn(
-        'flex min-h-12 items-center justify-center gap-2 rounded-control border border-dashed border-rule-strong bg-transparent text-[15px] font-medium text-ink no-underline transition-colors duration-200 hover:bg-nav-hover',
+        'flex min-h-12 items-center justify-center gap-2 rounded-control border border-dashed border-rule bg-transparent text-[15px] font-medium text-ink no-underline transition-colors duration-200 hover:bg-hover',
         className,
       )}
     >

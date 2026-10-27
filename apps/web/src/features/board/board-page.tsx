@@ -116,7 +116,7 @@ function LineCard({
               <li
                 key={s.id}
                 className={cn(
-                  'flex flex-col gap-2 rounded-control border border-hairline bg-surface p-3',
+                  'flex flex-col gap-2 rounded-control border border-line bg-card p-3',
                   drum && constraintRing,
                 )}
               >
@@ -155,7 +155,7 @@ function TouchesChip({ touches }: { touches: TouchHeadline }) {
       to="/o/$org/f/$factory"
       params={params}
       hash="touches"
-      className="hidden h-10 items-center gap-2 rounded-control bg-surface px-3.5 text-sm text-ink no-underline shadow-raise transition-shadow duration-200 hover:shadow-lift md:inline-flex"
+      className="hidden h-10 items-center gap-2 rounded-control bg-card px-3.5 text-sm text-ink no-underline transition-shadow duration-200 md:inline-flex"
     >
       <Users size={16} strokeWidth={1.5} aria-hidden="true" />
       {touches.finished === 0 ? (
@@ -288,7 +288,7 @@ function StationTabs({
               value={s.id}
               data-station={s.id}
               className={cn(
-                'flex min-h-14 w-36 shrink-0 flex-col items-start justify-center gap-0.5 rounded-control border border-line bg-surface px-3 py-2 text-ink',
+                'flex min-h-14 w-36 shrink-0 flex-col items-start justify-center gap-0.5 rounded-control border border-line bg-card px-3 py-2 text-ink',
                 'data-[state=active]:border-ink data-[state=active]:bg-ink data-[state=active]:text-white',
                 drum && 'shadow-[inset_0_-3px_0_var(--color-amber)]',
               )}
@@ -498,7 +498,7 @@ export function BoardPage() {
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <InboxButton factory={factory} />
           <TouchesChip touches={board.line.touches} />
-          <span className="hidden h-10 max-w-[360px] items-center rounded-control bg-surface px-3.5 shadow-raise md:inline-flex">
+          <span className="hidden h-10 max-w-[360px] items-center rounded-control bg-card px-3.5 md:inline-flex">
             <LineStatus andon={board.line.andon} className="text-sm text-ink" />
           </span>
           <AndonButton factory={factory} andon={board.line.andon} className="hidden md:inline-flex" />

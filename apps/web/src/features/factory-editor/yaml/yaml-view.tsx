@@ -377,12 +377,12 @@ export function YamlView({ search }: SectionViewProps) {
                 </button>
               </p>
             ) : (
-              <div aria-busy="true" className="h-64 bg-surface">
+              <div aria-busy="true" className="h-64 bg-card">
                 <span className="sr-only">Loading {path}</span>
               </div>
             )
           ) : binary ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-surface p-5 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-card p-5 text-sm">
               <span>{binarySentence(info?.size ?? text.length)}</span>
               <Button
                 size="sm"

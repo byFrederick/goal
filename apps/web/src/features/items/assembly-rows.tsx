@@ -140,7 +140,7 @@ export function AssemblyRow({ row, decides }: { row: Extract<ListRow, { kind: 'a
           aria-controls={open ? partsId : undefined}
           aria-label={`Parts of ${title}`}
           onClick={() => setOpen((o) => !o)}
-          className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-chip text-muted transition-colors hover:bg-control hover:text-ink"
+          className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-chip text-muted transition-colors hover:bg-panel hover:text-ink"
         >
           <ChevronDown
             size={16}
@@ -168,9 +168,9 @@ export function AssemblyRow({ row, decides }: { row: Extract<ListRow, { kind: 'a
           </span>
           <span className="flex min-w-0 items-center gap-2 text-sm">
             {summary ? (
-              <span aria-hidden="true" className="relative h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-control">
+              <span aria-hidden="true" className="relative h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-panel">
                 <span
-                  className={cn('absolute inset-y-0 left-0 rounded-full', percent === 100 ? 'bg-ok-dot' : 'bg-run')}
+                  className={cn('absolute inset-y-0 left-0 rounded-full', percent === 100 ? 'bg-ok' : 'bg-run')}
                   style={{ width: `${percent}%` }}
                 />
               </span>

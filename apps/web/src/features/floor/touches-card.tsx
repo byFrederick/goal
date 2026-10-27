@@ -187,7 +187,7 @@ function TouchBar({ row, max }: { row: TouchRow; max: number }) {
       <span
         role="img"
         aria-label={`${row.label}: ${plural(row.touches, 'touch', 'touches')}, ${perItem(row.perItem, 2)} per item`}
-        className="block h-2.5 overflow-hidden rounded-[3px] bg-surface"
+        className="block h-2.5 overflow-hidden rounded-[3px] bg-card"
       >
         <span className="block h-full overflow-hidden rounded-[3px]" style={{ width: `${(row.touches / max) * 100}%` }}>
           <Hatch tone="run" />

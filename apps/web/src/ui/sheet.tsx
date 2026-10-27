@@ -31,14 +31,14 @@ export function SheetContent({ title, children, initialFocus, onCloseAutoFocus }
           initialFocus.current.focus();
         }}
         onCloseAutoFocus={onCloseAutoFocus}
-        className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-1 overflow-y-auto rounded-t-[16px] bg-surface px-3 pt-2 pb-[max(28px,env(safe-area-inset-bottom))] shadow-sheet outline-none data-[state=open]:animate-[fade-in_150ms_ease-out]"
+        className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-1 overflow-y-auto rounded-t-[16px] bg-card px-3 pt-2 pb-[max(28px,env(safe-area-inset-bottom))] shadow-pop outline-none data-[state=open]:animate-[fade-in_150ms_ease-out]"
       >
         <span aria-hidden="true" className="mx-auto mb-1.5 block h-1 w-10 rounded-sm bg-rule" />
         <div className="flex items-center justify-between pl-2.5">
           <D.Title className="m-0 text-lg font-medium">{title}</D.Title>
           <D.Close
             aria-label="Close"
-            className="inline-flex size-11 items-center justify-center rounded-control text-ink transition-colors duration-200 hover:bg-nav-hover"
+            className="inline-flex size-11 items-center justify-center rounded-control text-ink transition-colors duration-200 hover:bg-hover"
           >
             <X size={20} strokeWidth={1.5} aria-hidden="true" />
           </D.Close>

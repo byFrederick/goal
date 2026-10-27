@@ -25,7 +25,7 @@ export function Switch({ checked, onCheckedChange, disabled: off, className, ...
         if (!disabled) onCheckedChange(!checked);
       }}
       className={cn(
-        'relative h-6 w-10 shrink-0 rounded-chip border border-rule-strong bg-control transition-colors duration-200',
+        'relative h-6 w-10 shrink-0 rounded-chip border border-rule bg-panel transition-colors duration-200',
         'before:absolute before:-inset-2.5 before:content-[""] md:before:-inset-1',
         'aria-checked:border-run aria-checked:bg-run',
         'aria-disabled:cursor-not-allowed aria-disabled:border-rule aria-disabled:opacity-60',
@@ -36,7 +36,7 @@ export function Switch({ checked, onCheckedChange, disabled: off, className, ...
       <span
         aria-hidden="true"
         className={cn(
-          'absolute top-[3px] left-[3px] size-4 rounded-[4px] bg-surface shadow-raise transition-transform duration-200',
+          'absolute top-[3px] left-[3px] size-4 rounded-[4px] bg-card transition-transform duration-200',
           checked && 'translate-x-4',
         )}
       />

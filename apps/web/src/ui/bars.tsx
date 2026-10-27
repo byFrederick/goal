@@ -76,7 +76,7 @@ export function Bars({
               <span
                 aria-hidden="true"
                 className={cn(
-                  'pointer-events-none absolute bottom-full z-10 mb-1.5 hidden rounded-chip border border-rule bg-surface px-2.5 py-1.5 text-[13px] whitespace-nowrap text-ink shadow-tip group-hover:block',
+                  'pointer-events-none absolute bottom-full z-10 mb-1.5 hidden rounded-chip border border-rule bg-card px-2.5 py-1.5 text-[13px] whitespace-nowrap text-ink shadow-pop group-hover:block',
                   // The tip stays inside the chart at both ends.
                   i < 2 ? 'left-0' : i >= bars.length - 2 ? 'right-0' : 'left-1/2 -translate-x-1/2',
                 )}

@@ -42,7 +42,7 @@ export function ProblemAlert({ errors, next, model }: { errors: DefinitionProble
     <section
       role="alert"
       aria-label={`Fix ${plural(errors.length, 'problem')} before you publish v${next}`}
-      className="flex flex-col gap-2 rounded-card border border-rework-line bg-rework-tint px-4 py-3.5 md:px-5"
+      className="flex flex-col gap-2 rounded-card border border-rework-tint bg-rework-tint px-4 py-3.5 md:px-5"
     >
       <p className="m-0 flex items-center gap-2 text-[15px] font-medium text-rework-ink">
         <TriangleAlert size={18} strokeWidth={1.75} aria-hidden="true" />
@@ -85,7 +85,7 @@ export function ChecksCard({ validation, model }: { validation: Validation | und
       }
     >
       {!validation ? (
-        <div aria-busy="true" className="h-32 rounded-control bg-control/60">
+        <div aria-busy="true" className="h-32 rounded-control bg-panel/60">
           <span className="sr-only">Checking the draft</span>
         </div>
       ) : (

@@ -26,7 +26,7 @@ export function WizardSteps({ current, done, factory }: StepsProps) {
         <p className="m-0 text-sm font-medium">
           Step {index + 1} of {wizardSteps.length} · {stepLabel(current)}
         </p>
-        <Meter value={index + 1} max={wizardSteps.length} className="h-1.5 bg-control" />
+        <Meter value={index + 1} max={wizardSteps.length} className="h-1.5 bg-panel" />
       </div>
       <ol className="m-0 hidden list-none grid-cols-3 gap-2 p-0 md:grid @[720px]:grid-cols-6">
         {wizardSteps.map((step, i) => {
@@ -38,7 +38,7 @@ export function WizardSteps({ current, done, factory }: StepsProps) {
                 aria-hidden="true"
                 className={cn(
                   'flex size-[22px] shrink-0 items-center justify-center rounded-chip text-xs font-medium',
-                  isCurrent ? 'bg-surface text-ink' : isDone ? 'bg-ok-tint text-ok' : 'bg-control text-ink-soft',
+                  isCurrent ? 'bg-card text-ink' : isDone ? 'bg-ok-tint text-ok' : 'bg-panel text-ink-soft',
                 )}
               >
                 {isDone ? <Check size={14} strokeWidth={2} /> : i + 1}
@@ -59,7 +59,7 @@ export function WizardSteps({ current, done, factory }: StepsProps) {
                   to="/o/$org/new/$step"
                   params={{ org: org.slug, step }}
                   search={{ factory }}
-                  className={cn(tile, 'hover:border-rule-strong hover:text-ink')}
+                  className={cn(tile, 'hover:border-rule hover:text-ink')}
                 >
                   {body}
                 </Link>

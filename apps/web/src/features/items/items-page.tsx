@@ -132,7 +132,7 @@ export function ItemsPage() {
                   aria-current={active ? 'page' : undefined}
                   className={cn(
                     'inline-flex h-10 items-center rounded-control px-3.5 text-sm whitespace-nowrap no-underline transition-colors',
-                    active ? 'bg-ink text-white' : 'bg-control text-ink hover:bg-control-hover',
+                    active ? 'bg-ink text-white' : 'bg-panel text-ink hover:bg-hover',
                   )}
                 >
                   {f.label}

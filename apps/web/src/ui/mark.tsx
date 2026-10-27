@@ -5,11 +5,11 @@ const kinds = {
   /** The organization: an ink tile with its two letters. */
   org: 'rounded-[12px] bg-ink font-semibold text-white',
   /** A factory: a white square, ink-filled when it is the current one. */
-  factory: 'rounded-control border border-rule bg-surface font-medium text-ink group-hover:border-rule-strong',
+  factory: 'rounded-control border border-rule bg-card font-medium text-ink group-hover:border-rule',
   /** New factory: a dashed square; ink while the wizard is open. */
-  add: 'rounded-control border border-dashed border-rule-strong bg-transparent text-ink-soft',
+  add: 'rounded-control border border-dashed border-rule bg-transparent text-ink-soft',
   /** An icon on the rail (Connections, Knowledge). */
-  icon: 'rounded-control text-ink-soft group-hover:bg-nav-hover',
+  icon: 'rounded-control text-ink-soft group-hover:bg-hover',
 } as const;
 
 const sizes = {

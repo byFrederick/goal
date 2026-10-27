@@ -78,7 +78,7 @@ export function ConnectionPage() {
         title={
           <span className="inline-flex flex-wrap items-center gap-3">
             <span translate="no">{connection.name}</span>
-            <Chip tone="quiet" className="bg-control font-normal tracking-normal">
+            <Chip tone="quiet" className="bg-panel font-normal tracking-normal">
               {kind?.title ?? connection.kind}
             </Chip>
           </span>
@@ -117,7 +117,7 @@ export function ConnectionPage() {
         <Callout tone="rework">A required secret isn’t set: runs that get this connection fail until it is.</Callout>
       ) : null}
       {kind?.mint ? (
-        <section className="flex items-start gap-3 rounded-card border border-line bg-surface px-4 py-3.5 text-[15px] leading-normal">
+        <section className="flex items-start gap-3 rounded-card border border-line bg-card px-4 py-3.5 text-[15px] leading-normal">
           <Clock size={18} strokeWidth={1.5} aria-hidden="true" className="mt-0.5 shrink-0 text-run" />
           <p className="m-0">
             <strong className="font-medium">Agents get short-lived credentials per run.</strong> When a run starts, Goal

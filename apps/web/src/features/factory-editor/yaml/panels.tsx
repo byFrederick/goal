@@ -76,7 +76,7 @@ function Fixes({
 /** Under a line of the editor: its problems, their fixes and Open in Visual (board Define-YAML). */
 export function ProblemBlock({ problems, ...actions }: { problems: DefinitionProblem[] } & ProblemActions) {
   return (
-    <div className="flex flex-col gap-3 rounded-control border border-rework-line bg-surface p-3 shadow-raise">
+    <div className="flex flex-col gap-3 rounded-control border border-rework-tint bg-card p-3">
       {problems.map((p) => (
         <div key={`${p.code}${p.pointer ?? ''}${p.message}`} className="flex flex-col gap-2.5">
           <p className="m-0 flex gap-2 text-sm leading-normal text-rework-ink">
@@ -111,7 +111,7 @@ export function ProblemsPanel({ problems, model, onGo, ...actions }: ProblemsPan
           Problems <span className={cn('tabular-nums', counted > 0 ? 'text-rework-ink' : 'text-muted')}>{counted}</span>
         </>
       }
-      className={cn(counted > 0 && 'border-rework-line bg-rework-tint/40')}
+      className={cn(counted > 0 && 'border-rework-tint bg-rework-tint/40')}
     >
       {problems.length === 0 ? (
         <p className="m-0 text-sm text-muted">No problems. Checked as you type.</p>

@@ -65,7 +65,7 @@ export function SourcePage() {
         title={
           <span className="inline-flex flex-wrap items-center gap-3">
             <span>{source.title}</span>
-            <Chip tone="quiet" className="bg-control font-normal tracking-normal">
+            <Chip tone="quiet" className="bg-panel font-normal tracking-normal">
               {sourceKinds[source.kind].label}
             </Chip>
           </span>

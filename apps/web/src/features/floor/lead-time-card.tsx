@@ -79,7 +79,7 @@ export function LeadTimeCard({
         className="mt-4"
       />
       {insight ? (
-        <div className="mt-auto rounded-control border border-line bg-surface px-4 py-3.5">
+        <div className="mt-auto rounded-control border border-line bg-card px-4 py-3.5">
           <p className="m-0 text-[15px] leading-snug">{insight.lead}</p>
           {insight.constraint ? <p className="m-0 mt-1.5 text-sm text-muted">{insight.constraint}</p> : null}
         </div>

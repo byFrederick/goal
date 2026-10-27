@@ -36,7 +36,7 @@ export function Tooltip({ children, label, detail, side = 'right' }: TooltipProp
           side={side}
           sideOffset={10}
           aria-hidden="true"
-          className="z-50 rounded-chip border border-rule bg-surface px-2.5 py-1.5 text-[13px] leading-[1.35] font-medium whitespace-nowrap text-ink shadow-tip data-[state=delayed-open]:animate-[fade-in_150ms_ease-out]"
+          className="z-50 rounded-chip border border-rule bg-card px-2.5 py-1.5 text-[13px] leading-[1.35] font-medium whitespace-nowrap text-ink shadow-pop data-[state=delayed-open]:animate-[fade-in_150ms_ease-out]"
         >
           {label}
           {detail ? <span className="block text-xs font-normal text-muted">{detail}</span> : null}

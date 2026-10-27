@@ -125,7 +125,7 @@ export function WaitingBanner({
     'grid min-h-14 grid-cols-[36px_minmax(0,1fr)_12px] items-center gap-3 rounded-card bg-you-tint px-3.5 py-2 text-ink no-underline md:hidden';
   const content = (
     <>
-      <span aria-hidden="true" className="flex size-9 items-center justify-center rounded-control bg-surface text-you">
+      <span aria-hidden="true" className="flex size-9 items-center justify-center rounded-control bg-card text-you">
         <CircleCheck {...iconProps} />
       </span>
       <span className="min-w-0">

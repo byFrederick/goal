@@ -77,9 +77,9 @@ export function WizardViewToggle({
   onChange: (yaml: boolean) => void;
   yamlUnavailable?: string | undefined;
 }) {
-  const current = 'bg-surface font-medium text-ink shadow-raise';
+  const current = 'bg-card font-medium text-ink';
   return (
-    <fieldset aria-label="Editor view" className="m-0 inline-flex gap-0.5 rounded-control border-0 bg-control p-[3px]">
+    <fieldset aria-label="Editor view" className="m-0 inline-flex gap-0.5 rounded-control border-0 bg-panel p-[3px]">
       <button
         type="button"
         aria-pressed={!yaml}

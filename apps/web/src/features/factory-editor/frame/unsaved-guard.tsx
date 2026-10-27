@@ -86,7 +86,7 @@ export function UnsavedGuard() {
     <Dialog open={blocker.status === 'blocked'} onOpenChange={(o) => (o ? undefined : close())}>
       <DialogContent title="Your last changes aren’t saved yet" description={reason(session)}>
         {stillUnsaved ? (
-          <p role="alert" className="m-0 rounded-control border border-rework-line bg-rework-tint px-3 py-2.5 text-sm">
+          <p role="alert" className="m-0 rounded-control border border-rework-tint bg-rework-tint px-3 py-2.5 text-sm">
             Still not saved. Stay to keep them, or leave without them.
           </p>
         ) : null}

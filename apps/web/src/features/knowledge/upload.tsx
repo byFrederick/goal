@@ -102,7 +102,7 @@ export function DropZone({ onFiles, disabled = false }: { onFiles: (files: File[
         className={cn(
           'flex min-h-32 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-control border border-dashed px-4 py-6 text-center text-ink transition-colors duration-200',
           'disabled:cursor-not-allowed disabled:opacity-55',
-          over ? 'border-run bg-surface' : 'border-rule-strong bg-transparent hover:bg-surface',
+          over ? 'border-run bg-card' : 'border-rule bg-transparent hover:bg-card',
         )}
       >
         <Upload size={18} strokeWidth={1.5} aria-hidden="true" />

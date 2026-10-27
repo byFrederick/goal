@@ -411,7 +411,7 @@ export function CopyAgentButton() {
               </Field>
             ) : null}
             {picked ? (
-              <div className="flex flex-col gap-2 rounded-control border border-line bg-surface p-3 text-sm">
+              <div className="flex flex-col gap-2 rounded-control border border-line bg-card p-3 text-sm">
                 <p className="m-0">
                   <span className="font-medium">{picked.description || 'No role yet'}</span>
                   <span className="text-muted"> · {picked.model ?? 'the factory’s default model'}</span>

@@ -128,7 +128,7 @@ export function PromptEditor({ agent, index }: { agent: ModelAgent; index: numbe
           Markdown{count !== undefined ? `, ${count === 1 ? '1 word' : `${count} words`}` : ''}
         </span>
       </div>
-      <div className="overflow-hidden rounded-control border border-rule bg-surface has-[textarea:focus-visible]:outline-2 has-[textarea:focus-visible]:outline-offset-2 has-[textarea:focus-visible]:outline-run has-[.monaco-editor.focused]:outline-2 has-[.monaco-editor.focused]:outline-offset-2 has-[.monaco-editor.focused]:outline-run">
+      <div className="overflow-hidden rounded-control border border-rule bg-card has-[textarea:focus-visible]:outline-2 has-[textarea:focus-visible]:outline-offset-2 has-[textarea:focus-visible]:outline-run has-[.monaco-editor.focused]:outline-2 has-[.monaco-editor.focused]:outline-offset-2 has-[.monaco-editor.focused]:outline-run">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-card px-2 py-1.5">
           <SegmentedControl
             label="Prompt view"

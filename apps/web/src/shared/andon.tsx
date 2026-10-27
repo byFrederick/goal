@@ -49,7 +49,7 @@ export function LineStatus({
 
   return (
     <p role="status" className={cn('m-0 flex min-w-0 items-center gap-2', className)}>
-      <span aria-hidden="true" className={cn('size-2 shrink-0 rounded-full', andon ? 'bg-rework' : 'bg-ok-dot')} />
+      <span aria-hidden="true" className={cn('size-2 shrink-0 rounded-full', andon ? 'bg-rework' : 'bg-ok')} />
       <span className={cn('min-w-0 truncate', andon && 'text-rework-ink')} title={title ?? andon?.reason}>
         {andon ? `Line stopped: ${andon.reason}` : 'Line running'}
         {suffix}
@@ -167,7 +167,7 @@ interface DialogProps {
 }
 
 const textarea =
-  'min-h-28 w-full resize-y rounded-control border border-rule bg-surface px-3 py-2.5 text-base text-ink placeholder:text-muted aria-[invalid=true]:border-rework';
+  'min-h-28 w-full resize-y rounded-control border border-rule bg-card px-3 py-2.5 text-base text-ink placeholder:text-muted aria-[invalid=true]:border-rework';
 
 function PullDialog({ factory, open, onOpenChange, onConfirm, pending }: DialogProps) {
   const id = useId();

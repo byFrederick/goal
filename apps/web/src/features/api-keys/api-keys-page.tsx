@@ -87,9 +87,9 @@ export function ApiKeysPage() {
           <div className="flex flex-col gap-3">
             {[0, 1, 2].map((i) => (
               <div key={i} className="grid grid-cols-[1fr_2fr_1fr] gap-4">
-                <div className="h-3 rounded-chip bg-control" />
-                <div className="h-3 rounded-chip bg-control" />
-                <div className="h-3 rounded-chip bg-control" />
+                <div className="h-3 rounded-chip bg-panel" />
+                <div className="h-3 rounded-chip bg-panel" />
+                <div className="h-3 rounded-chip bg-panel" />
               </div>
             ))}
           </div>
@@ -191,7 +191,7 @@ export function ApiKeysPage() {
             {live.map((k) => {
               const expiry = expiryText(k.expires_at, now);
               return (
-                <li key={k.id} className="flex flex-col gap-2 rounded-control border border-line bg-surface p-3.5">
+                <li key={k.id} className="flex flex-col gap-2 rounded-control border border-line bg-card p-3.5">
                   <div className="flex items-start justify-between gap-3">
                     <KeyName apiKey={k} />
                     {manage ? (
@@ -244,7 +244,7 @@ export function ApiKeysPage() {
               Put the secret in your CI’s secret store as GOAL_API_KEY. The CLI reads it from the environment and never
               writes it anywhere.
             </p>
-            <pre className="m-0 rounded-control border border-line bg-surface p-3.5 font-mono text-[13px] leading-relaxed break-words whitespace-pre-wrap">
+            <pre className="m-0 rounded-control border border-line bg-card p-3.5 font-mono text-[13px] leading-relaxed break-words whitespace-pre-wrap">
               {`export GOAL_API_KEY="$GOAL_KEY_FROM_CI"\ngoal factory list\ngoal run ${sample} "Deploy 1.4.2 to staging" --detach`}
             </pre>
           </section>

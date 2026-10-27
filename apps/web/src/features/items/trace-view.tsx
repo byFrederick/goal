@@ -24,8 +24,8 @@ export function ToolRow({ call }: { call: ToolCall }) {
   return (
     <li
       className={cn(
-        'grid gap-x-3 gap-y-0.5 rounded-control border bg-surface px-3 py-2 text-sm md:grid-cols-[minmax(0,220px)_minmax(0,1fr)]',
-        call.isError ? 'border-rework-line' : 'border-hairline',
+        'grid gap-x-3 gap-y-0.5 rounded-control border bg-card px-3 py-2 text-sm md:grid-cols-[minmax(0,220px)_minmax(0,1fr)]',
+        call.isError ? 'border-rework-tint' : 'border-line',
       )}
     >
       <span className="font-mono text-[13px] [overflow-wrap:anywhere] text-run">
@@ -133,7 +133,7 @@ function CheckLine({ check }: { check: CheckEntry }) {
     <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-[15px] leading-snug">
       <Icon size={16} strokeWidth={1.75} aria-hidden="true" className={check.passed ? 'text-ok' : 'text-rework'} />
       <span>{check.passed ? 'Check passed' : 'Check failed'}</span>
-      <code className="rounded-chip bg-surface px-1.5 py-0.5 text-[13px]">{check.command}</code>
+      <code className="rounded-chip bg-card px-1.5 py-0.5 text-[13px]">{check.command}</code>
       <span className="text-[13px] text-muted">
         {[
           check.durationMs !== undefined ? formatDuration(check.durationMs) : '',
@@ -151,9 +151,7 @@ function NoteLine({ note }: { note: NoteEntry }) {
     <div className="flex min-w-0 flex-col gap-1.5">
       <p className={cn('m-0 text-[15px] leading-snug', note.tone !== 'muted' && toneText[note.tone])}>{note.text}</p>
       {note.detail ? (
-        <p className="m-0 rounded-control border border-line bg-surface px-3 py-2 text-sm leading-normal">
-          {note.detail}
-        </p>
+        <p className="m-0 rounded-control border border-line bg-card px-3 py-2 text-sm leading-normal">{note.detail}</p>
       ) : null}
     </div>
   );

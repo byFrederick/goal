@@ -88,7 +88,7 @@ function Shown({ secret, title, description, what, warning, onDone }: ShownProps
   return (
     <DialogContent title={title} description={description} dismissible={false} initialFocus={secretRef}>
       <div className="flex flex-col gap-1.5">
-        <div className="flex items-start gap-2 rounded-control border border-line bg-surface p-2.5 pl-3">
+        <div className="flex items-start gap-2 rounded-control border border-line bg-card p-2.5 pl-3">
           <code
             ref={secretRef}
             tabIndex={-1}

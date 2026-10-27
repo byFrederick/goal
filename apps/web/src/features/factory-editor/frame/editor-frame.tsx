@@ -265,10 +265,10 @@ function ViewToggle({ section, yaml }: { section: EditorSection; yaml: boolean }
     params: { ...params, section },
     search: { ...entity, mode: 'yaml' },
   });
-  const currentClass = 'bg-surface font-medium text-ink shadow-raise';
+  const currentClass = 'bg-card font-medium text-ink';
 
   return (
-    <nav aria-label="Editor view" className="inline-flex gap-0.5 rounded-control bg-control p-[3px]">
+    <nav aria-label="Editor view" className="inline-flex gap-0.5 rounded-control bg-panel p-[3px]">
       <a
         {...visual}
         aria-current={showYaml ? undefined : 'page'}

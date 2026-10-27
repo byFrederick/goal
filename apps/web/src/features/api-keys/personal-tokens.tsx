@@ -213,9 +213,9 @@ function TokenList({ list, what, caption, empty, owner = false, onRevoke }: Toke
         </span>
         {[0, 1].map((i) => (
           <div key={i} className="grid grid-cols-[1fr_2fr_1fr] gap-4">
-            <div className="h-3 rounded-chip bg-control" />
-            <div className="h-3 rounded-chip bg-control" />
-            <div className="h-3 rounded-chip bg-control" />
+            <div className="h-3 rounded-chip bg-panel" />
+            <div className="h-3 rounded-chip bg-panel" />
+            <div className="h-3 rounded-chip bg-panel" />
           </div>
         ))}
       </div>
@@ -312,7 +312,7 @@ function TokenList({ list, what, caption, empty, owner = false, onRevoke }: Toke
         {live.map((t) => {
           const expiry = expiryText(t.expires_at, now);
           return (
-            <li key={t.id} className="flex flex-col gap-2 rounded-control border border-line bg-surface p-3.5">
+            <li key={t.id} className="flex flex-col gap-2 rounded-control border border-line bg-card p-3.5">
               <div className="flex items-start justify-between gap-3">
                 <TokenName token={t} />
                 {onRevoke ? (

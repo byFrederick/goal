@@ -54,8 +54,8 @@ describe('web app manifest', () => {
   });
 
   it('uses the light shell colour for both the background and the theme', () => {
-    expect(manifest.background_color).toBe('#eef1ef');
-    expect(manifest.theme_color).toBe('#eef1ef');
+    expect(manifest.background_color).toBe('#FFFFFF');
+    expect(manifest.theme_color).toBe('#FFFFFF');
   });
 
   it.each([
@@ -91,8 +91,8 @@ describe('index.html', () => {
 
   it('keeps viewport-fit=cover and the light and dark theme colours', () => {
     expect(indexHtml).toContain('viewport-fit=cover');
-    expect(indexHtml).toContain('<meta name="theme-color" content="#eef1ef" media="(prefers-color-scheme: light)" />');
-    expect(indexHtml).toContain('<meta name="theme-color" content="#0f161d" media="(prefers-color-scheme: dark)" />');
+    expect(indexHtml).toContain('<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)" />');
+    expect(indexHtml).toContain('<meta name="theme-color" content="#0E1120" media="(prefers-color-scheme: dark)" />');
   });
 });
 

@@ -62,7 +62,7 @@ export function SectionView({
     return (
       <div
         role="alert"
-        className="flex max-w-xl flex-col gap-3 rounded-card border border-rework-line bg-rework-tint p-5"
+        className="flex max-w-xl flex-col gap-3 rounded-card border border-rework-tint bg-rework-tint p-5"
       >
         <h2 className="m-0 text-xl font-medium text-rework-ink">The draft could not load</h2>
         <p className="m-0 text-[15px] leading-relaxed">
@@ -115,11 +115,11 @@ function SectionSkeleton() {
   return (
     <div aria-busy="true" className="flex flex-col gap-4 rounded-card border border-line bg-card p-5">
       <span className="sr-only">Loading the draft</span>
-      <div className="h-6 w-40 rounded-chip bg-control" />
-      <div className="h-4 w-full max-w-[520px] rounded-chip bg-control/70" />
+      <div className="h-6 w-40 rounded-chip bg-panel" />
+      <div className="h-4 w-full max-w-[520px] rounded-chip bg-panel/70" />
       <div className="grid gap-4 @[640px]:grid-cols-2">
         {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="h-16 rounded-control bg-control/60" />
+          <div key={i} className="h-16 rounded-control bg-panel/60" />
         ))}
       </div>
     </div>
@@ -131,7 +131,7 @@ function ParseErrorState({ line }: { line: number }) {
   return (
     <div
       role="alert"
-      className="flex max-w-xl flex-col gap-3 rounded-card border border-rework-line bg-rework-tint p-5"
+      className="flex max-w-xl flex-col gap-3 rounded-card border border-rework-tint bg-rework-tint p-5"
     >
       <h2 data-route-focus="" tabIndex={-1} className="m-0 text-xl font-medium text-rework-ink outline-none">
         factory.yaml doesn’t parse

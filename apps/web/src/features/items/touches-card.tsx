@@ -156,8 +156,8 @@ function ReasonSelect({
         className={cn(
           'h-11 w-full max-w-[220px] cursor-pointer rounded-control border px-2.5 text-base transition-colors duration-200 md:h-9 md:text-sm',
           reason === 'missing_knowledge'
-            ? 'border-you-line bg-you-tint text-you-ink hover:border-you'
-            : 'border-line bg-surface text-ink hover:border-faint',
+            ? 'border-you-tint bg-you-tint text-you-ink hover:border-you'
+            : 'border-line bg-card text-ink hover:border-muted',
         )}
       >
         {reason === null ? (

@@ -139,7 +139,7 @@ describe('BoardPage', () => {
     // Expedite first within the station, as the server orders it.
     expect(within(investigate).getAllByRole('article')[0]).toBe(card);
     expect(card?.classList).toContain('bg-rework-tint');
-    expect(card?.classList).toContain('border-rework-line');
+    expect(card?.classList).toContain('border-rework-tint');
     expect(within(card as HTMLElement).getByText('Expedite')).toBeTruthy();
 
     // A standard card in the same station has neither the tint nor the label.

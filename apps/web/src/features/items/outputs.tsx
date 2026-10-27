@@ -64,7 +64,7 @@ function Output({ station, value }: { station: string; value: unknown }) {
   const rest = obj ? Object.entries(obj).filter(([k]) => k !== lead && !linked.has(k)) : [];
 
   return (
-    <article className="flex flex-col gap-3 rounded-control border border-line bg-surface p-4">
+    <article className="flex flex-col gap-3 rounded-control border border-line bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="m-0 text-[15px] font-medium">{humanize(station)}</h3>
         {prs.length > 0 ? (
@@ -75,7 +75,7 @@ function Output({ station, value }: { station: string; value: unknown }) {
                 href={pr}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex h-9 items-center gap-1.5 rounded-control bg-control px-3 text-sm no-underline hover:bg-control-hover"
+                className="inline-flex h-9 items-center gap-1.5 rounded-control bg-panel px-3 text-sm no-underline hover:bg-hover"
               >
                 {pullRequestLabel(pr, prs.length > 1)}
                 <ExternalLink size={14} strokeWidth={1.5} aria-hidden="true" />

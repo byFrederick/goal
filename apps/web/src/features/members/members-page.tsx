@@ -208,7 +208,7 @@ function Members({ org, detail, members, invitations, factories, powers, signIn 
               <button
                 type="button"
                 onClick={() => setSheetFor(m.user.id)}
-                className="grid min-h-16 w-full cursor-pointer grid-cols-[40px_minmax(0,1fr)_20px] items-center gap-3 rounded-control border border-line bg-surface px-3 py-2.5 text-left text-ink transition-colors duration-200 hover:border-rule-strong"
+                className="grid min-h-16 w-full cursor-pointer grid-cols-[40px_minmax(0,1fr)_20px] items-center gap-3 rounded-control border border-line bg-card px-3 py-2.5 text-left text-ink transition-colors duration-200 hover:border-rule"
               >
                 <Avatar initials={initialsOf(m.user)} size="card" />
                 <span className="min-w-0">
@@ -339,7 +339,7 @@ function SearchField({ value, onChange }: { value: string; onChange: (value: str
         onChange={(e) => onChange(e.target.value)}
         placeholder="Find a person"
         autoComplete="off"
-        className="h-11 w-full rounded-control border border-rule bg-surface pr-3 pl-9 text-base text-ink transition-colors duration-200 hover:border-faint md:h-10 md:text-[15px]"
+        className="h-11 w-full rounded-control border border-rule bg-card pr-3 pl-9 text-base text-ink transition-colors duration-200 hover:border-muted md:h-10 md:text-[15px]"
       />
     </div>
   );
@@ -545,7 +545,7 @@ function PendingAvatar() {
   return (
     <span
       aria-hidden="true"
-      className="flex size-10 shrink-0 items-center justify-center rounded-full border border-dashed border-rule-strong bg-surface text-sm text-muted"
+      className="flex size-10 shrink-0 items-center justify-center rounded-full border border-dashed border-rule bg-card text-sm text-muted"
     >
       ?
     </span>
@@ -596,7 +596,7 @@ function InvitationCard({
   changes: Changes;
 }) {
   return (
-    <div className="flex flex-col gap-2.5 rounded-control border border-dashed border-rule-strong bg-surface px-3 py-2.5">
+    <div className="flex flex-col gap-2.5 rounded-control border border-dashed border-rule bg-card px-3 py-2.5">
       <span className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-3">
         <PendingAvatar />
         <span className="min-w-0">

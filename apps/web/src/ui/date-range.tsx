@@ -64,7 +64,7 @@ export function DateRange({
         <button
           type="button"
           className={cn(
-            'inline-flex h-9 items-center gap-2 rounded-control bg-surface px-3 text-sm text-ink shadow-raise transition-colors duration-200 hover:bg-shell',
+            'inline-flex h-9 items-center gap-2 rounded-control bg-card px-3 text-sm text-ink transition-colors duration-200 hover:bg-shell',
             className,
           )}
         >
@@ -79,7 +79,7 @@ export function DateRange({
           sideOffset={6}
           collisionPadding={8}
           aria-label="Date range"
-          className="z-50 flex w-72 max-w-[calc(100vw-16px)] flex-col gap-3 rounded-card border border-rule bg-surface p-2 text-ink shadow-menu outline-none data-[state=open]:animate-[fade-in_150ms_ease-out]"
+          className="z-50 flex w-72 max-w-[calc(100vw-16px)] flex-col gap-3 rounded-card border border-rule bg-card p-2 text-ink shadow-pop outline-none data-[state=open]:animate-[fade-in_150ms_ease-out]"
         >
           <ul className="m-0 flex list-none flex-col p-0">
             {presets.map((days) => (

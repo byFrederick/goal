@@ -3,13 +3,13 @@ import { cn } from './cn';
 
 const palettes = {
   /** Actual: teal on pale teal. */
-  run: { stripe: 'var(--color-run)', ground: 'var(--color-run-hatch)' },
+  run: { stripe: 'var(--color-run)', ground: 'var(--color-run-soft)' },
   /** Delay, loss, rework: rust. */
-  rework: { stripe: 'var(--color-rework)', ground: 'var(--color-rework-hatch)' },
+  rework: { stripe: 'var(--color-rework)', ground: 'var(--color-rework-tint)' },
   /** Waiting on a human: violet. */
-  you: { stripe: 'var(--color-you)', ground: 'var(--color-you-line)' },
+  you: { stripe: 'var(--color-you)', ground: 'var(--color-you-tint)' },
   /** Target or neutral time: gray. */
-  target: { stripe: 'var(--color-target)', ground: 'var(--color-line)' },
+  target: { stripe: 'var(--color-muted)', ground: 'var(--color-line)' },
 } as const;
 
 export type HatchTone = keyof typeof palettes;
@@ -65,7 +65,7 @@ export function Meter({
       }
     : { 'aria-hidden': true };
   return (
-    <div {...meter} className={cn('relative h-2.5 rounded-[3px] bg-surface', className)}>
+    <div {...meter} className={cn('relative h-2.5 rounded-[3px] bg-card', className)}>
       {pct > 0 ? (
         <div className="h-full overflow-hidden rounded-[3px]" style={{ width: `${pct}%` }}>
           <Hatch tone={tone} />

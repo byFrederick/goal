@@ -106,7 +106,7 @@ export default defineConfig({
   build: {
     target: 'es2023',
     // Fonts stay files: the CSP's default-src 'self' allows no data: fonts (Vite inlines files
-    // under 4 KB, some of Inter's and Fira Code's unicode-range subsets among them).
+    // under 4 KB, some of Archivo's and JetBrains Mono's unicode-range subsets among them).
     assetsInlineLimit: (file) => (/\.(woff2?|ttf|otf)$/.test(file) ? false : undefined),
   },
   test: {

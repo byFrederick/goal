@@ -37,9 +37,9 @@ export function LinePreview() {
               <li key={s.id} className="flex min-w-0 flex-col @[640px]:flex-1 @[640px]:flex-row">
                 <div
                   className={cn(
-                    'flex min-w-0 flex-1 flex-col gap-1 rounded-control border bg-surface p-2.5 text-[13px]',
+                    'flex min-w-0 flex-1 flex-col gap-1 rounded-control border bg-card p-2.5 text-[13px]',
                     drum ? 'border-amber shadow-[inset_0_3px_0_var(--color-amber)]' : 'border-line',
-                    s.kind === 'human' && !drum && 'border-you-line',
+                    s.kind === 'human' && !drum && 'border-you-tint',
                   )}
                 >
                   <span className="truncate text-sm font-medium">{stationLabel(s)}</span>

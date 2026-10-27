@@ -35,7 +35,7 @@ export function TargetBar({
   const pct = (n: number) => (max > 0 ? Math.min(100, Math.max(0, (n / max) * 100)) : 0);
   return (
     <div className={cn('flex flex-col gap-2', className)}>
-      <div {...meterOf(label, value, max)} className="relative h-2.5 rounded-[4px] bg-surface md:h-3">
+      <div {...meterOf(label, value, max)} className="relative h-2.5 rounded-[4px] bg-card md:h-3">
         {value > 0 ? (
           <div className="h-full overflow-hidden rounded-[4px]" style={{ width: `${pct(value)}%` }}>
             <Hatch tone="run" />

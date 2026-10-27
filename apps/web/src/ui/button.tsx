@@ -6,15 +6,15 @@ const variants = {
   /** Ink: the one primary action on a surface. */
   primary: 'bg-ink text-white hover:bg-ink/90',
   /** Concrete: secondary actions. */
-  secondary: 'bg-control text-ink hover:bg-control-hover',
+  secondary: 'bg-panel text-ink hover:bg-hover',
   /** White on concrete, for toggles and status pills. */
-  raised: 'bg-surface text-ink shadow-raise hover:bg-shell',
+  raised: 'bg-card text-ink hover:bg-shell',
   /** White with a hairline: a secondary action beside a primary one in a page header. */
-  white: 'border border-line bg-surface text-ink hover:bg-card',
+  white: 'border border-line bg-card text-ink hover:bg-card',
   /** Sends work back: dark rust text (AA on concrete), never a red fill. */
-  rework: 'bg-control text-rework-ink hover:bg-control-hover',
+  rework: 'bg-panel text-rework-ink hover:bg-hover',
   /** Text only, for low-weight actions inside cards. */
-  ghost: 'bg-transparent text-ink hover:bg-nav-hover',
+  ghost: 'bg-transparent text-ink hover:bg-hover',
 } as const;
 
 const sizes = {

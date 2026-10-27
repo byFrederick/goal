@@ -23,7 +23,7 @@ export function ArchivedBanner() {
   const error = restore.error instanceof ApiError ? (restore.error.detail ?? restore.error.title) : null;
 
   return (
-    <div className="m-0 flex flex-col gap-2 rounded-control border border-line bg-surface px-4 py-2.5 text-sm leading-snug">
+    <div className="m-0 flex flex-col gap-2 rounded-control border border-line bg-card px-4 py-2.5 text-sm leading-snug">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="m-0 flex min-w-0 items-start gap-2.5">
           <Archive size={16} strokeWidth={1.5} aria-hidden="true" className="mt-0.5 shrink-0 text-muted" />

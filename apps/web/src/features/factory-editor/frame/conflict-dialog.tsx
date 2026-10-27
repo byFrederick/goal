@@ -59,7 +59,7 @@ export function ConflictDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 return (
                   <fieldset
                     key={row.pointer}
-                    className="m-0 flex flex-col gap-2 rounded-control border border-line bg-surface p-3"
+                    className="m-0 flex flex-col gap-2 rounded-control border border-line bg-card p-3"
                   >
                     <legend className="float-left mb-1 w-full p-0 text-[15px] leading-snug">
                       <span className="font-medium">{row.label}</span> also changed elsewhere: theirs{' '}
@@ -139,7 +139,7 @@ export function FileConflictDialog({ open, onOpenChange }: { open: boolean; onOp
           ].map(([label, text]) => (
             <figure key={label} className="m-0 flex min-w-0 flex-col gap-1.5">
               <figcaption className="text-sm font-medium">{label}</figcaption>
-              <pre className="m-0 max-h-72 overflow-auto rounded-control border border-line bg-surface p-3 font-mono text-[13px] leading-relaxed whitespace-pre-wrap">
+              <pre className="m-0 max-h-72 overflow-auto rounded-control border border-line bg-card p-3 font-mono text-[13px] leading-relaxed whitespace-pre-wrap">
                 {text}
               </pre>
             </figure>

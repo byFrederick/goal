@@ -218,7 +218,7 @@ export function WizardEditor({
         onConfirm={() => remove.mutate()}
       >
         {deleteError ? (
-          <p role="alert" className="m-0 rounded-control border border-rework-line bg-rework-tint px-3 py-2.5 text-sm">
+          <p role="alert" className="m-0 rounded-control border border-rework-tint bg-rework-tint px-3 py-2.5 text-sm">
             {deleteError}
           </p>
         ) : null}

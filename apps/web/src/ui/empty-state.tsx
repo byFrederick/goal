@@ -20,7 +20,7 @@ export function EmptyState({
       {icon ? (
         <span
           aria-hidden="true"
-          className="flex size-10 items-center justify-center rounded-control border border-rule bg-surface text-ink-soft"
+          className="flex size-10 items-center justify-center rounded-control border border-rule bg-card text-ink-soft"
         >
           {icon}
         </span>

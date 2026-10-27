@@ -115,7 +115,7 @@ export function TimeCard({
         {bar.leftMs !== null && bar.leftMs > 0 ? (
           <div
             className={cn(
-              'h-full min-w-[3px] grow rounded-r-[3px] border border-line bg-surface',
+              'h-full min-w-[3px] grow rounded-r-[3px] border border-line bg-card',
               bar.segments.length === 0 && 'rounded-l-[3px]',
             )}
           />
@@ -255,7 +255,7 @@ export function PathCard({ item, factory, className }: { item: Item; factory: Fa
               }[state.tone]
             : visited
               ? 'bg-ink ring-line'
-              : 'bg-surface ring-[1.5px] ring-faint';
+              : 'bg-card ring-[1.5px] ring-muted';
           return (
             <li
               key={s.id}

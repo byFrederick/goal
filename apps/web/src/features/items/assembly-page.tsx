@@ -27,7 +27,7 @@ import {
 const segmentTone: Record<PartTone, string> = {
   done: 'bg-ok',
   working: 'bg-run',
-  waiting: 'bg-target',
+  waiting: 'bg-muted',
   cancelled: 'bg-line',
 };
 
@@ -86,7 +86,7 @@ function ProgressCard({ item, assembly, className }: { item: Item; assembly: Ass
 function WorkCard({ part, sub }: { part: AssemblyPart; sub: string }) {
   const link = usePartLink();
   return (
-    <li className="flex min-w-0 items-start gap-2.5 rounded-control border border-line bg-surface p-3">
+    <li className="flex min-w-0 items-start gap-2.5 rounded-control border border-line bg-card p-3">
       <StatusIcon status="working" className="mt-0.5" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <Link

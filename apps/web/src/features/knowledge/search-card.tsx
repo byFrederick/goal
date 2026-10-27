@@ -199,7 +199,7 @@ function Hit({ hit, q, source }: { hit: KnowledgeHit; q: string; source: Knowled
         {excerpt(hit.snippet, q).map((s, i) =>
           s.mark ? (
             // biome-ignore lint/suspicious/noArrayIndexKey: the pieces of one snippet, in order
-            <mark key={i} className="rounded-[3px] bg-control px-px font-medium text-ink">
+            <mark key={i} className="rounded-[3px] bg-panel px-px font-medium text-ink">
               {s.text}
             </mark>
           ) : (

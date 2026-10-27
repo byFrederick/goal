@@ -118,7 +118,7 @@ describe('the token overrides in styles.css', () => {
   it('defines the dark values of every themed color token, in both places', () => {
     // transparent and currentColor do not change with the theme.
     const fixed = ['--color-current', '--color-transparent'];
-    const light = tokens(css.slice(css.indexOf('@theme {'), css.indexOf('--shadow-raise'))).filter(
+    const light = tokens(css.slice(css.indexOf('@theme {'), css.indexOf('--radius-andon'))).filter(
       (t) => !fixed.includes(t),
     );
     const dark = tokens(block(':root[data-theme="dark"]'));
