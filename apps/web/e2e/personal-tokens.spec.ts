@@ -10,6 +10,7 @@ import {
   expectNoHorizontalScroll,
   expectToast,
   isPhone,
+  openNavigation,
   orgMarkOf,
   orgNav,
   recordToasts,
@@ -202,15 +203,10 @@ test('a member without api_key:read sees only their own tokens', async ({ page }
 test('the account menu opens your personal tokens', async ({ page }) => {
   await signIn(page.request);
   await page.goto('/o/acme');
-  if (isPhone(page)) {
-    await orgNav(page)
-      .getByRole('button', { name: /switch organization/ })
-      .click();
-    await page.getByRole('region', { name: 'Account' }).getByRole('link', { name: 'Personal tokens' }).click();
-  } else {
-    await orgNav(page).getByRole('button', { name: 'FC, F. Cruz, account' }).click();
-    await page.getByRole('dialog', { name: 'Account' }).getByRole('link', { name: 'Personal tokens' }).click();
-  }
+  // The account menu at every width; on a phone it opens from the drawer's person row.
+  await openNavigation(page);
+  await orgNav(page).getByRole('button', { name: 'FC, F. Cruz, account' }).click();
+  await page.getByRole('dialog', { name: 'Account' }).getByRole('link', { name: 'Personal tokens' }).click();
   await expect(page).toHaveURL(/\/o\/acme\/api-keys#personal-tokens$/);
   await expect(own(page).getByRole('heading', { name: 'Personal tokens' })).toBeFocused();
   await expect(own(page).getByRole('heading', { name: 'Personal tokens' })).toBeInViewport();
