@@ -961,6 +961,16 @@ func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
 		t.Errorf("UpdateBranch err = %v; want an error without the token", err)
 	}
 
+	// Nor in an error of a listing GitHub refuses with it.
+	echo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		f.reply(w, http.StatusForbidden, map[string]any{message: "token " + token + " lacks a scope"})
+	}))
+	t.Cleanup(echo.Close)
+
+	if _, err := New(Config{APIURL: echo.URL}).Repositories(t.Context(), dotComConn(t), ""); err == nil || strings.Contains(err.Error(), token) {
+		t.Errorf("Repositories err = %v; want an error without the token", err)
+	}
+
 	// A redirect is not followed: the token would travel to another host.
 	var leaked bool
 
@@ -990,9 +1000,158 @@ func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
 			_, err := moved.Compare(t.Context(), dotComConn(t), repoURL, "c1", "c2")
 			return err
 		},
+		"Repositories": func() error {
+			_, err := moved.Repositories(t.Context(), dotComConn(t), "")
+			return err
+		},
 	} {
 		if err := call(); err == nil || leaked {
 			t.Errorf("%s via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", name, err, leaked)
 		}
+	}
+}
+
+// fakeRepo is one repository of the fake's account or organization listings.
+type fakeRepo struct {
+	fullName  string
+	updatedAt string
+	languages string // the languages answer, a JSON object of bytes by language
+}
+
+// serveRepositories adds GitHub's account, organization and repository listings to the fake's
+// API: octo signs in, belongs to acme, owns mine and acme owns many; acme's first page ends with
+// a Link to a next one. Each listing must be asked by most recently updated, 100 a page.
+func serveRepositories(t *testing.T, f *fakeGitHub, mux *http.ServeMux, mine, acme []fakeRepo) {
+	t.Helper()
+
+	list := func(repos []fakeRepo, next bool, want map[string]string) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			for k, v := range want {
+				if got := r.URL.Query().Get(k); got != v {
+					t.Errorf("%s %s=%q; want %q", r.URL.Path, k, got, v)
+				}
+			}
+
+			out := []map[string]any{}
+			for _, fr := range repos {
+				out = append(out, map[string]any{
+					"full_name": fr.fullName, "clone_url": "https://github.com/" + fr.fullName + ".git", "updated_at": fr.updatedAt,
+					"private": false,
+				})
+			}
+
+			if next {
+				w.Header().Set("Link", `<https://api.github.com/organizations/1/repos?page=2>; rel="next", <https://api.github.com/organizations/1/repos?page=3>; rel="last"`)
+			}
+
+			f.reply(w, http.StatusOK, out)
+		}
+	}
+
+	mux.HandleFunc("GET /user", func(w http.ResponseWriter, _ *http.Request) {
+		f.reply(w, http.StatusOK, map[string]any{"login": "octo", "type": "User"})
+	})
+	mux.HandleFunc("GET /user/orgs", func(w http.ResponseWriter, _ *http.Request) {
+		f.reply(w, http.StatusOK, []map[string]any{{"login": "acme"}})
+	})
+	mux.HandleFunc("GET /user/repos", list(mine, false, map[string]string{"affiliation": "owner", "sort": "updated", "per_page": "100"}))
+	mux.HandleFunc("GET /orgs/acme/repos", list(acme, true, map[string]string{"type": "all", "sort": "updated", "per_page": "100"}))
+	mux.HandleFunc("GET /orgs/{org}/repos", func(w http.ResponseWriter, _ *http.Request) {
+		f.reply(w, http.StatusNotFound, map[string]any{message: "Not Found"})
+	})
+	mux.HandleFunc("GET /repos/{owner}/{name}/languages", func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("owner") + "/" + r.PathValue("name")
+		for _, fr := range slices.Concat(mine, acme) {
+			if fr.fullName == name {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, fr.languages)
+
+				return
+			}
+		}
+
+		f.reply(w, http.StatusNotFound, map[string]any{message: "Not Found"})
+	})
+}
+
+func TestClient_Repositories(t *testing.T) {
+	t.Parallel()
+
+	mine := []fakeRepo{
+		{fullName: "octo/goal", updatedAt: "2026-10-27T09:00:00Z", languages: `{"Go":9000,"TypeScript":4000,"Shell":30,"HCL":200}`},
+		{fullName: "octo/notes", updatedAt: "2026-10-01T09:00:00Z", languages: `{}`},
+	}
+
+	acme := make([]fakeRepo, 0, 100)
+	for i := range 100 {
+		acme = append(acme, fakeRepo{fullName: "acme/app-" + strconv.Itoa(i), updatedAt: "2026-09-01T00:00:00Z", languages: `{"Python":1}`})
+	}
+
+	f := &fakeGitHub{}
+	mux := http.NewServeMux()
+	serveRepositories(t, f, mux, mine, acme)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		f.requests = append(f.requests, r.Method+" "+r.URL.Path)
+		f.mu.Unlock()
+
+		if r.Header.Get("Authorization") != "Bearer "+token {
+			f.reply(w, http.StatusUnauthorized, map[string]any{message: "Bad credentials"})
+			return
+		}
+
+		mux.ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+
+	c := New(Config{APIURL: srv.URL})
+	owners := []ports.RepositoryOwner{{Login: "octo", Kind: ports.RepositoryOwnerUser}, {Login: "acme", Kind: ports.RepositoryOwnerOrganization}}
+
+	// The account's, when no owner is asked.
+	got, err := c.Repositories(t.Context(), dotComConn(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := ports.RepositoryList{
+		Login: "octo", Owners: owners, Owner: "octo",
+		Repositories: []ports.Repository{
+			{
+				FullName: "octo/goal", CloneURL: "https://github.com/octo/goal.git", Languages: []string{"Go", "TypeScript", "HCL"},
+				UpdatedAt: time.Date(2026, 10, 27, 9, 0, 0, 0, time.UTC),
+			},
+			{FullName: "octo/notes", CloneURL: "https://github.com/octo/notes.git", Languages: []string{}, UpdatedAt: time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)},
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Repositories(\"\") = %+v; want %+v", got, want)
+	}
+
+	// An organization's first page of 100, truncated because GitHub has a next one.
+	got, err = c.Repositories(t.Context(), dotComConn(t), "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Owner != "acme" || len(got.Repositories) != ports.MaxRepositories || !got.Truncated ||
+		!slices.Equal(got.Repositories[99].Languages, []string{"Python"}) || !reflect.DeepEqual(got.Owners, owners) {
+		t.Errorf("Repositories(acme) = owner %s, %d repositories, truncated %v; want acme, 100, truncated", got.Owner, len(got.Repositories), got.Truncated)
+	}
+
+	// The account named as the owner is the account's listing.
+	if got, err := c.Repositories(t.Context(), dotComConn(t), "octo"); err != nil || len(got.Repositories) != 2 || got.Truncated {
+		t.Errorf("Repositories(octo) = %+v, %v; want octo's 2", got, err)
+	}
+
+	// An owner GitHub does not know is not found.
+	if _, err := c.Repositories(t.Context(), dotComConn(t), "nobody"); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("Repositories(nobody) = %v; want ErrNotFound", err)
+	}
+
+	// A name that is not a login is refused before anything is sent.
+	before := len(f.sent())
+	if _, err := c.Repositories(t.Context(), dotComConn(t), "../user"); err == nil || len(f.sent()) != before {
+		t.Errorf("Repositories(../user) = %v after %d requests; want an error and none sent", err, len(f.sent())-before)
 	}
 }
