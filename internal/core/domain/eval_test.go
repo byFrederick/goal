@@ -30,7 +30,7 @@ func TestNewEvalRun_Check(t *testing.T) {
 		edit func(n *NewEvalRun)
 		ok   bool
 	}{
-		{"valid", func(*NewEvalRun) {}, true},
+		{"a valid run", func(*NewEvalRun) {}, true},
 		{"on publish of a version", func(n *NewEvalRun) { n.Trigger, n.VersionID = EvalOnPublish, "00000000-0000-7000-8000-0000000000a1" }, true},
 		{"the one case named", func(n *NewEvalRun) { n.Case, n.Cases = testEvalCase, n.Cases[:1] }, true},
 		{"no factory", func(n *NewEvalRun) { n.FactoryID = "" }, false},

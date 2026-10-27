@@ -171,6 +171,27 @@ type ItemTouch struct {
 	ReasonBy  *string
 }
 
+type JudgeScore struct {
+	ID         uuid.UUID
+	OrgID      uuid.UUID
+	FactoryID  uuid.UUID
+	VersionID  uuid.UUID
+	Judge      string
+	RunID      *uuid.UUID
+	ItemID     *uuid.UUID
+	State      string
+	Outcome    *string
+	Score      *float64
+	Passed     *bool
+	Reason     string
+	CostUsd    float64
+	JudgeRunID *uuid.UUID
+	LeaseUntil *time.Time
+	LeaseToken *uuid.UUID
+	CreatedAt  time.Time
+	ScoredAt   *time.Time
+}
+
 type Lease struct {
 	ItemID      uuid.UUID
 	FactoryID   uuid.UUID
