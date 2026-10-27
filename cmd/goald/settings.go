@@ -67,6 +67,10 @@ type settings struct {
 	// identity service is told about (GOAL_TRUSTED_PROXIES: comma-separated CIDRs or addresses,
 	// default none).
 	TrustedProxies []netip.Prefix
+	// EgressAddresses are the addresses agents' traffic leaves the install from, which the
+	// organization policy screen shows so people can allow them upstream (GOAL_EGRESS_ADDRESSES:
+	// comma-separated CIDRs, default none).
+	EgressAddresses []netip.Prefix
 	// GatewayURL is the MCP gateway's URL (GOAL_GATEWAY_URL, default http://<gateway listen or
 	// listen>/mcp, a wildcard host becoming 127.0.0.1). Agent containers are given the egress
 	// proxy's address at its path, and the proxy reaches goald as GOAL_EGRESS_GATEWAY says
@@ -133,19 +137,20 @@ type settings struct {
 const (
 	// modelsEnv lists the editor's models; defaultModels are the current Claude models, the most
 	// capable first.
-	modelsEnv      = "GOAL_MODELS"
-	publicURLEnv   = "GOAL_PUBLIC_URL"
-	listenEnv      = "GOAL_LISTEN"
-	gatewayEnv     = "GOAL_GATEWAY_LISTEN"
-	gatewayURLEnv  = "GOAL_GATEWAY_URL"
-	authEnv        = "GOAL_AUTH"
-	upstreamEnv    = "GOAL_AUTH_UPSTREAM"
-	proxiesEnv     = "GOAL_TRUSTED_PROXIES"
-	googleEnv      = "GOAL_AUTH_GOOGLE"
-	emailEnv       = "GOAL_AUTH_EMAIL"
-	defaultAuthURL = "http://127.0.0.1:8081"
-	schemeHTTP     = "http"
-	schemeHTTPS    = "https"
+	modelsEnv          = "GOAL_MODELS"
+	publicURLEnv       = "GOAL_PUBLIC_URL"
+	listenEnv          = "GOAL_LISTEN"
+	gatewayEnv         = "GOAL_GATEWAY_LISTEN"
+	gatewayURLEnv      = "GOAL_GATEWAY_URL"
+	authEnv            = "GOAL_AUTH"
+	upstreamEnv        = "GOAL_AUTH_UPSTREAM"
+	proxiesEnv         = "GOAL_TRUSTED_PROXIES"
+	egressAddressesEnv = "GOAL_EGRESS_ADDRESSES"
+	googleEnv          = "GOAL_AUTH_GOOGLE"
+	emailEnv           = "GOAL_AUTH_EMAIL"
+	defaultAuthURL     = "http://127.0.0.1:8081"
+	schemeHTTP         = "http"
+	schemeHTTPS        = "https"
 	// sandboxNetworkEnv names the agents' network (compose.yaml's agents).
 	sandboxNetworkEnv = "GOAL_SANDBOX_NETWORK"
 	sandboxEnv        = "GOAL_SANDBOX"
@@ -446,6 +451,10 @@ func authSettings(s *settings, or func(name, def string) string) []error {
 		errs = append(errs, err)
 	}
 
+	if s.EgressAddresses, err = egressAddresses(or(egressAddressesEnv, "")); err != nil {
+		errs = append(errs, err)
+	}
+
 	return errs
 }
 
@@ -488,6 +497,46 @@ func trustedProxies(raw string) ([]netip.Prefix, error) {
 
 		a = a.Unmap()
 		out = append(out, netip.PrefixFrom(a, a.BitLen()))
+	}
+
+	return out, nil
+}
+
+// modelIDs are the ids of the install's models, the default first.
+func (s settings) modelIDs() []string {
+	out := make([]string, 0, len(s.Models))
+	for _, m := range s.Models {
+		out = append(out, m.ID)
+	}
+
+	return out
+}
+
+// boxSizes are the vCPU and memory the sandbox backend gives each size.
+func (s settings) boxSizes() []domain.BoxSize {
+	if s.Sandbox == sandboxCloudflare {
+		return cloudflare.BoxSizes()
+	}
+
+	return docker.BoxSizes()
+}
+
+// egressAddresses parses GOAL_EGRESS_ADDRESSES: comma-separated CIDRs.
+func egressAddresses(raw string) ([]netip.Prefix, error) {
+	var out []netip.Prefix
+
+	for item := range strings.SplitSeq(raw, ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+
+		p, err := netip.ParsePrefix(item)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %q is not a CIDR such as 203.0.113.0/24", egressAddressesEnv, item)
+		}
+
+		out = append(out, p.Masked())
 	}
 
 	return out, nil
