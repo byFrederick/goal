@@ -128,6 +128,12 @@ func (p *Permissions) Authorize(_ context.Context, r AccessRequest) error {
 		return err
 	}
 
+	// A factory permission's freshness is asked in the resolver's pass, after the factory's
+	// visibility, so a stale session or a key learns nothing about a factory it does not see.
+	if ru.level == levelFactory && r.Factory == "" {
+		return nil
+	}
+
 	return p.fresh(pr, name, ru)
 }
 
