@@ -48,10 +48,10 @@ test('the root opens the factories of the first organization', async ({ page }) 
 });
 
 test('the root returns to the organization used last', async ({ page }) => {
-  await page.goto('/o/example-labs');
+  await page.goto('/o/goal');
   await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeVisible();
   await page.goto('/');
-  await expect(page).toHaveURL(/\/o\/example-labs$/);
+  await expect(page).toHaveURL(/\/o\/goal$/);
   await expect(page.getByRole('article')).toHaveCount(1);
   await expect(orgNav(page).getByRole('link', { name: /, \S+ factory/ })).toHaveCount(1);
 });
@@ -119,12 +119,12 @@ test('on a phone: the banner leads to what waits, a card to its floor', async ({
 });
 
 test('an organization without budgets or factories says so', async ({ page, request }) => {
-  await page.goto('/o/example-labs');
+  await page.goto('/o/goal');
   await expect(
     page.getByText(
       isPhone(page)
         ? /^\$\d+\.\d\d spent this week, no budget set$/
-        : /^Example Labs’ factories\. Nothing is waiting on you, and \$\d+\.\d\d was spent this week\.$/,
+        : /^Goal’s factories\. Nothing is waiting on you, and \$\d+\.\d\d was spent this week\.$/,
     ),
   ).toBeVisible();
   await expect(page.getByRole('region', { name: 'Waiting on you', exact: true })).toContainText(
@@ -148,7 +148,7 @@ test('old /f/ links move under their organization, keeping search params', async
   await expect(page.getByRole('heading', { level: 1, name: 'goald: serve the embedded web UI' })).toBeVisible();
 
   await page.goto('/f/research/items?state=done');
-  await expect(page).toHaveURL(/\/o\/example-labs\/f\/research\/items\?state=done$/);
+  await expect(page).toHaveURL(/\/o\/goal\/f\/research\/items\?state=done$/);
 
   await page.goto('/f/nothing-here');
   await expect(page.getByRole('heading', { level: 1, name: 'No such factory' })).toBeVisible();
@@ -238,7 +238,7 @@ test('the sidebar marks Home on the organization pages', async ({ page }) => {
   await page.goto('/o/acme/f/goal');
   // The current organization in the menu opens its Factories home.
   await orgMarkOf(page).click();
-  await page.getByRole('menuitemradio', { name: /^Acme/ }).click();
+  await page.getByRole('menuitem', { name: /^Acme/ }).click();
   await expect(page).toHaveURL(/\/o\/acme$/);
   const sidebar = orgNav(page);
   await expect(sidebar.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
@@ -658,21 +658,18 @@ test('switch organization from the menu by keyboard', async ({ page }) => {
   const menu = page.getByRole('menu', { name: 'Acme organization, switch organization' });
   await expect(menu).toBeVisible();
   await expect(mark).toHaveAttribute('aria-expanded', 'true');
-  await expect(menu.getByRole('menuitemradio', { name: /^Acme\s?3 factories$/ })).toHaveAttribute(
-    'aria-checked',
+  await expect(menu.getByRole('menuitem', { name: /^Acme\s?3 factories, owner Current$/ })).toHaveAttribute(
+    'aria-current',
     'true',
   );
-  await expect(menu.getByRole('menuitemradio', { name: /^Example Labs\s?1 factory$/ })).toHaveAttribute(
-    'aria-checked',
-    'false',
-  );
-  await expect(menu.getByRole('menuitem', { name: 'Connections' })).toHaveAttribute('href', '/o/acme/connections');
-  await expect(menu.getByRole('menuitem', { name: 'Knowledge' })).toHaveAttribute('href', '/o/acme/knowledge');
+  await expect(menu.getByRole('menuitem', { name: /^Goal\s?1 factory, owner$/ })).not.toHaveAttribute('aria-current');
+  await expect(menu.getByRole('menuitem', { name: 'Spend and billing' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(menu.getByRole('menuitem', { name: 'Models and policies' })).toHaveAttribute('aria-disabled', 'true');
   await expect(menu.getByRole('menuitem', { name: 'Organization settings' })).toHaveAttribute(
     'href',
     '/o/acme/settings',
   );
-  await expect(menu.getByRole('menuitem', { name: 'Members and roles' })).toHaveAttribute('href', '/o/acme/members');
+  await expect(menu.getByRole('menuitem', { name: /^Members and roles/ })).toHaveAttribute('href', '/o/acme/members');
   await expectAccessible(page);
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
@@ -680,18 +677,18 @@ test('switch organization from the menu by keyboard', async ({ page }) => {
 
   // Arrow keys and Enter choose another organization: its Factories home, its sidebar.
   await page.keyboard.press('Enter');
-  await expect(menu.getByRole('menuitemradio', { name: /^Acme/ })).toBeFocused();
+  await expect(menu.getByRole('menuitem', { name: /^Acme/ })).toBeFocused();
   await page.keyboard.press('ArrowDown');
-  await expect(menu.getByRole('menuitemradio', { name: /^Example Labs/ })).toBeFocused();
+  await expect(menu.getByRole('menuitem', { name: /^Goal/ })).toBeFocused();
   await page.keyboard.press('Enter');
-  await expect(page).toHaveURL(/\/o\/example-labs$/);
+  await expect(page).toHaveURL(/\/o\/goal$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeFocused();
   await expect(orgNav(page).getByRole('link', { name: /, \S+ factory/ })).toHaveCount(1);
-  await expect(orgMarkOf(page, 'Example Labs')).toBeVisible();
+  await expect(orgMarkOf(page, 'Goal')).toBeVisible();
 
   // The organization used last is where / returns.
   await page.goto('/');
-  await expect(page).toHaveURL(/\/o\/example-labs$/);
+  await expect(page).toHaveURL(/\/o\/goal$/);
 });
 
 test('switch organization from the drawer on a phone', async ({ page }) => {
@@ -700,15 +697,12 @@ test('switch organization from the drawer on a phone', async ({ page }) => {
   await openNavigation(page);
   await orgMarkOf(page).click();
   const menu = page.getByRole('menu', { name: 'Acme organization, switch organization' });
-  await expect(menu.getByRole('menuitemradio', { name: /^Acme\s?3 factories$/ })).toHaveAttribute(
-    'aria-checked',
-    'true',
-  );
+  await expect(menu.getByRole('menuitem', { name: /^Acme\s?3 factories/ })).toHaveAttribute('aria-current', 'true');
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
-  await menu.getByRole('menuitemradio', { name: /^Example Labs/ }).click();
-  await expect(page).toHaveURL(/\/o\/example-labs$/);
+  await menu.getByRole('menuitem', { name: /^Goal/ }).click();
+  await expect(page).toHaveURL(/\/o\/goal$/);
   await expect(page.getByRole('dialog', { name: 'Acme' })).toBeHidden();
   await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeFocused();
   await expect(orgNav(page).getByRole('link', { name: /, \S+ factory/ })).toHaveCount(1);
@@ -757,10 +751,9 @@ test('create an organization and land on its empty factories', async ({ page }) 
   // The new organization is in the menu, current.
   await openNavigation(page);
   await newMark.click();
-  await expect(page.getByRole('menuitemradio', { name: /^Acme Two\s?0 factories$/ })).toHaveAttribute(
-    'aria-checked',
-    'true',
-  );
+  // The organization menu is used at every width, including in the phone drawer, and its
+  // current row is marked with aria-current at every width.
+  await expect(page.getByRole('menuitem', { name: /^Acme Two\s?0 factories/ })).toHaveAttribute('aria-current', 'true');
 });
 
 test('a malformed address is caught before sending, and Escape returns to the mark', async ({ page }) => {
@@ -789,6 +782,8 @@ test('a malformed address is caught before sending, and Escape returns to the ma
 
 test('with sign-in off the account names the local user and offers nothing to sign out of', async ({ page }) => {
   await page.goto('/o/acme');
+  // The account menu at every width; on a phone it opens from the drawer's person row.
+  await openNavigation(page);
   const account = orgNav(page).getByRole('button', { name: 'LU, Local user, account' });
   await account.click();
   const panel = page.getByRole('dialog', { name: 'Account' });
