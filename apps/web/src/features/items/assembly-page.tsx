@@ -3,6 +3,7 @@ import { Link, useParams } from '@tanstack/react-router';
 import { ChevronLeft, ExternalLink } from 'lucide-react';
 import { boardQuery, itemQuery, partsQuery } from '../../api/queries';
 import type { AssemblyPart, AssemblyParts, BoardLane, Item } from '../../api/types';
+import { TopBarSlot } from '../../app/top-bar';
 import { factoryTitle, itemKey, refParam, useFactory, useFactoryParams } from '../../shared/factory';
 import { formatDuration, formatUsd, humanize } from '../../shared/format';
 import { pullRequestLabel, stateNames } from '../../shared/item-state';
@@ -281,6 +282,7 @@ export function AssemblyPage() {
 
   return (
     <>
+      <TopBarSlot crumb={`#${item.number}`} />
       <header className="flex flex-col gap-2.5">
         <Link
           to="/o/$org/f/$factory/board"

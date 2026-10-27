@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { runDefinition } from './definition.js';
 import type { WorkerEvent } from './events.js';
+import { runJudge } from './judge.js';
 import { type Exec, type Output, type Prepared, prepare } from './prepare.js';
 import { failed, runTask } from './run.js';
 import { type AgentFiles, parseSpec, paths } from './spec.js';
@@ -80,6 +81,8 @@ async function runAgent(): Promise<number> {
   try {
     const spec = parseSpec(await readFile(paths.spec, 'utf8'));
     // A draft request's run (ADR 0021) reads no agent files and installs no skills.
+    // A judge's run (ADR 0025) reads no agent files and installs no skills either.
+    if (spec.judge) return await runJudge(spec, { query, emit, now, env: process.env, abortController });
     if (spec.draft_request) return await runDefinition(spec, { query, emit, now, env: process.env, abortController });
     const files = await readAgentFiles();
     await installSkills();

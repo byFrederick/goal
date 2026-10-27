@@ -25,26 +25,31 @@ var yamlErrorLine = regexp.MustCompile(`line (\d+)(?:: column (\d+))?`)
 // parseDocument parses factory.yaml. A file that does not parse, or parses into something
 // JSON cannot hold (non-string keys), is one yaml-invalid problem.
 func parseDocument(raw []byte) (*document, *domain.DefinitionProblem) {
+	return parseYAML(FileName, raw)
+}
+
+// parseYAML parses the YAML file at path in the tree, as parseDocument does factory.yaml.
+func parseYAML(file string, raw []byte) (*document, *domain.DefinitionProblem) {
 	var n yaml.Node
 	if err := yaml.Unmarshal(raw, &n); err != nil {
-		return nil, yamlInvalid(FileName, err)
+		return nil, yamlInvalid(file, err)
 	}
 
 	if n.Kind != yaml.DocumentNode || len(n.Content) == 0 {
 		return nil, &domain.DefinitionProblem{
 			Code: codeYAMLInvalid, Severity: domain.SeverityError, Check: checkYAML, Section: domain.SectionFiles,
-			File: FileName, Message: FileName + " is empty",
+			File: file, Message: file + " is empty",
 		}
 	}
 
 	var v any
 	if err := n.Decode(&v); err != nil {
-		return nil, yamlInvalid(FileName, err)
+		return nil, yamlInvalid(file, err)
 	}
 
 	data, err := json.Marshal(v)
 	if err != nil {
-		return nil, yamlInvalid(FileName, fmt.Errorf("keys must be strings and values plain YAML: %w", err))
+		return nil, yamlInvalid(file, fmt.Errorf("keys must be strings and values plain YAML: %w", err))
 	}
 
 	return &document{root: n.Content[0], json: data}, nil
