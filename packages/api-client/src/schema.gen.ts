@@ -1741,6 +1741,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's agent runs across the factories the caller sees, newest first
+         * @description The runs that started in [since, until) in the factories the caller may read, or in the one named by factory, newest first (by start, then id), paged by next_cursor. When since is absent it is the start of the current UTC day; when until is absent it is the end of that day; since must be before until. The summary covers the same factories and window whatever status and q say. A wide window is a scan of every run in it: keep it short.
+         */
+        get: operations["listRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/runs/{run}": {
         parameters: {
             query?: never;
@@ -3851,6 +3874,42 @@ export interface components {
             definition_version_id: string | null;
             /** @description That version's number ("ran on v9"); null when the run has no version */
             definition_version: number | null;
+        };
+        OrgRunList: {
+            runs: components["schemas"]["OrgRun"][];
+            /** @description Pass as cursor for the next page; null on the last page */
+            next_cursor: string | null;
+            summary: components["schemas"]["RunSummary"];
+        };
+        /** @description A run with the factory and the item it worked */
+        OrgRun: components["schemas"]["Run"] & {
+            factory: components["schemas"]["FactoryHit"];
+            item: components["schemas"]["RunItem"];
+        };
+        RunItem: {
+            id: string;
+            /** @description <factory>#<number>, as in goal#147 */
+            ref: string;
+            title: string;
+        };
+        /** @description The runs of a window's factories, whatever their status */
+        RunSummary: {
+            total: number;
+            running: number;
+            failed: number;
+            /** @description Succeeded and cancelled runs */
+            finished: number;
+            /** Format: double */
+            spend_usd: number;
+            /** @description The factories that ran anything in the window, the highest spend first, then by name */
+            spend_by_factory: components["schemas"]["FactorySpend"][];
+        };
+        FactorySpend: {
+            /** @description The factory's metadata.id */
+            id: string;
+            name: string;
+            /** Format: double */
+            spend_usd: number;
         };
         /** @description One stop of a factory's line, open (cleared_at null) until someone clears it. While a pull is open the line releases and claims nothing. */
         AndonPull: {
@@ -7514,6 +7573,44 @@ export interface operations {
                 content?: never;
             };
             409: components["responses"]["Conflict"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listRuns: {
+        parameters: {
+            query?: {
+                /** @description Only this factory's runs (its metadata.id or metadata.name); unknown is 404 */
+                factory?: string;
+                /** @description Only runs with this status */
+                status?: components["schemas"]["RunStatus"];
+                /** @description The earliest start, included; the start of the current UTC day when absent */
+                since?: string;
+                /** @description The latest start, excluded; the end of the current UTC day when absent */
+                until?: string;
+                /** @description Only runs whose item title, agent or model contains q (case-insensitively and literally: % and _ are no wildcards), or whose item has the number q names ("147", "#147" or "goal#147"). Trimmed; at most 200 characters. */
+                q?: string;
+                limit?: number;
+                /** @description The next_cursor of the previous page, opaque */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of runs and the window's summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgRunList"];
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };

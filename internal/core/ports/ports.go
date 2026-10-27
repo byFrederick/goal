@@ -203,6 +203,12 @@ type Store interface {
 	// Run returns one run, or ErrNotFound.
 	Run(ctx context.Context, id domain.RunID) (domain.Run, error)
 
+	// OrgRuns returns up to q.Limit of the runs of q.Factories that started in [q.Since,
+	// q.Until) and match q, newest first (by start, then id, both descending), after q.After
+	// when set. The summary counts every run of q.Factories in the window, whatever q.Status,
+	// q.Text and q.Number say. No factory finds nothing.
+	OrgRuns(ctx context.Context, q RunQuery) ([]domain.ListedRun, domain.RunSummary, error)
+
 	// Transition moves an item as described by t, compare-and-set on t.From (and on t.Lease
 	// when set). It returns ErrConflict or ErrLeaseLost when the guard fails; nothing changes.
 	// Releasing a lease records its lease span, so t.Lease needs t.Outcome (an error otherwise).
@@ -565,6 +571,30 @@ type ItemQuery struct {
 	// Before, when positive, keeps items numbered below it: the cursor of the next page.
 	Before int64
 	Limit  int
+}
+
+// RunQuery selects the runs of an organization's factories for its run list.
+type RunQuery struct {
+	Factories []domain.FactoryID
+	// Since (included) and Until (excluded) bound the runs' start.
+	Since, Until time.Time
+	// Status, when not empty, keeps runs with this status.
+	Status domain.RunStatus
+	// Text, when not empty, keeps runs whose item title, agent or model contains it
+	// (case-insensitively and literally), or whose item's number is Number when that is
+	// positive (and the item is of NumberOf when that is set).
+	Text     string
+	Number   int64
+	NumberOf domain.FactoryID
+	// After, when set, keeps runs before it in the list's order: the cursor of the next page.
+	After *RunCursor
+	Limit int
+}
+
+// RunCursor is the position of a run in the organization's run list.
+type RunCursor struct {
+	StartedAt time.Time
+	ID        domain.RunID
 }
 
 // ItemSearch finds items across factories for the shell's search box.

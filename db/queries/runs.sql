@@ -35,6 +35,45 @@ WHERE item_id = sqlc.arg(item_id)
 ORDER BY started_at, id
 LIMIT sqlc.arg(max_runs)::bigint;
 
+-- name: ListOrgRuns :many
+-- The organization's run list: the runs of the factories that started in [since, until), newest
+-- first, after the cursor (after_started_at, after_id) when paged. agent_runs_factory_started_idx
+-- serves the range per factory; status and the pattern (already escaped, with \ as the escape
+-- character, matched against the item's title, the agent and the model, or the item's number,
+-- of number_of's factory when set)
+-- filter within it. Row-level security scopes it to the organization.
+SELECT sqlc.embed(r), w.number AS item_number, w.title AS item_title
+FROM agent_runs r
+JOIN work_items w ON w.id = r.item_id
+WHERE r.factory_id = ANY (sqlc.arg(factories)::uuid[])
+  AND r.started_at >= sqlc.arg(since) AND r.started_at < sqlc.arg(until)
+  AND (sqlc.arg(status)::text = '' OR r.status = sqlc.arg(status)::text)
+  AND (sqlc.arg(pattern)::text = ''
+       OR w.title ILIKE '%' || sqlc.arg(pattern)::text || '%' ESCAPE '\'
+       OR r.agent ILIKE '%' || sqlc.arg(pattern)::text || '%' ESCAPE '\'
+       OR r.model ILIKE '%' || sqlc.arg(pattern)::text || '%' ESCAPE '\'
+       OR (sqlc.arg(number)::bigint > 0 AND w.number = sqlc.arg(number)::bigint
+           AND (sqlc.narg(number_of)::uuid IS NULL OR r.factory_id = sqlc.narg(number_of)::uuid)))
+  AND (NOT sqlc.arg(paged)::boolean
+       OR (r.started_at, r.id) < (sqlc.arg(after_started_at)::timestamptz, sqlc.arg(after_id)::uuid))
+ORDER BY r.started_at DESC, r.id DESC
+LIMIT sqlc.arg(max_runs)::bigint;
+
+-- name: OrgRunsSummary :many
+-- Each factory's runs that started in [since, until), whatever their status, for the run list's
+-- summary; agent_runs_factory_started_idx serves the range. Factories without a run have no row.
+SELECT factory_id,
+       count(*)                                                  AS total,
+       count(*) FILTER (WHERE status = 'running')                AS running,
+       count(*) FILTER (WHERE status = 'failed')                 AS failed,
+       count(*) FILTER (WHERE status IN ('succeeded', 'cancelled')) AS finished,
+       coalesce(sum(cost_usd), 0)::float8                        AS spend_usd
+FROM agent_runs
+WHERE factory_id = ANY (sqlc.arg(factories)::uuid[])
+  AND started_at >= sqlc.arg(since) AND started_at < sqlc.arg(until)
+GROUP BY factory_id
+ORDER BY factory_id;
+
 -- name: GetRun :one
 SELECT * FROM agent_runs WHERE id = $1;
 

@@ -85,6 +85,7 @@ type Items interface {
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
 	Runs(ctx context.Context, item domain.ItemID, limit int) ([]domain.Run, error)
 	Run(ctx context.Context, id domain.RunID) (domain.Run, error)
+	OrgRuns(ctx context.Context, q ports.RunQuery) ([]domain.ListedRun, domain.RunSummary, error)
 	ListItems(ctx context.Context, q ports.ItemQuery) ([]domain.Item, error)
 	SearchItems(ctx context.Context, q ports.ItemSearch) ([]domain.Item, error)
 	Assemblies(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID]domain.Assembly, error)

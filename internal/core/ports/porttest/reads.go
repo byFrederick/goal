@@ -129,6 +129,71 @@ func (s *Store) SearchItems(ctx context.Context, q ports.ItemSearch) ([]domain.I
 	return out, nil
 }
 
+// OrgRuns implements ports.Store.
+func (s *Store) OrgRuns(ctx context.Context, q ports.RunQuery) ([]domain.ListedRun, domain.RunSummary, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, domain.RunSummary{}, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	text := strings.ToLower(q.Text)
+	matches := func(r *domain.Run, it *domain.Item) bool {
+		if q.Status != "" && r.Result.Status != q.Status {
+			return false
+		}
+
+		if text != "" && !strings.Contains(strings.ToLower(it.Title), text) && !strings.Contains(strings.ToLower(r.Agent), text) &&
+			!strings.Contains(strings.ToLower(r.Model), text) && (q.Number <= 0 || it.Number != q.Number || (q.NumberOf != "" && it.FactoryID != q.NumberOf)) {
+			return false
+		}
+
+		return q.After == nil || r.StartedAt.Before(q.After.StartedAt) || (r.StartedAt.Equal(q.After.StartedAt) && r.ID < q.After.ID)
+	}
+
+	var (
+		match = []domain.ListedRun{}
+		sum   domain.RunSummary
+		spend = map[domain.FactoryID]float64{}
+	)
+
+	for _, r := range s.runs {
+		it, ok := s.visible(r.ItemID, org)
+		if !ok || !slices.Contains(q.Factories, r.FactoryID) || r.StartedAt.Before(q.Since) || !r.StartedAt.Before(q.Until) {
+			continue
+		}
+
+		sum.Total++
+		sum.SpendUSD += r.Result.CostUSD
+		spend[r.FactoryID] += r.Result.CostUSD
+
+		switch r.Result.Status {
+		case domain.RunRunning:
+			sum.Running++
+		case domain.RunFailed:
+			sum.Failed++
+		case domain.RunSucceeded, domain.RunCancelled:
+			sum.Finished++
+		}
+
+		if matches(r, it) {
+			match = append(match, domain.ListedRun{Run: *r, ItemNumber: it.Number, ItemTitle: it.Title})
+		}
+	}
+
+	for _, f := range slices.Sorted(maps.Keys(spend)) {
+		sum.ByFactory = append(sum.ByFactory, domain.FactorySpend{FactoryID: f, SpendUSD: spend[f]})
+	}
+
+	slices.SortFunc(match, func(a, b domain.ListedRun) int {
+		return cmp.Or(b.StartedAt.Compare(a.StartedAt), cmp.Compare(b.ID, a.ID))
+	})
+
+	return match[:min(q.Limit, len(match))], sum, nil
+}
+
 // StationLoads implements ports.Store.
 func (s *Store) StationLoads(ctx context.Context, factory domain.FactoryID) ([]domain.StationLoad, error) {
 	org, err := orgOf(ctx)

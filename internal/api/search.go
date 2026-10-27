@@ -128,9 +128,8 @@ func searchFactories(fs []*config.Factory, q string, limit int) []gen.FactoryHit
 	var out []gen.FactoryHit
 
 	for _, f := range fs {
-		title := cmp.Or(f.Metadata.Title, f.Metadata.Name)
-		if matchRank(f.Metadata.Name, q) >= 0 || matchRank(title, q) >= 0 {
-			out = append(out, gen.FactoryHit{Id: f.Metadata.ID, Name: f.Metadata.Name, Title: title})
+		if hit := factoryHit(f); matchRank(hit.Name, q) >= 0 || matchRank(hit.Title, q) >= 0 {
+			out = append(out, hit)
 		}
 	}
 

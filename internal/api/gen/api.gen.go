@@ -2284,6 +2284,14 @@ type FactorySlotsPatch struct {
 	Max       *int   `json:"max"`
 }
 
+// FactorySpend defines model for FactorySpend.
+type FactorySpend struct {
+	// Id The factory's metadata.id
+	Id       string  `json:"id"`
+	Name     string  `json:"name"`
+	SpendUsd float64 `json:"spend_usd"`
+}
+
 // FactoryStart Where the new factory's first draft comes from
 type FactoryStart struct {
 	union json.RawMessage
@@ -3305,6 +3313,45 @@ type OrgList struct {
 // OrgRole defines model for OrgRole.
 type OrgRole string
 
+// OrgRun A run with the factory and the item it worked
+type OrgRun struct {
+	Agent   string  `json:"agent"`
+	CostUsd float64 `json:"cost_usd"`
+
+	// DefinitionVersion That version's number ("ran on v9"); null when the run has no version
+	DefinitionVersion *int `json:"definition_version"`
+
+	// DefinitionVersionId The definition version the run started and finished on; null for runs from before versions
+	DefinitionVersionId *string `json:"definition_version_id"`
+
+	// EndedAt Null while the run is running
+	EndedAt *time.Time `json:"ended_at"`
+
+	// Error Why a failed or cancelled run ended, else null
+	Error        *string    `json:"error"`
+	Factory      FactoryHit `json:"factory"`
+	Id           string     `json:"id"`
+	InputTokens  int64      `json:"input_tokens"`
+	Item         RunItem    `json:"item"`
+	ItemId       string     `json:"item_id"`
+	Model        string     `json:"model"`
+	OutputTokens int64      `json:"output_tokens"`
+	StartedAt    time.Time  `json:"started_at"`
+	Station      string     `json:"station"`
+	Status       RunStatus  `json:"status"`
+	Turns        int        `json:"turns"`
+}
+
+// OrgRunList defines model for OrgRunList.
+type OrgRunList struct {
+	// NextCursor Pass as cursor for the next page; null on the last page
+	NextCursor *string  `json:"next_cursor"`
+	Runs       []OrgRun `json:"runs"`
+
+	// Summary The runs of a window's factories, whatever their status
+	Summary RunSummary `json:"summary"`
+}
+
 // OrgSearch What a search found in the organization, by group, each best first
 type OrgSearch struct {
 	Agents []AgentHit `json:"agents"`
@@ -3658,6 +3705,15 @@ type Run struct {
 	Turns        int       `json:"turns"`
 }
 
+// RunItem defines model for RunItem.
+type RunItem struct {
+	Id string `json:"id"`
+
+	// Ref <factory>#<number>, as in goal#147
+	Ref   string `json:"ref"`
+	Title string `json:"title"`
+}
+
 // RunList defines model for RunList.
 type RunList struct {
 	Runs []Run `json:"runs"`
@@ -3668,6 +3724,20 @@ type RunList struct {
 
 // RunStatus defines model for RunStatus.
 type RunStatus string
+
+// RunSummary The runs of a window's factories, whatever their status
+type RunSummary struct {
+	Failed int `json:"failed"`
+
+	// Finished Succeeded and cancelled runs
+	Finished int `json:"finished"`
+	Running  int `json:"running"`
+
+	// SpendByFactory The factories that ran anything in the window, the highest spend first, then by name
+	SpendByFactory []FactorySpend `json:"spend_by_factory"`
+	SpendUsd       float64        `json:"spend_usd"`
+	Total          int            `json:"total"`
+}
 
 // SaveResult The draft after a save
 type SaveResult struct {
@@ -4529,6 +4599,28 @@ type GetOrgTouchMetricsParams struct {
 type GetFactoryOverviewParams struct {
 	// Window The last N UTC calendar days, today included, written Nd (1d to 90d), as for metrics. The previous window, which deltas compare against, has the same length and ends where this one starts.
 	Window *string `form:"window,omitempty" json:"window,omitempty"`
+}
+
+// ListRunsParams defines parameters for ListRuns.
+type ListRunsParams struct {
+	// Factory Only this factory's runs (its metadata.id or metadata.name); unknown is 404
+	Factory *string `form:"factory,omitempty" json:"factory,omitempty"`
+
+	// Status Only runs with this status
+	Status *RunStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// Since The earliest start, included; the start of the current UTC day when absent
+	Since *time.Time `form:"since,omitempty" json:"since,omitempty"`
+
+	// Until The latest start, excluded; the end of the current UTC day when absent
+	Until *time.Time `form:"until,omitempty" json:"until,omitempty"`
+
+	// Q Only runs whose item title, agent or model contains q (case-insensitively and literally: % and _ are no wildcards), or whose item has the number q names ("147", "#147" or "goal#147"). Trimmed; at most 200 characters.
+	Q     *string `form:"q,omitempty" json:"q,omitempty"`
+	Limit *int    `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor The next_cursor of the previous page, opaque
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // SearchOrgParams defines parameters for SearchOrg.
@@ -6042,6 +6134,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with DELETE /v1/orgs/{org}/personal-tokens/{token} (the `RevokePersonalToken` operationId).
 	RevokePersonalToken(ctx context.Context, org OrgRef, token string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListRuns The organization's agent runs across the factories the caller sees, newest first
+	//
+	// The runs that started in [since, until) in the factories the caller may read, or in the one named by factory, newest first (by start, then id), paged by next_cursor. When since is absent it is the start of the current UTC day; when until is absent it is the end of that day; since must be before until. The summary covers the same factories and window whatever status and q say. A wide window is a scan of every run in it: keep it short.
+	//
+	// Corresponds with GET /v1/orgs/{org}/runs (the `ListRuns` operationId).
+	ListRuns(ctx context.Context, org OrgRef, params *ListRunsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetRun One agent run (404 for a run of another organization)
 	//
@@ -8602,6 +8701,23 @@ func (c *Client) CreatePersonalToken(ctx context.Context, org OrgRef, body Creat
 // Corresponds with DELETE /v1/orgs/{org}/personal-tokens/{token} (the `RevokePersonalToken` operationId).
 func (c *Client) RevokePersonalToken(ctx context.Context, org OrgRef, token string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRevokePersonalTokenRequest(c.Server, org, token)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListRuns The organization's agent runs across the factories the caller sees, newest first
+//
+// The runs that started in [since, until) in the factories the caller may read, or in the one named by factory, newest first (by start, then id), paged by next_cursor. When since is absent it is the start of the current UTC day; when until is absent it is the end of that day; since must be before until. The summary covers the same factories and window whatever status and q say. A wide window is a scan of every run in it: keep it short.
+//
+// Corresponds with GET /v1/orgs/{org}/runs (the `ListRuns` operationId).
+func (c *Client) ListRuns(ctx context.Context, org OrgRef, params *ListRunsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListRunsRequest(c.Server, org, params)
 	if err != nil {
 		return nil, err
 	}
@@ -14669,6 +14785,139 @@ func NewRevokePersonalTokenRequest(server string, org OrgRef, token string) (*ht
 	return req, nil
 }
 
+// NewListRunsRequest constructs an http.Request for the ListRuns method
+func NewListRunsRequest(server string, org OrgRef, params *ListRunsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/runs", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Factory != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "factory", *params.Factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Status != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "status", *params.Status, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Since != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "since", *params.Since, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Until != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "until", *params.Until, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Q != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "q", *params.Q, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetRunRequest constructs an http.Request for the GetRun method
 func NewGetRunRequest(server string, org OrgRef, run string) (*http.Request, error) {
 	var err error
@@ -16507,6 +16756,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with DELETE /v1/orgs/{org}/personal-tokens/{token} (the `RevokePersonalToken` operationId).
 	RevokePersonalTokenWithResponse(ctx context.Context, org OrgRef, token string, reqEditors ...RequestEditorFn) (*RevokePersonalTokenResponse, error)
+
+	// ListRunsWithResponse The organization's agent runs across the factories the caller sees, newest first
+	//
+	// The runs that started in [since, until) in the factories the caller may read, or in the one named by factory, newest first (by start, then id), paged by next_cursor. When since is absent it is the start of the current UTC day; when until is absent it is the end of that day; since must be before until. The summary covers the same factories and window whatever status and q say. A wide window is a scan of every run in it: keep it short.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/runs (the `ListRuns` operationId).
+	ListRunsWithResponse(ctx context.Context, org OrgRef, params *ListRunsParams, reqEditors ...RequestEditorFn) (*ListRunsResponse, error)
 
 	// GetRunWithResponse One agent run (404 for a run of another organization)
 	//
@@ -21845,6 +22103,54 @@ func (r RevokePersonalTokenResponse) ContentType() string {
 	return ""
 }
 
+type ListRunsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *OrgRunList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListRunsResponse) GetJSON200() *OrgRunList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListRunsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListRunsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListRunsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListRunsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListRunsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetRunResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -24454,6 +24760,21 @@ func (c *ClientWithResponses) RevokePersonalTokenWithResponse(ctx context.Contex
 		return nil, err
 	}
 	return ParseRevokePersonalTokenResponse(rsp)
+}
+
+// ListRunsWithResponse The organization's agent runs across the factories the caller sees, newest first
+//
+// The runs that started in [since, until) in the factories the caller may read, or in the one named by factory, newest first (by start, then id), paged by next_cursor. When since is absent it is the start of the current UTC day; when until is absent it is the end of that day; since must be before until. The summary covers the same factories and window whatever status and q say. A wide window is a scan of every run in it: keep it short.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/runs (the `ListRuns` operationId).
+func (c *ClientWithResponses) ListRunsWithResponse(ctx context.Context, org OrgRef, params *ListRunsParams, reqEditors ...RequestEditorFn) (*ListRunsResponse, error) {
+	rsp, err := c.ListRuns(ctx, org, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListRunsResponse(rsp)
 }
 
 // GetRunWithResponse One agent run (404 for a run of another organization)
@@ -28358,6 +28679,39 @@ func ParseRevokePersonalTokenResponse(rsp *http.Response) (*RevokePersonalTokenR
 	return response, nil
 }
 
+// ParseListRunsResponse parses an HTTP response from a ListRunsWithResponse call
+func ParseListRunsResponse(rsp *http.Response) (*ListRunsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListRunsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OrgRunList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetRunResponse parses an HTTP response from a GetRunWithResponse call
 func ParseGetRunResponse(rsp *http.Response) (*GetRunResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -29069,6 +29423,9 @@ type ServerInterface interface {
 	// RevokePersonalToken Revoke one of your personal tokens
 	// (DELETE /v1/orgs/{org}/personal-tokens/{token})
 	RevokePersonalToken(w http.ResponseWriter, r *http.Request, org OrgRef, token string)
+	// ListRuns The organization's agent runs across the factories the caller sees, newest first
+	// (GET /v1/orgs/{org}/runs)
+	ListRuns(w http.ResponseWriter, r *http.Request, org OrgRef, params ListRunsParams)
 	// GetRun One agent run (404 for a run of another organization)
 	// (GET /v1/orgs/{org}/runs/{run})
 	GetRun(w http.ResponseWriter, r *http.Request, org OrgRef, run string)
@@ -33637,6 +33994,126 @@ func (siw *ServerInterfaceWrapper) RevokePersonalToken(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// ListRuns operation middleware
+func (siw *ServerInterfaceWrapper) ListRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListRunsParams
+
+	// ------------- Optional query parameter "factory" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "factory", r.URL.Query(), &params.Factory, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "factory"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "since" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "since", r.URL.Query(), &params.Since, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "since"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "since", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "until" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "until", r.URL.Query(), &params.Until, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "until"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "until", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRuns(w, r, org, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetRun operation middleware
 func (siw *ServerInterfaceWrapper) GetRun(w http.ResponseWriter, r *http.Request) {
 
@@ -34244,6 +34721,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/needs", wrapper.LinkItem)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/needs/{need}", wrapper.UnlinkItem)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/touches/{event}/reason", wrapper.SetTouchReason)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs", wrapper.ListRuns)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs/{run}", wrapper.GetRun)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/approve", wrapper.ApproveItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/reject", wrapper.RejectItem)
@@ -38844,6 +39322,46 @@ func (response RevokePersonalTokendefaultApplicationProblemPlusJSONResponse) Vis
 	return err
 }
 
+type ListRunsRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params ListRunsParams
+}
+
+type ListRunsResponseObject interface {
+	VisitListRunsResponse(w http.ResponseWriter) error
+}
+
+type ListRuns200JSONResponse OrgRunList
+
+func (response ListRuns200JSONResponse) VisitListRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRunsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListRunsdefaultApplicationProblemPlusJSONResponse) VisitListRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetRunRequestObject struct {
 	Org OrgRef `json:"org"`
 	Run string `json:"run"`
@@ -39667,6 +40185,9 @@ type StrictServerInterface interface {
 	// RevokePersonalToken Revoke one of your personal tokens
 	// (DELETE /v1/orgs/{org}/personal-tokens/{token})
 	RevokePersonalToken(ctx context.Context, request RevokePersonalTokenRequestObject) (RevokePersonalTokenResponseObject, error)
+	// ListRuns The organization's agent runs across the factories the caller sees, newest first
+	// (GET /v1/orgs/{org}/runs)
+	ListRuns(ctx context.Context, request ListRunsRequestObject) (ListRunsResponseObject, error)
 	// GetRun One agent run (404 for a run of another organization)
 	// (GET /v1/orgs/{org}/runs/{run})
 	GetRun(ctx context.Context, request GetRunRequestObject) (GetRunResponseObject, error)
@@ -42902,6 +43423,33 @@ func (sh *strictHandler) RevokePersonalToken(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RevokePersonalTokenResponseObject); ok {
 		if err := validResponse.VisitRevokePersonalTokenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListRuns operation middleware
+func (sh *strictHandler) ListRuns(w http.ResponseWriter, r *http.Request, org OrgRef, params ListRunsParams) {
+	var request ListRunsRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListRuns(ctx, request.(ListRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListRunsResponseObject); ok {
+		if err := validResponse.VisitListRunsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

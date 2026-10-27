@@ -474,6 +474,74 @@ func (s *Store) Run(ctx context.Context, id domain.RunID) (domain.Run, error) {
 	return runFrom(row), nil
 }
 
+// OrgRuns implements ports.Store: the page and the summary in one read-only transaction. Ids
+// that are not UUIDs name no factory.
+func (s *Store) OrgRuns(ctx context.Context, q ports.RunQuery) ([]domain.ListedRun, domain.RunSummary, error) {
+	factories := uuids(q.Factories)
+	if len(factories) == 0 {
+		return []domain.ListedRun{}, domain.RunSummary{}, nil
+	}
+
+	params := db.ListOrgRunsParams{
+		Factories: factories, Since: q.Since, Until: q.Until, Status: string(q.Status),
+		Pattern: likeEscaper.Replace(q.Text), Number: q.Number, MaxRuns: int64(q.Limit),
+	}
+
+	if q.NumberOf != "" {
+		of, err := parseID("factory", string(q.NumberOf))
+		if err != nil {
+			return nil, domain.RunSummary{}, err
+		}
+
+		params.NumberOf = &of
+	}
+
+	if q.After != nil {
+		id, err := parseID("run", string(q.After.ID))
+		if err != nil {
+			return nil, domain.RunSummary{}, err
+		}
+
+		params.Paged, params.AfterStartedAt, params.AfterID = true, q.After.StartedAt, id
+	}
+
+	var (
+		rows []db.ListOrgRunsRow
+		sums []db.OrgRunsSummaryRow
+	)
+
+	err := s.read(ctx, func(dq *db.Queries) error {
+		var err error
+		if rows, err = dq.ListOrgRuns(ctx, params); err != nil {
+			return err
+		}
+
+		sums, err = dq.OrgRunsSummary(ctx, db.OrgRunsSummaryParams{Factories: factories, Since: q.Since, Until: q.Until})
+
+		return err
+	})
+	if err != nil {
+		return nil, domain.RunSummary{}, fmt.Errorf("runs of the organization: %w", err)
+	}
+
+	runs := make([]domain.ListedRun, 0, len(rows))
+	for _, r := range rows {
+		runs = append(runs, domain.ListedRun{Run: runFrom(r.AgentRun), ItemNumber: r.ItemNumber, ItemTitle: r.ItemTitle})
+	}
+
+	var sum domain.RunSummary
+	for _, r := range sums {
+		sum.Total += int(r.Total)
+		sum.Running += int(r.Running)
+		sum.Failed += int(r.Failed)
+		sum.Finished += int(r.Finished)
+		sum.SpendUSD += r.SpendUsd
+		sum.ByFactory = append(sum.ByFactory, domain.FactorySpend{FactoryID: domain.FactoryID(r.FactoryID.String()), SpendUSD: r.SpendUsd})
+	}
+
+	return runs, sum, nil
+}
+
 // FinishRun implements ports.Store.
 func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunResult, endedAt time.Time) error {
 	run, err := parseID("run", string(id))
