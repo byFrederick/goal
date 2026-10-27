@@ -837,15 +837,9 @@ func (cl *Client) send(ctx context.Context, p pull, method, path string, body, o
 		return res.StatusCode, "", res.Header, nil
 	}
 
-	var problem struct {
-		Message string `json:"message"`
-	}
-
-	// A listing answers an array, which carries no message.
-	if raw := bytes.TrimSpace(raw); raw[0] == '{' {
-		if err := json.Unmarshal(raw, &problem); err != nil {
-			return 0, "", nil, fmt.Errorf("decode answer (%d): %w", res.StatusCode, err)
-		}
+	msg, err := messageOf(raw)
+	if err != nil {
+		return 0, "", nil, fmt.Errorf("decode answer (%d): %w", res.StatusCode, err)
 	}
 
 	if out != nil && res.StatusCode < http.StatusMultipleChoices {
@@ -854,5 +848,21 @@ func (cl *Client) send(ctx context.Context, p pull, method, path string, body, o
 		}
 	}
 
-	return res.StatusCode, problem.Message, res.Header, nil
+	return res.StatusCode, msg, res.Header, nil
+}
+
+// messageOf is the message of GitHub's JSON answer raw; a listing answers an array, which
+// carries none.
+func messageOf(raw []byte) (string, error) {
+	if bytes.TrimSpace(raw)[0] != '{' {
+		return "", nil
+	}
+
+	var problem struct {
+		Message string `json:"message"`
+	}
+
+	err := json.Unmarshal(raw, &problem)
+
+	return problem.Message, err
 }

@@ -37,6 +37,9 @@ const (
 	mainBranch = "main"
 	sharedFile = "docs/shared.md"
 	keySHA     = "sha"
+	keyName    = "full_name"
+	// octo is the account the fake's token signs in as.
+	octo = "octo"
 )
 
 // connection is a connection of the platform's github kind with values (token and host).
@@ -101,8 +104,8 @@ func newFakeGitHubWith(t *testing.T, cfg Config) (*fakeGitHub, *Client) {
 
 	f := &fakeGitHub{pr: map[string]any{
 		"state": "open", merged: false, "mergeable": true, "merge_commit_sha": "test-merge-sha",
-		"head": map[string]any{keySHA: headSHA, "ref": headBranch, "repo": map[string]any{"full_name": "acme/app"}},
-		"base": map[string]any{"ref": mainBranch, "repo": map[string]any{"full_name": "acme/app"}},
+		"head": map[string]any{keySHA: headSHA, "ref": headBranch, "repo": map[string]any{keyName: "acme/app"}},
+		"base": map[string]any{"ref": mainBranch, "repo": map[string]any{keyName: "acme/app"}},
 	}}
 	f.merge = func(map[string]string) (int, any) {
 		f.pr["state"], f.pr[merged] = closed, true
@@ -152,7 +155,7 @@ func newFakeGitHubWith(t *testing.T, cfg Config) (*fakeGitHub, *Client) {
 		f.reply(w, status, res)
 	})
 	mux.HandleFunc("GET /repos/acme/app", func(w http.ResponseWriter, _ *http.Request) {
-		f.reply(w, http.StatusOK, map[string]any{"full_name": "acme/app", "default_branch": mainBranch})
+		f.reply(w, http.StatusOK, map[string]any{keyName: "acme/app", "default_branch": mainBranch})
 	})
 	mux.HandleFunc("GET /repos/acme/app/branches/{branch...}", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
@@ -1035,7 +1038,7 @@ func serveRepositories(t *testing.T, f *fakeGitHub, mux *http.ServeMux, mine, ac
 			out := []map[string]any{}
 			for _, fr := range repos {
 				out = append(out, map[string]any{
-					"full_name": fr.fullName, "clone_url": "https://github.com/" + fr.fullName + ".git", "updated_at": fr.updatedAt,
+					keyName: fr.fullName, "clone_url": "https://github.com/" + fr.fullName + ".git", "updated_at": fr.updatedAt,
 					"private": false,
 				})
 			}
@@ -1049,7 +1052,7 @@ func serveRepositories(t *testing.T, f *fakeGitHub, mux *http.ServeMux, mine, ac
 	}
 
 	mux.HandleFunc("GET /user", func(w http.ResponseWriter, _ *http.Request) {
-		f.reply(w, http.StatusOK, map[string]any{"login": "octo", "type": "User"})
+		f.reply(w, http.StatusOK, map[string]any{"login": octo, "type": "User"})
 	})
 	mux.HandleFunc("GET /user/orgs", func(w http.ResponseWriter, _ *http.Request) {
 		f.reply(w, http.StatusOK, []map[string]any{{"login": "acme"}})
@@ -1074,13 +1077,10 @@ func serveRepositories(t *testing.T, f *fakeGitHub, mux *http.ServeMux, mine, ac
 	})
 }
 
-func TestClient_Repositories(t *testing.T) {
-	t.Parallel()
-
-	mine := []fakeRepo{
-		{fullName: "octo/goal", updatedAt: "2026-10-27T09:00:00Z", languages: `{"Go":9000,"TypeScript":4000,"Shell":30,"HCL":200}`},
-		{fullName: "octo/notes", updatedAt: "2026-10-01T09:00:00Z", languages: `{}`},
-	}
+// newRepositoriesGitHub is a fake GitHub serving the listings of serveRepositories: octo owns
+// mine, and acme owns 100 on a first page of more.
+func newRepositoriesGitHub(t *testing.T, mine []fakeRepo) (*fakeGitHub, *Client) {
+	t.Helper()
 
 	acme := make([]fakeRepo, 0, 100)
 	for i := range 100 {
@@ -1105,8 +1105,19 @@ func TestClient_Repositories(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	c := New(Config{APIURL: srv.URL})
-	owners := []ports.RepositoryOwner{{Login: "octo", Kind: ports.RepositoryOwnerUser}, {Login: "acme", Kind: ports.RepositoryOwnerOrganization}}
+	return f, New(Config{APIURL: srv.URL})
+}
+
+// fakeOwners are the owners octo's listings name.
+var fakeOwners = []ports.RepositoryOwner{{Login: octo, Kind: ports.RepositoryOwnerUser}, {Login: "acme", Kind: ports.RepositoryOwnerOrganization}}
+
+func TestClient_Repositories(t *testing.T) {
+	t.Parallel()
+
+	_, c := newRepositoriesGitHub(t, []fakeRepo{
+		{fullName: "octo/goal", updatedAt: "2026-10-27T09:00:00Z", languages: `{"Go":9000,"TypeScript":4000,"Shell":30,"HCL":200}`},
+		{fullName: "octo/notes", updatedAt: "2026-10-01T09:00:00Z", languages: `{}`},
+	})
 
 	// The account's, when no owner is asked.
 	got, err := c.Repositories(t.Context(), dotComConn(t), "")
@@ -1115,7 +1126,7 @@ func TestClient_Repositories(t *testing.T) {
 	}
 
 	want := ports.RepositoryList{
-		Login: "octo", Owners: owners, Owner: "octo",
+		Login: octo, Owners: fakeOwners, Owner: octo,
 		Repositories: []ports.Repository{
 			{
 				FullName: "octo/goal", CloneURL: "https://github.com/octo/goal.git", Languages: []string{"Go", "TypeScript", "HCL"},
@@ -1128,28 +1139,39 @@ func TestClient_Repositories(t *testing.T) {
 		t.Errorf("Repositories(\"\") = %+v; want %+v", got, want)
 	}
 
-	// An organization's first page of 100, truncated because GitHub has a next one.
-	got, err = c.Repositories(t.Context(), dotComConn(t), "acme")
+	// The account named as the owner is the account's listing.
+	if got, err := c.Repositories(t.Context(), dotComConn(t), octo); err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("Repositories(octo) = %+v, %v; want %+v", got, err, want)
+	}
+}
+
+// An organization's listing is its first page of 100, truncated when GitHub links a next one.
+func TestClient_RepositoriesOfAnOrganizationTruncated(t *testing.T) {
+	t.Parallel()
+
+	_, c := newRepositoriesGitHub(t, nil)
+
+	got, err := c.Repositories(t.Context(), dotComConn(t), "acme")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	if got.Owner != "acme" || len(got.Repositories) != ports.MaxRepositories || !got.Truncated ||
-		!slices.Equal(got.Repositories[99].Languages, []string{"Python"}) || !reflect.DeepEqual(got.Owners, owners) {
+		!slices.Equal(got.Repositories[99].Languages, []string{"Python"}) || !reflect.DeepEqual(got.Owners, fakeOwners) {
 		t.Errorf("Repositories(acme) = owner %s, %d repositories, truncated %v; want acme, 100, truncated", got.Owner, len(got.Repositories), got.Truncated)
 	}
+}
 
-	// The account named as the owner is the account's listing.
-	if got, err := c.Repositories(t.Context(), dotComConn(t), "octo"); err != nil || len(got.Repositories) != 2 || got.Truncated {
-		t.Errorf("Repositories(octo) = %+v, %v; want octo's 2", got, err)
-	}
+// An owner GitHub does not know is not found; a name that is not a login is refused unsent.
+func TestClient_RepositoriesRefusals(t *testing.T) {
+	t.Parallel()
 
-	// An owner GitHub does not know is not found.
+	f, c := newRepositoriesGitHub(t, nil)
+
 	if _, err := c.Repositories(t.Context(), dotComConn(t), "nobody"); !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("Repositories(nobody) = %v; want ErrNotFound", err)
 	}
 
-	// A name that is not a login is refused before anything is sent.
 	before := len(f.sent())
 	if _, err := c.Repositories(t.Context(), dotComConn(t), "../user"); err == nil || len(f.sent()) != before {
 		t.Errorf("Repositories(../user) = %v after %d requests; want an error and none sent", err, len(f.sent())-before)

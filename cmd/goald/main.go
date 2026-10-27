@@ -177,13 +177,16 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
+	// The code host adapters: the engine merges with them, the API lists what a connection reaches.
+	hosts := codeHosts(s.AllowPrivateUpstreams)
+
 	// The engine runs each claim in a sandbox with the run's connections, merges with the
 	// factory's code host connections and, at its start and every ReapEvery, deletes the
 	// sandboxes of runs that are over, whichever goald on this Docker host or this Worker
 	// started them.
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
-		Contracts: defs, Secrets: secrets, Connections: connections, CodeHosts: codeHosts(s.AllowPrivateUpstreams), Clock: clock,
+		Contracts: defs, Secrets: secrets, Connections: connections, CodeHosts: hosts, Clock: clock,
 		Minters: minters(s), Logger: log,
 	}, engine.Config{
 		TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: boxes.gateway, GatewayKeyRef: s.GatewayKeyRef, MaxRuns: s.MaxRuns,
@@ -215,7 +218,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 			Mode: api.AuthMode(s.Auth), EmailCodes: s.EmailCodes, Google: s.Google, SecureCookies: s.strictTransport(),
 		},
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
-		Connections: connections, ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams),
+		Connections: connections, ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes,
 		Clock: clock, Logger: log,
 	})
