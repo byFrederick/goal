@@ -1,6 +1,6 @@
 ## When you change
 
-The organization policy store ([ADR 0024](../adr/0024-organization-policy.md)): the `org_policies` table (`db/migrations/00068_org_policies.sql` and the migrations after it), its queries (`db/queries/org_policies.sql`) or the adapter (`internal/adapters/store/postgres/orgpolicies.go`)
+The organization policy store ([ADR 0024](../adr/0024-organization-policy.md)): the `org_policies` table (`db/migrations/00069_org_policies.sql` and the migrations after it), its queries (`db/queries/org_policies.sql`) or the adapter (`internal/adapters/store/postgres/orgpolicies.go`)
 
 ## Also change
 

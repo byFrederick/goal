@@ -21,7 +21,7 @@ const (
 	ToolAttachedOnly   ToolSetting = "attached_only"   // an agent gets only the credentials attached to it
 )
 
-// The values each tool default takes, as 00068's CHECK constraints list them.
+// The values each tool default takes, as 00069's CHECK constraints list them.
 var (
 	WriteOutsideBranchSettings = []ToolSetting{ToolOff, ToolAsk, ToolAllowed}
 	MergePullRequestSettings   = []ToolSetting{ToolOff, ToolReviewApproval}

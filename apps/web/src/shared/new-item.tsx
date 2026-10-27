@@ -57,8 +57,10 @@ function NewItem({ factory, compact }: NewItemProps) {
  * The sidebar's "New item" (MASTER.md "The shell"): the same composer, with a factory picker. It starts
  * on the open factory and is empty elsewhere. C opens it too, unless focus is in a field or a dialog is
  * open. Hidden once the list of factories loads with none the person may add items to.
+ * With `button` false it only listens for C and renders the composer: the collapsed rail has no
+ * New item button yet, but C must still open the composer there and on phones.
  */
-export function NewItemFromSidebar() {
+export function NewItemFromSidebar({ button = true }: { button?: boolean }) {
   const org = useOrg();
   const factories = useQuery(factoriesQuery(org.id));
   const current = useMatch({ from: '/o/$org/f/$factory', shouldThrow: false });
@@ -103,7 +105,7 @@ export function NewItemFromSidebar() {
         onRetry: () => void factories.refetch(),
       }}
       trigger={
-        shown ? (
+        shown && button ? (
           <button
             type="button"
             aria-keyshortcuts="C"

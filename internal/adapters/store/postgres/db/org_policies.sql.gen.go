@@ -80,7 +80,7 @@ type OrgPolicyRow struct {
 	UpdatedByName       string
 }
 
-// The organization policy (00068), under row-level security: every statement sees the
+// The organization policy (00069), under row-level security: every statement sees the
 // transaction's organization only. Who last saved it is named as the audit entry names them (a
 // person's name at that moment), as credentials.sql does.
 func (q *Queries) OrgPolicy(ctx context.Context) (OrgPolicyRow, error) {

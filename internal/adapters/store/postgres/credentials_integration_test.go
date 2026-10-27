@@ -33,6 +33,7 @@ func TestCredentials_Conformance(t *testing.T) {
 
 		return credentialtest.Harness{
 			Credentials: func(key ports.MasterKey) ports.Credentials { return NewCredentials(d.store, key) },
+			Connections: func(key ports.MasterKey) ports.Connections { return NewConnections(d.store, key) },
 			Key:         func(ids ...string) ports.MasterKey { return testKey(t, ids...) },
 			Audit:       d.store,
 			NewOrg:      func(t *testing.T) domain.OrgID { t.Helper(); return newOrgID(t, d.store) },
