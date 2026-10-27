@@ -88,7 +88,7 @@ func testOrgRuns(f *fixture) {
 	}
 
 	all := []domain.RunID{cancelled, tie[0], tie[1], loginOK, edge}
-	byFactory := []domain.FactorySpend{{FactoryID: f.factory, SpendUSD: 1.875}, {FactoryID: second, SpendUSD: 0}}
+	byFactory := []domain.FactorySpend{{FactoryID: f.factory, USD: 1.875}, {FactoryID: second, USD: 0}}
 	slices.SortFunc(byFactory, func(a, b domain.FactorySpend) int { return cmp.Compare(a.FactoryID, b.FactoryID) })
 	// The summary ignores the status, the text and the cursor; only the factories bound it.
 	every := domain.RunSummary{Total: 5, Running: 1, Failed: 1, Finished: 3, SpendUSD: 1.875, ByFactory: byFactory}
@@ -196,7 +196,7 @@ func sameSummary(t *testing.T, what string, got, want domain.RunSummary) {
 	ok := got.Total == want.Total && got.Running == want.Running && got.Failed == want.Failed &&
 		got.Finished == want.Finished && near(got.SpendUSD, want.SpendUSD) && len(got.ByFactory) == len(want.ByFactory)
 	for i := 0; ok && i < len(want.ByFactory); i++ {
-		ok = got.ByFactory[i].FactoryID == want.ByFactory[i].FactoryID && near(got.ByFactory[i].SpendUSD, want.ByFactory[i].SpendUSD)
+		ok = got.ByFactory[i].FactoryID == want.ByFactory[i].FactoryID && near(got.ByFactory[i].USD, want.ByFactory[i].USD)
 	}
 
 	if !ok {

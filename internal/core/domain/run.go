@@ -92,12 +92,6 @@ type RunSummary struct {
 	ByFactory []FactorySpend
 }
 
-// FactorySpend is what one factory's runs cost.
-type FactorySpend struct {
-	FactoryID FactoryID
-	SpendUSD  float64
-}
-
 // RunResult is what a runner returns when an agent task ends.
 type RunResult struct {
 	Status RunStatus

@@ -226,7 +226,7 @@ func runSummaryOf(sum domain.RunSummary, byID map[domain.FactoryID]*config.Facto
 
 	for _, f := range sum.ByFactory {
 		if def, ok := byID[f.FactoryID]; ok {
-			out.SpendByFactory = append(out.SpendByFactory, gen.FactorySpend{Id: def.Metadata.ID, Name: def.Metadata.Name, SpendUsd: f.SpendUSD})
+			out.SpendByFactory = append(out.SpendByFactory, gen.FactorySpend{Id: def.Metadata.ID, Name: def.Metadata.Name, SpendUsd: f.USD})
 		}
 	}
 

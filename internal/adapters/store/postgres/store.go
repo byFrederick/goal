@@ -536,7 +536,7 @@ func (s *Store) OrgRuns(ctx context.Context, q ports.RunQuery) ([]domain.ListedR
 		sum.Failed += int(r.Failed)
 		sum.Finished += int(r.Finished)
 		sum.SpendUSD += r.SpendUsd
-		sum.ByFactory = append(sum.ByFactory, domain.FactorySpend{FactoryID: domain.FactoryID(r.FactoryID.String()), SpendUSD: r.SpendUsd})
+		sum.ByFactory = append(sum.ByFactory, domain.FactorySpend{FactoryID: domain.FactoryID(r.FactoryID.String()), USD: r.SpendUsd})
 	}
 
 	return runs, sum, nil

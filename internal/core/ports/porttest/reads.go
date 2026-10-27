@@ -160,7 +160,7 @@ func (s *Store) OrgRuns(ctx context.Context, q ports.RunQuery) ([]domain.ListedR
 	}
 
 	for _, f := range slices.Sorted(maps.Keys(spend)) {
-		sum.ByFactory = append(sum.ByFactory, domain.FactorySpend{FactoryID: f, SpendUSD: spend[f]})
+		sum.ByFactory = append(sum.ByFactory, domain.FactorySpend{FactoryID: f, USD: spend[f]})
 	}
 
 	slices.SortFunc(match, func(a, b domain.ListedRun) int {
