@@ -181,6 +181,69 @@ func TestFlowReads_UseTheirIndexes(t *testing.T) {
 	}
 }
 
+// The organization's spend reads (db/queries/spend.sql) take their ranges from the indexes of
+// migration 00066 under the organization filter row-level security adds.
+func TestSpendReads_UseTheirIndexes(t *testing.T) {
+	t.Parallel()
+
+	db := newTestDB(t, OwnerRole)
+	migrate(t, db.owner)
+	admin := openPool(t, db.admin)
+	org := uuid.NewString()
+
+	// A year of hourly runs in other organizations and in org, and of org's items, a tenth of
+	// them done, as the bootstrap superuser with triggers and key checks off.
+	err := pgx.BeginFunc(t.Context(), admin, func(tx pgx.Tx) error {
+		for _, stmt := range []string{
+			"SET LOCAL session_replication_role = replica",
+			`INSERT INTO agent_runs (org_id, factory_id, item_id, station, agent, model, status, cost_usd, started_at)
+			 SELECT CASE WHEN h % 10 = 0 THEN $1::uuid ELSE gen_random_uuid() END, gen_random_uuid(), gen_random_uuid(),
+			        'work', 'worker', 'model-a', 'succeeded', 0.5, now() - h * interval '1 hour'
+			 FROM generate_series(1, 8760) h`,
+			`INSERT INTO work_items (org_id, factory_id, number, type, title, station, state, done_at)
+			 SELECT $1::uuid, gen_random_uuid(), h, 'task', 'an item', 'work',
+			        CASE WHEN h % 10 = 0 THEN 'done' ELSE 'queued' END,
+			        CASE WHEN h % 10 = 0 THEN now() - h * interval '1 hour' END
+			 FROM generate_series(1, 8760) h`,
+		} {
+			args := []any{org}
+			if !strings.Contains(stmt, "$1") {
+				args = nil
+			}
+
+			if _, err := tx.Exec(t.Context(), stmt, args...); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := admin.Exec(t.Context(), "ANALYZE agent_runs, work_items"); err != nil {
+		t.Fatal(err)
+	}
+
+	runs := `FROM agent_runs WHERE org_id = $1::uuid AND started_at >= now() - interval '90 days' AND started_at < now()`
+	for _, c := range []struct{ index, query string }{
+		{"agent_runs_org_started_idx", `SELECT date_trunc('day', started_at, 'UTC'), factory_id, sum(cost_usd) ` + runs + ` GROUP BY 1, 2`},
+		{"agent_runs_org_started_idx", `SELECT factory_id, agent, sum(cost_usd) ` + runs + ` GROUP BY 1, 2`},
+		{"agent_runs_org_started_idx", `SELECT model, sum(cost_usd) ` + runs + ` GROUP BY 1`},
+		{"agent_runs_org_started_idx", `SELECT sum(r.cost_usd) FROM agent_runs r
+			WHERE r.org_id = $1::uuid AND r.started_at >= now() - interval '90 days' AND r.started_at < now()
+			  AND EXISTS (SELECT 1 FROM item_spans s WHERE s.item_id = r.item_id AND s.rework_round >= 1 AND s.entered_at <= r.started_at)`},
+		{"work_items_org_done_at_idx", `SELECT date_trunc('day', done_at, 'UTC'), count(*) FROM work_items
+			WHERE org_id = $1::uuid AND done_at >= now() - interval '90 days' AND done_at < now() AND state = 'done' GROUP BY 1`},
+	} {
+		plan := explain(t, admin, c.query, org)
+		if !strings.Contains(plan, c.index) {
+			t.Errorf("plan of %s does not use %s:\n%s", strings.Join(strings.Fields(c.query), " "), c.index, plan)
+		}
+	}
+}
+
 // explain returns the plan of query with sequential scans disabled.
 func explain(t *testing.T, pool *pgxpool.Pool, query string, args ...any) string {
 	t.Helper()
