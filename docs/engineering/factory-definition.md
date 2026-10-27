@@ -264,4 +264,11 @@ The organization policy ([ADR 0024](../adr/0024-organization-policy.md)) is a ce
 - The policy's denied commands are added to the agent's `tools.deny` rules in the run bundle, whatever the version says. A denied command fails its tool call and shows on the item's timeline as a denied tool call (`tool_denied`).
 - The policy's box time limit caps the run: each run's timeout is the smaller of goald's task timeout and the limit, and the box lives no longer than the limit.
 
-The engine signs the model and the denied commands into the run's task token, so a policy change never reaches a run already in its box. A run keeps the policy it started with.
+The four tool defaults ("What agents may do without a person") narrow the agent through the mechanism that already decides each one. An agent that allows less keeps less:
+
+- **Read the web and docs.** `off` or `ask` adds `WebFetch` and `WebSearch` (the `builtins.web` tools) to the agent's deny rules, whatever its `builtins.web` says. `ask` is served as `off`, as it is for builtins, because no tool approval is enforced. `allowed` leaves the agent's setting. Documentation MCP servers are connections, so Use credentials covers them.
+- **Merge a pull request.** `review_approval` is the definition's behavior: an agent gate whose station `action` is `merge` merges on approval. `off` stops that merge. The approval is recorded, and the item waits for a person at the gate (`waiting_human`) with a reason that names the organization policy; a person's merge (`goal merge <item>`) then merges it.
+- **Use credentials.** `attached_only` is the definition's behavior: the agent gets the connections its `connections` list names. `off` gives the agent none of them, neither their env nor their tools in the run bundle. The runtime's model connection and repository connection still reach the run, because it cannot start without them.
+- **Write outside the item's branch** is not enforced. Comments, issues, tickets and messages go through connections' CLIs and MCP servers, and no engine or gateway step can ask a person for one. Its value is stored and changes nothing at run start.
+
+The engine signs the model, the denied commands and the denied web tools into the run's task token, so a policy change never reaches a run already in its box. A run keeps the policy it started with.

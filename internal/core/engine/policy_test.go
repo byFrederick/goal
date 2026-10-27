@@ -17,6 +17,9 @@ const (
 	modelSonnet = "claude-sonnet-5-5"
 )
 
+// denyApply is a denied command of the policy tests.
+const denyApply = "Bash(terraform apply:*)"
+
 // withPolicy saves p as the test organization's policy over a platform that offers opus and
 // sonnet, and rebuilds the harness's engine to read it.
 func (h *harness) withPolicy(t *testing.T, p domain.OrgPolicy) {
@@ -76,7 +79,7 @@ func TestEngine_RunGetsThePolicyDefaultModel(t *testing.T) {
 func TestEngine_RunDeniesOrgCommands(t *testing.T) {
 	t.Parallel()
 
-	denied := []string{"Bash(terraform apply:*)", "Bash(git push --force:*)"}
+	denied := []string{denyApply, "Bash(git push --force:*)"}
 	h := newHarness(t, repoLine(), porttest.Succeed(`{}`))
 	h.withPolicy(t, policy(func(p *domain.OrgPolicy) { p.DeniedCommands = denied }))
 	h.submit(t, domain.NewItem{})
@@ -151,13 +154,13 @@ func TestEngine_BoxTimeLimitCapsTheRun(t *testing.T) {
 func TestEngine_ReadWebPolicyDeniesWebTools(t *testing.T) {
 	t.Parallel()
 
-	denied := []string{"Bash(terraform apply:*)", "WebSearch"}
+	denied := []string{denyApply, "WebSearch"}
 	tests := []struct {
 		setting domain.ToolSetting
 		want    []string
 	}{
-		{domain.ToolOff, []string{"Bash(terraform apply:*)", "WebSearch", "WebFetch"}},
-		{domain.ToolAsk, []string{"Bash(terraform apply:*)", "WebSearch", "WebFetch"}},
+		{domain.ToolOff, []string{denyApply, "WebSearch", "WebFetch"}},
+		{domain.ToolAsk, []string{denyApply, "WebSearch", "WebFetch"}},
 		{domain.ToolAllowed, denied},
 	}
 
