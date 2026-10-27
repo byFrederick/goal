@@ -24,7 +24,7 @@ func credentialCommand(ctx context.Context, out *printer, getenv func(string) st
 	}
 
 	handler, ok := map[string]command{
-		subList: credentialList, verbCreate: credentialCreate, "replace": credentialReplace, "rm": credentialRm, "import": credentialImport,
+		subList: credentialList, verbCreate: credentialCreate, verbReplace: credentialReplace, "rm": credentialRm, verbImport: credentialImport,
 	}[args[0]]
 	if !ok {
 		return errUsage
@@ -32,6 +32,12 @@ func credentialCommand(ctx context.Context, out *printer, getenv func(string) st
 
 	return handler(ctx, out, getenv, args[1:])
 }
+
+// The verbs goal credential adds to connection's.
+const (
+	verbReplace = "replace"
+	verbImport  = "import"
+)
 
 // errNoCredentialValue is a create or replace whose stdin holds no value.
 var errNoCredentialValue = errors.New("no value on stdin: pipe the credential in, as in `goal credential create <name> --type api_key < value-file`")
@@ -142,29 +148,10 @@ func credentialCreate(ctx context.Context, out *printer, getenv func(string) str
 		return errUsage
 	}
 
-	body := gen.NewCredential{
-		Name: pos[0], Type: gen.CredentialType(*typ),
-		Scope: &gen.CredentialScope{AllFactories: *allFactories, Factories: append([]string{}, factories...)},
+	body, err := newCredentialBody(fs, pos[0], *typ, *description, *expires, *remindDays, *allFactories, factories)
+	if err != nil {
+		return err
 	}
-
-	if *description != "" {
-		body.Description = description
-	}
-
-	if *expires != "" {
-		day, err := time.ParseInLocation(time.DateOnly, *expires, time.UTC)
-		if err != nil {
-			return errUsage
-		}
-
-		body.ExpiresAt = &day
-	}
-
-	fs.Visit(func(f *flag.Flag) {
-		if f.Name == "remind-days" {
-			body.RemindDays = remindDays
-		}
-	})
 
 	value, err := readCredentialValue(out.in)
 	if err != nil {
@@ -190,6 +177,38 @@ func credentialCreate(ctx context.Context, out *printer, getenv func(string) str
 	out.printf("✓ created credential %s (%s) in %s; a connection refers to it as {{%s}}\n", res.JSON201.Name, res.JSON201.Type, c.org, res.JSON201.Name)
 
 	return nil
+}
+
+// newCredentialBody is the NewCredential goal credential create's flags make, without its value:
+// --expires is UTC midnight of its day, and remind_days is sent only when --remind-days is given.
+func newCredentialBody(fs *flag.FlagSet, name, typ, description, expires string, remindDays int, allFactories bool,
+	factories []string,
+) (gen.NewCredential, error) {
+	body := gen.NewCredential{
+		Name: name, Type: gen.CredentialType(typ),
+		Scope: &gen.CredentialScope{AllFactories: allFactories, Factories: append([]string{}, factories...)},
+	}
+
+	if description != "" {
+		body.Description = &description
+	}
+
+	if expires != "" {
+		day, err := time.ParseInLocation(time.DateOnly, expires, time.UTC)
+		if err != nil {
+			return gen.NewCredential{}, errUsage
+		}
+
+		body.ExpiresAt = &day
+	}
+
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "remind-days" {
+			body.RemindDays = &remindDays
+		}
+	})
+
+	return body, nil
 }
 
 // credentialReplace replaces a credential's value with the one on stdin; nothing else changes.
@@ -289,7 +308,7 @@ func credentialImport(ctx context.Context, out *printer, getenv func(string) str
 		body.OnConflict = &oc
 	}
 
-	raw, err := os.ReadFile(pos[0]) //nolint:gosec // the import file the user names
+	raw, err := os.ReadFile(pos[0])
 	if err != nil {
 		return err
 	}
