@@ -114,7 +114,7 @@ type InsertWebhookEndpointParams struct {
 	Ciphertext []byte
 }
 
-// Intake triggers' state (ADR 0026, 00068): webhook endpoints, their deliveries and the trigger
+// Intake triggers' state (ADR 0026, 00069): webhook endpoints, their deliveries and the trigger
 // firing log. Every query runs as goal_app under row-level security, except the two definers'
 // callers and goal db rekey's (as goal_owner).
 // org_id comes from its default, goal_org().

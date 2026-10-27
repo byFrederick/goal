@@ -2,7 +2,8 @@
 // fake in porttest runs it, and the PostgreSQL adapter joins it with the store part, so tests on
 // the fake hold for the database's rules: names unique per organization, write-only values sealed
 // under the master key, the factory scope enforced by Resolve, an audit entry for every change and
-// use, organizations kept apart, and an import's dry run that stores nothing.
+// use, organizations kept apart, an import's dry run that stores nothing, and no deletion of a
+// credential that a connection refers to as {{name}}.
 package credentialtest
 
 import (
@@ -22,6 +23,9 @@ type Harness struct {
 	// Credentials returns the credentials under test, sealing with key; every call shares one
 	// store, as goalds with different keys share one database.
 	Credentials func(key ports.MasterKey) ports.Credentials
+	// Connections returns connections sealing with key in the credentials' store, so a connection
+	// can refer to a credential.
+	Connections func(key ports.MasterKey) ports.Connections
 	// Key returns master keys with ids, the first active; the same id is the same key in every
 	// call. With no ids it has none (ports.ErrNoMasterKey).
 	Key   func(ids ...string) ports.MasterKey
@@ -51,6 +55,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Resolve_UnknownNotFound", testResolveUnknown},
 		{"Resolve_AnotherKeyDoesNotOpen", testOtherKey},
 		{"Delete_GoneAndAudited", testDelete},
+		{"Delete_ReferencedIsAConflict", testDeleteReferenced},
+		{"UsedBy_NamesReferringConnections", testUsedBy},
 		{"OtherOrg_SeesNothing", testIsolation},
 		{"NoMasterKey_ValuesUnavailable", testNoKey},
 		{"ImportPreview_NewAndExistingStoresNothing", testImportPreview},
@@ -446,6 +452,91 @@ func testDelete(f *fixture) {
 	f.expect(f.resolve(acme, inA, sentry)[0].Value == replaced, "a deleted name could not be created again")
 }
 
+// refKind is an organization's connection kind with a secret field that may refer to a credential.
+func refKind() domain.ConnectionKind {
+	return domain.ConnectionKind{Name: "acme-api", Title: "Acme API", Spec: domain.KindSpec{
+		Fields: []domain.KindField{{Name: "key", Title: "Key", Secret: true, Required: true}},
+		Env:    map[string]string{"ACME_KEY": "{{key}}"},
+	}}
+}
+
+// connect puts refKind in org, creates its connections names, each with its key set to value, and
+// returns the connections.
+func (f *fixture) connect(org domain.OrgID, value string, names ...string) ports.Connections {
+	f.t.Helper()
+
+	conns := f.Connections(f.Key("k1"))
+	if err := conns.PutKind(f.in(org), refKind(), admin); err != nil {
+		f.t.Fatalf("PutKind: %v", err)
+	}
+
+	for _, name := range names {
+		n := domain.NewConnection{Name: name, Kind: refKind().Name, Secrets: map[string]string{"key": value}}
+		if _, err := conns.Create(f.in(org), n, admin); err != nil {
+			f.t.Fatalf("Create connection %s: %v", name, err)
+		}
+	}
+
+	return conns
+}
+
+func (f *fixture) usedBy(org domain.OrgID, name string) []string {
+	f.t.Helper()
+
+	got, err := f.c.UsedBy(f.in(org), name)
+	if err != nil {
+		f.t.Fatalf("UsedBy %s: %v", name, err)
+	}
+
+	return got
+}
+
+func testUsedBy(f *fixture) {
+	acme, labs := f.NewOrg(f.t), f.NewOrg(f.t)
+	f.create(acme, sentryIn(marker))
+	f.expect(len(f.usedBy(acme, sentry)) == 0, "UsedBy of an unused credential = %v", f.usedBy(acme, sentry))
+
+	f.connect(acme, "{{"+sentry+"}}", "b-conn", "a-conn")
+	f.connect(acme, "{{"+deploy+"}}", "d-conn")
+	f.connect(acme, marker, "c-conn")
+	f.connect(labs, "{{"+sentry+"}}", "l-conn")
+
+	got := f.usedBy(acme, sentry)
+	f.expect(fmt.Sprint(got) == "[a-conn b-conn]", "UsedBy = %v; want [a-conn b-conn]", got)
+	f.expect(fmt.Sprint(f.usedBy(acme, deploy)) == "[d-conn]", "UsedBy of a credential that does not exist = %v; want [d-conn]", f.usedBy(acme, deploy))
+	f.expect(len(f.usedBy(labs, deploy)) == 0, "another org's UsedBy = %v; want nothing", f.usedBy(labs, deploy))
+
+	preview, err := f.c.ImportPreview(f.in(acme), []string{sentry, deploy})
+	f.expect(err == nil && len(preview) == 2 && preview[0].Connections == 2 && preview[1] == domain.CredentialImportPreview{Name: deploy, Connections: 1},
+		"ImportPreview = %+v, %v; want sentry used by two and deploy, not a credential, by one", preview, err)
+}
+
+func testDeleteReferenced(f *fixture) {
+	acme := f.NewOrg(f.t)
+	ctx := f.in(acme)
+	f.create(acme, sentryIn(marker))
+	conns := f.connect(acme, "{{"+sentry+"}}", "a-conn", "b-conn")
+
+	f.refused("Delete of a referenced credential", f.c.Delete(ctx, sentry, admin), ports.ErrConflict)
+
+	_, err := f.c.Get(ctx, sentry)
+	f.expect(err == nil, "a refused Delete deleted the credential: %v", err)
+	f.expect(len(f.audit(acme, domain.AuditCredentialDeleted)) == 0, "a refused Delete was audited")
+
+	if _, err := conns.Update(ctx, "a-conn", domain.ConnectionPatch{Secrets: map[string]string{"key": replaced}}, admin); err != nil {
+		f.t.Fatalf("Update a-conn: %v", err)
+	}
+
+	f.refused("Delete while one connection refers to it", f.c.Delete(ctx, sentry, admin), ports.ErrConflict)
+
+	if err := conns.Delete(ctx, "b-conn", admin); err != nil {
+		f.t.Fatalf("Delete b-conn: %v", err)
+	}
+
+	f.expect(f.c.Delete(ctx, sentry, admin) == nil, "Delete of a credential no connection refers to was refused")
+	f.one(acme, domain.AuditCredentialDeleted)
+}
+
 func testIsolation(f *fixture) {
 	acme, labs := f.NewOrg(f.t), f.NewOrg(f.t)
 	f.create(acme, sentryIn(marker))
@@ -526,6 +617,8 @@ func testNoOrg(f *fixture) {
 	_, err = f.c.Patch(ctx, sentry, domain.CredentialPatch{Description: &desc}, admin)
 	f.refused("Patch", err, domain.ErrNoOrg)
 	f.refused("Delete", f.c.Delete(ctx, sentry, admin), domain.ErrNoOrg)
+	_, err = f.c.UsedBy(ctx, sentry)
+	f.refused("UsedBy", err, domain.ErrNoOrg)
 	_, err = f.c.Resolve(ctx, []string{sentry}, inA)
 	f.refused("Resolve", err, domain.ErrNoOrg)
 	_, err = f.c.ImportPreview(ctx, []string{sentry})

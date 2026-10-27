@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/byFrederick/goal/internal/adapters/masterkey/masterkey"
@@ -109,6 +110,46 @@ func seedConnections(t *testing.T, c *Connections, org domain.OrgID, secret stri
 	}
 
 	return conn
+}
+
+// ADR 0017 decision 5 and 00066: a connection whose every secret field refers to a credential
+// stores its references in secret_refs and no ciphertext, and the table refuses a row whose set
+// secret field is neither sealed nor a reference.
+func TestConnections_ReferenceOnlyHasNoCiphertext(t *testing.T) {
+	t.Parallel()
+
+	d := newConnectionsDB(t)
+	c := NewConnections(d.store, testKey(t, "k1"))
+	acme := newOrgID(t, d.store)
+	seedConnections(t, c, acme, "acme-secret")
+
+	ref := "by-ref"
+	if _, err := c.Create(domain.WithOrg(t.Context(), acme), domain.NewConnection{
+		Name: ref, Kind: seededKind, Secrets: map[string]string{seededField: "{{sentry-token}}"},
+	}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	var (
+		refs    string
+		noSeal  bool
+		secrets []string
+	)
+
+	err := d.admin.QueryRow(t.Context(), `SELECT secret_refs::text, key_id IS NULL AND nonce IS NULL AND ciphertext IS NULL, secret_fields
+		FROM connections WHERE name = $1`, ref).Scan(&refs, &noSeal, &secrets)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if refs != `{"key": "sentry-token"}` || !noSeal || len(secrets) != 1 || secrets[0] != seededField {
+		t.Errorf("the reference-only row = secret_refs %s, unsealed %v, secret_fields %v", refs, noSeal, secrets)
+	}
+
+	_, err = d.admin.Exec(t.Context(), `UPDATE connections SET secret_refs = '{}' WHERE name = $1`, ref)
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); !ok || pgErr.ConstraintName != "connections_check1" {
+		t.Errorf("a set secret field neither sealed nor a reference = %v; want connections_check1 to refuse it", err)
+	}
 }
 
 // Spec 4 §11.2 row 1: as goal_app, organization B neither reads nor writes A's connections and

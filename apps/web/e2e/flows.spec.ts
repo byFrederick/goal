@@ -188,6 +188,25 @@ test('the sidebar opens a factory and marks its pages', async ({ page }) => {
   await expect(sidebar.getByRole('link', { name: 'Connections, 1 failing' })).toBeVisible();
 });
 
+test('the sidebar collapses to a rail and remembers it', async ({ page }) => {
+  test.skip(isPhone(page), 'the sidebar and its rail are the 768 px and wider navigation');
+  await page.goto('/o/acme');
+  const sidebar = orgNav(page);
+  await sidebar.getByRole('button', { name: 'Collapse sidebar' }).click();
+  await expect(sidebar.getByRole('button', { name: 'Expand sidebar' })).toBeFocused();
+  await expect(sidebar.getByRole('link', { name: 'Home' })).toBeVisible();
+  await expect(sidebar.getByRole('button', { name: 'Needs you' })).toHaveAttribute('aria-disabled', 'true');
+
+  // The choice is kept across a reload: the rail shows its icons and no spend text.
+  await page.reload();
+  await expect(sidebar.getByRole('button', { name: 'Expand sidebar' })).toBeVisible();
+  await expect(sidebar.getByText('Spend this week')).toHaveCount(0);
+
+  await sidebar.getByRole('button', { name: 'Expand sidebar' }).click();
+  await expect(sidebar.getByRole('button', { name: 'Collapse sidebar' })).toBeFocused();
+  await expect(sidebar.getByText('Spend this week')).toBeVisible();
+});
+
 test('the drawer opens a factory on a phone', async ({ page }) => {
   test.skip(!isPhone(page), 'the drawer is the phone navigation');
   await page.goto('/o/acme');
