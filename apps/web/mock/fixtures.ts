@@ -342,7 +342,8 @@ const sreFactory: Factory = {
 const supportFactory: Factory = {
   id: '5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a01',
   org_id: acmeOrg,
-  can: factoryCan,
+  // No item:create here, so the sidebar's New item picker leaves this factory out.
+  can: factoryCan.filter((p) => p !== 'item:create'),
   name: 'support',
   title: 'Support',
   description: 'Answers questions from the acme shop, citing runbooks.',
@@ -362,8 +363,7 @@ const supportFactory: Factory = {
 const researchFactory: Factory = {
   id: '9e8d7c6b-5a49-4382-9172-6a5b4c3d2e1f',
   org_id: labsOrg,
-  // No item:create here, so the sidebar's New item picker leaves this factory out.
-  can: factoryCan.filter((p) => p !== 'item:create'),
+  can: factoryCan,
   name: 'research',
   title: 'Research',
   description: 'Reads papers and writes short notes for the Example Labs team.',

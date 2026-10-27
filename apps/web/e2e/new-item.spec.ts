@@ -42,5 +42,6 @@ test('the picker leaves out a factory where the person may not add items', async
 
   const picker = page.getByRole('dialog', { name: 'New item' }).getByRole('combobox', { name: 'Factory' });
   await expect(picker.getByRole('option', { name: 'goal' })).toHaveCount(1);
-  await expect(picker.getByRole('option', { name: 'research' })).toHaveCount(0);
+  await expect(picker.getByRole('option', { name: 'sre' })).toHaveCount(1);
+  await expect(picker.getByRole('option', { name: 'support' })).toHaveCount(0);
 });
