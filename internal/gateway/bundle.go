@@ -216,8 +216,10 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 	b := runBundle{
 		Spec: bundleSpec{
 			FactoryID: c.FactoryID, ItemID: it.ID, RunID: c.RunID, Station: station.ID, Agent: agent.Name,
-			Model: cmp.Or(agent.Model, line.Runtime.Model), Skills: make([]string, 0, len(agent.Skills)),
-			ToolsAllow: nonNil(agent.ToolsAllow), ToolsDeny: nonNil(agent.ToolsDeny), Purpose: line.Purpose,
+			// The engine chose the model and read the denied commands from the organization policy at
+			// run start (ADR 0024); a token from before the policy names neither.
+			Model: cmp.Or(c.Model, agent.Model, line.Runtime.Model), Skills: make([]string, 0, len(agent.Skills)),
+			ToolsAllow: nonNil(agent.ToolsAllow), ToolsDeny: withDenied(agent.ToolsDeny, c.DeniedCommands), Purpose: line.Purpose,
 			Brief: it.Work(), Inputs: it.Outputs, Output: station.Output, MaxTurns: maxTurns, MaxUSD: maxUSD,
 			Connections:      []bundleConnection{},
 			KnowledgeSources: g.searchable(line),
@@ -470,6 +472,20 @@ func (b *runBundle) addGit(c gitCredential) {
 	if !slices.Contains(b.Git, c) {
 		b.Git = append(b.Git, c)
 	}
+}
+
+// withDenied is the agent's deny rules followed by the organization's denied commands it does not
+// already have, never nil.
+func withDenied(agent, org []string) []string {
+	out := append([]string{}, agent...)
+
+	for _, d := range org {
+		if !slices.Contains(out, d) {
+			out = append(out, d)
+		}
+	}
+
+	return out
 }
 
 func nonNil(s []string) []string {

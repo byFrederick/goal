@@ -239,6 +239,9 @@ type Deps struct {
 	// EvalGate, when set, gates every publish of a draft with eval cases on their run
 	// (evalgate.go); nil publishes as if no draft had cases.
 	EvalGate *EvalGate
+	// Policies is the organization policy whose allowed models a version may name (ADR 0024
+	// decision 3); nil leaves the policy check out.
+	Policies ports.OrgPolicies
 	Clock    ports.Clock
 	// NewID returns a new factory id (a UUIDv7); uuid.NewV7 when nil.
 	NewID func() string
@@ -251,6 +254,7 @@ type Service struct {
 	loads       Loads
 	credentials Credentials
 	evals       *EvalGate
+	policies    ports.OrgPolicies
 	clock       ports.Clock
 	newID       func() string
 	templates   *TemplateCatalog
@@ -265,7 +269,8 @@ func New(d Deps) *Service {
 
 	return &Service{
 		store: d.Store, loads: d.Loads, credentials: d.Credentials, evals: d.EvalGate,
-		clock: d.Clock, newID: newID,
+		policies: d.Policies,
+		clock:    d.Clock, newID: newID,
 		templates: NewTemplateCatalog(d.Templates, d.Clock),
 	}
 }
