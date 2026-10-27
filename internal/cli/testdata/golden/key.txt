@@ -113,6 +113,10 @@ usage:
                                                   and connections, by group, best first (--limit: per
                                                   group, 1 to 20, default 5; --json: goald's answer as
                                                   it came)
+  goal spend [--window week|month|90d] [--json]   what the organization's agent runs cost (default this
+                                                  week), per merged item and on rework, and each
+                                                  factory's budget: running, stopped or over_budget,
+                                                  its spend today and in the last 7 days
   goal connection import-env                      once, after the cutover to connections: GOAL_GITHUB_TOKEN
                                                   becomes github, CLAUDE_CODE_OAUTH_TOKEN (or ANTHROPIC_API_KEY)
                                                   claude; names that exist are left as they are
@@ -159,7 +163,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, move, pause, the decisions, status, andon, factory, connection, knowledge, search) acts in one
+Every command that talks to goald (run, follow, item, note, move, pause, the decisions, status, andon, factory, connection, knowledge, search, spend) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or
