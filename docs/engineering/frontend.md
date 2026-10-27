@@ -186,7 +186,7 @@ Approve calls `approveItem`, or `mergeItem` when the entry's action is `merge`. 
 
 ### The Needs you link
 
-The Board and the Floor headers carry a "Needs you" link (`shared/needs-you-link.tsx`) at every width; the Items list has none. It shows the count of what waits on people in the factory it is on (the All tab of the Needs you page for that factory, from `inboxQuery(org, factory)`) and links to `/o/$org/needs-you?factory=<name>`. The factories home links to the page too: its "Needs you first" list has an "Open all" link, and on a phone the banner leads to the page when more than one thing waits (with one item waiting, to that item). The page itself is `features/needs-you/`.
+The Floor's header carries a "Needs you" link at every width, and the Board's from 768 px (its phone has no header: the tab bar's Needs you goes to the page); both use `shared/needs-you-link.tsx`. The Items list has none. It shows the count of what waits on people in the factory it is on (the All tab of the Needs you page for that factory, from `inboxQuery(org, factory)`) and links to `/o/$org/needs-you?factory=<name>`. The factories home links to the page too: its "Needs you first" list has an "Open all" link, and on a phone the banner leads to the page when more than one thing waits (with one item waiting, to that item). The page itself is `features/needs-you/`.
 
 ### Status icons
 
