@@ -134,7 +134,7 @@ WHERE EXISTS (SELECT 1 FROM jsonb_each_text(c.secret_refs) AS r (field, credenti
 ORDER BY c.name
 `
 
-// The connections that refer to credential name as {{name}} (00066's secret_refs), by name.
+// The connections that refer to credential name as {{name}} (00070's secret_refs), by name.
 func (q *Queries) CredentialUsers(ctx context.Context, name string) ([]string, error) {
 	rows, err := q.db.Query(ctx, credentialUsers, name)
 	if err != nil {
