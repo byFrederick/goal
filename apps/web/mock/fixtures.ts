@@ -204,6 +204,7 @@ type Step =
       error?: string;
     }
   | { check: string; exit: number; ms: number }
+  | { note: string; by: string }
   | { gate: 'approve' | 'reject'; agent: string; reason?: string }
   | { human: 'approved' | 'rejected'; by: string; reason?: string }
   | { waiting: true; reason?: string }
@@ -1420,15 +1421,72 @@ const softwareSeeds: Seed[] = [
   })),
   {
     number: 14,
-    title: 'Rework the export schema',
-    type: 'refactor',
-    body: 'The engineer needs a decision on the export schema.',
+    title: 'Show the sidebar spend for the organization',
+    type: 'feature',
+    body: 'The sidebar shows the spend of the week. The frontend engineer needs a decision on its scope.',
     station: 'build',
     state: 'waiting_human',
-    agent: 'engineer',
+    agent: 'frontend-engineer',
     createdMin: 210,
     updatedMin: 35,
-    steps: [],
+    // The pictured item (daily-work/item): an architect spec with four criteria, a frontend build with
+    // its events, and the open decision whose summary is the question the card asks.
+    outputs: {
+      spec: specOutput(
+        'Show the spend of this week in the sidebar, with the weekly budget.',
+        [
+          'The sidebar shows "Spend this week" with the amount and the weekly budget.',
+          'The bar fills to spend divided by budget and turns amber at 80%.',
+          'Choosing it opens the usage page.',
+          'It reads correctly in light and dark themes.',
+        ],
+        'web',
+      ),
+      build: {
+        summary:
+          'Should the sidebar show this week’s spend for the whole organization, or only for the factory you are in?',
+      },
+    },
+    steps: [
+      { move: 'spec' },
+      {
+        run: 'architect',
+        tools: [
+          ['Read', 'docs/design/MASTER.md', 'Read 230 lines'],
+          ['Read', 'apps/web/src/features/usage/sidebar.tsx', 'Read 88 lines'],
+        ],
+        // The reply is the spec's output: the run card lists its acceptance criteria from it.
+        message: JSON.stringify(
+          specOutput(
+            'Show the spend of this week in the sidebar, with the weekly budget.',
+            [
+              'The sidebar shows "Spend this week" with the amount and the weekly budget.',
+              'The bar fills to spend divided by budget and turns amber at 80%.',
+              'Choosing it opens the usage page.',
+              'It reads correctly in light and dark themes.',
+            ],
+            'web',
+          ),
+        ),
+        cost: 0.62,
+        turns: 14,
+      },
+      { move: 'build' },
+      {
+        run: 'frontend-engineer',
+        tools: [
+          ['Read', 'apps/web/src', 'Read 18 files'],
+          ['Edit', 'apps/web/src/features/usage/sidebar-usage.tsx', 'Edited 1 file, +48 −12'],
+          ['Write', 'apps/web/src/features/usage/sidebar-usage.test.tsx', 'Wrote 1 file'],
+        ],
+        cost: 2.38,
+        turns: 41,
+      },
+      { check: 'task check:changed', exit: 1, ms: 190_000 },
+      { note: 'Use the weekly budget, not the daily one.', by: 'Freddy Cruz' },
+      { check: 'task check:changed', exit: 0, ms: 220_000 },
+      { waiting: true },
+    ],
   },
   {
     number: 15,
@@ -1588,6 +1646,8 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
           exit_code: step.exit,
           duration_ms: step.ms,
         });
+      } else if ('note' in step) {
+        push('note', step.by, { text: step.note });
       } else if ('gate' in step) {
         push(
           step.gate === 'approve' ? 'gate_approved' : 'gate_rejected',
@@ -1805,6 +1865,50 @@ export function seed(now = Date.now()): MockState {
         },
       },
       goal: {
+        'spec-writer': {
+          model: 'claude-opus-5-5',
+          tasks_finished: 24,
+          sent_back: { count: 1, ratio: 0.04 },
+          median_turns: 22,
+          spend_per_task_usd: 1.1,
+          task_time_p85_minutes: 40,
+          spend_usd: 26.4,
+          reasons: [],
+          denied_tool_calls: { count: 0, tools: [] },
+        },
+        'backend-engineer': {
+          model: 'claude-opus-5-5',
+          tasks_finished: 19,
+          sent_back: { count: 2, ratio: 0.12 },
+          median_turns: 22,
+          spend_per_task_usd: 1.1,
+          task_time_p85_minutes: 40,
+          spend_usd: 20.9,
+          reasons: [],
+          denied_tool_calls: { count: 0, tools: [] },
+        },
+        'frontend-engineer': {
+          model: 'claude-haiku-5-5',
+          tasks_finished: 17,
+          sent_back: { count: 3, ratio: 0.18 },
+          median_turns: 22,
+          spend_per_task_usd: 1.1,
+          task_time_p85_minutes: 40,
+          spend_usd: 18.7,
+          reasons: [],
+          denied_tool_calls: { count: 0, tools: [] },
+        },
+        reviewer: {
+          model: 'claude-opus-5-5',
+          tasks_finished: 28,
+          sent_back: { count: 0, ratio: 0 },
+          median_turns: 22,
+          spend_per_task_usd: 1.1,
+          task_time_p85_minutes: 40,
+          spend_usd: 30.8,
+          reasons: [],
+          denied_tool_calls: { count: 0, tools: [] },
+        },
         builder: {
           model,
           tasks_finished: 12,
