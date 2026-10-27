@@ -127,6 +127,11 @@ interface Props {
   sendBackLabel?: string;
   /** Move goes into a "More actions" menu beside the other controls (the Item page's top bar). */
   moveInMenu?: boolean;
+  /**
+   * Phones: `decisions` renders only Approve, Merge and Retry, and `controls` only one "More actions" menu
+   * with Pause, Send back and Move. Undefined renders both, as the desktop does.
+   */
+  split?: 'decisions' | 'controls';
   className?: string;
 }
 
@@ -140,6 +145,7 @@ export function ItemDecisions({
   size = 'md',
   sendBackLabel = 'Send back',
   moveInMenu = false,
+  split,
   className,
 }: Props) {
   const decide = useDecision(item, factory);
@@ -154,7 +160,10 @@ export function ItemDecisions({
   const reject = can.reject || ctl.sendBack;
   const decisions = can.approve || reject || can.merge || can.retry;
 
-  if (!decisions && !ctl.pause && !ctl.move) return null;
+  const menuHas = Boolean(controls) && (ctl.pause || reject || ctl.move);
+  if (split === 'controls' ? !menuHas : split === 'decisions' ? !decisions : !decisions && !ctl.pause && !ctl.move) {
+    return null;
+  }
 
   const pending = decide.isPending ? decide.variables?.kind : undefined;
   const btn = layout === 'stack' ? 'w-full justify-center' : '';
@@ -169,13 +178,13 @@ export function ItemDecisions({
 
   return (
     <div className={cn('flex gap-2', layout === 'stack' ? 'flex-col' : 'flex-wrap items-center', className)}>
-      {can.merge ? (
+      {split !== 'controls' && can.merge ? (
         <Button variant="primary" size={s} className={btn} {...decision(() => setOpen('merge'))}>
           <GitMerge size={16} strokeWidth={1.75} aria-hidden="true" />
           {pending === 'merge' ? 'Merging…' : 'Merge'}
         </Button>
       ) : null}
-      {can.approve ? (
+      {split !== 'controls' && can.approve ? (
         <Button
           variant="primary"
           size={s}
@@ -187,7 +196,7 @@ export function ItemDecisions({
           {pending === 'approve' ? 'Approving…' : 'Approve'}
         </Button>
       ) : null}
-      {can.retry ? (
+      {split !== 'controls' && can.retry ? (
         <Button variant="primary" size={s} className={btn} {...decision(() => decide.mutate({ kind: 'retry' }))}>
           {resume ? (
             <Play size={16} strokeWidth={1.75} aria-hidden="true" />
@@ -197,7 +206,7 @@ export function ItemDecisions({
           {pending === 'retry' ? (resume ? 'Resuming…' : 'Retrying…') : resume ? 'Resume' : 'Retry'}
         </Button>
       ) : null}
-      {ctl.pause ? (
+      {split === undefined && ctl.pause ? (
         <Button
           variant="secondary"
           size={s}
@@ -209,13 +218,13 @@ export function ItemDecisions({
           {pending === 'pause' ? 'Pausing…' : 'Pause'}
         </Button>
       ) : null}
-      {reject ? (
+      {split === undefined && reject ? (
         <Button variant="rework" size={s} className={btn} {...decision(() => setOpen('reject'))}>
           <Undo2 size={16} strokeWidth={1.75} aria-hidden="true" />
           {pending === 'reject' ? 'Sending back…' : backTo}
         </Button>
       ) : null}
-      {ctl.move && controls && !moveInMenu ? (
+      {split === undefined && ctl.move && controls && !moveInMenu ? (
         <Button
           variant="secondary"
           size={s}
@@ -227,7 +236,43 @@ export function ItemDecisions({
           Move
         </Button>
       ) : null}
-      {ctl.move && controls && moveInMenu ? (
+      {split === 'controls' && menuHas ? (
+        <Menu>
+          <MenuTrigger asChild>
+            <Button variant="secondary" size="icon" aria-label="More actions" className="size-11">
+              <Ellipsis size={16} strokeWidth={1.75} aria-hidden="true" />
+            </Button>
+          </MenuTrigger>
+          {/* An action's dialog opens from the menu: focus goes to it, not back to the trigger. */}
+          <MenuContent
+            align="end"
+            className="w-52"
+            onCloseAutoFocus={(event) => {
+              if (open !== null) event.preventDefault();
+            }}
+          >
+            {ctl.pause ? (
+              <MenuItem disabled={decide.isPending} onSelect={() => setOpen('pause')}>
+                <Pause size={16} strokeWidth={1.75} aria-hidden="true" />
+                Pause
+              </MenuItem>
+            ) : null}
+            {reject ? (
+              <MenuItem disabled={decide.isPending} onSelect={() => setOpen('reject')}>
+                <Undo2 size={16} strokeWidth={1.75} aria-hidden="true" />
+                {backTo}
+              </MenuItem>
+            ) : null}
+            {ctl.move ? (
+              <MenuItem disabled={decide.isPending} onSelect={() => setOpen('move')}>
+                <ArrowRight size={16} strokeWidth={1.75} aria-hidden="true" />
+                Move
+              </MenuItem>
+            ) : null}
+          </MenuContent>
+        </Menu>
+      ) : null}
+      {split === undefined && ctl.move && controls && moveInMenu ? (
         <Menu>
           <MenuTrigger asChild>
             <Button variant="secondary" size="icon" aria-label="More actions">
@@ -249,7 +294,7 @@ export function ItemDecisions({
           </MenuContent>
         </Menu>
       ) : null}
-      {decisions && !mayDecide ? (
+      {split !== 'controls' && decisions && !mayDecide ? (
         <p id={reasonId} className={cn('m-0 text-sm text-muted', layout === 'row' && 'basis-full')}>
           {reasons.decide(grants?.name ?? 'this factory')}
         </p>

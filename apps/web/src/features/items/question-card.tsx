@@ -41,15 +41,16 @@ export function QuestionCard({ entry, agent, paused, onWriteAnswer, className }:
         </span>
       </div>
       <p className="m-0 text-heading leading-normal font-medium text-ink">{question}</p>
-      <div className="flex flex-wrap gap-2">
+      {/* Phones: the quick answers and Write an answer are full-width 44 px targets, one under another. */}
+      <div className="flex flex-wrap gap-2 max-md:flex-col">
         {quickAnswers.map((answer) => (
           <NotAvailable key={answer} label="Quick answer">
-            <Button variant="secondary" type="button" className="border-you-tint">
+            <Button variant="secondary" type="button" className="border-you-tint max-md:h-11">
               {answer}
             </Button>
           </NotAvailable>
         ))}
-        <Button variant="ghost" type="button" className="text-you-ink" onClick={onWriteAnswer}>
+        <Button variant="ghost" type="button" className="text-you-ink max-md:h-11" onClick={onWriteAnswer}>
           Write an answer
         </Button>
       </div>

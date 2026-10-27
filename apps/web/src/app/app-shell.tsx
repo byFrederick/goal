@@ -58,6 +58,7 @@ export function ShellFrame({ tabs = true, children }: FrameProps) {
           <PhoneTopBar
             title={topBar?.crumb ?? pageTitle}
             actions={topBar?.actions}
+            back={topBar?.back}
             onMenu={openDrawer}
             drawerOpen={drawer}
             menuRef={menu}
