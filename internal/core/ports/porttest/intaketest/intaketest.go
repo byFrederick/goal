@@ -928,6 +928,13 @@ func testIsolatedReads(f *fixture) {
 		t.Errorf("labs TriggerStats = %v, %v; want none", got, err)
 	}
 
+	f.isolatedIntakeReads(labs)
+}
+
+// isolatedIntakeReads checks that labs reads none of the fixture's sources and trigger days.
+func (f *fixture) isolatedIntakeReads(labs context.Context) {
+	t := f.t
+
 	if got, err := f.in.ItemSources(labs, f.factory, 48); err != nil || len(got.Counts) != 0 || !got.From.IsZero() {
 		t.Errorf("labs ItemSources = %+v, %v; want none", got, err)
 	}

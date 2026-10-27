@@ -3,7 +3,9 @@ package api
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -27,8 +29,21 @@ const (
 
 var errTriggerNotFound = fmt.Errorf("trigger %w", ports.ErrNotFound)
 
+// triggerProblem is the problem of a trigger the current definition does not have, when err is one.
+func triggerProblem(err error) (gen.Problem, bool) {
+	if !errors.Is(err, errTriggerNotFound) {
+		return gen.Problem{}, false
+	}
+
+	p := detailed(http.StatusNotFound, err)
+	p.Code = optional("trigger-not-found")
+
+	return p, true
+}
+
 func (s *server) GetIntake(ctx context.Context, req gen.GetIntakeRequestObject) (gen.GetIntakeResponseObject, error) {
 	last := defaultIntakeItems
+
 	if n := req.Params.Items; n != nil {
 		if *n < 1 || *n > maxIntakeItems {
 			return nil, fmt.Errorf("%w: items must be 1 to %d", errInvalid, maxIntakeItems)

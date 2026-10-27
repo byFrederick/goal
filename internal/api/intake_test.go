@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,14 +21,15 @@ const (
 	flakyName   = "flaky-test-on-main"
 	nightlyName = "nightly-audit"
 	deployName  = "deploy-failed"
+	typeFix     = "fix"
 )
 
-// intakeItem creates an item of acme from source (and trigger, when set), created at at.
+// intakeItem creates an item of acme from source (and trigger, when set) at the instant given.
 func (h *harness) intakeItem(t *testing.T, source domain.ItemSource, trigger string, at time.Time) domain.Item {
 	t.Helper()
 
 	it, err := h.store.CreateItem(inOrg(t), domain.NewItem{
-		FactoryID: acmeID, Type: "fix", Title: "from " + string(source), Station: "inbox", State: domain.StateQueued,
+		FactoryID: acmeID, Type: typeFix, Title: "from " + string(source), Station: stInbox, State: domain.StateQueued,
 		Class: domain.ClassStandard, CreatedAt: at, Source: source, Trigger: trigger,
 	})
 	if err != nil {
@@ -37,7 +39,7 @@ func (h *harness) intakeItem(t *testing.T, source domain.ItemSource, trigger str
 	return it
 }
 
-// fire records a firing of trigger at at for the check dedupe: created with item when it is set,
+// fire records a firing of trigger at the instant given for the check dedupe: created with item when it is set,
 // skipped with reason otherwise.
 func (h *harness) fire(t *testing.T, trigger, dedupe string, item domain.ItemID, reason string, at time.Time) {
 	t.Helper()
@@ -92,28 +94,7 @@ func TestIntake_SourceTally(t *testing.T) {
 		t.Errorf("intake = %s, want %s", got, want)
 	}
 
-	var names []string
-	for _, tr := range in.Triggers {
-		names = append(names, tr.Name)
-	}
-
-	if want := []string{nightlyName, flakyName, deployName}; !slices.Equal(names, want) {
-		t.Fatalf("triggers = %v, want %v", names, want)
-	}
-
-	nightly, flaky, deploy := in.Triggers[0], in.Triggers[1], in.Triggers[2]
-	if nightly.Source != gen.Schedule || nightly.When != "0 6 * * MON-FRI, Europe/Berlin" || !nightly.Enabled || nightly.Problem != nil ||
-		nightly.Create.Type != "feature" || nightly.Create.Station != "inbox" || nightly.Create.Lane != nil || nightly.Create.Expedite {
-		t.Errorf("nightly = %+v, want an enabled schedule creating features at inbox", nightly)
-	}
-
-	if flaky.Source != gen.Github || flaky.When != "github.check_run.failed" || !flaky.Create.Expedite || flaky.Create.Type != "fix" {
-		t.Errorf("flaky = %+v, want a GitHub trigger expediting fixes", flaky)
-	}
-
-	if deploy.Source != gen.Webhook || deploy.Enabled || deploy.On != "webhook.ci-hooks.deploy" {
-		t.Errorf("deploy = %+v, want a disabled webhook trigger", deploy)
-	}
+	checkIntakeTriggers(t, in.Triggers)
 
 	var five gen.Intake
 	if h.call(t, http.MethodGet, intakePath+"?items=5", "", &five); five.Items != 5 || five.Sources.Github != 4 || five.Sources.Webhook != 1 {
@@ -124,6 +105,32 @@ func TestIntake_SourceTally(t *testing.T) {
 		if code := h.call(t, http.MethodGet, intakePath+q, "", nil); code != http.StatusBadRequest {
 			t.Errorf("intake%s = %d, want 400", q, code)
 		}
+	}
+}
+
+// checkIntakeTriggers checks acme's triggers as Intake shows them, in definition order.
+func checkIntakeTriggers(t *testing.T, triggers []gen.IntakeTrigger) {
+	t.Helper()
+
+	var got []string
+
+	for _, tr := range triggers {
+		lane := "-"
+		if tr.Create.Lane != nil {
+			lane = *tr.Create.Lane
+		}
+
+		got = append(got, fmt.Sprintf("%s: %s on %s, when %q, enabled %v, creates %s at %s lane %s expedite %v, problem %v",
+			tr.Name, tr.Source, tr.On, tr.When, tr.Enabled, tr.Create.Type, tr.Create.Station, lane, tr.Create.Expedite, tr.Problem != nil))
+	}
+
+	want := []string{
+		`nightly-audit: schedule on schedule, when "0 6 * * MON-FRI, Europe/Berlin", enabled true, creates feature at inbox lane - expedite false, problem false`,
+		`flaky-test-on-main: github on github.check_run.failed, when "github.check_run.failed", enabled true, creates fix at inbox lane - expedite true, problem true`,
+		`deploy-failed: webhook on webhook.ci-hooks.deploy, when "webhook.ci-hooks.deploy", enabled false, creates fix at inbox lane - expedite false, problem true`,
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("triggers =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
 
@@ -169,20 +176,7 @@ func TestIntake_TriggerStats(t *testing.T) {
 	nightly := h.intakeItem(t, domain.ItemFromSchedule, nightlyName, oct(23, 4))
 	h.fire(t, nightlyName, "", nightly.ID, "", oct(23, 4))
 
-	if err := h.store.AppendEvents(inOrg(t), domain.Event{
-		FactoryID: acmeID, ItemID: a.ID, At: oct(23, 2), Kind: domain.EventMerged, Station: "approve", Actor: domain.ActorEngine,
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	run, err := h.store.StartRun(inOrg(t), ports.NewRun{FactoryID: acmeID, ItemID: b.ID, Station: "inbox", Agent: "writer", Model: "m", StartedAt: oct(23, 8)})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := h.store.FinishRun(inOrg(t), run, domain.RunResult{Status: domain.RunSucceeded, CostUSD: 1.5}, oct(23, 9)); err != nil {
-		t.Fatal(err)
-	}
+	h.mergedAndSpent(t, a, b, 1.5)
 
 	var in gen.Intake
 	h.call(t, http.MethodGet, intakePath, "", &in)
@@ -214,20 +208,7 @@ func TestIntake_TriggerStats(t *testing.T) {
 		t.Errorf("week = %+v, want 3 created, 1 merged, $1.50", w)
 	}
 
-	var events []string
-
-	for _, e := range d.Events {
-		s := fmt.Sprintf("%s %s %s", e.Title, e.At.UTC().Format("Jan 2 15:04"), e.Outcome)
-		if e.ItemNumber != nil {
-			s += fmt.Sprintf(" #%d", *e.ItemNumber)
-		}
-
-		if e.Reason != nil {
-			s += ": " + *e.Reason
-		}
-
-		events = append(events, s)
-	}
+	events := eventLines(d.Events)
 
 	want := []string{
 		fmt.Sprintf("TestLeaseExpiry Oct 23 08:00 created #%d", b.Number),
@@ -357,4 +338,44 @@ func TestIntakeTrigger_NotFound(t *testing.T) {
 			}
 		}
 	}
+}
+
+// mergedAndSpent records a merge of merged and a finished run of spent that cost usd.
+func (h *harness) mergedAndSpent(t *testing.T, merged, spent domain.Item, usd float64) {
+	t.Helper()
+
+	if err := h.store.AppendEvents(inOrg(t), domain.Event{
+		FactoryID: acmeID, ItemID: merged.ID, At: oct(23, 2), Kind: domain.EventMerged, Station: stInbox, Actor: domain.ActorEngine,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	run, err := h.store.StartRun(inOrg(t), ports.NewRun{FactoryID: acmeID, ItemID: spent.ID, Station: stInbox, Agent: "writer", Model: "m", StartedAt: oct(23, 8)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.store.FinishRun(inOrg(t), run, domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd}, oct(23, 9)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// eventLines are a trigger's events as one line each: title, instant, outcome, item and reason.
+func eventLines(events []gen.IntakeEvent) []string {
+	var out []string
+
+	for _, e := range events {
+		s := fmt.Sprintf("%s %s %s", e.Title, e.At.UTC().Format("Jan 2 15:04"), e.Outcome)
+		if e.ItemNumber != nil {
+			s += fmt.Sprintf(" #%d", *e.ItemNumber)
+		}
+
+		if e.Reason != nil {
+			s += ": " + *e.Reason
+		}
+
+		out = append(out, s)
+	}
+
+	return out
 }

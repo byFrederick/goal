@@ -606,7 +606,9 @@ func (in *Intake) TriggerDays(ctx context.Context, factory domain.FactoryID, sin
 		out = append(out, domain.TriggerDay{Trigger: k.trigger, Day: k.day, Created: n})
 	}
 
-	slices.SortFunc(out, func(a, b domain.TriggerDay) int { return cmp.Or(cmp.Compare(a.Trigger, b.Trigger), a.Day.Compare(b.Day)) })
+	slices.SortFunc(out, func(a, b domain.TriggerDay) int {
+		return cmp.Or(cmp.Compare(a.Trigger, b.Trigger), a.Day.Compare(b.Day))
+	})
 
 	return out, nil
 }
@@ -618,8 +620,9 @@ func (in *Intake) Firings(ctx context.Context, factory domain.FactoryID, trigger
 		return nil, err
 	}
 
-	in.d.mu.Lock()
 	var mine []domain.TriggerFiring
+
+	in.d.mu.Lock()
 
 	for _, r := range in.d.firings {
 		if r.org == org && r.f.FactoryID == factory && r.f.Trigger == trigger {

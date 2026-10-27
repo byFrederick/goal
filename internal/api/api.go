@@ -601,7 +601,7 @@ func problemOf(err error) gen.Problem {
 	// wrap ports.ErrNameTaken); the credentials' before the connections' (both wrap
 	// ports.ErrNoMasterKey).
 	for _, answer := range []func(error) (gen.Problem, bool){
-		fixedProblem, edgeProblem, partProblem, credentialProblem, connectionProblem, knowledgeProblem, definitionProblem, controlProblem, agentProblem, apiKeyProblem, personalTokenProblem,
+		fixedProblem, edgeProblem, partProblem, credentialProblem, connectionProblem, knowledgeProblem, definitionProblem, controlProblem, agentProblem, triggerProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {
 			return p
@@ -633,11 +633,6 @@ func problemOf(err error) gen.Problem {
 			Title: http.StatusText(http.StatusConflict), Status: http.StatusConflict, Detail: &detail,
 			Code: optional("factory-archived"),
 		}
-	case errors.Is(err, errTriggerNotFound):
-		p := detailed(http.StatusNotFound, err)
-		p.Code = optional("trigger-not-found")
-
-		return p
 	case errors.Is(err, errTouchNotFound):
 		p := detailed(http.StatusNotFound, err)
 		p.Code = optional("touch-not-found")
