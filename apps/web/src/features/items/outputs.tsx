@@ -21,7 +21,7 @@ function Value({ name, value }: { name: string; value: unknown }) {
     return (
       <div className="flex flex-col gap-1">
         <span className="text-sm text-muted">{humanize(name)}</span>
-        <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-[15px] leading-normal">
+        <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-body leading-normal">
           {value.map((v) => (
             <li key={v}>{v}</li>
           ))}
@@ -33,7 +33,7 @@ function Value({ name, value }: { name: string; value: unknown }) {
     return (
       <div className="flex flex-col gap-1">
         <span className="text-sm text-muted">{humanize(name)}</span>
-        <pre className="m-0 overflow-x-auto rounded-control bg-shell p-3 text-[13px] leading-normal">
+        <pre className="m-0 overflow-x-auto rounded-control bg-shell p-3 text-secondary leading-normal">
           {JSON.stringify(value, null, 2)}
         </pre>
       </div>
@@ -42,14 +42,14 @@ function Value({ name, value }: { name: string; value: unknown }) {
   const text = String(value);
   const url = /^https?:\/\//.test(text);
   return (
-    <div className="flex items-baseline justify-between gap-3 border-t border-line pt-2 text-[15px]">
+    <div className="flex items-baseline justify-between gap-3 border-t border-line pt-2 text-body">
       <span className="text-muted">{humanize(name)}</span>
       {url ? (
         <a href={text} target="_blank" rel="noreferrer" className="[overflow-wrap:anywhere] hover:text-run">
           {text}
         </a>
       ) : (
-        <span className={name === 'branch' || name === 'lane' ? 'font-mono text-[13px]' : ''}>{text}</span>
+        <span className={name === 'branch' || name === 'lane' ? 'font-mono text-secondary' : ''}>{text}</span>
       )}
     </div>
   );
@@ -66,7 +66,7 @@ function Output({ station, value }: { station: string; value: unknown }) {
   return (
     <article className="flex flex-col gap-3 rounded-control border border-line bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="m-0 text-[15px] font-medium">{humanize(station)}</h3>
+        <h3 className="m-0 text-body font-medium">{humanize(station)}</h3>
         {prs.length > 0 ? (
           <span className="flex flex-wrap gap-2">
             {prs.map((pr) => (
@@ -87,13 +87,13 @@ function Output({ station, value }: { station: string; value: unknown }) {
       </div>
       {obj ? (
         <>
-          {lead ? <p className="m-0 text-[17px] leading-normal tracking-[-0.01em]">{String(obj[lead])}</p> : null}
+          {lead ? <p className="m-0 text-heading leading-normal tracking-[-0.01em]">{String(obj[lead])}</p> : null}
           {rest.map(([k, v]) => (
             <Value key={k} name={k} value={v} />
           ))}
         </>
       ) : (
-        <p className="m-0 text-[15px] leading-normal whitespace-pre-wrap">{String(value)}</p>
+        <p className="m-0 text-body leading-normal whitespace-pre-wrap">{String(value)}</p>
       )}
     </article>
   );

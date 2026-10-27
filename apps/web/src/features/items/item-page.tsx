@@ -92,6 +92,9 @@ export function ItemPage() {
   const [fullTrace, setFullTrace] = useState(false);
   const { tab = 'timeline' } = useSearch({ from: '/o/$org/f/$factory/items/$ref' });
   const noteField = useRef<HTMLTextAreaElement>(null);
+  const compactNoteField = useRef<HTMLTextAreaElement>(null);
+  // The wide field is hidden on phones and the compact one elsewhere, so the focus goes to the one shown.
+  const focusNote = () => (noteField.current?.offsetParent ? noteField.current : compactNoteField.current)?.focus();
   // The question: this item's open decision in the inbox, when the caller may decide it.
   const { data: inbox } = useQuery(inboxQuery(org.id, factory.id));
   const question = inbox?.entries.find((e) => e.kind === 'decision' && e.item?.id === item.id);
@@ -214,7 +217,7 @@ export function ItemPage() {
               entry={question}
               agent={latest ? runRole(latest) : null}
               paused={controls.paused}
-              onWriteAnswer={() => noteField.current?.focus()}
+              onWriteAnswer={focusNote}
               className="order-2 @[720px]:order-none"
             />
           ) : null}
@@ -232,13 +235,6 @@ export function ItemPage() {
               className={cn('order-6 flex flex-col gap-4 @[720px]:order-none', !fullTrace && 'hidden @[720px]:flex')}
             >
               <TraceList entries={trace.entries} itemState={item.state} status={runsStatus} />
-              <NoteComposer
-                itemKey={key}
-                factory={factory}
-                state={item.state}
-                fieldRef={noteField}
-                className="hidden @[720px]:flex"
-              />
             </section>
           ) : null}
           {tab === 'spec' ? (
@@ -269,8 +265,22 @@ export function ItemPage() {
               )}
             </SectionCard>
           ) : null}
+          <NoteComposer
+            itemKey={key}
+            factory={factory}
+            state={item.state}
+            fieldRef={noteField}
+            className="hidden @[720px]:flex"
+          />
         </div>
-        <NoteComposer itemKey={key} factory={factory} state={item.state} compact className="order-8 @[720px]:hidden" />
+        <NoteComposer
+          itemKey={key}
+          factory={factory}
+          state={item.state}
+          compact
+          fieldRef={compactNoteField}
+          className="order-8 @[720px]:hidden"
+        />
       </div>
     </>
   );
