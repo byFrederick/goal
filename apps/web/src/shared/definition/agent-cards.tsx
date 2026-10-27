@@ -35,22 +35,10 @@ export function useRunningModel(): UseQueryResult<Model> {
 }
 
 /** The running version's files (path and sha256), to read single files by their content. */
-function useRunningFiles(enabled: boolean): VersionDetail['files'] | undefined {
+export function useRunningFiles(enabled: boolean): VersionDetail['files'] | undefined {
   const org = useOrg();
   const factory = useFactory();
   return useQuery({ ...versionQuery(org.id, factory.id, 'current'), enabled }).data?.files;
-}
-
-/** Header action: the agent in Definition › Agents. */
-export function EditInDefinition({ agent }: { agent: string }) {
-  const params = useFactoryParams();
-  return (
-    <Button asChild variant="secondary" className="h-11 md:h-10">
-      <Link to="/o/$org/f/$factory/definition/$section" params={{ ...params, section: 'agents' }} search={{ agent }}>
-        Edit in Definition
-      </Link>
-    </Button>
-  );
 }
 
 /** "The draft changes this agent", with a link to Review, while the open draft does. */
@@ -74,7 +62,7 @@ export function DraftChangesNote({ agent, className }: { agent: string; classNam
   return (
     <p
       className={cn(
-        'm-0 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-control border border-line bg-card px-3.5 py-2.5 text-sm md:text-[15px]',
+        'm-0 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-control border border-line bg-card px-4 py-3 text-body',
         className,
       )}
     >
@@ -181,24 +169,24 @@ export function SkillsCard({ agent, className }: { agent: string; className?: st
               return (
                 <li
                   key={name}
-                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2.5 border-t border-line py-[11px] md:rounded-control md:border md:border-line md:bg-card md:px-3 md:py-2.5"
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-line py-3 md:rounded-control md:border md:border-line md:bg-card md:px-3 md:py-3"
                 >
                   <span className="min-w-0">
-                    <span translate="no" className="block text-[15px] font-medium break-words">
+                    <span translate="no" className="block text-body font-medium break-words">
                       {name}
                     </span>
                     {!skill ? (
-                      <span className="mt-0.5 block text-[13px] text-rework-ink">Not among the factory’s skills</span>
+                      <span className="mt-1 block text-secondary text-rework-ink">Not among the factory’s skills</span>
                     ) : description ? (
-                      <span className="mt-0.5 block text-[13px] leading-snug text-muted break-words">
+                      <span className="mt-1 block text-secondary leading-snug text-muted break-words">
                         {description}
                       </span>
                     ) : text?.isPending && text.fetchStatus !== 'idle' ? (
-                      <span aria-hidden="true" className="mt-1.5 block h-3 w-40 max-w-full rounded-chip bg-panel/70" />
+                      <span aria-hidden="true" className="mt-2 block h-3 w-40 max-w-full rounded-chip bg-panel/70" />
                     ) : null}
                   </span>
                   {source ? (
-                    <span className="font-mono text-[13px] text-muted">
+                    <span className="font-mono text-secondary text-muted">
                       <span className="sr-only">Source: </span>
                       {source}
                     </span>
@@ -214,7 +202,7 @@ export function SkillsCard({ agent, className }: { agent: string; className?: st
         to="/o/$org/f/$factory/definition/$section"
         params={{ ...params, section: 'agents' }}
         search={{ agent, add: 'skill' }}
-        className="inline-flex min-h-11 items-center self-start text-[15px] text-ink underline underline-offset-3 transition-colors duration-200 hover:text-run md:min-h-6"
+        className="inline-flex min-h-11 items-center self-start text-body text-ink underline underline-offset-3 transition-colors duration-200 hover:text-run md:min-h-6"
       >
         Add a skill from skills.sh
       </Link>
@@ -230,7 +218,7 @@ function Rules({ label, rules, tone }: { label: string; rules: string[]; tone: '
         {label}
       </p>
       {rules.length > 0 ? (
-        <ul aria-labelledby={id} className="m-0 flex list-none flex-wrap gap-1.5 p-0">
+        <ul aria-labelledby={id} className="m-0 flex list-none flex-wrap gap-2 p-0">
           {rules.map((rule) => (
             <li key={rule} className="min-w-0">
               <Chip
@@ -243,7 +231,7 @@ function Rules({ label, rules, tone }: { label: string; rules: string[]; tone: '
           ))}
         </ul>
       ) : (
-        <p className="m-0 text-[13px] text-muted">None</p>
+        <p className="m-0 text-secondary text-muted">None</p>
       )}
     </div>
   );
@@ -297,7 +285,7 @@ export function ToolPolicyCard({
             <Rules label="Allowed" rules={policy.allowed} tone="plain" />
             <Rules label="Denied before the call runs" rules={policy.denied} tone="rework" />
             {asked.length > 0 ? (
-              <p className="m-0 text-[13px] leading-snug text-amber-ink">
+              <p className="m-0 text-secondary leading-snug text-amber-ink">
                 {asked.map((k) => builtinLabels[k]).join(', ')}: Ask me is asked as Off until tool approvals arrive.
               </p>
             ) : null}

@@ -106,8 +106,11 @@ spec:
       skills: [acme-conventions]
       builtins: { read: allowed, edit: allowed, run: { mode: allowed, commands: [go, task, git] } }
     - name: frontend-engineer
-      description: Builds web changes from the spec.
+      description: The React UI in apps/web and the TypeScript packages, following the design system exactly.
       prompt: ./agents/frontend-engineer.md
+      model: claude-haiku-5-5
+      maxTurns: 250
+      perItemUsd: 20
       skills: [acme-conventions]
       connections: [playwright]
       builtins: { read: allowed, edit: allowed, run: { mode: allowed, commands: [pnpm, git] }, web: ${o.draft ? 'ask' : 'off'} }
@@ -150,10 +153,15 @@ Name the lane (backend or frontend) that builds it.
 Build the change the spec describes in Go. Keep the hexagonal boundaries, add tests that fail without
 the change, and run task check before you open the pull request.
 `,
-    'agents/frontend-engineer.md': `# frontend-engineer
+    'agents/frontend-engineer.md': `# You build Goal's web app
 
-Build the change the spec describes in web/. Follow the design system, keep every action reachable by
-keyboard, and run pnpm test before you open the pull request.
+You work in apps/web and the TypeScript packages. The design system in design-system/goal/MASTER.md is the
+source of truth for colour, type, spacing and components.
+
+- Read the spec's acceptance criteria before you open a file.
+- Every new state gets a test: loading, empty, error and success.
+- Use tokens, never raw colours. Check both themes.
+- Run task check:changed and attach the output as evidence.
 `,
     'agents/reviewer.md': `# reviewer
 
