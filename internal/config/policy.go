@@ -11,8 +11,8 @@ import (
 // 3): authoring runs it on publish and validate, since the policy is not in the definition.
 const CheckPolicy = "policy"
 
-// CodeModelNotAllowed: spec.runtime.model or an agent's model is not one the organization's
-// policy allows.
+// CodeModelNotAllowed is the code of a spec.runtime.model or an agent's model that is not one the
+// organization's policy allows.
 const CodeModelNotAllowed = "model-not-allowed"
 
 // ModelProblems reports each model f names, in spec.runtime.model and in its agents' model, that

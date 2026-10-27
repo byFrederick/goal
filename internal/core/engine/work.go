@@ -67,20 +67,7 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 	c := claimed{line: l, station: st, item: it, lease: lease}
 	log := e.log.With(slog.String("factory", string(it.FactoryID)), slog.String("item", string(it.ID)), slog.String("station", st.ID))
 
-	var err error
-	if c.agent, err = agentFor(l, st, it.Lane); err != nil {
-		e.block(ctx, log, c, err.Error())
-		return
-	}
-
-	refusal, err := e.applyPolicy(ctx, &c)
-
-	switch {
-	case err != nil:
-		e.block(ctx, log, c, err.Error())
-		return
-	case refusal != "":
-		e.escalate(ctx, log, c, refusal)
+	if !e.admitted(ctx, log, &c) {
 		return
 	}
 
@@ -222,6 +209,30 @@ func (e *Engine) backoff(ctx context.Context, lease domain.Lease, d time.Duratio
 	return ctx.Err()
 }
 
+// admitted finds the claim's agent (agentFor), applies the organization policy to it
+// (applyPolicy) and reports whether it may run; when not, the item is blocked (no agent, or the
+// policy could not be read) or waits for a person (the policy refuses its model).
+func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) bool {
+	var err error
+	if c.agent, err = agentFor(c.line, c.station, c.item.Lane); err != nil {
+		e.block(ctx, log, *c, err.Error())
+		return false
+	}
+
+	refusal, err := e.applyPolicy(ctx, c)
+
+	switch {
+	case err != nil:
+		e.block(ctx, log, *c, err.Error())
+		return false
+	case refusal != "":
+		e.escalate(ctx, log, *c, refusal)
+		return false
+	}
+
+	return true
+}
+
 // applyPolicy reads the organization policy once for the claim and applies it as a ceiling over
 // the version (ADR 0024 decision 3): the run's model is its agent's, its factory's or the
 // policy's default; its deny rules get the policy's denied commands; its run and box take no
@@ -259,14 +270,7 @@ func (e *Engine) applyPolicy(ctx context.Context, c *claimed) (string, error) {
 // escalate hands a claimed item that may not run to a person: it waits at its station with the
 // reason in its event, and the lease is released.
 func (e *Engine) escalate(ctx context.Context, log *slog.Logger, c claimed, reason string) {
-	now := e.clock.Now()
-
-	e.transition(ctx, log, ports.Transition{
-		ItemID: c.item.ID, From: domain.Position{Station: c.station.ID, State: domain.StateInProgress},
-		To: domain.Position{Station: c.station.ID, State: domain.StateWaitingHuman}, Lease: &c.lease, Outcome: domain.LeaseEscalated,
-		At:     now,
-		Events: []domain.Event{event(c.item, domain.EventWaitingHuman, now, domain.ActorEngine, map[string]any{keyReason: reason})},
-	})
+	e.park(ctx, log, c, domain.StateWaitingHuman, domain.LeaseEscalated, domain.EventWaitingHuman, reason)
 }
 
 // agentFor is the agent that works on an item of lane at st, or why none can: no agent for the
@@ -857,13 +861,21 @@ func (e *Engine) gateReject(c claimed, l domain.Line, v domain.Verdict, t *ports
 
 // block parks a claimed item as blocked, with the reason in its event, and releases the lease.
 func (e *Engine) block(ctx context.Context, log *slog.Logger, c claimed, reason string) {
+	e.park(ctx, log, c, domain.StateBlocked, domain.LeaseBlocked, domain.EventBlocked, reason)
+}
+
+// park moves a claimed item to state at its station with outcome, recording an engine event of
+// kind with the reason, and releases the lease.
+func (e *Engine) park(ctx context.Context, log *slog.Logger, c claimed, state domain.ItemState, outcome domain.LeaseOutcome,
+	kind domain.EventKind, reason string,
+) {
 	now := e.clock.Now()
 
 	e.transition(ctx, log, ports.Transition{
 		ItemID: c.item.ID, From: domain.Position{Station: c.station.ID, State: domain.StateInProgress},
-		To: domain.Position{Station: c.station.ID, State: domain.StateBlocked}, Lease: &c.lease, Outcome: domain.LeaseBlocked,
+		To: domain.Position{Station: c.station.ID, State: state}, Lease: &c.lease, Outcome: outcome,
 		At:     now,
-		Events: []domain.Event{event(c.item, domain.EventBlocked, now, domain.ActorEngine, map[string]any{keyReason: reason})},
+		Events: []domain.Event{event(c.item, kind, now, domain.ActorEngine, map[string]any{keyReason: reason})},
 	})
 }
 

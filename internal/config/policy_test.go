@@ -79,20 +79,28 @@ func TestModelProblems(t *testing.T) {
 			}
 
 			for i, p := range got {
-				if p.Check != config.CheckPolicy || p.Code != config.CodeModelNotAllowed || p.Severity != domain.SeverityError {
-					t.Errorf("problem %+v, want an error of check policy, code model-not-allowed", p)
-				}
-
-				if at := f.Locate(tc.want[i]); p.Pointer != at.Pointer || p.File != at.File || p.Line != at.Line || p.Line == 0 {
-					t.Errorf("problem at %s:%d %q, want at %s:%d %q", p.File, p.Line, p.Pointer, at.File, at.Line, at.Pointer)
-				}
-
-				for _, w := range tc.message {
-					if !strings.Contains(p.Message, w) {
-						t.Errorf("message %q does not name %q", p.Message, w)
-					}
-				}
+				expectModelProblem(t, p, f.Locate(tc.want[i]), tc.message)
 			}
 		})
+	}
+}
+
+// expectModelProblem fails the test unless p is a model-not-allowed error of the policy check,
+// located as want, whose message names each of names.
+func expectModelProblem(t *testing.T, p domain.DefinitionProblem, want config.Location, names []string) {
+	t.Helper()
+
+	if p.Check != config.CheckPolicy || p.Code != config.CodeModelNotAllowed || p.Severity != domain.SeverityError {
+		t.Errorf("problem %+v, want an error of check policy, code model-not-allowed", p)
+	}
+
+	if p.Pointer != want.Pointer || p.File != want.File || p.Line != want.Line || p.Line == 0 {
+		t.Errorf("problem at %s:%d %q, want at %s:%d %q", p.File, p.Line, p.Pointer, want.File, want.Line, want.Pointer)
+	}
+
+	for _, w := range names {
+		if !strings.Contains(p.Message, w) {
+			t.Errorf("message %q does not name %q", p.Message, w)
+		}
 	}
 }
