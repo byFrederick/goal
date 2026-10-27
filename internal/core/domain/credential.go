@@ -668,3 +668,15 @@ func singleQuoted(v string) (body, rest string, ok bool) {
 
 	return "", "", false
 }
+
+// Audit actions of credentials (ADR 0017 decision 7); no entry holds a value.
+const (
+	AuditCredentialCreated       = "credential.created"
+	AuditCredentialUpdated       = "credential.updated"
+	AuditCredentialValueReplaced = "credential.value_replaced"
+	AuditCredentialDeleted       = "credential.deleted"
+	AuditCredentialUsed          = "credential.used"
+)
+
+// AuditTargetCredential is the audit target kind of credentials.
+const AuditTargetCredential = "credential"
