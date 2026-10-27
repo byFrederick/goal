@@ -834,6 +834,27 @@ func (e PatchOpOp) Valid() bool {
 	}
 }
 
+// Defines values for PolicyBoxSizeSize.
+const (
+	Large  PolicyBoxSizeSize = "large"
+	Medium PolicyBoxSizeSize = "medium"
+	Small  PolicyBoxSizeSize = "small"
+)
+
+// Valid indicates whether the value is a known member of the PolicyBoxSizeSize enum.
+func (e PolicyBoxSizeSize) Valid() bool {
+	switch e {
+	case Large:
+		return true
+	case Medium:
+		return true
+	case Small:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for QueueTrend.
 const (
 	Growing   QueueTrend = "growing"
@@ -990,6 +1011,84 @@ const (
 func (e TemplateStartKind) Valid() bool {
 	switch e {
 	case TemplateStartKindTemplate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ToolPolicyMergePullRequest.
+const (
+	ToolPolicyMergePullRequestOff            ToolPolicyMergePullRequest = "off"
+	ToolPolicyMergePullRequestReviewApproval ToolPolicyMergePullRequest = "review_approval"
+)
+
+// Valid indicates whether the value is a known member of the ToolPolicyMergePullRequest enum.
+func (e ToolPolicyMergePullRequest) Valid() bool {
+	switch e {
+	case ToolPolicyMergePullRequestOff:
+		return true
+	case ToolPolicyMergePullRequestReviewApproval:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ToolPolicyReadWeb.
+const (
+	ToolPolicyReadWebAllowed ToolPolicyReadWeb = "allowed"
+	ToolPolicyReadWebAsk     ToolPolicyReadWeb = "ask"
+	ToolPolicyReadWebOff     ToolPolicyReadWeb = "off"
+)
+
+// Valid indicates whether the value is a known member of the ToolPolicyReadWeb enum.
+func (e ToolPolicyReadWeb) Valid() bool {
+	switch e {
+	case ToolPolicyReadWebAllowed:
+		return true
+	case ToolPolicyReadWebAsk:
+		return true
+	case ToolPolicyReadWebOff:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ToolPolicyUseCredentials.
+const (
+	ToolPolicyUseCredentialsAttachedOnly ToolPolicyUseCredentials = "attached_only"
+	ToolPolicyUseCredentialsOff          ToolPolicyUseCredentials = "off"
+)
+
+// Valid indicates whether the value is a known member of the ToolPolicyUseCredentials enum.
+func (e ToolPolicyUseCredentials) Valid() bool {
+	switch e {
+	case ToolPolicyUseCredentialsAttachedOnly:
+		return true
+	case ToolPolicyUseCredentialsOff:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ToolPolicyWriteOutsideBranch.
+const (
+	ToolPolicyWriteOutsideBranchAllowed ToolPolicyWriteOutsideBranch = "allowed"
+	ToolPolicyWriteOutsideBranchAsk     ToolPolicyWriteOutsideBranch = "ask"
+	ToolPolicyWriteOutsideBranchOff     ToolPolicyWriteOutsideBranch = "off"
+)
+
+// Valid indicates whether the value is a known member of the ToolPolicyWriteOutsideBranch enum.
+func (e ToolPolicyWriteOutsideBranch) Valid() bool {
+	switch e {
+	case ToolPolicyWriteOutsideBranchAllowed:
+		return true
+	case ToolPolicyWriteOutsideBranchAsk:
+		return true
+	case ToolPolicyWriteOutsideBranchOff:
 		return true
 	default:
 		return false
@@ -3139,6 +3238,14 @@ type MetricsSummary struct {
 	To               openapi_types.Date `json:"to"`
 }
 
+// ModelUse defines model for ModelUse.
+type ModelUse struct {
+	// Agents The names of the factory's agents that use the model
+	Agents    []string `json:"agents"`
+	FactoryId string   `json:"factory_id"`
+	Name      string   `json:"name"`
+}
+
 // MoveRequest defines model for MoveRequest.
 type MoveRequest struct {
 	// Reason Why; required when the station is upstream of the item's (the agent reads it)
@@ -3331,6 +3438,45 @@ type OrgDeletion struct {
 // OrgList defines model for OrgList.
 type OrgList struct {
 	Orgs []OrgSummary `json:"orgs"`
+}
+
+// OrgPolicyInput What an organization allows every factory definition (ADR 0024). The revision is the If-Match header, never a field.
+type OrgPolicyInput struct {
+	// AllowedModels The model ids agents may use, a non-empty subset of the install's models
+	AllowedModels []string `json:"allowed_models"`
+
+	// BoxTimeLimitMinutes How long a box may run before it is stopped
+	BoxTimeLimitMinutes int `json:"box_time_limit_minutes"`
+
+	// DefaultModel One of allowed_models, the model of an agent that names none
+	DefaultModel string `json:"default_model"`
+
+	// DeniedCommands Claude Code Bash permission patterns no agent may run, such as Bash(terraform apply:*)
+	DeniedCommands []string `json:"denied_commands"`
+
+	// Tools The tool policy defaults (ADR 0024 decision 2)
+	Tools ToolPolicy `json:"tools"`
+}
+
+// OrgPolicyView defines model for OrgPolicyView.
+type OrgPolicyView struct {
+	// BoxSizes small, medium and large, as the install's sandbox backend sizes them
+	BoxSizes []PolicyBoxSize `json:"box_sizes"`
+
+	// EgressAddresses The addresses agents' traffic leaves from, as CIDRs (GOAL_EGRESS_ADDRESSES); empty when not set
+	EgressAddresses []string `json:"egress_addresses"`
+
+	// Models The install's models (GOAL_MODELS), in its order
+	Models []PolicyModel `json:"models"`
+
+	// Policy What an organization allows every factory definition (ADR 0024). The revision is the If-Match header, never a field.
+	Policy OrgPolicyInput `json:"policy"`
+
+	// Revision The policy's revision, 0 until a save; the ETag
+	Revision int64 `json:"revision"`
+
+	// UpdatedAt When the policy was last saved; absent at revision 0
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 }
 
 // OrgRole defines model for OrgRole.
@@ -3553,6 +3699,29 @@ type PlatformAdmin struct {
 // PlatformAdminList defines model for PlatformAdminList.
 type PlatformAdminList struct {
 	Admins []PlatformAdmin `json:"admins"`
+}
+
+// PolicyBoxSize defines model for PolicyBoxSize.
+type PolicyBoxSize struct {
+	// Factories The factories whose runtime.size is this size (medium when they name none), by name
+	Factories   []SizeUse         `json:"factories"`
+	MemoryBytes int64             `json:"memory_bytes"`
+	Size        PolicyBoxSizeSize `json:"size"`
+
+	// Vcpu The virtual CPUs a box of this size gets
+	Vcpu float64 `json:"vcpu"`
+}
+
+// PolicyBoxSizeSize defines model for PolicyBoxSize.Size.
+type PolicyBoxSizeSize string
+
+// PolicyModel defines model for PolicyModel.
+type PolicyModel struct {
+	Id    string `json:"id"`
+	Label string `json:"label"`
+
+	// UsedBy The factories whose agents use the model now, by name; empty when none does. An agent uses its own model, else its factory's runtime.model, else the policy's default model.
+	UsedBy []ModelUse `json:"used_by"`
 }
 
 // Problem defines model for Problem.
@@ -3846,6 +4015,12 @@ type SentBack struct {
 // SignInMethod defines model for SignInMethod.
 type SignInMethod string
 
+// SizeUse defines model for SizeUse.
+type SizeUse struct {
+	FactoryId string `json:"factory_id"`
+	Name      string `json:"name"`
+}
+
 // SkillFiles defines model for SkillFiles.
 type SkillFiles struct {
 	// Files Files by slash-separated relative path
@@ -4002,6 +4177,30 @@ type Throughput struct {
 	// PreviousPerDay The same over the previous window
 	PreviousPerDay float64 `json:"previous_per_day"`
 }
+
+// ToolPolicy The tool policy defaults (ADR 0024 decision 2)
+type ToolPolicy struct {
+	MergePullRequest ToolPolicyMergePullRequest `json:"merge_pull_request"`
+
+	// ReadWeb Search, fetch and documentation tools
+	ReadWeb        ToolPolicyReadWeb        `json:"read_web"`
+	UseCredentials ToolPolicyUseCredentials `json:"use_credentials"`
+
+	// WriteOutsideBranch Comments, issues, tickets and messages outside the item's branch
+	WriteOutsideBranch ToolPolicyWriteOutsideBranch `json:"write_outside_branch"`
+}
+
+// ToolPolicyMergePullRequest defines model for ToolPolicy.MergePullRequest.
+type ToolPolicyMergePullRequest string
+
+// ToolPolicyReadWeb Search, fetch and documentation tools
+type ToolPolicyReadWeb string
+
+// ToolPolicyUseCredentials defines model for ToolPolicy.UseCredentials.
+type ToolPolicyUseCredentials string
+
+// ToolPolicyWriteOutsideBranch Comments, issues, tickets and messages outside the item's branch
+type ToolPolicyWriteOutsideBranch string
 
 // Touch One action by a person on an item, named by its most specific event
 type Touch struct {
@@ -4629,6 +4828,12 @@ type GetFactoryOverviewParams struct {
 	Window *string `form:"window,omitempty" json:"window,omitempty"`
 }
 
+// PutOrgPolicyParams defines parameters for PutOrgPolicy.
+type PutOrgPolicyParams struct {
+	// IfMatch The entity tag the write is based on, quoted ("<etag>"); writes without it are 428
+	IfMatch *IfMatch `json:"If-Match,omitempty"`
+}
+
 // ListRunsParams defines parameters for ListRuns.
 type ListRunsParams struct {
 	// Factory Only this factory's runs (its metadata.id or metadata.name); unknown is 404
@@ -4777,6 +4982,9 @@ type SetFactoryRoleJSONRequestBody = FactoryRoleChange
 
 // CreatePersonalTokenJSONRequestBody defines body for CreatePersonalToken for application/json ContentType.
 type CreatePersonalTokenJSONRequestBody = NewPersonalToken
+
+// PutOrgPolicyJSONRequestBody defines body for PutOrgPolicy for application/json ContentType.
+type PutOrgPolicyJSONRequestBody = OrgPolicyInput
 
 // UpdateOrgSettingsJSONRequestBody defines body for UpdateOrgSettings for application/json ContentType.
 type UpdateOrgSettingsJSONRequestBody = OrgSettingsPatch
@@ -6169,6 +6377,31 @@ type ClientInterface interface {
 	//
 	// Corresponds with DELETE /v1/orgs/{org}/personal-tokens/{token} (the `RevokePersonalToken` operationId).
 	RevokePersonalToken(ctx context.Context, org OrgRef, token string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetOrgPolicy The organization's model and tool policy, with the install's models, box sizes and egress addresses
+	//
+	// The policy (ADR 0024) is a ceiling over every factory definition: the default policy of the install's models at revision 0 until someone saves one. The answer also carries read-only facts computed now from the published definitions the caller sees, never stored: which factories and agents use each model and each box size. The ETag is the policy's revision, quoted, the If-Match of putOrgPolicy.
+	//
+	// Corresponds with GET /v1/orgs/{org}/policy (the `GetOrgPolicy` operationId).
+	GetOrgPolicy(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutOrgPolicyWithBody Replace the organization's policy
+	//
+	// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/policy (the `PutOrgPolicy` operationId).
+	PutOrgPolicyWithBody(ctx context.Context, org OrgRef, params *PutOrgPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutOrgPolicy Replace the organization's policy
+	//
+	// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/policy (the `PutOrgPolicy` operationId).
+	PutOrgPolicy(ctx context.Context, org OrgRef, params *PutOrgPolicyParams, body PutOrgPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListRuns The organization's agent runs across the factories the caller sees, newest first
 	//
@@ -8753,6 +8986,61 @@ func (c *Client) CreatePersonalToken(ctx context.Context, org OrgRef, body Creat
 // Corresponds with DELETE /v1/orgs/{org}/personal-tokens/{token} (the `RevokePersonalToken` operationId).
 func (c *Client) RevokePersonalToken(ctx context.Context, org OrgRef, token string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRevokePersonalTokenRequest(c.Server, org, token)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetOrgPolicy The organization's model and tool policy, with the install's models, box sizes and egress addresses
+//
+// The policy (ADR 0024) is a ceiling over every factory definition: the default policy of the install's models at revision 0 until someone saves one. The answer also carries read-only facts computed now from the published definitions the caller sees, never stored: which factories and agents use each model and each box size. The ETag is the policy's revision, quoted, the If-Match of putOrgPolicy.
+//
+// Corresponds with GET /v1/orgs/{org}/policy (the `GetOrgPolicy` operationId).
+func (c *Client) GetOrgPolicy(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetOrgPolicyRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PutOrgPolicyWithBody Replace the organization's policy
+//
+// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/policy (the `PutOrgPolicy` operationId).
+func (c *Client) PutOrgPolicyWithBody(ctx context.Context, org OrgRef, params *PutOrgPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutOrgPolicyRequestWithBody(c.Server, org, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PutOrgPolicy Replace the organization's policy
+//
+// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/policy (the `PutOrgPolicy` operationId).
+func (c *Client) PutOrgPolicy(ctx context.Context, org OrgRef, params *PutOrgPolicyParams, body PutOrgPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutOrgPolicyRequest(c.Server, org, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -14905,6 +15193,102 @@ func NewRevokePersonalTokenRequest(server string, org OrgRef, token string) (*ht
 	return req, nil
 }
 
+// NewGetOrgPolicyRequest constructs an http.Request for the GetOrgPolicy method
+func NewGetOrgPolicyRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/policy", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutOrgPolicyRequest calls the generic PutOrgPolicy builder with application/json body
+func NewPutOrgPolicyRequest(server string, org OrgRef, params *PutOrgPolicyParams, body PutOrgPolicyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutOrgPolicyRequestWithBody(server, org, params, "application/json", bodyReader)
+}
+
+// NewPutOrgPolicyRequestWithBody constructs an http.Request for the PutOrgPolicy method, with any body, and a specified content type
+func NewPutOrgPolicyRequestWithBody(server string, org OrgRef, params *PutOrgPolicyParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/policy", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IfMatch != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", *params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("If-Match", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
 // NewListRunsRequest constructs an http.Request for the ListRuns method
 func NewListRunsRequest(server string, org OrgRef, params *ListRunsParams) (*http.Request, error) {
 	var err error
@@ -16885,6 +17269,33 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with DELETE /v1/orgs/{org}/personal-tokens/{token} (the `RevokePersonalToken` operationId).
 	RevokePersonalTokenWithResponse(ctx context.Context, org OrgRef, token string, reqEditors ...RequestEditorFn) (*RevokePersonalTokenResponse, error)
+
+	// GetOrgPolicyWithResponse The organization's model and tool policy, with the install's models, box sizes and egress addresses
+	//
+	// The policy (ADR 0024) is a ceiling over every factory definition: the default policy of the install's models at revision 0 until someone saves one. The answer also carries read-only facts computed now from the published definitions the caller sees, never stored: which factories and agents use each model and each box size. The ETag is the policy's revision, quoted, the If-Match of putOrgPolicy.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/policy (the `GetOrgPolicy` operationId).
+	GetOrgPolicyWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetOrgPolicyResponse, error)
+
+	// PutOrgPolicyWithBodyWithResponse Replace the organization's policy
+	//
+	// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/policy (the `PutOrgPolicy` operationId).
+	PutOrgPolicyWithBodyWithResponse(ctx context.Context, org OrgRef, params *PutOrgPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutOrgPolicyResponse, error)
+
+	// PutOrgPolicyWithResponse Replace the organization's policy
+	//
+	// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/policy (the `PutOrgPolicy` operationId).
+	PutOrgPolicyWithResponse(ctx context.Context, org OrgRef, params *PutOrgPolicyParams, body PutOrgPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*PutOrgPolicyResponse, error)
 
 	// ListRunsWithResponse The organization's agent runs across the factories the caller sees, newest first
 	//
@@ -22280,6 +22691,116 @@ func (r RevokePersonalTokenResponse) ContentType() string {
 	return ""
 }
 
+// GetOrgPolicyResponse200Headers the declared response headers of an HTTP 200 response for GetOrgPolicy
+type GetOrgPolicyResponse200Headers struct {
+	ETag string
+}
+
+type GetOrgPolicyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *OrgPolicyView
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GetOrgPolicyResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetOrgPolicyResponse) GetJSON200() *OrgPolicyView {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetOrgPolicyResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetOrgPolicyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetOrgPolicyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetOrgPolicyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetOrgPolicyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PutOrgPolicyResponse200Headers the declared response headers of an HTTP 200 response for PutOrgPolicy
+type PutOrgPolicyResponse200Headers struct {
+	ETag string
+}
+
+type PutOrgPolicyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *OrgPolicyView
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *PutOrgPolicyResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PutOrgPolicyResponse) GetJSON200() *OrgPolicyView {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PutOrgPolicyResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PutOrgPolicyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PutOrgPolicyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutOrgPolicyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PutOrgPolicyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListRunsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -24952,6 +25473,51 @@ func (c *ClientWithResponses) RevokePersonalTokenWithResponse(ctx context.Contex
 		return nil, err
 	}
 	return ParseRevokePersonalTokenResponse(rsp)
+}
+
+// GetOrgPolicyWithResponse The organization's model and tool policy, with the install's models, box sizes and egress addresses
+//
+// The policy (ADR 0024) is a ceiling over every factory definition: the default policy of the install's models at revision 0 until someone saves one. The answer also carries read-only facts computed now from the published definitions the caller sees, never stored: which factories and agents use each model and each box size. The ETag is the policy's revision, quoted, the If-Match of putOrgPolicy.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/policy (the `GetOrgPolicy` operationId).
+func (c *ClientWithResponses) GetOrgPolicyWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetOrgPolicyResponse, error) {
+	rsp, err := c.GetOrgPolicy(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetOrgPolicyResponse(rsp)
+}
+
+// PutOrgPolicyWithBodyWithResponse Replace the organization's policy
+//
+// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/policy (the `PutOrgPolicy` operationId).
+func (c *ClientWithResponses) PutOrgPolicyWithBodyWithResponse(ctx context.Context, org OrgRef, params *PutOrgPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutOrgPolicyResponse, error) {
+	rsp, err := c.PutOrgPolicyWithBody(ctx, org, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutOrgPolicyResponse(rsp)
+}
+
+// PutOrgPolicyWithResponse Replace the organization's policy
+//
+// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/policy (the `PutOrgPolicy` operationId).
+func (c *ClientWithResponses) PutOrgPolicyWithResponse(ctx context.Context, org OrgRef, params *PutOrgPolicyParams, body PutOrgPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*PutOrgPolicyResponse, error) {
+	rsp, err := c.PutOrgPolicy(ctx, org, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutOrgPolicyResponse(rsp)
 }
 
 // ListRunsWithResponse The organization's agent runs across the factories the caller sees, newest first
@@ -28904,6 +29470,98 @@ func ParseRevokePersonalTokenResponse(rsp *http.Response) (*RevokePersonalTokenR
 	return response, nil
 }
 
+// ParseGetOrgPolicyResponse parses an HTTP response from a GetOrgPolicyWithResponse call
+func ParseGetOrgPolicyResponse(rsp *http.Response) (*GetOrgPolicyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetOrgPolicyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OrgPolicyView
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GetOrgPolicyResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePutOrgPolicyResponse parses an HTTP response from a PutOrgPolicyWithResponse call
+func ParsePutOrgPolicyResponse(rsp *http.Response) (*PutOrgPolicyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutOrgPolicyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OrgPolicyView
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers PutOrgPolicyResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseListRunsResponse parses an HTTP response from a ListRunsWithResponse call
 func ParseListRunsResponse(rsp *http.Response) (*ListRunsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -29651,6 +30309,12 @@ type ServerInterface interface {
 	// RevokePersonalToken Revoke one of your personal tokens
 	// (DELETE /v1/orgs/{org}/personal-tokens/{token})
 	RevokePersonalToken(w http.ResponseWriter, r *http.Request, org OrgRef, token string)
+	// GetOrgPolicy The organization's model and tool policy, with the install's models, box sizes and egress addresses
+	// (GET /v1/orgs/{org}/policy)
+	GetOrgPolicy(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// PutOrgPolicy Replace the organization's policy
+	// (PUT /v1/orgs/{org}/policy)
+	PutOrgPolicy(w http.ResponseWriter, r *http.Request, org OrgRef, params PutOrgPolicyParams)
 	// ListRuns The organization's agent runs across the factories the caller sees, newest first
 	// (GET /v1/orgs/{org}/runs)
 	ListRuns(w http.ResponseWriter, r *http.Request, org OrgRef, params ListRunsParams)
@@ -34273,6 +34937,82 @@ func (siw *ServerInterfaceWrapper) RevokePersonalToken(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// GetOrgPolicy operation middleware
+func (siw *ServerInterfaceWrapper) GetOrgPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOrgPolicy(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutOrgPolicy operation middleware
+func (siw *ServerInterfaceWrapper) PutOrgPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PutOrgPolicyParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = &IfMatch
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutOrgPolicy(w, r, org, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListRuns operation middleware
 func (siw *ServerInterfaceWrapper) ListRuns(w http.ResponseWriter, r *http.Request) {
 
@@ -34927,6 +35667,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}", wrapper.GetOrg)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/settings", wrapper.GetOrgSettings)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/settings", wrapper.UpdateOrgSettings)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/policy", wrapper.GetOrgPolicy)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/policy", wrapper.PutOrgPolicy)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/audit", wrapper.ListAudit)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/api-keys", wrapper.ListAPIKeys)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/api-keys", wrapper.CreateAPIKey)
@@ -39643,6 +40385,102 @@ func (response RevokePersonalTokendefaultApplicationProblemPlusJSONResponse) Vis
 	return err
 }
 
+type GetOrgPolicyRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type GetOrgPolicyResponseObject interface {
+	VisitGetOrgPolicyResponse(w http.ResponseWriter) error
+}
+
+type GetOrgPolicy200ResponseHeaders struct {
+	ETag string
+}
+
+type GetOrgPolicy200JSONResponse struct {
+	Body    OrgPolicyView
+	Headers GetOrgPolicy200ResponseHeaders
+}
+
+func (response GetOrgPolicy200JSONResponse) VisitGetOrgPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOrgPolicydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetOrgPolicydefaultApplicationProblemPlusJSONResponse) VisitGetOrgPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutOrgPolicyRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params PutOrgPolicyParams
+	Body   *PutOrgPolicyJSONRequestBody
+}
+
+type PutOrgPolicyResponseObject interface {
+	VisitPutOrgPolicyResponse(w http.ResponseWriter) error
+}
+
+type PutOrgPolicy200ResponseHeaders struct {
+	ETag string
+}
+
+type PutOrgPolicy200JSONResponse struct {
+	Body    OrgPolicyView
+	Headers PutOrgPolicy200ResponseHeaders
+}
+
+func (response PutOrgPolicy200JSONResponse) VisitPutOrgPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutOrgPolicydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response PutOrgPolicydefaultApplicationProblemPlusJSONResponse) VisitPutOrgPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListRunsRequestObject struct {
 	Org    OrgRef `json:"org"`
 	Params ListRunsParams
@@ -40509,6 +41347,12 @@ type StrictServerInterface interface {
 	// RevokePersonalToken Revoke one of your personal tokens
 	// (DELETE /v1/orgs/{org}/personal-tokens/{token})
 	RevokePersonalToken(ctx context.Context, request RevokePersonalTokenRequestObject) (RevokePersonalTokenResponseObject, error)
+	// GetOrgPolicy The organization's model and tool policy, with the install's models, box sizes and egress addresses
+	// (GET /v1/orgs/{org}/policy)
+	GetOrgPolicy(ctx context.Context, request GetOrgPolicyRequestObject) (GetOrgPolicyResponseObject, error)
+	// PutOrgPolicy Replace the organization's policy
+	// (PUT /v1/orgs/{org}/policy)
+	PutOrgPolicy(ctx context.Context, request PutOrgPolicyRequestObject) (PutOrgPolicyResponseObject, error)
 	// ListRuns The organization's agent runs across the factories the caller sees, newest first
 	// (GET /v1/orgs/{org}/runs)
 	ListRuns(ctx context.Context, request ListRunsRequestObject) (ListRunsResponseObject, error)
@@ -43775,6 +44619,66 @@ func (sh *strictHandler) RevokePersonalToken(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RevokePersonalTokenResponseObject); ok {
 		if err := validResponse.VisitRevokePersonalTokenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetOrgPolicy operation middleware
+func (sh *strictHandler) GetOrgPolicy(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request GetOrgPolicyRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetOrgPolicy(ctx, request.(GetOrgPolicyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetOrgPolicy")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetOrgPolicyResponseObject); ok {
+		if err := validResponse.VisitGetOrgPolicyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutOrgPolicy operation middleware
+func (sh *strictHandler) PutOrgPolicy(w http.ResponseWriter, r *http.Request, org OrgRef, params PutOrgPolicyParams) {
+	var request PutOrgPolicyRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	var body PutOrgPolicyJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutOrgPolicy(ctx, request.(PutOrgPolicyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutOrgPolicy")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutOrgPolicyResponseObject); ok {
+		if err := validResponse.VisitPutOrgPolicyResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

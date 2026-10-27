@@ -341,6 +341,62 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/OrgSettings" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/policy:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: getOrgPolicy
+      x-goal-scope: org:read
+      tags: [orgs]
+      summary: The organization's model and tool policy, with the install's models, box sizes and egress addresses
+      description: >-
+        The policy (ADR 0024) is a ceiling over every factory definition: the default policy of the
+        install's models at revision 0 until someone saves one. The answer also carries read-only
+        facts computed now from the published definitions the caller sees, never stored: which
+        factories and agents use each model and each box size. The ETag is the policy's revision,
+        quoted, the If-Match of putOrgPolicy.
+      responses:
+        "200":
+          description: The policy and the facts
+          headers:
+            ETag:
+              description: The policy's revision, quoted ("3"), the If-Match of putOrgPolicy
+              required: true
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrgPolicyView" }
+        default: { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: putOrgPolicy
+      x-goal-scope: org:manage
+      tags: [orgs]
+      summary: Replace the organization's policy
+      description: >-
+        If-Match is the revision the caller read ("<revision>"); without it 428
+        precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that
+        is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models,
+        a tool setting the default does not take, a blank denied command or a box time limit that
+        is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrgPolicyInput" }
+      responses:
+        "200":
+          description: The policy after the save, at its next revision
+          headers:
+            ETag:
+              description: The policy's new revision, quoted
+              required: true
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrgPolicyView" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/audit:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -3537,6 +3593,112 @@ components:
         factory_id: { type: string }
         name: { type: string }
         max: { type: integer, nullable: true, minimum: 1, maximum: 1000 }
+    OrgPolicyInput:
+      type: object
+      description: >-
+        What an organization allows every factory definition (ADR 0024). The revision is the
+        If-Match header, never a field.
+      required: [allowed_models, default_model, denied_commands, tools, box_time_limit_minutes]
+      properties:
+        allowed_models:
+          type: array
+          description: The model ids agents may use, a non-empty subset of the install's models
+          items: { type: string }
+        default_model:
+          type: string
+          description: One of allowed_models, the model of an agent that names none
+        denied_commands:
+          type: array
+          description: Claude Code Bash permission patterns no agent may run, such as Bash(terraform apply:*)
+          items: { type: string }
+        tools: { $ref: "#/components/schemas/ToolPolicy" }
+        box_time_limit_minutes:
+          type: integer
+          minimum: 1
+          description: How long a box may run before it is stopped
+    ToolPolicy:
+      type: object
+      description: The tool policy defaults (ADR 0024 decision 2)
+      required: [write_outside_branch, merge_pull_request, read_web, use_credentials]
+      properties:
+        write_outside_branch:
+          type: string
+          enum: ["off", ask, allowed]
+          description: Comments, issues, tickets and messages outside the item's branch
+        merge_pull_request:
+          type: string
+          enum: ["off", review_approval]
+        read_web:
+          type: string
+          enum: ["off", ask, allowed]
+          description: Search, fetch and documentation tools
+        use_credentials:
+          type: string
+          enum: ["off", attached_only]
+    OrgPolicyView:
+      type: object
+      required: [policy, revision, models, box_sizes, egress_addresses]
+      properties:
+        policy: { $ref: "#/components/schemas/OrgPolicyInput" }
+        revision:
+          type: integer
+          format: int64
+          description: The policy's revision, 0 until a save; the ETag
+        updated_at:
+          type: string
+          format: date-time
+          description: When the policy was last saved; absent at revision 0
+        models:
+          type: array
+          description: The install's models (GOAL_MODELS), in its order
+          items: { $ref: "#/components/schemas/PolicyModel" }
+        box_sizes:
+          type: array
+          description: small, medium and large, as the install's sandbox backend sizes them
+          items: { $ref: "#/components/schemas/PolicyBoxSize" }
+        egress_addresses:
+          type: array
+          description: The addresses agents' traffic leaves from, as CIDRs (GOAL_EGRESS_ADDRESSES); empty when not set
+          items: { type: string }
+    PolicyModel:
+      type: object
+      required: [id, label, used_by]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        used_by:
+          type: array
+          description: >-
+            The factories whose agents use the model now, by name; empty when none does. An agent
+            uses its own model, else its factory's runtime.model, else the policy's default model.
+          items: { $ref: "#/components/schemas/ModelUse" }
+    ModelUse:
+      type: object
+      required: [factory_id, name, agents]
+      properties:
+        factory_id: { type: string }
+        name: { type: string }
+        agents:
+          type: array
+          description: The names of the factory's agents that use the model
+          items: { type: string }
+    PolicyBoxSize:
+      type: object
+      required: [size, vcpu, memory_bytes, factories]
+      properties:
+        size: { type: string, enum: [small, medium, large] }
+        vcpu: { type: number, format: double, description: The virtual CPUs a box of this size gets }
+        memory_bytes: { type: integer, format: int64 }
+        factories:
+          type: array
+          description: The factories whose runtime.size is this size (medium when they name none), by name
+          items: { $ref: "#/components/schemas/SizeUse" }
+    SizeUse:
+      type: object
+      required: [factory_id, name]
+      properties:
+        factory_id: { type: string }
+        name: { type: string }
     OrgSettingsPatch:
       type: object
       properties:

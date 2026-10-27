@@ -220,6 +220,33 @@ export interface paths {
         patch: operations["updateOrgSettings"];
         trace?: never;
     };
+    "/v1/orgs/{org}/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's model and tool policy, with the install's models, box sizes and egress addresses
+         * @description The policy (ADR 0024) is a ceiling over every factory definition: the default policy of the install's models at revision 0 until someone saves one. The answer also carries read-only facts computed now from the published definitions the caller sees, never stored: which factories and agents use each model and each box size. The ETag is the policy's revision, quoted, the If-Match of putOrgPolicy.
+         */
+        get: operations["getOrgPolicy"];
+        /**
+         * Replace the organization's policy
+         * @description If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+         */
+        put: operations["putOrgPolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/audit": {
         parameters: {
             query?: never;
@@ -2775,6 +2802,83 @@ export interface components {
             factory_id: string;
             name: string;
             max: number | null;
+        };
+        /** @description What an organization allows every factory definition (ADR 0024). The revision is the If-Match header, never a field. */
+        OrgPolicyInput: {
+            /** @description The model ids agents may use, a non-empty subset of the install's models */
+            allowed_models: string[];
+            /** @description One of allowed_models, the model of an agent that names none */
+            default_model: string;
+            /** @description Claude Code Bash permission patterns no agent may run, such as Bash(terraform apply:*) */
+            denied_commands: string[];
+            tools: components["schemas"]["ToolPolicy"];
+            /** @description How long a box may run before it is stopped */
+            box_time_limit_minutes: number;
+        };
+        /** @description The tool policy defaults (ADR 0024 decision 2) */
+        ToolPolicy: {
+            /**
+             * @description Comments, issues, tickets and messages outside the item's branch
+             * @enum {string}
+             */
+            write_outside_branch: "off" | "ask" | "allowed";
+            /** @enum {string} */
+            merge_pull_request: "off" | "review_approval";
+            /**
+             * @description Search, fetch and documentation tools
+             * @enum {string}
+             */
+            read_web: "off" | "ask" | "allowed";
+            /** @enum {string} */
+            use_credentials: "off" | "attached_only";
+        };
+        OrgPolicyView: {
+            policy: components["schemas"]["OrgPolicyInput"];
+            /**
+             * Format: int64
+             * @description The policy's revision, 0 until a save; the ETag
+             */
+            revision: number;
+            /**
+             * Format: date-time
+             * @description When the policy was last saved; absent at revision 0
+             */
+            updated_at?: string;
+            /** @description The install's models (GOAL_MODELS), in its order */
+            models: components["schemas"]["PolicyModel"][];
+            /** @description small, medium and large, as the install's sandbox backend sizes them */
+            box_sizes: components["schemas"]["PolicyBoxSize"][];
+            /** @description The addresses agents' traffic leaves from, as CIDRs (GOAL_EGRESS_ADDRESSES); empty when not set */
+            egress_addresses: string[];
+        };
+        PolicyModel: {
+            id: string;
+            label: string;
+            /** @description The factories whose agents use the model now, by name; empty when none does. An agent uses its own model, else its factory's runtime.model, else the policy's default model. */
+            used_by: components["schemas"]["ModelUse"][];
+        };
+        ModelUse: {
+            factory_id: string;
+            name: string;
+            /** @description The names of the factory's agents that use the model */
+            agents: string[];
+        };
+        PolicyBoxSize: {
+            /** @enum {string} */
+            size: "small" | "medium" | "large";
+            /**
+             * Format: double
+             * @description The virtual CPUs a box of this size gets
+             */
+            vcpu: number;
+            /** Format: int64 */
+            memory_bytes: number;
+            /** @description The factories whose runtime.size is this size (medium when they name none), by name */
+            factories: components["schemas"]["SizeUse"][];
+        };
+        SizeUse: {
+            factory_id: string;
+            name: string;
         };
         OrgSettingsPatch: {
             name?: string;
@@ -5511,6 +5615,65 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrgSettings"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getOrgPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The policy and the facts */
+            200: {
+                headers: {
+                    /** @description The policy's revision, quoted ("3"), the If-Match of putOrgPolicy */
+                    ETag: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgPolicyView"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    putOrgPolicy: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The entity tag the write is based on, quoted ("<etag>"); writes without it are 428 */
+                "If-Match"?: components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrgPolicyInput"];
+            };
+        };
+        responses: {
+            /** @description The policy after the save, at its next revision */
+            200: {
+                headers: {
+                    /** @description The policy's new revision, quoted */
+                    ETag: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgPolicyView"];
                 };
             };
             default: components["responses"]["Problem"];
