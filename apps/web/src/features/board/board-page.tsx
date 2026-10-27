@@ -488,7 +488,7 @@ export function BoardPage() {
       )}
       {moving ? (
         <MoveDialog
-          item={{ ...moving.item, key: itemKey(factory.name, moving.item.ref) }}
+          items={[{ ...moving.item, key: itemKey(factory.name, moving.item.ref) }]}
           factory={factory}
           open
           onOpenChange={(open) => {

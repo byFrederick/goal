@@ -279,8 +279,8 @@ test('a stopped line is what its floor needs first, and clears from it', async (
 });
 
 test('approve from the phone: the Inbox drawer decides the oldest decision', async ({ page }) => {
-  test.skip(!isPhone(page), 'the phone Items view is the one that opens the Inbox drawer');
-  await page.goto('/o/acme/f/sre/items');
+  test.skip(!isPhone(page), 'the phone Board is the one that opens the Inbox drawer (the Items header has none)');
+  await page.goto('/o/acme/f/sre/board');
   await expect(page.getByRole('heading', { name: 'Needs you' })).toHaveCount(0);
 
   await page.getByRole('button', { name: /^Inbox/ }).click();
@@ -295,10 +295,10 @@ test('approve from the phone: the Inbox drawer decides the oldest decision', asy
 });
 
 test('merging from the phone names every pull request the merge lands', async ({ page, request }) => {
-  test.skip(!isPhone(page), 'the phone Items view is the one that opens the Inbox drawer');
+  test.skip(!isPhone(page), 'the phone Board is the one that opens the Inbox drawer (the Items header has none)');
   // goal#12 is older; once approved, goal#6 (two pull requests, at Merge) is the one to decide.
   await request.post('/v1/orgs/acme/items/goal%2312/approve', { data: {} });
-  await page.goto('/o/acme/f/goal/items');
+  await page.goto('/o/acme/f/goal/board');
   await page.getByRole('button', { name: /^Inbox/ }).click();
   const drawer = page.getByRole('dialog', { name: 'Inbox' });
   await drawer.getByRole('button', { name: 'Merge goal#6' }).click();
