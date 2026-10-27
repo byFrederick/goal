@@ -19,6 +19,8 @@ type CredentialID string
 type CredentialType string
 
 // The credential types.
+//
+//nolint:gosec // type labels, not credentials
 const (
 	CredentialAPIKey     CredentialType = "api_key"
 	CredentialOAuthToken CredentialType = "oauth_token"
@@ -98,11 +100,20 @@ func CheckCredential(c Credential) error {
 		errs = append(errs, fmt.Errorf("a rotation reminder needs an expiry: %w", ErrInvalid))
 	}
 
+	return errors.Join(append(errs, checkCredentialScope(c))...)
+}
+
+// checkCredentialScope refuses a scope of all factories and a list, an empty or repeated factory
+// id, and agents of a factory outside the scope.
+func checkCredentialScope(c Credential) error {
+	var errs []error
+
 	if c.Scope.All && len(c.Scope.Factories) > 0 {
 		errs = append(errs, fmt.Errorf("a scope is all factories or a list of them, not both: %w", ErrInvalid))
 	}
 
 	seen := map[FactoryID]bool{}
+
 	for _, f := range c.Scope.Factories {
 		switch {
 		case f == "":
@@ -487,82 +498,101 @@ func unquoteEnv(v string) (string, error) {
 	return v[1 : len(v)-1], nil
 }
 
+// yamlImport is parseYAMLImport's state: whether credentials: was read, and its entries' indent.
+type yamlImport struct {
+	inside bool
+	indent string
+	out    []CredentialImportEntry
+}
+
 func parseYAMLImport(lines []string) ([]CredentialImportEntry, error) {
-	var (
-		out    []CredentialImportEntry
-		inside bool
-		indent string
-	)
+	var y yamlImport
 
 	for i, line := range lines {
-		n := i + 1
-		trimmed := strings.TrimSpace(line)
-
-		switch {
-		case trimmed == "" || strings.HasPrefix(trimmed, "#"):
-			continue
-		case trimmed == "---" && !inside && len(out) == 0:
+		if yamlBlank(line, y.inside) {
 			continue
 		}
 
-		lead := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
-		if strings.Contains(lead, "\t") {
-			return nil, fmt.Errorf("line %d is indented with a tab: %w", n, ErrInvalid)
+		if err := y.line(i+1, line); err != nil {
+			return nil, err
 		}
-
-		if lead == "" {
-			if inside || stripYAMLComment(trimmed) != "credentials:" {
-				return nil, fmt.Errorf("line %d: an import has one top-level key, credentials:, holding name: value lines: %w", n, ErrInvalid)
-			}
-
-			inside = true
-
-			continue
-		}
-
-		switch {
-		case !inside:
-			return nil, fmt.Errorf("line %d comes before credentials: %w", n, ErrInvalid)
-		case indent == "":
-			indent = lead
-		case lead != indent:
-			return nil, fmt.Errorf("line %d is not indented as the lines before it; nested maps and multi-line values are not supported: %w", n, ErrInvalid)
-		}
-
-		name, rest, ok := strings.Cut(trimmed, ":")
-		if !ok || strings.HasPrefix(trimmed, "- ") || trimmed == "-" {
-			return nil, fmt.Errorf("line %d is not name: value: %w", n, ErrInvalid)
-		}
-
-		if !namePattern.MatchString(name) {
-			return nil, fmt.Errorf("line %d: the key is not a credential name: 3 to 40 lowercase letters, digits or dashes: %w", n, ErrInvalid)
-		}
-
-		if _, err := CredentialEnvName(name); err != nil {
-			return nil, fmt.Errorf("line %d: %w", n, err)
-		}
-
-		if rest != "" && rest[0] != ' ' {
-			return nil, fmt.Errorf("line %d (%s): a value follows \": \": %w", n, name, ErrInvalid)
-		}
-
-		value, err := yamlScalar(strings.TrimSpace(rest))
-		if err != nil {
-			return nil, fmt.Errorf("line %d (%s): %w", n, name, err)
-		}
-
-		if err := checkCredentialValue(value); err != nil {
-			return nil, fmt.Errorf("line %d (%s): %w", n, name, err)
-		}
-
-		out = append(out, CredentialImportEntry{Name: name, Value: value})
 	}
 
-	if !inside {
+	if !y.inside {
 		return nil, fmt.Errorf("an import has a top-level credentials: key: %w", ErrInvalid)
 	}
 
-	return out, nil
+	return y.out, nil
+}
+
+// yamlBlank reports whether line is blank, a comment or, before credentials:, a document start.
+func yamlBlank(line string, inside bool) bool {
+	trimmed := strings.TrimSpace(line)
+
+	return trimmed == "" || strings.HasPrefix(trimmed, "#") || (trimmed == "---" && !inside)
+}
+
+// line reads line n, which is not blank: the credentials: key or one of its entries.
+func (y *yamlImport) line(n int, line string) error {
+	trimmed := strings.TrimSpace(line)
+	lead := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+
+	switch {
+	case strings.Contains(lead, "\t"):
+		return fmt.Errorf("line %d is indented with a tab: %w", n, ErrInvalid)
+	case lead == "" && (y.inside || stripYAMLComment(trimmed) != "credentials:"):
+		return fmt.Errorf("line %d: an import has one top-level key, credentials:, holding name: value lines: %w", n, ErrInvalid)
+	case lead == "":
+		y.inside = true
+
+		return nil
+	case !y.inside:
+		return fmt.Errorf("line %d comes before credentials: %w", n, ErrInvalid)
+	case y.indent == "":
+		y.indent = lead
+	case lead != y.indent:
+		return fmt.Errorf("line %d is not indented as the lines before it; nested maps and multi-line values are not supported: %w", n, ErrInvalid)
+	}
+
+	e, err := yamlEntry(n, trimmed)
+	if err != nil {
+		return err
+	}
+
+	y.out = append(y.out, e)
+
+	return nil
+}
+
+// yamlEntry reads the entry name: value on line n.
+func yamlEntry(n int, trimmed string) (CredentialImportEntry, error) {
+	name, rest, ok := strings.Cut(trimmed, ":")
+	if !ok || strings.HasPrefix(trimmed, "- ") {
+		return CredentialImportEntry{}, fmt.Errorf("line %d is not name: value: %w", n, ErrInvalid)
+	}
+
+	if !namePattern.MatchString(name) {
+		return CredentialImportEntry{}, fmt.Errorf("line %d: the key is not a credential name: 3 to 40 lowercase letters, digits or dashes: %w", n, ErrInvalid)
+	}
+
+	if _, err := CredentialEnvName(name); err != nil {
+		return CredentialImportEntry{}, fmt.Errorf("line %d: %w", n, err)
+	}
+
+	if rest != "" && rest[0] != ' ' {
+		return CredentialImportEntry{}, fmt.Errorf("line %d (%s): a value follows \": \": %w", n, name, ErrInvalid)
+	}
+
+	value, err := yamlScalar(strings.TrimSpace(rest))
+	if err == nil {
+		err = checkCredentialValue(value)
+	}
+
+	if err != nil {
+		return CredentialImportEntry{}, fmt.Errorf("line %d (%s): %w", n, name, err)
+	}
+
+	return CredentialImportEntry{Name: name, Value: value}, nil
 }
 
 // stripYAMLComment cuts a " #" comment off the end of an unquoted line.
@@ -581,53 +611,68 @@ func stripYAMLComment(s string) string {
 // yamlScalar reads one single-line value of the subset: plain, 'single-' or "double-quoted".
 // Errors never show the value.
 func yamlScalar(v string) (string, error) {
-	if v == "" || v[0] == '#' {
+	switch {
+	case v == "" || v[0] == '#':
 		return "", fmt.Errorf("no value on the line; nested maps and block scalars are not supported: %w", ErrInvalid)
-	}
-
-	switch v[0] {
-	case '"':
-		end := closingDoubleQuote(v)
-		if end < 0 || stripYAMLComment(" "+v[end+1:]) != "" {
-			return "", fmt.Errorf("a double-quoted value is not closed at the end of its line: %w", ErrInvalid)
-		}
-
-		s, err := strconv.Unquote(v[:end+1])
-		if err != nil {
-			return "", fmt.Errorf("a double-quoted value has an escape that is not supported: %w", ErrInvalid)
-		}
-
-		return s, nil
-	case '\'':
+	case v[0] == '"':
+		return yamlDoubleQuoted(v)
+	case v[0] == '\'':
 		body, rest, ok := singleQuoted(v[1:])
 		if !ok || stripYAMLComment(" "+rest) != "" {
 			return "", fmt.Errorf("a single-quoted value is not closed at the end of its line: %w", ErrInvalid)
 		}
 
 		return body, nil
-	case '|', '>':
-		return "", fmt.Errorf("block scalars (| and >) are not supported: %w", ErrInvalid)
-	case '&', '*', '!':
-		return "", fmt.Errorf("anchors, aliases and tags are not supported: %w", ErrInvalid)
-	case '{', '[':
-		return "", fmt.Errorf("flow maps and lists are not supported: %w", ErrInvalid)
-	case '-', '?', ':':
-		if len(v) == 1 || v[1] == ' ' {
-			return "", fmt.Errorf("lists and complex keys are not supported: %w", ErrInvalid)
-		}
-	case '%', '@', '`', ',':
-		return "", fmt.Errorf("a plain value does not start with %c; quote it: %w", v[0], ErrInvalid)
+	}
+
+	if err := yamlIndicator(v); err != nil {
+		return "", err
 	}
 
 	s := stripYAMLComment(v)
 	switch {
-	case s == "~" || s == "null" || s == "Null" || s == "NULL":
+	case s == "~" || strings.EqualFold(s, "null"):
 		return "", fmt.Errorf("a null is no value: %w", ErrInvalid)
 	case strings.Contains(s, ": ") || strings.HasSuffix(s, ":"):
 		return "", fmt.Errorf("a plain value holds no \": \"; quote it: %w", ErrInvalid)
 	}
 
 	return s, nil
+}
+
+// yamlDoubleQuoted reads a double-quoted value, with Go's escapes, then nothing but a comment.
+func yamlDoubleQuoted(v string) (string, error) {
+	end := closingDoubleQuote(v)
+	if end < 0 || stripYAMLComment(" "+v[end+1:]) != "" {
+		return "", fmt.Errorf("a double-quoted value is not closed at the end of its line: %w", ErrInvalid)
+	}
+
+	s, err := strconv.Unquote(v[:end+1])
+	if err != nil {
+		return "", fmt.Errorf("a double-quoted value has an escape that is not supported: %w", ErrInvalid)
+	}
+
+	return s, nil
+}
+
+// yamlIndicator refuses a plain value that starts with a YAML indicator outside the subset.
+func yamlIndicator(v string) error {
+	switch v[0] {
+	case '|', '>':
+		return fmt.Errorf("block scalars (| and >) are not supported: %w", ErrInvalid)
+	case '&', '*', '!':
+		return fmt.Errorf("anchors, aliases and tags are not supported: %w", ErrInvalid)
+	case '{', '[':
+		return fmt.Errorf("flow maps and lists are not supported: %w", ErrInvalid)
+	case '-', '?', ':':
+		if len(v) == 1 || v[1] == ' ' {
+			return fmt.Errorf("lists and complex keys are not supported: %w", ErrInvalid)
+		}
+	case '%', '@', '`', ',':
+		return fmt.Errorf("a plain value does not start with %c; quote it: %w", v[0], ErrInvalid)
+	}
+
+	return nil
 }
 
 // closingDoubleQuote is the index of the quote that closes the double-quoted v, or -1.
@@ -644,7 +689,7 @@ func closingDoubleQuote(v string) int {
 	return -1
 }
 
-// singleQuoted reads a single-quoted body after its opening quote, where '' is one quote, and
+// singleQuoted reads a single-quoted body after its opening quote, where ” is one quote, and
 // returns it with what follows the closing quote.
 func singleQuoted(v string) (body, rest string, ok bool) {
 	var b strings.Builder
@@ -658,6 +703,7 @@ func singleQuoted(v string) (body, rest string, ok bool) {
 
 		if i+1 < len(v) && v[i+1] == '\'' {
 			b.WriteByte('\'')
+
 			i++
 
 			continue
@@ -670,6 +716,8 @@ func singleQuoted(v string) (body, rest string, ok bool) {
 }
 
 // Audit actions of credentials (ADR 0017 decision 7); no entry holds a value.
+//
+//nolint:gosec // audit action names, not credentials
 const (
 	AuditCredentialCreated       = "credential.created"
 	AuditCredentialUpdated       = "credential.updated"

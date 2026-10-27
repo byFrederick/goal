@@ -9,14 +9,20 @@ import (
 )
 
 // credMarker is a value no test output, error or String may ever contain.
-const credMarker = "sk-credential-marker-value"
+const credMarker = "sk-credential-marker-value" //nolint:gosec // a made-up value
+
+// Names the credential tests use.
+const (
+	testCredName = "sentry-token"
+	testAgent    = "backend"
+)
 
 func TestCheckCredential(t *testing.T) {
 	t.Parallel()
 
 	expires := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
 	factory := FactoryID("00000000-0000-7000-8000-0000000000f1")
-	valid := Credential{Name: "sentry-token", Type: CredentialAPIKey, Scope: CredentialScope{Factories: []FactoryID{factory}}}
+	valid := Credential{Name: testCredName, Type: CredentialAPIKey, Scope: CredentialScope{Factories: []FactoryID{factory}}}
 
 	tests := []struct {
 		name string
@@ -28,7 +34,7 @@ func TestCheckCredential(t *testing.T) {
 		{"all factories", func(c *Credential) { c.Scope = CredentialScope{All: true} }, true},
 		{"no factories", func(c *Credential) { c.Scope = CredentialScope{} }, true},
 		{"expiry with a reminder", func(c *Credential) { c.ExpiresAt, c.RemindDays = &expires, 14 }, true},
-		{"agents of a factory in scope", func(c *Credential) { c.Agents = map[FactoryID][]string{factory: {"backend"}} }, true},
+		{"agents of a factory in scope", func(c *Credential) { c.Agents = map[FactoryID][]string{factory: {testAgent}} }, true},
 		{"bad name", func(c *Credential) { c.Name = "Sentry_Token" }, false},
 		{"short name", func(c *Credential) { c.Name = "ab" }, false},
 		{"reserved env name", func(c *Credential) { c.Name = "goal-token" }, false},
@@ -40,7 +46,7 @@ func TestCheckCredential(t *testing.T) {
 		{"all and a list", func(c *Credential) { c.Scope.All = true }, false},
 		{"empty factory id", func(c *Credential) { c.Scope.Factories = []FactoryID{""} }, false},
 		{"factory twice", func(c *Credential) { c.Scope.Factories = []FactoryID{factory, factory} }, false},
-		{"agents of a factory out of scope", func(c *Credential) { c.Agents = map[FactoryID][]string{"other": {"backend"}} }, false},
+		{"agents of a factory out of scope", func(c *Credential) { c.Agents = map[FactoryID][]string{"other": {testAgent}} }, false},
 		{"empty agent name", func(c *Credential) { c.Agents = map[FactoryID][]string{factory: {""}} }, false},
 	}
 
@@ -67,7 +73,7 @@ func TestCheckCredential(t *testing.T) {
 func TestCheckNewCredential(t *testing.T) {
 	t.Parallel()
 
-	n := NewCredential{Name: "sentry-token", Type: CredentialAPIKey, Value: credMarker}
+	n := NewCredential{Name: testCredName, Type: CredentialAPIKey, Value: credMarker}
 	if err := n.Check(); err != nil {
 		t.Fatalf("Check: %v", err)
 	}
@@ -91,7 +97,7 @@ func TestCheckNewCredential(t *testing.T) {
 	}
 }
 
-func TestCredentialPatch(t *testing.T) {
+func TestCredentialPatch_Apply(t *testing.T) {
 	t.Parallel()
 
 	expires := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -121,6 +127,10 @@ func TestCredentialPatch(t *testing.T) {
 	if cleared.ExpiresAt != nil || cleared.RemindDays != 0 {
 		t.Errorf("an empty Expiry does not clear the expiry: %+v", cleared)
 	}
+}
+
+func TestCredentialPatch_Value(t *testing.T) {
+	t.Parallel()
 
 	replace := credMarker
 	if (CredentialPatch{Replace: &replace}).Empty() {
@@ -137,7 +147,7 @@ func TestCredentialScopeAllows(t *testing.T) {
 	t.Parallel()
 
 	f1, f2 := FactoryID("f1"), FactoryID("f2")
-	c := Credential{Scope: CredentialScope{Factories: []FactoryID{f1}}, Agents: map[FactoryID][]string{f1: {"backend"}}}
+	c := Credential{Scope: CredentialScope{Factories: []FactoryID{f1}}, Agents: map[FactoryID][]string{f1: {testAgent}}}
 
 	if !c.Scope.Allows(f1) || c.Scope.Allows(f2) {
 		t.Error("a list scope allows exactly its factories")
@@ -151,7 +161,7 @@ func TestCredentialScopeAllows(t *testing.T) {
 		t.Error("an empty scope allows a factory")
 	}
 
-	if !c.ForAgent(f1, "backend") || c.ForAgent(f1, "frontend") || c.ForAgent(f2, "backend") {
+	if !c.ForAgent(f1, testAgent) || c.ForAgent(f1, "frontend") || c.ForAgent(f2, testAgent) {
 		t.Error("ForAgent is the agent list of a factory in scope")
 	}
 }
@@ -161,8 +171,8 @@ func TestCredentialEnvName(t *testing.T) {
 
 	for name, want := range map[string]string{
 		"cloudflare-token-2027": "CLOUDFLARE_TOKEN_2027",
-		"sentry-token":          "SENTRY_TOKEN",
-		"abc":                   "ABC",
+		testCredName:            "SENTRY_TOKEN",
+		"abc-key":               "ABC_KEY",
 	} {
 		got, err := CredentialEnvName(name)
 		if err != nil || got != want {
@@ -181,7 +191,7 @@ func TestCredentialRef(t *testing.T) {
 	t.Parallel()
 
 	name, ok, err := CredentialRef("{{sentry-token}}")
-	if err != nil || !ok || name != "sentry-token" {
+	if err != nil || !ok || name != testCredName {
 		t.Fatalf("CredentialRef({{sentry-token}}) = %q, %v, %v", name, ok, err)
 	}
 
@@ -211,13 +221,15 @@ func TestParseCredentialImport(t *testing.T) {
 		name, format, text string
 		want               map[string]string
 	}{
-		{"env", CredentialImportEnv, "SENTRY_TOKEN=x\n", map[string]string{"sentry-token": "x"}},
-		{"env comments and blanks", CredentialImportEnv, "# tokens\n\nSENTRY_TOKEN=a=b\r\n  # more\nAPI_KEY = v \n", map[string]string{"sentry-token": "a=b", "api-key": "v"}},
+		{"env", CredentialImportEnv, "SENTRY_TOKEN=x\n", map[string]string{testCredName: "x"}},
+		{"env comments and blanks", CredentialImportEnv, "# tokens\n\nSENTRY_TOKEN=a=b\r\n  # more\nAPI_KEY = v \n", map[string]string{testCredName: "a=b", "api-key": "v"}},
 		{"env quotes", CredentialImportEnv, "A_KEY=\"q v\"\nB_KEY='s'\nC_KEY=\"'x'\"\n", map[string]string{"a-key": "q v", "b-key": "s", "c-key": "'x'"}},
 		{"env empty", CredentialImportEnv, "\n# nothing\n", map[string]string{}},
-		{"yaml", CredentialImportYAML, "credentials:\n  sentry-token: x\n  api-key: \"a\\\"b\"\n", map[string]string{"sentry-token": "x", "api-key": `a"b`}},
-		{"yaml comments and quotes", CredentialImportYAML, "---\n# top\ncredentials: # all\n\n    one-key: 'it''s' # c\n    two-key: plain value # c\n    three-key: a#b\n",
-			map[string]string{"one-key": "it's", "two-key": "plain value", "three-key": "a#b"}},
+		{"yaml", CredentialImportYAML, "credentials:\n  sentry-token: x\n  api-key: \"a\\\"b\"\n", map[string]string{testCredName: "x", "api-key": `a"b`}},
+		{
+			"yaml comments and quotes", CredentialImportYAML, "---\n# top\ncredentials: # all\n\n    one-key: 'it''s' # c\n    two-key: plain value # c\n    three-key: a#b\n",
+			map[string]string{"one-key": "it's", "two-key": "plain value", "three-key": "a#b"},
+		},
 		{"yaml no entries", CredentialImportYAML, "credentials:\n", map[string]string{}},
 	}
 
@@ -296,11 +308,11 @@ func TestCredentialValueHidden(t *testing.T) {
 
 	v := credMarker
 	shown := []any{
-		NewCredential{Name: "sentry-token", Type: CredentialAPIKey, Value: credMarker},
+		NewCredential{Name: testCredName, Type: CredentialAPIKey, Value: credMarker},
 		CredentialPatch{Replace: &v},
-		ResolvedCredential{Credential: Credential{Name: "sentry-token"}, Value: credMarker},
-		CredentialImportEntry{Name: "sentry-token", Value: credMarker},
-		[]CredentialImportEntry{{Name: "sentry-token", Value: credMarker}},
+		ResolvedCredential{Credential: Credential{Name: testCredName}, Value: credMarker},
+		CredentialImportEntry{Name: testCredName, Value: credMarker},
+		[]CredentialImportEntry{{Name: testCredName, Value: credMarker}},
 	}
 
 	for _, x := range shown {

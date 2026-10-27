@@ -78,9 +78,9 @@ func (c *Credentials) Get(ctx context.Context, name string) (domain.Credential, 
 	c.d.mu.Lock()
 	defer c.d.mu.Unlock()
 
-	r, ok := c.d.rows[org][name]
-	if !ok {
-		return domain.Credential{}, fmt.Errorf("credential %q: %w", name, ports.ErrNotFound)
+	r, err := c.rowLocked(org, name)
+	if err != nil {
+		return domain.Credential{}, err
 	}
 
 	return cloneCredential(r.cred), nil
@@ -146,9 +146,9 @@ func (c *Credentials) Patch(ctx context.Context, name string, p domain.Credentia
 	c.d.mu.Lock()
 	defer c.d.mu.Unlock()
 
-	r, ok := c.d.rows[org][name]
-	if !ok {
-		return domain.Credential{}, fmt.Errorf("credential %q: %w", name, ports.ErrNotFound)
+	r, err := c.rowLocked(org, name)
+	if err != nil {
+		return domain.Credential{}, err
 	}
 
 	next := cloneCredential(p.Apply(r.cred))
@@ -171,24 +171,12 @@ func (c *Credentials) Patch(ctx context.Context, name string, p domain.Credentia
 
 	sealed.cred.UpdatedBy, sealed.cred.UpdatedAt = by, time.Now().UTC().Truncate(time.Microsecond)
 
-	if p.ChangesMetadata() {
-		data := map[string]any{auditName: next.Name}
-		if next.Name != name {
-			data["from"] = name
-		}
-
-		if err := c.appendAudit(ctx, by, domain.AuditCredentialUpdated, next, data); err != nil {
-			return domain.Credential{}, err
-		}
-	}
-
-	if p.Replace != nil {
-		if err := c.appendAudit(ctx, by, domain.AuditCredentialValueReplaced, next, map[string]any{auditName: next.Name}); err != nil {
-			return domain.Credential{}, err
-		}
+	if err := c.patchAudits(ctx, by, name, next, p); err != nil {
+		return domain.Credential{}, err
 	}
 
 	*r = *sealed
+
 	delete(c.d.rows[org], name)
 	c.d.rows[org][next.Name] = r
 
@@ -205,9 +193,9 @@ func (c *Credentials) Delete(ctx context.Context, name string, by domain.Actor) 
 	c.d.mu.Lock()
 	defer c.d.mu.Unlock()
 
-	r, ok := c.d.rows[org][name]
-	if !ok {
-		return fmt.Errorf("credential %q: %w", name, ports.ErrNotFound)
+	r, err := c.rowLocked(org, name)
+	if err != nil {
+		return err
 	}
 
 	if err := c.appendAudit(ctx, by, domain.AuditCredentialDeleted, r.cred, map[string]any{auditName: name}); err != nil {
@@ -282,6 +270,7 @@ func (c *Credentials) ImportPreview(ctx context.Context, names []string) ([]doma
 	}
 
 	var errs []error
+
 	for _, name := range names {
 		if _, err := domain.CredentialEnvName(name); err != nil {
 			errs = append(errs, err)
@@ -302,6 +291,38 @@ func (c *Credentials) ImportPreview(ctx context.Context, names []string) ([]doma
 	}
 
 	return out, nil
+}
+
+// rowLocked is org's credential name; ErrNotFound when there is none.
+func (c *Credentials) rowLocked(org domain.OrgID, name string) (*credentialRow, error) {
+	r, ok := c.d.rows[org][name]
+	if !ok {
+		return nil, fmt.Errorf("credential %q: %w", name, ports.ErrNotFound)
+	}
+
+	return r, nil
+}
+
+// patchAudits are the entries of p's change of credential from, now next.
+func (c *Credentials) patchAudits(ctx context.Context, by domain.Actor, from string, next domain.Credential, p domain.CredentialPatch) error {
+	if p.ChangesMetadata() {
+		data := map[string]any{auditName: next.Name}
+		if next.Name != from {
+			data["from"] = from
+		}
+
+		if err := c.appendAudit(ctx, by, domain.AuditCredentialUpdated, next, data); err != nil {
+			return err
+		}
+	}
+
+	if p.Replace != nil {
+		if err := c.appendAudit(ctx, by, domain.AuditCredentialValueReplaced, next, map[string]any{auditName: next.Name}); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (c *Credentials) sealLocked(org domain.OrgID, r *credentialRow, value string) error {

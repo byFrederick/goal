@@ -72,6 +72,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 // entry may hold.
 const (
 	sentry = "sentry-token"
+	agent  = "backend"
 	deploy = "deploy-key"
 
 	marker   = "sk-conformance-marker-value"
@@ -87,8 +88,8 @@ var (
 	admin  = domain.Actor{Kind: domain.ActorUser, ID: "00000000-0000-7000-8000-000000000001", Name: "Ada"}
 	editor = domain.Actor{Kind: domain.ActorUser, ID: "00000000-0000-7000-8000-000000000002", Name: "Eve"}
 	// inA is a run of factory A by its backend agent.
-	inA = domain.CredentialUse{Factory: factoryA, Agent: "backend", Run: run}
-	inB = domain.CredentialUse{Factory: factoryB, Agent: "backend", Run: run}
+	inA = domain.CredentialUse{Factory: factoryA, Agent: agent, Run: run}
+	inB = domain.CredentialUse{Factory: factoryB, Agent: agent, Run: run}
 )
 
 type fixture struct {
@@ -106,7 +107,7 @@ func sentryIn(value string) domain.NewCredential {
 
 	return domain.NewCredential{
 		Name: sentry, Type: domain.CredentialAPIKey, Description: "error reports",
-		Scope: domain.CredentialScope{Factories: []domain.FactoryID{factoryA}}, Agents: map[domain.FactoryID][]string{factoryA: {"backend"}},
+		Scope: domain.CredentialScope{Factories: []domain.FactoryID{factoryA}}, Agents: map[domain.FactoryID][]string{factoryA: {agent}},
 		ExpiresAt: &expires, RemindDays: 14, Value: value,
 	}
 }
@@ -205,7 +206,15 @@ func testCreate(f *fixture) {
 	f.expect(got.ExpiresAt != nil && got.RemindDays == 14 && got.LastUsedAt == nil, "Create's expiry or last use = %+v", got)
 	f.expect(got.CreatedBy == admin && got.UpdatedBy == admin && !got.CreatedAt.IsZero(), "Create's actors = %+v", got)
 	f.expect(!got.Scope.All && len(got.Scope.Factories) == 1 && got.Scope.Factories[0] == factoryA, "Create's scope = %+v", got.Scope)
-	f.expect(got.ForAgent(factoryA, "backend"), "Create's agents = %+v", got.Agents)
+	f.expect(got.ForAgent(factoryA, agent), "Create's agents = %+v", got.Agents)
+
+	f.readBack(acme, got)
+}
+
+// readBack checks that Get, List, the audit log and Resolve agree with got, the credential
+// sentry just created with value marker.
+func (f *fixture) readBack(acme domain.OrgID, got domain.Credential) {
+	f.t.Helper()
 
 	one, err := f.c.Get(f.in(acme), sentry)
 	f.expect(err == nil && one.ID == got.ID, "Get = %+v, %v", one, err)
@@ -243,7 +252,7 @@ func testCreateRules(f *fixture) {
 		"an unknown type":         func(n *domain.NewCredential) { n.Type = "password" },
 		"a reminder, no expiry":   func(n *domain.NewCredential) { n.ExpiresAt = nil },
 		"no value":                func(n *domain.NewCredential) { n.Value = "" },
-		"agents out of the scope": func(n *domain.NewCredential) { n.Agents = map[domain.FactoryID][]string{factoryB: {"backend"}} },
+		"agents out of the scope": func(n *domain.NewCredential) { n.Agents = map[domain.FactoryID][]string{factoryB: {agent}} },
 	} {
 		n := sentryIn(marker)
 		edit(&n)
@@ -262,6 +271,7 @@ func testPatch(f *fixture) {
 	before := f.create(acme, sentryIn(marker))
 
 	name, desc, typ := "sentry-token-2027", "rotated yearly", domain.CredentialOAuthToken
+
 	got, err := f.c.Patch(f.in(acme), sentry, domain.CredentialPatch{
 		Name: &name, Description: &desc, Type: &typ,
 		Scope:  &domain.CredentialScope{Factories: []domain.FactoryID{factoryA, factoryB}},
@@ -274,7 +284,7 @@ func testPatch(f *fixture) {
 	f.noValue("Patch's credential", got)
 	f.expect(got.ID == before.ID && got.Name == name && got.Description == desc && got.Type == typ, "Patch = %+v", got)
 	f.expect(got.ExpiresAt == nil && got.RemindDays == 0, "Patch did not clear the expiry: %+v", got)
-	f.expect(got.ForAgent(factoryB, "frontend") && !got.ForAgent(factoryA, "backend"), "Patch's agents = %+v", got.Agents)
+	f.expect(got.ForAgent(factoryB, "frontend") && !got.ForAgent(factoryA, agent), "Patch's agents = %+v", got.Agents)
 	f.expect(got.UpdatedBy == editor && got.CreatedBy == admin, "Patch's actors = %+v", got)
 
 	_, err = f.c.Get(f.in(acme), sentry)
@@ -311,6 +321,7 @@ func testReplace(f *fixture) {
 	f.create(acme, sentryIn(marker))
 
 	v := replaced
+
 	got, err := f.c.Patch(f.in(acme), sentry, domain.CredentialPatch{Replace: &v}, editor)
 	if err != nil {
 		f.t.Fatalf("Patch Replace: %v", err)
@@ -351,7 +362,7 @@ func testResolve(f *fixture) {
 		}
 
 		f.expect(e.Actor == domain.EngineActor && e.TargetKind == domain.AuditTargetCredential, "credential.used = %+v", e)
-		f.expect(e.Data["name"] == sentry && e.Data["run_id"] == string(run) && e.Data["factory_id"] == string(factoryA) && e.Data["agent"] == "backend",
+		f.expect(e.Data["name"] == sentry && e.Data["run_id"] == string(run) && e.Data["factory_id"] == string(factoryA) && e.Data["agent"] == agent,
 			"credential.used data = %+v", e.Data)
 	}
 }
