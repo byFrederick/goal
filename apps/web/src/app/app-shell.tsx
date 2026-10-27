@@ -1,17 +1,18 @@
 // The app frame (MASTER.md "The shell"): it fills the viewport like a normal web app, with no outer
-// frame or margin. From 768 px: the sidebar | main, the sidebar pinned to the left edge at full
-// height. Below: the top row, the crumb, main and, on factory pages, the bottom tab bar.
+// frame or margin. From 768 px: the sidebar | the top bar over main, the sidebar pinned to the left
+// edge at full height. Below: the top row, the crumb, main and, on factory pages, the bottom tab bar.
 //
 // AppShell (the /o/$org layout) draws what every organization page shares: the skip link, the
 // sidebar or the top row, and the reconnecting banner. Each child layout passes its phone crumb and
 // tab bar to ShellFrame, which draws them around `main`.
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import type { OrgSummary } from '../api/types';
 import { useStreamStatus } from '../shared/stream';
 import { cn } from '../ui/cn';
 import { AccountProvider } from './account-menu';
 import { PhoneTopRow } from './phone-chrome';
 import { Sidebar } from './sidebar';
+import { TopBar, TopBarSetContext, type TopBarState } from './top-bar';
 
 export function AppShell({ org, children }: { org: OrgSummary; children: ReactNode }) {
   return (
@@ -41,16 +42,19 @@ interface FrameProps {
 }
 
 export function ShellFrame({ crumb, tabBar, children }: FrameProps) {
+  // A page's last crumb and actions, set by its <TopBarSlot> and shown in the top bar (top-bar.tsx).
+  const [topBar, setTopBar] = useState<TopBarState | null>(null);
   return (
-    <>
+    <TopBarSetContext.Provider value={setTopBar}>
       <div className="flex min-w-0 flex-1 flex-col">
         {crumb}
+        <TopBar state={topBar} />
         {/* A container: screens lay out by the width left beside the sidebar, not the viewport's. */}
         <main
           id="main"
           tabIndex={-1}
           className={cn(
-            '@container flex min-w-0 flex-1 flex-col gap-5 px-4 pt-5 outline-none md:px-6 md:pt-7 md:pb-10 lg:px-9',
+            '@container flex min-w-0 flex-1 flex-col gap-5 px-4 pt-5 outline-none md:px-7 md:py-5',
             tabBar ? 'pb-28' : 'pb-8',
           )}
         >
@@ -58,7 +62,7 @@ export function ShellFrame({ crumb, tabBar, children }: FrameProps) {
         </main>
       </div>
       {tabBar}
-    </>
+    </TopBarSetContext.Provider>
   );
 }
 

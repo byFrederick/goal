@@ -146,6 +146,7 @@ var operationScopes = map[string]string{
 	"revokePersonalToken":         "personal_token:read",
 	"saveDraftSection":            "definition:edit",
 	"searchKnowledge":             "knowledge:read",
+	"searchOrg":                   "org:read",
 	"searchSkills":                "org:read",
 	"setFactoryRole":              "member:manage",
 	"setTouchReason":              "item:operate",
