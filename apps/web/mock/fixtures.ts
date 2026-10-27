@@ -1194,7 +1194,13 @@ const sreSeeds: Seed[] = [
 const softwareSeeds: Seed[] = [
   ...[1, 2, 3, 4].map((number) => ({
     number,
-    title: ['Add rate limits to the public API', 'Fix invoice PDF margins', 'Split the billing module', 'Document webhook retries'][number - 1] ?? '',
+    title:
+      [
+        'Add rate limits to the public API',
+        'Fix invoice PDF margins',
+        'Split the billing module',
+        'Document webhook retries',
+      ][number - 1] ?? '',
     type: number === 2 ? 'fix' : 'feature',
     body: 'A request from the intake queue.',
     station: 'intake',
@@ -1477,7 +1483,9 @@ export function seed(now = Date.now()): MockState {
         can: orgCan,
       },
     ],
-    factories: [goalFactory, sreFactory, supportFactory, researchFactory, softwareFactory].map((f) => structuredClone(f)),
+    factories: [goalFactory, sreFactory, supportFactory, researchFactory, softwareFactory].map((f) =>
+      structuredClone(f),
+    ),
     people: seedPeople(now, {
       acme: acmeOrg,
       labs: labsOrg,

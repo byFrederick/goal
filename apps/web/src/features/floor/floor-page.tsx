@@ -1,6 +1,14 @@
 import { keepPreviousData, useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { useSearch } from '@tanstack/react-router';
-import { boardQuery, constraintQuery, leadTimeQuery, metricsQuery, overviewQuery, touchesQuery, weeklyQuery } from '../../api/queries';
+import {
+  boardQuery,
+  constraintQuery,
+  leadTimeQuery,
+  metricsQuery,
+  overviewQuery,
+  touchesQuery,
+  weeklyQuery,
+} from '../../api/queries';
 import { useFactory } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
 import { cn } from '../../ui/cn';
@@ -9,7 +17,7 @@ import { FloorHeader, floorRoute } from './floor-header';
 import { KpiRow } from './kpi-row';
 import { LeadTimeCard } from './lead-time-card';
 import { LinePanel } from './line-panel';
-import { rangeOf, previousRange } from './range';
+import { previousRange, rangeOf } from './range';
 import { ThroughputCard } from './throughput-card';
 import { TouchesPanel, TouchesSummary, TouchesWaiting } from './touches-card';
 import { WeeklyCard } from './weekly-card';

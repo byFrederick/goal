@@ -99,9 +99,7 @@ const line: Board = {
       in_progress: 2,
       send_back_ratio: 0.14,
       items: [card(15, 'in_progress'), card(16, 'waiting_human')],
-      lanes: [
-        { key: 'reviewer', kind: 'agent', role: 'Reviewer', model: null, model_label: null, slots: 3, busy: 1 },
-      ],
+      lanes: [{ key: 'reviewer', kind: 'agent', role: 'Reviewer', model: null, model_label: null, slots: 3, busy: 1 }],
     }),
     station({ id: 'done', kind: 'done', done_today: 7 }),
   ],
@@ -124,12 +122,16 @@ describe('LinePanel', () => {
     render(<LinePanel board={line} constraint="build" doneThisWeek={53} />);
 
     expect(screen.getByRole('heading', { level: 2, name: 'The line, now' })).toBeTruthy();
-    const legend = screen.getByRole('group', { name: 'Legend' });
-    const stations = within(screen.getByRole('list', { name: 'Stations from intake to done' })).getAllByRole('listitem');
+    const legend = screen.getByRole('list', { name: 'Legend' });
+    const stations = within(screen.getByRole('list', { name: 'Stations from intake to done' })).getAllByRole(
+      'listitem',
+    );
     for (const name of ['Agent working', 'Waiting on you', 'Free']) {
       expect(within(legend).getByText(name)).toBeTruthy();
     }
-    const names = stations.map((li) => within(li).getByText(/^(Intake|Spec|Build|Review|Done)$/).firstChild?.textContent);
+    const names = stations.map(
+      (li) => within(li).getByText(/^(Intake|Spec|Build|Review|Done)$/).firstChild?.textContent,
+    );
     expect(names).toEqual(['Intake', 'Spec', 'Build', 'Review', 'Done']);
   });
 

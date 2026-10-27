@@ -5,9 +5,9 @@ import {
   boardQuery,
   constraintQuery,
   inboxQuery,
-  overviewQuery,
   leadTimeQuery,
   metricsQuery,
+  overviewQuery,
   touchesQuery,
   weeklyQuery,
 } from '../../api/queries';
@@ -15,10 +15,10 @@ import type {
   Board,
   ConstraintReport,
   Factory,
-  InboxEntry,
-  ItemCard,
   FactoryOverview,
   FactoryOverviewList,
+  InboxEntry,
+  ItemCard,
   LeadTimeBridge,
   Metrics,
   MetricsSummary,
@@ -210,7 +210,7 @@ const flow: Metrics = {
 /** The factory's row of the overview for a window: its spend and the day's or week's budget. */
 function overviewRow(spend: number, budget: number | null): FactoryOverview {
   return {
-    factory: { id: factory.id, name: factory.name, title: 'SRE' },
+    factory,
     health: 'running',
     andon: null,
     throughput: { per_day: 0, previous_per_day: 0, days: [{ day: '2026-10-26', done: 7 }] },

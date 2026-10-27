@@ -1,8 +1,8 @@
 import { type ReactNode, useId } from 'react';
 import type { Board, BoardLane, BoardStation } from '../../api/types';
 import { formatAge, formatPercent, humanize } from '../../shared/format';
-import { cn } from '../../ui/cn';
 import { Chip } from '../../ui/chip';
+import { cn } from '../../ui/cn';
 import { StationNode, type StationNodeTone } from '../../ui/station-node';
 
 // The andon panel, "The line, now" (MASTER.md, Components): the factory's stations from intake to
@@ -38,11 +38,14 @@ export function LinePanel({
         <h2 id={headingId} className="m-0 text-heading text-white">
           The line, now
         </h2>
-        <div role="group" aria-label="Legend" className="flex flex-wrap gap-x-4 gap-y-1 text-secondary text-andon-text">
+        <ul
+          aria-label="Legend"
+          className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 text-secondary text-andon-text"
+        >
           <Legend swatch="bg-run-soft">Agent working</Legend>
           <Legend swatch="bg-you">Waiting on you</Legend>
           <Legend swatch="border border-andon-text">Free</Legend>
-        </div>
+        </ul>
       </div>
 
       {stations.length === 0 ? (
@@ -51,7 +54,10 @@ export function LinePanel({
         <div className="relative">
           <span aria-hidden="true" className="absolute inset-x-[10%] top-6 hidden h-1 rounded-full bg-run md:block" />
           <span aria-hidden="true" className="absolute top-0 bottom-0 left-6 w-1 rounded-full bg-run md:hidden" />
-          <ol aria-label="Stations from intake to done" className="relative flex flex-col gap-4 md:grid md:auto-cols-fr md:grid-flow-col">
+          <ol
+            aria-label="Stations from intake to done"
+            className="relative flex flex-col gap-4 md:grid md:auto-cols-fr md:grid-flow-col"
+          >
             {stations.map((s) => {
               const tone = toneOf(s, constraint);
               const busy = busyOf(s);
@@ -106,9 +112,7 @@ export function LinePanel({
         ) : null}
         <span className="md:ml-auto">
           Andon{' '}
-          <strong className="font-semibold text-white">
-            {line.andon ? `pulled: ${line.andon.reason}` : 'clear'}
-          </strong>
+          <strong className="font-semibold text-white">{line.andon ? `pulled: ${line.andon.reason}` : 'clear'}</strong>
         </span>
       </footer>
     </section>
@@ -117,10 +121,10 @@ export function LinePanel({
 
 function Legend({ swatch, children }: { swatch: string; children: ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-2">
+    <li className="inline-flex items-center gap-2">
       <span aria-hidden="true" className={cn('size-3.5 rounded-chip', swatch)} />
       {children}
-    </span>
+    </li>
   );
 }
 
@@ -179,6 +183,7 @@ function Slots({ station }: { station: BoardStation }) {
     <span role="img" aria-label={label} className="flex flex-wrap gap-1 md:justify-center">
       {Array.from({ length: total }, (_, i) => (
         <span
+          // biome-ignore lint/suspicious/noArrayIndexKey: the squares are fixed by the slot count and never reorder
           key={i}
           aria-hidden="true"
           className={cn(

@@ -32,11 +32,7 @@ export function StationNode({
         className,
       )}
     >
-      {tone === 'done' ? (
-        <Check size={20} strokeWidth={2.2} className="text-ok" aria-hidden="true" />
-      ) : (
-        count
-      )}
+      {tone === 'done' ? <Check size={20} strokeWidth={2.2} className="text-ok" aria-hidden="true" /> : count}
     </span>
   );
 }

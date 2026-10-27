@@ -30,12 +30,19 @@ export function KpiRow({ factory, metrics, className }: { factory: Factory; metr
   const perItem = noItems ? null : metrics.spend_usd / metrics.items_done;
 
   return (
-    <section aria-label="Flow against targets" className={cn('grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6', className)}>
+    <section
+      aria-label="Flow against targets"
+      className={cn('grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6', className)}
+    >
       <KpiTile
         label="Throughput"
         value={throughput.toFixed(1)}
         unit="a day"
-        bar={throughputTarget ? meter(throughput, throughputTarget, 'run', `the target of ${throughputTarget} a day`) : undefined}
+        bar={
+          throughputTarget
+            ? meter(throughput, throughputTarget, 'run', `the target of ${throughputTarget} a day`)
+            : undefined
+        }
         sparkline={
           !throughputTarget && metrics.throughput.length > 1
             ? { points: metrics.throughput.map((d) => d.done), label: 'Items finished per day' }
@@ -64,18 +71,23 @@ export function KpiRow({ factory, metrics, className }: { factory: Factory; metr
 
       {/* Not built yet: disabled with a tip, never a number (ADR 0016, decision 4). */}
       <NotAvailable>
-        <div role="button" tabIndex={0} aria-label="Hands-off" className="hidden min-w-0 rounded-card md:flex">
+        <button type="button" aria-label="Hands-off" className="hidden min-w-0 rounded-card text-left md:flex">
           <KpiTile
             label="Hands-off"
             value={<span className="text-body text-ink-soft">Not built yet</span>}
             target="No human touch"
             className="flex-1 opacity-60"
           />
-        </div>
+        </button>
       </NotAvailable>
 
       <div className="hidden min-w-0 md:flex">
-        <KpiTile label="Cost per item" value={perItem === null ? notEnough : formatUsdCompact(perItem)} target="Per finished item" className="flex-1" />
+        <KpiTile
+          label="Cost per item"
+          value={perItem === null ? notEnough : formatUsdCompact(perItem)}
+          target="Per finished item"
+          className="flex-1"
+        />
       </div>
 
       <SpendToday factory={factory} />
