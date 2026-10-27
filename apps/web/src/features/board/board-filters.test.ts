@@ -8,6 +8,7 @@ import {
   openAssemblies,
   roleOptions,
   runsOf,
+  searchMatches,
 } from './board-filters';
 
 const item = (over: Partial<ItemCard>): ItemCard => ({
@@ -265,5 +266,25 @@ describe('arrangeBoard with the grouping', () => {
   it('orders each station’s cards by assembly and keeps the filter', () => {
     const grouped = arrangeBoard(twoStations, { group: 'assembly', assembly: ASM });
     expect(refs(grouped)).toEqual(['sre#21', 'sre#22']);
+  });
+});
+
+describe('searchMatches', () => {
+  const card = { title: 'Retry the export job', number: 142 };
+
+  it('matches the title, in any case', () => {
+    expect(searchMatches(card, 'RETRY')).toBe(true);
+    expect(searchMatches(card, 'budget')).toBe(false);
+  });
+
+  it('matches the number with or without its #, and nothing else numeric', () => {
+    expect(searchMatches(card, '142')).toBe(true);
+    expect(searchMatches(card, '#142')).toBe(true);
+    expect(searchMatches(card, '#14')).toBe(false);
+  });
+
+  it('keeps every card for an empty or blank search', () => {
+    expect(searchMatches(card, '')).toBe(true);
+    expect(searchMatches(card, '   ')).toBe(true);
   });
 });
