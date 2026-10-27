@@ -390,6 +390,16 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
           touchless_rate: h.touchless_rate,
         };
       }),
+      daily: Array.from({ length: 7 }, (_, i) => {
+        const from = end - (7 - i) * dayMs;
+        const h = touchHeadlineOf(finishedIn(items, from, from + dayMs));
+        return {
+          day: utcDayOf(from),
+          finished: h.finished,
+          per_item_mean: h.per_item_mean,
+          touchless_rate: h.touchless_rate,
+        };
+      }),
     };
   };
 

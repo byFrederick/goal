@@ -3902,9 +3902,17 @@ components:
         finished: { type: integer }
         per_item_mean: { type: number, format: double }
         touchless_rate: { type: number, format: double }
+    TouchDay:
+      type: object
+      required: [day, finished, per_item_mean, touchless_rate]
+      properties:
+        day: { type: string, format: date, description: The UTC day }
+        finished: { type: integer }
+        per_item_mean: { type: number, format: double }
+        touchless_rate: { type: number, format: double }
     TouchMetrics:
       type: object
-      required: [from, to, type, version, stats, weekly]
+      required: [from, to, type, version, stats, weekly, daily]
       properties:
         from: { type: string, format: date, description: The range's first UTC day }
         to: { type: string, format: date, description: The range's last UTC day, included }
@@ -3915,6 +3923,10 @@ components:
           type: array
           description: The headline in each of the weeks ending on to, oldest first
           items: { $ref: "#/components/schemas/TouchWeek" }
+        daily:
+          type: array
+          description: The headline in each of the 7 UTC days ending on to, oldest first
+          items: { $ref: "#/components/schemas/TouchDay" }
     OrgTouchMetrics:
       type: object
       required: [from, to, total, factories]
@@ -4610,7 +4622,7 @@ components:
           items: { $ref: "#/components/schemas/ConstraintCandidate" }
     ConstraintCandidate:
       type: object
-      required: [station, slots, agents, busy_ratio, avg_waiting, mean_wait_minutes, mean_service_minutes, leases, estimate]
+      required: [station, slots, agents, busy_ratio, avg_waiting, mean_wait_minutes, mean_service_minutes, leases, spend_per_slot_day_usd, estimate]
       properties:
         station: { type: string }
         slots: { type: integer }
@@ -4620,6 +4632,14 @@ components:
         mean_wait_minutes: { type: number, format: double, nullable: true, description: Mean wait of an item that waited there; null when none did }
         mean_service_minutes: { type: number, format: double, nullable: true, description: Mean lease; null without leases }
         leases: { type: integer }
+        spend_per_slot_day_usd:
+          type: number
+          format: double
+          nullable: true
+          description: >-
+            An estimate of what one more agent at the station costs a day: its agent runs' spend
+            over the measured range divided by its slots and by the range in days; null when the
+            range is empty or no run cost was recorded there
         estimate:
           type: object
           nullable: true

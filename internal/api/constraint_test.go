@@ -124,3 +124,31 @@ func orZero[T any](p *T) T {
 
 	return *p
 }
+
+// A candidate's spend per slot and day is its runs' cost over the range divided by its slots and
+// the range's days: $3 at build's two slots over the 7 days from Oct 16 to Oct 22 is 3/2/7. A
+// candidate without runs has none.
+func TestAPI_ConstraintReportSpendPerSlotDay(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.leaseHistory(t)
+
+	const week = "/v1/orgs/acme/factories/line/constraint?from=2026-10-16&to=2026-10-22"
+
+	var before gen.ConstraintReport
+	if code := h.call(t, http.MethodGet, week, "", &before); code != http.StatusOK || len(before.Candidates) != 1 ||
+		before.Candidates[0].SpendPerSlotDayUsd != nil {
+		t.Fatalf("report = %d %s; want build without spend per slot and day", code, asJSON(t, before.Candidates))
+	}
+
+	it := h.seed(t, stMerge, domain.StateWaitingHuman, oct(22, 0))
+	h.spend(t, it.ID, oct(22, 1), 3)
+
+	var after gen.ConstraintReport
+	h.call(t, http.MethodGet, week, "", &after)
+
+	if len(after.Candidates) != 1 || orZero(after.Candidates[0].SpendPerSlotDayUsd) != 3.0/2/7 {
+		t.Errorf("candidates %s; want build at %v a slot and day", asJSON(t, after.Candidates), 3.0/2/7)
+	}
+}

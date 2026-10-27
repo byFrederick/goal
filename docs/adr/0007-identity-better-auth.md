@@ -55,6 +55,6 @@ Status: accepted · 2026-10-24 · extends decision 4. Specified in [phase 3](../
 
 ## Amendment — who creates organizations (decision 5)
 
-Status: accepted · 2026-10-27 · changes decision 5's last sentence. Decided in [ADR 0024](0024-self-serve-onboarding.md), decision 1.
+Status: accepted · 2026-10-27 · changes decision 5's last sentence. Decided in [ADR 0026](0026-self-serve-onboarding.md), decision 1.
 
 Any person signed in with a session (in the browser or through the CLI's device sign-in) may create an organization and becomes its owner, so self-serve onboarding starts without a platform admin. Platform admins keep the right; API keys and personal tokens never had it and still do not. goald still owns the organization lifecycle as decision 5 says.

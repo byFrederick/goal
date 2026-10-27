@@ -1,4 +1,4 @@
-# ADR 0024 — Self-serve onboarding: anyone signed in creates an organization, and progress comes from existing data
+# ADR 0026 — Self-serve onboarding: anyone signed in creates an organization, and progress comes from existing data
 
 Status: accepted · 2026-10-27 · Builds on [ADR 0016](0016-ui-revamp.md) (decision 6 orders onboarding among the new features built end to end) · Amends [ADR 0007](0007-identity-better-auth.md) decision 5 (only platform admins created organizations)
 

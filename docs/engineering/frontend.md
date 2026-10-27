@@ -11,7 +11,7 @@ goal/
   go.mod                       Go module (goald, goal CLI, engine, adapters)
   cmd/  internal/  db/          Go code, and db/migrations/, db/queries/, db/sqlc.yaml
   contracts/api/openapi.yaml   THE contract between goald and every TypeScript client (incl. the SSE StreamEvent)
-  contracts/definitions/       factory.schema.json, evals.schema.json
+  contracts/definitions/       factory.schema.json, evals.schema.json (judges, eval cases), connection-kind.schema.json
   package.json                 private root: pnpm only, no app code
   pnpm-workspace.yaml          the apps (auth, web, worker) and packages/*; the catalog pins better-auth once
   apps/
