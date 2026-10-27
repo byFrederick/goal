@@ -26,7 +26,8 @@ const (
 	checkContracts  = "contracts"  // every output contract is a schema the model API takes as a tool's input
 	// checkAvailability: what the definition declares that this install cannot serve yet.
 	checkAvailability = "availability"
-	checkEvals        = "evals" // judges and eval cases are well formed (ADR 0025)
+	checkEvals        = "evals"    // judges and eval cases are well formed (ADR 0025)
+	checkTriggers     = "triggers" // intake triggers' crons, time zones and templates are well formed (ADR 0026)
 )
 
 // Problem codes config reports. They are stable: the UI, the CLI and tests key on them.
@@ -79,6 +80,10 @@ const (
 	codeEvalNameInvalid       = "eval-name-invalid"
 	codeUnknownJudge          = "unknown-judge"
 	codePatchNotFound         = "patch-not-found"
+
+	codeCronInvalid        = "cron-invalid"
+	codeTimeZoneInvalid    = "time-zone-invalid"
+	codePlaceholderInvalid = "placeholder-invalid"
 )
 
 // toolSpec is a mise tool spec: an optional backend ("aqua:", "npm:"), a tool name (a path for
@@ -112,6 +117,7 @@ func (c *checker) run() []domain.DefinitionProblem {
 	c.outputContracts()
 	c.removedForms()
 	c.evals()
+	c.triggers()
 
 	return c.problems
 }

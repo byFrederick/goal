@@ -198,3 +198,55 @@ Each problem is a `DefinitionProblem` in section `files`. Its `File` is the judg
 | A judge's or case's file name is not a slug (3 to 40 lowercase letters, digits and hyphens) | `eval-name-invalid` |
 
 Only files directly in `evals/judges/` (`.md`) and `evals/cases/` (`.yaml`, `.yml`) are judges and cases. Fixtures such as reference patches go elsewhere, for example `evals/fixtures/`.
+
+## Triggers: `board.triggers`
+
+A trigger turns an event, a schedule or a webhook delivery into a work item ([ADR 0026](../adr/0026-intake-triggers.md)). Triggers are part of `factory.yaml`, so saving one publishes a new version. `internal/config` parses and checks them (`config.Trigger`, `internal/config/triggers.go`). The engine that matches events, runs the checks and fires schedules is not built yet. `board.intake` is deprecated and ignored: the schema still accepts it so existing definitions load, and nothing reads it.
+
+```yaml
+board:
+  workTypes: [feature, fix]
+  triggers:
+    - name: morning-sweep
+      on: schedule
+      cron: "0 7 * * MON-FRI"
+      timeZone: Europe/Berlin
+      create: { type: fix, station: build, lane: backend, title: "Sweep flaky tests" }
+    - name: red-main
+      on: github.check_run.failed
+      filter: { branch: main, repo: acme/app, skipBots: true }
+      only: { failuresInARow: 2, dedupe: check.name }
+      create: { type: fix, station: build, expedite: true, title: "Fix {{check.name}} on main" }
+      limits: { perDay: 3, pauseOnBudget: true }
+    - name: deploy-failed
+      on: webhook.deploys.failed
+      create: { type: fix, station: inbox, brief: "{{service}} failed to deploy to example.com" }
+```
+
+The keys of a trigger:
+
+- `name` (required): a slug, unique within the factory. It names the trigger in the API, the UI and the firing log.
+- `enabled`: default `true`. A disabled trigger matches nothing.
+- `on` (required): the event key. One of `github.check_run.failed`, `github.issues.labeled`, `schedule`, or `webhook.<endpoint name>` with an optional `.<event>`, matched against the delivery's `event` field. Slack, Linear, Jira and Sentry keys are not accepted yet.
+- `cron` and `timeZone`: only with `on: schedule`, where `cron` is required. `cron` is five fields: minute, hour, day of month, month, day of week. A field takes numbers, `*`, ranges (`1-5`), steps (`*/15`, `0-30/10`), lists (`0,30`) and, for months and weekdays, names in any case (`JAN`, `mon`). Weekdays are 0 to 6, Sunday first. `@daily`, `?` and seconds are not accepted. `timeZone` is an IANA name and defaults to `UTC`; `Local` is refused.
+- `filter`: filters on the event's fields, all of which must match: `branch`, `repo` (owner/name), `label`, `paths` (globs; any changed path matches), `authors` (any of) and `skipBots`.
+- `only`: checks before an item is created, in this order. `failuresInARow: n` passes when the same check failed on the last n events for it. `dedupe: <field>` passes when no open item this trigger created holds the same value of that event field.
+- `create` (required): `type` (one of `board.workTypes`) and `station` (a station id) are required. `lane` is a key of that station's `route`, `expedite: true` puts the item in the expedite flow, and `title` and `brief` are templates. A placeholder is `{{field}}` or a dotted `{{field.sub}}`, spaces inside the braces allowed, and takes the event's field. Event text reaches agents only as untrusted data (ADR 0026, decision 5).
+- `limits`: `perDay` (at most n items from this trigger since the start of the UTC day) and `pauseOnBudget` (skip events while the factory's weekly budget is spent).
+
+### Trigger checks
+
+Each problem is located at its key under `spec.board.triggers` in `factory.yaml`. The editor's model has no triggers section yet, so the problems are in section `files`.
+
+| Problem | Code |
+| --- | --- |
+| A trigger fails the schema: a missing `name`, `on` or `create`, an unknown key, an `on` that is not an accepted event key, a schedule without `cron`, `cron` or `timeZone` on an event trigger | `schema-required`, `schema-unknown-key`, `schema-invalid` |
+| Two triggers share a name | `duplicate-name` |
+| `create.type` is not in `board.workTypes` | `unknown-work-type` |
+| `create.station` is not a station id | `unknown-station` |
+| `create.lane` is not a key of that station's `route` | `unknown-lane` |
+| A schedule's `cron` is not five valid fields | `cron-invalid` |
+| A schedule's `timeZone` is not an IANA time zone the host knows | `time-zone-invalid` |
+| A `{{` in `create.title` or `create.brief` is unclosed, empty or not a dotted field name | `placeholder-invalid` |
+
+The time zone check reads the host's zoneinfo, so a process without tzdata refuses every zone but `UTC`.
