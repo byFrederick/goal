@@ -46,7 +46,7 @@ test('your own tokens and every member’s are listed, and the page fits the scr
       'A personal token lets the CLI or a script on your machine act as you in Acme, with no more than your role allows. Tokens expire after at most 90 days.',
     ),
   ).toBeVisible();
-  const laptop = entry(own(page), 'laptop');
+  const laptop = entry(own(page), 'laptop-cli');
   await expect(laptop.getByText('goal_pat_Q7mk…')).toBeVisible();
   await expect(laptop.getByText('See factories')).toBeVisible();
   await expect(laptop.getByText('+2 more')).toBeVisible();
@@ -135,15 +135,15 @@ test('a token needs a name and something to do, and a live token’s name is tak
 test('revoking your own token needs no recent sign-in', async ({ page }) => {
   await signIn(page.request, {}, 'stale');
   await page.goto('/account');
-  await entry(own(page), 'laptop').getByRole('button', { name: 'Revoke laptop…' }).click();
-  const confirm = page.getByRole('dialog', { name: 'Revoke laptop?' });
+  await entry(own(page), 'laptop-cli').getByRole('button', { name: 'Revoke laptop-cli…' }).click();
+  const confirm = page.getByRole('dialog', { name: 'Revoke laptop-cli?' });
   await expect(confirm.getByText('Anything using it stops working at once.')).toBeVisible();
   await expect(confirm.getByRole('button', { name: 'Cancel' })).toBeFocused();
   await confirm.getByRole('button', { name: 'Revoke token' }).click();
 
-  await expectToast(page, 'Revoked laptop');
+  await expectToast(page, 'Revoked laptop-cli');
   await expect(page.getByRole('dialog', { name: 'Confirm it’s you' })).toHaveCount(0);
-  await expect(own(page).getByRole('button', { name: 'Revoke laptop…' })).toHaveCount(0);
+  await expect(own(page).getByRole('button', { name: 'Revoke laptop-cli…' })).toHaveCount(0);
 });
 
 test('creating a token with an older sign-in confirms it’s you, then creates it', async ({ page }) => {
