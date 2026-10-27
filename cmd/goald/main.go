@@ -151,12 +151,17 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	definitionStore := postgres.NewDefinitions(pool, objects, log)
 	kb := openKnowledge(s, store, connections, objects, clock, log)
 
+	// The organization policy (ADR 0024) is a ceiling over every definition: publishing checks a
+	// version's models against it, and the engine applies it at each run's start.
+	policies := postgres.NewOrgPolicies(store, modelIDs(s.Models))
+
 	// Definition authoring writes versions to PostgreSQL and file content to the bucket. A
-	// definition's connections and knowledge sources are checked against the organization's.
+	// definition's connections and knowledge sources are checked against the organization's, its
+	// models against the organization policy.
 	authors := authoring.New(authoring.Deps{
 		Store: definitionStore, Loads: store, Templates: objects,
 		Credentials: authoring.ConnectionsCheck{Connections: connections, Knowledge: kb.searcher},
-		Clock:       clock,
+		Policies:    policies, Clock: clock,
 	})
 
 	boxes, err := sandboxes(ctx, s, log)
@@ -190,7 +195,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
 		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, CodeHosts: hosts, Clock: clock,
-		Minters: minters(s), Logger: log,
+		Minters: minters(s), Policies: policies, Logger: log,
 	}, engine.Config{
 		TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: boxes.gateway, GatewayKeyRef: s.GatewayKeyRef, MaxRuns: s.MaxRuns,
 	})
@@ -784,4 +789,14 @@ func authReachable(ctx context.Context, upstream string) error {
 	}
 
 	return nil
+}
+
+// modelIDs are the ids of the platform's models (GOAL_MODELS), the first the default policy's.
+func modelIDs(models []builder.Model) []string {
+	ids := make([]string, 0, len(models))
+	for _, m := range models {
+		ids = append(ids, m.ID)
+	}
+
+	return ids
 }
