@@ -42,10 +42,12 @@ import type {
   Org,
   OrgAttention,
   OrgDeleted,
+  OrgRunList,
   OrgSettings,
   OrgSettingsPatch,
   OrgSummary,
   RunList,
+  RunStatus,
   TouchMetrics,
   TouchReason,
   WeeklyThroughput,
@@ -405,6 +407,41 @@ export function listItemEvents(
 /** An item's agent runs, oldest first (at most 200; `truncated` says there are more). */
 export function listItemRuns(org: string, item: string, signal?: AbortSignal): Promise<RunList> {
   return unwrap(goal.GET(orgPath('/items/{item}/runs'), { params: { path: { org, item } }, ...cancel(signal) }));
+}
+
+/** The org-level runs filter (GET /v1/orgs/{org}/runs): unset values are left out, and the window is the UTC day when absent. */
+export interface RunsFilter {
+  /** A factory's id or name. */
+  factory?: string | undefined;
+  status?: RunStatus | undefined;
+  since?: string | undefined;
+  until?: string | undefined;
+  q?: string | undefined;
+  limit?: number | undefined;
+  cursor?: string | undefined;
+}
+
+/** The filter as query parameters: unset and empty values are left out. */
+function runsQuery({ factory, status, since, until, q, limit, cursor }: RunsFilter) {
+  return {
+    ...(factory ? { factory } : {}),
+    ...(status ? { status } : {}),
+    ...(since ? { since } : {}),
+    ...(until ? { until } : {}),
+    ...(q ? { q } : {}),
+    ...(limit !== undefined ? { limit } : {}),
+    ...(cursor ? { cursor } : {}),
+  };
+}
+
+/** The organization's agent runs, newest first, with the window's summary (ignores status and q). */
+export function listOrgRuns(org: string, filter: RunsFilter, signal?: AbortSignal): Promise<OrgRunList> {
+  return unwrap(
+    goal.GET(orgPath('/runs'), {
+      params: { path: { org }, query: runsQuery(filter) },
+      ...cancel(signal),
+    }),
+  );
 }
 
 /** Leaves the local user's note for the agents working an item; the receipt says when one reads it. */

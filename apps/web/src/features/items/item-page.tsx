@@ -2,7 +2,7 @@ import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-quer
 import { Link, useParams } from '@tanstack/react-router';
 import { ChevronLeft } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
-import { eventsQuery, itemQuery, runsQuery } from '../../api/queries';
+import { eventsQuery, itemQuery, itemRunsQuery } from '../../api/queries';
 import type { Item, Station } from '../../api/types';
 import { TopBarSlot } from '../../app/top-bar';
 import { factoryTitle, itemKey, useFactory, useFactoryParams } from '../../shared/factory';
@@ -100,7 +100,7 @@ export function ItemPage() {
   const { data: item } = useSuspenseQuery(itemQuery(org.id, key));
   const { data: events } = useSuspenseQuery(eventsQuery(client, org.id, key));
   // The run records refine the trace when they arrive; the events alone already draw it.
-  const { data: runs } = useQuery(runsQuery(org.id, key));
+  const { data: runs } = useQuery(itemRunsQuery(org.id, key));
   const trace = useMemo(() => buildTrace(events, runs?.runs), [events, runs]);
   const [fullTrace, setFullTrace] = useState(false);
   const recipientAgent = noteRecipient(trace, item.station);

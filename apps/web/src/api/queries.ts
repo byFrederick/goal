@@ -38,7 +38,9 @@ import {
   listItemRuns,
   listItems,
   listMembers,
+  listOrgRuns,
   listOrgs,
+  type RunsFilter,
 } from './client';
 import {
   type ConnectionFilter,
@@ -185,7 +187,10 @@ export const keys = {
     ['org', org, 'factory', factory, 'items', filter] as const,
   item: (org: string, item: string) => ['org', org, 'item', item] as const,
   events: (org: string, item: string) => ['org', org, 'item', item, 'events'] as const,
-  runs: (org: string, item: string) => ['org', org, 'item', item, 'runs'] as const,
+  itemRuns: (org: string, item: string) => ['org', org, 'item', item, 'runs'] as const,
+  /** The organization's agent runs across factories (the Runs page). Rooted at ['org', org, 'runs']: the stream invalidates that prefix. */
+  runs: (org: string, filter?: RunsFilter) =>
+    filter ? (['org', org, 'runs', filter] as const) : (['org', org, 'runs'] as const),
   parts: (org: string, item: string) => ['org', org, 'item', item, 'parts'] as const,
 };
 
@@ -609,8 +614,12 @@ function retryUnlessRefused(failures: number, error: Error): boolean {
 }
 
 /** An item's runs: under the item's key, so every event of the item refreshes them. */
-export const runsQuery = (org: string, item: string) =>
-  queryOptions({ queryKey: keys.runs(org, item), queryFn: ({ signal }) => listItemRuns(org, item, signal) });
+export const itemRunsQuery = (org: string, item: string) =>
+  queryOptions({ queryKey: keys.itemRuns(org, item), queryFn: ({ signal }) => listItemRuns(org, item, signal) });
+
+/** The organization's runs in one window and filter (the Runs page). The stream refreshes them; nothing polls. */
+export const runsQuery = (org: string, filter: RunsFilter) =>
+  queryOptions({ queryKey: keys.runs(org, filter), queryFn: ({ signal }) => listOrgRuns(org, filter, signal) });
 
 const eventPage = 500;
 

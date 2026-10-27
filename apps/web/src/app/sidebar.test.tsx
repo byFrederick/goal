@@ -190,7 +190,6 @@ describe('the sidebar', () => {
 
   it.each([
     ['Needs you', /^Needs you/],
-    ['Runs', /^Runs$/],
     ['Credentials', /^Credentials$/],
   ])('renders %s as not available: aria-disabled, focusable, and inert', async (_, name) => {
     const { router } = renderSidebar({ can: ['connection:read', 'knowledge:read'] });
@@ -202,9 +201,19 @@ describe('the sidebar', () => {
     expect(router.state.location.pathname).toBe('/o/acme');
   });
 
+  it('links Runs to the runs page', async () => {
+    renderSidebar();
+
+    expect(
+      within(await nav())
+        .getByRole('link', { name: 'Runs' })
+        .getAttribute('href'),
+    ).toBe('/o/acme/runs');
+  });
+
   it('shows the not-available tooltip on hover', async () => {
     renderSidebar();
-    fireEvent.focus(within(await nav()).getByRole('button', { name: 'Runs' }));
+    fireEvent.focus(within(await nav()).getByRole('button', { name: /^Needs you/ }));
 
     expect(await screen.findByText('Not available yet')).toBeTruthy();
   });
@@ -415,19 +424,16 @@ describe('the collapsed rail', () => {
     expect(names.slice(11)).toEqual(['New factory', 'Spend this week, 37% of budget', 'FC, Freddy Cruz, account']);
   });
 
-  it.each(['New item', 'Needs you', 'Runs', 'Credentials'])(
-    'keeps %s disabled, and says what it is and why',
-    async (name) => {
-      renderSidebar();
-      await collapse();
-      const control = within(await nav()).getByRole('button', { name: new RegExp(`^${name}`) });
+  it.each(['New item', 'Needs you', 'Credentials'])('keeps %s disabled, and says what it is and why', async (name) => {
+    renderSidebar();
+    await collapse();
+    const control = within(await nav()).getByRole('button', { name: new RegExp(`^${name}`) });
 
-      expect(control.getAttribute('aria-disabled')).toBe('true');
-      fireEvent.focus(control);
-      expect(await screen.findByText(name)).toBeTruthy();
-      expect(await screen.findByText('Not available yet')).toBeTruthy();
-    },
-  );
+    expect(control.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.focus(control);
+    expect(await screen.findByText(name)).toBeTruthy();
+    expect(await screen.findByText('Not available yet')).toBeTruthy();
+  });
 
   it('gives each enabled entry a tooltip with its label', async () => {
     renderSidebar({ can: ['connection:read'] });

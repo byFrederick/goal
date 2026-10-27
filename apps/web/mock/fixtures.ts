@@ -196,8 +196,10 @@ type Step =
       message?: string;
       cost: number;
       turns: number;
-      status?: 'succeeded' | 'failed' | 'running';
+      status?: 'succeeded' | 'failed' | 'running' | 'cancelled';
       error?: string;
+      /** The model the run used; the seed's model when absent. */
+      model?: string;
     }
   | { check: string; exit: number; ms: number }
   | { gate: 'approve' | 'reject'; agent: string; reason?: string }
@@ -227,6 +229,135 @@ interface Seed {
 }
 
 const model = 'claude-sonnet-5-5';
+
+/**
+ * The rows of the Runs page's picture (runs.jpg), one run each. Their numbers and titles follow the
+ * picture except where another seed already holds the number (see the pull request).
+ */
+const runsPage: Record<'software' | 'sre' | 'support', Seed[]> = {
+  software: [
+    {
+      number: 150,
+      title: 'Fix flaky TestLeaseExpiry',
+      type: 'fix',
+      body: 'The lease expiry test fails about one run in five.',
+      station: 'build',
+      state: 'in_progress',
+      createdMin: 30,
+      updatedMin: 0,
+      steps: [
+        { move: 'build' },
+        { run: 'backend-engineer', model: 'claude-opus-5-5', cost: 0.7, turns: 12, tools: [], status: 'running' },
+      ],
+    },
+    {
+      number: 156,
+      title: 'Split the store package by port',
+      type: 'refactor',
+      body: 'Each port gets its own package, so adapters import ports and not the store.',
+      station: 'spec',
+      state: 'in_progress',
+      createdMin: 50,
+      updatedMin: 0,
+      steps: [
+        { move: 'spec' },
+        { run: 'architect', model: 'claude-opus-5-5', cost: 0.9, turns: 22, tools: [], status: 'running' },
+      ],
+    },
+    {
+      number: 146,
+      title: 'Usage table and API',
+      type: 'feature',
+      body: 'A table of spend by agent and model, with the API that serves it.',
+      station: 'review',
+      state: 'in_progress',
+      createdMin: 70,
+      updatedMin: 20,
+      steps: [{ move: 'review' }, { run: 'reviewer', model: 'claude-opus-5-5', cost: 0.95, turns: 18, tools: [] }],
+    },
+    {
+      number: 149,
+      title: 'Empty state for Intake',
+      type: 'feature',
+      body: 'Intake says what to do when nothing has arrived yet.',
+      station: 'review',
+      state: 'in_progress',
+      createdMin: 60,
+      updatedMin: 10,
+      steps: [{ move: 'review' }, { run: 'reviewer', model: 'claude-opus-5-5', cost: 0.34, turns: 7, tools: [] }],
+    },
+    {
+      number: 140,
+      title: 'Usage and budgets',
+      type: 'feature',
+      body: 'Budgets per factory, with the spend they are set against.',
+      station: 'spec',
+      state: 'in_progress',
+      createdMin: 110,
+      updatedMin: 60,
+      steps: [{ move: 'spec' }, { run: 'architect', model: 'claude-opus-5-5', cost: 0.74, turns: 19, tools: [] }],
+    },
+    {
+      number: 144,
+      title: 'Check the budget before each run',
+      type: 'feature',
+      body: 'Each run checks the factory budget before it starts.',
+      station: 'build',
+      state: 'in_progress',
+      createdMin: 330,
+      updatedMin: 200,
+      steps: [
+        { move: 'build' },
+        {
+          run: 'backend-engineer',
+          model: 'claude-opus-5-5',
+          cost: 6.1,
+          turns: 250,
+          tools: [],
+          status: 'failed',
+          error: 'Hit the 250-turn cap while rerunning task check:changed after each edit.',
+        },
+      ],
+    },
+  ],
+  sre: [
+    {
+      number: 311,
+      title: 'Checkout API p95 over 900 ms',
+      type: 'incident',
+      body: 'The checkout API p95 went over 900 ms after the 13:00 deploy.',
+      station: 'investigate',
+      state: 'in_progress',
+      createdMin: 75,
+      updatedMin: 40,
+      steps: [
+        { move: 'investigate' },
+        {
+          run: 'investigator',
+          model: 'claude-opus-5-5',
+          cost: 1.4,
+          turns: 27,
+          tools: [],
+          status: 'cancelled',
+          error: 'Stopped by andon',
+        },
+      ],
+    },
+  ],
+  support: [
+    {
+      number: 88,
+      title: 'Refund for a double charge',
+      type: 'question',
+      body: 'A customer was charged twice for one order.',
+      station: 'answer',
+      state: 'in_progress',
+      createdMin: 45,
+      updatedMin: 6,
+      steps: [{ move: 'answer' }, { run: 'responder', model: 'claude-sonnet-5-5', cost: 0.12, turns: 9, tools: [] }],
+    },
+  ],
+};
 
 /** The published definition version each factory's runs ran on, by name. */
 const versions: Record<string, { id: string; number: number }> = {
@@ -295,7 +426,7 @@ const goalFactory: Factory = {
   org_id: acmeOrg,
   can: factoryCan,
   name: 'goal',
-  title: 'Goal',
+  title: 'Software',
   description: 'Builds the Goal platform from this repository: engine, UI, infrastructure and its own factories.',
   work_types: ['feature', 'fix', 'refactor', 'infra', 'design'],
   stations: [
@@ -402,9 +533,12 @@ const goalSeeds: Seed[] = [
     body: 'The sidebar shows the spend of the week against the budget, with the factories it is spent on.',
     station: 'build',
     state: 'queued',
-    createdMin: 95,
+    createdMin: 175,
     updatedMin: 12,
-    steps: [],
+    steps: [
+      { move: 'build' },
+      { run: 'frontend-engineer', model: 'claude-haiku-5-5', cost: 2.38, turns: 41, tools: [] },
+    ],
   },
   {
     number: 145,
@@ -1249,7 +1383,7 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
         push('claimed', 'engine', { slot, agent });
         const startedAt = new Date(Math.round(at)).toISOString();
         push('run_started', agent, {}, run);
-        push('agent_started', agent, { model, session_id: run }, run);
+        push('agent_started', agent, { model: step.model ?? model, session_id: run }, run);
         step.tools.forEach(([tool, input, summary, isError], i) => {
           push('tool_call', agent, { id: `t${i}`, tool, input: JSON.stringify({ arg: input }) }, run);
           push('tool_result', agent, { id: `t${i}`, is_error: Boolean(isError), summary }, run);
@@ -1263,7 +1397,7 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
           item_id: id,
           station,
           agent,
-          model,
+          model: step.model ?? model,
           status,
           turns: status === 'running' ? 0 : step.turns,
           input_tokens: step.turns * 4_000,
@@ -1532,8 +1666,9 @@ export function seed(now = Date.now()): MockState {
     },
   });
 
-  build(goalFactory, 0, goalSeeds, now, state);
-  build(sreFactory, 1, sreSeeds, now, state);
+  build(goalFactory, 0, [...goalSeeds, ...runsPage.software], now, state);
+  build(sreFactory, 1, [...sreSeeds, ...runsPage.sre], now, state);
+  build(supportFactory, 2, runsPage.support, now, state);
 
   for (const f of state.factories) state.history[f.name] = seedHistory(f, now, state.constraint[f.name] ?? null);
   fitWeeklySpend(state, ['goal', 'sre', 'support'], now, 512);
