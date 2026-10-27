@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { approveItem, getFactoryActivity, rejectItem } from '../../api/client';
+import { ApiError, approveItem, getFactoryActivity, rejectItem } from '../../api/client';
+import { getDraftModel, openDraft, saveDraftSection } from '../../api/definitions';
 import {
   activityQuery,
   boardQuery,
@@ -9,6 +10,7 @@ import {
   inboxQuery,
   metricsQuery,
   overviewQuery,
+  touchesQuery,
   weeklyQuery,
 } from '../../api/queries';
 import type {
@@ -24,12 +26,13 @@ import type {
   Metrics,
   MetricsSummary,
   OrgSummary,
+  TouchMetrics,
   WeeklyThroughput,
 } from '../../api/types';
 import { renderFactoryPage } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
 import { FloorPage } from './floor-page';
-import { addDays, rangeOf, todayUtc } from './range';
+import { addDays, previousRange, rangeOf, todayUtc } from './range';
 
 // The decisions and the activity feed go through the API client; the other calls are answered by the seeded queries.
 vi.mock('../../api/client', async (importOriginal) => ({
@@ -37,6 +40,14 @@ vi.mock('../../api/client', async (importOriginal) => ({
   approveItem: vi.fn(),
   rejectItem: vi.fn(),
   getFactoryActivity: vi.fn(),
+}));
+
+// The add-agent flow saves the line through the definitions API; the tests answer it.
+vi.mock('../../api/definitions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../api/definitions')>()),
+  openDraft: vi.fn(),
+  getDraftModel: vi.fn(),
+  saveDraftSection: vi.fn(),
 }));
 
 afterEach(() => {
@@ -305,6 +316,44 @@ const deciding: InboxEntry = {
   station: 'review',
 };
 
+/** The touches the Floor reads from a range: the headline fields the tile uses, the rest left empty. */
+const touchStats = (touchless_rate: number, finished: number) =>
+  ({
+    finished,
+    touches: 0,
+    planned: 0,
+    unplanned: 0,
+    touchless_rate,
+    per_item_mean: 0,
+    per_item_median: 0,
+  }) as TouchMetrics['stats'];
+
+/** The seven days ending on the range's last day: the hands-off rate rising from 70% to 82%. */
+const risingDaily = [0.7, 0.72, 0.74, 0.76, 0.78, 0.8, 0.82].map((rate, i) => ({
+  day: `2026-10-${20 + i}`,
+  finished: 3,
+  per_item_mean: 0,
+  touchless_rate: rate,
+}));
+
+/** The Floor's touches: 82% of ten finished items touched by no person, 77% before. */
+const touchesNow: TouchMetrics = {
+  from: '2026-10-20',
+  to: '2026-10-26',
+  type: null,
+  version: null,
+  stats: touchStats(0.82, 10),
+  weekly: [],
+  daily: risingDaily,
+};
+const touchesBefore: TouchMetrics = {
+  ...touchesNow,
+  from: '2026-10-13',
+  to: '2026-10-19',
+  stats: touchStats(0.77, 9),
+  daily: [],
+};
+
 /** The Floor at its default range (the last seven days), with every query it reads seeded. */
 function renderFloor({
   entries = [],
@@ -315,6 +364,8 @@ function renderFloor({
   constraintReport = constraint,
   weeks = weekly,
   activity = feed,
+  touches = touchesNow,
+  subject = factory,
 }: {
   entries?: InboxEntry[];
   line?: Board;
@@ -325,6 +376,9 @@ function renderFloor({
   weeks?: WeeklyThroughput;
   /** null seeds no activity, so the card fetches it (and the test decides the answer). */
   activity?: Activity | null;
+  touches?: TouchMetrics;
+  /** The factory the page is for, with the permissions the test gives it. */
+  subject?: Factory;
 } = {}) {
   const range = rangeOf({});
   return renderFactoryPage({
@@ -336,8 +390,10 @@ function renderFloor({
     ),
     path: '/',
     org,
-    factory,
+    factory: subject,
     seed: [
+      [touchesQuery(org.id, factory.id, range).queryKey, touches],
+      [touchesQuery(org.id, factory.id, previousRange(range)).queryKey, touchesBefore],
       [boardQuery(org.id, factory.id).queryKey, line],
       [metricsQuery(org.id, factory.id, range).queryKey, flowMetrics],
       [weeklyQuery(org.id, factory.id, range).queryKey, weeks],
@@ -439,12 +495,22 @@ describe('FloorPage', () => {
     expect(screen.getByText('Week $412')).toBeTruthy();
   });
 
-  it('hands-off is disabled and shows no number, as it is not built yet', async () => {
+  it('hands-off shows the touchless share, its trend over the week and the change in points', async () => {
     renderFloor({ flowMetrics: flow });
 
-    const handsOff = await screen.findByRole('button', { name: 'Hands-off' });
-    expect(handsOff.getAttribute('aria-disabled')).toBe('true');
-    expect(within(handsOff).getByText('Not built yet')).toBeTruthy();
+    const tile = (await screen.findByText('Hands-off')).parentElement as HTMLElement;
+    expect(within(tile).getByText('82')).toBeTruthy();
+    expect(within(tile).getByRole('img', { name: 'Rising from 70% to 82% over 7 days' })).toBeTruthy();
+    expect(within(tile).getByText('No human touch')).toBeTruthy();
+    expect(within(tile).getByText('+5 pts')).toBeTruthy();
+  });
+
+  it('hands-off shows the empty value when no item finished in the range', async () => {
+    renderFloor({ flowMetrics: flow, touches: { ...touchesNow, stats: touchStats(0, 0), daily: [] } });
+
+    const tile = (await screen.findByText('Hands-off')).parentElement as HTMLElement;
+    expect(within(tile).getByText('Not enough data')).toBeTruthy();
+    expect(within(tile).queryByRole('img')).toBeNull();
   });
 
   it('spend today shows not enough data when the factory has no overview row', async () => {
@@ -510,15 +576,121 @@ describe('the cards below the figures', () => {
     expect(card.querySelectorAll('.bg-amber')).toHaveLength(1);
   });
 
-  it('the what-if button is not available yet: aria-disabled, and it says so on focus', async () => {
-    renderFloor({ constraintReport: busy });
+  describe('the what-if', () => {
+    /** The busy report with Build's estimate and spend: one more agent saves 6.4 h and costs $17.60 a day. */
+    const withEstimate: ConstraintReport = {
+      ...busy,
+      candidates: busy.candidates.map((c) =>
+        c.station === 'build' ? { ...c, spend_per_slot_day_usd: 17.6, estimate: { extra_slot_saves_hours: 6.4 } } : c,
+      ),
+    };
+    /** Lead time p85 31 h, so the what-if reads 31 h to 25 h. */
+    const withLeadTime = { ...flow, lead_time_hours: { p50: 18, p85: 31 } };
+    /** The definition's line: Build has six agents, Spec two. */
+    const line = {
+      stations: [
+        { id: 'spec', kind: 'agent', agent: 'architect', agents: 2 },
+        { id: 'build', kind: 'agent', agent: 'frontend-engineer', agents: 6 },
+      ],
+    };
+    const draft = { revision: 4, model: { line }, etags: { line: 'etag-line' }, edited: {}, ranges: {} };
 
-    const card = await screen.findByRole('region', { name: 'Where work waits' });
-    const button = within(card).getByRole('button', { name: 'Add a build agent' });
-    expect(button.getAttribute('aria-disabled')).toBe('true');
-    button.focus();
-    expect(await screen.findByText('Not available yet')).toBeTruthy();
-    expect(within(card).queryByText(/lead time/i)).toBeNull();
+    afterEach(() => {
+      vi.mocked(openDraft).mockReset();
+      vi.mocked(getDraftModel).mockReset();
+      vi.mocked(saveDraftSection).mockReset();
+    });
+
+    it('says the lead time and spend of one more agent at the constraint, from the data', async () => {
+      renderFloor({ constraintReport: withEstimate, flowMetrics: withLeadTime });
+
+      const card = await screen.findByRole('region', { name: 'Where work waits' });
+      expect(within(card).getByText('With a 7th build agent')).toBeTruthy();
+      expect(within(card).getByText('Lead time 31 h to 25 h')).toBeTruthy();
+      expect(within(card).getByText('About $18 more a day')).toBeTruthy();
+      expect(within(card).getByRole('button', { name: 'Add a build agent' })).toBeTruthy();
+    });
+
+    it('is left out when the candidate has no estimate', async () => {
+      const noEstimate: ConstraintReport = {
+        ...withEstimate,
+        candidates: withEstimate.candidates.map((c) => ({ ...c, estimate: null })),
+      };
+      renderFloor({ constraintReport: noEstimate, flowMetrics: withLeadTime });
+
+      const card = await screen.findByRole('region', { name: 'Where work waits' });
+      expect(within(card).queryByText(/With a /)).toBeNull();
+      expect(within(card).queryByRole('button', { name: 'Add a build agent' })).toBeNull();
+    });
+
+    it('is left out when the candidate has no spend', async () => {
+      const noSpend: ConstraintReport = {
+        ...withEstimate,
+        candidates: withEstimate.candidates.map((c) => ({ ...c, spend_per_slot_day_usd: null })),
+      };
+      renderFloor({ constraintReport: noSpend, flowMetrics: withLeadTime });
+
+      const card = await screen.findByRole('region', { name: 'Where work waits' });
+      expect(within(card).queryByText(/With a /)).toBeNull();
+      expect(within(card).queryByRole('button', { name: 'Add a build agent' })).toBeNull();
+    });
+
+    it('is disabled with its reason for a person without definition:edit', async () => {
+      renderFloor({ constraintReport: withEstimate, flowMetrics: withLeadTime });
+
+      const card = await screen.findByRole('region', { name: 'Where work waits' });
+      const button = within(card).getByRole('button', { name: 'Add a build agent' });
+      expect(button.getAttribute('aria-disabled')).toBe('true');
+      expect(within(card).getByText('View only. Editors of sre change its definition.')).toBeTruthy();
+      expect(openDraft).not.toHaveBeenCalled();
+    });
+
+    it('opens the draft, saves the line with the station one agent more and opens the line editor', async () => {
+      vi.mocked(openDraft).mockResolvedValue({} as never);
+      vi.mocked(getDraftModel).mockResolvedValue(draft as never);
+      vi.mocked(saveDraftSection).mockResolvedValue({} as never);
+      const { router } = renderFloor({
+        constraintReport: withEstimate,
+        flowMetrics: withLeadTime,
+        subject: { ...factory, can: ['definition:edit'] },
+      });
+
+      const card = await screen.findByRole('region', { name: 'Where work waits' });
+      fireEvent.click(within(card).getByRole('button', { name: 'Add a build agent' }));
+
+      await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/f/sre/definition/line'));
+      expect(openDraft).toHaveBeenCalledWith('org-1', 'factory-1');
+      expect(saveDraftSection).toHaveBeenCalledWith('org-1', 'factory-1', 'line', 'etag-line', {
+        value: {
+          stations: [
+            { id: 'spec', kind: 'agent', agent: 'architect', agents: 2 },
+            { id: 'build', kind: 'agent', agent: 'frontend-engineer', agents: 7 },
+          ],
+        },
+      });
+    });
+
+    it('shows the error state with a link to the definition when the draft moved on', async () => {
+      vi.mocked(openDraft).mockResolvedValue({} as never);
+      vi.mocked(getDraftModel).mockResolvedValue(draft as never);
+      vi.mocked(saveDraftSection).mockRejectedValue(
+        new ApiError({ type: 'draft-conflict', title: 'The draft changed', status: 412 } as never),
+      );
+      renderFloor({
+        constraintReport: withEstimate,
+        flowMetrics: withLeadTime,
+        subject: { ...factory, can: ['definition:edit'] },
+      });
+
+      const card = await screen.findByRole('region', { name: 'Where work waits' });
+      fireEvent.click(within(card).getByRole('button', { name: 'Add a build agent' }));
+
+      const alert = await within(card).findByRole('alert');
+      expect(alert.textContent).toContain('Could not add the agent.');
+      expect(within(alert).getByRole('link', { name: 'Open the definition' }).getAttribute('href')).toBe(
+        '/o/acme/f/sre/definition',
+      );
+    });
   });
 
   it('Throughput by week draws each week with the target', async () => {
