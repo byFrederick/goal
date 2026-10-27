@@ -19,7 +19,7 @@ import (
 // orgTables are the tables 00006 gave org_id, then those later phases added with theirs.
 var orgTables = []string{
 	"factories", "work_items", "leases", "agent_runs", "item_events", "andon_pulls", "audit_log", "item_spans", "lease_spans",
-	"factory_roles", "connection_kinds", "connections", "item_touch_labels", "credentials", "judge_scores",
+	"factory_roles", "connection_kinds", "connections", "item_touch_labels", "credentials", "judge_scores", "eval_runs", "eval_results", "org_policies",
 }
 
 // withPlatformRows are the org tables whose org_id may be NULL for the platform's rows, and why;

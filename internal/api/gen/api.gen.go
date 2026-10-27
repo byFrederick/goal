@@ -305,22 +305,22 @@ func (e ConnectionStatus) Valid() bool {
 
 // Defines values for ConnectionEventChange.
 const (
-	Created ConnectionEventChange = "created"
-	Deleted ConnectionEventChange = "deleted"
-	Tested  ConnectionEventChange = "tested"
-	Updated ConnectionEventChange = "updated"
+	ConnectionEventChangeCreated ConnectionEventChange = "created"
+	ConnectionEventChangeDeleted ConnectionEventChange = "deleted"
+	ConnectionEventChangeTested  ConnectionEventChange = "tested"
+	ConnectionEventChangeUpdated ConnectionEventChange = "updated"
 )
 
 // Valid indicates whether the value is a known member of the ConnectionEventChange enum.
 func (e ConnectionEventChange) Valid() bool {
 	switch e {
-	case Created:
+	case ConnectionEventChangeCreated:
 		return true
-	case Deleted:
+	case ConnectionEventChangeDeleted:
 		return true
-	case Tested:
+	case ConnectionEventChangeTested:
 		return true
-	case Updated:
+	case ConnectionEventChangeUpdated:
 		return true
 	default:
 		return false
@@ -366,6 +366,90 @@ func (e ConstraintSource) Valid() bool {
 	case Detected:
 		return true
 	case Snapshot:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CredentialImportFormat.
+const (
+	CredentialImportFormatEnv  CredentialImportFormat = "env"
+	CredentialImportFormatYaml CredentialImportFormat = "yaml"
+)
+
+// Valid indicates whether the value is a known member of the CredentialImportFormat enum.
+func (e CredentialImportFormat) Valid() bool {
+	switch e {
+	case CredentialImportFormatEnv:
+		return true
+	case CredentialImportFormatYaml:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CredentialImportOnConflict.
+const (
+	CredentialImportOnConflictReplace CredentialImportOnConflict = "replace"
+	CredentialImportOnConflictSkip    CredentialImportOnConflict = "skip"
+)
+
+// Valid indicates whether the value is a known member of the CredentialImportOnConflict enum.
+func (e CredentialImportOnConflict) Valid() bool {
+	switch e {
+	case CredentialImportOnConflictReplace:
+		return true
+	case CredentialImportOnConflictSkip:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CredentialImportOutcomeOutcome.
+const (
+	CredentialImportOutcomeOutcomeCreated  CredentialImportOutcomeOutcome = "created"
+	CredentialImportOutcomeOutcomeReplaced CredentialImportOutcomeOutcome = "replaced"
+	CredentialImportOutcomeOutcomeSkipped  CredentialImportOutcomeOutcome = "skipped"
+)
+
+// Valid indicates whether the value is a known member of the CredentialImportOutcomeOutcome enum.
+func (e CredentialImportOutcomeOutcome) Valid() bool {
+	switch e {
+	case CredentialImportOutcomeOutcomeCreated:
+		return true
+	case CredentialImportOutcomeOutcomeReplaced:
+		return true
+	case CredentialImportOutcomeOutcomeSkipped:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CredentialType.
+const (
+	CredentialTypeApiKey     CredentialType = "api_key"
+	CredentialTypeAppKey     CredentialType = "app_key"
+	CredentialTypeCloudRole  CredentialType = "cloud_role"
+	CredentialTypeOauthToken CredentialType = "oauth_token"
+	CredentialTypeSshKey     CredentialType = "ssh_key"
+)
+
+// Valid indicates whether the value is a known member of the CredentialType enum.
+func (e CredentialType) Valid() bool {
+	switch e {
+	case CredentialTypeApiKey:
+		return true
+	case CredentialTypeAppKey:
+		return true
+	case CredentialTypeCloudRole:
+		return true
+	case CredentialTypeOauthToken:
+		return true
+	case CredentialTypeSshKey:
 		return true
 	default:
 		return false
@@ -815,19 +899,19 @@ func (e OrgRole) Valid() bool {
 
 // Defines values for PatchOpOp.
 const (
-	Add     PatchOpOp = "add"
-	Remove  PatchOpOp = "remove"
-	Replace PatchOpOp = "replace"
+	PatchOpOpAdd     PatchOpOp = "add"
+	PatchOpOpRemove  PatchOpOp = "remove"
+	PatchOpOpReplace PatchOpOp = "replace"
 )
 
 // Valid indicates whether the value is a known member of the PatchOpOp enum.
 func (e PatchOpOp) Valid() bool {
 	switch e {
-	case Add:
+	case PatchOpOpAdd:
 		return true
-	case Remove:
+	case PatchOpOpRemove:
 		return true
-	case Replace:
+	case PatchOpOpReplace:
 		return true
 	default:
 		return false
@@ -1925,6 +2009,151 @@ type CreatedPersonalToken struct {
 	Token PersonalToken `json:"token"`
 }
 
+// Credential An organization's credential (ADR 0017), never its value
+type Credential struct {
+	// Agents Per factory id, the agents that get it in their run's box as env
+	Agents    CredentialAgents `json:"agents"`
+	CreatedAt time.Time        `json:"created_at"`
+
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	CreatedBy   Actor  `json:"created_by"`
+	Description string `json:"description"`
+
+	// ExpiresAt When the value expires
+	ExpiresAt *time.Time `json:"expires_at"`
+	Id        string     `json:"id"`
+
+	// LastUsedAt When a run last opened it
+	LastUsedAt *time.Time `json:"last_used_at"`
+
+	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter; an agent gets it as the env variable of the name upper-cased with each - turned into _, which must not be one reserved for the platform
+	Name CredentialName `json:"name"`
+
+	// RemindDays Days before expires_at a rotation reminder is due; 0: none
+	RemindDays int `json:"remind_days"`
+
+	// Scope The factories whose runs may open it; neither all nor any listed reaches no run
+	Scope CredentialScope `json:"scope"`
+
+	// Type A label of what the credential is; every type reaches a run as one env value
+	Type      CredentialType `json:"type"`
+	UpdatedAt time.Time      `json:"updated_at"`
+
+	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	UpdatedBy Actor `json:"updated_by"`
+
+	// UsedBy What uses a credential
+	UsedBy CredentialUsers `json:"used_by"`
+}
+
+// CredentialAgent defines model for CredentialAgent.
+type CredentialAgent struct {
+	Agent     string `json:"agent"`
+	FactoryId string `json:"factory_id"`
+}
+
+// CredentialAgents Per factory id, the agents that get it in their run's box as env
+type CredentialAgents map[string][]string
+
+// CredentialExpiry An expiry and its rotation reminder; without expires_at, neither
+type CredentialExpiry struct {
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	RemindDays *int       `json:"remind_days,omitempty"`
+}
+
+// CredentialImport defines model for CredentialImport.
+type CredentialImport struct {
+	// DryRun Answer what the import would do and store nothing
+	DryRun *bool                  `json:"dry_run,omitempty"`
+	Format CredentialImportFormat `json:"format"`
+
+	// OnConflict What a real run does with a name that exists; skip when absent
+	OnConflict *CredentialImportOnConflict `json:"on_conflict,omitempty"`
+
+	// Text The .env or YAML text; its values are sealed and never answered
+	Text *string `json:"text,omitempty"`
+}
+
+// CredentialImportFormat defines model for CredentialImport.Format.
+type CredentialImportFormat string
+
+// CredentialImportOnConflict What a real run does with a name that exists; skip when absent
+type CredentialImportOnConflict string
+
+// CredentialImportOutcome defines model for CredentialImportOutcome.
+type CredentialImportOutcome struct {
+	// Connections How many connections use the existing one
+	Connections int `json:"connections"`
+
+	// Exists A credential had the name before the import
+	Exists bool   `json:"exists"`
+	Name   string `json:"name"`
+
+	// Outcome A real run only, what it did
+	Outcome *CredentialImportOutcomeOutcome `json:"outcome,omitempty"`
+}
+
+// CredentialImportOutcomeOutcome A real run only, what it did
+type CredentialImportOutcomeOutcome string
+
+// CredentialImportResult defines model for CredentialImportResult.
+type CredentialImportResult struct {
+	// Credentials Each name of the import, in its order
+	Credentials []CredentialImportOutcome `json:"credentials"`
+	DryRun      bool                      `json:"dry_run"`
+}
+
+// CredentialList defines model for CredentialList.
+type CredentialList struct {
+	Credentials []Credential `json:"credentials"`
+}
+
+// CredentialName 3 to 40 lowercase letters, digits and inner dashes, starting with a letter; an agent gets it as the env variable of the name upper-cased with each - turned into _, which must not be one reserved for the platform
+type CredentialName = string
+
+// CredentialPatch defines model for CredentialPatch.
+type CredentialPatch struct {
+	// Agents Per factory id, the agents that get it in their run's box as env
+	Agents      *CredentialAgents `json:"agents,omitempty"`
+	Description *string           `json:"description,omitempty"`
+
+	// Expiry An expiry and its rotation reminder; without expires_at, neither
+	Expiry *CredentialExpiry `json:"expiry,omitempty"`
+
+	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter; an agent gets it as the env variable of the name upper-cased with each - turned into _, which must not be one reserved for the platform
+	Name *CredentialName `json:"name,omitempty"`
+
+	// Scope The factories whose runs may open it; neither all nor any listed reaches no run
+	Scope *CredentialScope `json:"scope,omitempty"`
+
+	// Type A label of what the credential is; every type reaches a run as one env value
+	Type *CredentialType `json:"type,omitempty"`
+
+	// Value A new secret, replacing the value; never answered
+	Value *string `json:"value,omitempty"`
+}
+
+// CredentialScope The factories whose runs may open it; neither all nor any listed reaches no run
+type CredentialScope struct {
+	// AllFactories Every factory
+	AllFactories bool `json:"all_factories"`
+
+	// Factories The factories' metadata.id, when not all_factories
+	Factories []string `json:"factories"`
+}
+
+// CredentialType A label of what the credential is; every type reaches a run as one env value
+type CredentialType string
+
+// CredentialUsers What uses a credential
+type CredentialUsers struct {
+	// Agents The agents it lists, by factory id then agent
+	Agents []CredentialAgent `json:"agents"`
+
+	// Connections The connections that refer to it as {{name}}, sorted; it cannot be deleted meanwhile
+	Connections []string `json:"connections"`
+}
+
 // CurrentRun defines model for CurrentRun.
 type CurrentRun struct {
 	Agent string `json:"agent"`
@@ -2305,6 +2534,14 @@ type FactorySlotsPatch struct {
 	// FactoryId The factory's metadata.id or metadata.name
 	FactoryId string `json:"factory_id"`
 	Max       *int   `json:"max"`
+}
+
+// FactorySpend defines model for FactorySpend.
+type FactorySpend struct {
+	// Id The factory's metadata.id
+	Id       string  `json:"id"`
+	Name     string  `json:"name"`
+	SpendUsd float64 `json:"spend_usd"`
 }
 
 // FactoryStart Where the new factory's first draft comes from
@@ -3176,6 +3413,27 @@ type NewConnection struct {
 	Secrets *map[string]string `json:"secrets,omitempty"`
 }
 
+// NewCredential defines model for NewCredential.
+type NewCredential struct {
+	// Agents Per factory id, the agents that get it in their run's box as env
+	Agents      *CredentialAgents `json:"agents,omitempty"`
+	Description *string           `json:"description,omitempty"`
+	ExpiresAt   *time.Time        `json:"expires_at,omitempty"`
+
+	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter; an agent gets it as the env variable of the name upper-cased with each - turned into _, which must not be one reserved for the platform
+	Name       CredentialName `json:"name"`
+	RemindDays *int           `json:"remind_days,omitempty"`
+
+	// Scope The factories whose runs may open it; neither all nor any listed reaches no run
+	Scope *CredentialScope `json:"scope,omitempty"`
+
+	// Type A label of what the credential is; every type reaches a run as one env value
+	Type CredentialType `json:"type"`
+
+	// Value The secret; sealed and never answered
+	Value *string `json:"value,omitempty"`
+}
+
 // NewFactoryRequest defines model for NewFactoryRequest.
 type NewFactoryRequest struct {
 	// Name Required except for an import, where factory.yaml's metadata.name is used when it is absent
@@ -3327,6 +3585,45 @@ type OrgList struct {
 
 // OrgRole defines model for OrgRole.
 type OrgRole string
+
+// OrgRun A run with the factory and the item it worked
+type OrgRun struct {
+	Agent   string  `json:"agent"`
+	CostUsd float64 `json:"cost_usd"`
+
+	// DefinitionVersion That version's number ("ran on v9"); null when the run has no version
+	DefinitionVersion *int `json:"definition_version"`
+
+	// DefinitionVersionId The definition version the run started and finished on; null for runs from before versions
+	DefinitionVersionId *string `json:"definition_version_id"`
+
+	// EndedAt Null while the run is running
+	EndedAt *time.Time `json:"ended_at"`
+
+	// Error Why a failed or cancelled run ended, else null
+	Error        *string    `json:"error"`
+	Factory      FactoryHit `json:"factory"`
+	Id           string     `json:"id"`
+	InputTokens  int64      `json:"input_tokens"`
+	Item         RunItem    `json:"item"`
+	ItemId       string     `json:"item_id"`
+	Model        string     `json:"model"`
+	OutputTokens int64      `json:"output_tokens"`
+	StartedAt    time.Time  `json:"started_at"`
+	Station      string     `json:"station"`
+	Status       RunStatus  `json:"status"`
+	Turns        int        `json:"turns"`
+}
+
+// OrgRunList defines model for OrgRunList.
+type OrgRunList struct {
+	// NextCursor Pass as cursor for the next page; null on the last page
+	NextCursor *string  `json:"next_cursor"`
+	Runs       []OrgRun `json:"runs"`
+
+	// Summary The runs of a window's factories, whatever their status
+	Summary RunSummary `json:"summary"`
+}
 
 // OrgSearch What a search found in the organization, by group, each best first
 type OrgSearch struct {
@@ -3510,7 +3807,7 @@ type PlatformAdminList struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415).
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415).
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 
@@ -3681,6 +3978,15 @@ type Run struct {
 	Turns        int       `json:"turns"`
 }
 
+// RunItem defines model for RunItem.
+type RunItem struct {
+	Id string `json:"id"`
+
+	// Ref <factory>#<number>, as in goal#147
+	Ref   string `json:"ref"`
+	Title string `json:"title"`
+}
+
 // RunList defines model for RunList.
 type RunList struct {
 	Runs []Run `json:"runs"`
@@ -3691,6 +3997,20 @@ type RunList struct {
 
 // RunStatus defines model for RunStatus.
 type RunStatus string
+
+// RunSummary The runs of a window's factories, whatever their status
+type RunSummary struct {
+	Failed int `json:"failed"`
+
+	// Finished Succeeded and cancelled runs
+	Finished int `json:"finished"`
+	Running  int `json:"running"`
+
+	// SpendByFactory The factories that ran anything in the window, the highest spend first, then by name
+	SpendByFactory []FactorySpend `json:"spend_by_factory"`
+	SpendUsd       float64        `json:"spend_usd"`
+	Total          int            `json:"total"`
+}
 
 // SaveResult The draft after a save
 type SaveResult struct {
@@ -4257,6 +4577,9 @@ type WeeklyThroughput struct {
 // ConnectionRef defines model for ConnectionRef.
 type ConnectionRef = string
 
+// CredentialRef defines model for CredentialRef.
+type CredentialRef = string
+
 // DocumentRef defines model for DocumentRef.
 type DocumentRef = string
 
@@ -4559,6 +4882,28 @@ type GetFactoryOverviewParams struct {
 	Window *string `form:"window,omitempty" json:"window,omitempty"`
 }
 
+// ListRunsParams defines parameters for ListRuns.
+type ListRunsParams struct {
+	// Factory Only this factory's runs (its metadata.id or metadata.name); unknown is 404
+	Factory *string `form:"factory,omitempty" json:"factory,omitempty"`
+
+	// Status Only runs with this status
+	Status *RunStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// Since The earliest start, included; the start of the current UTC day when absent
+	Since *time.Time `form:"since,omitempty" json:"since,omitempty"`
+
+	// Until The latest start, excluded; the end of the current UTC day when absent
+	Until *time.Time `form:"until,omitempty" json:"until,omitempty"`
+
+	// Q Only runs whose item title, agent or model contains q (case-insensitively and literally: % and _ are no wildcards), or whose item has the number q names ("147", "#147" or "goal#147"). Trimmed; at most 200 characters.
+	Q     *string `form:"q,omitempty" json:"q,omitempty"`
+	Limit *int    `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor The next_cursor of the previous page, opaque
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // SearchOrgParams defines parameters for SearchOrg.
 type SearchOrgParams struct {
 	// Q What to find, 1 to 200 characters once trimmed; anything else is a 400 problem
@@ -4607,6 +4952,15 @@ type CreateConnectionJSONRequestBody = NewConnection
 
 // UpdateConnectionJSONRequestBody defines body for UpdateConnection for application/json ContentType.
 type UpdateConnectionJSONRequestBody = ConnectionPatch
+
+// CreateCredentialJSONRequestBody defines body for CreateCredential for application/json ContentType.
+type CreateCredentialJSONRequestBody = NewCredential
+
+// ImportCredentialsJSONRequestBody defines body for ImportCredentials for application/json ContentType.
+type ImportCredentialsJSONRequestBody = CredentialImport
+
+// PatchCredentialJSONRequestBody defines body for PatchCredential for application/json ContentType.
+type PatchCredentialJSONRequestBody = CredentialPatch
 
 // ValidateDefinitionJSONRequestBody defines body for ValidateDefinition for application/json ContentType.
 type ValidateDefinitionJSONRequestBody = DefinitionFiles
@@ -5039,7 +5393,7 @@ type ClientInterface interface {
 
 	// CreateOrgWithBody Create an organization
 	//
-	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
+	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Any person signed in with a session (in the browser or through the CLI's device sign-in) may create one and becomes its owner; API keys and personal tokens may not.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -5048,7 +5402,7 @@ type ClientInterface interface {
 
 	// CreateOrg Create an organization
 	//
-	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
+	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Any person signed in with a session (in the browser or through the CLI's device sign-in) may create one and becomes its owner; API keys and personal tokens may not.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -5243,6 +5597,79 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/connections/{connection}/test (the `TestConnection` operationId).
 	TestConnection(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListCredentials The organization's credentials
+	//
+	// By name, each with its type, description, factory scope, agents per factory, expiry, rotation reminder, last use and what uses it (the connections that refer to it as {{name}} and the agents listed). Never a value.
+	//
+	// Corresponds with GET /v1/orgs/{org}/credentials (the `ListCredentials` operationId).
+	ListCredentials(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateCredentialWithBody Create a credential
+	//
+	// A named credential with its value, sealed under the platform's master key and never returned (ADR 0017). 400 credential-invalid for a name that is not a credential name or whose env variable is reserved for the platform, a missing or oversized value, an unknown type, a reminder without an expiry, or agents of a factory outside the scope; 409 credential-name-taken; 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as credential.created.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+	CreateCredentialWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateCredential Create a credential
+	//
+	// A named credential with its value, sealed under the platform's master key and never returned (ADR 0017). 400 credential-invalid for a name that is not a credential name or whose env variable is reserved for the platform, a missing or oversized value, an unknown type, a reminder without an expiry, or agents of a factory outside the scope; 409 credential-name-taken; 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as credential.created.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+	CreateCredential(ctx context.Context, org OrgRef, body CreateCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ImportCredentialsWithBody Import credentials from a .env or YAML text
+	//
+	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+	ImportCredentialsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ImportCredentials Import credentials from a .env or YAML text
+	//
+	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+	ImportCredentials(ctx context.Context, org OrgRef, body ImportCredentialsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteCredential Delete a credential
+	//
+	// 409 credential-in-use, naming the connections, while a connection refers to it as {{name}}; 404 credential-not-found. Needs a sign-in from the last 10 minutes. Audited as credential.deleted.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/credentials/{credential} (the `DeleteCredential` operationId).
+	DeleteCredential(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetCredential One credential, never its value
+	//
+	// Corresponds with GET /v1/orgs/{org}/credentials/{credential} (the `GetCredential` operationId).
+	GetCredential(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchCredentialWithBody Change a credential's metadata, or replace its value
+	//
+	// Each property present replaces its own: name renames it, scope and agents replace the scope and the agent list, expiry replaces the expiry and the reminder together (an empty expiry clears both), value replaces the value for runs that start afterwards (audited as credential.value_replaced); a change of the rest is audited as credential.updated. 400 credential-invalid, 404 credential-not-found, 409 credential-name-taken, 503 credentials-unavailable for a value while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+	PatchCredentialWithBody(ctx context.Context, org OrgRef, credential CredentialRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchCredential Change a credential's metadata, or replace its value
+	//
+	// Each property present replaces its own: name renames it, scope and agents replace the scope and the agent list, expiry replaces the expiry and the reminder together (an empty expiry clears both), value replaces the value for runs that start afterwards (audited as credential.value_replaced); a change of the rest is audited as credential.updated. 400 credential-invalid, 404 credential-not-found, 409 credential-name-taken, 503 credentials-unavailable for a value while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+	PatchCredential(ctx context.Context, org OrgRef, credential CredentialRef, body PatchCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// FormatDefinitionWithBody Format a factory.yaml the way Visual saves write changed lines (Format)
 	//
@@ -6078,6 +6505,13 @@ type ClientInterface interface {
 	// Corresponds with DELETE /v1/orgs/{org}/personal-tokens/{token} (the `RevokePersonalToken` operationId).
 	RevokePersonalToken(ctx context.Context, org OrgRef, token string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListRuns The organization's agent runs across the factories the caller sees, newest first
+	//
+	// The runs that started in [since, until) in the factories the caller may read, or in the one named by factory, newest first (by start, then id), paged by next_cursor. When since is absent it is the start of the current UTC day; when until is absent it is the end of that day; since must be before until. The summary covers the same factories and window whatever status and q say. A wide window is a scan of every run in it: keep it short.
+	//
+	// Corresponds with GET /v1/orgs/{org}/runs (the `ListRuns` operationId).
+	ListRuns(ctx context.Context, org OrgRef, params *ListRunsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetRun One agent run (404 for a run of another organization)
 	//
 	// Corresponds with GET /v1/orgs/{org}/runs/{run} (the `GetRun` operationId).
@@ -6152,7 +6586,7 @@ type ClientInterface interface {
 
 	// ListPlatformAdmins The install's platform admins, earliest first
 	//
-	// Platform admins create organizations and manage platform admins; inside an organization they have only the rights of their membership there. Platform admins only.
+	// Platform admins manage platform admins and, like every signed-in person, create organizations; inside an organization they have only the rights of their membership there. Platform admins only.
 	//
 	// Corresponds with GET /v1/platform/admins (the `ListPlatformAdmins` operationId).
 	ListPlatformAdmins(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -6275,7 +6709,7 @@ func (c *Client) ListOrgs(ctx context.Context, reqEditors ...RequestEditorFn) (*
 
 // CreateOrgWithBody Create an organization
 //
-// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
+// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Any person signed in with a session (in the browser or through the CLI's device sign-in) may create one and becomes its owner; API keys and personal tokens may not.
 //
 // Takes any type of body and a specified content type.
 //
@@ -6294,7 +6728,7 @@ func (c *Client) CreateOrgWithBody(ctx context.Context, contentType string, body
 
 // CreateOrg Create an organization
 //
-// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
+// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Any person signed in with a session (in the browser or through the CLI's device sign-in) may create one and becomes its owner; API keys and personal tokens may not.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -6740,6 +7174,169 @@ func (c *Client) ListConnectionRepositories(ctx context.Context, org OrgRef, con
 // Corresponds with POST /v1/orgs/{org}/connections/{connection}/test (the `TestConnection` operationId).
 func (c *Client) TestConnection(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewTestConnectionRequest(c.Server, org, connection)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListCredentials The organization's credentials
+//
+// By name, each with its type, description, factory scope, agents per factory, expiry, rotation reminder, last use and what uses it (the connections that refer to it as {{name}} and the agents listed). Never a value.
+//
+// Corresponds with GET /v1/orgs/{org}/credentials (the `ListCredentials` operationId).
+func (c *Client) ListCredentials(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListCredentialsRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateCredentialWithBody Create a credential
+//
+// A named credential with its value, sealed under the platform's master key and never returned (ADR 0017). 400 credential-invalid for a name that is not a credential name or whose env variable is reserved for the platform, a missing or oversized value, an unknown type, a reminder without an expiry, or agents of a factory outside the scope; 409 credential-name-taken; 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as credential.created.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+func (c *Client) CreateCredentialWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateCredentialRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateCredential Create a credential
+//
+// A named credential with its value, sealed under the platform's master key and never returned (ADR 0017). 400 credential-invalid for a name that is not a credential name or whose env variable is reserved for the platform, a missing or oversized value, an unknown type, a reminder without an expiry, or agents of a factory outside the scope; 409 credential-name-taken; 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as credential.created.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+func (c *Client) CreateCredential(ctx context.Context, org OrgRef, body CreateCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateCredentialRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ImportCredentialsWithBody Import credentials from a .env or YAML text
+//
+// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+func (c *Client) ImportCredentialsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewImportCredentialsRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ImportCredentials Import credentials from a .env or YAML text
+//
+// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+func (c *Client) ImportCredentials(ctx context.Context, org OrgRef, body ImportCredentialsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewImportCredentialsRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteCredential Delete a credential
+//
+// 409 credential-in-use, naming the connections, while a connection refers to it as {{name}}; 404 credential-not-found. Needs a sign-in from the last 10 minutes. Audited as credential.deleted.
+//
+// Corresponds with DELETE /v1/orgs/{org}/credentials/{credential} (the `DeleteCredential` operationId).
+func (c *Client) DeleteCredential(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteCredentialRequest(c.Server, org, credential)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetCredential One credential, never its value
+//
+// Corresponds with GET /v1/orgs/{org}/credentials/{credential} (the `GetCredential` operationId).
+func (c *Client) GetCredential(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCredentialRequest(c.Server, org, credential)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PatchCredentialWithBody Change a credential's metadata, or replace its value
+//
+// Each property present replaces its own: name renames it, scope and agents replace the scope and the agent list, expiry replaces the expiry and the reminder together (an empty expiry clears both), value replaces the value for runs that start afterwards (audited as credential.value_replaced); a change of the rest is audited as credential.updated. 400 credential-invalid, 404 credential-not-found, 409 credential-name-taken, 503 credentials-unavailable for a value while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+func (c *Client) PatchCredentialWithBody(ctx context.Context, org OrgRef, credential CredentialRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchCredentialRequestWithBody(c.Server, org, credential, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PatchCredential Change a credential's metadata, or replace its value
+//
+// Each property present replaces its own: name renames it, scope and agents replace the scope and the agent list, expiry replaces the expiry and the reminder together (an empty expiry clears both), value replaces the value for runs that start afterwards (audited as credential.value_replaced); a change of the rest is audited as credential.updated. 400 credential-invalid, 404 credential-not-found, 409 credential-name-taken, 503 credentials-unavailable for a value while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+func (c *Client) PatchCredential(ctx context.Context, org OrgRef, credential CredentialRef, body PatchCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchCredentialRequest(c.Server, org, credential, body)
 	if err != nil {
 		return nil, err
 	}
@@ -8664,6 +9261,23 @@ func (c *Client) RevokePersonalToken(ctx context.Context, org OrgRef, token stri
 	return c.Client.Do(req)
 }
 
+// ListRuns The organization's agent runs across the factories the caller sees, newest first
+//
+// The runs that started in [since, until) in the factories the caller may read, or in the one named by factory, newest first (by start, then id), paged by next_cursor. When since is absent it is the start of the current UTC day; when until is absent it is the end of that day; since must be before until. The summary covers the same factories and window whatever status and q say. A wide window is a scan of every run in it: keep it short.
+//
+// Corresponds with GET /v1/orgs/{org}/runs (the `ListRuns` operationId).
+func (c *Client) ListRuns(ctx context.Context, org OrgRef, params *ListRunsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListRunsRequest(c.Server, org, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetRun One agent run (404 for a run of another organization)
 //
 // Corresponds with GET /v1/orgs/{org}/runs/{run} (the `GetRun` operationId).
@@ -8838,7 +9452,7 @@ func (c *Client) TransferOwnership(ctx context.Context, org OrgRef, body Transfe
 
 // ListPlatformAdmins The install's platform admins, earliest first
 //
-// Platform admins create organizations and manage platform admins; inside an organization they have only the rights of their membership there. Platform admins only.
+// Platform admins manage platform admins and, like every signed-in person, create organizations; inside an organization they have only the rights of their membership there. Platform admins only.
 //
 // Corresponds with GET /v1/platform/admins (the `ListPlatformAdmins` operationId).
 func (c *Client) ListPlatformAdmins(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -10129,6 +10743,270 @@ func NewTestConnectionRequest(server string, org OrgRef, connection ConnectionRe
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewListCredentialsRequest constructs an http.Request for the ListCredentials method
+func NewListCredentialsRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/credentials", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateCredentialRequest calls the generic CreateCredential builder with application/json body
+func NewCreateCredentialRequest(server string, org OrgRef, body CreateCredentialJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateCredentialRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewCreateCredentialRequestWithBody constructs an http.Request for the CreateCredential method, with any body, and a specified content type
+func NewCreateCredentialRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/credentials", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewImportCredentialsRequest calls the generic ImportCredentials builder with application/json body
+func NewImportCredentialsRequest(server string, org OrgRef, body ImportCredentialsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewImportCredentialsRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewImportCredentialsRequestWithBody constructs an http.Request for the ImportCredentials method, with any body, and a specified content type
+func NewImportCredentialsRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/credentials/import", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteCredentialRequest constructs an http.Request for the DeleteCredential method
+func NewDeleteCredentialRequest(server string, org OrgRef, credential CredentialRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "credential", credential, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/credentials/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetCredentialRequest constructs an http.Request for the GetCredential method
+func NewGetCredentialRequest(server string, org OrgRef, credential CredentialRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "credential", credential, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/credentials/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchCredentialRequest calls the generic PatchCredential builder with application/json body
+func NewPatchCredentialRequest(server string, org OrgRef, credential CredentialRef, body PatchCredentialJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchCredentialRequestWithBody(server, org, credential, "application/json", bodyReader)
+}
+
+// NewPatchCredentialRequestWithBody constructs an http.Request for the PatchCredential method, with any body, and a specified content type
+func NewPatchCredentialRequestWithBody(server string, org OrgRef, credential CredentialRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "credential", credential, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/credentials/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -14789,6 +15667,139 @@ func NewRevokePersonalTokenRequest(server string, org OrgRef, token string) (*ht
 	return req, nil
 }
 
+// NewListRunsRequest constructs an http.Request for the ListRuns method
+func NewListRunsRequest(server string, org OrgRef, params *ListRunsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/runs", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Factory != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "factory", *params.Factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Status != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "status", *params.Status, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Since != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "since", *params.Since, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Until != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "until", *params.Until, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Q != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "q", *params.Q, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetRunRequest constructs an http.Request for the GetRun method
 func NewGetRunRequest(server string, org OrgRef, run string) (*http.Request, error) {
 	var err error
@@ -15458,7 +16469,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateOrgWithBodyWithResponse Create an organization
 	//
-	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
+	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Any person signed in with a session (in the browser or through the CLI's device sign-in) may create one and becomes its owner; API keys and personal tokens may not.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -15467,7 +16478,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateOrgWithResponse Create an organization
 	//
-	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
+	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Any person signed in with a session (in the browser or through the CLI's device sign-in) may create one and becomes its owner; API keys and personal tokens may not.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -15692,6 +16703,85 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/connections/{connection}/test (the `TestConnection` operationId).
 	TestConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*TestConnectionResponse, error)
+
+	// ListCredentialsWithResponse The organization's credentials
+	//
+	// By name, each with its type, description, factory scope, agents per factory, expiry, rotation reminder, last use and what uses it (the connections that refer to it as {{name}} and the agents listed). Never a value.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/credentials (the `ListCredentials` operationId).
+	ListCredentialsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListCredentialsResponse, error)
+
+	// CreateCredentialWithBodyWithResponse Create a credential
+	//
+	// A named credential with its value, sealed under the platform's master key and never returned (ADR 0017). 400 credential-invalid for a name that is not a credential name or whose env variable is reserved for the platform, a missing or oversized value, an unknown type, a reminder without an expiry, or agents of a factory outside the scope; 409 credential-name-taken; 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as credential.created.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+	CreateCredentialWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateCredentialResponse, error)
+
+	// CreateCredentialWithResponse Create a credential
+	//
+	// A named credential with its value, sealed under the platform's master key and never returned (ADR 0017). 400 credential-invalid for a name that is not a credential name or whose env variable is reserved for the platform, a missing or oversized value, an unknown type, a reminder without an expiry, or agents of a factory outside the scope; 409 credential-name-taken; 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as credential.created.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+	CreateCredentialWithResponse(ctx context.Context, org OrgRef, body CreateCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateCredentialResponse, error)
+
+	// ImportCredentialsWithBodyWithResponse Import credentials from a .env or YAML text
+	//
+	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+	ImportCredentialsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ImportCredentialsResponse, error)
+
+	// ImportCredentialsWithResponse Import credentials from a .env or YAML text
+	//
+	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+	ImportCredentialsWithResponse(ctx context.Context, org OrgRef, body ImportCredentialsJSONRequestBody, reqEditors ...RequestEditorFn) (*ImportCredentialsResponse, error)
+
+	// DeleteCredentialWithResponse Delete a credential
+	//
+	// 409 credential-in-use, naming the connections, while a connection refers to it as {{name}}; 404 credential-not-found. Needs a sign-in from the last 10 minutes. Audited as credential.deleted.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/credentials/{credential} (the `DeleteCredential` operationId).
+	DeleteCredentialWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*DeleteCredentialResponse, error)
+
+	// GetCredentialWithResponse One credential, never its value
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/credentials/{credential} (the `GetCredential` operationId).
+	GetCredentialWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*GetCredentialResponse, error)
+
+	// PatchCredentialWithBodyWithResponse Change a credential's metadata, or replace its value
+	//
+	// Each property present replaces its own: name renames it, scope and agents replace the scope and the agent list, expiry replaces the expiry and the reminder together (an empty expiry clears both), value replaces the value for runs that start afterwards (audited as credential.value_replaced); a change of the rest is audited as credential.updated. 400 credential-invalid, 404 credential-not-found, 409 credential-name-taken, 503 credentials-unavailable for a value while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+	PatchCredentialWithBodyWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchCredentialResponse, error)
+
+	// PatchCredentialWithResponse Change a credential's metadata, or replace its value
+	//
+	// Each property present replaces its own: name renames it, scope and agents replace the scope and the agent list, expiry replaces the expiry and the reminder together (an empty expiry clears both), value replaces the value for runs that start afterwards (audited as credential.value_replaced); a change of the rest is audited as credential.updated. 400 credential-invalid, 404 credential-not-found, 409 credential-name-taken, 503 credentials-unavailable for a value while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+	PatchCredentialWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, body PatchCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchCredentialResponse, error)
 
 	// FormatDefinitionWithBodyWithResponse Format a factory.yaml the way Visual saves write changed lines (Format)
 	//
@@ -16637,6 +17727,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with DELETE /v1/orgs/{org}/personal-tokens/{token} (the `RevokePersonalToken` operationId).
 	RevokePersonalTokenWithResponse(ctx context.Context, org OrgRef, token string, reqEditors ...RequestEditorFn) (*RevokePersonalTokenResponse, error)
 
+	// ListRunsWithResponse The organization's agent runs across the factories the caller sees, newest first
+	//
+	// The runs that started in [since, until) in the factories the caller may read, or in the one named by factory, newest first (by start, then id), paged by next_cursor. When since is absent it is the start of the current UTC day; when until is absent it is the end of that day; since must be before until. The summary covers the same factories and window whatever status and q say. A wide window is a scan of every run in it: keep it short.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/runs (the `ListRuns` operationId).
+	ListRunsWithResponse(ctx context.Context, org OrgRef, params *ListRunsParams, reqEditors ...RequestEditorFn) (*ListRunsResponse, error)
+
 	// GetRunWithResponse One agent run (404 for a run of another organization)
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -16723,7 +17822,7 @@ type ClientWithResponsesInterface interface {
 
 	// ListPlatformAdminsWithResponse The install's platform admins, earliest first
 	//
-	// Platform admins create organizations and manage platform admins; inside an organization they have only the rights of their membership there. Platform admins only.
+	// Platform admins manage platform admins and, like every signed-in person, create organizations; inside an organization they have only the rights of their membership there. Platform admins only.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -17981,6 +19080,287 @@ func (r TestConnectionResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r TestConnectionResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListCredentialsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *CredentialList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListCredentialsResponse) GetJSON200() *CredentialList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListCredentialsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListCredentialsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListCredentialsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListCredentialsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListCredentialsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateCredentialResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Credential
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateCredentialResponse) GetJSON201() *Credential {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateCredentialResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateCredentialResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateCredentialResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateCredentialResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateCredentialResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ImportCredentialsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *CredentialImportResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ImportCredentialsResponse) GetJSON200() *CredentialImportResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ImportCredentialsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ImportCredentialsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ImportCredentialsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ImportCredentialsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ImportCredentialsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DeleteCredentialResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r DeleteCredentialResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteCredentialResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteCredentialResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteCredentialResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteCredentialResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetCredentialResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Credential
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetCredentialResponse) GetJSON200() *Credential {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetCredentialResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetCredentialResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCredentialResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCredentialResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetCredentialResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PatchCredentialResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Credential
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PatchCredentialResponse) GetJSON200() *Credential {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PatchCredentialResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PatchCredentialResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchCredentialResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchCredentialResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PatchCredentialResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -22022,6 +23402,54 @@ func (r RevokePersonalTokenResponse) ContentType() string {
 	return ""
 }
 
+type ListRunsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *OrgRunList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListRunsResponse) GetJSON200() *OrgRunList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListRunsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListRunsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListRunsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListRunsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListRunsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetRunResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -22659,7 +24087,7 @@ func (c *ClientWithResponses) ListOrgsWithResponse(ctx context.Context, reqEdito
 
 // CreateOrgWithBodyWithResponse Create an organization
 //
-// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
+// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Any person signed in with a session (in the browser or through the CLI's device sign-in) may create one and becomes its owner; API keys and personal tokens may not.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -22674,7 +24102,7 @@ func (c *ClientWithResponses) CreateOrgWithBodyWithResponse(ctx context.Context,
 
 // CreateOrgWithResponse Create an organization
 //
-// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
+// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Any person signed in with a session (in the browser or through the CLI's device sign-in) may create one and becomes its owner; API keys and personal tokens may not.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -23054,6 +24482,139 @@ func (c *ClientWithResponses) TestConnectionWithResponse(ctx context.Context, or
 		return nil, err
 	}
 	return ParseTestConnectionResponse(rsp)
+}
+
+// ListCredentialsWithResponse The organization's credentials
+//
+// By name, each with its type, description, factory scope, agents per factory, expiry, rotation reminder, last use and what uses it (the connections that refer to it as {{name}} and the agents listed). Never a value.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/credentials (the `ListCredentials` operationId).
+func (c *ClientWithResponses) ListCredentialsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListCredentialsResponse, error) {
+	rsp, err := c.ListCredentials(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListCredentialsResponse(rsp)
+}
+
+// CreateCredentialWithBodyWithResponse Create a credential
+//
+// A named credential with its value, sealed under the platform's master key and never returned (ADR 0017). 400 credential-invalid for a name that is not a credential name or whose env variable is reserved for the platform, a missing or oversized value, an unknown type, a reminder without an expiry, or agents of a factory outside the scope; 409 credential-name-taken; 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as credential.created.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+func (c *ClientWithResponses) CreateCredentialWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateCredentialResponse, error) {
+	rsp, err := c.CreateCredentialWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateCredentialResponse(rsp)
+}
+
+// CreateCredentialWithResponse Create a credential
+//
+// A named credential with its value, sealed under the platform's master key and never returned (ADR 0017). 400 credential-invalid for a name that is not a credential name or whose env variable is reserved for the platform, a missing or oversized value, an unknown type, a reminder without an expiry, or agents of a factory outside the scope; 409 credential-name-taken; 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as credential.created.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+func (c *ClientWithResponses) CreateCredentialWithResponse(ctx context.Context, org OrgRef, body CreateCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateCredentialResponse, error) {
+	rsp, err := c.CreateCredential(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateCredentialResponse(rsp)
+}
+
+// ImportCredentialsWithBodyWithResponse Import credentials from a .env or YAML text
+//
+// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+func (c *ClientWithResponses) ImportCredentialsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ImportCredentialsResponse, error) {
+	rsp, err := c.ImportCredentialsWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseImportCredentialsResponse(rsp)
+}
+
+// ImportCredentialsWithResponse Import credentials from a .env or YAML text
+//
+// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+func (c *ClientWithResponses) ImportCredentialsWithResponse(ctx context.Context, org OrgRef, body ImportCredentialsJSONRequestBody, reqEditors ...RequestEditorFn) (*ImportCredentialsResponse, error) {
+	rsp, err := c.ImportCredentials(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseImportCredentialsResponse(rsp)
+}
+
+// DeleteCredentialWithResponse Delete a credential
+//
+// 409 credential-in-use, naming the connections, while a connection refers to it as {{name}}; 404 credential-not-found. Needs a sign-in from the last 10 minutes. Audited as credential.deleted.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/credentials/{credential} (the `DeleteCredential` operationId).
+func (c *ClientWithResponses) DeleteCredentialWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*DeleteCredentialResponse, error) {
+	rsp, err := c.DeleteCredential(ctx, org, credential, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteCredentialResponse(rsp)
+}
+
+// GetCredentialWithResponse One credential, never its value
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/credentials/{credential} (the `GetCredential` operationId).
+func (c *ClientWithResponses) GetCredentialWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*GetCredentialResponse, error) {
+	rsp, err := c.GetCredential(ctx, org, credential, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCredentialResponse(rsp)
+}
+
+// PatchCredentialWithBodyWithResponse Change a credential's metadata, or replace its value
+//
+// Each property present replaces its own: name renames it, scope and agents replace the scope and the agent list, expiry replaces the expiry and the reminder together (an empty expiry clears both), value replaces the value for runs that start afterwards (audited as credential.value_replaced); a change of the rest is audited as credential.updated. 400 credential-invalid, 404 credential-not-found, 409 credential-name-taken, 503 credentials-unavailable for a value while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+func (c *ClientWithResponses) PatchCredentialWithBodyWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchCredentialResponse, error) {
+	rsp, err := c.PatchCredentialWithBody(ctx, org, credential, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchCredentialResponse(rsp)
+}
+
+// PatchCredentialWithResponse Change a credential's metadata, or replace its value
+//
+// Each property present replaces its own: name renames it, scope and agents replace the scope and the agent list, expiry replaces the expiry and the reminder together (an empty expiry clears both), value replaces the value for runs that start afterwards (audited as credential.value_replaced); a change of the rest is audited as credential.updated. 400 credential-invalid, 404 credential-not-found, 409 credential-name-taken, 503 credentials-unavailable for a value while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+func (c *ClientWithResponses) PatchCredentialWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, body PatchCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchCredentialResponse, error) {
+	rsp, err := c.PatchCredential(ctx, org, credential, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchCredentialResponse(rsp)
 }
 
 // FormatDefinitionWithBodyWithResponse Format a factory.yaml the way Visual saves write changed lines (Format)
@@ -24648,6 +26209,21 @@ func (c *ClientWithResponses) RevokePersonalTokenWithResponse(ctx context.Contex
 	return ParseRevokePersonalTokenResponse(rsp)
 }
 
+// ListRunsWithResponse The organization's agent runs across the factories the caller sees, newest first
+//
+// The runs that started in [since, until) in the factories the caller may read, or in the one named by factory, newest first (by start, then id), paged by next_cursor. When since is absent it is the start of the current UTC day; when until is absent it is the end of that day; since must be before until. The summary covers the same factories and window whatever status and q say. A wide window is a scan of every run in it: keep it short.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/runs (the `ListRuns` operationId).
+func (c *ClientWithResponses) ListRunsWithResponse(ctx context.Context, org OrgRef, params *ListRunsParams, reqEditors ...RequestEditorFn) (*ListRunsResponse, error) {
+	rsp, err := c.ListRuns(ctx, org, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListRunsResponse(rsp)
+}
+
 // GetRunWithResponse One agent run (404 for a run of another organization)
 //
 // Returns a wrapper object for the known response body format(s).
@@ -24794,7 +26370,7 @@ func (c *ClientWithResponses) TransferOwnershipWithResponse(ctx context.Context,
 
 // ListPlatformAdminsWithResponse The install's platform admins, earliest first
 //
-// Platform admins create organizations and manage platform admins; inside an organization they have only the rights of their membership there. Platform admins only.
+// Platform admins manage platform admins and, like every signed-in person, create organizations; inside an organization they have only the rights of their membership there. Platform admins only.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -25695,6 +27271,200 @@ func ParseTestConnectionResponse(rsp *http.Response) (*TestConnectionResponse, e
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest ConnectionTestResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListCredentialsResponse parses an HTTP response from a ListCredentialsWithResponse call
+func ParseListCredentialsResponse(rsp *http.Response) (*ListCredentialsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListCredentialsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CredentialList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateCredentialResponse parses an HTTP response from a CreateCredentialWithResponse call
+func ParseCreateCredentialResponse(rsp *http.Response) (*CreateCredentialResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateCredentialResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Credential
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseImportCredentialsResponse parses an HTTP response from a ImportCredentialsWithResponse call
+func ParseImportCredentialsResponse(rsp *http.Response) (*ImportCredentialsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ImportCredentialsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CredentialImportResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteCredentialResponse parses an HTTP response from a DeleteCredentialWithResponse call
+func ParseDeleteCredentialResponse(rsp *http.Response) (*DeleteCredentialResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteCredentialResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCredentialResponse parses an HTTP response from a GetCredentialWithResponse call
+func ParseGetCredentialResponse(rsp *http.Response) (*GetCredentialResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCredentialResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Credential
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePatchCredentialResponse parses an HTTP response from a PatchCredentialWithResponse call
+func ParsePatchCredentialResponse(rsp *http.Response) (*PatchCredentialResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchCredentialResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Credential
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -28583,6 +30353,39 @@ func ParseRevokePersonalTokenResponse(rsp *http.Response) (*RevokePersonalTokenR
 	return response, nil
 }
 
+// ParseListRunsResponse parses an HTTP response from a ListRunsWithResponse call
+func ParseListRunsResponse(rsp *http.Response) (*ListRunsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListRunsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OrgRunList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetRunResponse parses an HTTP response from a GetRunWithResponse call
 func ParseGetRunResponse(rsp *http.Response) (*GetRunResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -29048,6 +30851,24 @@ type ServerInterface interface {
 	// TestConnection Run the connection's test
 	// (POST /v1/orgs/{org}/connections/{connection}/test)
 	TestConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef)
+	// ListCredentials The organization's credentials
+	// (GET /v1/orgs/{org}/credentials)
+	ListCredentials(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// CreateCredential Create a credential
+	// (POST /v1/orgs/{org}/credentials)
+	CreateCredential(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// ImportCredentials Import credentials from a .env or YAML text
+	// (POST /v1/orgs/{org}/credentials/import)
+	ImportCredentials(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// DeleteCredential Delete a credential
+	// (DELETE /v1/orgs/{org}/credentials/{credential})
+	DeleteCredential(w http.ResponseWriter, r *http.Request, org OrgRef, credential CredentialRef)
+	// GetCredential One credential, never its value
+	// (GET /v1/orgs/{org}/credentials/{credential})
+	GetCredential(w http.ResponseWriter, r *http.Request, org OrgRef, credential CredentialRef)
+	// PatchCredential Change a credential's metadata, or replace its value
+	// (PATCH /v1/orgs/{org}/credentials/{credential})
+	PatchCredential(w http.ResponseWriter, r *http.Request, org OrgRef, credential CredentialRef)
 	// FormatDefinition Format a factory.yaml the way Visual saves write changed lines (Format)
 	// (POST /v1/orgs/{org}/definitions/format)
 	FormatDefinition(w http.ResponseWriter, r *http.Request, org OrgRef)
@@ -29297,6 +31118,9 @@ type ServerInterface interface {
 	// RevokePersonalToken Revoke one of your personal tokens
 	// (DELETE /v1/orgs/{org}/personal-tokens/{token})
 	RevokePersonalToken(w http.ResponseWriter, r *http.Request, org OrgRef, token string)
+	// ListRuns The organization's agent runs across the factories the caller sees, newest first
+	// (GET /v1/orgs/{org}/runs)
+	ListRuns(w http.ResponseWriter, r *http.Request, org OrgRef, params ListRunsParams)
 	// GetRun One agent run (404 for a run of another organization)
 	// (GET /v1/orgs/{org}/runs/{run})
 	GetRun(w http.ResponseWriter, r *http.Request, org OrgRef, run string)
@@ -30218,6 +32042,189 @@ func (siw *ServerInterfaceWrapper) TestConnection(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.TestConnection(w, r, org, connection)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListCredentials operation middleware
+func (siw *ServerInterfaceWrapper) ListCredentials(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCredentials(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateCredential operation middleware
+func (siw *ServerInterfaceWrapper) CreateCredential(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateCredential(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ImportCredentials operation middleware
+func (siw *ServerInterfaceWrapper) ImportCredentials(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ImportCredentials(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteCredential operation middleware
+func (siw *ServerInterfaceWrapper) DeleteCredential(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "credential" -------------
+	var credential CredentialRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "credential", r.PathValue("credential"), &credential, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "credential", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteCredential(w, r, org, credential)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCredential operation middleware
+func (siw *ServerInterfaceWrapper) GetCredential(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "credential" -------------
+	var credential CredentialRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "credential", r.PathValue("credential"), &credential, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "credential", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCredential(w, r, org, credential)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PatchCredential operation middleware
+func (siw *ServerInterfaceWrapper) PatchCredential(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "credential" -------------
+	var credential CredentialRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "credential", r.PathValue("credential"), &credential, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "credential", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PatchCredential(w, r, org, credential)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -33916,6 +35923,126 @@ func (siw *ServerInterfaceWrapper) RevokePersonalToken(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// ListRuns operation middleware
+func (siw *ServerInterfaceWrapper) ListRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListRunsParams
+
+	// ------------- Optional query parameter "factory" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "factory", r.URL.Query(), &params.Factory, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "factory"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "since" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "since", r.URL.Query(), &params.Since, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "since"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "since", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "until" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "until", r.URL.Query(), &params.Until, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "until"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "until", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRuns(w, r, org, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetRun operation middleware
 func (siw *ServerInterfaceWrapper) GetRun(w http.ResponseWriter, r *http.Request) {
 
@@ -34524,6 +36651,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/needs", wrapper.LinkItem)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/needs/{need}", wrapper.UnlinkItem)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/touches/{event}/reason", wrapper.SetTouchReason)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs", wrapper.ListRuns)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs/{run}", wrapper.GetRun)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/approve", wrapper.ApproveItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/reject", wrapper.RejectItem)
@@ -34545,6 +36673,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}", wrapper.UpdateConnection)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}/test", wrapper.TestConnection)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}/repositories", wrapper.ListConnectionRepositories)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/credentials", wrapper.ListCredentials)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/credentials", wrapper.CreateCredential)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/credentials/import", wrapper.ImportCredentials)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/credentials/{credential}", wrapper.DeleteCredential)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/credentials/{credential}", wrapper.GetCredential)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/credentials/{credential}", wrapper.PatchCredential)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources", wrapper.ListKnowledgeSources)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources", wrapper.CreateKnowledgeSource)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}", wrapper.DeleteKnowledgeSource)
@@ -35540,6 +37674,240 @@ type TestConnectiondefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response TestConnectiondefaultApplicationProblemPlusJSONResponse) VisitTestConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCredentialsRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type ListCredentialsResponseObject interface {
+	VisitListCredentialsResponse(w http.ResponseWriter) error
+}
+
+type ListCredentials200JSONResponse CredentialList
+
+func (response ListCredentials200JSONResponse) VisitListCredentialsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCredentialsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListCredentialsdefaultApplicationProblemPlusJSONResponse) VisitListCredentialsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCredentialRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *CreateCredentialJSONRequestBody
+}
+
+type CreateCredentialResponseObject interface {
+	VisitCreateCredentialResponse(w http.ResponseWriter) error
+}
+
+type CreateCredential201JSONResponse Credential
+
+func (response CreateCredential201JSONResponse) VisitCreateCredentialResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCredentialdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateCredentialdefaultApplicationProblemPlusJSONResponse) VisitCreateCredentialResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ImportCredentialsRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *ImportCredentialsJSONRequestBody
+}
+
+type ImportCredentialsResponseObject interface {
+	VisitImportCredentialsResponse(w http.ResponseWriter) error
+}
+
+type ImportCredentials200JSONResponse CredentialImportResult
+
+func (response ImportCredentials200JSONResponse) VisitImportCredentialsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ImportCredentialsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ImportCredentialsdefaultApplicationProblemPlusJSONResponse) VisitImportCredentialsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCredentialRequestObject struct {
+	Org        OrgRef        `json:"org"`
+	Credential CredentialRef `json:"credential"`
+}
+
+type DeleteCredentialResponseObject interface {
+	VisitDeleteCredentialResponse(w http.ResponseWriter) error
+}
+
+type DeleteCredential204Response struct {
+}
+
+func (response DeleteCredential204Response) VisitDeleteCredentialResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteCredentialdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteCredentialdefaultApplicationProblemPlusJSONResponse) VisitDeleteCredentialResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCredentialRequestObject struct {
+	Org        OrgRef        `json:"org"`
+	Credential CredentialRef `json:"credential"`
+}
+
+type GetCredentialResponseObject interface {
+	VisitGetCredentialResponse(w http.ResponseWriter) error
+}
+
+type GetCredential200JSONResponse Credential
+
+func (response GetCredential200JSONResponse) VisitGetCredentialResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCredentialdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetCredentialdefaultApplicationProblemPlusJSONResponse) VisitGetCredentialResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PatchCredentialRequestObject struct {
+	Org        OrgRef        `json:"org"`
+	Credential CredentialRef `json:"credential"`
+	Body       *PatchCredentialJSONRequestBody
+}
+
+type PatchCredentialResponseObject interface {
+	VisitPatchCredentialResponse(w http.ResponseWriter) error
+}
+
+type PatchCredential200JSONResponse Credential
+
+func (response PatchCredential200JSONResponse) VisitPatchCredentialResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PatchCredentialdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response PatchCredentialdefaultApplicationProblemPlusJSONResponse) VisitPatchCredentialResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -39165,6 +41533,46 @@ func (response RevokePersonalTokendefaultApplicationProblemPlusJSONResponse) Vis
 	return err
 }
 
+type ListRunsRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params ListRunsParams
+}
+
+type ListRunsResponseObject interface {
+	VisitListRunsResponse(w http.ResponseWriter) error
+}
+
+type ListRuns200JSONResponse OrgRunList
+
+func (response ListRuns200JSONResponse) VisitListRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRunsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListRunsdefaultApplicationProblemPlusJSONResponse) VisitListRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetRunRequestObject struct {
 	Org OrgRef `json:"org"`
 	Run string `json:"run"`
@@ -39742,6 +42150,24 @@ type StrictServerInterface interface {
 	// TestConnection Run the connection's test
 	// (POST /v1/orgs/{org}/connections/{connection}/test)
 	TestConnection(ctx context.Context, request TestConnectionRequestObject) (TestConnectionResponseObject, error)
+	// ListCredentials The organization's credentials
+	// (GET /v1/orgs/{org}/credentials)
+	ListCredentials(ctx context.Context, request ListCredentialsRequestObject) (ListCredentialsResponseObject, error)
+	// CreateCredential Create a credential
+	// (POST /v1/orgs/{org}/credentials)
+	CreateCredential(ctx context.Context, request CreateCredentialRequestObject) (CreateCredentialResponseObject, error)
+	// ImportCredentials Import credentials from a .env or YAML text
+	// (POST /v1/orgs/{org}/credentials/import)
+	ImportCredentials(ctx context.Context, request ImportCredentialsRequestObject) (ImportCredentialsResponseObject, error)
+	// DeleteCredential Delete a credential
+	// (DELETE /v1/orgs/{org}/credentials/{credential})
+	DeleteCredential(ctx context.Context, request DeleteCredentialRequestObject) (DeleteCredentialResponseObject, error)
+	// GetCredential One credential, never its value
+	// (GET /v1/orgs/{org}/credentials/{credential})
+	GetCredential(ctx context.Context, request GetCredentialRequestObject) (GetCredentialResponseObject, error)
+	// PatchCredential Change a credential's metadata, or replace its value
+	// (PATCH /v1/orgs/{org}/credentials/{credential})
+	PatchCredential(ctx context.Context, request PatchCredentialRequestObject) (PatchCredentialResponseObject, error)
 	// FormatDefinition Format a factory.yaml the way Visual saves write changed lines (Format)
 	// (POST /v1/orgs/{org}/definitions/format)
 	FormatDefinition(ctx context.Context, request FormatDefinitionRequestObject) (FormatDefinitionResponseObject, error)
@@ -39991,6 +42417,9 @@ type StrictServerInterface interface {
 	// RevokePersonalToken Revoke one of your personal tokens
 	// (DELETE /v1/orgs/{org}/personal-tokens/{token})
 	RevokePersonalToken(ctx context.Context, request RevokePersonalTokenRequestObject) (RevokePersonalTokenResponseObject, error)
+	// ListRuns The organization's agent runs across the factories the caller sees, newest first
+	// (GET /v1/orgs/{org}/runs)
+	ListRuns(ctx context.Context, request ListRunsRequestObject) (ListRunsResponseObject, error)
 	// GetRun One agent run (404 for a run of another organization)
 	// (GET /v1/orgs/{org}/runs/{run})
 	GetRun(ctx context.Context, request GetRunRequestObject) (GetRunResponseObject, error)
@@ -40784,6 +43213,186 @@ func (sh *strictHandler) TestConnection(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(TestConnectionResponseObject); ok {
 		if err := validResponse.VisitTestConnectionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListCredentials operation middleware
+func (sh *strictHandler) ListCredentials(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request ListCredentialsRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListCredentials(ctx, request.(ListCredentialsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListCredentials")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListCredentialsResponseObject); ok {
+		if err := validResponse.VisitListCredentialsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateCredential operation middleware
+func (sh *strictHandler) CreateCredential(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request CreateCredentialRequestObject
+
+	request.Org = org
+
+	var body CreateCredentialJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateCredential(ctx, request.(CreateCredentialRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateCredential")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateCredentialResponseObject); ok {
+		if err := validResponse.VisitCreateCredentialResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ImportCredentials operation middleware
+func (sh *strictHandler) ImportCredentials(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request ImportCredentialsRequestObject
+
+	request.Org = org
+
+	var body ImportCredentialsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ImportCredentials(ctx, request.(ImportCredentialsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ImportCredentials")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ImportCredentialsResponseObject); ok {
+		if err := validResponse.VisitImportCredentialsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteCredential operation middleware
+func (sh *strictHandler) DeleteCredential(w http.ResponseWriter, r *http.Request, org OrgRef, credential CredentialRef) {
+	var request DeleteCredentialRequestObject
+
+	request.Org = org
+	request.Credential = credential
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteCredential(ctx, request.(DeleteCredentialRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteCredential")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteCredentialResponseObject); ok {
+		if err := validResponse.VisitDeleteCredentialResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCredential operation middleware
+func (sh *strictHandler) GetCredential(w http.ResponseWriter, r *http.Request, org OrgRef, credential CredentialRef) {
+	var request GetCredentialRequestObject
+
+	request.Org = org
+	request.Credential = credential
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCredential(ctx, request.(GetCredentialRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCredential")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCredentialResponseObject); ok {
+		if err := validResponse.VisitGetCredentialResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PatchCredential operation middleware
+func (sh *strictHandler) PatchCredential(w http.ResponseWriter, r *http.Request, org OrgRef, credential CredentialRef) {
+	var request PatchCredentialRequestObject
+
+	request.Org = org
+	request.Credential = credential
+
+	var body PatchCredentialJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PatchCredential(ctx, request.(PatchCredentialRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PatchCredential")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PatchCredentialResponseObject); ok {
+		if err := validResponse.VisitPatchCredentialResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -43254,6 +45863,33 @@ func (sh *strictHandler) RevokePersonalToken(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RevokePersonalTokenResponseObject); ok {
 		if err := validResponse.VisitRevokePersonalTokenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListRuns operation middleware
+func (sh *strictHandler) ListRuns(w http.ResponseWriter, r *http.Request, org OrgRef, params ListRunsParams) {
+	var request ListRunsRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListRuns(ctx, request.(ListRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListRunsResponseObject); ok {
+		if err := validResponse.VisitListRunsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

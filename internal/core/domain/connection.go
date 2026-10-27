@@ -118,14 +118,17 @@ type Connection struct {
 	Description string
 	// Fields are the non-secret values an admin set (a kind's defaults are not copied in).
 	Fields map[string]string
-	// SecretFields names the secret fields that are set, sorted.
+	// SecretFields names the secret fields that are set, sealed or a reference, sorted.
 	SecretFields []string
-	CreatedBy    Actor
-	CreatedAt    time.Time
-	UpdatedBy    Actor
-	UpdatedAt    time.Time
-	LastUsedAt   *time.Time
-	LastTest     *ConnectionTest
+	// SecretRefs maps each secret field that refers to a credential to the credential's name
+	// (ADR 0017 decision 5): stored in the clear, never sealed. Its fields are in SecretFields.
+	SecretRefs map[string]string
+	CreatedBy  Actor
+	CreatedAt  time.Time
+	UpdatedBy  Actor
+	UpdatedAt  time.Time
+	LastUsedAt *time.Time
+	LastTest   *ConnectionTest
 }
 
 // ConnectionTest is the outcome of a connection's test.
@@ -136,7 +139,8 @@ type ConnectionTest struct {
 }
 
 // NewConnection is a connection to create: its kind's non-secret values in Fields, its secret
-// ones in Secrets.
+// ones in Secrets. A secret value that is exactly {{name}} refers to credential name
+// (ConnectionSecrets).
 type NewConnection struct {
 	Name, Kind, Description string
 	Fields, Secrets         map[string]string
@@ -145,7 +149,8 @@ type NewConnection struct {
 // ConnectionPatch changes a connection. Name, when set, renames it (its sealed values stay: they
 // are bound to its id); Description, when set, replaces it; Fields, when not nil, replaces every
 // non-secret value; Secrets replaces the named secret values only, an empty value clearing an
-// optional one. The kind never changes.
+// optional one and {{name}} making it a reference to credential name (ConnectionSecrets). The kind
+// never changes.
 type ConnectionPatch struct {
 	Name        *string
 	Description *string
@@ -163,8 +168,12 @@ func (p ConnectionPatch) Empty() bool {
 type ResolvedConnection struct {
 	Connection Connection
 	Kind       ConnectionKind
-	// Values are the connection's fields and secrets by field name (defaults are applied by Render).
+	// Values are the connection's fields and sealed secrets by field name (defaults are applied by
+	// Render).
 	Values map[string]string
+	// SecretRefs maps each secret field that refers to a credential to its name, unopened: the
+	// engine opens them at run start and puts their values in Values.
+	SecretRefs map[string]string
 }
 
 // RunConnection is what a run's box gets from one connection: Render's output.
@@ -201,6 +210,42 @@ var (
 	// field as a field, a field as a secret).
 	ErrFieldUnknown = fmt.Errorf("field unknown: %w", ErrInvalid)
 )
+
+// ConnectionSecrets splits a connection's secret values into the ones to seal and its references
+// to credentials (ADR 0017 decision 5): a value that is exactly {{name}} refers to credential
+// name, which refs maps its field to; every other value, an empty one included, is in sealed. A
+// {{…}} anywhere else in a secret value, or anywhere in a non-secret field's value, is refused.
+// The error wraps ErrInvalid and names fields, never a value.
+func ConnectionSecrets(fields, secrets map[string]string) (sealed, refs map[string]string, err error) {
+	var errs []error
+
+	for _, name := range slices.Sorted(maps.Keys(fields)) {
+		if anyRef.MatchString(fields[name]) {
+			errs = append(errs, fmt.Errorf("field %q is not secret, so it cannot refer to a credential: %w", name, ErrInvalid))
+		}
+	}
+
+	sealed, refs = map[string]string{}, map[string]string{}
+
+	for _, name := range slices.Sorted(maps.Keys(secrets)) {
+		cred, ok, err := CredentialRef(secrets[name])
+
+		switch {
+		case err != nil:
+			errs = append(errs, fmt.Errorf("secret field %q: %w", name, err))
+		case ok:
+			refs[name] = cred
+		default:
+			sealed[name] = secrets[name]
+		}
+	}
+
+	if err := errors.Join(errs...); err != nil {
+		return nil, nil, err
+	}
+
+	return sealed, refs, nil
+}
 
 // CheckConnectionName enforces the name of a connection or a kind: 3 to 40 lowercase letters,
 // digits and inner dashes, starting with a letter. The error wraps ErrInvalid.

@@ -72,20 +72,20 @@ func TestOrgs_ListCreateAndGet(t *testing.T) {
 	h := newHarness(t)
 
 	var created gen.Org
-	if code := h.call(t, http.MethodPost, "/v1/orgs", `{"name":"Acme Two","slug":"acme-two"}`, &created); code != http.StatusCreated ||
+	if code := h.call(t, http.MethodPost, orgsPath, `{"name":"Acme Two","slug":"acme-two"}`, &created); code != http.StatusCreated ||
 		created.Slug != "acme-two" || created.Mark != "AT" || created.FactoryCount != 0 {
 		t.Fatalf("create = %d %+v, want 201 with the default mark", code, created)
 	}
 
 	for _, body := range []string{`{"name":"Again","slug":"acme-two"}`, `{"name":"Reserved","slug":"settings"}`} {
 		var p gen.Problem
-		if code := h.call(t, http.MethodPost, "/v1/orgs", body, &p); code != http.StatusConflict {
+		if code := h.call(t, http.MethodPost, orgsPath, body, &p); code != http.StatusConflict {
 			t.Errorf("create %s = %d %+v, want 409", body, code, p)
 		}
 	}
 
 	var list gen.OrgList
-	if code := h.call(t, http.MethodGet, "/v1/orgs", "", &list); code != http.StatusOK {
+	if code := h.call(t, http.MethodGet, orgsPath, "", &list); code != http.StatusOK {
 		t.Fatalf("list = %d", code)
 	}
 
@@ -240,8 +240,8 @@ var probes = map[string]probe{
 	"getAuthConfig":    {method: http.MethodGet, path: "/v1/auth/config"},
 	"getMe":            {method: http.MethodGet, path: "/v1/me"},
 	"getDeviceRequest": {method: http.MethodGet, path: "/v1/auth/device/ABCD-EFGH"},
-	"listOrgs":         {method: http.MethodGet, path: "/v1/orgs"},
-	"createOrg":        {method: http.MethodPost, path: "/v1/orgs", body: `{"name":"Acme Two","slug":"acme-two"}`},
+	"listOrgs":         {method: http.MethodGet, path: orgsPath},
+	"createOrg":        {method: http.MethodPost, path: orgsPath, body: `{"name":"Acme Two","slug":"acme-two"}`},
 
 	"listPlatformAdmins":  {method: http.MethodGet, path: "/v1/platform/admins"},
 	"addPlatformAdmin":    {method: http.MethodPost, path: "/v1/platform/admins", body: `{"email":"nobody@example.com"}`},
@@ -264,6 +264,7 @@ var probes = map[string]probe{
 	"getFactoryOverview":  {method: http.MethodGet, path: "/v1/orgs/acme/overview", org: testOrg},
 	"searchOrg":           {method: http.MethodGet, path: "/v1/orgs/acme/search?q=acme", org: testOrg},
 	"getInbox":            {method: http.MethodGet, path: "/v1/orgs/acme/inbox?factory=acme", org: testOrg, factory: acmeID},
+	"listRuns":            {method: http.MethodGet, path: "/v1/orgs/acme/runs?factory=acme", org: testOrg, factory: acmeID},
 	"listItems":           {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/items", org: testOrg, factory: acmeID},
 	"submitItem":          {method: http.MethodPost, path: acmeItems, body: submitFix, org: testOrg, factory: acmeID},
 	"getBoard":            {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/board", org: testOrg, factory: acmeID},
@@ -316,6 +317,14 @@ var probes = map[string]probe{
 	"testConnection":             {method: http.MethodPost, path: "/v1/orgs/acme/connections/docs/test", org: testOrg},
 	"listConnectionRepositories": {method: http.MethodGet, path: "/v1/orgs/acme/connections/docs/repositories", org: testOrg},
 	"deleteConnection":           {method: http.MethodDelete, path: "/v1/orgs/acme/connections/docs", org: testOrg},
+	"listCredentials":            {method: http.MethodGet, path: "/v1/orgs/acme/credentials", org: testOrg},
+	"createCredential": {
+		method: http.MethodPost, path: "/v1/orgs/acme/credentials", org: testOrg, body: `{"name":"acme-token","type":"api_key","value":"v"}`,
+	},
+	"getCredential":     {method: http.MethodGet, path: "/v1/orgs/acme/credentials/acme-token", org: testOrg},
+	"patchCredential":   {method: http.MethodPatch, path: "/v1/orgs/acme/credentials/acme-token", body: `{"description":"rotated"}`, org: testOrg},
+	"deleteCredential":  {method: http.MethodDelete, path: "/v1/orgs/acme/credentials/acme-token", org: testOrg},
+	"importCredentials": {method: http.MethodPost, path: "/v1/orgs/acme/credentials/import", body: `{"format":"env","text":"A_B=c","dry_run":true}`, org: testOrg},
 
 	"listKnowledgeSources": {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/sources?factory=acme", org: testOrg, factory: acmeID},
 	"createKnowledgeSource": {
