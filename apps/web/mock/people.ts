@@ -123,7 +123,7 @@ export function seedPeople(now: number, { acme, labs, factories }: SeedOrgs): Mo
       {
         id: invitationIds.second,
         orgId: acme,
-        email: 'ops@northwind.dev',
+        email: 'ops@example.com',
         role: 'member',
         factoryRoles: [{ factoryId: factories.support, role: 'viewer' }],
         inviterId: d.owner.id,

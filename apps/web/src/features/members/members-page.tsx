@@ -696,7 +696,7 @@ function InviteLinkCard() {
 const capabilityRows: { can: string; owner: boolean; admin: boolean; member: boolean }[] = [
   { can: 'See floors, boards and items', owner: true, admin: true, member: true },
   { can: 'Create items, answer, approve', owner: true, admin: true, member: true },
-  { can: 'Edit and publish definitions', owner: true, admin: true, member: false },
+  { can: 'Edit and publish definitions', owner: true, admin: true, member: true },
   { can: 'Connections and credentials', owner: true, admin: true, member: false },
   { can: 'Members, budgets, models', owner: true, admin: true, member: false },
   { can: 'Transfer or delete the organization', owner: true, admin: false, member: false },

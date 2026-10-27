@@ -218,11 +218,19 @@ describe('members and roles, ready', () => {
     const transfer = within(matrix).getByRole('row', { name: /Transfer or delete the organization/ });
     expect(within(transfer).getAllByText('Yes')).toHaveLength(1);
     expect(within(transfer).getAllByText('No')).toHaveLength(2);
+    const definitions = within(matrix).getByRole('row', { name: /Edit and publish definitions/ });
+    expect(within(definitions).getAllByText('Yes')).toHaveLength(3);
+    expect(within(definitions).queryAllByText('No')).toHaveLength(0);
   });
 
   it('changes a factory role from the person’s sheet, at once', async () => {
     renderMembers();
-    fireEvent.click(await screen.findByRole('button', { name: /^Jonas Okafor/ }));
+    fireEvent.pointerDown(await screen.findByRole('button', { name: 'More for Jonas Okafor' }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: 'mouse',
+    });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Factory roles…' }));
     const dialog = await screen.findByRole('dialog', { name: 'Jonas Okafor' });
     const goal = within(dialog).getByRole('group', { name: 'goal: role of Jonas Okafor' });
     fireEvent.click(within(goal).getByRole('radio', { name: 'Viewer' }));
