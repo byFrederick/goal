@@ -19,6 +19,9 @@ import (
 
 // Human touches per item (spec 4 §4.9, §4.10), tag work.
 
+// touchDays is how many days the daily headline covers, ending on the range's last.
+const touchDays = 7
+
 // errTouchNotFound is an event that is not one of the item's touches (404 touch-not-found).
 var errTouchNotFound = fmt.Errorf("touch not found: %w", ports.ErrNotFound)
 
@@ -84,6 +87,19 @@ func (s *server) GetTouchMetrics(ctx context.Context, req gen.GetTouchMetricsReq
 		from := first.Add(time.Duration(i) * week)
 		out.Weekly = append(out.Weekly, gen.TouchWeek{
 			From: openapi_types.Date{Time: from}, To: openapi_types.Date{Time: from.Add(week - day)}, Finished: b.Finished,
+			PerItemMean: b.PerItem(b.Touches), TouchlessRate: b.TouchlessRate(),
+		})
+	}
+
+	days, err := s.items.TouchesByBucket(ctx, weekly, day, touchDays)
+	if err != nil {
+		return nil, err
+	}
+
+	out.Daily = make([]gen.TouchDay, 0, len(days))
+	for i, b := range days {
+		out.Daily = append(out.Daily, gen.TouchDay{
+			Day: openapi_types.Date{Time: r.to.Add(time.Duration(i-touchDays+1) * day)}, Finished: b.Finished,
 			PerItemMean: b.PerItem(b.Touches), TouchlessRate: b.TouchlessRate(),
 		})
 	}
