@@ -65,6 +65,10 @@ const shutdownGrace = 10 * time.Second
 // purgeEvery is how often goald looks for deleted organizations whose retention has passed.
 const purgeEvery = time.Hour
 
+// scheduleEvery is how often goald fires the schedule triggers that are due and prunes old
+// webhook deliveries; one instance at a time does, under the schedule lock.
+const scheduleEvery = time.Minute
+
 func main() { os.Exit(goald()) }
 
 // goald runs the daemon and returns its exit code: 2 for bad configuration, 1 for a failure.
@@ -130,8 +134,8 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	// Connections and their kinds (spec 4): definitions are validated against them, the API serves
 	// them, runs get them and the gateway describes them in run bundles. Credentials (ADR 0017) are
-	// sealed under the same master keys.
-	connections, credentials, err := openConnections(ctx, store, os.Getenv, log)
+	// sealed under the same master keys, and so are webhook endpoints' signing secrets (ADR 0026).
+	connections, credentials, intake, err := openConnections(ctx, store, os.Getenv, log)
 	if err != nil {
 		return err
 	}
@@ -193,7 +197,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
 		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, CodeHosts: hosts, Clock: clock,
-		Minters: minters(s), Policies: policies, Logger: log,
+		Minters: minters(s), Policies: policies, Intake: intake, Logger: log,
 	}, engine.Config{
 		TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: boxes.gateway, GatewayKeyRef: s.GatewayKeyRef, MaxRuns: s.MaxRuns,
 	})
@@ -297,24 +301,24 @@ func openKnowledge(s settings, store *postgres.Store, connections *postgres.Conn
 // openConnections loads the platform's master keys (GOAL_MASTER_KEYS or GOAL_MASTER_KEY_FILE),
 // refuses to start while a connection or credential is sealed under a key id they lack (spec 4
 // §5.2, threat row 12, ADR 0017), makes the kinds goald ships the platform's, and returns the
-// connections and the credentials sealed with those keys. Without a master key goald serves
+// connections, the credentials and the intake state sealed with those keys. Without a master key goald serves
 // everything but connections with secrets and credentials' values, and says so.
 func openConnections(ctx context.Context, store *postgres.Store, getenv func(string) string, log *slog.Logger,
-) (*postgres.Connections, *postgres.Credentials, error) {
+) (*postgres.Connections, *postgres.Credentials, *postgres.Intake, error) {
 	keys, err := masterkey.Load(getenv)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	sealed, err := postgres.ConnectionKeyIDs(ctx, store)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	have := keys.IDs()
 
 	if missing := slices.DeleteFunc(sealed, func(id string) bool { return slices.Contains(have, id) }); len(missing) > 0 {
-		return nil, nil, fmt.Errorf("connections or credentials are sealed under master key %s, which %s and %s do not hold: "+
+		return nil, nil, nil, fmt.Errorf("connections or credentials are sealed under master key %s, which %s and %s do not hold: "+
 			"give goald every key a connection or credential is sealed under (goal db rekey reseals them under the active one, "+
 			"after which an old key can go)", strings.Join(missing, ", "), masterkey.KeysEnv, masterkey.FileEnv)
 	}
@@ -328,17 +332,17 @@ func openConnections(ctx context.Context, store *postgres.Store, getenv func(str
 
 	kinds, err := connkind.Platform()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	connections := postgres.NewConnections(store, keys)
 	if err := connections.SyncPlatformKinds(ctx, kinds); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	log.InfoContext(ctx, "connection kinds synced", slog.Int("platform", len(kinds)))
 
-	return connections, postgres.NewCredentials(store, keys), nil
+	return connections, postgres.NewCredentials(store, keys), postgres.NewIntake(store, keys), nil
 }
 
 // minters are the minters by the name connection kinds give them (mint): AWS STS for the aws and
@@ -517,6 +521,7 @@ func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Se
 	wg.Go(func() { refresh(ctx, log, defs, s.RefreshEvery) })
 	wg.Go(func() { j.purger.Run(ctx, purgeEvery) })
 	wg.Go(func() { cleanUpAuth(ctx, log, j.platform, j.clock, authCleanUpEvery) })
+	wg.Go(func() { fireSchedules(ctx, log, eng, j.clock, scheduleEvery) })
 
 	if s.KBWorkers > 0 {
 		wg.Go(func() { j.ingestor.Run(ctx) })
@@ -613,6 +618,35 @@ func refresh(ctx context.Context, log *slog.Logger, defs *definitions.Cache, eve
 
 		if _, err := defs.Refresh(ctx); err != nil && ctx.Err() == nil {
 			log.WarnContext(ctx, "refresh factory definitions", slog.Any("error", err))
+		}
+	}
+}
+
+// fireSchedules fires the schedule triggers that are due and deletes webhook deliveries past
+// their retention, at once and then on each tick of every until ctx ends (ADR 0026 decision 4). Every
+// goald ticks; the one holding the schedule lock does the work and the others skip the tick.
+func fireSchedules(ctx context.Context, log *slog.Logger, eng *engine.Engine, clock ports.Clock, every time.Duration) {
+	t := clock.NewTicker(every)
+	defer t.Stop()
+
+	for {
+		got, err := eng.FireSchedules(ctx, clock.Now())
+
+		switch {
+		case err != nil:
+			if ctx.Err() == nil {
+				log.WarnContext(ctx, "schedules failed", slog.Int("fired", len(got.Firings)), slog.Any("error", err))
+			}
+		case !got.Ran:
+			log.DebugContext(ctx, "schedules skipped: another goald holds them")
+		case len(got.Firings) > 0 || got.Pruned > 0:
+			log.InfoContext(ctx, "schedules fired", slog.Int("fired", len(got.Firings)), slog.Int("deliveries_pruned", got.Pruned))
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C():
 		}
 	}
 }
