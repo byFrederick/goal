@@ -13,8 +13,13 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// questionTool is the question tool as an agent names it.
-const questionTool = "question__ask"
+// The question tool as an agent names it, its arguments and a question the tests ask.
+const (
+	questionTool = "question__ask"
+	argQuestion  = "question"
+	argChoices   = "choices"
+	shipIt       = "Ship it?"
+)
 
 // fakeQuestions stands in for the engine behind the gateway: it keeps every question it is
 // asked and answers with err.
@@ -72,37 +77,42 @@ func TestGateway_QuestionToolListed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var schema struct {
-		AdditionalProperties *bool    `json:"additionalProperties"`
-		Required             []string `json:"required"`
-		Properties           struct {
-			Question struct {
-				Type      string `json:"type"`
-				MinLength int    `json:"minLength"`
-				MaxLength int    `json:"maxLength"`
-			} `json:"question"`
-			Choices struct {
-				Type     string `json:"type"`
-				MinItems int    `json:"minItems"`
-				MaxItems int    `json:"maxItems"`
-				Items    struct {
-					Type      string `json:"type"`
-					MinLength int    `json:"minLength"`
-					MaxLength int    `json:"maxLength"`
-				} `json:"items"`
-			} `json:"choices"`
-		} `json:"properties"`
-	}
-	if err := json.Unmarshal(raw, &schema); err != nil {
+	var got askSchemaShape
+	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatal(err)
 	}
 
-	q, c := schema.Properties.Question, schema.Properties.Choices
-	if schema.AdditionalProperties == nil || *schema.AdditionalProperties || !slices.Equal(schema.Required, []string{"question"}) ||
-		q.Type != "string" || q.MinLength != 1 || q.MaxLength != 500 ||
-		c.Type != "array" || c.MinItems != 0 || c.MaxItems != 4 || c.Items.Type != "string" || c.Items.MinLength != 1 || c.Items.MaxLength != 60 {
+	want := askSchemaShape{AdditionalProperties: false, Required: [2]string{argQuestion}}
+	want.Properties.Question = stringShape{Type: "string", MinLength: 1, MaxLength: 500}
+	want.Properties.Choices = arrayShape{Type: "array", MinItems: 0, MaxItems: 4, Items: stringShape{Type: "string", MinLength: 1, MaxLength: 60}}
+
+	if got != want {
 		t.Errorf("input schema = %s; want question 1-500, choices 0-4 of 1-60, nothing else", raw)
 	}
+}
+
+// askSchemaShape is what TestGateway_QuestionToolListed checks of question__ask's input schema.
+type askSchemaShape struct {
+	// AdditionalProperties is a bool when the schema sets it.
+	AdditionalProperties any       `json:"additionalProperties"`
+	Required             [2]string `json:"required"`
+	Properties           struct {
+		Question stringShape `json:"question"`
+		Choices  arrayShape  `json:"choices"`
+	} `json:"properties"`
+}
+
+type stringShape struct {
+	Type      string `json:"type"`
+	MinLength int    `json:"minLength"`
+	MaxLength int    `json:"maxLength"`
+}
+
+type arrayShape struct {
+	Type     string      `json:"type"`
+	MinItems int         `json:"minItems"`
+	MaxItems int         `json:"maxItems"`
+	Items    stringShape `json:"items"`
 }
 
 // A good question reaches the engine with the task's item, run and agent, and the agent is told
@@ -114,19 +124,19 @@ func TestGateway_QuestionAskReachesEngine(t *testing.T) {
 	cs := h.connect(t, "")
 
 	text, isErr := knowledgeCall(t, cs, questionTool, map[string]any{
-		"question": " Which colour should the button be? ", "choices": []string{"Blue", "Green"},
+		argQuestion: " Which colour should the button be? ", argChoices: []string{"Blue", "Green"},
 	})
 	if isErr || !strings.Contains(text, "sent") || !strings.Contains(text, "Stop now") {
 		t.Errorf("result = %q (error %v); want that the question was sent and to stop now", text, isErr)
 	}
 
-	want := Question{Item: itemID, Run: "run-1", Agent: agentEngineer, Text: "Which colour should the button be?", Choices: []string{"Blue", "Green"}}
+	want := Question{Item: itemID, Run: h.claims().RunID, Agent: agentEngineer, Text: "Which colour should the button be?", Choices: []string{"Blue", "Green"}}
 	if got := h.questions.questions(); len(got) != 1 || !questionEqual(got[0], want) {
 		t.Errorf("asked = %+v; want %+v", got, want)
 	}
 
 	// Choices are optional.
-	if _, isErr := knowledgeCall(t, cs, questionTool, map[string]any{"question": "Ship it?"}); isErr {
+	if _, isErr := knowledgeCall(t, cs, questionTool, map[string]any{argQuestion: shipIt}); isErr {
 		t.Error("a question without choices is a tool error; want it sent")
 	}
 }
@@ -143,14 +153,14 @@ func TestGateway_QuestionAskRefusesBadInput(t *testing.T) {
 	cs := h.connect(t, "")
 
 	for name, args := range map[string]map[string]any{
-		"not a string":     {"question": 5},
-		"unknown field":    {"question": "Ship it?", "urgent": true},
-		"empty question":   {"question": "  "},
-		"long question":    {"question": strings.Repeat("é", 501)},
-		"five choices":     {"question": "Ship it?", "choices": []string{"a", "b", "c", "d", "e"}},
-		"long choice":      {"question": "Ship it?", "choices": []string{strings.Repeat("x", 61)}},
-		"empty choice":     {"question": "Ship it?", "choices": []string{" "}},
-		"choices a string": {"question": "Ship it?", "choices": "yes"},
+		"not a string":     {argQuestion: 5},
+		"unknown field":    {argQuestion: shipIt, "urgent": true},
+		"empty question":   {argQuestion: "  "},
+		"long question":    {argQuestion: strings.Repeat("é", 501)},
+		"five choices":     {argQuestion: shipIt, argChoices: []string{"a", "b", "c", "d", "e"}},
+		"long choice":      {argQuestion: shipIt, argChoices: []string{strings.Repeat("x", 61)}},
+		"empty choice":     {argQuestion: shipIt, argChoices: []string{" "}},
+		"choices a string": {argQuestion: shipIt, argChoices: "yes"},
 	} {
 		if text, isErr := knowledgeCall(t, cs, questionTool, args); !isErr || text == "" {
 			t.Errorf("%s: result = %q (error %v); want a tool error with the reason", name, text, isErr)
@@ -180,13 +190,13 @@ func TestGateway_QuestionAskAlreadyOpen(t *testing.T) {
 
 	h.questions.answer(fmt.Errorf("ask: %w", &QuestionRefusedError{Reason: open}))
 
-	if text, isErr := knowledgeCall(t, cs, questionTool, map[string]any{"question": "Ship it?"}); !isErr || text != open {
+	if text, isErr := knowledgeCall(t, cs, questionTool, map[string]any{argQuestion: shipIt}); !isErr || text != open {
 		t.Errorf("result = %q (error %v); want the tool error %q", text, isErr, open)
 	}
 
 	h.questions.answer(errors.New("store: connection reset by peer"))
 
-	if text, isErr := knowledgeCall(t, cs, questionTool, map[string]any{"question": "Ship it?"}); !isErr || !strings.Contains(text, "try again") || strings.Contains(text, "peer") {
+	if text, isErr := knowledgeCall(t, cs, questionTool, map[string]any{argQuestion: shipIt}); !isErr || !strings.Contains(text, "try again") || strings.Contains(text, "peer") {
 		t.Errorf("result = %q (error %v); want a generic try-again tool error", text, isErr)
 	}
 
@@ -207,7 +217,7 @@ func TestGateway_QuestionAskAuditHasNoArguments(t *testing.T) {
 	h := newHarness(t, Config{})
 	cs := h.connect(t, "")
 
-	if _, isErr := knowledgeCall(t, cs, questionTool, map[string]any{"question": "Which secret colour?", "choices": []string{"Mauve"}}); isErr {
+	if _, isErr := knowledgeCall(t, cs, questionTool, map[string]any{argQuestion: "Which secret colour?", argChoices: []string{"Mauve"}}); isErr {
 		t.Fatal("the question was refused; want it sent")
 	}
 
@@ -217,7 +227,7 @@ func TestGateway_QuestionAskAuditHasNoArguments(t *testing.T) {
 	}
 
 	e := events[0]
-	if e.Kind != EventToolCall || e.RunID != "run-1" || e.Actor != agentEngineer ||
+	if e.Kind != EventToolCall || e.RunID != h.claims().RunID || e.Actor != agentEngineer ||
 		e.Data["connection"] != "question" || e.Data["tool"] != "ask" || e.Data["outcome"] != outcomeOK {
 		t.Errorf("event = %+v; want an ok question/ask audit event of the run", e)
 	}
