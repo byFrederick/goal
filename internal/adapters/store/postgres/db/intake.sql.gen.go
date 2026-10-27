@@ -532,6 +532,93 @@ func (q *Queries) WebhookDeliveries(ctx context.Context, arg WebhookDeliveriesPa
 	return items, nil
 }
 
+const webhookDelivery = `-- name: WebhookDelivery :one
+SELECT id, endpoint_id, received_at, headers, body, outcome, reason, item_id FROM webhook_deliveries
+WHERE endpoint_id = $1 AND id = $2
+`
+
+type WebhookDeliveryParams struct {
+	EndpointID uuid.UUID
+	ID         uuid.UUID
+}
+
+type WebhookDeliveryRow struct {
+	ID         uuid.UUID
+	EndpointID uuid.UUID
+	ReceivedAt time.Time
+	Headers    []byte
+	Body       []byte
+	Outcome    string
+	Reason     string
+	ItemID     *uuid.UUID
+}
+
+func (q *Queries) WebhookDelivery(ctx context.Context, arg WebhookDeliveryParams) (WebhookDeliveryRow, error) {
+	row := q.db.QueryRow(ctx, webhookDelivery, arg.EndpointID, arg.ID)
+	var i WebhookDeliveryRow
+	err := row.Scan(
+		&i.ID,
+		&i.EndpointID,
+		&i.ReceivedAt,
+		&i.Headers,
+		&i.Body,
+		&i.Outcome,
+		&i.Reason,
+		&i.ItemID,
+	)
+	return i, err
+}
+
+const webhookDeliveryDays = `-- name: WebhookDeliveryDays :many
+SELECT d.endpoint_id, date_trunc('day', d.received_at, 'UTC')::timestamptz AS day,
+       count(*) FILTER (WHERE d.outcome <> 'refused') AS delivered,
+       count(*) FILTER (WHERE d.outcome = 'refused') AS refused
+FROM webhook_endpoints e
+JOIN webhook_deliveries d ON d.endpoint_id = e.id AND d.received_at >= $1
+WHERE e.factory_id = $2
+GROUP BY 1, 2
+ORDER BY 1, 2
+`
+
+type WebhookDeliveryDaysParams struct {
+	Since     time.Time
+	FactoryID uuid.UUID
+}
+
+type WebhookDeliveryDaysRow struct {
+	EndpointID uuid.UUID
+	Day        time.Time
+	Delivered  int64
+	Refused    int64
+}
+
+// The factory's endpoints' deliveries since the instant, per endpoint and UTC day; each endpoint's
+// rows come from webhook_deliveries_endpoint_idx (endpoint_id, received_at).
+func (q *Queries) WebhookDeliveryDays(ctx context.Context, arg WebhookDeliveryDaysParams) ([]WebhookDeliveryDaysRow, error) {
+	rows, err := q.db.Query(ctx, webhookDeliveryDays, arg.Since, arg.FactoryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WebhookDeliveryDaysRow
+	for rows.Next() {
+		var i WebhookDeliveryDaysRow
+		if err := rows.Scan(
+			&i.EndpointID,
+			&i.Day,
+			&i.Delivered,
+			&i.Refused,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const webhookEndpoint = `-- name: WebhookEndpoint :one
 SELECT id, factory_id, name, kind, created_at, rotated_at FROM webhook_endpoints WHERE id = $1
 `

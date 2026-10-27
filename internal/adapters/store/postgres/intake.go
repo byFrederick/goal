@@ -311,6 +311,56 @@ func (in *Intake) ListDeliveries(ctx context.Context, endpoint domain.WebhookEnd
 	return convertAll(rows, deliveryFrom)
 }
 
+// Delivery implements ports.Intake.
+func (in *Intake) Delivery(ctx context.Context, endpoint domain.WebhookEndpointID, id domain.WebhookDeliveryID) (domain.WebhookDelivery, error) {
+	eid, err := parseID("endpoint", string(endpoint))
+	if err != nil {
+		return domain.WebhookDelivery{}, err
+	}
+
+	did, err := parseID("delivery", string(id))
+	if err != nil {
+		return domain.WebhookDelivery{}, err
+	}
+
+	r, err := fetch(ctx, in.s.read, func(q *db.Queries) (db.WebhookDeliveryRow, error) {
+		return q.WebhookDelivery(ctx, db.WebhookDeliveryParams{EndpointID: eid, ID: did})
+	})
+
+	switch {
+	case notFound(err):
+		return domain.WebhookDelivery{}, fmt.Errorf("delivery %s of endpoint %s: %w", id, endpoint, ports.ErrNotFound)
+	case err != nil:
+		return domain.WebhookDelivery{}, fmt.Errorf("delivery %s of endpoint %s: %w", id, endpoint, err)
+	default:
+		return deliveryFrom(db.WebhookDeliveriesRow(r))
+	}
+}
+
+// DeliveryDays implements ports.Intake.
+func (in *Intake) DeliveryDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.DeliveryDay, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]db.WebhookDeliveryDaysRow, error) {
+		return q.WebhookDeliveryDays(ctx, db.WebhookDeliveryDaysParams{FactoryID: fid, Since: since})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("delivery days of factory %s: %w", factory, err)
+	}
+
+	out := make([]domain.DeliveryDay, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, domain.DeliveryDay{
+			EndpointID: domain.WebhookEndpointID(r.EndpointID.String()), Day: r.Day.UTC(), Delivered: int(r.Delivered), Refused: int(r.Refused),
+		})
+	}
+
+	return out, nil
+}
+
 // PruneDeliveries implements ports.Intake.
 func (in *Intake) PruneDeliveries(ctx context.Context, before time.Time) (int, error) {
 	n, err := fetch(ctx, in.s.systemTx, func(q *db.Queries) (int64, error) { return q.PruneWebhookDeliveries(ctx, before) })

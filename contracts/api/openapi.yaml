@@ -67,6 +67,14 @@ tags:
       synced into it and of connections searched live, their documents, and the search agents
       run through the gateway's knowledge__search. Members and keys read and search it; owners,
       admins and keys add, sync and delete sources and documents.
+  - name: webhooks
+    description: >-
+      A factory's webhook endpoints (ADR 0026 decisions 2 and 3): the addresses other systems post
+      to, POST /hooks/{endpoint id}, each with a signing secret sealed under the platform's master
+      key and shown only in the answers that create the endpoint and rotate its secret, and the
+      log of the deliveries each received, kept 30 days. Anyone who sees the factory reads them;
+      its editors (and the organization's owners and admins) create, rotate and delete endpoints,
+      after a recent sign-in, never with a key or a personal token.
   - name: definitions
     description: >-
       Factory definitions: creating factories, the one shared draft per factory (Visual
@@ -1856,6 +1864,140 @@ paths:
               schema: { $ref: "#/components/schemas/AndonPull" }
         "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/webhooks:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: listWebhookEndpoints
+      x-goal-scope: factory:read
+      tags: [webhooks]
+      summary: The factory's webhook endpoints
+      description: >-
+        By name, each with its address, kind, the label of its signing secret, the triggers of the
+        factory's current definition it feeds (those whose on is webhook.<name> or starts with
+        webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret.
+      responses:
+        "200":
+          description: The endpoints
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebhookEndpointList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createWebhookEndpoint
+      x-goal-scope: webhook:manage
+      tags: [webhooks]
+      summary: Create a webhook endpoint
+      description: >-
+        An endpoint with a new signing secret, answered here once and never again: copy it to the
+        sender. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409
+        webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while
+        goald has no master key. Needs a sign-in from the last 10 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewWebhookEndpoint" }
+      responses:
+        "201":
+          description: The endpoint with its signing secret
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatedWebhookEndpoint" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/WebhookEndpointRef"
+    delete:
+      operationId: deleteWebhookEndpoint
+      x-goal-scope: webhook:manage
+      tags: [webhooks]
+      summary: Delete a webhook endpoint and its deliveries
+      description: >-
+        Its address stops accepting requests. 404 webhook-not-found for an endpoint the factory
+        does not have. Needs a sign-in from the last 10 minutes.
+      responses:
+        "204": { description: Deleted }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/rotate:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/WebhookEndpointRef"
+    post:
+      operationId: rotateWebhookSecret
+      x-goal-scope: webhook:manage
+      tags: [webhooks]
+      summary: Replace an endpoint's signing secret
+      description: >-
+        A new signing secret, answered here once and never again; the old one stops opening at
+        once, so the sender's requests are refused until it has the new one. 404
+        webhook-not-found; 503 webhooks-unavailable while goald has no master key. Needs a sign-in
+        from the last 10 minutes.
+      responses:
+        "200":
+          description: The endpoint with its new signing secret
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatedWebhookEndpoint" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/WebhookEndpointRef"
+    get:
+      operationId: listWebhookDeliveries
+      x-goal-scope: factory:read
+      tags: [webhooks]
+      summary: One page of an endpoint's deliveries, newest first
+      description: >-
+        What the endpoint received in the last 30 days, each with its outcome, without its
+        headers and body (getWebhookDelivery). 400 webhook-invalid for a cursor this route did
+        not answer; 404 webhook-not-found.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: after
+          in: query
+          description: The next_after of the previous page; deliveries received before it
+          schema: { type: string }
+      responses:
+        "200":
+          description: Deliveries, newest first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebhookDeliveryPage" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries/{delivery}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/WebhookEndpointRef"
+      - name: delivery
+        in: path
+        required: true
+        description: The delivery's id
+        schema: { type: string }
+    get:
+      operationId: getWebhookDelivery
+      x-goal-scope: factory:read
+      tags: [webhooks]
+      summary: One delivery with its request
+      description: >-
+        The request as received: its headers (names lower-cased, never a signature header) and its
+        body. 404 webhook-delivery-not-found for a delivery the endpoint does not have.
+      responses:
+        "200":
+          description: The delivery
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebhookDeliveryRequest" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/stream:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -3045,6 +3187,12 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
 components:
   parameters:
+    WebhookEndpointRef:
+      name: endpoint
+      in: path
+      required: true
+      description: The webhook endpoint's id, the one in its address /hooks/{id}
+      schema: { type: string }
     UserRef:
       name: user
       in: path
@@ -6312,6 +6460,124 @@ components:
       additionalProperties:
         type: array
         items: { type: string }
+    WebhookKind:
+      type: string
+      enum: [generic, github]
+      description: >-
+        How requests are signed and name their event. generic: X-Goal-Signature: sha256=<hex
+        HMAC-SHA256 of the body> and the event in the body's event field; github: GitHub's
+        X-Hub-Signature-256 and X-GitHub-Event.
+    NewWebhookEndpoint:
+      type: object
+      required: [name, kind]
+      properties:
+        name: { type: string, description: "A slug unique within the factory, the one a trigger's on: webhook.<name> names" }
+        kind: { $ref: "#/components/schemas/WebhookKind" }
+    WebhookEndpointList:
+      type: object
+      required: [endpoints]
+      properties:
+        endpoints:
+          type: array
+          items: { $ref: "#/components/schemas/WebhookEndpoint" }
+    WebhookEndpoint:
+      type: object
+      description: A factory's webhook endpoint, never its signing secret
+      required: [id, name, kind, address, secret_name, created_at, rotated_at, triggers, days]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kind: { $ref: "#/components/schemas/WebhookKind" }
+        address: { type: string, description: "The path senders post to, /hooks/{id}, on goald's public origin" }
+        secret_name:
+          type: string
+          description: >-
+            The label the screens show for its signing secret, <name>-hook-secret. The secret is
+            sealed on the endpoint, not a credential, so no credential has this name.
+        created_at: { type: string, format: date-time }
+        rotated_at: { type: string, format: date-time, nullable: true, description: When its secret was last replaced; null when it never was }
+        triggers:
+          type: array
+          description: The names of the current definition's triggers it feeds, in definition order
+          items: { type: string }
+        days:
+          type: array
+          description: The last 7 UTC days, oldest first, today last, each zero-filled
+          minItems: 7
+          maxItems: 7
+          items: { $ref: "#/components/schemas/WebhookDeliveryDay" }
+    WebhookDeliveryDay:
+      type: object
+      required: [day, delivered, refused]
+      properties:
+        day: { type: string, format: date, description: The UTC day }
+        delivered: { type: integer, description: Deliveries accepted, with or without an item created }
+        refused: { type: integer }
+    CreatedWebhookEndpoint:
+      description: >-
+        An endpoint with its signing secret, answered only by createWebhookEndpoint and
+        rotateWebhookSecret and never readable again.
+      allOf:
+        - $ref: "#/components/schemas/WebhookEndpoint"
+        - type: object
+          required: [secret]
+          properties:
+            secret:
+              type: string
+              pattern: "^[0-9a-f]{64}$"
+              description: >-
+                The signing secret: 32 random bytes as 64 lower-case hex characters. Senders give
+                this string as the HMAC-SHA256 key (its ASCII bytes), as GitHub's webhook secret
+                field takes it.
+    WebhookDeliveryOutcome:
+      type: string
+      enum: [refused, accepted, created]
+      description: "refused, with its reason; accepted, with no trigger matched; created, an item"
+    WebhookDelivery:
+      type: object
+      required: [id, received_at, outcome, reason, item]
+      properties:
+        id: { type: string }
+        received_at: { type: string, format: date-time }
+        outcome: { $ref: "#/components/schemas/WebhookDeliveryOutcome" }
+        reason: { type: string, description: "Why it was refused, such as signature did not match; empty otherwise" }
+        item:
+          description: The item it created; null for another outcome or once that item is gone
+          allOf: [{ $ref: "#/components/schemas/WebhookDeliveryItem" }]
+          nullable: true
+    WebhookDeliveryItem:
+      type: object
+      required: [id, number]
+      properties:
+        id: { type: string }
+        number: { type: integer, format: int64 }
+    WebhookDeliveryPage:
+      type: object
+      required: [deliveries, next_after]
+      properties:
+        deliveries:
+          type: array
+          items: { $ref: "#/components/schemas/WebhookDelivery" }
+        next_after:
+          type: string
+          nullable: true
+          description: Pass as `after` for the next page; null on the last page
+    WebhookDeliveryRequest:
+      allOf:
+        - $ref: "#/components/schemas/WebhookDelivery"
+        - type: object
+          required: [headers, body, body_encoding]
+          properties:
+            headers:
+              type: object
+              description: The request's headers, names lower-cased, without X-Goal-Signature, X-Hub-Signature-256 or X-Hub-Signature
+              additionalProperties: { type: string }
+            body: { type: string, description: The body as received, in body_encoding }
+            body_encoding:
+              type: string
+              enum: [text, base64]
+              x-enum-varnames: [BodyText, BodyBase64]
+              description: "text: the body is valid UTF-8 and given as is; base64: it is not, and is given in standard base64"
     CredentialList:
       type: object
       required: [credentials]

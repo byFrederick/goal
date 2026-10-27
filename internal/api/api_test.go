@@ -145,6 +145,8 @@ type harness struct {
 	publicOnly atomic.Bool
 	// creds keeps the organizations' credentials, sealed under key k1, referred to by conns.
 	creds *porttest.Credentials
+	// intake keeps the factories' webhook endpoints, sealed under key k1, and their deliveries.
+	intake *porttest.Intake
 	// kb is the organizations' knowledge base, its uploads in kbObjects, at most testUploadMax
 	// bytes each; searches are by keywords.
 	kb        *porttest.Knowledge
@@ -452,11 +454,12 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
 	h.platform = porttest.NewPlatform(h.keys)
 
 	connections := h.connections(t, tenancy)
+	h.intake = porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), h.store)
 
 	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
 		Access: h.keys, OrgRetention: retention, Authorizer: h.seam, Auth: api.AuthConfig{Mode: api.AuthNone}, Platform: h.platform, Feed: feed,
-		Builder: h.builder, Connections: h.conns, Credentials: h.creds, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
+		Builder: h.builder, Connections: h.conns, Credentials: h.creds, Intake: h.intake, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
 		// GitLab's code host lists no repositories, as the gitlab adapter.
 		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()},
 		Knowledge: h.kb, KnowledgeUploads: h.uploads, KnowledgeSearch: knowledge.NewSearcher(h.kb, nil, nil), UploadMaxBytes: testUploadMax, Clock: h.clock,

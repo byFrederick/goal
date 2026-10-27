@@ -40,6 +40,7 @@ var permissionRules = map[string]rule{
 	"platform:manage":       {level: "install", fresh: true, platformAdmin: true},
 	"platform:read":         {level: "install", platformAdmin: true},
 	"public":                {level: "install"},
+	"webhook:manage":        {level: "factory", factoryRole: "editor", fresh: true},
 }
 
 // operationScopes is the x-goal-scope of every operation of contracts/api/openapi.yaml, by operationId.
@@ -58,6 +59,7 @@ var operationScopes = map[string]string{
 	"createKnowledgeSource":       "knowledge:manage",
 	"createOrg":                   "org:create",
 	"createPersonalToken":         "personal_token:manage",
+	"createWebhookEndpoint":       "webhook:manage",
 	"deleteConnection":            "connection:manage",
 	"deleteConnectionKind":        "connection:manage",
 	"deleteCredential":            "credential:manage",
@@ -66,6 +68,7 @@ var operationScopes = map[string]string{
 	"deleteKnowledgeDocument":     "knowledge:manage",
 	"deleteKnowledgeSource":       "knowledge:manage",
 	"deleteOrg":                   "org:delete",
+	"deleteWebhookEndpoint":       "webhook:manage",
 	"discardDraft":                "definition:edit",
 	"formatDefinition":            "org:read",
 	"getAgentStats":               "factory:read",
@@ -102,6 +105,7 @@ var operationScopes = map[string]string{
 	"getVersion":                  "factory:read",
 	"getVersionFile":              "factory:read",
 	"getVersionModel":             "factory:read",
+	"getWebhookDelivery":          "factory:read",
 	"getWeeklyThroughput":         "factory:read",
 	"importCredentials":           "credential:manage",
 	"linkItem":                    "item:operate",
@@ -130,6 +134,8 @@ var operationScopes = map[string]string{
 	"listRuns":                    "org:read",
 	"listTemplates":               "org:read",
 	"listVersions":                "factory:read",
+	"listWebhookDeliveries":       "factory:read",
+	"listWebhookEndpoints":        "factory:read",
 	"mergeItem":                   "item:decide",
 	"moveItem":                    "item:operate",
 	"noteItem":                    "item:operate",
@@ -154,6 +160,7 @@ var operationScopes = map[string]string{
 	"revokeAPIKey":                "api_key:manage",
 	"revokeMemberToken":           "api_key:manage",
 	"revokePersonalToken":         "personal_token:read",
+	"rotateWebhookSecret":         "webhook:manage",
 	"saveDraftSection":            "definition:edit",
 	"searchKnowledge":             "knowledge:read",
 	"searchOrg":                   "org:read",

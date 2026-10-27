@@ -64,3 +64,7 @@ permissions:
   - {name: definition:edit,    level: factory, factory_role: editor,   keys: true, pat: true}  # high impact
   - {name: definition:publish, level: factory, factory_role: editor,   keys: true, pat: true}  # high impact
   - {name: factory:manage,     level: factory, factory_role: editor,   keys: true}
+  # A factory's webhook endpoints (ADR 0026 decision 2): anyone who sees the factory reads them
+  # (factory:read); its editors create, rotate and delete them after a recent sign-in, never with
+  # a key or a personal token, as the create and rotate answers show a signing secret.
+  - {name: webhook:manage,     level: factory, factory_role: editor,   fresh: true}
