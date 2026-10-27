@@ -92,7 +92,7 @@ func (d evalsDB) agentRun(t *testing.T) domain.RunID {
 	}
 
 	id, err := d.store.StartRun(d.in(t), ports.NewRun{
-		FactoryID: d.factory, DefinitionVersionID: d.version, ItemID: it.ID, Station: stWork, Agent: "worker", StartedAt: time.Now(),
+		FactoryID: d.factory, DefinitionVersionID: d.version, ItemID: it.ID, Station: stWork, Agent: agWorker, StartedAt: time.Now(),
 	})
 	if err != nil {
 		t.Fatal(err)
