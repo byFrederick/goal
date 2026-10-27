@@ -157,7 +157,8 @@ func truncate(s string, limit int) string {
 }
 
 // RenderTemplate replaces each {{field}} placeholder of tpl (spaces inside the braces allowed)
-// by the plain value of fields[field] (PlainValue, at most 200 characters), quoted as a Go string
+// by the plain value of fields[field] (PlainValue, at most 200 characters, with < and > written
+// as ‹ and › so no value forms a delimiter such as the untrusted block's), quoted as a Go string
 // when quote is set; a field the event lacks is empty. It reads tpl once, so a value holding a
 // placeholder is never expanded again. Text that is not a placeholder stays as written.
 func RenderTemplate(tpl string, fields map[string]string, quote bool) string {
@@ -174,7 +175,7 @@ func RenderTemplate(tpl string, fields map[string]string, quote bool) string {
 			break
 		}
 
-		v := PlainValue(fields[strings.TrimSpace(tpl[i+2:i+2+j])], maxPlaceholder)
+		v := angles.Replace(PlainValue(fields[strings.TrimSpace(tpl[i+2:i+2+j])], maxPlaceholder))
 		if quote {
 			v = strconv.Quote(v)
 		}
@@ -189,6 +190,9 @@ func RenderTemplate(tpl string, fields map[string]string, quote bool) string {
 
 	return b.String()
 }
+
+// angles writes a placeholder value's angle brackets as look-alikes that delimit nothing.
+var angles = strings.NewReplacer("<", "‹", ">", "›")
 
 // The delimiters of the untrusted event block.
 const (
