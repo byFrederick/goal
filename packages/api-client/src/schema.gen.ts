@@ -2241,6 +2241,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's credentials
+         * @description By name, each with its type, description, factory scope, agents per factory, expiry, rotation reminder, last use and what uses it (the connections that refer to it as {{name}} and the agents listed). Never a value.
+         */
+        get: operations["listCredentials"];
+        put?: never;
+        /**
+         * Create a credential
+         * @description A named credential with its value, sealed under the platform's master key and never returned (ADR 0017). 400 credential-invalid for a name that is not a credential name or whose env variable is reserved for the platform, a missing or oversized value, an unknown type, a reminder without an expiry, or agents of a factory outside the scope; 409 credential-name-taken; 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as credential.created.
+         */
+        post: operations["createCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/credentials/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import credentials from a .env or YAML text
+         * @description env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+         */
+        post: operations["importCredentials"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/credentials/{credential}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The credential's name */
+                credential: components["parameters"]["CredentialRef"];
+            };
+            cookie?: never;
+        };
+        /** One credential, never its value */
+        get: operations["getCredential"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a credential
+         * @description 409 credential-in-use, naming the connections, while a connection refers to it as {{name}}; 404 credential-not-found. Needs a sign-in from the last 10 minutes. Audited as credential.deleted.
+         */
+        delete: operations["deleteCredential"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a credential's metadata, or replace its value
+         * @description Each property present replaces its own: name renames it, scope and agents replace the scope and the agent list, expiry replaces the expiry and the reminder together (an empty expiry clears both), value replaces the value for runs that start afterwards (audited as credential.value_replaced); a change of the rest is audited as credential.updated. 400 credential-invalid, 404 credential-not-found, 409 credential-name-taken, 503 credentials-unavailable for a value while goald has no master key. Needs a sign-in from the last 10 minutes.
+         */
+        patch: operations["patchCredential"];
+        trace?: never;
+    };
     "/v1/orgs/{org}/knowledge/sources": {
         parameters: {
             query?: never;
@@ -2444,7 +2524,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -5058,6 +5138,124 @@ export interface components {
                 [key: string]: string;
             };
         };
+        /** @description 3 to 40 lowercase letters, digits and inner dashes, starting with a letter; an agent gets it as the env variable of the name upper-cased with each - turned into _, which must not be one reserved for the platform */
+        CredentialName: string;
+        /**
+         * @description A label of what the credential is; every type reaches a run as one env value
+         * @enum {string}
+         */
+        CredentialType: "api_key" | "oauth_token" | "ssh_key" | "cloud_role" | "app_key";
+        /** @description The factories whose runs may open it; neither all nor any listed reaches no run */
+        CredentialScope: {
+            /** @description Every factory */
+            all_factories: boolean;
+            /** @description The factories' metadata.id, when not all_factories */
+            factories: string[];
+        };
+        /** @description Per factory id, the agents that get it in their run's box as env */
+        CredentialAgents: {
+            [key: string]: string[];
+        };
+        CredentialList: {
+            credentials: components["schemas"]["Credential"][];
+        };
+        /** @description An organization's credential (ADR 0017), never its value */
+        Credential: {
+            id: string;
+            name: components["schemas"]["CredentialName"];
+            type: components["schemas"]["CredentialType"];
+            description: string;
+            scope: components["schemas"]["CredentialScope"];
+            agents: components["schemas"]["CredentialAgents"];
+            /**
+             * Format: date-time
+             * @description When the value expires
+             */
+            expires_at: string | null;
+            /** @description Days before expires_at a rotation reminder is due; 0: none */
+            remind_days: number;
+            /**
+             * Format: date-time
+             * @description When a run last opened it
+             */
+            last_used_at: string | null;
+            used_by: components["schemas"]["CredentialUsers"];
+            created_by: components["schemas"]["Actor"];
+            /** Format: date-time */
+            created_at: string;
+            updated_by: components["schemas"]["Actor"];
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @description What uses a credential */
+        CredentialUsers: {
+            /** @description The connections that refer to it as {{name}}, sorted; it cannot be deleted meanwhile */
+            connections: string[];
+            /** @description The agents it lists, by factory id then agent */
+            agents: components["schemas"]["CredentialAgent"][];
+        };
+        CredentialAgent: {
+            factory_id: string;
+            agent: string;
+        };
+        NewCredential: {
+            name: components["schemas"]["CredentialName"];
+            type: components["schemas"]["CredentialType"];
+            description?: string;
+            scope?: components["schemas"]["CredentialScope"];
+            agents?: components["schemas"]["CredentialAgents"];
+            /** Format: date-time */
+            expires_at?: string;
+            remind_days?: number;
+            /** @description The secret; sealed and never answered */
+            value: string;
+        };
+        CredentialPatch: {
+            name?: components["schemas"]["CredentialName"];
+            type?: components["schemas"]["CredentialType"];
+            description?: string;
+            scope?: components["schemas"]["CredentialScope"];
+            agents?: components["schemas"]["CredentialAgents"];
+            expiry?: components["schemas"]["CredentialExpiry"];
+            /** @description A new secret, replacing the value; never answered */
+            value?: string;
+        };
+        /** @description An expiry and its rotation reminder; without expires_at, neither */
+        CredentialExpiry: {
+            /** Format: date-time */
+            expires_at?: string;
+            remind_days?: number;
+        };
+        CredentialImport: {
+            /** @enum {string} */
+            format: "env" | "yaml";
+            /** @description The .env or YAML text; its values are sealed and never answered */
+            text: string;
+            /**
+             * @description What a real run does with a name that exists; skip when absent
+             * @enum {string}
+             */
+            on_conflict?: "replace" | "skip";
+            /** @description Answer what the import would do and store nothing */
+            dry_run?: boolean;
+        };
+        CredentialImportResult: {
+            dry_run: boolean;
+            /** @description Each name of the import, in its order */
+            credentials: components["schemas"]["CredentialImportOutcome"][];
+        };
+        CredentialImportOutcome: {
+            name: string;
+            /** @description A credential had the name before the import */
+            exists: boolean;
+            /** @description How many connections use the existing one */
+            connections: number;
+            /**
+             * @description A real run only, what it did
+             * @enum {string}
+             */
+            outcome?: "created" | "replaced" | "skipped";
+        };
         ConnectionTestResult: {
             ok: boolean;
             /** @description The test request's HTTP status, when it got one */
@@ -5257,6 +5455,8 @@ export interface components {
         OrgRef: string;
         /** @description The connection's name */
         ConnectionRef: string;
+        /** @description The credential's name */
+        CredentialRef: string;
         /** @description The knowledge source's name */
         SourceRef: string;
         /** @description The knowledge document's id */
@@ -8434,6 +8634,166 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RepositoryList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The credentials */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewCredential"];
+            };
+        };
+        responses: {
+            /** @description The credential */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Credential"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    importCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CredentialImport"];
+            };
+        };
+        responses: {
+            /** @description What the import does, or did */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialImportResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The credential's name */
+                credential: components["parameters"]["CredentialRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The credential */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Credential"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The credential's name */
+                credential: components["parameters"]["CredentialRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    patchCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The credential's name */
+                credential: components["parameters"]["CredentialRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CredentialPatch"];
+            };
+        };
+        responses: {
+            /** @description The credential */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Credential"];
                 };
             };
             default: components["responses"]["Problem"];

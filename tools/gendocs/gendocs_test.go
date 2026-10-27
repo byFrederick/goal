@@ -162,7 +162,7 @@ func TestParseADR_Rejects(t *testing.T) {
 	}
 }
 
-func TestCheck_CleanTreePasses(t *testing.T) {
+func TestValidate_StaleGeneratedFilesPass(t *testing.T) {
 	t.Parallel()
 
 	dir := copyRepo(t, "repo")
@@ -171,63 +171,80 @@ func TestCheck_CleanTreePasses(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	root := openRoot(t, dir)
+
+	for _, file := range generatedFiles {
+		if err := root.WriteFile(file, []byte("stale, edited by hand\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	if err := run([]string{"-C", dir, "-check"}, &bytes.Buffer{}); err != nil {
-		t.Errorf("check on a fresh render: %v", err)
+		t.Errorf("check with stale generated files: %v, want it to pass", err)
+	}
+
+	for _, file := range generatedFiles {
+		got, err := root.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if string(got) != "stale, edited by hand\n" {
+			t.Errorf("check rewrote %s, want it to write nothing", file)
+		}
 	}
 }
 
-func TestCheck_HandEditFails(t *testing.T) {
-	t.Parallel()
-
-	for _, file := range []string{changeMapFile, adrIndexFile} {
-		t.Run(file, func(t *testing.T) {
-			t.Parallel()
-
-			dir := copyRepo(t, "repo")
-
-			if err := run([]string{"-C", dir}, &bytes.Buffer{}); err != nil {
-				t.Fatal(err)
-			}
-
-			root := openRoot(t, dir)
-
-			text, err := root.ReadFile(file)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			edited := strings.Replace(string(text), "Alpha", "Alpha, edited", 1)
-			edited = strings.Replace(edited, "`a.go`", "`c.go`", 1)
-
-			if err := root.WriteFile(file, []byte(edited), 0o600); err != nil {
-				t.Fatal(err)
-			}
-
-			var out bytes.Buffer
-
-			err = run([]string{"-C", dir, "-check"}, &out)
-			if err == nil {
-				t.Fatal("check after a hand edit succeeded, want an error")
-			}
-
-			if !strings.Contains(out.String(), file) {
-				t.Errorf("output %q does not name %s", out.String(), file)
-			}
-		})
-	}
-}
-
-func TestCheck_MissingFileFails(t *testing.T) {
+func TestValidate_MissingGeneratedFilesPass(t *testing.T) {
 	t.Parallel()
 
 	dir := copyRepo(t, "repo")
 
-	var out bytes.Buffer
-	if err := run([]string{"-C", dir, "-check"}, &out); err == nil {
-		t.Fatal("check with no generated files succeeded, want an error")
+	if err := run([]string{"-C", dir, "-check"}, &bytes.Buffer{}); err != nil {
+		t.Errorf("check with no generated files: %v, want it to pass", err)
 	}
 
-	if !strings.Contains(out.String(), adrIndexFile) || !strings.Contains(out.String(), changeMapFile) {
-		t.Errorf("output %q does not name both files", out.String())
+	for _, file := range generatedFiles {
+		if _, err := openRoot(t, dir).Stat(file); err == nil {
+			t.Errorf("check wrote %s, want it to write nothing", file)
+		}
+	}
+}
+
+func TestValidate_RejectsBadEntry(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		file, text, want string
+	}{
+		"a change-map entry without a section": {
+			"docs/engineering/change-map/20-second.md", "## When you change\n\na\n\n## Also change\n\nx\n", "20-second.md",
+		},
+		"an ADR whose heading has another number": {
+			"docs/adr/0003-gamma.md", "# ADR 0004 — Gamma\n\nStatus: accepted\n", "0003-gamma.md",
+		},
+		"an ADR without a title": {
+			"docs/adr/0003-gamma.md", "# ADR 0003 — \n\nStatus: accepted\n", "0003-gamma.md",
+		},
+		"an ADR without a status": {
+			"docs/adr/0003-gamma.md", "# ADR 0003 — Gamma\n\n## Context\n", "0003-gamma.md",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := copyRepo(t, "repo")
+
+			if err := openRoot(t, dir).WriteFile(tt.file, []byte(tt.text), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			err := run([]string{"-C", dir, "-check"}, &bytes.Buffer{})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Errorf("check = %v, want an error naming %s", err, tt.want)
+			}
+		})
 	}
 }

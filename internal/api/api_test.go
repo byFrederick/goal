@@ -122,6 +122,8 @@ var testBoxSizes = []domain.BoxSize{
 
 const testEgress = "203.0.113.0/24"
 
+var testEgressAddresses = []netip.Prefix{netip.MustParsePrefix(testEgress)}
+
 type harness struct {
 	srv      *httptest.Server
 	engine   *engine.Engine
@@ -154,6 +156,8 @@ type harness struct {
 	// servers) allowed unless publicOnly is set.
 	conns      *porttest.Connections
 	publicOnly atomic.Bool
+	// creds keeps the organizations' credentials, sealed under key k1, referred to by conns.
+	creds *porttest.Credentials
 	// kb is the organizations' knowledge base, its uploads in kbObjects, at most testUploadMax
 	// bytes each; searches are by keywords.
 	kb        *porttest.Knowledge
@@ -396,6 +400,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
 		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock,
 		CodeHosts:   map[string]ports.CodeHost{"github": h.codehost},
 		Connections: engineConnections(t, newTenancy(t)),
+		Credentials: porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), tenancy, nil),
 	}, engine.Config{Image: "ghcr.io/acme/goal-agent:1", GatewayURL: "http://gateway.example.com/mcp", GatewayKeyRef: "env:GOAL_GATEWAY_KEY"})
 	if err != nil {
 		t.Fatal(err)
@@ -464,12 +469,11 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer) *harness {
 	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
 		Access: h.keys, OrgRetention: retention, Authorizer: h.seam, Auth: api.AuthConfig{Mode: api.AuthNone}, Platform: h.platform, Feed: feed,
-		Builder: h.builder, Connections: h.conns, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
+		Builder: h.builder, Connections: h.conns, Credentials: h.creds, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
 		// GitLab's code host lists no repositories, as the gitlab adapter.
 		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()},
 		Knowledge: h.kb, KnowledgeUploads: h.uploads, KnowledgeSearch: knowledge.NewSearcher(h.kb, nil, nil), UploadMaxBytes: testUploadMax, Clock: h.clock,
-		OrgPolicies: porttest.NewOrgPolicies([]string{modelOpus, modelHaiku}, tenancy, h.clock.Now),
-		BoxSizes:    testBoxSizes, EgressAddresses: []netip.Prefix{netip.MustParsePrefix(testEgress)},
+		OrgPolicies: porttest.NewOrgPolicies([]string{modelOpus, modelHaiku}, tenancy, h.clock.Now), BoxSizes: testBoxSizes, EgressAddresses: testEgressAddresses,
 	}
 	if in != nil {
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity
@@ -530,6 +534,7 @@ func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
 	t.Helper()
 
 	h.conns = porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), audit)
+	h.creds = porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), audit, h.conns)
 	h.kb, h.kbObjects = porttest.NewKnowledge(h.conns, audit), porttest.NewObjectStore()
 	h.uploads = knowledge.NewUploads(h.kb, h.kbObjects, testUploadMax)
 

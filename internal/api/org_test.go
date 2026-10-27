@@ -319,6 +319,14 @@ var probes = map[string]probe{
 	"testConnection":             {method: http.MethodPost, path: "/v1/orgs/acme/connections/docs/test", org: testOrg},
 	"listConnectionRepositories": {method: http.MethodGet, path: "/v1/orgs/acme/connections/docs/repositories", org: testOrg},
 	"deleteConnection":           {method: http.MethodDelete, path: "/v1/orgs/acme/connections/docs", org: testOrg},
+	"listCredentials":            {method: http.MethodGet, path: "/v1/orgs/acme/credentials", org: testOrg},
+	"createCredential": {
+		method: http.MethodPost, path: "/v1/orgs/acme/credentials", org: testOrg, body: `{"name":"acme-token","type":"api_key","value":"v"}`,
+	},
+	"getCredential":     {method: http.MethodGet, path: "/v1/orgs/acme/credentials/acme-token", org: testOrg},
+	"patchCredential":   {method: http.MethodPatch, path: "/v1/orgs/acme/credentials/acme-token", body: `{"description":"rotated"}`, org: testOrg},
+	"deleteCredential":  {method: http.MethodDelete, path: "/v1/orgs/acme/credentials/acme-token", org: testOrg},
+	"importCredentials": {method: http.MethodPost, path: "/v1/orgs/acme/credentials/import", body: `{"format":"env","text":"A_B=c","dry_run":true}`, org: testOrg},
 
 	"listKnowledgeSources": {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/sources?factory=acme", org: testOrg, factory: acmeID},
 	"createKnowledgeSource": {

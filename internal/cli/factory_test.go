@@ -103,6 +103,7 @@ func newDefGoald(t *testing.T) *defGoald {
 		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: clock,
 		CodeHosts:   map[string]ports.CodeHost{},
 		Connections: porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy),
+		Credentials: porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), tenancy, nil),
 	}, engine.Config{Image: "ghcr.io/acme/goal-agent:1", GatewayURL: "http://gateway.example.com/mcp", GatewayKeyRef: "env:GOAL_GATEWAY_KEY"})
 	if err != nil {
 		t.Fatal(err)
@@ -138,6 +139,7 @@ func newDefGoald(t *testing.T) *defGoald {
 		Access: keys, OrgRetention: time.Hour, Authorizer: api.AllowAll{}, Auth: api.AuthConfig{Mode: api.AuthNone},
 		Platform: porttest.NewPlatform(porttest.NewIdentity(clock.Now)), Feed: api.NewFeed(porttest.NewItemNotices(), defNotices, nil),
 		Builder: builder.New(objects, clock, builder.Config{}), Connections: conns, ParseKind: connkind.Parse,
+		Credentials:         porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), tenancy, conns),
 		ConnectionTransport: transport, Knowledge: kb, KnowledgeUploads: uploads, KnowledgeSearch: knowledge.NewSearcher(kb, nil, nil),
 		UploadMaxBytes: domain.DefaultMaxUpload, Clock: clock,
 		OrgPolicies: porttest.NewOrgPolicies(nil, tenancy, clock.Now), BoxSizes: []domain.BoxSize{{Size: domain.SandboxMedium, VCPUs: 2, MemoryBytes: 4 << 30}},

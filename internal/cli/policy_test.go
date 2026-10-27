@@ -14,7 +14,10 @@ import (
 )
 
 // cliOpus is the stub install's default model.
-const cliOpus = "claude-opus-5-5"
+const (
+	cliOpus   = "claude-opus-5-5"
+	cliSonnet = "claude-sonnet-5-5"
+)
 
 // policyGoald serves acme's policy at revision 3 and records the save it was sent.
 type policyGoald struct {
@@ -43,7 +46,7 @@ func newPolicyGoald(t *testing.T) *policyGoald {
 			{Id: cliOpus, Label: "Claude Opus 5.5", UsedBy: []gen.ModelUse{
 				{FactoryId: "f1", Name: "support", Agents: []string{"responder"}}, {FactoryId: "f2", Name: "web", Agents: []string{"backend", "frontend"}},
 			}},
-			{Id: "claude-sonnet-5-5", Label: "Claude Sonnet 5.5", UsedBy: []gen.ModelUse{}},
+			{Id: cliSonnet, Label: "Claude Sonnet 5.5", UsedBy: []gen.ModelUse{}},
 			{Id: "claude-haiku-5-5", Label: "Claude Haiku 5.5", UsedBy: []gen.ModelUse{}},
 		},
 		BoxSizes: []gen.PolicyBoxSize{
@@ -142,7 +145,7 @@ func TestPolicy_SetKeepsWhatItRead(t *testing.T) {
 
 	g := newPolicyGoald(t)
 
-	out, err := g.goalPolicy(t, policySetVerb, "--models", "claude-opus-5-5,claude-sonnet-5-5", "--default", "claude-sonnet-5-5",
+	out, err := g.goalPolicy(t, policySetVerb, "--models", cliOpus+","+cliSonnet, "--default", cliSonnet,
 		"--deny-command", "Bash(git push --force:*)", "--deny-command", "Bash(rm -rf /:*)", "--box-limit", "90m")
 	if err != nil {
 		t.Fatal(err)
@@ -153,7 +156,7 @@ func TestPolicy_SetKeepsWhatItRead(t *testing.T) {
 	}
 
 	want := gen.OrgPolicyInput{
-		AllowedModels: []string{cliOpus, "claude-sonnet-5-5"}, DefaultModel: "claude-sonnet-5-5",
+		AllowedModels: []string{cliOpus, cliSonnet}, DefaultModel: cliSonnet,
 		DeniedCommands: []string{"Bash(git push --force:*)", "Bash(rm -rf /:*)"}, BoxTimeLimitMinutes: 90,
 		Tools: gen.ToolPolicy{WriteOutsideBranch: "off", MergePullRequest: "review_approval", ReadWeb: "ask", UseCredentials: "attached_only"},
 	}
