@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"testing"
 	"time"
@@ -43,6 +44,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		test func(f *fixture)
 	}{
 		{"Endpoint_SecretReturnedOnceAndOpened", testSecretOnce},
+		{"Endpoint_ReadWithoutItsSecret", testEndpointReads},
 		{"Endpoint_RotateChangesTheSecret", testRotate},
 		{"Endpoint_DuplicateNameRefused", testDuplicateName},
 		{"Endpoint_RulesRefused", testEndpointRules},
@@ -53,10 +55,12 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Delivery_RulesRefused", testDeliveryRules},
 		{"Delivery_PruneDeletesOnlyOlderRows", testPrune},
 		{"Firing_SecondWithTheSameKeyIsANoOp", testFiringIdempotent},
+		{"Firing_RulesRefused", testFiringRules},
 		{"Firing_CreatedSinceCountsCreatedOnly", testCreatedSince},
 		{"Firing_OpenItemByDedupeIgnoresClosedItems", testDedupe},
 		{"Tally_SourcesAndTriggerStatsOverAWindow", testTallies},
-		{"OtherOrg_SeesNothing", testIsolation},
+		{"OtherOrg_ReachesNoEndpoint", testIsolation},
+		{"OtherOrg_CountsNothing", testIsolatedReads},
 		{"Methods_NoOrgIsAnError", testNoOrg},
 	}
 
@@ -78,6 +82,7 @@ const (
 	flaky   = "flaky-test-on-main"
 	nightly = "nightly-audit"
 	station = "build"
+	jsonCT  = "application/json"
 )
 
 // t0 is a fixed instant the suite's events happen around, at microsecond precision as
@@ -110,7 +115,7 @@ func (f *fixture) deliver(id domain.WebhookEndpointID, at time.Time) domain.Webh
 	f.t.Helper()
 
 	d, err := f.in.RecordDelivery(f.ctx(), domain.NewWebhookDelivery{
-		EndpointID: id, ReceivedAt: at, Headers: map[string]string{"Content-Type": "application/json"}, Body: []byte(`{"event":"deploy"}`),
+		EndpointID: id, ReceivedAt: at, Headers: map[string]string{"Content-Type": jsonCT}, Body: []byte(`{"event":"deploy"}`),
 		Outcome: domain.DeliveryAccepted,
 	})
 	if err != nil {
@@ -183,8 +188,7 @@ func (f *fixture) close(it domain.Item, state domain.ItemState) {
 }
 
 // A new endpoint's secret is 32 random bytes, returned by CreateEndpoint and opened again by
-// OpenSecret; the endpoint, as listed and read, carries none, and EndpointOrg finds its
-// organization without one in ctx.
+// OpenSecret.
 func testSecretOnce(f *fixture) {
 	t := f.t
 	s := f.endpoint(hooks, domain.WebhookGitHub)
@@ -199,6 +203,19 @@ func testSecretOnce(f *fixture) {
 		t.Errorf("CreateEndpoint = %+v", e)
 	}
 
+	secret, err := f.in.OpenSecret(f.ctx(), e.ID)
+	if err != nil || !bytes.Equal(secret, s.Secret) {
+		t.Errorf("OpenSecret = %x, %v; want %x", secret, err, s.Secret)
+	}
+}
+
+// An endpoint is read and listed, by name, without its secret, and EndpointOrg finds its
+// organization without one in ctx.
+func testEndpointReads(f *fixture) {
+	t := f.t
+	e := f.endpoint(hooks, domain.WebhookGitHub).Endpoint
+	f.endpoint("deploys", domain.WebhookGeneric)
+
 	got, err := f.in.Endpoint(f.ctx(), e.ID)
 	if err != nil || got.ID != e.ID || got.Name != hooks || !got.CreatedAt.Equal(e.CreatedAt) {
 		t.Errorf("Endpoint = %+v, %v; want %+v", got, err, e)
@@ -207,11 +224,6 @@ func testSecretOnce(f *fixture) {
 	list, err := f.in.ListEndpoints(f.ctx(), f.factory)
 	if err != nil || len(list) != 2 || list[0].Name != hooks || list[1].Name != "deploys" {
 		t.Errorf("ListEndpoints = %+v, %v; want ci-hooks then deploys", list, err)
-	}
-
-	secret, err := f.in.OpenSecret(f.ctx(), e.ID)
-	if err != nil || !bytes.Equal(secret, s.Secret) {
-		t.Errorf("OpenSecret = %x, %v; want %x", secret, err, s.Secret)
 	}
 
 	org, err := f.in.EndpointOrg(context.Background(), e.ID)
@@ -357,7 +369,7 @@ func testSignatureHeaders(f *fixture) {
 		EndpointID: s.Endpoint.ID, ReceivedAt: t0,
 		Headers: map[string]string{
 			"X-Hub-Signature-256": "sha256=deadbeef", "X-Hub-Signature": "sha1=beef", "x-goal-signature": "sha256=cafe",
-			"X-GitHub-Event": "check_run", "Content-Type": "application/json",
+			"X-GitHub-Event": "check_run", "Content-Type": jsonCT,
 		},
 		Body: []byte(`{"action":"completed"}`), Outcome: domain.DeliveryCreated, Reason: "created item", ItemID: it.ID,
 	})
@@ -365,7 +377,7 @@ func testSignatureHeaders(f *fixture) {
 		t.Fatalf("RecordDelivery: %v", err)
 	}
 
-	want := map[string]string{"x-github-event": "check_run", "content-type": "application/json"}
+	want := map[string]string{"x-github-event": "check_run", "content-type": jsonCT}
 
 	got := f.deliveries(s.Endpoint.ID)
 	if len(got) != 1 {
@@ -373,7 +385,7 @@ func testSignatureHeaders(f *fixture) {
 	}
 
 	for _, g := range []domain.WebhookDelivery{d, got[0]} {
-		if len(g.Headers) != len(want) || g.Headers["x-github-event"] != "check_run" || g.Headers["content-type"] != "application/json" {
+		if !maps.Equal(g.Headers, want) {
 			t.Errorf("headers = %v; want %v", g.Headers, want)
 		}
 
@@ -497,12 +509,27 @@ func testFiringIdempotent(f *fixture) {
 	if _, fresh := f.fire(flaky, "check-run-2", "", "", t0); !fresh {
 		t.Error("the trigger's firing with another key was not recorded")
 	}
+}
+
+// A firing from an unknown source, or naming an item it did not create, is refused.
+func testFiringRules(f *fixture) {
+	t := f.t
 
 	_, _, err := f.in.RecordFiring(f.ctx(), domain.TriggerFiring{
 		FactoryID: f.factory, Trigger: flaky, Source: "slack", EventKey: "slack.message", IdempotencyKey: "m1", Outcome: domain.FiringSkipped, At: t0,
 	})
 	if !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("a firing from slack = %v; want ErrInvalid", err)
+	}
+
+	it := f.item(domain.ItemFromGitHub, flaky, t0)
+
+	_, _, err = f.in.RecordFiring(f.ctx(), domain.TriggerFiring{
+		FactoryID: f.factory, Trigger: flaky, Source: domain.TriggerGitHub, EventKey: "github.check_run.failed", IdempotencyKey: "e1",
+		Outcome: domain.FiringSkipped, ItemID: it.ID, At: t0,
+	})
+	if !errors.Is(err, domain.ErrInvalid) {
+		t.Errorf("a skipped firing naming an item = %v; want ErrInvalid", err)
 	}
 }
 
@@ -617,14 +644,12 @@ func (f *fixture) spent(it domain.Item, usd float64) {
 	}
 }
 
-// Another organization sees, opens, rotates and deletes none of the fixture's endpoints, and
-// counts none of its firings or items.
+// Another organization reads, opens, rotates, deletes and delivers to none of the fixture's
+// endpoints.
 func testIsolation(f *fixture) {
 	t := f.t
 	s := f.endpoint(hooks, domain.WebhookGeneric)
 	f.deliver(s.Endpoint.ID, t0)
-	it := f.item(domain.ItemFromGitHub, flaky, t0)
-	f.fire(flaky, "e1", "unit", it.ID, t0)
 
 	labs := domain.WithOrg(t.Context(), f.NewOrg(t))
 	id := s.Endpoint.ID
@@ -650,6 +675,26 @@ func testIsolation(f *fixture) {
 		t.Errorf("labs RecordDelivery on acme's endpoint = %v; want ErrNotFound", err)
 	}
 
+	if got := f.deliveries(id); len(got) != 1 {
+		t.Errorf("acme's deliveries = %d; want its 1", len(got))
+	}
+
+	if _, err := f.in.OpenSecret(f.ctx(), id); err != nil {
+		t.Errorf("acme OpenSecret: %v", err)
+	}
+}
+
+// Another organization lists, counts and tallies none of the fixture's rows.
+func testIsolatedReads(f *fixture) {
+	t := f.t
+	s := f.endpoint(hooks, domain.WebhookGeneric)
+	f.deliver(s.Endpoint.ID, t0)
+	it := f.item(domain.ItemFromGitHub, flaky, t0)
+	f.fire(flaky, "e1", "unit", it.ID, t0)
+
+	labs := domain.WithOrg(t.Context(), f.NewOrg(t))
+	id := s.Endpoint.ID
+
 	if got, err := f.in.ListEndpoints(labs, f.factory); err != nil || len(got) != 0 {
 		t.Errorf("labs ListEndpoints = %v, %v; want none", got, err)
 	}
@@ -672,14 +717,6 @@ func testIsolation(f *fixture) {
 
 	if got, err := f.in.TriggerStats(labs, f.factory, t0.Add(-time.Hour)); err != nil || len(got) != 0 {
 		t.Errorf("labs TriggerStats = %v, %v; want none", got, err)
-	}
-
-	if got := f.deliveries(id); len(got) != 1 {
-		t.Errorf("acme's deliveries = %d; want its 1", len(got))
-	}
-
-	if _, err := f.in.OpenSecret(f.ctx(), id); err != nil {
-		t.Errorf("acme OpenSecret: %v", err)
 	}
 }
 

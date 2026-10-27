@@ -402,12 +402,7 @@ func (in *Intake) OpenItemByDedupe(ctx context.Context, factory domain.FactoryID
 
 	for _, r := range in.d.firings {
 		f := r.f
-		if r.org != org || f.FactoryID != factory || f.Trigger != trigger || f.Outcome != domain.FiringCreated || f.Dedupe != value || f.ItemID == "" {
-			continue
-		}
-
-		it, ok := in.store.visible(f.ItemID, org)
-		if !ok || it.State == domain.StateDone || it.State == domain.StateCancelled {
+		if r.org != org || f.FactoryID != factory || f.Trigger != trigger || f.Dedupe != value || !in.openLocked(org, f.ItemID) {
 			continue
 		}
 
@@ -502,6 +497,14 @@ func (in *Intake) items(org domain.OrgID, factory domain.FactoryID, since time.T
 	}
 
 	return out
+}
+
+// openLocked reports whether item is org's and neither done nor cancelled. Callers hold
+// in.store.mu.
+func (in *Intake) openLocked(org domain.OrgID, item domain.ItemID) bool {
+	it, ok := in.store.visible(item, org)
+
+	return ok && it.State != domain.StateDone && it.State != domain.StateCancelled
 }
 
 func (in *Intake) ownsFactory(org domain.OrgID, factory domain.FactoryID) bool {

@@ -54,7 +54,7 @@ func (s *Store) CreateItem(ctx context.Context, n domain.NewItem) (domain.Item, 
 		row, err := q.InsertItem(ctx, db.InsertItemParams{
 			ID: id, FactoryID: factory, Number: number, ParentID: parent, Type: n.Type, Lane: optional(n.Lane),
 			Title: n.Title, Body: n.Body, Station: n.Station, State: string(n.State), ClassOfService: string(n.Class),
-			Priority: int64(n.Priority), CreatedAt: n.CreatedAt,
+			Priority: int64(n.Priority), CreatedAt: n.CreatedAt, Source: optional(string(n.Source)), Trigger: optional(n.Trigger),
 		})
 		if err != nil {
 			return fmt.Errorf("insert item: %w", err)

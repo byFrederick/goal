@@ -166,6 +166,8 @@ type DeliveryCursor struct {
 // ItemSource is where a work item came from, for Intake.
 type ItemSource string
 
+// The sources an item may come from: people in the UI, the CLI, the API, or a trigger's schedule,
+// webhook or GitHub event.
 const (
 	ItemFromPeople   ItemSource = "people"
 	ItemFromCLI      ItemSource = "cli"
@@ -178,6 +180,8 @@ const (
 // TriggerSource is what kind of event reached a trigger.
 type TriggerSource string
 
+// The kinds of event that reach a trigger: a schedule's instant, a webhook delivery or a GitHub
+// event.
 const (
 	TriggerSchedule TriggerSource = "schedule"
 	TriggerWebhook  TriggerSource = "webhook"
@@ -221,6 +225,26 @@ type TriggerFiring struct {
 // Check refuses a firing that misses its factory, trigger, event or key, has an unknown source or
 // outcome, or names an item when it created none; the error wraps ErrInvalid.
 func (f TriggerFiring) Check() error {
+	if err := f.checkEvent(); err != nil {
+		return err
+	}
+
+	switch {
+	case utf8.RuneCountInString(f.Dedupe) > maxIntakeText || utf8.RuneCountInString(f.Reason) > maxIntakeText:
+		return fmt.Errorf("a firing's dedupe value and reason are at most %d characters: %w", maxIntakeText, ErrInvalid)
+	case f.Outcome != FiringCreated && f.Outcome != FiringSkipped:
+		return fmt.Errorf("firing outcome %q must be created or skipped: %w", f.Outcome, ErrInvalid)
+	case f.ItemID != "" && f.Outcome != FiringCreated:
+		return fmt.Errorf("only a created firing names an item: %w", ErrInvalid)
+	case f.At.IsZero():
+		return fmt.Errorf("a firing needs its instant: %w", ErrInvalid)
+	}
+
+	return nil
+}
+
+// checkEvent checks what names the firing's factory, trigger and event.
+func (f TriggerFiring) checkEvent() error {
 	switch {
 	case f.FactoryID == "":
 		return fmt.Errorf("a firing needs a factory: %w", ErrInvalid)
@@ -232,14 +256,6 @@ func (f TriggerFiring) Check() error {
 		return fmt.Errorf("a firing needs an event key of at most 200 bytes: %w", ErrInvalid)
 	case f.IdempotencyKey == "" || utf8.RuneCountInString(f.IdempotencyKey) > maxIntakeText:
 		return fmt.Errorf("a firing needs an idempotency key of at most %d characters: %w", maxIntakeText, ErrInvalid)
-	case utf8.RuneCountInString(f.Dedupe) > maxIntakeText || utf8.RuneCountInString(f.Reason) > maxIntakeText:
-		return fmt.Errorf("a firing's dedupe value and reason are at most %d characters: %w", maxIntakeText, ErrInvalid)
-	case f.Outcome != FiringCreated && f.Outcome != FiringSkipped:
-		return fmt.Errorf("firing outcome %q must be created or skipped: %w", f.Outcome, ErrInvalid)
-	case f.ItemID != "" && f.Outcome != FiringCreated:
-		return fmt.Errorf("only a created firing names an item: %w", ErrInvalid)
-	case f.At.IsZero():
-		return fmt.Errorf("a firing needs its instant: %w", ErrInvalid)
 	}
 
 	return nil
