@@ -123,7 +123,7 @@ test('an organization without budgets or factories says so', async ({ page, requ
     page.getByText(
       isPhone(page)
         ? /^\$\d+\.\d\d spent this week, no budget set$/
-        : /^Goal’ factories\. Nothing is waiting on you, and \$\d+\.\d\d was spent this week\.$/,
+        : /^Goal’s factories\. Nothing is waiting on you, and \$\d+\.\d\d was spent this week\.$/,
     ),
   ).toBeVisible();
   await expect(page.getByRole('region', { name: 'Waiting on you', exact: true })).toContainText(

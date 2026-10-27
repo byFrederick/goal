@@ -5,6 +5,11 @@
 // block sits at the bottom of the organization sheet. With sign-in off (GOAL_AUTH=none) it names
 // the local user and has no actions.
 //
+// The restyled menu (docs/design/screens/account/shell.jpg, "Account menu") shows the name, a role pill
+// and the code-host identity only when the session carries one, then Theme (Auto, Light, Dark), Profile
+// (opens Edit name…), Notifications, Personal tokens, Connected apps, Keyboard shortcuts (?), Sign out and
+// Sign out everywhere…. Notifications, Connected apps and Keyboard shortcuts are disabled ("Not available yet").
+//
 // AccountProvider (in AppShell) keeps the dialogs those actions open, so they outlive the panel or
 // sheet that opened them, and keeps the session alive while signed in.
 import { useQuery } from '@tanstack/react-query';
