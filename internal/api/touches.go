@@ -74,37 +74,48 @@ func (s *server) GetTouchMetrics(ctx context.Context, req gen.GetTouchMetricsReq
 		return nil, err
 	}
 
-	weekly := q
-	weekly.Until = r.to.Add(day)
-
-	buckets, err := s.items.TouchesByBucket(ctx, weekly, week, weeks)
-	if err != nil {
+	if out.Weekly, out.Daily, err = s.touchSeries(ctx, q, r.to, weeks); err != nil {
 		return nil, err
 	}
 
-	first := weekly.Until.Add(-time.Duration(weeks) * week)
+	return out, nil
+}
+
+// touchSeries is the headline of q in each of the last weeks and each of the touchDays UTC days
+// ending on to, oldest first.
+func (s *server) touchSeries(ctx context.Context, q ports.FlowQuery, to time.Time, weeks int) ([]gen.TouchWeek, []gen.TouchDay, error) {
+	q.Until = to.Add(day)
+
+	buckets, err := s.items.TouchesByBucket(ctx, q, week, weeks)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	weekly := make([]gen.TouchWeek, 0, len(buckets))
+	first := q.Until.Add(-time.Duration(weeks) * week)
+
 	for i, b := range buckets {
 		from := first.Add(time.Duration(i) * week)
-		out.Weekly = append(out.Weekly, gen.TouchWeek{
+		weekly = append(weekly, gen.TouchWeek{
 			From: openapi_types.Date{Time: from}, To: openapi_types.Date{Time: from.Add(week - day)}, Finished: b.Finished,
 			PerItemMean: b.PerItem(b.Touches), TouchlessRate: b.TouchlessRate(),
 		})
 	}
 
-	days, err := s.items.TouchesByBucket(ctx, weekly, day, touchDays)
+	days, err := s.items.TouchesByBucket(ctx, q, day, touchDays)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	out.Daily = make([]gen.TouchDay, 0, len(days))
+	daily := make([]gen.TouchDay, 0, len(days))
 	for i, b := range days {
-		out.Daily = append(out.Daily, gen.TouchDay{
-			Day: openapi_types.Date{Time: r.to.Add(time.Duration(i-touchDays+1) * day)}, Finished: b.Finished,
+		daily = append(daily, gen.TouchDay{
+			Day: openapi_types.Date{Time: to.Add(time.Duration(i-touchDays+1) * day)}, Finished: b.Finished,
 			PerItemMean: b.PerItem(b.Touches), TouchlessRate: b.TouchlessRate(),
 		})
 	}
 
-	return out, nil
+	return weekly, daily, nil
 }
 
 // touchVersion resolves the version parameter of the touch metrics: a published version's
