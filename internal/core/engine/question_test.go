@@ -3,6 +3,7 @@ package engine_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -215,6 +216,12 @@ func TestAnswer_ResumesTheItemWithoutRework(t *testing.T) {
 	if _, ok := domain.OpenQuestion(h.store.Events(it.ID)); ok {
 		t.Error("the question is still open after its answer")
 	}
+
+	audited := h.audited(t, domain.AuditItemAnswered)
+	if len(audited) != 1 || audited[0].TargetID != string(it.ID) || audited[0].Actor.Ref() != human.Ref() ||
+		fmt.Sprint(audited[0].Data) != "map[choice_index:1 length:7]" {
+		t.Errorf("audit %+v; want one item.answered with the answer's length and the choice index, never its text", audited)
+	}
 }
 
 func TestAnswer_Refusals(t *testing.T) {
@@ -248,6 +255,23 @@ func TestAnswer_Refusals(t *testing.T) {
 
 	if got := h.item(t, it.ID); got.State != domain.StateWaitingHuman || len(h.eventsOf(it.ID, domain.EventQuestionAnswered)) != 0 {
 		t.Errorf("item %+v events %v; refused answers change nothing", got.Position(), h.kinds(it.ID))
+	}
+
+	done := h.at(t, h.submit(t, domain.NewItem{}), stDone, domain.StateDone)
+	if _, err := h.e.Answer(inOrg(t), done.ID, human, "yes", nil); !errors.Is(err, engine.ErrItemClosed) {
+		t.Errorf("Answer on a done item = %v; want ErrItemClosed", err)
+	}
+
+	if _, err := h.e.Cancel(inOrg(t), it.ID, human, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.e.Answer(inOrg(t), it.ID, human, "yes", nil); !errors.Is(err, engine.ErrItemClosed) {
+		t.Errorf("Answer on a cancelled item = %v; want ErrItemClosed", err)
+	}
+
+	if a := h.audited(t, domain.AuditItemAnswered); len(a) != 0 {
+		t.Errorf("audit %+v; refused answers audit nothing", a)
 	}
 }
 
@@ -299,8 +323,18 @@ func TestQuestion_WithdrawnByAPersonsControl(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if _, err := h.e.Answer(inOrg(t), it.ID, human, "too late", nil); !errors.Is(err, engine.ErrNoOpenQuestion) {
-				t.Errorf("Answer after %s = %v; want ErrNoOpenQuestion", name, err)
+			if _, ok := domain.OpenQuestion(h.store.Events(it.ID)); ok {
+				t.Errorf("the question is still open after %s", name)
+			}
+
+			// A cancelled item is closed, which Answer checks first.
+			want := engine.ErrNoOpenQuestion
+			if name == "cancel" {
+				want = engine.ErrItemClosed
+			}
+
+			if _, err := h.e.Answer(inOrg(t), it.ID, human, "too late", nil); !errors.Is(err, want) {
+				t.Errorf("Answer after %s = %v; want %v", name, err, want)
 			}
 
 			if n := len(h.eventsOf(it.ID, domain.EventQuestionAnswered)); n != 0 {

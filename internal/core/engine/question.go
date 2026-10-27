@@ -102,11 +102,16 @@ func (e *Engine) Ask(ctx context.Context, id domain.ItemID, run domain.RunID, ag
 // Answer records a person's answer to an item's open question, picked from its choices
 // (choiceIndex) or in their own words, and puts the item back in its station's arrival state
 // with its rework count unchanged: an answer is no rework. The next run's brief carries the
-// question and the answer (answersSection).
+// question and the answer (answersSection). A done or cancelled item is refused with
+// ErrItemClosed; the audit entry item.answered records the answer's length, never its text.
 func (e *Engine) Answer(ctx context.Context, id domain.ItemID, by domain.Actor, answer string, choiceIndex *int) (domain.Item, error) {
 	it, l, err := e.itemAndLine(ctx, id)
 	if err != nil {
 		return domain.Item{}, fmt.Errorf("answer on item %s: %w", id, err)
+	}
+
+	if closed(it) {
+		return domain.Item{}, fmt.Errorf("answer on item %s: %w", id, ErrItemClosed)
 	}
 
 	events, err := e.itemEvents(ctx, id)
@@ -139,9 +144,15 @@ func (e *Engine) Answer(ctx context.Context, id domain.ItemID, by domain.Actor, 
 
 	now := e.clock.Now()
 
+	audit := map[string]any{"length": utf8.RuneCountInString(data[domain.KeyAnswer].(string))}
+	if choiceIndex != nil {
+		audit[domain.KeyChoiceIndex] = *choiceIndex
+	}
+
 	got, err := e.store.Transition(ctx, ports.Transition{
 		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: st.ID, State: st.Arrival()}, At: now,
 		Events: []domain.Event{decision(it, domain.EventQuestionAnswered, now, by, data)},
+		Audit:  itemAudit(it, now, by, domain.AuditItemAnswered, audit),
 	})
 	if errors.Is(err, ports.ErrConflict) {
 		return domain.Item{}, fmt.Errorf("answer on item %s: %w", id, errors.Join(ErrItemChanged, err))
