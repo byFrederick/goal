@@ -64,6 +64,7 @@ import {
   listVersions,
   validateDraft,
 } from './definitions';
+import { definitionFile, getIntakeTrigger } from './intake';
 import { listApiKeys, listMemberTokens, listPersonalTokens } from './keys';
 import {
   getKnowledgeDocument,
@@ -74,7 +75,7 @@ import {
   listKnowledgeSources,
   searchKnowledge,
 } from './knowledge';
-import type { ItemEvent } from './types';
+import type { Factory, ItemEvent } from './types';
 
 /**
  * The one way route loaders load (loaders.test.ts keeps it so): an ensureQueryData that survives
@@ -490,6 +491,41 @@ export const defKeys = {
   template: (org: string, name: string, version?: number) =>
     ['org', org, 'template', name, version ?? 'latest'] as const,
 };
+
+/** The intake's keys: every read of a factory's triggers sits under its `intake` root, which work events invalidate. */
+export const intakeKeys = {
+  root: (org: string, f: string) => ['org', org, 'factory', f, 'intake'] as const,
+  triggers: (org: string, f: string) => [...intakeKeys.root(org, f), 'triggers'] as const,
+  trigger: (org: string, f: string, trigger: string) => [...intakeKeys.triggers(org, f), trigger] as const,
+  /** factory.yaml as the page reads it: the draft's, or the running version's (one per version id). */
+  definition: (org: string, f: string, source: string) => [...intakeKeys.root(org, f), 'definition', source] as const,
+};
+
+/** One trigger of the current definition, with this week's results and its recent events. */
+export const intakeTriggerQuery = (org: string, factory: string, trigger: string) =>
+  queryOptions({
+    queryKey: intakeKeys.trigger(org, factory, trigger),
+    queryFn: ({ signal }) => getIntakeTrigger(org, factory, trigger, signal),
+  });
+
+/**
+ * factory.yaml as a trigger page reads it: the open draft's when there is one (what a save changes),
+ * else the running version's. A factory with no version has an empty file.
+ */
+export const definitionTextQuery = (org: string, factory: Factory) =>
+  factory.draft
+    ? queryOptions({
+        queryKey: intakeKeys.definition(org, factory.id, 'draft'),
+        queryFn: ({ signal }) => getDraftFile(org, factory.id, definitionFile, signal),
+      })
+    : queryOptions({
+        queryKey: intakeKeys.definition(org, factory.id, factory.current?.id ?? 'none'),
+        queryFn: async ({ signal }) =>
+          factory.current
+            ? getVersionFile(org, factory.id, factory.current.id, definitionFile, signal)
+            : { text: '', sha256: '' },
+        staleTime: Number.POSITIVE_INFINITY,
+      });
 
 export const factoryQuery = (org: string, factory: string) =>
   queryOptions({ queryKey: defKeys.factory(org, factory), queryFn: ({ signal }) => getFactory(org, factory, signal) });
