@@ -159,6 +159,15 @@ describe('the account page', () => {
     expect((box as HTMLInputElement).checked).toBe(false);
   });
 
+  it('keeps the sign-out of another browser disabled, not available yet', async () => {
+    renderAccount(session);
+    const signOut = await screen.findByRole('button', { name: 'Sign out' });
+    expect(signOut.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(signOut);
+    expect(identity.signOut).not.toHaveBeenCalled();
+    expect(identity.signOutEverywhere).not.toHaveBeenCalled();
+  });
+
   it('opens the sign-out-everywhere confirmation and signs out everywhere once confirmed', async () => {
     renderAccount(session);
     fireEvent.click(await screen.findByRole('button', { name: 'Sign out everywhere' }));
