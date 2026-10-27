@@ -1,17 +1,18 @@
 // The sidebar (≥ 768 px, MASTER.md "The shell"): 256 px, pinned left at full height beside the content
 // on every organization page and on the New factory wizard. Top to bottom: the Goal mark and the
-// organization's name (its menu), Search (sidebar-search.tsx) and Collapse (not built yet); New item (not
-// built yet); the organization-wide pages; Factories (sidebar-factories.tsx); and at the bottom the spend
-// this week and the person (account-menu.tsx). Search replaces that body with its input and results.
-// Below 768 px the top row and the tab bar take its place (phone-chrome.tsx).
+// organization's name (its menu), Search (sidebar-search.tsx) and Collapse (not built yet); New item (new-item.tsx,
+// with C); the organization-wide pages; Factories (sidebar-factories.tsx); and at the bottom the spend this week
+// and the person (account-menu.tsx). Search replaces that body with its input and results. Below 768 px the top
+// row and the tab bar take its place (phone-chrome.tsx).
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ChevronsUpDown, PanelLeft, Plus, Search } from 'lucide-react';
+import { ChevronsUpDown, PanelLeft, Search } from 'lucide-react';
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { attentionQuery, overviewQuery } from '../api/queries';
 import type { FactoryOverviewList, OrgSummary } from '../api/types';
 import { useConnectionTrouble } from '../shared/connections';
 import { formatUsdCompact } from '../shared/format';
+import { NewItemFromSidebar } from '../shared/new-item';
 import { useOrgGrants } from '../shared/org';
 import { Count } from '../ui/count';
 import { GoalMark } from '../ui/goal-mark';
@@ -63,7 +64,7 @@ export function Sidebar({ org }: { org: OrgSummary }) {
       ) : (
         <>
           <SidebarTop org={org} searchIcon={searchIcon} onSearch={openSearch} />
-          <NewItem />
+          <NewItemFromSidebar />
           <ul className="m-0 mt-2 flex list-none flex-col gap-1 p-0">
             {screensFor(sidebarOrgScreens, can).map((screen) => (
               <li key={screen.id}>
@@ -137,24 +138,6 @@ function SidebarTop({
       </NotAvailable>
       <CreateOrgDialog open={creating} onOpenChange={setCreating} returnFocus={trigger} />
     </div>
-  );
-}
-
-/** The one way to add work; its shortcut C is not built yet, so the hint is shown and inert. */
-function NewItem() {
-  return (
-    <NotAvailable>
-      <button
-        type="button"
-        className="flex h-9 w-full items-center gap-2 rounded-control bg-run pr-2 pl-3 font-control text-white aria-disabled:cursor-default"
-      >
-        <Plus {...iconProps} size={16} />
-        <span className="flex-1 text-left text-body">New item</span>
-        <kbd className="grid size-5 place-items-center rounded-chip border border-white/40 text-meta font-semibold">
-          C
-        </kbd>
-      </button>
-    </NotAvailable>
   );
 }
 
