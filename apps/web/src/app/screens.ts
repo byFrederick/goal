@@ -176,9 +176,12 @@ type Listed<Path extends string> = { id: string; label: string; icon?: LucideIco
   | { available: false }
 );
 
+/** The organization's Home: the factories list (the sidebar's first entry, the top bar's page name). */
+export const homeScreen: OrgScreen = { id: 'home', label: 'Home', icon: House, to: '/o/$org', exact: true };
+
 /** The sidebar's organization-wide entries, top to bottom. */
 export const sidebarOrgScreens: readonly Listed<OrgPath>[] = [
-  { id: 'home', label: 'Home', icon: House, available: true, to: '/o/$org', exact: true },
+  { ...homeScreen, available: true },
   { id: 'needs-you', label: 'Needs you', icon: Inbox, available: false },
   { id: 'runs', label: 'Runs', icon: Activity, available: false },
   { ...connectionsScreen, available: true },
