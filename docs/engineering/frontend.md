@@ -297,6 +297,34 @@ Differences from `docs/design/screens/build/agents.jpg`, each for a reason:
 - The summary counts the agents' positions at stations, not copies, so it reads "4 agents" where the picture reads 15.
 - The Factory defaults' connections read the mock seed (github, playwright), not the picture's (github, cloudflare, context7): the seed has no cloudflare or context7 connection.
 
+### The intake trigger page
+
+`…/f/$factory/intake/$trigger` (`features/intake/`, ADR 0016's `trigger` screen) shows one trigger of the
+factory's current definition: its title with the on/off switch, this week's created, merged and spend,
+the When, Only if, Create and Limits blocks, its recent events, and its YAML in the definition. Reads go
+through `intakeTriggerQuery` (`GET …/intake/triggers/{trigger}`) and the definition's `factory.yaml`
+(the open draft's when there is one, else the running version's).
+
+Save changes writes `spec.board.triggers[name]` and nothing else. `trigger-save.ts` runs the draft files
+API in order: open the draft, read `factory.yaml` for its sha256, put the file back with `If-Match`,
+validate the draft, publish it. `trigger-yaml.ts` splices only the keys that changed into the text, so
+every other line and comment stays byte for byte. The draft-model API cannot carry `board.triggers`
+yet (`internal/factorymodel/model.go`), which is why the page does not use it.
+
+Rules the page follows:
+- A draft with edits of its own blocks the save, with a link to the definition editor: the page never
+  publishes someone else's draft.
+- A 412 draft conflict keeps the typed edits and reloads the draft; the user saves again.
+- Validation problems from `validateDraft` are placed by their line: a problem inside a trigger's key
+  shows under that block, any other problem above the form. Save stays off while an error stands.
+- A name the definition does not have opens a blank trigger when the URL has `?on=<event key>` (the New
+  trigger picker's choice). The picker itself is not on this page.
+- "Try with a past event", "A model agrees it is worth an item" and "+ Add another event" render disabled
+  with "Not available yet" (ADR 0016, decision 4; ADR 0028 for the model check).
+
+Stream events: a `definition` event and an `item` event both invalidate `intakeKeys.root`, so the
+trigger's results and its YAML re-read.
+
 ### Factory settings
 
 `/o/$org/f/$factory/settings` (`features/factory-settings/`), reached from the factory's Settings in the sidebar and, on phones, from the drawer. The page follows the picture in `docs/design/screens/build/factory-settings.jpg`, built from `SectionCard` and `Field`. General (`general.tsx`) shows the factory's name and purpose read-only, from the factory detail. People with access (`people.tsx`) lists the organization's members from `membersQuery`; the role control and "Add people" are disabled through `NotAvailable` until factory roles are built. A section list at the right links the cards from 1024 px. The Danger zone (`danger-zone.tsx`, `pause-row.tsx`, `zone-row.tsx`) shows each row on its own permission: Pause (Pause or Resume, `pauseFactory`, `resumeFactory`) on `factory:manage` in the factory's `can`, and not for an archived factory; Archive, or Restore once archived, on `factory:archive`; Delete on `factory:delete`. The card shows when at least one row does. Archive, Restore and Delete read the organization's `can`. Archive asks first; a running factory offers "Pause first", which pauses, then archives, and a `factory-busy` answer shows goald's detail ("N items are being worked"). Restore says the factory stays paused. Delete is disabled with "Archive the factory first" until the factory is archived, and its dialog takes the factory's name typed exactly before it enables; after a delete the page opens the Factories home and the factory's queries leave the cache. Every action refreshes the factory list, the factory's detail and the rail's attention and overview queries (`refreshFactory`); the archived and paused state on the page comes from the factory's detail, since the list leaves archived factories out. The definition-backed fields of the picture (badge, handle, repository, runtime, budgets, flow) and its Save changes are not built: no endpoint reads or writes them yet.

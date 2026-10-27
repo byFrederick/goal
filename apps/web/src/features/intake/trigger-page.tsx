@@ -254,7 +254,7 @@ function TriggerEditor({ org, factory, text, saved, blank, board, detail }: Edit
     <>
       <TopBarSlot crumb={title} actions={actions} />
       <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <h1 className="m-0 text-page-title">{title}</h1>
           <div className="flex items-center gap-2 text-secondary font-semibold">
             <Switch
@@ -303,11 +303,11 @@ function TriggerEditor({ org, factory, text, saved, blank, board, detail }: Edit
             factoryName={factoryTitle(factory)}
             problems={blockProblems}
           />
-          <aside className="flex min-w-0 flex-col gap-3.5">
+          <aside className="flex min-w-0 flex-col gap-4">
             <RecentEvents events={detail?.events ?? []} />
             <section
               aria-labelledby="in-the-definition"
-              className="flex flex-col gap-2.5 rounded-card border border-line p-4"
+              className="flex flex-col gap-3 rounded-card border border-line p-4"
             >
               <div className="flex items-center gap-3">
                 <h2 id="in-the-definition" className="m-0 text-heading">

@@ -51,9 +51,9 @@ export function RecentEvents({ events, now }: { events: IntakeEvent[]; now?: Dat
             return (
               <li
                 key={`${event.at}-${event.title}-${event.item_number ?? ''}`}
-                className="flex items-start justify-between gap-3 border-t border-line py-2.5 first:border-t-0"
+                className="flex items-start justify-between gap-3 border-t border-line py-2 first:border-t-0"
               >
-                <div className="flex min-w-0 flex-col gap-0.5">
+                <div className="flex min-w-0 flex-col gap-1">
                   <span className="min-w-0 break-words text-body">{event.title}</span>
                   <span className="text-meta text-muted">{eventWhen(event.at, now)}</span>
                 </div>

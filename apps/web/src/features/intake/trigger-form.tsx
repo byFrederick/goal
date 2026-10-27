@@ -51,7 +51,7 @@ function Block({
 }) {
   return (
     <section aria-labelledby={id} className="overflow-hidden rounded-card border border-line">
-      <header className="flex flex-wrap items-center gap-2.5 border-b border-line bg-panel px-4 py-3">
+      <header className="flex flex-wrap items-center gap-3 border-b border-line bg-panel px-4 py-3">
         <h2 id={id} className="m-0 text-body font-semibold">
           {title}
         </h2>
@@ -118,7 +118,7 @@ function Option({
   children: ReactNode;
 }) {
   return (
-    <label className="flex items-start gap-2.5 text-body">
+    <label className="flex items-start gap-3 text-body">
       <input
         type="checkbox"
         checked={checked}
@@ -134,7 +134,7 @@ function Option({
 function ModelCheckOption({ children }: { children: ReactNode }) {
   return (
     <NotAvailable label="A model agrees it is worth an item">
-      <button type="button" className="flex items-start gap-2.5 text-left text-body text-ink-soft">
+      <button type="button" className="flex items-start gap-3 text-left text-body text-ink-soft">
         <span aria-hidden="true" className="mt-1 size-4 shrink-0 rounded-chip border border-rule bg-card" />
         <span className="flex min-w-0 flex-wrap items-center gap-2">{children}</span>
       </button>
@@ -179,7 +179,7 @@ export function TriggerForm({ value, set, board, factoryName, problems }: Trigge
     create.station && !board.stations.includes(create.station) ? [...board.stations, create.station] : board.stations;
 
   return (
-    <div className="flex min-w-0 flex-col gap-3.5">
+    <div className="flex min-w-0 flex-col gap-4">
       <Block
         id={ids.when}
         title="When"
@@ -232,7 +232,7 @@ export function TriggerForm({ value, set, board, factoryName, problems }: Trigge
           <p className="m-0 flex flex-wrap items-center gap-2 text-secondary text-muted">
             Fields:
             {fields.map((f) => (
-              <code key={f} className="rounded-chip bg-you-tint px-1.5 py-0.5 font-mono text-meta text-you-ink">
+              <code key={f} className="rounded-chip bg-you-tint px-2 py-1 font-mono text-meta text-you-ink">
                 {f}
               </code>
             ))}
@@ -417,7 +417,7 @@ function TemplateField({
   const insert = (field: string) => onChange(`${value}{{${field}}}`);
   const common = 'rounded-cell border-rule bg-card px-3 py-2 text-body';
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
       <label htmlFor={id} className="text-secondary font-semibold">
         {label}
       </label>
@@ -427,14 +427,14 @@ function TemplateField({
         <Input id={id} value={value} onChange={(e) => onChange(e.target.value)} className={cn('h-9', common)} />
       )}
       {fields.length ? (
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
           {fields.map((f) => (
             <Button
               key={f}
               variant="ghost"
               size="sm"
               onClick={() => insert(f)}
-              className="h-6.5 px-2 font-mono text-meta"
+              className="h-6 px-2 font-mono text-meta"
             >
               {`{{${f}}}`}
             </Button>
