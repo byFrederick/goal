@@ -1,0 +1,6 @@
+eval run er1: running, on v3 (manual), $0.85 of about $1.20
+CASE         TRIES      RESULT
+lease-fix    pass pass  passes
+merge-step   pass fail  fails
+review-step  error      fails
+slow-case    running    -

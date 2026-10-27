@@ -77,12 +77,8 @@ test("the board says the week's touches per item, by station and on each touched
       '/o/acme/f/sre#touches-summary',
     );
   } else {
-    await expect(page.getByRole('link', { name: /^\d+\.\d touches per item ?, \d+% touchless$/ })).toHaveAttribute(
-      'href',
-      '/o/acme/f/sre#touches',
-    );
-    const stations = page.getByRole('region', { name: 'Stations in line order' });
-    await expect(stations.getByText(/^\d\.\d\d touches per item$/)).toHaveCount(5);
+    // The desktop board shows no touches (the canvas picture has none); the Floor keeps the touches panel.
+    await expect(page.getByRole('link', { name: /touches per item/ })).toHaveCount(0);
   }
   const card = page.locator('[data-card]').filter({ hasText: 'sre#8' }).filter({ visible: true });
   await expect(card.getByText('1 touch', { exact: true })).toBeVisible();
@@ -164,7 +160,7 @@ test('the board and the floor work while the touch metrics fail, and the floor o
   await expect(page.getByRole('heading', { level: 1, name: 'SRE board' })).toBeVisible();
 
   await page.goto('/o/acme/f/sre');
-  await expect(page.getByRole('heading', { level: 1, name: 'SRE floor' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
   const card = page.getByRole('region', { name: 'Human touches' });
   await expect(card.getByText('Couldn’t load the human touches.')).toBeVisible({ timeout: 15_000 });
   await expectAccessible(page);

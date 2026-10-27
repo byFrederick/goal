@@ -14,7 +14,7 @@ import { cn } from '../ui/cn';
 import { Dialog, DialogClose, DialogContent } from '../ui/dialog';
 import { humanize } from './format';
 import { factoryWorkInvalidations } from './invalidation';
-import { type MoveChoice, moveChoices, movedOnBoard } from './move-choices';
+import { type MoveChoice, moveChoicesFor, movedOnBoard } from './move-choices';
 import { useOrg } from './org';
 
 /** The item being moved, as a card or the Item page knows it. */
@@ -43,7 +43,14 @@ const hint: Record<MoveChoice['kind'], string> = {
   done: '',
 };
 
-function useMove(item: Movable, factory: Factory, onMoved: (updated: Item) => void) {
+/** One item's answer from goald: its updated card, or the refusal. */
+type MoveResult = { item: Movable; updated: Item; error: null } | { item: Movable; updated: null; error: Error };
+
+/**
+ * Moves each item to the station, one request per item. A refusal of one item does not stop the
+ * others: each refused item gets its own toast, and the board keeps the items that moved.
+ */
+function useMove(items: Movable[], factory: Factory, onMoved: (updated: Item) => void) {
   const client = useQueryClient();
   const org = useOrg();
   const board = keys.board(org.id, factory.id);
@@ -51,21 +58,43 @@ function useMove(item: Movable, factory: Factory, onMoved: (updated: Item) => vo
 
   return useMutation({
     mutationKey: moveKey,
-    mutationFn: ({ to, reason }: { to: string; reason: string }) => moveItem(org.id, item.key, to, reason || undefined),
+    mutationFn: ({ to, reason }: { to: string; reason: string }): Promise<MoveResult[]> =>
+      Promise.all(
+        items.map(async (item): Promise<MoveResult> => {
+          try {
+            return { item, updated: await moveItem(org.id, item.key, to, reason || undefined), error: null };
+          } catch (err) {
+            return { item, updated: null, error: err instanceof Error ? err : new Error(String(err)) };
+          }
+        }),
+      ),
     onMutate: async ({ to }) => {
       await client.cancelQueries({ queryKey: board });
       const before = client.getQueryData<Board>(board);
-      if (before) client.setQueryData(board, movedOnBoard(before, item.id, to, factory.stations));
+      if (before) {
+        client.setQueryData(
+          board,
+          items.reduce((current, item) => movedOnBoard(current, item.id, to, factory.stations), before),
+        );
+      }
       return { before };
     },
-    onError: (err, _vars, ctx) => {
-      if (ctx?.before) client.setQueryData(board, ctx.before);
-      toast.error(`Could not move ${item.ref}`, { description: err.message });
-    },
-    onSuccess: (updated) => {
-      client.setQueryData(keys.item(org.id, item.key), updated);
-      toast.success(`Moved ${item.ref} to ${humanize(updated.station)}.`);
-      onMoved(updated);
+    onSuccess: (results, _vars, ctx) => {
+      const moved = results.flatMap((r) => (r.updated ? [r.updated] : []));
+      for (const result of results) {
+        if (result.updated) client.setQueryData(keys.item(org.id, result.item.key), result.updated);
+        else toast.error(`Could not move ${result.item.ref}`, { description: result.error.message });
+      }
+      // Nothing moved: put the whole board back as it was before the drop.
+      if (moved.length === 0 && ctx?.before) client.setQueryData(board, ctx.before);
+      const last = moved.at(-1);
+      if (!last) return;
+      const station = humanize(last.station);
+      const refs = results.flatMap((r) => (r.updated ? [r.item.ref] : []));
+      toast.success(
+        refs.length === 1 ? `Moved ${refs[0]} to ${station}.` : `Moved ${refs.length} items to ${station}.`,
+      );
+      onMoved(last);
     },
     onSettled: () =>
       Promise.all([
@@ -76,30 +105,34 @@ function useMove(item: Movable, factory: Factory, onMoved: (updated: Item) => vo
           .map((queryKey) => client.invalidateQueries({ queryKey })),
         client.invalidateQueries({ queryKey: keys.attention(org.id) }),
         client.invalidateQueries({ queryKey: keys.inboxes(org.id) }),
-        client.invalidateQueries({ queryKey: keys.item(org.id, item.key) }),
+        ...items.map((item) => client.invalidateQueries({ queryKey: keys.item(org.id, item.key) })),
       ]),
   });
 }
 
 interface DialogProps {
-  item: Movable;
+  /** The items to move together: one card, or every selected row of the list. */
+  items: Movable[];
   factory: Factory;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** The station a drop chose, preselected. */
   initialTo?: string | undefined;
-  /** After goald moved it (the board focuses the card again). */
+  /** After goald moved the last of them (the board focuses the card again). */
   onMoved?: (updated: Item) => void;
 }
 
 /** The Move menu: a dialog with the line's stations to choose from (Radix: focus trapped, Escape closes). */
-export function MoveDialog({ item, factory, open, onOpenChange, initialTo, onMoved }: DialogProps) {
-  const choices = moveChoices(factory.stations, item.station);
+export function MoveDialog({ items, factory, open, onOpenChange, initialTo, onMoved }: DialogProps) {
+  const choices = moveChoicesFor(
+    factory.stations,
+    items.map((item) => item.station),
+  );
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {open ? (
         <MoveForm
-          item={item}
+          items={items}
           factory={factory}
           choices={choices}
           initialTo={initialTo}
@@ -114,13 +147,13 @@ export function MoveDialog({ item, factory, open, onOpenChange, initialTo, onMov
 }
 
 function MoveForm({
-  item,
+  items,
   factory,
   choices,
   initialTo,
   onDone,
 }: {
-  item: Movable;
+  items: Movable[];
   factory: Factory;
   choices: MoveChoice[];
   initialTo: string | undefined;
@@ -134,9 +167,11 @@ function MoveForm({
   const [reason, setReason] = useState('');
   const [touched, setTouched] = useState(false);
   const first = useRef<HTMLInputElement>(null);
-  const move = useMove(item, factory, onDone);
+  const move = useMove(items, factory, onDone);
   const choice = choices.find((c) => c.id === to);
   const missing = Boolean(choice?.upstream) && reason.trim() === '';
+  const working = items.some((item) => item.state === 'in_progress');
+  const subject = items.length === 1 ? (items[0]?.ref ?? '') : `${items.length} items`;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -147,11 +182,11 @@ function MoveForm({
 
   return (
     <DialogContent
-      title={`Move ${item.ref}`}
+      title={`Move ${subject}`}
       description={
-        item.state === 'in_progress'
-          ? 'Choose the station it goes to. The agent working on it now stops.'
-          : 'Choose the station it goes to.'
+        working
+          ? `Choose the station ${items.length === 1 ? 'it goes to' : 'they go to'}. The agent working on ${items.length === 1 ? 'it' : 'them'} now stops.`
+          : `Choose the station ${items.length === 1 ? 'it goes to' : 'they go to'}.`
       }
       initialFocus={first}
     >
