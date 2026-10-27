@@ -2,8 +2,8 @@
 // with the credential of a connection whose kind's code host is github (spec 4 §5.5).
 //
 // It reads pull requests, merges them, updates their branches with their base and deletes
-// branches, and reads a repository's branch heads and the commits between two commits, nothing
-// else. The connection's
+// branches, reads a repository's branch heads and the commits between two commits, and lists the
+// owners and repositories the connection reaches, nothing else. The connection's
 // rendered git login says which host it serves and holds the token; a pull request URL on any
 // other host is refused before anything is sent, and the repository is the URL's own. The API is
 // https://api.github.com for github.com, https://api.<host> for a GitHub Enterprise Cloud host
@@ -18,17 +18,20 @@ package github
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -72,7 +75,10 @@ const (
 	// maxCommitBytes bounds the answers of the compare and commit APIs, which carry every changed
 	// file's patch.
 	maxCommitBytes = 32 << 20
-	dotCom         = "github.com"
+	// maxListBytes bounds a listing's answer: a page of 100 repositories carries every one's
+	// whole object.
+	maxListBytes = 8 << 20
+	dotCom       = "github.com"
 )
 
 // Client calls GitHub's REST API. It is safe for concurrent use and keeps no state.
@@ -571,20 +577,185 @@ func (cl *Client) Compare(ctx context.Context, c domain.ResolvedConnection, repo
 	return out, nil
 }
 
+// repoListJSON is the part of GitHub's repository listings goald reads.
+type repoListJSON struct {
+	FullName  string    `json:"full_name"`
+	CloneURL  string    `json:"clone_url"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// loginName is a GitHub account or organization login.
+var loginName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
+
+// Repositories implements ports.CodeHost with GET /user (the login), GET /user/orgs (its
+// organizations, the first 100) and the first page of ports.MaxRepositories of the owner's
+// repositories by most recently updated: GET /user/repos?affiliation=owner for the account,
+// GET /orgs/{owner}/repos?type=all for another owner. Truncated is set when GitHub links a next
+// page. Each repository's languages are read once more (GET /repos/{full_name}/languages),
+// languageReads at a time, the largest by bytes first: up to ports.MaxRepositories+3 requests in
+// all, and any failure fails the whole call.
+func (cl *Client) Repositories(ctx context.Context, c domain.ResolvedConnection, owner string) (ports.RepositoryList, error) {
+	host, token, err := c.GitLogin()
+	if err != nil {
+		return ports.RepositoryList{}, err
+	}
+
+	if owner != "" && !loginName.MatchString(owner) {
+		return ports.RepositoryList{}, fmt.Errorf("repositories of %q: not an account or organization name", owner)
+	}
+
+	p := pull{api: cl.apiFor(host), token: token}
+
+	var user struct {
+		Login string `json:"login"`
+	}
+
+	if err := cl.get(ctx, p, "/user", &user, maxBodyBytes); err != nil {
+		return ports.RepositoryList{}, fmt.Errorf("repositories: the signed-in account: %w", err)
+	}
+
+	var orgs []struct {
+		Login string `json:"login"`
+	}
+
+	if err := cl.get(ctx, p, "/user/orgs?per_page=100", &orgs, maxListBytes); err != nil {
+		return ports.RepositoryList{}, fmt.Errorf("repositories: the organizations of %s: %w", user.Login, err)
+	}
+
+	out := ports.RepositoryList{Login: user.Login, Owners: []ports.RepositoryOwner{{Login: user.Login, Kind: ports.RepositoryOwnerUser}}}
+	for _, o := range orgs {
+		out.Owners = append(out.Owners, ports.RepositoryOwner{Login: o.Login, Kind: ports.RepositoryOwnerOrganization})
+	}
+
+	page := "?sort=updated&per_page=" + strconv.Itoa(ports.MaxRepositories)
+	path := "/user/repos" + page + "&affiliation=owner"
+	out.Owner = user.Login
+
+	if owner != "" && !strings.EqualFold(owner, user.Login) {
+		path, out.Owner = "/orgs/"+url.PathEscape(owner)+"/repos"+page+"&type=all", owner
+	}
+
+	var repos []repoListJSON
+
+	next, err := cl.getPage(ctx, p, path, &repos, maxListBytes)
+	if err != nil {
+		return ports.RepositoryList{}, fmt.Errorf("repositories of %s: %w", out.Owner, err)
+	}
+
+	listed := repos[:min(len(repos), ports.MaxRepositories)]
+	out.Truncated = next || len(repos) > len(listed)
+	out.Repositories = make([]ports.Repository, len(listed))
+
+	for i, r := range listed {
+		out.Repositories[i] = ports.Repository{FullName: r.FullName, CloneURL: r.CloneURL, UpdatedAt: r.UpdatedAt.UTC()}
+	}
+
+	if err := cl.languages(ctx, p, out.Repositories); err != nil {
+		return ports.RepositoryList{}, fmt.Errorf("repositories of %s: %w", out.Owner, err)
+	}
+
+	return out, nil
+}
+
+// languageReads bounds the languages reads of one Repositories in flight.
+const languageReads = 8
+
+// languages sets the Languages of each of repos, languageReads at a time; the first failure
+// stops the others and is the answer.
+func (cl *Client) languages(ctx context.Context, p pull, repos []ports.Repository) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var (
+		wg    sync.WaitGroup
+		mu    sync.Mutex
+		first error
+		slots = make(chan struct{}, languageReads)
+	)
+
+	for i := range repos {
+		wg.Go(func() {
+			select {
+			case slots <- struct{}{}:
+				defer func() { <-slots }()
+			case <-ctx.Done():
+				return
+			}
+
+			langs, err := cl.languagesOf(ctx, p, repos[i].FullName)
+			if err != nil {
+				mu.Lock()
+				if first == nil {
+					first = err
+				}
+				mu.Unlock()
+				cancel()
+
+				return
+			}
+
+			repos[i].Languages = langs
+		})
+	}
+
+	wg.Wait()
+
+	if first == nil {
+		// Only the caller's context ends before a failure: reads it stopped return nothing.
+		return ctx.Err()
+	}
+
+	return first
+}
+
+// languagesOf reads the languages of the repository fullName, the largest by bytes first, at most
+// ports.MaxRepositoryLanguages.
+func (cl *Client) languagesOf(ctx context.Context, p pull, fullName string) ([]string, error) {
+	owner, name, ok := strings.Cut(fullName, "/")
+	if !ok {
+		return nil, fmt.Errorf("languages of %q: not a repository name", fullName)
+	}
+
+	p.owner, p.repo = owner, name
+
+	var bytesOf map[string]int64
+	if err := cl.get(ctx, p, p.repoPath("/languages"), &bytesOf, maxBodyBytes); err != nil {
+		return nil, fmt.Errorf("languages of %s: %w", fullName, err)
+	}
+
+	langs := slices.Collect(maps.Keys(bytesOf))
+	slices.SortFunc(langs, func(a, b string) int {
+		if c := cmp.Compare(bytesOf[b], bytesOf[a]); c != 0 {
+			return c
+		}
+
+		return strings.Compare(a, b)
+	})
+
+	return append([]string{}, langs[:min(len(langs), ports.MaxRepositoryLanguages)]...), nil
+}
+
 // get reads path into out, its answer bounded by limit: a 404 is ports.ErrNotFound.
 func (cl *Client) get(ctx context.Context, p pull, path string, out any, limit int64) error {
-	status, msg, err := cl.callLimit(ctx, p, http.MethodGet, path, nil, out, limit)
+	_, err := cl.getPage(ctx, p, path, out, limit)
+
+	return err
+}
+
+// getPage is get of one page of a listing; it reports whether GitHub links a next page.
+func (cl *Client) getPage(ctx context.Context, p pull, path string, out any, limit int64) (bool, error) {
+	status, msg, header, err := cl.exchange(ctx, p, http.MethodGet, path, nil, out, limit)
 
 	switch {
 	case err != nil:
-		return err
+		return false, err
 	case status == http.StatusNotFound:
-		return fmt.Errorf("GitHub answered 404: %s: %w", msg, ports.ErrNotFound)
+		return false, fmt.Errorf("GitHub answered 404: %s: %w", msg, ports.ErrNotFound)
 	case status != http.StatusOK:
-		return fmt.Errorf("GitHub answered %d: %s", status, msg)
+		return false, fmt.Errorf("GitHub answered %d: %s", status, msg)
 	}
 
-	return nil
+	return strings.Contains(header.Get("Link"), `rel="next"`), nil
 }
 
 // refPath is ref as URL path segments, each escaped.
@@ -607,7 +778,14 @@ func (cl *Client) call(ctx context.Context, p pull, method, path string, body, o
 
 // callLimit is call with the answer bounded by limit bytes.
 func (cl *Client) callLimit(ctx context.Context, p pull, method, path string, body, out any, limit int64) (int, string, error) {
-	status, msg, err := cl.send(ctx, p, method, path, body, out, limit)
+	status, msg, _, err := cl.exchange(ctx, p, method, path, body, out, limit)
+
+	return status, msg, err
+}
+
+// exchange is callLimit that also returns the answer's headers.
+func (cl *Client) exchange(ctx context.Context, p pull, method, path string, body, out any, limit int64) (int, string, http.Header, error) {
+	status, msg, header, err := cl.send(ctx, p, method, path, body, out, limit)
 
 	scrub := func(s string) string { return strings.ReplaceAll(s, p.token, "[redacted]") }
 
@@ -615,16 +793,16 @@ func (cl *Client) callLimit(ctx context.Context, p pull, method, path string, bo
 		err = errors.New(scrub(err.Error()))
 	}
 
-	return status, scrub(msg), err
+	return status, scrub(msg), header, err
 }
 
-func (cl *Client) send(ctx context.Context, p pull, method, path string, body, out any, limit int64) (int, string, error) {
+func (cl *Client) send(ctx context.Context, p pull, method, path string, body, out any, limit int64) (int, string, http.Header, error) {
 	var reader io.Reader
 
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
-			return 0, "", err
+			return 0, "", nil, err
 		}
 
 		reader = bytes.NewReader(b)
@@ -632,7 +810,7 @@ func (cl *Client) send(ctx context.Context, p pull, method, path string, body, o
 
 	req, err := http.NewRequestWithContext(ctx, method, p.api+path, reader)
 	if err != nil {
-		return 0, "", err
+		return 0, "", nil, err
 	}
 
 	req.Header.Set("Accept", "application/vnd.github+json")
@@ -646,32 +824,45 @@ func (cl *Client) send(ctx context.Context, p pull, method, path string, body, o
 
 	res, err := cl.http.Do(req)
 	if err != nil {
-		return 0, "", err
+		return 0, "", nil, err
 	}
 	defer func() { _ = res.Body.Close() }()
 
 	raw, err := io.ReadAll(io.LimitReader(res.Body, limit))
 	if err != nil {
-		return 0, "", fmt.Errorf("read answer: %w", err)
+		return 0, "", nil, fmt.Errorf("read answer: %w", err)
 	}
 
 	if len(bytes.TrimSpace(raw)) == 0 || !strings.Contains(res.Header.Get("Content-Type"), "json") {
-		return res.StatusCode, "", nil
+		return res.StatusCode, "", res.Header, nil
+	}
+
+	msg, err := messageOf(raw)
+	if err != nil {
+		return 0, "", nil, fmt.Errorf("decode answer (%d): %w", res.StatusCode, err)
+	}
+
+	if out != nil && res.StatusCode < http.StatusMultipleChoices {
+		if err := json.Unmarshal(raw, out); err != nil {
+			return 0, "", nil, fmt.Errorf("decode answer (%d): %w", res.StatusCode, err)
+		}
+	}
+
+	return res.StatusCode, msg, res.Header, nil
+}
+
+// messageOf is the message of GitHub's JSON answer raw; a listing answers an array, which
+// carries none.
+func messageOf(raw []byte) (string, error) {
+	if bytes.TrimSpace(raw)[0] != '{' {
+		return "", nil
 	}
 
 	var problem struct {
 		Message string `json:"message"`
 	}
 
-	if err := json.Unmarshal(raw, &problem); err != nil {
-		return 0, "", fmt.Errorf("decode answer (%d): %w", res.StatusCode, err)
-	}
+	err := json.Unmarshal(raw, &problem)
 
-	if out != nil && res.StatusCode < http.StatusMultipleChoices {
-		if err := json.Unmarshal(raw, out); err != nil {
-			return 0, "", fmt.Errorf("decode answer (%d): %w", res.StatusCode, err)
-		}
-	}
-
-	return res.StatusCode, problem.Message, nil
+	return problem.Message, err
 }

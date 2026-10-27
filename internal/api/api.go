@@ -163,6 +163,10 @@ type Deps struct {
 	Connections         ports.Connections
 	ParseKind           KindParser
 	ConnectionTransport http.RoundTripper
+	// CodeHosts are the code host adapters by the name a connection kind gives (KindSpec.CodeHost),
+	// as the engine has them; they list what a connection reaches. Without one, no kind is a code
+	// host here.
+	CodeHosts map[string]ports.CodeHost
 	// Knowledge is the organization's knowledge base (spec 4 §4.8); KnowledgeUploads keeps its
 	// uploaded files, of at most UploadMaxBytes each (GOAL_UPLOAD_MAX_BYTES); KnowledgeSearch
 	// searches it as the gateway's knowledge__search does.
@@ -239,7 +243,7 @@ func New(d Deps) (http.Handler, error) {
 	s := &server{
 		engine: d.Engine, items: d.Items, factories: d.Factories, defs: d.Definitions, versions: d.Versions, orgs: d.Orgs, audit: d.Audit,
 		retention: d.OrgRetention, authz: d.Authorizer, auth: d.Auth, identity: d.Identity, access: d.Access, platform: d.Platform, feed: d.Feed,
-		builder: d.Builder, connections: d.Connections, parseKind: d.ParseKind,
+		builder: d.Builder, connections: d.Connections, parseKind: d.ParseKind, codehosts: d.CodeHosts,
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
 		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, search: d.KnowledgeSearch, uploadMax: d.UploadMaxBytes,
 		clock: d.Clock, log: log,
@@ -359,6 +363,8 @@ type server struct {
 	connections      ports.Connections
 	parseKind        KindParser
 	connectionClient *http.Client
+	// codehosts list what code host connections reach.
+	codehosts map[string]ports.CodeHost
 	// knowledge, uploads and search serve the knowledge routes; uploadMax bounds an uploaded file.
 	knowledge ports.Knowledge
 	uploads   KnowledgeUploads

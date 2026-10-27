@@ -486,3 +486,20 @@ func TestBranchHeadAndCompare_Unsupported(t *testing.T) {
 		t.Errorf("requests %v; want none", got)
 	}
 }
+
+// GitLab does not list repositories yet: it says so and sends nothing.
+func TestClient_RepositoriesUnsupported(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitLab(t)
+
+	for _, owner := range []string{"", "acme"} {
+		if _, err := c.Repositories(t.Context(), dotComConn(t), owner); !errors.Is(err, errors.ErrUnsupported) {
+			t.Errorf("Repositories(%q) = %v; want ErrUnsupported", owner, err)
+		}
+	}
+
+	if got := f.sent(); len(got) != 0 {
+		t.Errorf("requests %v; want none", got)
+	}
+}
