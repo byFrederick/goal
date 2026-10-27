@@ -1,9 +1,11 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { Tabs } from 'radix-ui';
-import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { boardQuery, touchesQuery } from '../../api/queries';
 import type { Board, BoardStation, ItemCard } from '../../api/types';
+import { usePhone } from '../../app/phone-chrome';
+import { TopBarSlot } from '../../app/top-bar';
 import { AndonButton, LineStatus } from '../../shared/andon';
 import { factoryTitle, itemKey, useFactory, useFactoryParams } from '../../shared/factory';
 import { humanize } from '../../shared/format';
@@ -20,6 +22,7 @@ import { SegmentedControl, type SegmentedOption } from '../../ui/segmented-contr
 import { StatusIcon } from '../../ui/status-icon';
 import { StationColumn } from './board-column';
 import { CardDnd } from './board-dnd';
+import { BoardTopBar, SearchItems } from './board-top-bar';
 import {
   type AssemblyOption,
   arrangeBoard,
@@ -287,31 +290,27 @@ function FilterSelect({
 
 /**
  * The filters over the columns and the phone's station tabs: Assembly, Agent role and Status, then
- * Group by. Each choice is a URL search param; "Any" and "None" are the absent param.
+ * Group by. Each choice is a URL search param; "Any" and "None" are the absent param. From 768 px the
+ * search is in the top bar (board-top-bar.tsx), so the row keeps it only on a phone.
  */
 function FilterRow({
   board,
   view,
+  phone,
   onChange,
 }: {
   board: Board;
   view: BoardView;
+  phone: boolean;
   onChange: (change: BoardView) => void;
 }) {
   const assemblies: AssemblyOption[] = assemblyOptions(board);
   return (
     <fieldset className="m-0 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 border-0 p-0">
       <legend className="sr-only">Filter and group the cards</legend>
-      <label className="flex min-w-0 items-center gap-2 text-sm text-muted">
-        <span className="sr-only">Search items</span>
-        <input
-          type="search"
-          value={view.q ?? ''}
-          placeholder="Search items"
-          onChange={(event) => onChange({ q: event.target.value || undefined })}
-          className="h-10 w-56 max-w-full rounded-control border border-line bg-card px-3 text-sm text-ink placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run"
-        />
-      </label>
+      {phone ? (
+        <SearchItems value={view.q ?? ''} onChange={(q) => onChange({ q: q || undefined })} />
+      ) : null}
       <FilterSelect label="Work type" value={view.type ?? ''} onChange={(v) => onChange({ type: v || undefined })}>
         <option value="">Any</option>
         {typeOptions(board).map((type) => (
@@ -415,49 +414,59 @@ export function BoardPage() {
   const [moving, setMoving] = useState<{ item: ItemCard; to?: string | undefined } | null>(null);
   const onMove: OnMove = holds(factory, 'item:operate') ? (item, to) => setMoving({ item, to }) : undefined;
   const role = factoryRoleNote(factory.role, factory.name);
+  // From 768 px the actions and the search are in the top bar; a phone keeps its own header.
+  const phone = usePhone();
+  const actions = useMemo(
+    () => (phone ? undefined : <BoardTopBar factory={factory} andon={board.line.andon} />),
+    [phone, factory, board.line.andon],
+  );
+  const filters = <FilterRow board={board} view={view} phone={phone} onChange={changeView} />;
 
   return (
     <>
-      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <TopBarSlot actions={actions} />
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
-          <h1 className="m-0 text-page-title tracking-display">{factoryTitle(factory)} board</h1>
+          <h1 className="m-0 text-page-title tracking-display">{phone ? `${factoryTitle(factory)} board` : 'Board'}</h1>
           {role ? <Chip tone="plain">{role}</Chip> : null}
+          {phone ? null : (
+            <span role="status">
+              <Chip tone={board.line.andon ? 'rework' : 'ok'} dot size="lg">
+                {board.line.andon ? `Line stopped: ${board.line.andon.reason}` : 'Line running'}
+              </Chip>
+            </span>
+          )}
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="ml-auto flex min-w-0 flex-wrap items-center gap-2">
           <InboxButton factory={factory} />
-          <span className="hidden h-10 max-w-[360px] items-center rounded-control bg-card px-3.5 md:inline-flex">
-            <LineStatus andon={board.line.andon} className="text-sm text-ink" />
-          </span>
-          <AndonButton factory={factory} andon={board.line.andon} className="hidden md:inline-flex" />
-          <span className="md:hidden">
-            <NewItemButton factory={factory} compact />
-          </span>
-          <span className="hidden md:inline-flex">
-            <NewItemButton factory={factory} />
-          </span>
+          {phone ? <NewItemButton factory={factory} compact /> : null}
+          {phone ? null : filters}
         </div>
       </header>
-      <div className="-mt-3 flex min-w-0 items-center gap-2 text-sm text-muted md:hidden">
-        <LineStatus
-          andon={board.line.andon}
-          className="min-w-0 flex-1"
-          title={phoneLine}
-          suffix={
-            <>
-              , <span className="whitespace-nowrap">{wipText(board.line)}</span>
-              {headline.finished > 0 ? (
+      {phone ? (
+        <>
+          <div className="-mt-3 flex min-w-0 items-center gap-2 text-sm text-muted">
+            <LineStatus
+              andon={board.line.andon}
+              className="min-w-0 flex-1"
+              title={phoneLine}
+              suffix={
                 <>
-                  , <span className="whitespace-nowrap">{touchesHeadline}</span>
+                  , <span className="whitespace-nowrap">{wipText(board.line)}</span>
+                  {headline.finished > 0 ? (
+                    <>
+                      , <span className="whitespace-nowrap">{touchesHeadline}</span>
+                    </>
+                  ) : null}
                 </>
-              ) : null}
-            </>
-          }
-        />
-        {headline.finished > 0 ? <PhoneTouchesLink /> : null}
-        <AndonButton factory={factory} andon={board.line.andon} className="min-h-11" />
-      </div>
-
-      <FilterRow board={board} view={view} onChange={changeView} />
+              }
+            />
+            {headline.finished > 0 ? <PhoneTouchesLink /> : null}
+            <AndonButton factory={factory} andon={board.line.andon} className="min-h-11" />
+          </div>
+          {filters}
+        </>
+      ) : null}
       <Columns
         board={shown}
         onMove={onMove}

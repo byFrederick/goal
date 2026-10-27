@@ -2,8 +2,19 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Board, BoardLane, BoardStation, Factory, ItemCard, OrgSummary } from '../../api/types';
+import { ShellFrame } from '../../app/app-shell';
 import { renderBoardPage } from '../../test/route';
+import { TooltipProvider } from '../../ui/tooltip';
 import { BoardPage } from './board-page';
+
+/** The Board as the app draws it: inside ShellFrame, so the desktop top bar holds its search and actions. */
+const ShellBoard = () => (
+  <TooltipProvider>
+    <ShellFrame>
+      <BoardPage />
+    </ShellFrame>
+  </TooltipProvider>
+);
 
 // The header's Inbox button reads the inbox; the board tests see an empty one.
 vi.mock(import('../../api/client'), async (original) => ({
@@ -11,7 +22,21 @@ vi.mock(import('../../api/client'), async (original) => ({
   getInbox: vi.fn(async () => ({ entries: [], truncated: false })),
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // @ts-expect-error restoring the jsdom default, which has no matchMedia
+  delete window.matchMedia;
+});
+
+/** Pretends the viewport is a phone (below 768 px): the phone's status line and filters draw then. */
+function stubPhone() {
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: true,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+}
 
 const org: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'A', factory_count: 1, role: null };
 const factory: Factory = {
@@ -127,7 +152,7 @@ const board = (
 
 describe('BoardPage', () => {
   it('shows an expedite item once, in its station, with the expedite style', async () => {
-    renderBoardPage({ page: BoardPage, org, factory, board: board() });
+    renderBoardPage({ page: ShellBoard, org, factory, board: board() });
 
     const columns = await screen.findByRole('region', { name: 'Stations' });
     // The phone's picker shows only the picked station, so the whole page holds the item once.
@@ -150,14 +175,14 @@ describe('BoardPage', () => {
   });
 
   it('the selected station tab shows only its own items', async () => {
-    const first = renderBoardPage({ page: BoardPage, org, factory, board: board(), station: 'investigate' });
+    const first = renderBoardPage({ page: ShellBoard, org, factory, board: board(), station: 'investigate' });
     const investigatePanel = await screen.findByRole('tabpanel');
     expect(within(investigatePanel).getByRole('link', { name: EXPEDITE })).toBeTruthy();
     expect(within(investigatePanel).getByRole('link', { name: STANDARD })).toBeTruthy();
     expect(within(investigatePanel).queryByRole('link', { name: BUILD })).toBeNull();
     first.unmount();
 
-    renderBoardPage({ page: BoardPage, org, factory, board: board(), station: 'build' });
+    renderBoardPage({ page: ShellBoard, org, factory, board: board(), station: 'build' });
     const buildPanel = await screen.findByRole('tabpanel');
     expect(within(buildPanel).getByRole('link', { name: BUILD })).toBeTruthy();
     expect(within(buildPanel).queryByRole('link', { name: EXPEDITE })).toBeNull();
@@ -165,7 +190,7 @@ describe('BoardPage', () => {
   });
 
   it('heads the columns with the expedite lane and its count in use', async () => {
-    renderBoardPage({ page: BoardPage, org, factory, board: board() });
+    renderBoardPage({ page: ShellBoard, org, factory, board: board() });
 
     const columns = await screen.findByRole('region', { name: 'Stations' });
     // The chip, and the card's own Expedite label.
@@ -175,7 +200,7 @@ describe('BoardPage', () => {
 
   it('leaves the expedite lane out when the line has no lane and no expedite item', async () => {
     const plain = board({ expedite: null }, [standardItem]);
-    renderBoardPage({ page: BoardPage, org, factory, board: plain });
+    renderBoardPage({ page: ShellBoard, org, factory, board: plain });
 
     await screen.findByRole('region', { name: 'Stations' });
     expect(screen.queryByText(/jumps every queue/)).toBeNull();
@@ -185,7 +210,7 @@ describe('BoardPage', () => {
   it('a queue column has no header, and the agent, human and done columns keep theirs', async () => {
     const intake = station({ id: 'intake', kind: 'queue', agents: [], wip_limit: null, items: [standardItem] });
     const withQueue = { ...board(), stations: [intake, ...board().stations] };
-    renderBoardPage({ page: BoardPage, org, factory, board: withQueue });
+    renderBoardPage({ page: ShellBoard, org, factory, board: withQueue });
 
     const columns = await screen.findByRole('region', { name: 'Stations' });
     const queue = within(columns).getByRole('region', { name: 'Intake' });
@@ -200,7 +225,7 @@ describe('BoardPage', () => {
   });
 
   it('the header Inbox button opens the inbox drawer over the board', async () => {
-    renderBoardPage({ page: BoardPage, org, factory, board: board() });
+    renderBoardPage({ page: ShellBoard, org, factory, board: board() });
 
     fireEvent.click(await screen.findByRole('button', { name: /^Inbox/ }));
     const drawer = await screen.findByRole('dialog', { name: 'Inbox' });
@@ -237,18 +262,19 @@ describe('BoardPage', () => {
   });
 
   it('states the constraint under the tabs only while the constraint is picked', async () => {
-    const first = renderBoardPage({ page: BoardPage, org, factory, board: board(), station: 'build' });
+    const first = renderBoardPage({ page: ShellBoard, org, factory, board: board(), station: 'build' });
     expect(await screen.findByText('Build is the constraint: 1 of 1 busy, 0 waiting')).toBeTruthy();
     first.unmount();
 
-    renderBoardPage({ page: BoardPage, org, factory, board: board(), station: 'investigate' });
+    renderBoardPage({ page: ShellBoard, org, factory, board: board(), station: 'investigate' });
     await screen.findByRole('tabpanel');
     expect(screen.queryByText(/^Build is the constraint: /)).toBeNull();
   });
 
   it('keeps the phone status line to one line with the touches per item and a 44 px link to them', async () => {
+    stubPhone();
     const touched = board({ touches: { finished: 4, per_item_mean: 1.4, per_item_median: 1, touchless_rate: 0.5 } });
-    renderBoardPage({ page: BoardPage, org, factory, board: touched });
+    renderBoardPage({ page: ShellBoard, org, factory, board: touched });
 
     const line = await screen.findByTitle('Line running, WIP 2 of 3, 1.4 touches per item');
     expect(line.classList).toContain('truncate');
@@ -260,7 +286,8 @@ describe('BoardPage', () => {
   });
 
   it('shows no touches link while no item finished this week', async () => {
-    renderBoardPage({ page: BoardPage, org, factory, board: board() });
+    stubPhone();
+    renderBoardPage({ page: ShellBoard, org, factory, board: board() });
 
     await screen.findByTitle('Line running, WIP 2 of 3');
     expect(screen.queryByRole('link', { name: 'By station' })).toBeNull();
@@ -300,14 +327,76 @@ describe('BoardPage', () => {
       expect(within(card).queryByText('Done')).toBeNull();
     };
 
-    const first = renderBoardPage({ page: BoardPage, org, factory, board: withDone });
+    const first = renderBoardPage({ page: ShellBoard, org, factory, board: withDone });
     const columns = await screen.findByRole('region', { name: 'Stations' });
     expectDoneCard(within(within(columns).getByRole('region', { name: 'Done' })).getByRole('article'));
     first.unmount();
 
-    renderBoardPage({ page: BoardPage, org, factory, board: withDone, station: 'done' });
+    renderBoardPage({ page: ShellBoard, org, factory, board: withDone, station: 'done' });
     const panel = await screen.findByRole('tabpanel');
     expectDoneCard(within(panel).getByRole('article'));
+  });
+});
+
+describe('the desktop Board, as the screen draws it', () => {
+  it('heads the page Board, with the line status and the top bar’s search, view and New item', async () => {
+    const creator = { ...factory, can: [...factory.can, 'item:create'] } as Factory;
+    renderBoardPage({ page: ShellBoard, org, factory: creator, board: board() });
+
+    await screen.findByRole('region', { name: 'Stations' });
+    expect(screen.getByRole('heading', { level: 1, name: 'Board' })).toBeTruthy();
+    expect(screen.getByText('Line running')).toBeTruthy();
+    expect(screen.getByRole('searchbox', { name: 'Search items' })).toBeTruthy();
+    expect((screen.getByRole('radio', { name: 'Board' }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole('button', { name: 'New item' })).toBeTruthy();
+  });
+
+  it('writes the search to the URL, and List goes to the Items page', async () => {
+    const { router } = renderBoardPage({ page: ShellBoard, org, factory, board: board() });
+
+    await screen.findByRole('region', { name: 'Stations' });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search items' }), { target: { value: 'Triage' } });
+    await waitFor(() => expect((router.state.location.search as Record<string, unknown>).q).toBe('Triage'));
+    expect(screen.queryByText(STANDARD)).toBeTruthy();
+    expect(screen.queryByText(BUILD)).toBeNull();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'List' }));
+    await waitFor(() => expect(router.state.location.pathname).toMatch(/\/items\/?$/));
+  });
+
+  it('heads the Done column with Merged pull requests and the week’s count', async () => {
+    const done = board();
+    done.stations.push(station({ id: 'done', kind: 'done', items: [] }));
+    renderBoardPage({ page: ShellBoard, org, factory, board: { ...done, line: { ...done.line, touches: { finished: 53, per_item_mean: 0, per_item_median: 0, touchless_rate: 0 } } } });
+
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const doneColumn = within(columns).getByRole('region', { name: 'Done' });
+    expect(within(doneColumn).getByText('Merged pull requests')).toBeTruthy();
+    expect(within(doneColumn).getByText('53 this week')).toBeTruthy();
+  });
+
+  it('shows the drum’s Ready buffer with Next in, and In progress below it, with the constraint chip', async () => {
+    const ready = item({
+      id: 'item-11',
+      ref: 'sre#11',
+      number: 11,
+      title: 'Wire the retry flag',
+      station: 'build',
+      state: 'queued',
+      in_buffer: true,
+    });
+    const drum = board({ release: { policy: 'push', enforced: false, drum: 'build', buffer: 2, in_buffer: 1 } });
+    drum.stations[1] = { ...drum.stations[1]!, items: [ready, buildItem] };
+    renderBoardPage({ page: ShellBoard, org, factory, board: drum });
+
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const build = within(columns).getByRole('region', { name: 'Build' });
+    expect(within(build).getByText('Constraint')).toBeTruthy();
+    expect(within(build).getByText('Ready, buffer 1 of 2')).toBeTruthy();
+    expect(within(build).getByText('Next in')).toBeTruthy();
+    expect(within(build).getByText('In progress')).toBeTruthy();
+    expect(within(build).getByRole('img', { name: '1 of 1 in progress' })).toBeTruthy();
+    expect(within(build).getByRole('link', { name: 'Wire the retry flag' })).toBeTruthy();
   });
 });
 
@@ -432,7 +521,7 @@ describe('board filters and grouping', () => {
   const choice = (name: string) => (screen.getByRole('combobox', { name }) as HTMLSelectElement).value;
 
   it('filters the cards by assembly, agent role and status, in every station', async () => {
-    renderBoardPage({ page: BoardPage, org, factory, board: filterBoard() });
+    renderBoardPage({ page: ShellBoard, org, factory, board: filterBoard() });
     await screen.findByRole('region', { name: 'Stations' });
     const filter = async (name: string, value: string, titles: string[]) => {
       fireEvent.change(screen.getByRole('combobox', { name }), { target: { value } });
@@ -450,7 +539,7 @@ describe('board filters and grouping', () => {
   });
 
   it('says Empty in a column the filter leaves no card in, and keeps the column', async () => {
-    renderBoardPage({ page: BoardPage, org, factory, board: filterBoard() });
+    renderBoardPage({ page: ShellBoard, org, factory, board: filterBoard() });
     await screen.findByRole('region', { name: 'Stations' });
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Agent role' }), { target: { value: 'Triager' } });
@@ -462,7 +551,7 @@ describe('board filters and grouping', () => {
 
   it('orders a station’s cards by assembly when grouped, and keeps the order of the board otherwise', async () => {
     const grouped = renderBoardPage({
-      page: BoardPage,
+      page: ShellBoard,
       org,
       factory,
       board: filterBoard(),
@@ -473,14 +562,14 @@ describe('board filters and grouping', () => {
     expect(shownTitles(investigate)).toEqual([DRAFT, ADD, WIRE, TRIAGE, ROTATE]);
     grouped.unmount();
 
-    renderBoardPage({ page: BoardPage, org, factory, board: filterBoard() });
+    renderBoardPage({ page: ShellBoard, org, factory, board: filterBoard() });
     const ungrouped = await screen.findByRole('region', { name: 'Investigate' });
     expect(shownTitles(ungrouped)).toEqual([DRAFT, TRIAGE, WIRE, ADD, ROTATE]);
   });
 
   it('shows the view its search params name, and writes each change back to the URL', async () => {
     const { router } = renderBoardPage({
-      page: BoardPage,
+      page: ShellBoard,
       org,
       factory,
       board: filterBoard(),
@@ -505,7 +594,7 @@ describe('board filters and grouping', () => {
 
   it('drops the search params the board cannot show, so the page shows every card', async () => {
     renderBoardPage({
-      page: BoardPage,
+      page: ShellBoard,
       org,
       factory,
       board: filterBoard(),
@@ -552,7 +641,7 @@ describe('board filters and grouping', () => {
       stations: [station({ id: 'investigate', lanes: [lane({})], items: parts, in_progress: 1, wip_limit: 2 })],
       assemblies: [PWA],
     };
-    renderBoardPage({ page: BoardPage, org, factory, board, search: { group: 'assembly' } });
+    renderBoardPage({ page: ShellBoard, org, factory, board, search: { group: 'assembly' } });
     const columns = await screen.findByRole('region', { name: 'Stations' });
 
     // The assembly is no card and no header: its parts are the cards, in part order.
@@ -578,7 +667,7 @@ describe('board filters and grouping', () => {
       ],
       assemblies: [],
     };
-    renderBoardPage({ page: BoardPage, org, factory, board, search: { group: 'assembly' } });
+    renderBoardPage({ page: ShellBoard, org, factory, board, search: { group: 'assembly' } });
     const columns = await screen.findByRole('region', { name: 'Stations' });
     expect(shownTitles(within(columns).getByRole('region', { name: 'Done' }))).toEqual(['Billing migration']);
     expect(within(columns).queryAllByRole('link', { name: /merged/ })).toHaveLength(0);
@@ -597,7 +686,7 @@ describe('board filters and grouping', () => {
       stations: [station({ id: 'investigate', lanes: [lane({})], items: [part], in_progress: 0, wip_limit: 2 })],
       assemblies: [PWA],
     };
-    renderBoardPage({ page: BoardPage, org, factory, board, search: { group: 'assembly', station: 'investigate' } });
+    renderBoardPage({ page: ShellBoard, org, factory, board, search: { group: 'assembly', station: 'investigate' } });
     const panel = await screen.findByRole('tabpanel');
     const header = within(panel).getByRole('link', { name: /3 of 5 merged/ });
     expect(header.getAttribute('href')).toBe('/o/acme/f/sre/items/50');
