@@ -77,7 +77,7 @@ export function RuntimeFields({ basics }: { basics: BasicsSection }) {
         </p>
       </div>
       {removed ? (
-        <div className="flex flex-col gap-2 rounded-control border border-line bg-surface p-3">
+        <div className="flex flex-col gap-2 rounded-control border border-line bg-card p-3">
           <p className="m-0 text-sm font-medium">Removed in phase 4</p>
           {removedKeys.map((k) => (
             <ProblemFixes key={k} pointer={`/basics/${k}`} />

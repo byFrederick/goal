@@ -103,7 +103,7 @@ export function ConnectionsPage() {
         <section
           key={c.id}
           aria-label={`${c.name} failed its test`}
-          className="flex flex-col items-start gap-3 rounded-card border border-rework-line bg-rework-tint px-4 py-3.5 md:px-5"
+          className="flex flex-col items-start gap-3 rounded-card border border-rework-tint bg-rework-tint px-4 py-3.5 md:px-5"
         >
           <p className="m-0 flex items-start gap-2.5 text-[15px] leading-normal text-rework-ink">
             <TriangleAlert size={18} strokeWidth={1.75} aria-hidden="true" className="mt-0.5 shrink-0" />
@@ -133,9 +133,9 @@ export function ConnectionsPage() {
           <div className="flex flex-col gap-4">
             {[0, 1, 2, 3].map((i) => (
               <div key={i} className="grid grid-cols-[36px_1fr_1fr] items-center gap-4">
-                <div className="size-9 rounded-control bg-control" />
-                <div className="h-3 rounded-chip bg-control" />
-                <div className="h-3 rounded-chip bg-control" />
+                <div className="size-9 rounded-control bg-panel" />
+                <div className="h-3 rounded-chip bg-panel" />
+                <div className="h-3 rounded-chip bg-panel" />
               </div>
             ))}
           </div>
@@ -304,10 +304,7 @@ export function ConnectionsPage() {
                   const kind = kindOf(c);
                   const trouble = c.status === 'failing' || c.status === 'missing-secret';
                   return (
-                    <li
-                      key={c.id}
-                      className="flex flex-col gap-1.5 rounded-control border border-line bg-surface p-3.5"
-                    >
+                    <li key={c.id} className="flex flex-col gap-1.5 rounded-control border border-line bg-card p-3.5">
                       <div className="flex items-baseline justify-between gap-3">
                         <Link
                           to="/o/$org/connections/$connection"

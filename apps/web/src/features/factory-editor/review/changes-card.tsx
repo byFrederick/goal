@@ -56,7 +56,7 @@ export function ChangesCard({
       {isError ? (
         <p className="m-0 text-sm text-rework-ink">The comparison could not load.</p>
       ) : !comparison ? (
-        <div aria-busy="true" className="h-40 rounded-control bg-control/60">
+        <div aria-busy="true" className="h-40 rounded-control bg-panel/60">
           <span className="sr-only">Loading the changes</span>
         </div>
       ) : files.length === 0 || countsOnly ? null : (
@@ -113,7 +113,7 @@ function FileDiff({ file, pair, changes }: { file: FileChange; pair: ComparePair
   if (before.isError || after.isError) return <p className="m-0 text-sm text-rework-ink">This file could not load.</p>;
   if (loading) {
     return (
-      <div aria-busy="true" className="h-32 rounded-control bg-control/60">
+      <div aria-busy="true" className="h-32 rounded-control bg-panel/60">
         <span className="sr-only">Loading {file.path}</span>
       </div>
     );
@@ -134,7 +134,7 @@ export function DiffView({ hunks, label }: { hunks: Hunk[]; label: string }) {
       aria-label={label}
       // biome-ignore lint/a11y/noNoninteractiveTabindex: the diff scrolls sideways; the keyboard scrolls it
       tabIndex={0}
-      className="overflow-x-auto rounded-control border border-line bg-surface py-1.5 font-mono text-[13px] leading-[1.75]"
+      className="overflow-x-auto rounded-control border border-line bg-card py-1.5 font-mono text-[13px] leading-[1.75]"
     >
       <table className="w-full border-collapse">
         {hunks.map((h, i) => (

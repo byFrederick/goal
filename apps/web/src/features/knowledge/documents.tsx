@@ -237,7 +237,7 @@ export function DocumentDialog({ source, id }: { source: KnowledgeSource; id: st
                   // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region must be focusable
                   tabIndex={0}
                   aria-label={`Indexed text of ${d.title}`}
-                  className="max-h-[50dvh] overflow-y-auto rounded-control border border-line bg-surface p-3 text-sm leading-relaxed break-words whitespace-pre-wrap"
+                  className="max-h-[50dvh] overflow-y-auto rounded-control border border-line bg-card p-3 text-sm leading-relaxed break-words whitespace-pre-wrap"
                 >
                   {text}
                 </section>

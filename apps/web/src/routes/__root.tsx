@@ -25,7 +25,7 @@ function Root() {
         position="top-center"
         toastOptions={{
           classNames: {
-            toast: '!rounded-card !border-line !bg-card !font-sans !text-ink !shadow-dialog',
+            toast: '!rounded-card !border-line !bg-card !font-sans !text-ink !shadow-pop',
             description: '!text-muted',
             // The update prompt's Reload: the primary button of the design system (ink on white).
             actionButton: '!rounded-control !bg-ink !font-sans !text-white hover:!bg-ink/90',

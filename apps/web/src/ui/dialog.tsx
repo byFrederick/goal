@@ -54,7 +54,7 @@ export function DialogContent({
           back.focus();
         }}
         className={cn(
-          'fixed z-50 flex flex-col gap-4 bg-card p-5 shadow-dialog outline-none',
+          'fixed z-50 flex flex-col gap-4 bg-card p-5 shadow-pop outline-none',
           'top-1/2 left-1/2 max-h-[calc(100dvh-32px)] w-[calc(100vw-32px)] max-w-[480px] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-contain rounded-card',
           className,
         )}
@@ -77,7 +77,7 @@ export function DialogContent({
           </div>
           {dismissible ? (
             <D.Close
-              className="-mt-1 -mr-1 inline-flex size-10 shrink-0 items-center justify-center rounded-control text-ink transition-colors hover:bg-nav-hover"
+              className="-mt-1 -mr-1 inline-flex size-10 shrink-0 items-center justify-center rounded-control text-ink transition-colors hover:bg-hover"
               aria-label="Close"
             >
               <X size={18} strokeWidth={1.5} aria-hidden="true" />

@@ -78,7 +78,7 @@ function Resume({ factory }: { factory: string }) {
     return (
       <div
         role="alert"
-        className="flex max-w-xl flex-col gap-3 rounded-card border border-rework-line bg-rework-tint p-5"
+        className="flex max-w-xl flex-col gap-3 rounded-card border border-rework-tint bg-rework-tint p-5"
       >
         <h1 className="m-0 text-xl font-medium text-rework-ink">This draft factory can’t be opened</h1>
         <p className="m-0 text-[15px] leading-relaxed">{failed.detail ?? failed.title}</p>

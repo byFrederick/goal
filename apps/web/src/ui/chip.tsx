@@ -2,14 +2,14 @@ import type { ReactNode } from 'react';
 import { cn } from './cn';
 
 const tones = {
-  plain: 'border-line bg-surface text-ink',
+  plain: 'border-line bg-card text-ink',
   quiet: 'border-transparent bg-shell text-ink',
-  run: 'border-run-hatch bg-run-tint text-run',
-  you: 'border-you-line bg-you-tint text-you',
-  rework: 'border-rework-line bg-rework-tint text-rework-ink',
+  run: 'border-run-soft bg-run-tint text-run',
+  you: 'border-you-tint bg-you-tint text-you',
+  rework: 'border-rework-tint bg-rework-tint text-rework-ink',
   /** The constraint (the drum) only: amber with ink text at 600. */
   constraint: 'border-amber bg-amber font-semibold text-ink',
-  ok: 'border-line bg-surface text-ok',
+  ok: 'border-line bg-card text-ok',
 } as const;
 
 export type ChipTone = keyof typeof tones;

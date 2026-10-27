@@ -91,7 +91,7 @@ function OrgTile({ mark, current }: { mark: string; current: boolean }) {
       aria-hidden="true"
       className={cn(
         'box-border flex size-9 items-center justify-center rounded-[10px] text-[13px] font-semibold',
-        current ? 'bg-ink text-white' : 'border border-ink bg-surface text-ink',
+        current ? 'bg-ink text-white' : 'border border-ink bg-card text-ink',
       )}
     >
       {mark}

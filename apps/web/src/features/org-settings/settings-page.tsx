@@ -156,7 +156,7 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
       {failed ? (
         <p
           role="alert"
-          className="m-0 max-w-[980px] rounded-control border border-rework-line bg-rework-tint px-4 py-3 text-sm"
+          className="m-0 max-w-[980px] rounded-control border border-rework-tint bg-rework-tint px-4 py-3 text-sm"
         >
           {saveError(save.error)}
         </p>
@@ -319,7 +319,7 @@ function ModelConnections({ org }: { org: OrgSummary }) {
   const models = connections.filter((c) => kinds.some((k) => k.name === c.kind && k.model));
   const title = (kind: string) => kinds.find((k) => k.name === kind)?.title ?? kind;
   return (
-    <div className="flex flex-col items-start gap-3 rounded-control border border-line bg-surface px-4 py-3.5 text-sm leading-normal">
+    <div className="flex flex-col items-start gap-3 rounded-control border border-line bg-card px-4 py-3.5 text-sm leading-normal">
       <p className="m-0">
         Each factory picks a model connection in its Basics.{' '}
         {models.length === 0
@@ -356,7 +356,7 @@ function ConnectionsCount({ org }: { org: OrgSummary }) {
   const connections = useQuery({ ...connectionsQuery(org.id), enabled: read }).data;
   const failing = connections?.filter((c) => c.status === 'failing').map((c) => c.name) ?? [];
   return (
-    <div className="flex flex-col items-start gap-3 rounded-control border border-line bg-surface px-4 py-3.5 text-sm leading-normal">
+    <div className="flex flex-col items-start gap-3 rounded-control border border-line bg-card px-4 py-3.5 text-sm leading-normal">
       <p className="m-0">
         {connections ? `${plural(connections.length, 'connection')}. ` : ''}
         Their secrets are encrypted in Goal’s database and are write-only: owners and admins replace them, nobody reads

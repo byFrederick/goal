@@ -53,7 +53,7 @@ function Choices({
         {all.map((o) => (
           <label
             key={o.value}
-            className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-chip border border-line bg-surface px-3 text-[13px] has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-run md:min-h-8"
+            className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-chip border border-line bg-card px-3 text-[13px] has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-run md:min-h-8"
           >
             <input
               type="checkbox"
@@ -216,7 +216,7 @@ function RuleFields({ rule, initial, onDone }: { rule: ModelRule | undefined; in
         help="Markdown, short. Put what a check can enforce into a contract, a gate, a tool permission or branch protection; keep here only the judgment those cannot express. In this factory's runs, factory rules win over repository rules."
       >
         {view === 'preview' ? (
-          <div className="min-h-[160px] overflow-hidden rounded-control border border-rule bg-surface">
+          <div className="min-h-[160px] overflow-hidden rounded-control border border-rule bg-card">
             <Suspense fallback={<p className="m-0 p-3 text-sm text-muted">Loading the preview…</p>}>
               <MarkdownPreview text={body} />
             </Suspense>

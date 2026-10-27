@@ -39,7 +39,7 @@ export function Monogram({ name, className }: { name: string; className?: string
     <span
       aria-hidden="true"
       className={cn(
-        'flex size-9 shrink-0 items-center justify-center rounded-control bg-control text-[13px] font-semibold text-ink',
+        'flex size-9 shrink-0 items-center justify-center rounded-control bg-panel text-[13px] font-semibold text-ink',
         className,
       )}
     >
@@ -103,7 +103,7 @@ export function EnvNames({ names, className }: { names: string[]; className?: st
         <code
           key={n}
           translate="no"
-          className="rounded-chip border border-line bg-surface px-1.5 py-0.5 font-mono text-xs"
+          className="rounded-chip border border-line bg-card px-1.5 py-0.5 font-mono text-xs"
         >
           {n}
         </code>

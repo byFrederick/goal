@@ -72,7 +72,7 @@ function ReconnectingBanner() {
   return (
     <p role="status" className="pointer-events-none fixed inset-x-0 top-3 z-40 m-0 flex justify-center px-4">
       {status === 'reconnecting' ? (
-        <span className="inline-flex items-center gap-2 rounded-control border border-rework-line bg-surface px-3 py-2 text-[13px] text-ink shadow-lift">
+        <span className="inline-flex items-center gap-2 rounded-control border border-rework-tint bg-card px-3 py-2 text-[13px] text-ink">
           <span aria-hidden="true" className="size-2 rounded-full bg-rework" />
           Reconnecting to goald; changes appear once it answers.
         </span>

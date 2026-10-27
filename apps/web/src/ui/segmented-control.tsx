@@ -41,7 +41,7 @@ export function SegmentedControl<T extends string>({
   return (
     <fieldset
       aria-describedby={describedBy}
-      className={cn('m-0 inline-flex shrink-0 gap-0.5 rounded-control border-0 bg-control p-[3px]', className)}
+      className={cn('m-0 inline-flex shrink-0 gap-0.5 rounded-control border-0 bg-panel p-[3px]', className)}
     >
       <legend className="sr-only">{label}</legend>
       {options.map((o, i) => {
@@ -55,8 +55,8 @@ export function SegmentedControl<T extends string>({
               'has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-run',
               readOnly
                 ? 'cursor-default hover:text-muted'
-                : 'has-[:disabled]:cursor-not-allowed has-[:disabled]:text-faint has-[:disabled]:hover:text-faint',
-              checked && 'bg-surface font-medium text-ink shadow-raise hover:text-ink',
+                : 'has-[:disabled]:cursor-not-allowed has-[:disabled]:text-muted has-[:disabled]:hover:text-muted',
+              checked && 'bg-card font-medium text-ink hover:text-ink',
             )}
           >
             <input

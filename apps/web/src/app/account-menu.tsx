@@ -226,7 +226,7 @@ function LocalUser() {
   return (
     <div className="flex flex-col gap-2 p-2">
       <div className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-3">
-        <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-full bg-control text-ink">
+        <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-full bg-panel text-ink">
           <CircleCheck size={18} strokeWidth={1.5} />
         </span>
         <span className="min-w-0">

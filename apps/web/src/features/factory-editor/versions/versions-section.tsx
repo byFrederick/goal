@@ -37,7 +37,7 @@ export function VersionsSection({ search }: SectionViewProps) {
     <div className="grid min-w-0 gap-4 @[960px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] @[960px]:items-start">
       <SectionShell section="versions">
         {pages.isPending ? (
-          <div aria-busy="true" className="h-40 rounded-control bg-control/60">
+          <div aria-busy="true" className="h-40 rounded-control bg-panel/60">
             <span className="sr-only">Loading the versions</span>
           </div>
         ) : pages.isError ? (

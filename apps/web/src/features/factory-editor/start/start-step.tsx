@@ -200,7 +200,7 @@ export function StartStep({ search }: { search: StartSearch }) {
       {error ? (
         <p
           role="alert"
-          className="m-0 max-w-2xl rounded-control border border-rework-line bg-rework-tint px-4 py-3 text-sm"
+          className="m-0 max-w-2xl rounded-control border border-rework-tint bg-rework-tint px-4 py-3 text-sm"
         >
           The factory wasn’t created: {error.replace(/\.$/, '')}.
         </p>
@@ -312,7 +312,7 @@ function ClonePreview({ factory }: { factory: string }) {
   return (
     <section
       aria-label="factory.yaml of the factory to copy"
-      className="overflow-hidden rounded-card border border-line bg-surface"
+      className="overflow-hidden rounded-card border border-line bg-card"
     >
       <CodeEditor
         value={file.data?.text ?? ''}

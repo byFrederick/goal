@@ -104,7 +104,7 @@ function FactoryId({ id }: { id: string }) {
           type="button"
           aria-label="Copy factory id"
           onClick={() => void copy()}
-          className="inline-flex size-11 shrink-0 items-center justify-center rounded-control border border-line bg-surface text-ink transition-colors duration-200 hover:bg-shell md:size-8"
+          className="inline-flex size-11 shrink-0 items-center justify-center rounded-control border border-line bg-card text-ink transition-colors duration-200 hover:bg-shell md:size-8"
         >
           <Copy size={15} strokeWidth={1.5} aria-hidden="true" />
         </button>

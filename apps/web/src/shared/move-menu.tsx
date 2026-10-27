@@ -167,7 +167,7 @@ function MoveForm({
                 className={cn(
                   'flex min-h-12 cursor-pointer items-center gap-3 rounded-control border px-3 py-2 transition-colors duration-200',
                   'has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-run',
-                  c.id === to ? 'border-ink bg-surface' : 'border-line bg-surface hover:border-faint',
+                  c.id === to ? 'border-ink bg-card' : 'border-line bg-card hover:border-muted',
                 )}
               >
                 <input
@@ -201,7 +201,7 @@ function MoveForm({
               required={choice?.upstream}
               aria-invalid={touched && missing}
               aria-describedby={touched && missing ? `${id}-error` : undefined}
-              className="min-h-20 w-full resize-y rounded-control border border-rule bg-surface px-3 py-2.5 text-base text-ink placeholder:text-muted aria-[invalid=true]:border-rework"
+              className="min-h-20 w-full resize-y rounded-control border border-rule bg-card px-3 py-2.5 text-base text-ink placeholder:text-muted aria-[invalid=true]:border-rework"
             />
             {touched && missing ? (
               <p id={`${id}-error`} className="m-0 text-sm text-rework">
@@ -241,7 +241,7 @@ export function MoveButton({
       onClick={onMove}
       aria-label={`Move ${item.ref} to another station`}
       className={cn(
-        'relative z-10 inline-flex shrink-0 items-center justify-center rounded-control border border-line bg-surface text-ink transition-colors duration-200 hover:border-faint hover:bg-shell',
+        'relative z-10 inline-flex shrink-0 items-center justify-center rounded-control border border-line bg-card text-ink transition-colors duration-200 hover:border-muted hover:bg-shell',
         size === 'sm' ? 'size-8' : 'size-11',
         className,
       )}

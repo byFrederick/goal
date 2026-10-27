@@ -48,7 +48,7 @@ export function CodeField({ value, onChange, look = 'normal', className, disable
             {i === 3 ? <span /> : null}
             <span
               className={cn(
-                'flex h-14 min-w-0 items-center justify-center rounded-control border bg-surface text-2xl text-ink transition-colors duration-200',
+                'flex h-14 min-w-0 items-center justify-center rounded-control border bg-card text-2xl text-ink transition-colors duration-200',
                 look === 'normal' && 'border-rule',
                 look === 'error' && 'border-rework',
                 off && 'border-line bg-shell text-muted',

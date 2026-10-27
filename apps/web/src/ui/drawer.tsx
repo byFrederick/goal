@@ -33,7 +33,7 @@ export function DrawerContent({ title, description, children }: DrawerContentPro
           e.preventDefault();
           back.focus();
         }}
-        className="fixed inset-0 z-50 flex flex-col gap-4 overflow-y-auto overscroll-contain bg-card p-5 shadow-dialog outline-none data-[state=open]:animate-[fade-in_150ms_ease-out] md:inset-y-0 md:right-0 md:left-auto md:w-[460px] md:border-l md:border-line"
+        className="fixed inset-0 z-50 flex flex-col gap-4 overflow-y-auto overscroll-contain bg-card p-5 shadow-pop outline-none data-[state=open]:animate-[fade-in_150ms_ease-out] md:inset-y-0 md:right-0 md:left-auto md:w-[460px] md:border-l md:border-line"
         // Radix warns about a missing description unless aria-describedby is explicitly unset.
         {...(description ? {} : ({ 'aria-describedby': undefined } as object))}
       >
@@ -43,7 +43,7 @@ export function DrawerContent({ title, description, children }: DrawerContentPro
             {description ? <D.Description className="m-0 text-sm text-muted">{description}</D.Description> : null}
           </div>
           <D.Close
-            className="-mt-1 -mr-1 inline-flex size-10 shrink-0 items-center justify-center rounded-control text-ink transition-colors hover:bg-nav-hover"
+            className="-mt-1 -mr-1 inline-flex size-10 shrink-0 items-center justify-center rounded-control text-ink transition-colors hover:bg-hover"
             aria-label="Close"
           >
             <X size={18} strokeWidth={1.5} aria-hidden="true" />

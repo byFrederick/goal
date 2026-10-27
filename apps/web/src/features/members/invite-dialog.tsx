@@ -165,7 +165,7 @@ export function InviteDialog({ open, onOpenChange, org, role, factories, invite 
           ) : null}
           <div aria-live="polite">
             {refused.length > 0 ? (
-              <ul className="m-0 flex list-none flex-col gap-1 rounded-control border border-rework-line bg-rework-tint px-3 py-2.5 text-sm text-rework-ink">
+              <ul className="m-0 flex list-none flex-col gap-1 rounded-control border border-rework-tint bg-rework-tint px-3 py-2.5 text-sm text-rework-ink">
                 {refused.map((r) => (
                   <li key={r}>Not sent to {r}</li>
                 ))}

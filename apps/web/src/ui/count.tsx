@@ -2,7 +2,7 @@ import { cn } from './cn';
 
 const tones = {
   /** A plain tally (factories, proposals): concrete, ink-soft on the active nav item. */
-  neutral: 'bg-control text-ink group-aria-[current=page]:bg-ink-soft group-aria-[current=page]:text-white',
+  neutral: 'bg-panel text-ink group-aria-[current=page]:bg-ink-soft group-aria-[current=page]:text-white',
   /** What waits on you: violet. */
   you: 'bg-you text-white',
 } as const;

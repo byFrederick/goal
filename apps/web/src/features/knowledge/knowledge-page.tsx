@@ -83,9 +83,9 @@ export function KnowledgePage() {
           <div className="flex flex-col gap-4">
             {[0, 1, 2].map((i) => (
               <div key={i} className="grid grid-cols-[1fr_1fr_1fr] items-center gap-4">
-                <div className="h-3 rounded-chip bg-control" />
-                <div className="h-3 rounded-chip bg-control" />
-                <div className="h-3 rounded-chip bg-control" />
+                <div className="h-3 rounded-chip bg-panel" />
+                <div className="h-3 rounded-chip bg-panel" />
+                <div className="h-3 rounded-chip bg-panel" />
               </div>
             ))}
           </div>
@@ -235,7 +235,7 @@ function SourcesCard({
                     key={s.id}
                     className={cn(
                       'border-t border-line align-middle [&>td]:py-2.5 [&>td]:pr-3',
-                      s.name === selected ? 'bg-surface' : status.tone === 'rework' ? 'bg-rework-tint/40' : undefined,
+                      s.name === selected ? 'bg-card' : status.tone === 'rework' ? 'bg-rework-tint/40' : undefined,
                     )}
                   >
                     <td className="max-w-[240px]">

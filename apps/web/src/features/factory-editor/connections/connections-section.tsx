@@ -137,7 +137,7 @@ function FactoryConnections({ factory }: { factory: string }) {
         </ul>
       )}
       {others.length > 0 ? (
-        <div className="flex flex-col gap-2 rounded-control border border-line bg-surface p-3">
+        <div className="flex flex-col gap-2 rounded-control border border-line bg-card p-3">
           {others.map(({ c, index }) => (
             <div key={`${c.name}-${index}`} className="flex flex-col gap-1">
               <span className="text-sm">
@@ -206,14 +206,14 @@ function ConnectionRow({
             <code
               key={n}
               translate="no"
-              className="rounded-chip border border-line bg-surface px-1.5 py-0.5 font-mono text-xs"
+              className="rounded-chip border border-line bg-card px-1.5 py-0.5 font-mono text-xs"
             >
               {n}
             </code>
           ))
         )}
         {summary.more > 0 ? (
-          <span className="rounded-chip border border-line bg-surface px-1.5 py-0.5 text-xs">
+          <span className="rounded-chip border border-line bg-card px-1.5 py-0.5 text-xs">
             +{summary.more}
             <span className="sr-only"> more</span>
           </span>
@@ -494,7 +494,7 @@ function RunsGet() {
                       <code
                         key={n}
                         translate="no"
-                        className="rounded-chip border border-line bg-surface px-1.5 py-0.5 font-mono text-xs"
+                        className="rounded-chip border border-line bg-card px-1.5 py-0.5 font-mono text-xs"
                       >
                         {n}
                       </code>

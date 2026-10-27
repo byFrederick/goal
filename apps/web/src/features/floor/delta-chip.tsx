@@ -12,7 +12,7 @@ export function DeltaChip({ delta }: { delta: Delta }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 text-[13px] font-medium whitespace-nowrap tabular-nums md:h-[26px] md:rounded-chip md:bg-surface md:px-2 md:shadow-raise',
+        'inline-flex items-center gap-1.5 text-[13px] font-medium whitespace-nowrap tabular-nums md:h-[26px] md:rounded-chip md:bg-card md:px-2',
         tones[delta.tone],
       )}
     >

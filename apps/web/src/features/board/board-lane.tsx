@@ -220,7 +220,7 @@ function LaneHeader({ lane }: { lane: BoardLane }) {
     <header className="flex min-w-0 items-center gap-2 px-1">
       <span
         aria-hidden="true"
-        className="grid size-7 shrink-0 place-items-center rounded-control border border-rule bg-surface text-[11px] font-medium text-ink-soft"
+        className="grid size-7 shrink-0 place-items-center rounded-control border border-rule bg-card text-[11px] font-medium text-ink-soft"
       >
         {roleMark(lane.role)}
       </span>
@@ -252,7 +252,7 @@ function Slots({ slots, busy }: { slots: number; busy: number }) {
           // biome-ignore lint/suspicious/noArrayIndexKey: the boxes are fixed by the slot count and never reorder
           key={i}
           aria-hidden="true"
-          className={cn('size-2.5 rounded-[2px] border', i < filled ? 'border-run bg-run' : 'border-rule-strong')}
+          className={cn('size-2.5 rounded-[2px] border', i < filled ? 'border-run bg-run' : 'border-rule')}
         />
       ))}
     </span>
@@ -286,9 +286,9 @@ function WorkCard({
       onKeyDown={moveKeys(onMove, drag)}
       style={drag?.style}
       className={cn(
-        'relative flex flex-col gap-2 rounded-control border bg-surface p-3 transition-[border-color,box-shadow,opacity] duration-200',
-        'hover:border-faint hover:shadow-lift has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-run',
-        expedite ? 'border-rework-line bg-rework-tint' : 'border-hairline',
+        'relative flex flex-col gap-2 rounded-control border bg-card p-3 transition-[border-color,box-shadow,opacity] duration-200',
+        'hover:border-muted has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-run',
+        expedite ? 'border-rework-tint bg-rework-tint' : 'border-line',
         drag?.dragging && 'opacity-40',
       )}
     >
@@ -349,8 +349,8 @@ function PlanBar({ plan }: { plan: ItemCard['plan_steps'] }) {
 
 const planTones: Record<PlanSegment, string> = {
   done: 'border-run bg-run',
-  current: 'border-run bg-run-hatch',
-  todo: 'border-rule-strong bg-surface',
+  current: 'border-run bg-run-soft',
+  todo: 'border-rule bg-card',
 };
 
 /** A waiting row: an item queued for the lane, its title and the one line saying what it waits for. */
@@ -382,13 +382,13 @@ function WaitingRow({
       onKeyDown={moveKeys(onMove, drag)}
       style={drag?.style}
       className={cn(
-        'relative flex items-center gap-2 rounded-control border bg-surface px-3 py-2 transition-[border-color,box-shadow,opacity] duration-200',
-        'hover:border-faint hover:shadow-lift has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-run',
+        'relative flex items-center gap-2 rounded-control border bg-card px-3 py-2 transition-[border-color,box-shadow,opacity] duration-200',
+        'hover:border-muted has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-run',
         expedite
-          ? 'border-rework-line bg-rework-tint'
+          ? 'border-rework-tint bg-rework-tint'
           : item.state === 'blocked'
-            ? 'border-rework-line'
-            : 'border-hairline',
+            ? 'border-rework-tint'
+            : 'border-line',
         drag?.dragging && 'opacity-40',
       )}
     >

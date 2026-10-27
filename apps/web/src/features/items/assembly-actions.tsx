@@ -163,7 +163,7 @@ function CancelDialog({ openParts, working, open, onOpenChange, onConfirm, pendi
           {refusal ? (
             <p
               role="alert"
-              className="m-0 rounded-control border border-rework-line bg-rework-tint px-3 py-2.5 text-sm leading-snug text-rework-ink"
+              className="m-0 rounded-control border border-rework-tint bg-rework-tint px-3 py-2.5 text-sm leading-snug text-rework-ink"
             >
               {refusal}
             </p>

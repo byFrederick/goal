@@ -219,11 +219,11 @@ function ReviewStep({ heading, me, code, request, onApproved, onDenied, onInvali
       </p>
       <p className="m-0 flex flex-wrap items-center gap-2.5 text-sm text-ink-soft">
         Code you entered
-        <span className="inline-flex h-8 items-center rounded-chip border border-line bg-surface px-2.5 font-mono text-[15px] tracking-[0.06em] text-ink">
+        <span className="inline-flex h-8 items-center rounded-chip border border-line bg-card px-2.5 font-mono text-[15px] tracking-[0.06em] text-ink">
           {code}
         </span>
       </p>
-      <dl className="m-0 grid grid-cols-1 gap-x-4 gap-y-0.5 rounded-control border border-line bg-surface px-3.5 py-3 text-sm leading-snug sm:grid-cols-[140px_minmax(0,1fr)] sm:gap-y-2.5 sm:px-4 sm:py-3.5">
+      <dl className="m-0 grid grid-cols-1 gap-x-4 gap-y-0.5 rounded-control border border-line bg-card px-3.5 py-3 text-sm leading-snug sm:grid-cols-[140px_minmax(0,1fr)] sm:gap-y-2.5 sm:px-4 sm:py-3.5">
         {request.ip ? (
           <>
             <dt className="text-muted">Requested from</dt>
@@ -253,7 +253,7 @@ function ReviewStep({ heading, me, code, request, onApproved, onDenied, onInvali
       </dl>
       <p
         role="note"
-        className="m-0 flex items-start gap-2.5 rounded-control border border-rework-line bg-rework-tint px-3 py-2.5 text-sm leading-snug text-rework-ink"
+        className="m-0 flex items-start gap-2.5 rounded-control border border-rework-tint bg-rework-tint px-3 py-2.5 text-sm leading-snug text-rework-ink"
       >
         <TriangleAlert size={16} strokeWidth={1.6} aria-hidden="true" className="mt-0.5 shrink-0" />
         <span>

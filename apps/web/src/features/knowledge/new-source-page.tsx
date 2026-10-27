@@ -82,10 +82,10 @@ export function NewSourcePage() {
                     <label
                       key={k}
                       className={cn(
-                        'flex min-w-0 cursor-pointer items-start gap-3 rounded-control border bg-surface p-4 transition-colors duration-200',
+                        'flex min-w-0 cursor-pointer items-start gap-3 rounded-control border bg-card p-4 transition-colors duration-200',
                         k === kind
                           ? 'border-ink shadow-[inset_0_0_0_1px_var(--color-ink)]'
-                          : 'border-line hover:border-rule-strong',
+                          : 'border-line hover:border-rule',
                       )}
                     >
                       <input
@@ -94,7 +94,7 @@ export function NewSourcePage() {
                         value={k}
                         checked={k === kind}
                         onChange={() => void navigate({ search: { kind: k }, replace: true })}
-                        className="m-0 mt-0.5 size-5 shrink-0 cursor-pointer appearance-none rounded-full border border-rule-strong bg-surface transition-[border-width,border-color] duration-200 checked:border-[6px] checked:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run"
+                        className="m-0 mt-0.5 size-5 shrink-0 cursor-pointer appearance-none rounded-full border border-rule bg-card transition-[border-width,border-color] duration-200 checked:border-[6px] checked:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run"
                       />
                       <span className="flex min-w-0 flex-col gap-1">
                         <span className="inline-flex items-center gap-2 text-[15px] font-medium">

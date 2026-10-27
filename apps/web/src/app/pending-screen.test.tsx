@@ -18,7 +18,7 @@ describe('the first-load state', () => {
 
     expect(screen.getByText('Loading')).toBeTruthy();
     expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
-    expect(container.querySelector('.bg-card, .bg-control, .border')).toBeNull();
+    expect(container.querySelector('.bg-card, .bg-panel, .border')).toBeNull();
     expect(container.querySelector('[aria-hidden="true"]')).toBeNull();
   });
 

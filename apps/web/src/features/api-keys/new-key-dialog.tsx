@@ -41,7 +41,7 @@ interface NewKeyDialogProps {
 }
 
 const radio =
-  'm-0 size-5 shrink-0 cursor-pointer appearance-none rounded-full border border-rule-strong bg-surface transition-[border-width,border-color] duration-200 checked:border-[6px] checked:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run';
+  'm-0 size-5 shrink-0 cursor-pointer appearance-none rounded-full border border-rule bg-card transition-[border-width,border-color] duration-200 checked:border-[6px] checked:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run';
 const checkbox = 'size-[18px] shrink-0 cursor-pointer accent-ink disabled:cursor-not-allowed';
 const legend = 'mb-2 p-0 text-sm font-medium';
 
@@ -187,7 +187,7 @@ export function NewKeyDialog({ org, factories, onClose, onCreated }: NewKeyDialo
                 <label
                   key={c.value}
                   className={cn(
-                    'flex cursor-pointer items-start gap-3 rounded-control border border-line bg-surface p-3 transition-colors duration-200 hover:border-rule-strong',
+                    'flex cursor-pointer items-start gap-3 rounded-control border border-line bg-card p-3 transition-colors duration-200 hover:border-rule',
                     form.ceiling === c.value && 'border-ink shadow-[inset_0_0_0_1px_var(--color-ink)]',
                   )}
                 >

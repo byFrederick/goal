@@ -161,7 +161,7 @@ describe('Items list status icons', () => {
 
     const icons = statusIcons(await rowOf('Rotate the keys'));
     expect(icons.length).toBeGreaterThan(0);
-    expect(icons.every((c) => c.includes('text-ok-dot'))).toBe(true);
+    expect(icons.every((c) => c.includes('text-ok'))).toBe(true);
   });
 
   it('shows no icon for a blocked item, whose words say it', async () => {
@@ -240,7 +240,7 @@ describe('Items list assemblies', () => {
     expect(within(row).getAllByText('Done').length).toBeGreaterThan(0);
     const icons = [...row.querySelectorAll('svg.shrink-0')].map((svg) => svg.getAttribute('class') ?? '');
     expect(icons.length).toBeGreaterThan(0);
-    expect(icons.every((c) => c.includes('text-ok-dot'))).toBe(true);
+    expect(icons.every((c) => c.includes('text-ok'))).toBe(true);
   });
 
   it('collapses and expands its parts', async () => {

@@ -7,7 +7,7 @@ const tiles = {
   /** Waiting on a person: violet. */
   you: 'bg-you-tint text-you',
   /** Anything else: concrete. */
-  plain: 'bg-control text-ink-soft',
+  plain: 'bg-panel text-ink-soft',
 } as const;
 
 interface ListRowProps {

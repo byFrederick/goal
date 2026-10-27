@@ -159,9 +159,9 @@ function KindPicker({
             <label
               key={k.name}
               className={cn(
-                'relative grid min-h-16 cursor-pointer grid-cols-[36px_minmax(0,1fr)] items-center gap-3 rounded-control border bg-surface p-3 text-left text-ink transition-colors duration-200',
+                'relative grid min-h-16 cursor-pointer grid-cols-[36px_minmax(0,1fr)] items-center gap-3 rounded-control border bg-card p-3 text-left text-ink transition-colors duration-200',
                 'has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-run',
-                on ? 'border-ink shadow-[0_0_0_1px_var(--color-ink)]' : 'border-line hover:border-rule-strong',
+                on ? 'border-ink shadow-[0_0_0_1px_var(--color-ink)]' : 'border-line hover:border-rule',
               )}
             >
               <input
@@ -191,7 +191,7 @@ function KindPicker({
           <button
             type="button"
             onClick={onDefine}
-            className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-control border border-dashed border-rule-strong bg-transparent p-3 text-[15px] font-medium text-ink transition-colors duration-200 hover:bg-nav-hover"
+            className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-control border border-dashed border-rule bg-transparent p-3 text-[15px] font-medium text-ink transition-colors duration-200 hover:bg-hover"
           >
             <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
             Define a kind…

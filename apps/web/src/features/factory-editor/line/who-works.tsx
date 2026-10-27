@@ -17,8 +17,8 @@ const routed = '__route';
 const create = '__new';
 
 const select = cn(
-  'h-11 w-full min-w-0 cursor-pointer truncate rounded-control border border-rule bg-surface pr-8 pl-2.5 text-base text-ink transition-colors duration-200 md:h-9 md:text-sm',
-  'hover:border-faint aria-[invalid=true]:border-rework',
+  'h-11 w-full min-w-0 cursor-pointer truncate rounded-control border border-rule bg-card pr-8 pl-2.5 text-base text-ink transition-colors duration-200 md:h-9 md:text-sm',
+  'hover:border-muted aria-[invalid=true]:border-rework',
   'disabled:cursor-default disabled:border-line disabled:bg-shell disabled:hover:border-line',
 );
 

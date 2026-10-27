@@ -29,7 +29,7 @@ interface RadioGroupProps<T extends string> {
 }
 
 const radio =
-  'm-0 size-5 shrink-0 cursor-pointer appearance-none rounded-full border border-rule-strong bg-surface transition-[border-width,border-color] duration-200 checked:border-[6px] checked:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run';
+  'm-0 size-5 shrink-0 cursor-pointer appearance-none rounded-full border border-rule bg-card transition-[border-width,border-color] duration-200 checked:border-[6px] checked:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run';
 
 const chosen = 'border-ink shadow-[inset_0_0_0_1px_var(--color-ink)]';
 
@@ -51,7 +51,7 @@ export function RadioCards<T extends string>({
           <label
             key={o.value}
             className={cn(
-              'relative flex min-w-0 cursor-pointer flex-col gap-2 rounded-card border border-line bg-card p-4 transition-colors duration-200 hover:border-rule-strong',
+              'relative flex min-w-0 cursor-pointer flex-col gap-2 rounded-card border border-line bg-card p-4 transition-colors duration-200 hover:border-rule',
               o.value === value && chosen,
             )}
           >
@@ -59,7 +59,7 @@ export function RadioCards<T extends string>({
               {o.icon ? (
                 <span
                   aria-hidden="true"
-                  className="flex size-10 items-center justify-center rounded-control bg-control text-ink-soft"
+                  className="flex size-10 items-center justify-center rounded-control bg-panel text-ink-soft"
                 >
                   {o.icon}
                 </span>
@@ -100,7 +100,7 @@ export function RadioList<T extends string>({
           <label
             key={o.value}
             className={cn(
-              'flex min-h-14 min-w-0 cursor-pointer items-center gap-3.5 rounded-control border border-line bg-surface px-4 py-2.5 transition-colors duration-200 hover:border-rule-strong',
+              'flex min-h-14 min-w-0 cursor-pointer items-center gap-3.5 rounded-control border border-line bg-card px-4 py-2.5 transition-colors duration-200 hover:border-rule',
               o.value === value && chosen,
             )}
           >

@@ -1,76 +1,70 @@
 /* Design tokens from docs/design/MASTER.md (the user overrides). Components use these
    names only: no hex values, no default Tailwind palette (it is cleared below), no gradients. */
 @import "tailwindcss";
-@import "@fontsource-variable/inter/opsz.css";
-@import "@fontsource/fira-code/400.css";
-@import "@fontsource/fira-code/500.css";
+@import "@fontsource-variable/archivo/wdth.css";
+@import "@fontsource-variable/jetbrains-mono/wght.css";
 
 @theme {
   --color-*: initial;
-  /* The text on an ink fill (the primary button, the ink mark): white in light, the shell's dark in dark. */
+  /* The text on a run, violet or red fill: white in both themes (MASTER.md, Colour). */
   --color-white: #ffffff;
   --color-transparent: transparent;
   --color-current: currentColor;
-  /* The tint of every shadow: ink in light, black in dark (see the dark overrides below). */
-  --color-shadow: #1d2733;
+  /* The tint of the one popover and dialog shadow: ink in light, black in dark (see the dark overrides). */
+  --color-shadow: #14182b;
 
   /* Surfaces */
-  --color-shell: #eef1ef;
-  --color-card: #f6f7f5;
-  --color-surface: #ffffff;
-  --color-control: #e3e7e5;
-  --color-control-hover: #d8dedb;
-  --color-nav-hover: #e1e6e3;
+  --color-shell: #ffffff;
+  --color-sidebar: #f3f4f9;
+  --color-panel: #f7f8fc;
+  --color-hover: #e9ebf4;
+  --color-card: #ffffff;
+  --color-line: #e3e6ef;
+  --color-rule: #cbd0df;
 
-  /* Text and lines */
-  --color-ink: #1d2733;
-  --color-ink-soft: #3a4654;
-  --color-muted: #556270;
-  --color-rule: #cbd2ce;
-  --color-rule-strong: #6f7b77;
-  --color-line: #dde2df;
-  --color-hairline: #e3e7e5;
-  --color-faint: #9aa5a0;
+  /* Text */
+  --color-ink: #14182b;
+  --color-ink-soft: #464d6a;
+  --color-muted: #626986;
 
-  /* Meaning: teal runs, amber is the constraint only, violet waits on you, rust is rework */
-  --color-run: #1f6f8b;
-  --color-run-tint: #dceef3;
-  --color-run-hatch: #bfe0ea;
-  --color-amber: #f0a202;
-  --color-amber-tint: #fff6e0;
-  --color-amber-line: #f2d58a;
-  --color-amber-ink: #8a5d00;
-  --color-you: #5b4bb7;
-  --color-you-tint: #ece9f8;
-  --color-you-line: #c9c1ee;
-  --color-you-ink: #4a3c9e;
-  --color-rework: #b4441c;
-  --color-rework-tint: #fbefe9;
-  --color-rework-line: #ebc3b2;
-  --color-rework-ink: #8a3313;
-  --color-rework-hatch: #f1cdbe;
-  --color-ok: #2e6b4e;
-  --color-ok-tint: #e3efe8;
-  --color-ok-ink: #24563e;
-  --color-ok-dot: #2e8b5e;
-  --color-target: #8a958f;
+  /* Meaning: cobalt runs, violet waits on you, red is rework, yellow is the constraint, green is done */
+  --color-run: #2742f5;
+  --color-run-ink: #1b33c9;
+  --color-run-tint: #e8ecff;
+  --color-run-soft: #9aa6ff;
+  --color-you: #7b3fe4;
+  --color-you-tint: #f1ebfe;
+  --color-you-ink: #5a24b8;
+  --color-rework: #d63a1f;
+  --color-rework-tint: #fdece8;
+  --color-rework-ink: #ae2c14;
+  --color-amber: #ffc21a;
+  --color-amber-tint: #fff4d1;
+  --color-amber-ink: #6e4b00;
+  --color-ok: #0fa36b;
+  --color-ok-tint: #e1f5eb;
+  --color-ok-ink: #0a7a4f;
 
-  --font-sans: "Inter Variable", "Inter", system-ui, sans-serif;
-  --font-mono: "Fira Code", ui-monospace, monospace;
+  /* The andon panel: the line, now */
+  --color-andon: #121633;
+  --color-andon-raised: #1c2147;
+  --color-andon-line: #262c58;
+  --color-andon-text: #c3c8ea;
+
+  --font-sans: "Archivo Variable", "Archivo", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
 
   --tracking-display: -0.035em;
   --tracking-numeral: -0.04em;
 
-  --radius-card: 12px;
+  --radius-andon: 18px;
+  --radius-card: 14px;
+  --radius-cell: 10px;
   --radius-control: 8px;
   --radius-chip: 6px;
 
-  --shadow-raise: 0 1px 2px color-mix(in srgb, var(--color-shadow) 8%, transparent);
-  --shadow-lift: 0 4px 12px -6px color-mix(in srgb, var(--color-shadow) 25%, transparent);
-  --shadow-dialog: 0 20px 25px -5px color-mix(in srgb, var(--color-shadow) 20%, transparent);
-  --shadow-tip: 0 8px 20px -8px color-mix(in srgb, var(--color-shadow) 35%, transparent);
-  --shadow-menu: 0 18px 40px -16px color-mix(in srgb, var(--color-shadow) 38%, transparent);
-  --shadow-sheet: 0 -12px 32px -12px color-mix(in srgb, var(--color-shadow) 35%, transparent);
+  /* Borders, not shadows, except the one shadow of a popover or dialog (MASTER.md, Shape). */
+  --shadow-pop: 0 20px 44px -18px color-mix(in srgb, var(--color-shadow) 40%, transparent);
 
   @keyframes fade-in {
     from {
@@ -89,90 +83,80 @@
   }
 }
 
-/* Dark values (docs/design/MASTER.md, "Dark theme"): the same tokens, redefined. Two blocks
+/* Dark values (docs/design/MASTER.md, Colour): the same tokens, redefined. Two blocks
    with the same declarations: the choice is written to data-theme by theme.js before first paint
    (and by src/shared/theme.ts afterwards); the media query covers a page that has no script yet.
    Data-theme=light always wins over the system. Components never name a color: they use these. */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --color-white: #0f161d;
-  --color-shell: #0f161d;
-  --color-card: #18212a;
-  --color-surface: #1e2a35;
-  --color-control: #26323e;
-  --color-control-hover: #2e3b48;
-  --color-nav-hover: #223039;
-  --color-ink: #e6ecea;
-  --color-ink-soft: #c2cbc7;
-  --color-muted: #b0bbb6;
-  --color-rule: #75838c;
-  --color-rule-strong: #9aa6ae;
-  --color-line: #2c3741;
-  --color-hairline: #242e37;
-  --color-faint: #8a9690;
-  --color-run: #6cc0dc;
-  --color-run-tint: #173f4d;
-  --color-run-hatch: #3a7a92;
-  --color-amber: #f5b21a;
-  --color-amber-tint: #3a2d0c;
-  --color-amber-line: #6b5216;
-  --color-amber-ink: #f5c75a;
-  --color-you: #a99bea;
-  --color-you-tint: #2a2647;
-  --color-you-line: #4b4290;
-  --color-you-ink: #cfc8f5;
-  --color-rework: #f07f5c;
-  --color-rework-tint: #3d1f17;
-  --color-rework-line: #6e3524;
-  --color-rework-ink: #f7a68d;
-  --color-rework-hatch: #b45a38;
-  --color-ok: #6fcb9c;
-  --color-ok-tint: #173a2a;
-  --color-ok-ink: #8fddb5;
-  --color-ok-dot: #4fbf86;
-  --color-target: #8e9b95;
+  --color-white: #ffffff;
+  --color-shell: #0e1120;
+  --color-sidebar: #13172a;
+  --color-panel: #161a2f;
+  --color-hover: #1e2340;
+  --color-card: #0e1120;
+  --color-line: #252a45;
+  --color-rule: #3a4066;
+  --color-ink: #eceef7;
+  --color-ink-soft: #b7bcd4;
+  --color-muted: #9096b3;
+  --color-run: #4a63f5;
+  --color-run-ink: #a3b2ff;
+  --color-run-tint: #1d2556;
+  --color-run-soft: #5b6bc9;
+  --color-you: #9061f5;
+  --color-you-tint: #2a1e4f;
+  --color-you-ink: #cdb4ff;
+  --color-rework: #e2512f;
+  --color-rework-tint: #3b1c16;
+  --color-rework-ink: #ffa08a;
+  --color-amber: #ffc21a;
+  --color-amber-tint: #3a3013;
+  --color-amber-ink: #ffd666;
+  --color-ok: #22c17f;
+  --color-ok-tint: #10301f;
+  --color-ok-ink: #62dda5;
+  --color-andon: #090c1a;
+  --color-andon-raised: #151a36;
+  --color-andon-line: #272d58;
+  --color-andon-text: #c3c8ea;
   --color-shadow: #000000;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --color-white: #0f161d;
-    --color-shell: #0f161d;
-    --color-card: #18212a;
-    --color-surface: #1e2a35;
-    --color-control: #26323e;
-    --color-control-hover: #2e3b48;
-    --color-nav-hover: #223039;
-    --color-ink: #e6ecea;
-    --color-ink-soft: #c2cbc7;
-    --color-muted: #b0bbb6;
-    --color-rule: #75838c;
-    --color-rule-strong: #9aa6ae;
-    --color-line: #2c3741;
-    --color-hairline: #242e37;
-    --color-faint: #8a9690;
-    --color-run: #6cc0dc;
-    --color-run-tint: #173f4d;
-    --color-run-hatch: #3a7a92;
-    --color-amber: #f5b21a;
-    --color-amber-tint: #3a2d0c;
-    --color-amber-line: #6b5216;
-    --color-amber-ink: #f5c75a;
-    --color-you: #a99bea;
-    --color-you-tint: #2a2647;
-    --color-you-line: #4b4290;
-    --color-you-ink: #cfc8f5;
-    --color-rework: #f07f5c;
-    --color-rework-tint: #3d1f17;
-    --color-rework-line: #6e3524;
-    --color-rework-ink: #f7a68d;
-    --color-rework-hatch: #b45a38;
-    --color-ok: #6fcb9c;
-    --color-ok-tint: #173a2a;
-    --color-ok-ink: #8fddb5;
-    --color-ok-dot: #4fbf86;
-    --color-target: #8e9b95;
+    --color-white: #ffffff;
+    --color-shell: #0e1120;
+    --color-sidebar: #13172a;
+    --color-panel: #161a2f;
+    --color-hover: #1e2340;
+    --color-card: #0e1120;
+    --color-line: #252a45;
+    --color-rule: #3a4066;
+    --color-ink: #eceef7;
+    --color-ink-soft: #b7bcd4;
+    --color-muted: #9096b3;
+    --color-run: #4a63f5;
+    --color-run-ink: #a3b2ff;
+    --color-run-tint: #1d2556;
+    --color-run-soft: #5b6bc9;
+    --color-you: #9061f5;
+    --color-you-tint: #2a1e4f;
+    --color-you-ink: #cdb4ff;
+    --color-rework: #e2512f;
+    --color-rework-tint: #3b1c16;
+    --color-rework-ink: #ffa08a;
+    --color-amber: #ffc21a;
+    --color-amber-tint: #3a3013;
+    --color-amber-ink: #ffd666;
+    --color-ok: #22c17f;
+    --color-ok-tint: #10301f;
+    --color-ok-ink: #62dda5;
+    --color-andon: #090c1a;
+    --color-andon-raised: #151a36;
+    --color-andon-line: #272d58;
+    --color-andon-text: #c3c8ea;
     --color-shadow: #000000;
   }
 }
@@ -183,11 +167,11 @@
     color: var(--color-ink);
     font-family: var(--font-sans);
     font-optical-sizing: auto;
-    font-feature-settings: "cv11", "ss01";
+    font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-size-adjust: 100%;
-    scrollbar-color: var(--color-faint) transparent;
+    scrollbar-color: var(--color-muted) transparent;
   }
 
   body {

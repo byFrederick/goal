@@ -10,7 +10,7 @@ export const iconProps = { size: 18, strokeWidth: 1.5, 'aria-hidden': true } as 
 
 /** A sidebar entry; the current one (aria-current) is ink. `group` lets a Count react to it. */
 export const entryClass =
-  'group flex h-10 items-center gap-3 rounded-control px-3 text-[15px] text-ink no-underline transition-colors duration-200 hover:bg-nav-hover aria-[current=page]:bg-ink aria-[current=page]:text-white';
+  'group flex h-10 items-center gap-3 rounded-control px-3 text-[15px] text-ink no-underline transition-colors duration-200 hover:bg-hover aria-[current=page]:bg-ink aria-[current=page]:text-white';
 
 export function Sidebar({
   label,

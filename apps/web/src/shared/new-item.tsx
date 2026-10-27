@@ -14,7 +14,7 @@ import { useOrg } from './org';
 import { holds } from './permissions';
 
 const field =
-  'w-full rounded-control border border-rule bg-surface px-3 text-base text-ink placeholder:text-muted aria-[invalid=true]:border-rework';
+  'w-full rounded-control border border-rule bg-card px-3 text-base text-ink placeholder:text-muted aria-[invalid=true]:border-rework';
 
 interface NewItemProps {
   factory: Factory;

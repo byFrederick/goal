@@ -11,7 +11,7 @@ const tones: Record<StatusKind, string> = {
   working: 'text-run',
   waiting: 'text-amber',
   'same-files': 'text-muted',
-  ready: 'text-ok-dot',
+  ready: 'text-ok',
 };
 
 export function StatusIcon({ status, className }: { status: StatusKind; className?: string }) {

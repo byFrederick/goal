@@ -109,12 +109,7 @@ export function SendBackReasons({ stats, className }: { stats: AgentStats; class
                   {r.count}×<span className="sr-only"> sent back</span>
                 </span>
               </div>
-              <Meter
-                value={reasonShare(r, stats.reasons)}
-                max={1}
-                tone="rework"
-                className="h-2 border border-hairline"
-              />
+              <Meter value={reasonShare(r, stats.reasons)} max={1} tone="rework" className="h-2 border border-line" />
             </li>
           ))}
         </ul>

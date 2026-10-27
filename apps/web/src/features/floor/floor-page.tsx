@@ -122,7 +122,7 @@ function RangeControl({ metrics, before, label }: { metrics: Metrics; before: st
   const navigate = useNavigate({ from: floorRoute });
   const type = metrics.type ?? undefined;
   return (
-    <div className="inline-flex h-10 items-center gap-1 rounded-[10px] bg-control p-[3px]">
+    <div className="inline-flex h-10 items-center gap-1 rounded-[10px] bg-panel p-[3px]">
       <DateRange
         label={label}
         from={metrics.from}

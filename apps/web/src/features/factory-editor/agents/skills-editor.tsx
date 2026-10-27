@@ -113,7 +113,7 @@ export function SkillsEditor({ agent, index, openPicker }: { agent: ModelAgent; 
               <li
                 key={name}
                 className={cn(
-                  'inline-flex h-11 items-center gap-1 rounded-chip border bg-surface pr-1 pl-2.5 text-[13px] md:h-8',
+                  'inline-flex h-11 items-center gap-1 rounded-chip border bg-card pr-1 pl-2.5 text-[13px] md:h-8',
                   problem ? 'border-rework text-rework-ink' : 'border-line',
                 )}
               >
@@ -151,7 +151,7 @@ export function SkillsEditor({ agent, index, openPicker }: { agent: ModelAgent; 
 
       {viewOnly ? null : (
         <div className="relative">
-          <div className="flex h-11 items-center gap-2 rounded-control border border-rule bg-surface px-3 text-muted transition-colors duration-200 hover:border-faint has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-run md:h-10">
+          <div className="flex h-11 items-center gap-2 rounded-control border border-rule bg-card px-3 text-muted transition-colors duration-200 hover:border-muted has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-run md:h-10">
             <Search size={16} strokeWidth={1.5} aria-hidden="true" />
             <input
               ref={input}
@@ -182,7 +182,7 @@ export function SkillsEditor({ agent, index, openPicker }: { agent: ModelAgent; 
             role="listbox"
             aria-label="Skills"
             hidden={!showList}
-            className="absolute top-full right-0 left-0 z-20 mt-1 max-h-80 overflow-y-auto rounded-card border border-rule bg-surface p-1.5 shadow-menu"
+            className="absolute top-full right-0 left-0 z-20 mt-1 max-h-80 overflow-y-auto rounded-card border border-rule bg-card p-1.5 shadow-pop"
           >
             {groups.map((g, gi) => (
               // biome-ignore lint/a11y/useSemanticElements: a group of a combobox's listbox (ARIA 1.2), not a form fieldset.
@@ -312,7 +312,7 @@ function AddSkillDialog({
           className="max-w-[640px]"
           onCloseAutoFocus={(e) => e.preventDefault()}
         >
-          <p className="m-0 flex gap-2 rounded-control border border-amber-line bg-amber-tint px-3 py-2.5 text-sm text-ink">
+          <p className="m-0 flex gap-2 rounded-control border border-amber-tint bg-amber-tint px-3 py-2.5 text-sm text-ink">
             <TriangleAlert size={16} strokeWidth={1.75} aria-hidden="true" className="mt-0.5 shrink-0 text-amber-ink" />
             Skills run inside this agent’s container with its tools. Review it before you publish.
           </p>
@@ -329,7 +329,7 @@ function AddSkillDialog({
               aria-label="SKILL.md"
               // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region must be reachable by keyboard.
               tabIndex={0}
-              className="max-h-[45dvh] overflow-auto rounded-control border border-line bg-surface p-3"
+              className="max-h-[45dvh] overflow-auto rounded-control border border-line bg-card p-3"
             >
               <pre className="m-0 font-mono text-[13px] leading-[1.6] whitespace-pre-wrap text-ink [overflow-wrap:anywhere]">
                 {text ?? 'This skill has no SKILL.md.'}

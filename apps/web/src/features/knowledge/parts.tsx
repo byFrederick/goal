@@ -61,7 +61,7 @@ export function UsedBy({ source }: { source: KnowledgeSource }) {
   return (
     <span className="flex flex-wrap gap-1">
       {source.used_by.factories.map((f) => (
-        <Chip key={f.id} className="border-transparent bg-control">
+        <Chip key={f.id} className="border-transparent bg-panel">
           <span translate="no">{f.name}</span>
         </Chip>
       ))}

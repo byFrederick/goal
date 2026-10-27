@@ -31,7 +31,7 @@ export function TokenField({
   /** B's problem with the list. */
   problem?: string | undefined;
   help: ReactNode;
-  /** Values in Fira Code (tool specs). */
+  /** Values in JetBrains Mono (tool specs). */
   mono?: boolean;
   onAdd: (value: string) => void;
   onRemove: (value: string) => void;
@@ -73,10 +73,10 @@ export function TokenField({
       <fieldset
         aria-labelledby={`${id}-label`}
         className={cn(
-          'm-0 flex min-h-11 flex-wrap items-center gap-1.5 rounded-control border bg-surface px-1.5 py-1 transition-colors duration-200 md:min-h-10',
+          'm-0 flex min-h-11 flex-wrap items-center gap-1.5 rounded-control border bg-card px-1.5 py-1 transition-colors duration-200 md:min-h-10',
           // The input inside draws no ring of its own: the whole field shows focus.
           'has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-run',
-          viewOnly ? 'border-line bg-shell' : shownError ? 'border-rework' : 'border-rule hover:border-faint',
+          viewOnly ? 'border-line bg-shell' : shownError ? 'border-rework' : 'border-rule hover:border-muted',
         )}
       >
         {viewOnly && values.length === 0 ? <span className="px-1.5 text-sm text-muted">None</span> : null}
@@ -84,7 +84,7 @@ export function TokenField({
           <span
             key={value}
             className={cn(
-              'inline-flex h-8 items-center gap-1 rounded-chip border border-line bg-surface pr-1 pl-2.5 text-[13px]',
+              'inline-flex h-8 items-center gap-1 rounded-chip border border-line bg-card pr-1 pl-2.5 text-[13px]',
               mono && 'font-mono',
             )}
           >

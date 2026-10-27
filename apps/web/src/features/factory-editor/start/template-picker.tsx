@@ -35,7 +35,7 @@ export function TemplatePicker({ value, onChange }: { value: string | undefined;
   if (isPending) return <div aria-busy="true" className={cn(card, 'h-64')} />;
   if (error) {
     return (
-      <p role="alert" className="m-0 rounded-control border border-rework-line bg-rework-tint px-4 py-3 text-sm">
+      <p role="alert" className="m-0 rounded-control border border-rework-tint bg-rework-tint px-4 py-3 text-sm">
         The templates can’t be read right now: goald is not answering. Try again in a moment.
       </p>
     );

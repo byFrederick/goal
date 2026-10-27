@@ -4,7 +4,7 @@ import { cn } from './cn';
 
 const tones = {
   /** What went wrong and what to do next. */
-  rework: { box: 'border-rework-line bg-rework-tint px-3 py-2.5 text-rework-ink', Icon: TriangleAlert },
+  rework: { box: 'border-rework-tint bg-rework-tint px-3 py-2.5 text-rework-ink', Icon: TriangleAlert },
   /** What just worked ("We sent a new code."). */
   ok: { box: 'border-ok/25 bg-ok-tint px-3 py-2.5 text-ok-ink', Icon: Check },
   /** A plain note beside a form, without a box. */

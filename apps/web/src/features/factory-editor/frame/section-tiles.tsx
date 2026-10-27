@@ -122,9 +122,7 @@ function Tile({
       className={cn(
         // relative: the screen-reader name stays inside the tile, not past the scrolling row.
         'relative flex min-h-11 items-center gap-2.5 rounded-control border px-3 py-1.5 text-sm no-underline transition-colors duration-200',
-        current
-          ? 'border-ink bg-ink text-white'
-          : 'border-line bg-card text-ink hover:border-rule-strong hover:bg-surface',
+        current ? 'border-ink bg-ink text-white' : 'border-line bg-card text-ink hover:border-rule hover:bg-card',
       )}
     >
       {children}
@@ -135,7 +133,7 @@ function Tile({
         <span
           className={cn(
             'truncate text-xs',
-            current ? (problem ? 'text-rework-line' : 'text-white/80') : problem ? 'text-rework-ink' : 'text-muted',
+            current ? (problem ? 'text-rework-tint' : 'text-white/80') : problem ? 'text-rework-ink' : 'text-muted',
           )}
         >
           {text}
@@ -150,14 +148,14 @@ const iconBox = 'flex size-[22px] shrink-0 items-center justify-center rounded-c
 function TileIcon({ section, state }: { section: Section; state: string }) {
   if (state === 'view') {
     return (
-      <span aria-hidden="true" className={cn(iconBox, 'bg-control text-ink')}>
+      <span aria-hidden="true" className={cn(iconBox, 'bg-panel text-ink')}>
         <Eye size={13} strokeWidth={1.75} />
       </span>
     );
   }
   if (section === 'review') {
     return (
-      <span aria-hidden="true" className={cn(iconBox, 'bg-control text-ink')}>
+      <span aria-hidden="true" className={cn(iconBox, 'bg-panel text-ink')}>
         <Upload size={13} strokeWidth={1.75} />
       </span>
     );
@@ -171,10 +169,10 @@ function TileIcon({ section, state }: { section: Section; state: string }) {
   }
   if (state === 'edited') {
     return (
-      <span aria-hidden="true" className={cn(iconBox, 'bg-control text-ink')}>
+      <span aria-hidden="true" className={cn(iconBox, 'bg-panel text-ink')}>
         <Pencil size={13} strokeWidth={1.75} />
       </span>
     );
   }
-  return <span aria-hidden="true" className="mx-0.5 size-[18px] shrink-0 rounded-full border-[1.5px] border-target" />;
+  return <span aria-hidden="true" className="mx-0.5 size-[18px] shrink-0 rounded-full border-[1.5px] border-muted" />;
 }

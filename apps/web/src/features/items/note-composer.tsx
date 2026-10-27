@@ -71,7 +71,7 @@ export function NoteComposer({ itemKey, factory, state, agent, compact = false, 
           placeholder="What should the agent know?"
           aria-describedby={statusId}
           className={cn(
-            'min-w-0 flex-1 basis-[240px] rounded-control border border-rule bg-surface px-3 text-base text-ink transition-colors duration-200 hover:border-faint',
+            'min-w-0 flex-1 basis-[240px] rounded-control border border-rule bg-card px-3 text-base text-ink transition-colors duration-200 hover:border-muted',
             compact ? 'h-12' : 'h-11 md:text-[15px]',
           )}
         />

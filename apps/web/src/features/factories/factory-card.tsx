@@ -40,7 +40,7 @@ export function FactoryCard({ org, overview, mark }: { org: string; overview: Fa
     <article
       aria-labelledby={headingId}
       className={cn(
-        'relative flex min-w-0 flex-1 flex-col gap-2.5 rounded-card border border-line bg-card p-3.5 transition-colors duration-200 hover:border-faint md:gap-4 md:p-5',
+        'relative flex min-w-0 flex-1 flex-col gap-2.5 rounded-card border border-line bg-card p-3.5 transition-colors duration-200 hover:border-muted md:gap-4 md:p-5',
         // On a phone the whole card is the link: its focus ring goes around the card.
         'max-md:has-[h2_a:focus-visible]:outline-2 max-md:has-[h2_a:focus-visible]:outline-offset-2 max-md:has-[h2_a:focus-visible]:outline-run',
       )}
@@ -48,7 +48,7 @@ export function FactoryCard({ org, overview, mark }: { org: string; overview: Fa
       <div className="flex items-center gap-2.5 md:gap-3">
         <span
           aria-hidden="true"
-          className="flex size-9 shrink-0 items-center justify-center rounded-control border border-rule bg-surface text-sm font-medium md:size-10 md:text-base"
+          className="flex size-9 shrink-0 items-center justify-center rounded-control border border-rule bg-card text-sm font-medium md:size-10 md:text-base"
         >
           {mark}
         </span>
@@ -130,7 +130,7 @@ function Health({ overview }: { overview: FactoryOverview }) {
     case 'draft':
       return (
         <span className={cn(base, 'text-muted')}>
-          <Dot className="bg-faint" />
+          <Dot className="bg-muted" />
           Draft
         </span>
       );
@@ -158,7 +158,7 @@ function WeekTouches({ overview }: { overview: FactoryOverview }) {
   const { current } = overview.touches;
   const trend = touchesTrend(overview.touches);
   return (
-    <div className="hidden rounded-control border border-line bg-surface px-3.5 py-3 md:block">
+    <div className="hidden rounded-control border border-line bg-card px-3.5 py-3 md:block">
       {current.finished === 0 ? (
         <p className="m-0 text-sm text-muted">No items finished this week, so no human touches to count.</p>
       ) : (
@@ -261,7 +261,7 @@ function WeekStats({ overview }: { overview: FactoryOverview }) {
               max={budget}
               label={spent.label}
               tone={over ? 'rework' : 'run'}
-              className="h-1.5 bg-control"
+              className="h-1.5 bg-panel"
             />
           </dd>
         ) : null}
