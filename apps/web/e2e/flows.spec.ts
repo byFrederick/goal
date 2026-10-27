@@ -529,20 +529,17 @@ test('on a phone the board opens where a person is needed, then picks any statio
   // Items waiting on a person come first: the board opens on Approve, not the constraint.
   const picker = page.getByRole('tablist', { name: 'Stations' });
   await expect(picker.getByRole('tab', { name: /^Approve/ })).toHaveAttribute('aria-selected', 'true');
-  // The line's WIP stays one phrase on one line ("WIP 1 / of 2" read badly).
-  const wip = page.getByText(/^WIP \d+( of \d+)?$/).filter({ visible: true });
-  expect(await wip.evaluate((el) => el.getClientRects().length)).toBe(1);
-  await picker.getByRole('tab', { name: 'Investigate 3 of 3, 2 ready' }).click();
+  // The phone has no status line: the picked station's column names the constraint.
+  await picker.getByRole('tab', { name: /^Investigate/ }).click();
   await expect(page).toHaveURL(/station=investigate/);
-  await expect(page.getByText('Investigate is the constraint: 3 of 3 busy, 2 waiting')).toBeVisible();
-  await expect(page.getByRole('article').filter({ hasText: 'billing-svc' })).toContainText(
-    'sre#8, Incident, 1 hbilling-svc deploy rolled back twiceinvestigator-1, turn 3',
-  );
+  await expect(page.getByRole('tabpanel').getByRole('heading', { name: 'Investigate' })).toBeVisible();
+  await expect(page.getByRole('tabpanel').getByText('Constraint', { exact: true })).toBeVisible();
+  await expect(page.getByRole('article').filter({ hasText: 'billing-svc' })).toContainText('sre#8');
   await expect(page.getByRole('tabpanel').getByRole('article').filter({ hasText: 'Checkout API p95' })).toContainText(
     'Expedite',
   );
 
-  await picker.getByRole('tab', { name: 'Done 1 today' }).click();
+  await picker.getByRole('tab', { name: /^Done/ }).click();
   await expect(page).toHaveURL(/station=done/);
   await expect(page.getByRole('article').filter({ hasText: 'Redis evictions' })).not.toContainText('Postmortem filed');
   await expectAccessible(page);

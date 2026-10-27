@@ -1,11 +1,10 @@
 // The "Needs you" link in a factory's header (the Board and the Floor): what waits on people in this
-// factory, leading to the Needs you page filtered to it. Its count is the page's All tab for the
-// factory, so the two agree.
+// factory, leading to the Needs you page filtered to it. The inbox query is already limited to the
+// factory, so its entries are the page's All tab for it.
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { inboxQuery } from '../api/queries';
 import type { Factory } from '../api/types';
-import { tabCounts } from '../features/needs-you/search';
 import { Button } from '../ui/button';
 import { Count } from '../ui/count';
 import { useOrg } from './org';
@@ -14,7 +13,7 @@ import { useOrg } from './org';
 export function NeedsYouLink({ factory }: { factory: Factory }) {
   const org = useOrg();
   const { data } = useQuery(inboxQuery(org.id, factory.id));
-  const count = tabCounts(data?.entries ?? [], factory.name).all;
+  const count = data?.entries.length ?? 0;
 
   return (
     <Button variant="raised" asChild>
