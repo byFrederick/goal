@@ -120,6 +120,11 @@
   }
 }
 
+/* Numbers and factory letters are set at 112% width (MASTER.md, Typography). */
+@utility font-numeral {
+  font-stretch: 112%;
+}
+
 /* Dark values (docs/design/MASTER.md, Colour): the same tokens, redefined. Two blocks
    with the same declarations: the choice is written to data-theme by theme.js before first paint
    (and by src/shared/theme.ts afterwards); the media query covers a page that has no script yet.
