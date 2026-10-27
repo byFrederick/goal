@@ -83,7 +83,7 @@ test.describe('a viewer', () => {
     await expect(page.getByRole('heading', { name: 'Who approves' })).toBeVisible();
     await expect(
       page.getByText(
-        'Owners and admins of Acme, and this factory’s approvers and editors: F. Cruz, M. Okafor, S. Lee.',
+        'Owners and admins of Acme, and this factory’s approvers and editors: F. Cruz, M. Okafor, J. Lindqvist.',
       ),
     ).toBeVisible();
     // Only whoever manages people changes it.
