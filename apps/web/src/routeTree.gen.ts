@@ -21,6 +21,7 @@ import { Route as OOrgOrgIndexRouteImport } from './routes/o.$org._org.index'
 import { Route as OOrgOrgApiKeysRouteImport } from './routes/o.$org._org.api-keys'
 import { Route as OOrgOrgMembersRouteImport } from './routes/o.$org._org.members'
 import { Route as OOrgOrgNeedsYouRouteImport } from './routes/o.$org._org.needs-you'
+import { Route as OOrgOrgRunsRouteImport } from './routes/o.$org._org.runs'
 import { Route as OOrgOrgSettingsRouteImport } from './routes/o.$org._org.settings'
 import { Route as OOrgFFactoryRouteImport } from './routes/o.$org.f.$factory'
 import { Route as OOrgNewStepRouteImport } from './routes/o.$org.new.$step'
@@ -98,6 +99,11 @@ const OOrgOrgMembersRoute = OOrgOrgMembersRouteImport.update({
 const OOrgOrgNeedsYouRoute = OOrgOrgNeedsYouRouteImport.update({
   id: '/needs-you',
   path: '/needs-you',
+  getParentRoute: () => OOrgOrgRoute,
+} as any)
+const OOrgOrgRunsRoute = OOrgOrgRunsRouteImport.update({
+  id: '/runs',
+  path: '/runs',
   getParentRoute: () => OOrgOrgRoute,
 } as any)
 const OOrgOrgSettingsRoute = OOrgOrgSettingsRouteImport.update({
@@ -210,6 +216,7 @@ export interface FileRoutesByFullPath {
   '/o/$org/api-keys': typeof OOrgOrgApiKeysRoute
   '/o/$org/members': typeof OOrgOrgMembersRoute
   '/o/$org/needs-you': typeof OOrgOrgNeedsYouRoute
+  '/o/$org/runs': typeof OOrgOrgRunsRoute
   '/o/$org/settings': typeof OOrgOrgSettingsRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
   '/o/$org/new/$step': typeof OOrgNewStepRoute
@@ -242,6 +249,7 @@ export interface FileRoutesByTo {
   '/o/$org/api-keys': typeof OOrgOrgApiKeysRoute
   '/o/$org/members': typeof OOrgOrgMembersRoute
   '/o/$org/needs-you': typeof OOrgOrgNeedsYouRoute
+  '/o/$org/runs': typeof OOrgOrgRunsRoute
   '/o/$org/settings': typeof OOrgOrgSettingsRoute
   '/o/$org/new/$step': typeof OOrgNewStepRoute
   '/o/$org/connections/$connection': typeof OOrgOrgConnectionsConnectionRoute
@@ -273,6 +281,7 @@ export interface FileRoutesById {
   '/o/$org/_org/api-keys': typeof OOrgOrgApiKeysRoute
   '/o/$org/_org/members': typeof OOrgOrgMembersRoute
   '/o/$org/_org/needs-you': typeof OOrgOrgNeedsYouRoute
+  '/o/$org/_org/runs': typeof OOrgOrgRunsRoute
   '/o/$org/_org/settings': typeof OOrgOrgSettingsRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
   '/o/$org/new/$step': typeof OOrgNewStepRoute
@@ -307,6 +316,7 @@ export interface FileRouteTypes {
     | '/o/$org/api-keys'
     | '/o/$org/members'
     | '/o/$org/needs-you'
+    | '/o/$org/runs'
     | '/o/$org/settings'
     | '/o/$org/f/$factory'
     | '/o/$org/new/$step'
@@ -339,6 +349,7 @@ export interface FileRouteTypes {
     | '/o/$org/api-keys'
     | '/o/$org/members'
     | '/o/$org/needs-you'
+    | '/o/$org/runs'
     | '/o/$org/settings'
     | '/o/$org/new/$step'
     | '/o/$org/connections/$connection'
@@ -369,6 +380,7 @@ export interface FileRouteTypes {
     | '/o/$org/_org/api-keys'
     | '/o/$org/_org/members'
     | '/o/$org/_org/needs-you'
+    | '/o/$org/_org/runs'
     | '/o/$org/_org/settings'
     | '/o/$org/f/$factory'
     | '/o/$org/new/$step'
@@ -485,6 +497,13 @@ declare module '@tanstack/react-router' {
       path: '/needs-you'
       fullPath: '/o/$org/needs-you'
       preLoaderRoute: typeof OOrgOrgNeedsYouRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
+    '/o/$org/_org/runs': {
+      id: '/o/$org/_org/runs'
+      path: '/runs'
+      fullPath: '/o/$org/runs'
+      preLoaderRoute: typeof OOrgOrgRunsRouteImport
       parentRoute: typeof OOrgOrgRoute
     }
     '/o/$org/_org/settings': {
@@ -627,6 +646,7 @@ interface OOrgOrgRouteChildren {
   OOrgOrgApiKeysRoute: typeof OOrgOrgApiKeysRoute
   OOrgOrgMembersRoute: typeof OOrgOrgMembersRoute
   OOrgOrgNeedsYouRoute: typeof OOrgOrgNeedsYouRoute
+  OOrgOrgRunsRoute: typeof OOrgOrgRunsRoute
   OOrgOrgSettingsRoute: typeof OOrgOrgSettingsRoute
   OOrgOrgIndexRoute: typeof OOrgOrgIndexRoute
   OOrgOrgConnectionsConnectionRoute: typeof OOrgOrgConnectionsConnectionRoute
@@ -641,6 +661,7 @@ const OOrgOrgRouteChildren: OOrgOrgRouteChildren = {
   OOrgOrgApiKeysRoute: OOrgOrgApiKeysRoute,
   OOrgOrgMembersRoute: OOrgOrgMembersRoute,
   OOrgOrgNeedsYouRoute: OOrgOrgNeedsYouRoute,
+  OOrgOrgRunsRoute: OOrgOrgRunsRoute,
   OOrgOrgSettingsRoute: OOrgOrgSettingsRoute,
   OOrgOrgIndexRoute: OOrgOrgIndexRoute,
   OOrgOrgConnectionsConnectionRoute: OOrgOrgConnectionsConnectionRoute,

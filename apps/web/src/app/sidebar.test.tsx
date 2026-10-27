@@ -188,22 +188,32 @@ describe('the sidebar', () => {
     expect(links.some((text) => text?.startsWith('Knowledge'))).toBe(true);
   });
 
-  it.each([
-    ['Runs', /^Runs$/],
-    ['Credentials', /^Credentials$/],
-  ])('renders %s as not available: aria-disabled, focusable, and inert', async (_, name) => {
-    const { router } = renderSidebar({ can: ['connection:read', 'knowledge:read'] });
-    const control = within(await nav()).getByRole('button', { name });
+  it.each([['Credentials', /^Credentials$/]])(
+    'renders %s as not available: aria-disabled, focusable, and inert',
+    async (_, name) => {
+      const { router } = renderSidebar({ can: ['connection:read', 'knowledge:read'] });
+      const control = within(await nav()).getByRole('button', { name });
 
-    expect(control.getAttribute('aria-disabled')).toBe('true');
-    expect(control.tabIndex).not.toBe(-1);
-    fireEvent.click(control);
-    expect(router.state.location.pathname).toBe('/o/acme');
+      expect(control.getAttribute('aria-disabled')).toBe('true');
+      expect(control.tabIndex).not.toBe(-1);
+      fireEvent.click(control);
+      expect(router.state.location.pathname).toBe('/o/acme');
+    },
+  );
+
+  it('links Runs to the runs page', async () => {
+    renderSidebar();
+
+    expect(
+      within(await nav())
+        .getByRole('link', { name: 'Runs' })
+        .getAttribute('href'),
+    ).toBe('/o/acme/runs');
   });
 
   it('shows the not-available tooltip on hover', async () => {
     renderSidebar();
-    fireEvent.focus(within(await nav()).getByRole('button', { name: 'Runs' }));
+    fireEvent.focus(within(await nav()).getByRole('button', { name: /^Credentials$/ }));
 
     expect(await screen.findByText('Not available yet')).toBeTruthy();
   });
@@ -441,7 +451,7 @@ describe('the collapsed rail', () => {
     expect(link.getAttribute('aria-disabled')).toBeNull();
   });
 
-  it.each(['New item', 'Runs', 'Credentials'])('keeps %s disabled, and says what it is and why', async (name) => {
+  it.each(['New item', 'Credentials'])('keeps %s disabled, and says what it is and why', async (name) => {
     renderSidebar();
     await collapse();
     const control = within(await nav()).getByRole('button', { name: new RegExp(`^${name}`) });

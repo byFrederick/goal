@@ -2,7 +2,7 @@ import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-quer
 import { Link, useParams, useSearch } from '@tanstack/react-router';
 import { ChevronLeft, Eye, LayoutGrid } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
-import { eventsQuery, inboxQuery, itemQuery, runsQuery } from '../../api/queries';
+import { eventsQuery, inboxQuery, itemQuery, itemRunsQuery } from '../../api/queries';
 import type { Station } from '../../api/types';
 import { usePhone } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
@@ -80,7 +80,7 @@ export function ItemPage() {
   const { data: item } = useSuspenseQuery(itemQuery(org.id, key));
   const { data: events } = useSuspenseQuery(eventsQuery(client, org.id, key));
   // The run records refine the trace when they arrive; the events alone already draw it.
-  const runsQ = useQuery(runsQuery(org.id, key));
+  const runsQ = useQuery(itemRunsQuery(org.id, key));
   const runs = runsQ.data;
   const trace = useMemo(() => buildTrace(events, runs?.runs), [events, runs]);
   const [fullTrace, setFullTrace] = useState(false);
@@ -235,10 +235,7 @@ export function ItemPage() {
               <p aria-live="polite" className="m-0 inline-flex items-center gap-2 text-sm text-run">
                 {run ? (
                   <>
-                    <span
-                      aria-hidden="true"
-                      className="size-2 rounded-full bg-run shadow-[0_0_0_4px_var(--color-run-tint)]"
-                    />
+                    <span aria-hidden="true" className="size-2 rounded-full bg-run ring-4 ring-run-tint" />
                     {runRole(run)} working, {run.tools.length} tool calls
                   </>
                 ) : null}

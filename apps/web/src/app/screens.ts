@@ -44,6 +44,7 @@ export type OrgPath =
   | '/o/$org/api-keys'
   | '/o/$org/connections'
   | '/o/$org/knowledge'
+  | '/o/$org/runs'
   | '/o/$org/needs-you';
 
 type Availability<Path> = { available: true; to: Path; exact?: boolean } | { available: false };
@@ -162,6 +163,13 @@ export const knowledgeScreen: OrgScreen = {
   to: '/o/$org/knowledge',
   permissions: ['knowledge:read'],
 };
+/** The agent runs across the organization's factories (the Runs page, /o/$org/runs). */
+export const runsScreen: OrgScreen = {
+  id: 'runs',
+  label: 'Runs',
+  icon: Activity,
+  to: '/o/$org/runs',
+};
 export const settingsScreen: OrgScreen = {
   id: 'settings',
   label: 'Settings',
@@ -188,7 +196,7 @@ export const needsYouScreen: OrgScreen = { id: 'needs-you', label: 'Needs you', 
 export const sidebarOrgScreens: readonly Listed<OrgPath>[] = [
   { ...homeScreen, available: true },
   { ...needsYouScreen, available: true },
-  { id: 'runs', label: 'Runs', icon: Activity, available: false },
+  { ...runsScreen, available: true },
   { ...connectionsScreen, available: true },
   { id: 'credentials', label: 'Credentials', icon: KeyRound, available: false },
   { ...knowledgeScreen, available: true },
