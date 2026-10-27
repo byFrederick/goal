@@ -94,6 +94,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"ItemEvents_PagesInAppendOrder", testItemEvents},
 		{"ItemByNumber_PerFactory", testItemByNumber},
 		{"ListItems_NewestFirstFilteredAndPaged", testListItems},
+		{"SearchItems_MatchesTitleAndNumber", testSearchItems},
 		{"Assemblies_PartsInNumberOrder", testAssembliesPartsInNumberOrder},
 		{"StationLoads_CountWaitingAndInProgress", testStationLoads},
 		{"StationLoads_CountNoOpenAssembly", testStationLoadsCountNoOpenAssembly},

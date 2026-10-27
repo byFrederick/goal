@@ -12,6 +12,7 @@ import { ApiError } from '../../api/client';
 import { createKnowledgeSource } from '../../api/knowledge';
 import { connectionKindsQuery, connectionsQuery, keys, knowledgeSourcesQuery } from '../../api/queries';
 import type { Connection, ConnectionKind, KnowledgeSourceKind } from '../../api/types';
+import { TopBarSlot } from '../../app/top-bar';
 import { sourceKinds } from '../../shared/knowledge';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
@@ -44,6 +45,7 @@ export function NewSourcePage() {
 
   return (
     <>
+      <TopBarSlot crumb="New source" />
       <nav aria-label="Breadcrumb" className="text-sm text-muted">
         <ol className="m-0 flex list-none gap-1.5 p-0">
           <li>

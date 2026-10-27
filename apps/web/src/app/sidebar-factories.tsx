@@ -11,6 +11,7 @@ import { useOrgHolds } from '../shared/org';
 import { cn } from '../ui/cn';
 import { Count } from '../ui/count';
 import { NotAvailable } from '../ui/not-available';
+import { FactoryBadge } from './factory-badge';
 import { type FactorySquare, useFactorySquares } from './factory-squares';
 import { newFactoryScreen, sidebarFactoryPages } from './screens';
 
@@ -78,12 +79,7 @@ function FactoryGroup({ org, square, current }: { org: OrgSummary; square: Facto
           aria-label={label}
           className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-body font-control text-ink no-underline hover:bg-hover"
         >
-          <span
-            aria-hidden="true"
-            className="flex size-6 flex-none items-center justify-center rounded-chip bg-run text-meta font-semibold text-white font-numeral"
-          >
-            {mark}
-          </span>
+          <FactoryBadge mark={mark} />
           <span className="min-w-0 flex-1 truncate">{factory.name}</span>
           {attention.waiting > 0 ? <Count value={attention.waiting} label=" waiting on you" tone="you" /> : null}
           {attention.andon !== null || attention.blocked > 0 ? (

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -90,6 +91,29 @@ func (s *Store) ListItems(ctx context.Context, q ports.ItemQuery) ([]domain.Item
 
 	return convertAll(rows, itemFrom)
 }
+
+// SearchItems implements ports.Store. Ids that are not UUIDs name no factory.
+func (s *Store) SearchItems(ctx context.Context, q ports.ItemSearch) ([]domain.Item, error) {
+	factories := uuids(q.Factories)
+	if len(factories) == 0 || (q.Title == "" && q.Number <= 0) {
+		return []domain.Item{}, nil
+	}
+
+	rows, err := fetch(ctx, s.read, func(dq *db.Queries) ([]db.WorkItem, error) {
+		return dq.SearchItems(ctx, db.SearchItemsParams{
+			Factories: factories, Pattern: likeEscaper.Replace(q.Title), Number: q.Number, MaxItems: int64(q.Limit),
+		})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("search items: %w", err)
+	}
+
+	return convertAll(rows, itemFrom)
+}
+
+// likeEscaper escapes a LIKE pattern's wildcards and its escape character (\), so the text
+// matches literally.
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
 // Assemblies implements ports.Store. Ids that are not UUIDs name no item.
 func (s *Store) Assemblies(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID]domain.Assembly, error) {
