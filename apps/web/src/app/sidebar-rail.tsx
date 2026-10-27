@@ -3,11 +3,15 @@
 // here, though the 256 px sidebar's opens the composer: new-item.tsx; C still opens it, since Sidebar keeps the
 // composer mounted while the rail shows), the organization-wide pages as icons, the factories as squares with
 // their counts, New factory (+), the spend ring and the person's avatar. It reads the same data as the 256 px sidebar, which it
-// replaces (sidebar.tsx), and it shares the factory squares with the phone's top row (rail-items.tsx).
+// replaces (sidebar.tsx), and it shares the factory squares with the account menu (rail-items.tsx). Command K
+// on the rail expands the sidebar into search, so the shortcut never opens search out of sight.
+import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { PanelLeft, Plus } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import { attentionQuery, overviewQuery } from '../api/queries';
 import type { FactoryOverviewList, OrgSummary } from '../api/types';
+import { useConnectionTrouble } from '../shared/connections';
 import { formatUsdCompact } from '../shared/format';
 import { useOrgGrants, useOrgHolds } from '../shared/org';
 import { GoalMark } from '../ui/goal-mark';
@@ -17,6 +21,7 @@ import { AccountMenu } from './account-menu';
 import { useFactorySquares } from './factory-squares';
 import { FactorySquareLink, NewFactoryLink } from './rail-items';
 import { screensFor, sidebarOrgScreens } from './screens';
+import { useSearchShortcut } from './sidebar-search';
 
 const iconProps = { size: 18, strokeWidth: 1.5, 'aria-hidden': true } as const;
 
@@ -28,24 +33,30 @@ interface SidebarRailProps {
   org: OrgSummary;
   /** Attention or overview still loading: aria-busy and a spoken "Loading", no placeholder shapes. */
   busy: boolean;
-  /** What waits on a person (0 while the counts are missing). */
-  waiting: number;
-  /** Connections whose last test failed (0 while the counts are missing). */
-  trouble: number;
-  /** Missing while the overview is loading or has failed: no spend ring then. */
-  overview: FactoryOverviewList | undefined;
   /** The Expand button takes focus when the rail appears by the person's own Collapse. */
   focusOnMount: boolean;
-  onExpand: () => void;
+  /** Expands the sidebar; `search` opens it straight into search (Command K). */
+  onExpand: (search: boolean) => void;
 }
 
-export function SidebarRail({ org, busy, waiting, trouble, overview, focusOnMount, onExpand }: SidebarRailProps) {
+export function SidebarRail({ org, busy, focusOnMount, onExpand }: SidebarRailProps) {
   const can = useOrgGrants()?.can;
   const mayCreate = useOrgHolds('factory:create');
+  const attention = useQuery(attentionQuery(org.id));
+  const overview = useQuery(overviewQuery(org.id));
+  const trouble = useConnectionTrouble(org.id);
+  const waiting = attention.data?.waiting_on_you ?? 0;
   const expand = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (focusOnMount) expand.current?.focus();
   }, [focusOnMount]);
+
+  // Below 768 px this rail is hidden, and Command K there must not expand a sidebar nobody sees.
+  const openSearch = useCallback(() => {
+    if (typeof window.matchMedia === 'function' && !window.matchMedia('(min-width: 768px)').matches) return;
+    onExpand(true);
+  }, [onExpand]);
+  useSearchShortcut(openSearch);
 
   return (
     <nav
@@ -58,7 +69,13 @@ export function SidebarRail({ org, busy, waiting, trouble, overview, focusOnMoun
         <GoalMark size="shell" />
       </span>
       <Tooltip label="Expand sidebar">
-        <button ref={expand} type="button" aria-label="Expand sidebar" onClick={onExpand} className={railButton}>
+        <button
+          ref={expand}
+          type="button"
+          aria-label="Expand sidebar"
+          onClick={() => onExpand(false)}
+          className={railButton}
+        >
           <PanelLeft {...iconProps} />
         </button>
       </Tooltip>
@@ -84,7 +101,7 @@ export function SidebarRail({ org, busy, waiting, trouble, overview, focusOnMoun
         <RailFactories org={org} mayCreate={mayCreate} />
       </ul>
       <div className="mt-auto flex flex-col items-center gap-1 pt-4">
-        <SpendRing overview={overview} />
+        <SpendRing overview={overview.data} />
         <AccountMenu org={org} size="rail" />
       </div>
     </nav>
