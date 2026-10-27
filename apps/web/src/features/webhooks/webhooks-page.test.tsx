@@ -435,6 +435,39 @@ describe('Rotate', () => {
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(ones));
   });
 
+  it('keeps the confirmation open and says why when the rotation fails, without a secret', async () => {
+    answers();
+    api.rotateWebhookSecret.mockRejectedValue(
+      new ApiError({ status: 503, title: 'Unavailable', code: 'webhooks-unavailable', detail: 'try later' } as never),
+    );
+    renderPage();
+    const card = await screen.findByRole('region', { name: 'cf-deploys' });
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Rotate' }));
+    const confirm = await screen.findByRole('dialog', { name: /Rotate the signing secret/ });
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Rotate secret' }));
+
+    const alert = await within(confirm).findByRole('alert');
+    expect(alert.textContent).toContain('Not rotated: try later. The old secret still works.');
+    expect(screen.queryByRole('dialog', { name: 'Secret rotated' })).toBeNull();
+    expect(document.body.textContent).not.toContain(ones);
+  });
+
+  it('says a network failure without claiming the old secret still works', async () => {
+    answers();
+    api.rotateWebhookSecret.mockRejectedValue(new TypeError('Failed to fetch'));
+    renderPage();
+    const card = await screen.findByRole('region', { name: 'cf-deploys' });
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Rotate' }));
+    const confirm = await screen.findByRole('dialog', { name: /Rotate the signing secret/ });
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Rotate secret' }));
+
+    const alert = await within(confirm).findByRole('alert');
+    expect(alert.textContent).toContain('goald is not answering');
+    expect(alert.textContent).not.toContain('old secret still works');
+  });
+
   it('does not offer Rotate to someone who cannot manage webhooks', async () => {
     answers();
     renderPage(viewer);

@@ -4,6 +4,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, KeyRound, RotateCw } from 'lucide-react';
 import { useState } from 'react';
+import { ApiError } from '../../api/client';
 import { keys } from '../../api/queries';
 import { rotateWebhookSecret, type WebhookEndpoint } from '../../api/webhooks';
 import { Button } from '../../ui/button';
@@ -14,6 +15,14 @@ import { Deliveries, type DeliveriesScope } from './deliveries';
 import type { RequestTarget } from './request-dialog';
 import type { ShownSecret } from './secret-dialog';
 import { addressUrl, feedsNothing, refusedChip, weekTotals } from './words';
+
+/** Why a rotation failed, in the dialog's words. The old secret is only changed when goald answers. */
+function rotateFailure(err: Error): string {
+  if (!(err instanceof ApiError)) {
+    return 'Not rotated: goald is not answering. Check the sender before you change its secret, then try again.';
+  }
+  return `Not rotated: ${err.detail ?? err.title}. The old secret still works.`;
+}
 
 export interface EndpointCardProps {
   scope: DeliveriesScope;
@@ -40,11 +49,15 @@ export function EndpointCard({ scope, endpoint, orgSlug, factoryName, canManage,
       const rotated = await rotateWebhookSecret(scope.org, scope.factory, endpoint.id);
       onShown({ endpointName: rotated.name, secret: rotated.secret, reason: 'rotated' });
     },
-    onSettled: () => {
-      setConfirming(false);
-      return queryClient.invalidateQueries({ queryKey: keys.webhooks(scope.org, scope.factory) });
-    },
+    // The confirmation closes only when the secret is shown; a failure stays in it, with the reason.
+    onSuccess: () => setConfirming(false),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.webhooks(scope.org, scope.factory) }),
   });
+
+  const openRotate = () => {
+    rotate.reset();
+    setConfirming(true);
+  };
 
   const copy = async () => {
     try {
@@ -99,7 +112,7 @@ export function EndpointCard({ scope, endpoint, orgSlug, factoryName, canManage,
           </Chip>
           <span className="text-meta text-muted">HMAC SHA-256</span>
           {canManage ? (
-            <Button variant="ghost" size="sm" onClick={() => setConfirming(true)}>
+            <Button variant="ghost" size="sm" onClick={openRotate}>
               <RotateCw size={14} strokeWidth={1.5} aria-hidden="true" />
               Rotate
             </Button>
@@ -144,7 +157,13 @@ export function EndpointCard({ scope, endpoint, orgSlug, factoryName, canManage,
         pending={rotate.isPending}
         tone="danger"
         onConfirm={() => rotate.mutate()}
-      />
+      >
+        {rotate.error ? (
+          <p role="alert" className="m-0 text-secondary text-rework-ink">
+            {rotateFailure(rotate.error)}
+          </p>
+        ) : null}
+      </ConfirmDialog>
     </section>
   );
 }
