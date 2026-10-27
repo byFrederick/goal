@@ -52,12 +52,15 @@ export interface Hunk {
 
 const overlaps = ([a = 0, b = 0]: readonly number[], from: number, to: number) => a > 0 && a <= to && b >= from;
 
+/** The name of a change's section ("Line", "Agents"); "Files" for one the editor does not know. */
+export function sectionName(section: string): string {
+  return section in sectionInfo ? sectionInfo[section as keyof typeof sectionInfo].label : 'Files';
+}
+
 /** "Line: build station", "Connections: browser", "Agents: reviewer". */
 export function changeLabel(change: Change): string {
-  const section =
-    change.section in sectionInfo ? sectionInfo[change.section as keyof typeof sectionInfo].label : 'Files';
   const target = change.target.kind === 'station' ? `${change.target.id} station` : change.target.id;
-  return `${section}: ${target}`;
+  return `${sectionName(change.section)}: ${target}`;
 }
 
 /**
@@ -140,12 +143,6 @@ export function blockedSentence(errors: number): string {
 }
 
 /** What publishing does to the running version (B's copy fix: runs, not items, finish on it). */
-export function publishExplainer(current: number | null, next: number): string {
-  if (current === null) {
-    return `Publishing saves version ${next}. Later edits start a new draft; nothing changes the running factory until you publish again.`;
-  }
-  return `v${current} keeps running until you publish. Runs already started finish on v${current}; new runs start on v${next}.`;
-}
 
 // Versions.
 

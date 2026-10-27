@@ -7,7 +7,6 @@ import {
   mergeMoveNeeds,
   movesFromProblems,
   parseCompare,
-  publishExplainer,
   publishedLine,
   reviewCompare,
   sourceText,
@@ -101,12 +100,8 @@ describe('publishing', () => {
     ]);
   });
 
-  it('says what stands in the way and what publishing changes', () => {
+  it('says what stands in the way of a publish', () => {
     expect(blockedSentence(1)).toBe('Fix 1 problem first. Your draft stays saved.');
-    expect(publishExplainer(8, 9)).toBe(
-      'v8 keeps running until you publish. Runs already started finish on v8; new runs start on v9.',
-    );
-    expect(publishExplainer(null, 1)).toMatch(/^Publishing saves version 1\./);
   });
 });
 
