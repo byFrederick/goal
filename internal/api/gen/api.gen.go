@@ -4870,7 +4870,7 @@ type ClientInterface interface {
 
 	// CreateOrgWithBody Create an organization
 	//
-	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
+	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Any person signed in with a session (in the browser or through the CLI's device sign-in) may create one and becomes its owner; API keys and personal tokens may not.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -4879,7 +4879,7 @@ type ClientInterface interface {
 
 	// CreateOrg Create an organization
 	//
-	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
+	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Any person signed in with a session (in the browser or through the CLI's device sign-in) may create one and becomes its owner; API keys and personal tokens may not.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -5962,7 +5962,7 @@ type ClientInterface interface {
 
 	// ListPlatformAdmins The install's platform admins, earliest first
 	//
-	// Platform admins create organizations and manage platform admins; inside an organization they have only the rights of their membership there. Platform admins only.
+	// Platform admins manage platform admins and, like every signed-in person, create organizations; inside an organization they have only the rights of their membership there. Platform admins only.
 	//
 	// Corresponds with GET /v1/platform/admins (the `ListPlatformAdmins` operationId).
 	ListPlatformAdmins(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -6085,7 +6085,7 @@ func (c *Client) ListOrgs(ctx context.Context, reqEditors ...RequestEditorFn) (*
 
 // CreateOrgWithBody Create an organization
 //
-// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
+// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Any person signed in with a session (in the browser or through the CLI's device sign-in) may create one and becomes its owner; API keys and personal tokens may not.
 //
 // Takes any type of body and a specified content type.
 //
@@ -6104,7 +6104,7 @@ func (c *Client) CreateOrgWithBody(ctx context.Context, contentType string, body
 
 // CreateOrg Create an organization
 //
-// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
+// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Any person signed in with a session (in the browser or through the CLI's device sign-in) may create one and becomes its owner; API keys and personal tokens may not.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -8597,7 +8597,7 @@ func (c *Client) TransferOwnership(ctx context.Context, org OrgRef, body Transfe
 
 // ListPlatformAdmins The install's platform admins, earliest first
 //
-// Platform admins create organizations and manage platform admins; inside an organization they have only the rights of their membership there. Platform admins only.
+// Platform admins manage platform admins and, like every signed-in person, create organizations; inside an organization they have only the rights of their membership there. Platform admins only.
 //
 // Corresponds with GET /v1/platform/admins (the `ListPlatformAdmins` operationId).
 func (c *Client) ListPlatformAdmins(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -15012,7 +15012,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateOrgWithBodyWithResponse Create an organization
 	//
-	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
+	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Any person signed in with a session (in the browser or through the CLI's device sign-in) may create one and becomes its owner; API keys and personal tokens may not.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -15021,7 +15021,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateOrgWithResponse Create an organization
 	//
-	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
+	// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Any person signed in with a session (in the browser or through the CLI's device sign-in) may create one and becomes its owner; API keys and personal tokens may not.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -16250,7 +16250,7 @@ type ClientWithResponsesInterface interface {
 
 	// ListPlatformAdminsWithResponse The install's platform admins, earliest first
 	//
-	// Platform admins create organizations and manage platform admins; inside an organization they have only the rights of their membership there. Platform admins only.
+	// Platform admins manage platform admins and, like every signed-in person, create organizations; inside an organization they have only the rights of their membership there. Platform admins only.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -22042,7 +22042,7 @@ func (c *ClientWithResponses) ListOrgsWithResponse(ctx context.Context, reqEdito
 
 // CreateOrgWithBodyWithResponse Create an organization
 //
-// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
+// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Any person signed in with a session (in the browser or through the CLI's device sign-in) may create one and becomes its owner; API keys and personal tokens may not.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -22057,7 +22057,7 @@ func (c *ClientWithResponses) CreateOrgWithBodyWithResponse(ctx context.Context,
 
 // CreateOrgWithResponse Create an organization
 //
-// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Platform admins only; the caller becomes the organization's owner.
+// The slug is lowercase letters, digits and hyphens (3 to 40), unique across the install and not a reserved word (new, settings, api, v1, o, me, orgs, auth, invite, admin, default). The mark defaults to the name's initials. A taken or reserved slug, or a malformed field, is 409. Any person signed in with a session (in the browser or through the CLI's device sign-in) may create one and becomes its owner; API keys and personal tokens may not.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -24132,7 +24132,7 @@ func (c *ClientWithResponses) TransferOwnershipWithResponse(ctx context.Context,
 
 // ListPlatformAdminsWithResponse The install's platform admins, earliest first
 //
-// Platform admins create organizations and manage platform admins; inside an organization they have only the rights of their membership there. Platform admins only.
+// Platform admins manage platform admins and, like every signed-in person, create organizations; inside an organization they have only the rights of their membership there. Platform admins only.
 //
 // Returns a wrapper object for the known response body format(s).
 //

@@ -32,6 +32,7 @@ const (
 
 	acmePath   = "/v1/orgs/acme"
 	healthPath = "/v1/health"
+	orgsPath   = "/v1/orgs"
 )
 
 // signedIn is the harness under GOAL_AUTH=session with acme's people signed in for a week.
@@ -191,12 +192,12 @@ func TestAPI_SignIn_OrgsByMembership(t *testing.T) {
 
 	h := newSignedIn(t)
 
-	orgs := decode[gen.OrgList](t, h.as(t, viewerToken, http.MethodGet, "/v1/orgs", ""), http.StatusOK)
+	orgs := decode[gen.OrgList](t, h.as(t, viewerToken, http.MethodGet, orgsPath, ""), http.StatusOK)
 	if len(orgs.Orgs) != 1 || orgs.Orgs[0].Slug != acmeSlug || orgs.Orgs[0].Role == nil || *orgs.Orgs[0].Role != gen.OrgRoleMember || orgs.Orgs[0].FactoryCount != 1 {
 		t.Errorf("viewer's orgs = %+v, want acme alone, as a member seeing 1 factory", orgs.Orgs)
 	}
 
-	if owners := decode[gen.OrgList](t, h.as(t, ownerToken, http.MethodGet, "/v1/orgs", ""), http.StatusOK); len(owners.Orgs) != 1 || owners.Orgs[0].FactoryCount != 2 {
+	if owners := decode[gen.OrgList](t, h.as(t, ownerToken, http.MethodGet, orgsPath, ""), http.StatusOK); len(owners.Orgs) != 1 || owners.Orgs[0].FactoryCount != 2 {
 		t.Errorf("owner's orgs = %+v, want acme with both factories", owners.Orgs)
 	}
 
@@ -279,26 +280,46 @@ func TestAPI_SignIn_RemovalHoldsAtOnce(t *testing.T) {
 
 	h.identity.EndSession(viewerToken)
 
-	if res := h.as(t, viewerToken, http.MethodGet, "/v1/orgs", ""); !unauthenticated(res) {
+	if res := h.as(t, viewerToken, http.MethodGet, orgsPath, ""); !unauthenticated(res) {
 		t.Errorf("after signing out = %d %s, want 401", res.status, res.body)
 	}
 }
 
-// A platform admin's new organization is theirs (NewOrg.Owner); nobody else may create one.
+// A new organization is its creator's (NewOrg.Owner), a platform admin's or a member's (ADR 0019,
+// decision 1).
 func TestAPI_SignIn_CreateOrgOwnedByTheCaller(t *testing.T) {
 	t.Parallel()
 
 	h := newSignedIn(t)
 
-	created := h.as(t, ownerToken, http.MethodPost, "/v1/orgs", `{"slug":"beta-labs","name":"Beta Labs"}`)
+	created := h.as(t, ownerToken, http.MethodPost, orgsPath, `{"slug":"beta-labs","name":"Beta Labs"}`)
 	o := decode[gen.Org](t, created, http.StatusCreated)
 
 	if h.tenancy.Owner(domain.OrgID(o.Id)) != ownerID || o.Role == nil || *o.Role != gen.OrgRoleOwner || !slices.Contains(o.Can, "org:delete") {
 		t.Errorf("created org = %+v (owner %s), want it owned by the caller", o, h.tenancy.Owner(domain.OrgID(o.Id)))
 	}
 
-	if res := h.as(t, viewerToken, http.MethodPost, "/v1/orgs", `{"slug":"gamma-labs","name":"Gamma Labs"}`); res.status != http.StatusForbidden {
-		t.Errorf("a member creating an org = %d, want 403", res.status)
+	if res := h.as(t, viewerToken, http.MethodPost, orgsPath, `{"slug":"gamma-labs","name":"Gamma Labs"}`); res.status != http.StatusCreated {
+		t.Errorf("a member creating an org = %d %s, want 201", res.status, res.body)
+	}
+}
+
+// ADR 0019, decision 1: any person signed in with a session creates an organization and owns it,
+// without being a platform admin.
+func TestAPI_SignIn_AnyPersonCreatesAnOrg(t *testing.T) {
+	t.Parallel()
+
+	h := newSignedIn(t)
+
+	created := h.as(t, viewerToken, http.MethodPost, orgsPath, `{"slug":"delta-labs","name":"Delta Labs"}`)
+	o := decode[gen.Org](t, created, http.StatusCreated)
+
+	if h.tenancy.Owner(domain.OrgID(o.Id)) != viewerID || o.Role == nil || *o.Role != gen.OrgRoleOwner || !slices.Contains(o.Can, "org:delete") {
+		t.Errorf("created org = %+v (owner %s), want it owned by the member who created it", o, h.tenancy.Owner(domain.OrgID(o.Id)))
+	}
+
+	if res := h.as(t, "", http.MethodPost, orgsPath, `{"slug":"epsilon-labs","name":"Epsilon Labs"}`); !unauthenticated(res) {
+		t.Errorf("creating an org signed out = %d %s, want 401", res.status, res.body)
 	}
 }
 

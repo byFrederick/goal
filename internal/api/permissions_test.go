@@ -157,7 +157,7 @@ func TestPermissions_RoleGrants(t *testing.T) {
 		{name: "a member of another org does not see this one", p: owner, operation: opGetOrg, org: grantsOther, want: wantHidden},
 		{name: "a platform admin is no member", p: platformAdmin, operation: opGetOrg, org: grantsOrg, want: wantHidden},
 		{name: "a platform admin creates orgs", p: platformAdmin, operation: opCreateOrg, want: wantAllow},
-		{name: "an owner who is not a platform admin cannot", p: owner, operation: opCreateOrg, want: wantForbidden},
+		{name: "a person who is not a platform admin creates orgs too", p: owner, operation: opCreateOrg, want: wantAllow},
 
 		{name: "a stale session cannot delete the org", p: stale, operation: opDeleteOrg, org: grantsOrg, want: wantReauth},
 		{name: "a stale session still reads", p: stale, operation: opGetOrg, org: grantsOrg, want: wantAllow},

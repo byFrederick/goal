@@ -1,6 +1,6 @@
 # ADR 0007 — Identity with Better Auth beside goald
 
-Status: accepted · 2026-10-24 · decision 4 amended the same day ([personal tokens](#amendment--personal-tokens-decision-4)) · Builds on [ADR 0003](0003-hexagonal-architecture-and-deployment.md) and [ADR 0004](0004-frontend-and-monorepo.md) · Spec: [phase 3](../history/specs/3-identity-and-access.md) · (roadmap 2026-10-24) the Goal MCP server this ADR calls phase 6 was phase 5 when it was written; continuous learning took phase 5
+Status: accepted · 2026-10-24 · decision 4 amended the same day ([personal tokens](#amendment--personal-tokens-decision-4)) · decision 5 amended 2026-10-27 ([who creates organizations](#amendment--who-creates-organizations-decision-5)) · Builds on [ADR 0003](0003-hexagonal-architecture-and-deployment.md) and [ADR 0004](0004-frontend-and-monorepo.md) · Spec: [phase 3](../history/specs/3-identity-and-access.md) · (roadmap 2026-10-24) the Goal MCP server this ADR calls phase 6 was phase 5 when it was written; continuous learning took phase 5
 
 ## Context
 
@@ -52,3 +52,9 @@ Status: accepted · 2026-10-24 · extends decision 4. Specified in [phase 3](../
 - *Creating tokens from the CLI* (`goal token create`): a bearer session comes from the device flow, whose approval can be phished; if it could mint a 90-day token, one phished approval would outlive the 7-day session. Browser-only creation with a fresh cookie session keeps a phished CLI session from minting one; the CLI only stores a token it is given on stdin (`goal login --token`).
 
 **Consequences.** One more lookup function, table and credential branch in goald; the permission table gains a `pat` column that each new permission must decide; high-impact scopes (`definition:edit`, `definition:publish`, `factory:create`) can be given to a token, behind a warning and never in a preset. Whether the phase 6 MCP endpoint accepts personal tokens is left to phase 6 (spec 6).
+
+## Amendment — who creates organizations (decision 5)
+
+Status: accepted · 2026-10-27 · changes decision 5's last sentence. Decided in [ADR 0019](0019-self-serve-onboarding.md), decision 1.
+
+Any person signed in with a session (in the browser or through the CLI's device sign-in) may create an organization and becomes its owner, so self-serve onboarding starts without a platform admin. Platform admins keep the right; API keys and personal tokens never had it and still do not. goald still owns the organization lifecycle as decision 5 says.

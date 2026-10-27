@@ -22,3 +22,4 @@ One line per ADR: its number, its title and the first part of its status. To add
 - [ADR 0016](0016-ui-revamp.md): The UI revamp: the canvas screens are the UI's contract. Status: accepted.
 - [ADR 0017](0017-credentials.md): Credentials: organization-owned sealed secrets, scoped to factories and agents, that connections refer to as {{name}}. Status: accepted.
 - [ADR 0018](0018-agents-ask-questions.md): Agents ask questions: the run ends until a person answers. Status: accepted.
+- [ADR 0019](0019-self-serve-onboarding.md): Self-serve onboarding: anyone signed in creates an organization, and progress comes from existing data. Status: accepted.

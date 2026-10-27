@@ -287,21 +287,21 @@ createKnowledgeSource pat-removed      401 unauthenticated      401 unauthentica
 createKnowledgeSource pat-platform     403 forbidden            404 org-not-found
 createKnowledgeSource pat-deleted-org  401 unauthenticated      401 unauthenticated
 createOrg            anonymous        install: 401 unauthenticated
-createOrg            owner            install: 403 forbidden
-createOrg            admin            install: 403 forbidden
-createOrg            viewer           install: 403 forbidden
-createOrg            approver         install: 403 forbidden
-createOrg            editor           install: 403 forbidden
-createOrg            member-no-roles  install: 403 forbidden
-createOrg            other-org-owner  install: 403 forbidden
+createOrg            owner            install: 200
+createOrg            admin            install: 200
+createOrg            viewer           install: 200
+createOrg            approver         install: 200
+createOrg            editor           install: 200
+createOrg            member-no-roles  install: 200
+createOrg            other-org-owner  install: 200
 createOrg            platform-admin   install: 200
-createOrg            stale-owner      install: 403 forbidden
+createOrg            stale-owner      install: 200
 createOrg            key-scoped       install: 403 forbidden
 createOrg            key-restricted   install: 403 forbidden
 createOrg            key-other-org    install: 403 forbidden
 createOrg            key-expired      install: 401 unauthenticated
 createOrg            key-revoked      install: 401 unauthenticated
-createOrg            bearer-owner     install: 403 forbidden
+createOrg            bearer-owner     install: 200
 createOrg            pat-approver     install: 403 forbidden
 createOrg            pat-owner        install: 403 forbidden
 createOrg            pat-viewer       install: 403 forbidden

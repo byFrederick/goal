@@ -39,6 +39,7 @@ The words Goal's code, API and UI use, one sentence each, with the place in the 
 | Learned | The planned built-in knowledge source of facts learned from retros; it is not built yet. | [architecture.md](../engineering/architecture.md) ("Phases 5 and 6") |
 | Line | A factory's stations in order, with its agents and flow policy, as the engine reads them. | `internal/core/domain/line.go` (`Line`) |
 | Needs you | The revamp's name in the UI for the inbox, with four types: approvals, decisions, questions and alerts; the screens still say Inbox until it lands. | [MASTER.md](../design/MASTER.md); `apps/web/src/shared/inbox.ts` |
+| Onboarding | The steps a new person takes from signing up to a first factory: create an organization, connect code, pick a template, shape the line, set budgets, choose triggers, invite people and watch a first item; its progress is read from existing data. | `docs/design/screens/get-started/`; [ADR 0019](../adr/0019-self-serve-onboarding.md) |
 | Organization | The tenant: every org-owned row carries its id and is scoped by row-level security. | `internal/core/domain/org.go` (`Org`, `OrgID`) |
 | Part | One item of an assembly, counted in the assembly's progress. | `internal/core/domain/item.go` (`Part`), `internal/core/domain/part.go` |
 | Personal token | A member's own token for scripts, limited to the scopes it was created with. | `internal/core/domain/personaltoken.go` (`PersonalToken`) |

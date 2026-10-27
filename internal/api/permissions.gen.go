@@ -27,7 +27,7 @@ var permissionRules = map[string]rule{
 	"knowledge:read":        {level: "org", orgRoles: []string{"owner", "admin", "member"}, keys: true, pat: true},
 	"member:manage":         {level: "org", orgRoles: []string{"owner", "admin"}, fresh: true},
 	"member:read":           {level: "org", orgRoles: []string{"owner", "admin", "member"}},
-	"org:create":            {level: "install", platformAdmin: true},
+	"org:create":            {level: "install"},
 	"org:delete":            {level: "org", orgRoles: []string{"owner"}, fresh: true},
 	"org:manage":            {level: "org", orgRoles: []string{"owner", "admin"}},
 	"org:read":              {level: "org", orgRoles: []string{"owner", "admin", "member"}, keys: true, pat: true},
