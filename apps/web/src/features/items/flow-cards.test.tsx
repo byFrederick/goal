@@ -3,7 +3,7 @@ import { cleanup, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BuilderMeta, Factory, Item } from '../../api/types';
 import { renderBoardPage } from '../../test/route';
-import { TimeCard } from './flow-cards';
+import { RunCard } from './flow-cards';
 import { buildTrace } from './timeline';
 
 afterEach(cleanup);
@@ -71,10 +71,10 @@ function workingItem(model: string): Item {
   };
 }
 
-describe('TimeCard: the run in progress', () => {
+describe('RunCard: the run in progress', () => {
   it('names the run by its role and model, never by its numbered agent copy', async () => {
     renderBoardPage({
-      page: () => <TimeCard item={workingItem('claude-opus-5-5')} factory={factory} trace={buildTrace([])} />,
+      page: () => <RunCard item={workingItem('claude-opus-5-5')} factory={factory} trace={buildTrace([])} />,
       org,
       factory,
       builderMeta,
@@ -87,7 +87,7 @@ describe('TimeCard: the run in progress', () => {
 
   it('shows the model id until the install lists it', async () => {
     renderBoardPage({
-      page: () => <TimeCard item={workingItem('claude-haiku-5-5')} factory={factory} trace={buildTrace([])} />,
+      page: () => <RunCard item={workingItem('claude-haiku-5-5')} factory={factory} trace={buildTrace([])} />,
       org,
       factory,
       builderMeta,
