@@ -11,6 +11,7 @@ const investigate: ConstraintCandidate = {
   mean_wait_minutes: 95,
   mean_service_minutes: 50,
   leases: 120,
+  spend_per_slot_day_usd: 6,
   estimate: { extra_slot_saves_hours: 2.1 },
 };
 
