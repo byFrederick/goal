@@ -751,12 +751,9 @@ test('create an organization and land on its empty factories', async ({ page }) 
   // The new organization is in the menu, current.
   await openNavigation(page);
   await newMark.click();
-  // The menu item is current with aria-current at every width; on a phone the sheet's link says
-  // "page" because its Factories home is open.
-  const current = isPhone(page)
-    ? page.getByRole('dialog', { name: 'Switch organization' }).getByRole('link', { name: /^Acme Two\s?0 factories/ })
-    : page.getByRole('menuitem', { name: /^Acme Two\s?0 factories/ });
-  await expect(current).toHaveAttribute('aria-current', isPhone(page) ? 'page' : 'true');
+  // The organization menu is used at every width, including in the phone drawer, and its
+  // current row is marked with aria-current at every width.
+  await expect(page.getByRole('menuitem', { name: /^Acme Two\s?0 factories/ })).toHaveAttribute('aria-current', 'true');
 });
 
 test('a malformed address is caught before sending, and Escape returns to the mark', async ({ page }) => {
