@@ -33,6 +33,7 @@ export type FactoryPath =
   | '/o/$org/f/$factory'
   | '/o/$org/f/$factory/board'
   | '/o/$org/f/$factory/items'
+  | '/o/$org/f/$factory/agents'
   | '/o/$org/f/$factory/definition'
   | '/o/$org/f/$factory/settings';
 /** Paths of the organization's screens; their only param is its slug. */
@@ -42,7 +43,9 @@ export type OrgPath =
   | '/o/$org/settings'
   | '/o/$org/api-keys'
   | '/o/$org/connections'
-  | '/o/$org/knowledge';
+  | '/o/$org/knowledge'
+  | '/o/$org/runs'
+  | '/o/$org/needs-you';
 
 type Availability<Path> = { available: true; to: Path; exact?: boolean } | { available: false };
 
@@ -160,6 +163,13 @@ export const knowledgeScreen: OrgScreen = {
   to: '/o/$org/knowledge',
   permissions: ['knowledge:read'],
 };
+/** The agent runs across the organization's factories (the Runs page, /o/$org/runs). */
+export const runsScreen: OrgScreen = {
+  id: 'runs',
+  label: 'Runs',
+  icon: Activity,
+  to: '/o/$org/runs',
+};
 export const settingsScreen: OrgScreen = {
   id: 'settings',
   label: 'Settings',
@@ -179,11 +189,14 @@ type Listed<Path extends string> = { id: string; label: string; icon?: LucideIco
 /** The organization's Home: the factories list (the sidebar's first entry, the top bar's page name). */
 export const homeScreen: OrgScreen = { id: 'home', label: 'Home', icon: House, to: '/o/$org', exact: true };
 
+/** Needs you: what waits on a person across the factories (ADR 0016, wave 2). */
+export const needsYouScreen: OrgScreen = { id: 'needs-you', label: 'Needs you', icon: Inbox, to: '/o/$org/needs-you' };
+
 /** The sidebar's organization-wide entries, top to bottom. */
 export const sidebarOrgScreens: readonly Listed<OrgPath>[] = [
   { ...homeScreen, available: true },
-  { id: 'needs-you', label: 'Needs you', icon: Inbox, available: false },
-  { id: 'runs', label: 'Runs', icon: Activity, available: false },
+  { ...needsYouScreen, available: true },
+  { ...runsScreen, available: true },
   { ...connectionsScreen, available: true },
   { id: 'credentials', label: 'Credentials', icon: KeyRound, available: false },
   { ...knowledgeScreen, available: true },
@@ -194,7 +207,7 @@ export const sidebarFactoryPages: readonly Listed<FactoryPath>[] = [
   { id: 'floor', label: 'Floor', available: true, to: '/o/$org/f/$factory', exact: true },
   { id: 'board', label: 'Board', available: true, to: '/o/$org/f/$factory/board' },
   { id: 'items', label: 'Items', available: true, to: '/o/$org/f/$factory/items' },
-  { id: 'agents', label: 'Agents', available: false },
+  { id: 'agents', label: 'Agents', available: true, to: '/o/$org/f/$factory/agents' },
   { id: 'intake', label: 'Intake', available: false },
   { id: 'jonah', label: 'Jonah', available: false },
   { id: 'definition', label: 'Definition', available: true, to: '/o/$org/f/$factory/definition' },

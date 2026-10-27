@@ -114,7 +114,7 @@ test('leaving with a change goald has not saved asks first, and Retry saves it',
   await request.delete('/__mock/fail');
   await dialog.getByRole('button', { name: 'Retry' }).click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/goal$/);
-  await expect(page.getByRole('heading', { level: 1, name: 'Goal floor' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
 
   await page.goto(basics);
   await expect(title(page)).toHaveValue('Goal 2');

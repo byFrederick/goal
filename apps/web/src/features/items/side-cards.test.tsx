@@ -2,7 +2,7 @@
 import { cleanup, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { membersQuery, runsQuery, versionFileQuery, versionModelQuery, versionQuery } from '../../api/queries';
+import { itemRunsQuery, membersQuery, versionFileQuery, versionModelQuery, versionQuery } from '../../api/queries';
 import type { Factory, Item, ItemEvent, Member, Run } from '../../api/types';
 import { renderFactoryPage, type Seed } from '../../test/route';
 import { CostCard, DetailsCard, OverlapsCard, RulesCard } from './side-cards';
@@ -149,7 +149,7 @@ const ruleTexts: Record<string, string> = {
 function seeds(withModel = true): Seed[] {
   const list: Seed[] = [
     [membersQuery(org.id).queryKey, members],
-    [runsQuery(org.id, 'software#147').queryKey, { runs }],
+    [itemRunsQuery(org.id, 'software#147').queryKey, { runs }],
   ];
   if (withModel) {
     const versionFiles = [

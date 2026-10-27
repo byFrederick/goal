@@ -24,6 +24,7 @@ import {
   membersScreen,
   newFactoryScreen,
   type OrgPath,
+  runsScreen,
   settingsScreen,
   sidebarFactoryPages,
 } from './screens';
@@ -58,6 +59,7 @@ const factoryRoutePages: Record<string, string> = {
   '/o/$org/f/$factory/board': 'board',
   '/o/$org/f/$factory/items/': 'items',
   '/o/$org/f/$factory/items/$ref': 'items',
+  '/o/$org/f/$factory/agents/': 'agents',
   '/o/$org/f/$factory/agents/$agent': 'agents',
   '/o/$org/f/$factory/definition/': 'definition',
   '/o/$org/f/$factory/definition/$section': 'definition',
@@ -69,6 +71,7 @@ const orgRoutePages: Record<string, { label: string; to?: OrgPath }> = {
   '/o/$org/_org/': homeScreen,
   '/o/$org/_org/api-keys': apiKeysScreen,
   '/o/$org/_org/members': membersScreen,
+  '/o/$org/_org/runs': runsScreen,
   '/o/$org/_org/settings': settingsScreen,
   '/o/$org/_org/connections/': connectionsScreen,
   '/o/$org/_org/connections/$connection': connectionsScreen,

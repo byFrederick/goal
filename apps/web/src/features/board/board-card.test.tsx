@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { Factory, ItemCard, ItemWaiting, OrgSummary } from '../../api/types';
+import type { Factory, ItemCard, ItemWaiting, OrgSummary, PartsSummary } from '../../api/types';
+import { moveShortcut } from '../../shared/move-menu';
 import { renderFactoryPage } from '../../test/route';
 import { BoardCard } from './board-card';
 
@@ -59,6 +60,14 @@ const shared = (refs: string[]): ItemWaiting => ({
 const renderCard = (item: ItemCard) =>
   renderFactoryPage({ page: () => <BoardCard item={item} />, path: 'board', org, factory });
 
+const renderMovable = (item: ItemCard, assemblyParts?: PartsSummary) =>
+  renderFactoryPage({
+    page: () => <BoardCard item={item} onMove={() => {}} assemblyParts={assemblyParts} />,
+    path: 'board',
+    org,
+    factory,
+  });
+
 describe('BoardCard wait line', () => {
   it('shows one wait line for one needed item, with no path or glob on the card', async () => {
     renderCard(card({ waiting: shared(['sre#3']) }));
@@ -89,5 +98,59 @@ describe('BoardCard wait line', () => {
       'article',
     ) as HTMLElement;
     expect(within(article).queryByText(/^Waits for/)).toBeNull();
+  });
+});
+
+describe('BoardCard as the screen draws it', () => {
+  const article = async () =>
+    (await screen.findByRole('link', { name: 'Adjust the export handler' })).closest('article') as HTMLElement;
+
+  it('shows the ref, the type and lane chips, the age, the agent with its cost, and its state chip', async () => {
+    renderMovable(
+      card({
+        type: 'feature',
+        lane: 'backend',
+        age_seconds: 600,
+        state: 'waiting_human',
+        agent: 'builder',
+        cost_usd: 0.7,
+        slot: 1,
+        turn: 2,
+      }),
+    );
+
+    const card_ = await article();
+    expect(within(card_).getByText('sre#21')).toBeTruthy();
+    expect(within(card_).getByText('Feature')).toBeTruthy();
+    expect(within(card_).getByText('Backend')).toBeTruthy();
+    expect(within(card_).getByText('10 min')).toBeTruthy();
+    expect(within(card_).getByText('builder')).toBeTruthy();
+    expect(within(card_).getByText('$0.70')).toBeTruthy();
+    expect(within(card_).getByText('Needs your OK')).toBeTruthy();
+    expect(card_.textContent).not.toMatch(/copy/i);
+  });
+
+  it('shows the assembly line: the part, one pip per part with the merged ones filled', async () => {
+    renderMovable(
+      card({
+        assembly: { id: 'item-50', ref: 'sre#50', title: 'PWA', part: 2, parts: 3 },
+      }),
+      { total: 3, merged: 1, in_progress: 1, waiting: 0, stations: [] },
+    );
+
+    const card_ = await article();
+    expect(within(card_).getByRole('link', { name: 'Part 2 of 3 of PWA' })).toBeTruthy();
+    expect(card_.querySelectorAll('i.bg-ok')).toHaveLength(1);
+    expect(card_.querySelectorAll('i.bg-ok-tint')).toHaveLength(2);
+  });
+
+  it('keeps the Move button and the M shortcut on the card', async () => {
+    renderMovable(card({ state: 'queued' }));
+
+    const card_ = await article();
+    expect(within(card_).getByRole('button', { name: /move/i })).toBeTruthy();
+    expect(
+      within(card_).getByRole('link', { name: 'Adjust the export handler' }).getAttribute('aria-keyshortcuts'),
+    ).toBe(moveShortcut);
   });
 });
