@@ -17,6 +17,10 @@ export type BoardGroup = 'assembly';
 
 /** The choices the filters and the grouping hold; an absent field is "Any" or "None". */
 export interface BoardView {
+  /** The search: a card matches by its title or its number ("#12" or "12"). */
+  q?: string | undefined;
+  type?: string | undefined;
+  lane?: string | undefined;
   assembly?: string | undefined;
   role?: string | undefined;
   status?: StatusKind | undefined;
@@ -60,6 +64,26 @@ export function assemblyOptions(board: Board): AssemblyOption[] {
   return [...byId.values()].sort((a, b) => a.title.localeCompare(b.title));
 }
 
+/** The distinct work types on the board's cards, by name. */
+export function typeOptions(board: Board): string[] {
+  const types = new Set(
+    allItems(board)
+      .map((it) => it.type)
+      .filter((type): type is string => Boolean(type)),
+  );
+  return [...types].sort((a, b) => a.localeCompare(b));
+}
+
+/** The distinct lanes (the work's lane, not a station lane) on the board's cards, by name. */
+export function laneOptions(board: Board): string[] {
+  const lanes = new Set(
+    allItems(board)
+      .map((it) => it.lane)
+      .filter((lane): lane is string => Boolean(lane)),
+  );
+  return [...lanes].sort((a, b) => a.localeCompare(b));
+}
+
 /** The distinct lane roles on the board, by name. */
 export function roleOptions(board: Board): string[] {
   const roles = new Set(board.stations.flatMap((s) => (s.lanes ?? []).map((lane) => lane.role)));
@@ -72,10 +96,21 @@ export function roleOptions(board: Board): string[] {
  */
 export function knownView(board: Board, view: BoardView): BoardView {
   const assembly = assemblyOptions(board).some((o) => o.id === view.assembly) ? view.assembly : undefined;
+  const type = typeOptions(board).includes(view.type ?? '') ? view.type : undefined;
+  const lane = laneOptions(board).includes(view.lane ?? '') ? view.lane : undefined;
   const role = roleOptions(board).includes(view.role ?? '') ? view.role : undefined;
   const status = statusChoices.some((s) => s.value === view.status) ? view.status : undefined;
   const group = view.group === 'assembly' ? view.group : undefined;
-  return { assembly, role, status, group };
+  const q = view.q?.trim() ? view.q.trim() : undefined;
+  return { q, type, lane, assembly, role, status, group };
+}
+
+/** Whether a search matches a card: its title, or its number with or without the "#". */
+export function searchMatches(item: Pick<ItemCard, 'title' | 'number'>, q: string): boolean {
+  const query = q.trim().toLowerCase();
+  if (!query) return true;
+  const number = query.startsWith('#') ? query.slice(1) : query;
+  return item.title.toLowerCase().includes(query) || String(item.number) === number;
 }
 
 /** The role of the lane a card names in board_lane, within its station; undefined for an unclaimed card. */
@@ -85,6 +120,9 @@ function laneRole(station: BoardStation, item: ItemCard): string | undefined {
 
 /** A card matches an assembly when it is the assembly itself or one of its parts. */
 function matches(station: BoardStation, item: ItemCard, view: BoardView): boolean {
+  if (view.q && !searchMatches(item, view.q)) return false;
+  if (view.type && item.type !== view.type) return false;
+  if (view.lane && item.lane !== view.lane) return false;
   if (view.assembly && item.id !== view.assembly && item.assembly?.id !== view.assembly) return false;
   if (view.role && laneRole(station, item) !== view.role) return false;
   if (view.status && itemStatus(item) !== view.status) return false;
