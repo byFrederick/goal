@@ -14,12 +14,15 @@ import { defKeys, keys } from '../../../api/queries';
 import type { ItemsAtRemovedStations, Validation } from '../../../api/types';
 import { useOrg } from '../../../shared/org';
 import { Button } from '../../../ui/button';
-import { SectionCard, Stat, StatGrid } from '../../../ui/card';
+import { SectionCard } from '../../../ui/card';
 import { Field, Input, NativeSelect } from '../../../ui/field';
 import { useDraftSession, useModel } from '../draft/use-draft';
 import { SearchLink } from '../search-link';
-import { blockedSentence, defaultMessage, type MoveNeed, mergeMoveNeeds, publishExplainer } from './review';
+import { blockedSentence, defaultMessage, type MoveNeed, mergeMoveNeeds } from './review';
 import { useComparison, useEditorFacts } from './use-review';
+
+/** What a publish leaves open: the earlier versions stay one step away. */
+const rollbackLine = 'You can roll back to any earlier version later.';
 
 interface PublishCardProps {
   place: 'definition' | 'wizard';
@@ -68,7 +71,6 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
     if (fresh.length > 0) setRows((known) => mergeMoveNeeds(known, fresh));
   }, [freshKey]);
 
-  const counts = validation?.counts;
   const errors = validation?.problems.filter((p) => p.severity === 'error').length ?? 0;
   const unmapped = rows.filter((r) => !moves[r.station]).length;
   const note = message ?? defaultMessage(changes);
@@ -151,38 +153,17 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
   if (!hasDraft) {
     return (
       <SectionCard title="Publish">
-        <p className="m-0 text-[15px]">
+        <p className="m-0 text-body">
           {current ? `No draft. v${current.number} is running.` : 'Nothing to publish yet.'}
         </p>
-        <p className="m-0 text-sm text-muted">Your first change in any section opens a draft of v{next}.</p>
+        <p className="m-0 text-secondary text-muted">Your first change in any section opens a draft of v{next}.</p>
       </SectionCard>
     );
   }
 
   return (
     <SectionCard title="Publish">
-      <StatGrid>
-        <Stat label="Stations">
-          <dd className="m-0 text-2xl tabular-nums">{counts?.stations ?? '–'}</dd>
-        </Stat>
-        <Stat label="Agents">
-          <dd className="m-0 text-2xl tabular-nums">{counts?.agents ?? '–'}</dd>
-        </Stat>
-        <Stat label="Connections">
-          <dd className="m-0 text-2xl tabular-nums">{counts?.connections ?? '–'}</dd>
-        </Stat>
-        {place === 'wizard' ? (
-          <Stat label="Skills">
-            <dd className="m-0 text-2xl tabular-nums">{counts?.skills ?? '–'}</dd>
-          </Stat>
-        ) : (
-          <Stat label="Changes">
-            <dd className="m-0 text-2xl tabular-nums">{counts?.changes ?? '–'}</dd>
-          </Stat>
-        )}
-      </StatGrid>
-
-      <Field label="Describe this version" help="Shown in the version history">
+      <Field label="What changed, in one line">
         <Input value={note} maxLength={200} onChange={(e) => setMessage(e.target.value)} />
       </Field>
 
@@ -210,12 +191,12 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
       ) : null}
 
       {first ? (
-        <label className="flex cursor-pointer items-start gap-3 text-[15px] leading-normal">
+        <label className="flex cursor-pointer items-start gap-3 text-body leading-normal">
           <input
             type="checkbox"
             checked={start}
             onChange={(e) => setStart(e.target.checked)}
-            className="mt-1 size-[18px] shrink-0 accent-ink"
+            className="mt-1 size-4 shrink-0 accent-ink"
           />
           Start the line right away. Otherwise it stays paused until you start it.
         </label>
@@ -238,7 +219,7 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
           </p>
         ) : null}
         {refusal ? (
-          <div role="alert" className="flex flex-col gap-1.5 text-sm text-rework-ink">
+          <div role="alert" className="flex flex-col gap-2 text-sm text-rework-ink">
             <p className="m-0">
               {refusal.message}{' '}
               {refusal.differences ? (
@@ -254,7 +235,7 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
             ))}
           </div>
         ) : null}
-        <p className="m-0 text-[13px] leading-normal text-muted">{publishExplainer(current?.number ?? null, next)}</p>
+        <p className="m-0 text-secondary leading-normal text-muted">{rollbackLine}</p>
       </div>
     </SectionCard>
   );

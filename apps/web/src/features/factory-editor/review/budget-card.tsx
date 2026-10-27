@@ -49,21 +49,21 @@ export function BudgetCard({ name }: { name: string }) {
         </Field>
       </div>
       <fieldset className="m-0 flex flex-col gap-1 border-0 p-0">
-        <legend className="mb-1.5 text-sm font-medium">When the week’s budget runs out</legend>
+        <legend className="mb-2 text-sm font-medium">When the week’s budget runs out</legend>
         {(
           [
             ['drain', 'Finish items in progress, take no new ones'],
             ['stop', 'Stop every agent at once'],
           ] as const
         ).map(([value, label]) => (
-          <label key={value} className="flex min-h-11 cursor-pointer items-center gap-3 text-[15px] md:min-h-9">
+          <label key={value} className="flex min-h-11 cursor-pointer items-center gap-3 text-body md:min-h-9">
             <input
               type="radio"
               name={`${id}-exhausted`}
               value={value}
               checked={(budget.on_exhausted ?? 'drain') === value}
               onChange={() => set('on_exhausted', value)}
-              className="size-[18px] accent-ink"
+              className="size-4 accent-ink"
             />
             {label}
           </label>
@@ -91,7 +91,7 @@ function WeekSpend() {
       </div>
       <Meter value={b.spent_usd} max={b.weekly_usd} tone={b.exhausted ? 'rework' : 'run'} label={label} />
       {b.exhausted ? (
-        <p className="m-0 text-[13px] text-rework-ink">
+        <p className="m-0 text-secondary text-rework-ink">
           Used up: no new agent work starts until the week’s spend falls under the cap or you raise it.
         </p>
       ) : null}
@@ -180,8 +180,8 @@ function ClaudeSlots({ name }: { name: string }) {
         </span>
       </div>
       <Meter value={mine} max={cap.cap} label={label} />
-      {sharing ? <p className="m-0 text-[13px] text-muted">{sharing}</p> : null}
-      <p className="m-0 text-[13px]">
+      {sharing ? <p className="m-0 text-secondary text-muted">{sharing}</p> : null}
+      <p className="m-0 text-secondary">
         <Link
           to="/o/$org/settings"
           params={{ org: orgCtx.slug }}
