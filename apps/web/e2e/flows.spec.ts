@@ -197,7 +197,7 @@ test('the sidebar collapses to a rail and remembers it', async ({ page }) => {
   await sidebar.getByRole('button', { name: 'Collapse sidebar' }).click();
   await expect(sidebar.getByRole('button', { name: 'Expand sidebar' })).toBeFocused();
   await expect(sidebar.getByRole('link', { name: 'Home' })).toBeVisible();
-  await expect(sidebar.getByRole('button', { name: 'Needs you' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(sidebar.getByRole('link', { name: /^Needs you/ })).toHaveAttribute('href', '/o/acme/needs-you');
 
   // The choice is kept across a reload: the rail shows its icons and no spend text.
   await page.reload();
