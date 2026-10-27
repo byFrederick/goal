@@ -299,11 +299,12 @@ var probes = map[string]probe{
 	"pullAndon":      {method: http.MethodPost, path: acmeAndon, body: `{"reason":"probe"}`, org: testOrg, factory: acmeID},
 	"clearAndon":     {method: http.MethodPost, path: acmeAndon + "/clear", org: testOrg, factory: acmeID},
 	// No run exists here; TestAPI_RunsOfAnItem checks that the run resolver passes the seam with its factory.
-	"getRun":         {method: http.MethodGet, path: "/v1/orgs/acme/runs/00000000-0000-7000-8000-ffffffffffff", org: testOrg},
-	"getBuilderMeta": {method: http.MethodGet, path: "/v1/orgs/acme/builder/meta", org: testOrg},
-	"searchSkills":   {method: http.MethodGet, path: "/v1/orgs/acme/builder/skills?q=lint", org: testOrg},
-	"getSkillFiles":  {method: http.MethodGet, path: "/v1/orgs/acme/builder/skills/acme/skills/lint/files", org: testOrg},
-	"listAPIKeys":    {method: http.MethodGet, path: "/v1/orgs/acme/api-keys", org: testOrg},
+	"getRun":           {method: http.MethodGet, path: "/v1/orgs/acme/runs/00000000-0000-7000-8000-ffffffffffff", org: testOrg},
+	"listRunKnowledge": {method: http.MethodGet, path: "/v1/orgs/acme/runs/00000000-0000-7000-8000-ffffffffffff/knowledge", org: testOrg},
+	"getBuilderMeta":   {method: http.MethodGet, path: "/v1/orgs/acme/builder/meta", org: testOrg},
+	"searchSkills":     {method: http.MethodGet, path: "/v1/orgs/acme/builder/skills?q=lint", org: testOrg},
+	"getSkillFiles":    {method: http.MethodGet, path: "/v1/orgs/acme/builder/skills/acme/skills/lint/files", org: testOrg},
+	"listAPIKeys":      {method: http.MethodGet, path: "/v1/orgs/acme/api-keys", org: testOrg},
 
 	"listConnectionKinds":  {method: http.MethodGet, path: "/v1/orgs/acme/connection-kinds", org: testOrg},
 	"putConnectionKind":    {method: http.MethodPut, path: "/v1/orgs/acme/connection-kinds/acme-api", body: `{}`, org: testOrg},
@@ -343,7 +344,12 @@ var probes = map[string]probe{
 	"getKnowledgeDocumentContent": {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/documents/" + noDocument + "/content", org: testOrg},
 	"deleteKnowledgeDocument":     {method: http.MethodDelete, path: "/v1/orgs/acme/knowledge/documents/" + noDocument, org: testOrg},
 	"searchKnowledge":             {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/search?q=notes", org: testOrg},
-	"deleteKnowledgeSource":       {method: http.MethodDelete, path: "/v1/orgs/acme/knowledge/sources/notes", org: testOrg},
+	"getKnowledgeUsage":           {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/usage?source=notes", org: testOrg},
+	"listKnowledgeDocumentUses":   {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/documents/" + noDocument + "/uses", org: testOrg},
+	"giveKnowledgeVerdict": {
+		method: http.MethodPut, path: "/v1/orgs/acme/knowledge/documents/" + noDocument + "/verdict", org: testOrg, body: `{"verdict":"helped"}`,
+	},
+	"deleteKnowledgeSource": {method: http.MethodDelete, path: "/v1/orgs/acme/knowledge/sources/notes", org: testOrg},
 	// The key's factory passes the resolver; no key has this id.
 	"createAPIKey": {
 		method: http.MethodPost, path: "/v1/orgs/acme/api-keys", org: testOrg, factory: acmeID,

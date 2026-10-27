@@ -2174,6 +2174,29 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Run" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/runs/{run}/knowledge:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - name: run
+        in: path
+        required: true
+        description: The run's id
+        schema: { type: string }
+    get:
+      operationId: listRunKnowledge
+      x-goal-scope: factory:read
+      tags: [knowledge]
+      summary: The knowledge documents a run used, with the verdicts given on them for it
+      description: >-
+        Its uses by time, document and kind, and the verdicts agents and people gave for the run
+        (ADR 0027). 404 for a run of another organization.
+      responses:
+        "200":
+          description: The run's knowledge
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RunKnowledge" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/approve:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -3009,6 +3032,89 @@ paths:
             application/octet-stream:
               schema: { type: string, format: binary }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/knowledge/documents/{document}/uses:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/DocumentRef"
+    get:
+      operationId: listKnowledgeDocumentUses
+      x-goal-scope: knowledge:read
+      tags: [knowledge]
+      summary: One page of the runs that used a document
+      description: >-
+        Newest first use first (ADR 0027), after the run id after; next_after, when set, is the
+        after of the next page. Each names its run, item and factory, so a client links to them;
+        a run of a factory the caller may not see is left out. 404 knowledge-document-not-found.
+      parameters:
+        - name: after
+          in: query
+          description: The last run id of the previous page
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: The page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeDocumentUsePage" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/knowledge/documents/{document}/verdict:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/DocumentRef"
+    put:
+      operationId: giveKnowledgeVerdict
+      x-goal-scope: knowledge:verdict
+      tags: [knowledge]
+      summary: Say whether a document helped or misled
+      description: >-
+        The caller's verdict on the document, of a run of the organization when run_id is set
+        (ADR 0027, decision 2). There is one per person, document and run, so a second replaces
+        the first. 404 knowledge-document-not-found, 404 run-not-found, 422
+        knowledge-document-not-used for a run with no use of the document. Audited as
+        knowledge_verdict.given, without the note; sends the stream event knowledge.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/KnowledgeVerdictInput" }
+      responses:
+        "200":
+          description: The verdict as stored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeVerdict" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/knowledge/usage:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: getKnowledgeUsage
+      x-goal-scope: knowledge:read
+      tags: [knowledge]
+      summary: Where a source's documents were used
+      description: >-
+        Per document of the source with a use or a verdict in the last days days (ADR 0027,
+        decision 3): the distinct runs that used it and the verdicts given, agents' and people's
+        apart; at most 500, the most used first, then by id. 404 knowledge-source-not-found.
+      parameters:
+        - name: source
+          in: query
+          required: true
+          description: The source's name
+          schema: { type: string }
+        - name: days
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 90, default: 7 }
+      responses:
+        "200":
+          description: The usage
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeUsage" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/knowledge/search:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -3224,7 +3330,8 @@ components:
             Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found
             (404), connection-cannot-sync (400), knowledge-source-name-taken,
             knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413),
-            unsupported-document-type (415).
+            unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run
+            has no use of the document).
         problems:
           type: array
           description: definition-invalid only, every problem of the definition (errors block the publish)
@@ -6605,6 +6712,95 @@ components:
         heading: { type: string, description: 'The headings the chunk is under ("Install > Docker")' }
         snippet: { type: string, description: The chunk's text }
         score: { type: number, format: double }
+    KnowledgeUsage:
+      type: object
+      required: [source, days, documents]
+      properties:
+        source: { type: string, description: The source's name }
+        days: { type: integer, description: The window in days }
+        documents:
+          type: array
+          items: { $ref: "#/components/schemas/KnowledgeDocumentUsage" }
+    KnowledgeDocumentUsage:
+      type: object
+      description: One document's use over the window; getKnowledgeDocument has its url
+      required: [id, title, source, runs, agents_helped, agents_misled, people_helped, people_misled]
+      properties:
+        id: { type: string, description: The document's id }
+        title: { type: string }
+        source: { type: string, description: Its source's name }
+        runs: { type: integer, description: The distinct runs that used it }
+        agents_helped: { type: integer }
+        agents_misled: { type: integer }
+        people_helped: { type: integer }
+        people_misled: { type: integer }
+    KnowledgeUseKind:
+      type: string
+      enum: [search, read]
+      description: search when knowledge__search returned some of its chunks, read when knowledge__read opened it
+    KnowledgeDocumentUsePage:
+      type: object
+      required: [uses]
+      properties:
+        uses:
+          type: array
+          items: { $ref: "#/components/schemas/KnowledgeDocumentUse" }
+        next_after: { type: string, description: "The after of the next page; absent on the last" }
+    KnowledgeDocumentUse:
+      type: object
+      description: One run that used a document
+      required: [run_id, item, factory, kinds, at]
+      properties:
+        run_id: { type: string }
+        item: { $ref: "#/components/schemas/RunItem" }
+        factory: { $ref: "#/components/schemas/FactoryHit" }
+        kinds:
+          type: array
+          items: { $ref: "#/components/schemas/KnowledgeUseKind" }
+        at: { type: string, format: date-time, description: The run's first use of the document }
+    KnowledgeVerdictInput:
+      type: object
+      required: [verdict]
+      additionalProperties: false
+      properties:
+        verdict: { type: string, enum: [helped, misled] }
+        run_id: { type: string, description: A run of the organization that used the document }
+        note: { type: string, maxLength: 500 }
+    KnowledgeVerdict:
+      type: object
+      required: [document, source, verdict, by, at]
+      properties:
+        document: { type: string, description: The document's id }
+        source: { type: string, description: Its source's name }
+        verdict: { type: string, enum: [helped, misled] }
+        run_id: { type: string }
+        item_id: { type: string, description: The run's item }
+        note: { type: string }
+        by: { $ref: "#/components/schemas/Actor" }
+        at: { type: string, format: date-time }
+    RunKnowledge:
+      type: object
+      required: [uses, verdicts]
+      properties:
+        uses:
+          type: array
+          items: { $ref: "#/components/schemas/RunKnowledgeUse" }
+        verdicts:
+          type: array
+          description: The verdicts given for the run, by time
+          items: { $ref: "#/components/schemas/KnowledgeVerdict" }
+    RunKnowledgeUse:
+      type: object
+      required: [document, source, kind, chunks, at]
+      properties:
+        document: { type: string, description: The document's id }
+        source: { type: string, description: Its source's name }
+        kind: { $ref: "#/components/schemas/KnowledgeUseKind" }
+        chunks:
+          type: array
+          description: The chunk ids a search returned; none for a read
+          items: { type: integer, format: int64 }
+        at: { type: string, format: date-time }
     KnowledgeEvent:
       type: object
       description: "The data of one `event: knowledge` on /v1/orgs/{org}/stream: a source's sync started or ended"
