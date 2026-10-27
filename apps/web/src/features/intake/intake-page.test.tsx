@@ -21,7 +21,12 @@ const factory: Factory = {
   title: 'Widgets',
   work_types: [],
   stations: [],
-  current: { id: 'version-3', number: 3, published_at: '2026-10-20T10:00:00Z', published_by: { kind: 'user', id: 'u', name: 'Freddy' } },
+  current: {
+    id: 'version-3',
+    number: 3,
+    published_at: '2026-10-20T10:00:00Z',
+    published_by: { kind: 'user', id: 'u', name: 'Freddy' },
+  },
   draft: null,
   paused: false,
   created_at: '2026-10-01T00:00:00Z',
@@ -85,7 +90,13 @@ describe('IntakePage', () => {
   });
 
   it('shows the empty state when there are no items and no triggers', async () => {
-    vi.mocked(getIntake).mockResolvedValue({ items: 0, from: null, to: null, sources: { github: 0, people: 0, cli: 0, api: 0, schedule: 0, webhook: 0 }, triggers: [] });
+    vi.mocked(getIntake).mockResolvedValue({
+      items: 0,
+      from: null,
+      to: null,
+      sources: { github: 0, people: 0, cli: 0, api: 0, schedule: 0, webhook: 0 },
+      triggers: [],
+    });
     renderIntake();
 
     expect(await screen.findByRole('heading', { level: 2, name: 'No triggers yet' })).toBeTruthy();
@@ -104,7 +115,9 @@ describe('IntakePage', () => {
     expect(within(triggers).getByText('2')).toBeTruthy();
     expect(within(triggers).getByText('2 events refused, bad signature')).toBeTruthy();
     expect(within(triggers).getByText('expedite')).toBeTruthy();
-    expect(within(triggers).getByRole('switch', { name: 'flaky-test-on-main' }).getAttribute('aria-checked')).toBe('true');
+    expect(within(triggers).getByRole('switch', { name: 'flaky-test-on-main' }).getAttribute('aria-checked')).toBe(
+      'true',
+    );
     expect(within(triggers).getByRole('switch', { name: 'deploy-failed' }).getAttribute('aria-checked')).toBe('false');
     expect(within(triggers).getByText('New item, the goal CLI and the API are always on')).toBeTruthy();
 

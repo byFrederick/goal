@@ -146,7 +146,7 @@ function SourceButton({ source, pressed, onPick }: { source: PickerSource; press
         if (source.available) onPick();
       }}
       className={cn(
-        'flex h-10 items-center gap-2.5 rounded-control px-2 text-left text-body font-medium text-ink hover:bg-hover',
+        'flex h-10 items-center gap-3 rounded-control px-2 text-left text-body font-medium text-ink hover:bg-hover',
         'aria-pressed:border aria-pressed:border-rule aria-pressed:bg-card',
         !source.available && 'text-muted',
       )}

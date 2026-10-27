@@ -20,7 +20,9 @@ function IntakeRoute() {
   return (
     <IntakePage
       group={group}
-      onGroupChange={(next) => navigate({ search: (prev) => ({ ...prev, group: next }), replace: true, resetScroll: false })}
+      onGroupChange={(next) =>
+        navigate({ search: (prev) => ({ ...prev, group: next }), replace: true, resetScroll: false })
+      }
     />
   );
 }
