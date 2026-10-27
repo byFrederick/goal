@@ -383,7 +383,7 @@ type server struct {
 	codehosts map[string]ports.CodeHost
 	// credentials serve the credential routes.
 	credentials ports.Credentials
-	// intake serves the webhook routes.
+	// intake serves the webhook routes and Intake's reads.
 	intake ports.Intake
 	// knowledge, uploads and search serve the knowledge routes; uploadMax bounds an uploaded file.
 	knowledge ports.Knowledge
@@ -609,7 +609,7 @@ func problemOf(err error) gen.Problem {
 	// wrap ports.ErrNameTaken); the credentials' before the connections' (both wrap
 	// ports.ErrNoMasterKey).
 	for _, answer := range []func(error) (gen.Problem, bool){
-		fixedProblem, edgeProblem, partProblem, credentialProblem, webhookProblem, connectionProblem, knowledgeProblem, evalProblem, definitionProblem, controlProblem, agentProblem, apiKeyProblem, personalTokenProblem,
+		fixedProblem, edgeProblem, partProblem, credentialProblem, webhookProblem, connectionProblem, knowledgeProblem, evalProblem, definitionProblem, controlProblem, agentProblem, triggerProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {
 			return p

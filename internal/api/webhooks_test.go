@@ -61,7 +61,7 @@ func TestWebhooks_SecretShownOnce(t *testing.T) {
 	h := newHarness(t)
 
 	created := h.createHook(t)
-	if !hexSecret.MatchString(created.Secret) || created.Name != hookName || created.Kind != gen.Generic ||
+	if !hexSecret.MatchString(created.Secret) || created.Name != hookName || created.Kind != gen.WebhookKindGeneric ||
 		created.Address != "/hooks/"+created.Id || created.SecretName != hookName+"-hook-secret" || created.RotatedAt != nil {
 		t.Fatalf("created = %+v; want ci-hooks with a 64-character hex secret", created)
 	}

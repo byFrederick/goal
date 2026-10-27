@@ -586,6 +586,84 @@ func (in *Intake) TriggerStats(ctx context.Context, factory domain.FactoryID, si
 	return out, nil
 }
 
+// ItemSources implements ports.Intake.
+func (in *Intake) ItemSources(ctx context.Context, factory domain.FactoryID, last int) (domain.SourceWindow, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return domain.SourceWindow{}, err
+	}
+
+	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]db.LastItemSourcesRow, error) {
+		return q.LastItemSources(ctx, db.LastItemSourcesParams{FactoryID: fid, MaxItems: int32(min(max(last, 0), math.MaxInt32))})
+	})
+	if err != nil {
+		return domain.SourceWindow{}, fmt.Errorf("sources of factory %s's last items: %w", factory, err)
+	}
+
+	w := domain.SourceWindow{Counts: make([]domain.SourceCount, 0, len(rows))}
+
+	for _, r := range rows {
+		w.Counts = append(w.Counts, domain.SourceCount{Source: domain.ItemSource(r.Source), Items: int(r.Items)})
+
+		if first := r.FirstAt.UTC(); w.From.IsZero() || first.Before(w.From) {
+			w.From = first
+		}
+
+		if lastAt := r.LastAt.UTC(); lastAt.After(w.To) {
+			w.To = lastAt
+		}
+	}
+
+	return w, nil
+}
+
+// TriggerDays implements ports.Intake.
+func (in *Intake) TriggerDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.TriggerDay, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]db.TriggerDaysRow, error) {
+		return q.TriggerDays(ctx, db.TriggerDaysParams{FactoryID: fid, Since: since})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("trigger days of factory %s: %w", factory, err)
+	}
+
+	out := make([]domain.TriggerDay, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, domain.TriggerDay{Trigger: r.Trigger, Day: r.Day.UTC(), Created: int(r.Created)})
+	}
+
+	return out, nil
+}
+
+// Firings implements ports.Intake.
+func (in *Intake) Firings(ctx context.Context, factory domain.FactoryID, trigger string, limit int) ([]domain.FiringEntry, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]db.TriggerFiringsRow, error) {
+		return q.TriggerFirings(ctx, db.TriggerFiringsParams{FactoryID: fid, Trigger: trigger, MaxRows: int32(min(max(limit, 0), math.MaxInt32))})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("firings of %s: %w", trigger, err)
+	}
+
+	out := make([]domain.FiringEntry, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, domain.FiringEntry{Firing: firingFrom(db.TriggerFiringByKeyRow{
+			ID: r.ID, FactoryID: r.FactoryID, Trigger: r.Trigger, Source: r.Source, EventKey: r.EventKey, IdempotencyKey: r.IdempotencyKey,
+			Dedupe: r.Dedupe, Outcome: r.Outcome, Reason: r.Reason, ItemID: r.ItemID, At: r.At,
+		}), ItemNumber: r.ItemNumber, Merged: r.Merged})
+	}
+
+	return out, nil
+}
+
 // newSecret generates a signing secret for endpoint id of org and seals it under the active key.
 func (in *Intake) newSecret(org domain.OrgID, id domain.WebhookEndpointID) ([]byte, sealedValue, error) {
 	active := in.key.Active()
