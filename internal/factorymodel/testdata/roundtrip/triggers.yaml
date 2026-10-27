@@ -1,0 +1,44 @@
+# The acme app's line with intake triggers (ADR 0026): a schedule, a GitHub event and a
+# webhook, in block and flow style with comments, which the editor keeps as written.
+apiVersion: goal/v1
+kind: Factory
+metadata:
+  id: 7a2e4c1d-3b5f-4e6a-9c8d-0f1e2d3c4b5a
+  name: acme-app
+spec:
+  runtime:
+    modelConnection: claude
+  agents:
+    - name: engineer
+      prompt: ./agents/engineer.md
+  board:
+    workTypes: [feature, fix]
+    triggers:
+      # Every weekday morning, in Berlin time.
+      - name: morning-sweep
+        on: schedule
+        cron: "0 7 * * MON-FRI"   # before the team starts
+        timeZone: Europe/Berlin
+        create:
+          type: fix
+          station: build
+          lane: backend
+          title: "Sweep flaky tests"
+          brief: |
+            Look at the checks that failed overnight.
+      - name: red-main
+        enabled: false             # paused while the suite is rebuilt
+        on: github.check_run.failed
+        filter: { branch: main, repo: acme/app, skipBots: true }
+        only: { failuresInARow: 2, dedupe: check.name }
+        create: { type: fix, station: build, expedite: true, title: "Fix {{check.name}} on main" }
+        limits: { perDay: 3, pauseOnBudget: true }
+      - name: deploy-failed
+        on: webhook.deploys.failed
+        create: { type: fix, station: inbox, brief: "{{service}} failed to deploy" }
+    stations:
+      - { id: inbox, kind: queue }
+      - id: build
+        kind: agent
+        route: { backend: engineer }
+      - { id: done, kind: done }

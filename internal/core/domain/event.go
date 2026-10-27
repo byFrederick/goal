@@ -146,3 +146,19 @@ type Event struct {
 	Actor string
 	Data  map[string]any
 }
+
+// ActivityKinds are the milestone kinds a factory's activity lists (GET .../activity): what
+// moved an item along, never a run's per-turn events (tool_call, usage, ...).
+var ActivityKinds = []EventKind{
+	EventCreated, EventMoved, EventGateApproved, EventGateRejected, EventApproved, EventRejected,
+	EventBlocked, EventCheckFailed, EventMerged, EventDone, EventAssembled, EventCancelled,
+}
+
+// ActivityEvent is one entry of a factory's activity: a milestone event with its item's number
+// and title.
+type ActivityEvent struct {
+	Event
+
+	Number int64
+	Title  string
+}
