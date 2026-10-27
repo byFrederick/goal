@@ -72,6 +72,13 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 		return
 	}
 
+	// The questions its agents asked and people answered since then (ADR 0018).
+	answers, err := e.answersSinceLastRun(ctx, it.ID)
+	if err != nil {
+		e.block(ctx, log, c, err.Error())
+		return
+	}
+
 	// What the claim's every attempt hears: its assembly, the factory's open work.
 	preloaded, err := e.preloaded(ctx, l, st, it)
 	if err != nil {
@@ -85,7 +92,7 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 	rejection, attempt, lost := "", 1, 0
 
 	for {
-		res, chk, err := e.runOnce(ctx, c, &b, joinParts(preloaded, feedbackOf(notes, rejection)))
+		res, chk, err := e.runOnce(ctx, c, &b, joinParts(preloaded, feedbackOf(notes, answers, rejection)))
 
 		if e.cut(ctx, log, c, err) {
 			return
@@ -550,10 +557,10 @@ func (e *Engine) preloaded(ctx context.Context, l domain.Line, st domain.Station
 	return joinParts(assembly, inFlight, e.changedSinceNote(ctx, l, it)), nil
 }
 
-// feedbackOf is what goald adds to the brief for one attempt: the notes people left and, on a
-// retry, why the previous attempt was rejected.
-func feedbackOf(notes []domain.Event, rejection string) string {
-	return joinParts(notesSection(notes), rejection)
+// feedbackOf is what goald adds to the brief for one attempt: the notes people left, their
+// answers to the agents' questions and, on a retry, why the previous attempt was rejected.
+func feedbackOf(notes []domain.Event, answers []domain.Answer, rejection string) string {
+	return joinParts(notesSection(notes), answersSection(answers), rejection)
 }
 
 // joinParts joins the non-empty parts with a blank line.
