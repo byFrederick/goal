@@ -71,6 +71,7 @@ import {
   listKnowledgeSources,
   searchKnowledge,
 } from './knowledge';
+import { type SearchQuery, searchOrg } from './search';
 import type { ItemEvent } from './types';
 
 /**
@@ -157,6 +158,8 @@ export const keys = {
   knowledgeDocuments: (org: string, name: string) => ['org', org, 'knowledge', 'source', name, 'documents'] as const,
   knowledgeDocument: (org: string, id: string) => ['org', org, 'knowledge', 'document', id] as const,
   knowledgeSearch: (org: string, query: KnowledgeQuery) => ['org', org, 'knowledge', 'search', query] as const,
+  /** The shell's search box (sidebar-search.tsx): one entry per debounced query and limit. */
+  search: (org: string, query: SearchQuery) => ['org', org, 'search', query] as const,
   /** The prefix of every factory overview window. */
   overviews: (org: string) => ['org', org, 'overview'] as const,
   overview: (org: string, window: string) => ['org', org, 'overview', window] as const,
@@ -327,6 +330,16 @@ export const knowledgeSearchQuery = (org: string, query: KnowledgeQuery) =>
   queryOptions({
     queryKey: keys.knowledgeSearch(org, query),
     queryFn: ({ signal }) => searchKnowledge(org, query, signal),
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+    retry: retryUnlessRefused,
+  });
+
+/** The shell's search results; the previous answer stays shown while the next one loads. */
+export const searchQuery = (org: string, query: SearchQuery) =>
+  queryOptions({
+    queryKey: keys.search(org, query),
+    queryFn: ({ signal }) => searchOrg(org, query, signal),
     staleTime: 30_000,
     placeholderData: keepPreviousData,
     retry: retryUnlessRefused,
