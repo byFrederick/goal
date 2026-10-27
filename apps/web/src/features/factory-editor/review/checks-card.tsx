@@ -128,10 +128,7 @@ export function ChecksCard({ validation, model }: { validation: Validation | und
             ))}
           <li className="border-t border-line py-3">
             <NotAvailable label="Evals before publish">
-              <button
-                type="button"
-                className="flex w-full items-center gap-3 text-left text-body text-muted"
-              >
+              <button type="button" className="flex w-full items-center gap-3 text-left text-body text-muted">
                 <span className="grid size-5 shrink-0 place-items-center rounded-full bg-panel text-muted">
                   <Check size={12} strokeWidth={2} aria-hidden="true" />
                 </span>
