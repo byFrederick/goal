@@ -136,8 +136,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	// The engine and the API take the credentials in their own parts (software#216, #217).
-	_ = credentials
+	// The API takes the credentials in its own part (software#217).
 
 	s3cfg, err := s3.ConfigFromEnv(os.Getenv)
 	if err != nil {
@@ -190,7 +189,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// started them.
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
-		Contracts: defs, Secrets: secrets, Connections: connections, CodeHosts: hosts, Clock: clock,
+		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, CodeHosts: hosts, Clock: clock,
 		Minters: minters(s), Logger: log,
 	}, engine.Config{
 		TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: boxes.gateway, GatewayKeyRef: s.GatewayKeyRef, MaxRuns: s.MaxRuns,
