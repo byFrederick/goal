@@ -11,7 +11,7 @@ test.beforeEach(async ({ page, request }) => {
   await recordToasts(page);
 });
 
-const reviewLink = (page: Page) => page.getByRole('link', { name: 'Review and publish', exact: true });
+const reviewLink = (page: Page) => page.getByRole('link', { name: 'Review changes', exact: true }).first();
 const publishButton = (page: Page) => page.getByRole('button', { name: /^Publish v\d+$/ });
 const history = (page: Page) => page.getByRole('region', { name: 'Versions' });
 const versionRow = (page: Page, n: number) =>
@@ -58,7 +58,7 @@ test('a problem blocks Publish until it is fixed; then v9 runs (flow 3)', async 
   await expectAccessible(page);
 
   // The fix button in YAML puts the agent back.
-  await page.getByRole('navigation', { name: 'Editor view' }).getByRole('link', { name: 'YAML' }).click();
+  await page.getByRole('group', { name: 'Editor view' }).getByRole('button', { name: 'YAML' }).click();
   await problems(page).getByRole('button', { name: 'Set agent to spec-writer' }).click();
   await expect(problems(page)).not.toContainText('ghost');
 
@@ -117,7 +117,7 @@ test('Compare v7, Restore v7, then discard the draft (flow 5)', async ({ page })
   await expect(versionRow(page, 7)).toContainText('Live');
   await expect(status(page)).toContainText('Based on v8; v7 is running.');
 
-  await page.getByRole('button', { name: 'Discard draft…' }).click();
+  await page.getByRole('button', { name: 'Discard draft', exact: true }).click();
   const discard = page.getByRole('dialog', { name: 'Discard the draft of v9?' });
   await discard.getByRole('button', { name: 'Discard draft' }).click();
   await expect(status(page)).toContainText('v7 runs now. Your first change opens a draft.');
