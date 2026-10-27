@@ -33,7 +33,7 @@ test.describe('a viewer', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
     await expect(page.getByRole('button', { name: /^Move / })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /New item/ })).toHaveCount(0);
+    await expect(page.getByRole('main').getByRole('button', { name: /New item/ })).toHaveCount(0);
     await expect(
       page.getByText(
         'You can see sre’s board. Approvers and editors of sre move cards and decide items; agents pull work, nobody assigns it.',
@@ -122,7 +122,7 @@ test.describe('an approver', () => {
         .filter({ visible: true })
         .first(),
     ).toBeVisible();
-    await expect(page.getByRole('button', { name: /New item/ }).filter({ visible: true })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('button', { name: /New item/ })).toBeVisible();
 
     await page.goto('/o/acme/f/goal/items/12');
     const approve = page.getByRole('button', { name: /^Approve/ }).filter({ visible: true });

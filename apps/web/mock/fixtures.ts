@@ -362,7 +362,8 @@ const supportFactory: Factory = {
 const researchFactory: Factory = {
   id: '9e8d7c6b-5a49-4382-9172-6a5b4c3d2e1f',
   org_id: labsOrg,
-  can: factoryCan,
+  // No item:create here, so the sidebar's New item picker leaves this factory out.
+  can: factoryCan.filter((p) => p !== 'item:create'),
   name: 'research',
   title: 'Research',
   description: 'Reads papers and writes short notes for the Example Labs team.',
