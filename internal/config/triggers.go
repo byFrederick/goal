@@ -69,7 +69,7 @@ func (c *checker) triggerPlace(t Trigger, create []string) {
 func (c *checker) schedule(t Trigger, base []string) {
 	if why := cronProblem(t.Cron); why != "" {
 		c.errorf(checkTriggers, codeCronInvalid, append(slices.Clone(base), "cron"),
-			"trigger %s: cron %q must be five fields (minute, hour, day of month, month, day of week): %s",
+			"trigger %s: cron %q must be five fields (minute, hour, day-of-month, month, day-of-week): %s",
 			t.Name, t.Cron, why)
 	}
 
@@ -136,14 +136,13 @@ func (cf cronField) problem(field string) string {
 			return fmt.Sprintf("%q steps from a single value; use a range or *", part)
 		}
 
-		lo, ok := cf.value(from)
-		hi := lo
-
-		if ranged {
-			var okHi bool
-			hi, okHi = cf.value(to)
-			ok = ok && okHi
+		if !ranged {
+			to = from
 		}
+
+		lo, okLo := cf.value(from)
+		hi, okHi := cf.value(to)
+		ok := okLo && okHi
 
 		switch {
 		case !ok:
