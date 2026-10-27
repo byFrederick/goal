@@ -211,6 +211,9 @@ keyboard, and run pnpm test before you open the pull request.
 Review the pull request against the spec's acceptance criteria. Approve it, or send it back with the
 criteria it misses.
 `,
+    'contracts/spec.md': '# Spec\n\nThe item, the change and the acceptance criteria a reviewer checks.\n',
+    'contracts/review.md': '# Review\n\nThe checks a change passes before it merges.\n',
+    'contracts/handoff.md': '# Handoff\n\nWhat the next station needs from this one.\n',
     'skills/acme-conventions/SKILL.md': `---
 name: acme-conventions
 description: How acme names things, writes commits and structures pull requests.

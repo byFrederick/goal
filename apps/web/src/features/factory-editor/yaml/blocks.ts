@@ -1,6 +1,6 @@
 // Where each section's block of factory.yaml is, in words ("board, lines 31–45"): what the
-// section tiles say in YAML mode and the Changes panel links. No dependencies, so the frame can
-// use it without loading the YAML view.
+// section tiles say in YAML mode. No dependencies, so the frame can use it without loading the
+// YAML view.
 import type { LineRange, Section } from '../../../api/types';
 
 /** The YAML block each section edits, as the tiles name it in YAML mode. */
