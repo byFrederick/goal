@@ -43,6 +43,7 @@ The words Goal's code, API and UI use, one sentence each, with the place in the 
 | Part | One item of an assembly, counted in the assembly's progress. | `internal/core/domain/item.go` (`Part`), `internal/core/domain/part.go` |
 | Personal token | A member's own token for scripts, limited to the scopes it was created with. | `internal/core/domain/personaltoken.go` (`PersonalToken`) |
 | Principal | Who a request acts for, and what the database says about them at that moment. | `internal/core/domain/identity.go` (`Principal`) |
+| Question | What an agent asks a person through the gateway's `question__ask` tool, which ends its run until a person answers and the item's next run reads the answer; planned, not built yet. | `internal/gateway`, `internal/core/engine` (planned); [ADR 0018](../adr/0018-agents-ask-questions.md) |
 | Rework | A round in which a gate sends an item back for another try. | `internal/core/domain/line.go` (`Gate.MaxRework`), `internal/core/domain/flowstats.go` (`ReworkRound`) |
 | Rule | Always-on guidance a factory gives the agents, stations, lanes or work types it targets, from a `rules/<name>.md` file of the definition. | `internal/core/domain/rule.go` (`Rule`), `internal/config/rules.go` |
 | Run | One agent's work on one item at one station, in its own box. | `internal/core/domain/run.go` (`Run`), `internal/core/engine` |
