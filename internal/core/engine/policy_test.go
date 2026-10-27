@@ -1,6 +1,7 @@
 package engine_test
 
 import (
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -141,5 +142,123 @@ func TestEngine_BoxTimeLimitCapsTheRun(t *testing.T) {
 
 	if want := t0.Add(10 * time.Minute); !run.Sandbox.Deadline.Equal(want) {
 		t.Errorf("sandbox deadline %s, want %s", run.Sandbox.Deadline, want)
+	}
+}
+
+// Read the web and docs off or ask denies the web builtins (WebFetch, WebSearch) after the
+// policy's denied commands, each once, whatever the agent's builtins.web says; allowed leaves
+// the agent's own setting.
+func TestEngine_ReadWebPolicyDeniesWebTools(t *testing.T) {
+	t.Parallel()
+
+	denied := []string{"Bash(terraform apply:*)", "WebSearch"}
+	tests := []struct {
+		setting domain.ToolSetting
+		want    []string
+	}{
+		{domain.ToolOff, []string{"Bash(terraform apply:*)", "WebSearch", "WebFetch"}},
+		{domain.ToolAsk, []string{"Bash(terraform apply:*)", "WebSearch", "WebFetch"}},
+		{domain.ToolAllowed, denied},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.setting), func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarness(t, repoLine(), porttest.Succeed(`{}`))
+			h.withPolicy(t, policy(func(p *domain.OrgPolicy) { p.DeniedCommands, p.ReadWeb = denied, tt.setting }))
+			h.submit(t, domain.NewItem{})
+
+			h.step(t)
+
+			if c := h.claims(t, h.agentRun(t).Env["GOAL_GATEWAY_TOKEN"]); !slices.Equal(c.DeniedCommands, tt.want) {
+				t.Errorf("task token denies %q, want %q", c.DeniedCommands, tt.want)
+			}
+		})
+	}
+}
+
+// Merge a pull request off stops an approving agent gate whose action is merge from merging:
+// the item waits for a person at the gate, with the approval recorded and a reason that names
+// the organization policy, and a person's merge then merges it.
+func TestEngine_MergePolicyOffLeavesTheMergeToAPerson(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, gateMergeLine(), byAgent(map[string]string{
+		agWorker:   `{"pull_request":"` + prURL + `"}`,
+		agReviewer: `{"decision":"approve"}`,
+	}))
+	h.withPolicy(t, policy(func(p *domain.OrgPolicy) { p.MergePullRequest = domain.ToolOff }))
+	h.codehost.Add(openPR(prURL))
+
+	it := h.submit(t, domain.NewItem{})
+	h.step(t) // built
+	h.step(t) // reviewed, not merged
+
+	h.expectAt(t, it, stReview, domain.StateWaitingHuman)
+
+	if merges := h.codehost.Merges(); len(merges) != 0 {
+		t.Fatalf("merges %+v, want none before a person merges", merges)
+	}
+
+	if approved := h.eventsOf(it.ID, domain.EventGateApproved); len(approved) != 1 || approved[0].Actor != agReviewer {
+		t.Errorf("gate_approved events %+v, want one by the reviewer", approved)
+	}
+
+	waits := h.eventsOf(it.ID, domain.EventWaitingHuman)
+	if len(waits) != 1 {
+		t.Fatalf("%d waiting_human events, want 1 (events %v)", len(waits), h.kinds(it.ID))
+	}
+
+	if reason, _ := waits[0].Data["reason"].(string); !strings.Contains(reason, "organization policy") {
+		t.Errorf("reason %q; want it to name the organization policy", reason)
+	}
+
+	got, err := h.e.Merge(inOrg(t), it.ID, human, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Position() != (domain.Position{Station: stDone, State: domain.StateDone}) {
+		t.Errorf("item at %+v, want done", got.Position())
+	}
+
+	if merges := h.codehost.Merges(); !reflect.DeepEqual(merges, []porttest.MergeCall{squashOf(prURL, connGitHub)}) {
+		t.Errorf("merges %+v, want app#7 by the person's merge", merges)
+	}
+}
+
+// Use credentials off signs no connections into the run's task token, though its agent lists
+// some; attached_only signs the agent's list.
+func TestEngine_UseCredentialsPolicyOffGrantsNoConnections(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		setting domain.ToolSetting
+		want    []string
+	}{
+		{domain.ToolOff, nil},
+		{domain.ToolAttachedOnly, []string{connGitHub}},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.setting), func(t *testing.T) {
+			t.Parallel()
+
+			line := repoLine()
+			line.Connections = []string{connGitHub}
+			i := slices.IndexFunc(line.Agents, func(a domain.AgentSpec) bool { return a.Name == agWorker })
+			line.Agents[i].Connections = []string{connGitHub}
+
+			h := newHarness(t, line, porttest.Succeed(`{}`))
+			h.withPolicy(t, policy(func(p *domain.OrgPolicy) { p.UseCredentials = tt.setting }))
+			h.submit(t, domain.NewItem{})
+
+			h.step(t)
+
+			if c := h.claims(t, h.agentRun(t).Env["GOAL_GATEWAY_TOKEN"]); !slices.Equal(c.Connections, tt.want) {
+				t.Errorf("task token connections %q, want %q", c.Connections, tt.want)
+			}
+		})
 	}
 }
