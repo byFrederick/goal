@@ -51,13 +51,19 @@ type claimed struct {
 	lease   domain.Lease
 	agent   domain.AgentSpec
 	// What the organization policy decided at run start (ADR 0024), the same for each of the
-	// claim's runs: the model, the commands added to the agent's deny rules, how long one run
-	// may take and how long the box may live (0: no policy limit).
+	// claim's runs: the model, the commands and tools added to the agent's deny rules, how long
+	// one run may take, how long the box may live (0: no policy limit) and whether an approving
+	// gate whose action is merge leaves the merge to a person (noMerge).
 	model    string
 	deny     []string
 	timeout  time.Duration
 	boxLimit time.Duration
+	noMerge  bool
 }
+
+// webTools are the Claude Code tools of the builtins.web group, which the organization policy's
+// Read the web and docs default denies when it is off or ask.
+var webTools = []string{"WebFetch", "WebSearch"}
 
 // work runs the agent on a claimed item until the item moves on, is blocked, is released (at
 // shutdown, or cancelled by the weekly budget) or the lease is lost to another instance. The
@@ -239,6 +245,19 @@ func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) boo
 // longer than the policy's box time limit. It returns why the claim may not run, when its model
 // is not one the policy allows, and an error when the policy cannot be read. Without Policies
 // only the version decides.
+//
+// The tool defaults narrow the agent and never widen it, each through the mechanism that already
+// decides it:
+//   - Read the web and docs, off or ask: the deny rules also get the builtins.web tools
+//     (webTools); ask is served as off, as for builtins, since no tool approval is enforced.
+//   - Merge a pull request, off: an approving gate whose action is merge does not merge, and the
+//     item waits there for a person's merge (noMerge); review_approval is the version's say.
+//   - Use credentials, off: the agent's connections list is emptied, so neither its env nor its
+//     task token gets any of them; the runtime's model and repository connections still reach
+//     the run, which cannot start without them. attached_only is the agent's list.
+//   - Write outside the item's branch is not applied: comments, issues, tickets and messages go
+//     through connections' CLIs and MCP servers, and no engine or gateway step can ask a person
+//     for one, refuse it or allow it.
 func (e *Engine) applyPolicy(ctx context.Context, c *claimed) (string, error) {
 	c.model, c.timeout = cmp.Or(c.agent.Model, c.line.Runtime.Model), e.cfg.TaskTimeout
 
@@ -257,7 +276,20 @@ func (e *Engine) applyPolicy(ctx context.Context, c *claimed) (string, error) {
 			"choose one of %s for it, or allow it in the policy", c.model, c.agent.Name, strings.Join(p.AllowedModels, ", ")), nil
 	}
 
-	c.deny = p.DeniedCommands
+	c.deny = slices.Clone(p.DeniedCommands)
+	if p.ReadWeb == domain.ToolOff || p.ReadWeb == domain.ToolAsk {
+		for _, tool := range webTools {
+			if !slices.Contains(c.deny, tool) {
+				c.deny = append(c.deny, tool)
+			}
+		}
+	}
+
+	c.noMerge = p.MergePullRequest == domain.ToolOff
+
+	if p.UseCredentials == domain.ToolOff {
+		c.agent.Connections = nil
+	}
 
 	if p.BoxTimeLimitMinutes > 0 {
 		c.boxLimit = time.Duration(p.BoxTimeLimitMinutes) * time.Minute
@@ -714,7 +746,8 @@ func (e *Engine) finishRun(ctx context.Context, id domain.RunID, res domain.RunR
 // output says was broken (violations) and the paths it lists in the field the line maps
 // (flow.dependencies.paths), with the base commit it was planned against (baseCommit): through the gate's verdict when the
 // station has one, into state assembly when its output has a plan (assemble), otherwise to the
-// next station. The run was checked against the version it started on; where the item goes
+// next station. An approving gate whose action is merge leaves the merge to a person when the
+// organization policy lets no agent merge (claimed.noMerge). The run was checked against the version it started on; where the item goes
 // next is the current line's say (chk.next), so an item finishing on v1 after v2 was published
 // moves along v2.
 func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output json.RawMessage, chk checked) {
@@ -741,6 +774,12 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output
 		e.assemble(ctx, log, c, ports.Assembly{Transition: t, Parts: chk.plan, After: itemIDs(chk.after), AfterBy: agentActor(c)})
 
 		return
+	case v != nil && c.noMerge && c.station.Action == domain.ActionMerge:
+		t.Events = append(t.Events, event(c.item, domain.EventGateApproved, t.At, c.agent.Name, nil))
+		t.To, t.Outcome = domain.Position{Station: c.station.ID, State: domain.StateWaitingHuman}, domain.LeaseEscalated
+		t.Events = append(t.Events, event(c.item, domain.EventWaitingHuman, t.At, domain.ActorEngine, map[string]any{
+			keyReason: "approved; the organization policy lets no agent merge a pull request, so a person merges it",
+		}))
 	case v != nil:
 		t.Events = append(t.Events, event(c.item, domain.EventGateApproved, t.At, c.agent.Name, nil))
 		if err = e.mergeOnApproval(ctx, c, next, &t); err == nil {
