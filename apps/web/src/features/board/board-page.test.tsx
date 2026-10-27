@@ -138,13 +138,14 @@ describe('BoardPage', () => {
     expect(card).not.toBeNull();
     // Expedite first within the station, as the server orders it.
     expect(within(investigate).getAllByRole('article')[0]).toBe(card);
-    expect(card?.classList).toContain('bg-rework-tint');
-    expect(card?.classList).toContain('border-rework-tint');
+    // The expedite zone is tinted; the card keeps its own border and says Expedite in text.
+    expect(card?.parentElement?.classList).toContain('bg-amber-tint');
+    expect(card?.classList).not.toContain('bg-rework-tint');
     expect(within(card as HTMLElement).getByText('Expedite')).toBeTruthy();
 
     // A standard card in the same station has neither the tint nor the label.
     const standard = within(investigate).getByRole('link', { name: STANDARD }).closest('article');
-    expect(standard?.classList).not.toContain('bg-rework-tint');
+    expect(standard?.parentElement?.classList).not.toContain('bg-amber-tint');
     expect(within(standard as HTMLElement).queryByText('Expedite')).toBeNull();
   });
 
@@ -163,23 +164,22 @@ describe('BoardPage', () => {
     expect(within(buildPanel).queryByRole('link', { name: STANDARD })).toBeNull();
   });
 
-  it('heads the line with the expedite count in use', async () => {
+  it('heads the columns with the expedite lane and its count in use', async () => {
     renderBoardPage({ page: BoardPage, org, factory, board: board() });
 
-    const line = await screen.findByRole('region', { name: 'The line' });
-    expect(within(line).getByText('WIP 2 of 3')).toBeTruthy();
-    expect(within(line).getByText('Expedite 1 of 1 in use')).toBeTruthy();
-    // The phone's status line is the line, WIP and touches only, so the count appears once.
-    expect(screen.getAllByText('Expedite 1 of 1 in use')).toHaveLength(1);
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    // The chip, and the card's own Expedite label.
+    expect(within(columns).getAllByText('Expedite')).toHaveLength(2);
+    expect(within(columns).getByText('1 of 1 in use, jumps every queue')).toBeTruthy();
   });
 
-  it('leaves the expedite count out when the line has no lane and no expedite item', async () => {
+  it('leaves the expedite lane out when the line has no lane and no expedite item', async () => {
     const plain = board({ expedite: null }, [standardItem]);
     renderBoardPage({ page: BoardPage, org, factory, board: plain });
 
-    const line = await screen.findByRole('region', { name: 'The line' });
-    expect(within(line).getByText('WIP 2 of 3')).toBeTruthy();
-    expect(screen.queryByText(/^Expedite/)).toBeNull();
+    await screen.findByRole('region', { name: 'Stations' });
+    expect(screen.queryByText(/jumps every queue/)).toBeNull();
+    expect(screen.queryByText('Expedite')).toBeNull();
   });
 
   it('a queue column has no header, and the agent, human and done columns keep theirs', async () => {
@@ -189,7 +189,10 @@ describe('BoardPage', () => {
 
     const columns = await screen.findByRole('region', { name: 'Stations' });
     const queue = within(columns).getByRole('region', { name: 'Intake' });
-    expect(within(queue).queryByRole('heading', { level: 2 })).toBeNull();
+    // Intake has its count, "No limit" and its oldest wait, and no WIP meter: it is no station with slots.
+    expect(within(queue).getByRole('heading', { level: 2, name: 'Intake' })).toBeTruthy();
+    expect(within(queue).getByText('No limit')).toBeTruthy();
+    expect(within(queue).queryByRole('img', { name: /in progress/ })).toBeNull();
     expect(within(queue).getByRole('link', { name: STANDARD })).toBeTruthy();
 
     expect(within(columns).getByRole('heading', { name: 'Investigate' })).toBeTruthy();
@@ -421,6 +424,10 @@ describe('board filters and grouping', () => {
       .queryAllByRole('article')
       .map((card) => within(within(card).getByRole('heading', { level: 3 })).getByRole('link').textContent);
 
+  /** The shown cards are the expected ones, whatever station each sits in. */
+  const expectShown = (titles: string[], region?: HTMLElement) =>
+    expect([...shownTitles(region)].sort()).toEqual([...titles].sort());
+
   /** A filter's chosen value: the option's value, '' for Any. */
   const choice = (name: string) => (screen.getByRole('combobox', { name }) as HTMLSelectElement).value;
 
@@ -429,7 +436,7 @@ describe('board filters and grouping', () => {
     await screen.findByRole('region', { name: 'Stations' });
     const filter = async (name: string, value: string, titles: string[]) => {
       fireEvent.change(screen.getByRole('combobox', { name }), { target: { value } });
-      await waitFor(() => expect(shownTitles()).toEqual(titles));
+      await waitFor(() => expectShown(titles));
     };
     await filter('Assembly', ASM1, [ADD, WIRE]);
     expect(screen.queryByRole('link', { name: DRAFT })).toBeNull();
@@ -442,21 +449,18 @@ describe('board filters and grouping', () => {
     await filter('Status', 'same-files', []);
   });
 
-  it('keeps the lane and its header, and says nothing to do where the filter leaves no card', async () => {
+  it('says Empty in a column the filter leaves no card in, and keeps the column', async () => {
     renderBoardPage({ page: BoardPage, org, factory, board: filterBoard() });
     await screen.findByRole('region', { name: 'Stations' });
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Agent role' }), { target: { value: 'Triager' } });
-    await waitFor(() =>
-      expect(within(screen.getByRole('region', { name: 'Investigator' })).queryAllByRole('link')).toHaveLength(0),
-    );
-    const investigator = screen.getByRole('region', { name: 'Investigator' });
-    expect(within(investigator).getByRole('heading', { name: 'Investigator' })).toBeTruthy();
-    expect(within(investigator).getByText('Nothing to do')).toBeTruthy();
-    expect(shownTitles(screen.getByRole('region', { name: 'Triager' }))).toEqual([ROTATE]);
+    await waitFor(() => expectShown([ROTATE]));
+    const build = within(screen.getByRole('region', { name: 'Stations' })).getByRole('region', { name: 'Build' });
+    expect(within(build).getByRole('heading', { name: 'Build' })).toBeTruthy();
+    expect(within(build).getByText('Empty')).toBeTruthy();
   });
 
-  it('orders a lane’s cards by assembly when grouped, and keeps the order of the board otherwise', async () => {
+  it('orders a station’s cards by assembly when grouped, and keeps the order of the board otherwise', async () => {
     const grouped = renderBoardPage({
       page: BoardPage,
       org,
@@ -464,13 +468,14 @@ describe('board filters and grouping', () => {
       board: filterBoard(),
       search: { group: 'assembly' },
     });
-    const lane = await screen.findByRole('region', { name: 'Investigator' });
-    expect(shownTitles(lane)).toEqual([ADD, DRAFT, WIRE, TRIAGE]);
+    const investigate = await screen.findByRole('region', { name: 'Investigate' });
+    // Each assembly's parts together in part order, the assemblies by their first part, then the loose cards.
+    expect(shownTitles(investigate)).toEqual([DRAFT, ADD, WIRE, TRIAGE, ROTATE]);
     grouped.unmount();
 
     renderBoardPage({ page: BoardPage, org, factory, board: filterBoard() });
-    const ungrouped = await screen.findByRole('region', { name: 'Investigator' });
-    expect(shownTitles(ungrouped)).toEqual([ADD, DRAFT, TRIAGE, WIRE]);
+    const ungrouped = await screen.findByRole('region', { name: 'Investigate' });
+    expect(shownTitles(ungrouped)).toEqual([DRAFT, TRIAGE, WIRE, ADD, ROTATE]);
   });
 
   it('shows the view its search params name, and writes each change back to the URL', async () => {
@@ -484,7 +489,7 @@ describe('board filters and grouping', () => {
     await screen.findByRole('region', { name: 'Stations' });
     const search = () => router.state.location.search as Record<string, unknown>;
     expect(choice('Assembly')).toBe(ASM1);
-    expect(shownTitles()).toEqual([ADD, WIRE]);
+    expectShown([ADD, WIRE]);
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), { target: { value: 'waiting' } });
     await waitFor(() => expect(search().status).toBe('waiting'));
@@ -504,14 +509,17 @@ describe('board filters and grouping', () => {
       org,
       factory,
       board: filterBoard(),
-      search: { assembly: 'item-gone', role: 'Infra engineer', status: 'blocked', group: 'lane' },
+      search: { assembly: 'item-gone', role: 'Infra engineer', status: 'blocked', group: 'lane', type: 'nope' },
     });
     await screen.findByRole('region', { name: 'Stations' });
     expect(choice('Assembly')).toBe('');
     expect(choice('Agent role')).toBe('');
     expect(choice('Status')).toBe('');
+    expect(choice('Work type')).toBe('');
+    expect(choice('Lane')).toBe('');
+    expect(screen.getByRole('searchbox', { name: 'Search items' })).toHaveProperty('value', '');
     expect(screen.getByRole('radio', { name: 'None' })).toHaveProperty('checked', true);
-    expect(shownTitles()).toEqual([ADD, DRAFT, TRIAGE, WIRE, ROTATE, SHIP]);
+    expectShown([ADD, DRAFT, TRIAGE, WIRE, ROTATE, SHIP]);
   });
 
   /** An open assembly on the board: "PWA" (sre#50), 3 of its 5 parts merged; its own card is in no station. */
@@ -524,11 +532,7 @@ describe('board filters and grouping', () => {
   });
   const pwaPartOf = (n: number) => ({ id: 'item-50', ref: 'sre#50', title: 'PWA', part: n, parts: 5 });
 
-  /** Whether `later` comes after `earlier` in the document. */
-  const follows = (earlier: Element, later: Element) =>
-    (earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
-
-  it('shows an open assembly as a header over its grouped parts, and in no station column', async () => {
+  it('shows an open assembly on no station column, and each part’s card with its line and one pip per part', async () => {
     const parts = [
       item({
         id: 'item-51',
@@ -551,20 +555,17 @@ describe('board filters and grouping', () => {
     renderBoardPage({ page: BoardPage, org, factory, board, search: { group: 'assembly' } });
     const columns = await screen.findByRole('region', { name: 'Stations' });
 
-    // The working card and the waiting row sit in different runs, so each has its own header.
-    const headers = within(columns).getAllByRole('link', { name: /3 of 5 merged/ });
-    expect(headers).toHaveLength(2);
-    for (const header of headers) {
-      expect(header.textContent).toBe('PWA· 3 of 5 merged');
-      expect(header.getAttribute('href')).toBe('/o/acme/f/sre/items/50');
-    }
-    expect(shownTitles(columns)).toEqual([ADD, WIRE]);
-    expect(within(columns).queryAllByRole('link', { name: /^Part \d+ of 5 of PWA$/ })).toHaveLength(0);
-    // Each header comes before the run it heads: the working card, then the waiting row.
+    // The assembly is no card and no header: its parts are the cards, in part order.
+    expect(within(columns).queryAllByRole('link', { name: /merged/ })).toHaveLength(0);
+    expectShown([ADD, WIRE]);
     const [addCard, wireCard] = within(columns).getAllByRole('article');
-    const [workingHeader, waitingHeader] = headers;
-    expect(workingHeader && addCard && follows(workingHeader, addCard)).toBe(true);
-    expect(waitingHeader && wireCard && follows(waitingHeader, wireCard)).toBe(true);
+    expect(within(addCard as HTMLElement).getByRole('link', { name: 'Part 4 of 5 of PWA' })).toBeTruthy();
+    expect(within(wireCard as HTMLElement).getByRole('link', { name: 'Part 5 of 5 of PWA' })).toBeTruthy();
+    // Three of the five parts are merged: three filled pips on each part's card.
+    for (const card of [addCard, wireCard] as HTMLElement[]) {
+      expect(card.querySelectorAll('i.bg-ok')).toHaveLength(3);
+      expect(card.querySelectorAll('i.bg-ok-tint')).toHaveLength(2);
+    }
   });
 
   it('shows a done assembly as a normal card in the Done column', async () => {
