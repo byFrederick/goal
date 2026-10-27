@@ -112,22 +112,29 @@ export function toFile(trigger: Trigger): Trigger {
 export function writeTrigger(text: string, trigger: Trigger): string {
   const doc = parseDocument(text);
   if (doc.errors.length > 0) throw new Error('factory.yaml does not parse');
-  const seq = triggerSeq(doc);
-  if (!seq) throw new Error('spec.board.triggers is not a list');
+  const raw = doc.getIn(['spec', 'board', 'triggers'], true);
+  // No triggers key, or an empty one (`triggers:` with nothing, or `[]`), is a list with no entries yet.
+  const empty = raw === undefined || (isScalar(raw) && raw.value === null);
+  if (!empty && !isSeq(raw)) throw new Error('spec.board.triggers is not a list');
+  const seq = isSeq(raw) ? raw : undefined;
   const next = toFile(trigger);
-  const node = triggerNode(doc, trigger.name);
   const edits: Splice[] = [];
-  if (!node) {
-    edits.push(addEntry(text, seq, next));
+  if (!seq || seq.items.length === 0) {
+    edits.push(addFirstEntry(text, doc, next));
   } else {
-    const current = node.toJSON() as Trigger;
-    for (const key of keys) {
-      if (key === 'name') continue;
-      const value = next[key];
-      if (JSON.stringify(value) === JSON.stringify(current[key])) continue;
-      const pair = node.items.find((p) => isScalar(p.key) && p.key.value === key);
-      if (pair) edits.push(replacePair(text, pair, key, value));
-      else if (value !== undefined) edits.push(addPair(text, node, key, value));
+    const node = triggerNode(doc, trigger.name);
+    if (!node) {
+      edits.push(addEntry(text, seq, next));
+    } else {
+      const current = node.toJSON() as Trigger;
+      for (const key of keys) {
+        if (key === 'name') continue;
+        const value = next[key];
+        if (JSON.stringify(value) === JSON.stringify(current[key])) continue;
+        const pair = node.items.find((p) => isScalar(p.key) && p.key.value === key);
+        if (pair) edits.push(replacePair(text, pair, key, value));
+        else if (value !== undefined) edits.push(addPair(text, node, key, value));
+      }
     }
   }
   // Applied from the end of the text back, so each splice's offsets still hold.
@@ -157,6 +164,12 @@ const lineEnd = (text: string, offset: number) => {
   return i === -1 ? text.length : i + 1;
 };
 const columnOf = (text: string, offset: number) => offset - lineStart(text, offset);
+/** The offset just past the last non-blank character before `offset`: a node's range can run into the blank lines after it. */
+const contentEnd = (text: string, offset: number) => {
+  let e = offset;
+  while (e > 0 && /\s/.test(text[e - 1] ?? '')) e--;
+  return e;
+};
 
 /** Replaces one key's whole pair (key, colon and value) with the new value, on the same line. */
 function replacePair(text: string, pair: YAMLMap['items'][number], key: string, value: unknown): Splice {
@@ -180,20 +193,69 @@ function addPair(text: string, node: YAMLMap, key: string, value: unknown): Spli
   return { from: at, to: at, text: insert };
 }
 
-/** Adds a new trigger after the last list item, as a block entry in the same column as the others. */
-function addEntry(text: string, seq: YAMLSeq, trigger: Trigger): Splice {
-  const entry = seq.items.at(-1);
-  if (!isMap(entry) || !entry.range) throw new Error('spec.board.triggers has no entry to follow');
+/** A trigger as one block-style list entry whose dash sits at `dashPad`, its maps as flow maps. */
+function entryText(trigger: Trigger, dashPad: string): string {
   const doc = new Document(trigger);
   if (isMap(doc.contents)) {
     for (const pair of doc.contents.items) if (isMap(pair.value) || isSeq(pair.value)) pair.value.flow = true;
   }
-  const pad = ' '.repeat(columnOf(text, entry.range[0]) - 2);
   const lines = doc.toString({ lineWidth: 0 }).trimEnd().split('\n');
-  const block = [`${pad}- ${lines[0]}`, ...lines.slice(1).map((l) => `${pad}  ${l}`)].join('\n');
+  return [`${dashPad}- ${lines[0]}`, ...lines.slice(1).map((l) => `${dashPad}  ${l}`)].join('\n');
+}
+
+/** Adds a new trigger after the last list item, as a block entry in the same column as the others. */
+function addEntry(text: string, seq: YAMLSeq, trigger: Trigger): Splice {
+  const entry = seq.items.at(-1);
+  if (!isMap(entry) || !entry.range) throw new Error('spec.board.triggers has no entry to follow');
+  const block = entryText(trigger, ' '.repeat(columnOf(text, entry.range[0]) - 2));
   const at = lastLineEnd(text, seq);
   const lead = at === text.length && !text.endsWith('\n') ? '\n' : '';
   return { from: at, to: at, text: `${lead}${block}\n` };
+}
+
+/**
+ * Writes the first trigger: `triggers:` under spec.board, where it is missing or empty, and `board:`
+ * under spec when the board is missing too. The key takes the column of its siblings, so the file's
+ * indentation holds.
+ */
+function addFirstEntry(text: string, doc: Document, trigger: Trigger): Splice {
+  const spec = doc.get('spec', true);
+  if (!isMap(spec)) throw new Error('factory.yaml has no spec');
+  const board = spec.get('board', true);
+  if (board !== undefined && !isMap(board)) throw new Error('spec.board is not a map');
+  if (isMap(board)) {
+    const pair = board.items.find((p) => isScalar(p.key) && p.key.value === 'triggers');
+    if (pair) {
+      // Replace the empty `triggers` pair's lines with the list.
+      const keyStart = (pair.key as { range: [number, number, number] }).range[0];
+      const valueEnd = (pair.value as { range?: [number, number, number] } | null)?.range?.[1];
+      const to = lineEnd(text, contentEnd(text, valueEnd ?? keyStart));
+      const column = ' '.repeat(columnOf(text, keyStart));
+      const block = `${column}triggers:\n${entryText(trigger, `${column}  `)}\n`;
+      return { from: lineStart(text, keyStart), to, text: block };
+    }
+    const first = board.items[0];
+    if (!first) throw new Error('spec.board is empty');
+    const column = ' '.repeat(columnOf(text, (first.key as { range: [number, number, number] }).range[0]));
+    return insertAfter(text, board, `${column}triggers:\n${entryText(trigger, `${column}  `)}`);
+  }
+  const first = spec.items[0];
+  if (!first) throw new Error('factory.yaml has an empty spec');
+  const column = ' '.repeat(columnOf(text, (first.key as { range: [number, number, number] }).range[0]));
+  const lines = `${column}board:\n${column}  triggers:\n${entryText(trigger, `${column}    `)}`;
+  return insertAfter(text, spec, lines);
+}
+
+/** Inserts `lines` after the last line of `map`, as its own lines, and ends the text with a newline. */
+function insertAfter(text: string, map: YAMLMap, lines: string): Splice {
+  let end = 0;
+  for (const pair of map.items) {
+    const v = (pair.value as { range?: [number, number, number] } | null)?.range;
+    if (v) end = Math.max(end, v[1]);
+  }
+  const at = lineEnd(text, contentEnd(text, end));
+  const lead = at === text.length && !text.endsWith('\n') ? '\n' : '';
+  return { from: at, to: at, text: `${lead}${lines}\n` };
 }
 
 /** The offset just past the last line of the list's last entry. */
@@ -204,7 +266,7 @@ function lastLineEnd(text: string, seq: YAMLSeq): number {
     const v = (pair.value as { range?: [number, number, number] } | null)?.range;
     if (v) end = Math.max(end, v[1]);
   }
-  return lineEnd(text, end);
+  return lineEnd(text, contentEnd(text, end));
 }
 
 /** The trigger as YAML the way the page shows it: a list entry whose maps are flow maps, as the picture has them. */

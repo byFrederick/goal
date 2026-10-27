@@ -308,12 +308,14 @@ through `intakeTriggerQuery` (`GET …/intake/triggers/{trigger}`) and the defin
 Save changes writes `spec.board.triggers[name]` and nothing else. `trigger-save.ts` runs the draft files
 API in order: open the draft, read `factory.yaml` for its sha256, put the file back with `If-Match`,
 validate the draft, publish it. `trigger-yaml.ts` splices only the keys that changed into the text, so
-every other line and comment stays byte for byte. The draft-model API cannot carry `board.triggers`
+every other line and comment stays byte for byte. A file with no `triggers` key, or an empty one, gets its first
+trigger written in place (and `board` under `spec` when that is missing too). The draft-model API cannot carry `board.triggers`
 yet (`internal/factorymodel/model.go`), which is why the page does not use it.
 
 Rules the page follows:
 - A draft with edits of its own blocks the save, with a link to the definition editor: the page never
-  publishes someone else's draft.
+  publishes someone else's draft. An invalid save leaves this page's own write in the draft, so that write does not
+  block the fix; the page clears the mark once a save publishes or a 412 moves the draft.
 - A 412 draft conflict keeps the typed edits and reloads the draft; the user saves again.
 - Validation problems from `validateDraft` are placed by their line: a problem inside a trigger's key
   shows under that block, any other problem above the form. Save stays off while an error stands.

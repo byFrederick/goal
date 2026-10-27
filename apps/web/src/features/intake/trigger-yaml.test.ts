@@ -115,6 +115,55 @@ describe('writing a trigger', () => {
     expect(next.startsWith(file)).toBe(true);
   });
 
+  it('adds the first trigger under a board that has no triggers key, keeping the lines around it', () => {
+    const bare = `# Software: no triggers yet.
+apiVersion: goal/v1
+kind: Factory
+spec:
+  board:
+    workTypes: [feature, fix]
+    stations:
+      - { id: build, kind: agent }
+  intake: {}
+`;
+    const next = writeTrigger(bare, {
+      name: 'lint',
+      on: 'github.check_run.failed',
+      create: { type: 'fix', station: 'build' },
+    });
+    expect(readTriggers(next).map((t) => t.name)).toEqual(['lint']);
+    expect(next.startsWith(bare.slice(0, bare.indexOf('  intake:')))).toBe(true);
+    expect(next).toContain('    triggers:\n      - name: lint\n');
+    expect(next.endsWith('  intake: {}\n')).toBe(true);
+  });
+
+  it('writes the first trigger into an empty triggers list in place of the empty value', () => {
+    const empty = file.replace(/ {4}triggers:\n[\s\S]*$/, '    triggers: []\n');
+    const next = writeTrigger(empty, {
+      name: 'lint',
+      on: 'github.check_run.failed',
+      create: { type: 'fix', station: 'build' },
+    });
+    expect(readTriggers(next).map((t) => t.name)).toEqual(['lint']);
+    expect(next.startsWith(empty.slice(0, empty.indexOf('    triggers:')))).toBe(true);
+    expect(next).not.toContain('triggers: []');
+  });
+
+  it('adds the board when the spec has none', () => {
+    const noBoard = `apiVersion: goal/v1
+kind: Factory
+spec:
+  intake: {}
+`;
+    const next = writeTrigger(noBoard, {
+      name: 'lint',
+      on: 'github.check_run.failed',
+      create: { type: 'fix', station: 'build' },
+    });
+    expect(readTriggers(next).map((t) => t.name)).toEqual(['lint']);
+    expect(next.startsWith('apiVersion: goal/v1\nkind: Factory\nspec:\n  intake: {}\n')).toBe(true);
+  });
+
   it('refuses a file that does not parse', () => {
     expect(() => writeTrigger('spec: [', flaky)).toThrow();
   });

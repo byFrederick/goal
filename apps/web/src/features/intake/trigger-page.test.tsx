@@ -3,12 +3,13 @@
 // the save (its calls in order, then a clean form), the problems placed under their fields, and a
 // new trigger from the New trigger picker. The API boundary is mocked; the routes and the shell are not.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../api/client';
 import * as definitions from '../../api/definitions';
 import * as intake from '../../api/intake';
+import { defKeys } from '../../api/queries';
 import type { DefinitionProblem, Factory, IntakeTriggerDetail, Problem } from '../../api/types';
 import { TooltipProvider } from '../../ui/tooltip';
 import { TriggerPage } from './trigger-page';
@@ -181,13 +182,14 @@ afterEach(() => {
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <TooltipProvider>
         <TriggerPage />
       </TooltipProvider>
     </QueryClientProvider>,
   );
+  return { ...view, client };
 }
 
 const saveButton = () => screen.getByRole('button', { name: 'Save changes' });
@@ -377,6 +379,43 @@ describe('saving', () => {
     expect(within(limits).getByRole('alert').textContent).toBe('perDay must be at least 1');
     expect(mocked.publishDraft).not.toHaveBeenCalled();
     expect(saveButton().hasAttribute('disabled')).toBe(true);
+  });
+
+  it("lets the fix save after an invalid save, even once the draft shows the page's own write", async () => {
+    const problem: DefinitionProblem = {
+      code: 'minimum',
+      severity: 'error',
+      check: 'schema',
+      section: 'line',
+      file: 'factory.yaml',
+      line: keyLines(file, 'flaky-test-on-main').limits?.from ?? 0,
+      column: 1,
+      end_line: 1,
+      end_column: 1,
+      message: 'perDay must be at least 1',
+      fixes: [],
+    };
+    // The draft is open, and it holds this page's write once the first save has put the file.
+    mocked.getFactory.mockResolvedValue({ ...factory, draft: { id: 'draft-1', revision: 1 } } as unknown as Factory);
+    mocked.getDraft.mockImplementation(
+      async () => ({ id: 'draft-1', revision: 1, change_count: mocked.putDraftFile.mock.calls.length }) as never,
+    );
+    mocked.validateDraft.mockResolvedValueOnce(ok({ ok: false, problems: [problem] }) as never);
+    const { client } = renderPage();
+    await screen.findByRole('heading', { level: 1 });
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Items a day' }), { target: { value: '4' } });
+    fireEvent.click(saveButton());
+    expect(await screen.findByText('perDay must be at least 1')).toBeTruthy();
+
+    // The stream refreshes the draft, so the page reads that it now has a change: the page's own write.
+    await act(() => client.invalidateQueries({ queryKey: defKeys.draft('org-1', 'factory-1') }));
+    await waitFor(() => expect(mocked.getDraft.mock.results.length).toBeGreaterThan(1));
+    expect(screen.queryByText(/has an open draft with edits/)).toBeNull();
+
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Items a day' }), { target: { value: '5' } });
+    fireEvent.click(saveButton());
+    expect(await screen.findByText("Saved. Software's definition is version 3 now.")).toBeTruthy();
+    expect(mocked.publishDraft).toHaveBeenCalledTimes(1);
   });
 
   it('shows a problem outside every field above the form', async () => {

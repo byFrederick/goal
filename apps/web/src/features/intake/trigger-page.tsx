@@ -169,10 +169,13 @@ function TriggerEditor({ org, factory, text, saved, blank, board, detail }: Edit
   const [lines, setLines] = useState<KeyLines>({});
   const [notice, setNotice] = useState<{ tone: 'ok' | 'rework'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  // An invalid save leaves this page's own write in the draft. That write is not someone else's edit, so
+  // it must not block the fix the problems ask for; it is cleared when the draft is published or moved.
+  const [draftIsOurs, setDraftIsOurs] = useState(false);
   const title = titleOf(value.name);
   const draft = useQuery({ ...draftQuery(org.id, factory.id), enabled: factory.draft !== null });
   // A draft with edits of its own (not this page's) blocks the save: publishing it here would publish them too.
-  const blocked = factory.draft !== null && (draft.data?.change_count ?? 0) > 0;
+  const blocked = factory.draft !== null && (draft.data?.change_count ?? 0) > 0 && !draftIsOurs;
   const hasErrors = problems.some((p) => p.severity === 'error');
   const valid = value.on !== '' && value.create.type !== '' && value.create.station !== '';
   const failed = notice?.tone === 'rework';
@@ -201,8 +204,10 @@ function TriggerEditor({ org, factory, text, saved, blank, board, detail }: Edit
       if (outcome.kind === 'invalid') {
         setProblems(outcome.problems);
         setLines(keyLines(outcome.text, value.name));
+        setDraftIsOurs(true);
         return;
       }
+      setDraftIsOurs(false);
       edits.reset();
       setNotice({
         tone: 'ok',
@@ -217,6 +222,7 @@ function TriggerEditor({ org, factory, text, saved, blank, board, detail }: Edit
     } catch (error) {
       if (error instanceof ApiError && error.status === 412) {
         // Someone else saved the draft: reload what it says now and keep the typed edits.
+        setDraftIsOurs(false);
         await queryClient.invalidateQueries({ queryKey: defKeys.draft(org.id, factory.id) });
         setNotice({
           tone: 'rework',
