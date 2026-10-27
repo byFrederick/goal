@@ -498,6 +498,117 @@ func (e DefinitionProblemSeverity) Valid() bool {
 	}
 }
 
+// Defines values for EvalCheckedByKind.
+const (
+	EvalCheckedByKindContract       EvalCheckedByKind = "contract"
+	EvalCheckedByKindJudge          EvalCheckedByKind = "judge"
+	EvalCheckedByKindReferencePatch EvalCheckedByKind = "reference_patch"
+)
+
+// Valid indicates whether the value is a known member of the EvalCheckedByKind enum.
+func (e EvalCheckedByKind) Valid() bool {
+	switch e {
+	case EvalCheckedByKindContract:
+		return true
+	case EvalCheckedByKindJudge:
+		return true
+	case EvalCheckedByKindReferencePatch:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EvalResultState.
+const (
+	EvalResultStateError   EvalResultState = "error"
+	EvalResultStateFail    EvalResultState = "fail"
+	EvalResultStatePass    EvalResultState = "pass"
+	EvalResultStatePending EvalResultState = "pending"
+	EvalResultStateRunning EvalResultState = "running"
+)
+
+// Valid indicates whether the value is a known member of the EvalResultState enum.
+func (e EvalResultState) Valid() bool {
+	switch e {
+	case EvalResultStateError:
+		return true
+	case EvalResultStateFail:
+		return true
+	case EvalResultStatePass:
+		return true
+	case EvalResultStatePending:
+		return true
+	case EvalResultStateRunning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EvalRunState.
+const (
+	EvalRunStateCancelled EvalRunState = "cancelled"
+	EvalRunStateDone      EvalRunState = "done"
+	EvalRunStateFailed    EvalRunState = "failed"
+	EvalRunStateQueued    EvalRunState = "queued"
+	EvalRunStateRunning   EvalRunState = "running"
+)
+
+// Valid indicates whether the value is a known member of the EvalRunState enum.
+func (e EvalRunState) Valid() bool {
+	switch e {
+	case EvalRunStateCancelled:
+		return true
+	case EvalRunStateDone:
+		return true
+	case EvalRunStateFailed:
+		return true
+	case EvalRunStateQueued:
+		return true
+	case EvalRunStateRunning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EvalRunTrigger.
+const (
+	EvalRunTriggerManual  EvalRunTrigger = "manual"
+	EvalRunTriggerPublish EvalRunTrigger = "publish"
+)
+
+// Valid indicates whether the value is a known member of the EvalRunTrigger enum.
+func (e EvalRunTrigger) Valid() bool {
+	switch e {
+	case EvalRunTriggerManual:
+		return true
+	case EvalRunTriggerPublish:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EvalRunRequestOn.
+const (
+	EvalRunRequestOnCurrent EvalRunRequestOn = "current"
+	EvalRunRequestOnDraft   EvalRunRequestOn = "draft"
+)
+
+// Valid indicates whether the value is a known member of the EvalRunRequestOn enum.
+func (e EvalRunRequestOn) Valid() bool {
+	switch e {
+	case EvalRunRequestOnCurrent:
+		return true
+	case EvalRunRequestOnDraft:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for FactoryHealth.
 const (
 	FactoryHealthDraft   FactoryHealth = "draft"
@@ -2354,6 +2465,187 @@ type DraftTree struct {
 	Files FileMap `json:"files"`
 }
 
+// EvalCaseEntry defines model for EvalCaseEntry.
+type EvalCaseEntry struct {
+	Agent     string        `json:"agent"`
+	CheckedBy EvalCheckedBy `json:"checked_by"`
+
+	// CostUsd What its tries cost in the latest run that ran it; absent when none did
+	CostUsd     *float64 `json:"cost_usd,omitempty"`
+	Description string   `json:"description"`
+
+	// LastTries Its last finished tries, newest first, at most 3
+	LastTries []EvalHistoryTry `json:"last_tries"`
+
+	// Name The case's file name under evals/cases/
+	Name string `json:"name"`
+
+	// Tries How many tries a run gives it
+	Tries *int `json:"tries,omitempty"`
+}
+
+// EvalCaseFromRun defines model for EvalCaseFromRun.
+type EvalCaseFromRun struct {
+	// Description What the agent must get right; the item's title when absent
+	Description *string `json:"description,omitempty"`
+
+	// ExpectedCurrentVersionId The version the caller saw running; the current one when absent
+	ExpectedCurrentVersionId *string `json:"expected_current_version_id,omitempty"`
+
+	// Judge A judge of the current version checks it; absent
+	Judge *string `json:"judge,omitempty"`
+
+	// Name The case's name, its file name: 3 to 40 lowercase letters, digits and hyphens
+	Name string `json:"name"`
+
+	// Run The past agent run whose agent and item the case replays
+	Run   string `json:"run"`
+	Tries *int   `json:"tries,omitempty"`
+}
+
+// EvalCheckedBy defines model for EvalCheckedBy.
+type EvalCheckedBy struct {
+	// Judge judge only
+	Judge *string           `json:"judge,omitempty"`
+	Kind  EvalCheckedByKind `json:"kind"`
+
+	// Path reference_patch only
+	Path *string `json:"path,omitempty"`
+
+	// Title judge only
+	Title *string `json:"title,omitempty"`
+}
+
+// EvalCheckedByKind defines model for EvalCheckedBy.Kind.
+type EvalCheckedByKind string
+
+// EvalEstimate defines model for EvalEstimate.
+type EvalEstimate struct {
+	// Unpriced The cases with no tries and whose agent has no finished run to price them by
+	Unpriced []string `json:"unpriced"`
+
+	// Usd About what the priced cases' tries cost
+	Usd float64 `json:"usd"`
+}
+
+// EvalHistoryTry defines model for EvalHistoryTry.
+type EvalHistoryTry struct {
+	CostUsd   float64 `json:"cost_usd"`
+	EvalRunId string  `json:"eval_run_id"`
+
+	// RunId The agent run of the try
+	RunId *string `json:"run_id,omitempty"`
+
+	// State pass, fail and error are finished; a try that failed for an infrastructure reason is error, never fail
+	State EvalResultState `json:"state"`
+	Try   int             `json:"try"`
+}
+
+// EvalList defines model for EvalList.
+type EvalList struct {
+	Cases   []EvalCaseEntry `json:"cases"`
+	Summary EvalSummary     `json:"summary"`
+}
+
+// EvalResult defines model for EvalResult.
+type EvalResult struct {
+	Case string `json:"case"`
+
+	// CheckedBy contract, judge:<slug> or reference-patch:<path>, once checked
+	CheckedBy *string `json:"checked_by,omitempty"`
+	CostUsd   float64 `json:"cost_usd"`
+
+	// Detail What the check found (a reason, a contract problem, the judge's outcome and score, missing files)
+	Detail *map[string]interface{} `json:"detail,omitempty"`
+	RunId  *string                 `json:"run_id,omitempty"`
+
+	// State pass, fail and error are finished; a try that failed for an infrastructure reason is error, never fail
+	State EvalResultState `json:"state"`
+	Try   int             `json:"try"`
+	Turns int             `json:"turns"`
+}
+
+// EvalResultState pass, fail and error are finished; a try that failed for an infrastructure reason is error, never fail
+type EvalResultState string
+
+// EvalRun defines model for EvalRun.
+type EvalRun struct {
+	// Case The one case it was asked for; absent when it runs every case
+	Case *string `json:"case,omitempty"`
+
+	// ContentSha256 The hash of the content it runs
+	ContentSha256 string `json:"content_sha256"`
+
+	// CostUsd What its recorded tries cost
+	CostUsd     float64    `json:"cost_usd"`
+	CreatedAt   time.Time  `json:"created_at"`
+	EstimateUsd float64    `json:"estimate_usd"`
+	FinishedAt  *time.Time `json:"finished_at,omitempty"`
+	Id          string     `json:"id"`
+
+	// Results By case, then try
+	Results []EvalResult   `json:"results"`
+	State   EvalRunState   `json:"state"`
+	Trigger EvalRunTrigger `json:"trigger"`
+
+	// Version The published version it runs; absent for a draft's content
+	Version *int `json:"version,omitempty"`
+}
+
+// EvalRunState defines model for EvalRun.State.
+type EvalRunState string
+
+// EvalRunTrigger defines model for EvalRun.Trigger.
+type EvalRunTrigger string
+
+// EvalRunRequest defines model for EvalRunRequest.
+type EvalRunRequest struct {
+	// Case The one case to run; absent runs every case
+	Case *string `json:"case,omitempty"`
+
+	// On The content to run the cases of, the current version's or the open draft's
+	On *EvalRunRequestOn `json:"on,omitempty"`
+}
+
+// EvalRunRequestOn The content to run the cases of, the current version's or the open draft's
+type EvalRunRequestOn string
+
+// EvalRunStarted defines model for EvalRunStarted.
+type EvalRunStarted struct {
+	Estimate EvalEstimate `json:"estimate"`
+	Run      EvalRun      `json:"run"`
+}
+
+// EvalSummary defines model for EvalSummary.
+type EvalSummary struct {
+	// Cases How many cases the current version has
+	Cases int `json:"cases"`
+
+	// CasesPassing The cases whose last tries all passed (a case with no try does not pass)
+	CasesPassing int `json:"cases_passing"`
+
+	// FirstTryPassRate tries_passed of tries, 0 to 1; absent while no case has a try
+	FirstTryPassRate *float64 `json:"first_try_pass_rate,omitempty"`
+
+	// LatestRunAt When that run finished, or started while it runs
+	LatestRunAt *time.Time `json:"latest_run_at,omitempty"`
+
+	// LatestRunId The newest eval run of the current version's content
+	LatestRunId *string `json:"latest_run_id,omitempty"`
+
+	// LatestTriesPerCase The most tries that run gave a case
+	LatestTriesPerCase *int `json:"latest_tries_per_case,omitempty"`
+
+	// Tries The last tries of every case
+	Tries int `json:"tries"`
+
+	// TriesPassed Of those
+	TriesPassed int `json:"tries_passed"`
+
+	// Version The current version's number; absent for a factory never published
+	Version *int `json:"version,omitempty"`
+}
+
 // Event defines model for Event.
 type Event struct {
 	Actor   string                 `json:"actor"`
@@ -3807,12 +4099,18 @@ type PlatformAdminList struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415).
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open.
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 
 	// Etag draft-conflict on a section save only, the section's etag now (resend with it to overwrite)
 	Etag *string `json:"etag,omitempty"`
+
+	// EvalRunId evals-pending and evals-failing only, the eval run of the draft's content the publish waits on or that failed
+	EvalRunId *string `json:"eval_run_id,omitempty"`
+
+	// FailingCases evals-failing only, the cases of that run with a try that did not pass
+	FailingCases *[]string `json:"failing_cases,omitempty"`
 
 	// Items The open items that keep a publish or restore from dropping stations
 	Items *ItemsAtRemovedStations `json:"items,omitempty"`
@@ -4583,6 +4881,9 @@ type CredentialRef = string
 // DocumentRef defines model for DocumentRef.
 type DocumentRef = string
 
+// EvalRunRef defines model for EvalRunRef.
+type EvalRunRef = string
+
 // FactoryRef defines model for FactoryRef.
 type FactoryRef = string
 
@@ -4991,6 +5292,15 @@ type ReplaceDraftTreeJSONRequestBody = DraftTree
 
 // ValidateDraftJSONRequestBody defines body for ValidateDraft for application/json ContentType.
 type ValidateDraftJSONRequestBody = ValidateDraftRequest
+
+// AddEvalCaseJSONRequestBody defines body for AddEvalCase for application/json ContentType.
+type AddEvalCaseJSONRequestBody = EvalCaseFromRun
+
+// EstimateEvalRunJSONRequestBody defines body for EstimateEvalRun for application/json ContentType.
+type EstimateEvalRunJSONRequestBody = EvalRunRequest
+
+// StartEvalRunJSONRequestBody defines body for StartEvalRun for application/json ContentType.
+type StartEvalRunJSONRequestBody = EvalRunRequest
 
 // SubmitItemJSONRequestBody defines body for SubmitItem for application/json ContentType.
 type SubmitItemJSONRequestBody = NewItem
@@ -5923,7 +6233,7 @@ type ClientInterface interface {
 
 	// PublishDraftWithBody Publish the open draft as the factory's next version
 	//
-	// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken.
+	// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken, and with eval cases evals-pending or evals-failing (the eval gate, with eval_run_id; the draft stays open).
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -5932,7 +6242,7 @@ type ClientInterface interface {
 
 	// PublishDraft Publish the open draft as the factory's next version
 	//
-	// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken.
+	// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken, and with eval cases evals-pending or evals-failing (the eval gate, with eval_run_id; the draft stays open).
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -5974,6 +6284,81 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/validate (the `ValidateDraft` operationId).
 	ValidateDraft(ctx context.Context, org OrgRef, factory FactoryRef, body ValidateDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListEvals The eval cases of the current version, with their last tries and a summary
+	//
+	// Each case of the current version's evals/cases/, by name, with what checks it, its last 3 finished tries (newest first) and what it cost in the latest run that ran it. The summary counts the cases whose last tries all passed and the share of those tries that passed, and names the latest run of the current version's content. A factory never published has no cases and no version. 503 evals-unavailable while this goald does not run evals.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals (the `ListEvals` operationId).
+	ListEvals(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AddEvalCaseWithBody Add an eval case from a past run and publish it
+	//
+	// Writes evals/cases/{name}.yaml from the past agent run: its agent, and its item's title, body, type and lane as the input, checked by the agent's contract or by judge, with tries tries (default 1). The file goes into a new draft of the current version, which publishes as the next version through the same checks and eval gate as publishDraft (ADR 0025 decision 5). 400 invalid-request for a name that is not a slug; 404 run-not-found for a run that is not the factory's; 409 eval-case-exists when the current version has the case, draft-open when the factory already has a draft (the draft this call opened is discarded), and the publish's own conflicts. When the eval gate refuses (evals-pending, evals-failing) the draft stays open, so it publishes once its run passes. 503 evals-unavailable.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/cases (the `AddEvalCase` operationId).
+	AddEvalCaseWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AddEvalCase Add an eval case from a past run and publish it
+	//
+	// Writes evals/cases/{name}.yaml from the past agent run: its agent, and its item's title, body, type and lane as the input, checked by the agent's contract or by judge, with tries tries (default 1). The file goes into a new draft of the current version, which publishes as the next version through the same checks and eval gate as publishDraft (ADR 0025 decision 5). 400 invalid-request for a name that is not a slug; 404 run-not-found for a run that is not the factory's; 409 eval-case-exists when the current version has the case, draft-open when the factory already has a draft (the draft this call opened is discarded), and the publish's own conflicts. When the eval gate refuses (evals-pending, evals-failing) the draft stays open, so it publishes once its run passes. 503 evals-unavailable.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/cases (the `AddEvalCase` operationId).
+	AddEvalCase(ctx context.Context, org OrgRef, factory FactoryRef, body AddEvalCaseJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EstimateEvalRunWithBody What an eval run would cost, about, without starting it
+	//
+	// Each try at the mean cost of its case's last finished tries or, for a case with none, at the median cost of its agent's newest finished runs; a case with neither is unpriced. The same refusals as startEvalRun.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/estimate (the `EstimateEvalRun` operationId).
+	EstimateEvalRunWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EstimateEvalRun What an eval run would cost, about, without starting it
+	//
+	// Each try at the mean cost of its case's last finished tries or, for a case with none, at the median cost of its agent's newest finished runs; a case with neither is unpriced. The same refusals as startEvalRun.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/estimate (the `EstimateEvalRun` operationId).
+	EstimateEvalRun(ctx context.Context, org OrgRef, factory FactoryRef, body EstimateEvalRunJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// StartEvalRunWithBody Start an eval run of every case, or of one, on the current version or the draft
+	//
+	// Queues a run (trigger manual) with one try per case and try, priced as estimateEvalRun prices it, and answers at once; goald's eval loop works the tries. 400 invalid-request for a case name that is not a slug, eval-case-unknown for a case the content does not have and for content without cases; 404 version-not-found for a factory never published (on current), no-draft for one without a draft (on draft); 503 evals-unavailable.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/runs (the `StartEvalRun` operationId).
+	StartEvalRunWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// StartEvalRun Start an eval run of every case, or of one, on the current version or the draft
+	//
+	// Queues a run (trigger manual) with one try per case and try, priced as estimateEvalRun prices it, and answers at once; goald's eval loop works the tries. 400 invalid-request for a case name that is not a slug, eval-case-unknown for a case the content does not have and for content without cases; 404 version-not-found for a factory never published (on current), no-draft for one without a draft (on draft); 503 evals-unavailable.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/runs (the `StartEvalRun` operationId).
+	StartEvalRun(ctx context.Context, org OrgRef, factory FactoryRef, body StartEvalRunJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetEvalRun One eval run with its results by case and try
+	//
+	// 404 eval-run-not-found for a run that is not the factory's; 503 evals-unavailable.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run} (the `GetEvalRun` operationId).
+	GetEvalRun(ctx context.Context, org OrgRef, factory FactoryRef, evalRun EvalRunRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CancelEvalRun Cancel an eval run
+	//
+	// No further try of it starts and a try that is running stops at its next poll. 404 eval-run-not-found; 409 eval-run-finished for a run that is done, failed or cancelled; 503 evals-unavailable.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run}/cancel (the `CancelEvalRun` operationId).
+	CancelEvalRun(ctx context.Context, org OrgRef, factory FactoryRef, evalRun EvalRunRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListItems One page of a factory's items, newest first
 	//
@@ -7919,7 +8304,7 @@ func (c *Client) RevertDraftSection(ctx context.Context, org OrgRef, factory Fac
 
 // PublishDraftWithBody Publish the open draft as the factory's next version
 //
-// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken.
+// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken, and with eval cases evals-pending or evals-failing (the eval gate, with eval_run_id; the draft stays open).
 //
 // Takes any type of body and a specified content type.
 //
@@ -7938,7 +8323,7 @@ func (c *Client) PublishDraftWithBody(ctx context.Context, org OrgRef, factory F
 
 // PublishDraft Publish the open draft as the factory's next version
 //
-// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken.
+// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken, and with eval cases evals-pending or evals-failing (the eval gate, with eval_run_id; the draft stays open).
 //
 // Takes a body of the `application/json` content type.
 //
@@ -8021,6 +8406,171 @@ func (c *Client) ValidateDraftWithBody(ctx context.Context, org OrgRef, factory 
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/validate (the `ValidateDraft` operationId).
 func (c *Client) ValidateDraft(ctx context.Context, org OrgRef, factory FactoryRef, body ValidateDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewValidateDraftRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListEvals The eval cases of the current version, with their last tries and a summary
+//
+// Each case of the current version's evals/cases/, by name, with what checks it, its last 3 finished tries (newest first) and what it cost in the latest run that ran it. The summary counts the cases whose last tries all passed and the share of those tries that passed, and names the latest run of the current version's content. A factory never published has no cases and no version. 503 evals-unavailable while this goald does not run evals.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals (the `ListEvals` operationId).
+func (c *Client) ListEvals(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListEvalsRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AddEvalCaseWithBody Add an eval case from a past run and publish it
+//
+// Writes evals/cases/{name}.yaml from the past agent run: its agent, and its item's title, body, type and lane as the input, checked by the agent's contract or by judge, with tries tries (default 1). The file goes into a new draft of the current version, which publishes as the next version through the same checks and eval gate as publishDraft (ADR 0025 decision 5). 400 invalid-request for a name that is not a slug; 404 run-not-found for a run that is not the factory's; 409 eval-case-exists when the current version has the case, draft-open when the factory already has a draft (the draft this call opened is discarded), and the publish's own conflicts. When the eval gate refuses (evals-pending, evals-failing) the draft stays open, so it publishes once its run passes. 503 evals-unavailable.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/cases (the `AddEvalCase` operationId).
+func (c *Client) AddEvalCaseWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAddEvalCaseRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AddEvalCase Add an eval case from a past run and publish it
+//
+// Writes evals/cases/{name}.yaml from the past agent run: its agent, and its item's title, body, type and lane as the input, checked by the agent's contract or by judge, with tries tries (default 1). The file goes into a new draft of the current version, which publishes as the next version through the same checks and eval gate as publishDraft (ADR 0025 decision 5). 400 invalid-request for a name that is not a slug; 404 run-not-found for a run that is not the factory's; 409 eval-case-exists when the current version has the case, draft-open when the factory already has a draft (the draft this call opened is discarded), and the publish's own conflicts. When the eval gate refuses (evals-pending, evals-failing) the draft stays open, so it publishes once its run passes. 503 evals-unavailable.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/cases (the `AddEvalCase` operationId).
+func (c *Client) AddEvalCase(ctx context.Context, org OrgRef, factory FactoryRef, body AddEvalCaseJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAddEvalCaseRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EstimateEvalRunWithBody What an eval run would cost, about, without starting it
+//
+// Each try at the mean cost of its case's last finished tries or, for a case with none, at the median cost of its agent's newest finished runs; a case with neither is unpriced. The same refusals as startEvalRun.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/estimate (the `EstimateEvalRun` operationId).
+func (c *Client) EstimateEvalRunWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEstimateEvalRunRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EstimateEvalRun What an eval run would cost, about, without starting it
+//
+// Each try at the mean cost of its case's last finished tries or, for a case with none, at the median cost of its agent's newest finished runs; a case with neither is unpriced. The same refusals as startEvalRun.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/estimate (the `EstimateEvalRun` operationId).
+func (c *Client) EstimateEvalRun(ctx context.Context, org OrgRef, factory FactoryRef, body EstimateEvalRunJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEstimateEvalRunRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// StartEvalRunWithBody Start an eval run of every case, or of one, on the current version or the draft
+//
+// Queues a run (trigger manual) with one try per case and try, priced as estimateEvalRun prices it, and answers at once; goald's eval loop works the tries. 400 invalid-request for a case name that is not a slug, eval-case-unknown for a case the content does not have and for content without cases; 404 version-not-found for a factory never published (on current), no-draft for one without a draft (on draft); 503 evals-unavailable.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/runs (the `StartEvalRun` operationId).
+func (c *Client) StartEvalRunWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStartEvalRunRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// StartEvalRun Start an eval run of every case, or of one, on the current version or the draft
+//
+// Queues a run (trigger manual) with one try per case and try, priced as estimateEvalRun prices it, and answers at once; goald's eval loop works the tries. 400 invalid-request for a case name that is not a slug, eval-case-unknown for a case the content does not have and for content without cases; 404 version-not-found for a factory never published (on current), no-draft for one without a draft (on draft); 503 evals-unavailable.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/runs (the `StartEvalRun` operationId).
+func (c *Client) StartEvalRun(ctx context.Context, org OrgRef, factory FactoryRef, body StartEvalRunJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStartEvalRunRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetEvalRun One eval run with its results by case and try
+//
+// 404 eval-run-not-found for a run that is not the factory's; 503 evals-unavailable.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run} (the `GetEvalRun` operationId).
+func (c *Client) GetEvalRun(ctx context.Context, org OrgRef, factory FactoryRef, evalRun EvalRunRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetEvalRunRequest(c.Server, org, factory, evalRun)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CancelEvalRun Cancel an eval run
+//
+// No further try of it starts and a try that is running stops at its next poll. 404 eval-run-not-found; 409 eval-run-finished for a run that is done, failed or cancelled; 503 evals-unavailable.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run}/cancel (the `CancelEvalRun` operationId).
+func (c *Client) CancelEvalRun(ctx context.Context, org OrgRef, factory FactoryRef, evalRun EvalRunRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCancelEvalRunRequest(c.Server, org, factory, evalRun)
 	if err != nil {
 		return nil, err
 	}
@@ -12618,6 +13168,305 @@ func NewValidateDraftRequestWithBody(server string, org OrgRef, factory FactoryR
 	return req, nil
 }
 
+// NewListEvalsRequest constructs an http.Request for the ListEvals method
+func NewListEvalsRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/evals", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAddEvalCaseRequest calls the generic AddEvalCase builder with application/json body
+func NewAddEvalCaseRequest(server string, org OrgRef, factory FactoryRef, body AddEvalCaseJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAddEvalCaseRequestWithBody(server, org, factory, "application/json", bodyReader)
+}
+
+// NewAddEvalCaseRequestWithBody constructs an http.Request for the AddEvalCase method, with any body, and a specified content type
+func NewAddEvalCaseRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/evals/cases", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewEstimateEvalRunRequest calls the generic EstimateEvalRun builder with application/json body
+func NewEstimateEvalRunRequest(server string, org OrgRef, factory FactoryRef, body EstimateEvalRunJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewEstimateEvalRunRequestWithBody(server, org, factory, "application/json", bodyReader)
+}
+
+// NewEstimateEvalRunRequestWithBody constructs an http.Request for the EstimateEvalRun method, with any body, and a specified content type
+func NewEstimateEvalRunRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/evals/estimate", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewStartEvalRunRequest calls the generic StartEvalRun builder with application/json body
+func NewStartEvalRunRequest(server string, org OrgRef, factory FactoryRef, body StartEvalRunJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewStartEvalRunRequestWithBody(server, org, factory, "application/json", bodyReader)
+}
+
+// NewStartEvalRunRequestWithBody constructs an http.Request for the StartEvalRun method, with any body, and a specified content type
+func NewStartEvalRunRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/evals/runs", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetEvalRunRequest constructs an http.Request for the GetEvalRun method
+func NewGetEvalRunRequest(server string, org OrgRef, factory FactoryRef, evalRun EvalRunRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "eval_run", evalRun, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/evals/runs/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCancelEvalRunRequest constructs an http.Request for the CancelEvalRun method
+func NewCancelEvalRunRequest(server string, org OrgRef, factory FactoryRef, evalRun EvalRunRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "eval_run", evalRun, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/evals/runs/%s/cancel", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewListItemsRequest constructs an http.Request for the ListItems method
 func NewListItemsRequest(server string, org OrgRef, factory FactoryRef, params *ListItemsParams) (*http.Request, error) {
 	var err error
@@ -17067,7 +17916,7 @@ type ClientWithResponsesInterface interface {
 
 	// PublishDraftWithBodyWithResponse Publish the open draft as the factory's next version
 	//
-	// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken.
+	// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken, and with eval cases evals-pending or evals-failing (the eval gate, with eval_run_id; the draft stays open).
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -17076,7 +17925,7 @@ type ClientWithResponsesInterface interface {
 
 	// PublishDraftWithResponse Publish the open draft as the factory's next version
 	//
-	// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken.
+	// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken, and with eval cases evals-pending or evals-failing (the eval gate, with eval_run_id; the draft stays open).
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -17118,6 +17967,87 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/validate (the `ValidateDraft` operationId).
 	ValidateDraftWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body ValidateDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*ValidateDraftResponse, error)
+
+	// ListEvalsWithResponse The eval cases of the current version, with their last tries and a summary
+	//
+	// Each case of the current version's evals/cases/, by name, with what checks it, its last 3 finished tries (newest first) and what it cost in the latest run that ran it. The summary counts the cases whose last tries all passed and the share of those tries that passed, and names the latest run of the current version's content. A factory never published has no cases and no version. 503 evals-unavailable while this goald does not run evals.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals (the `ListEvals` operationId).
+	ListEvalsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListEvalsResponse, error)
+
+	// AddEvalCaseWithBodyWithResponse Add an eval case from a past run and publish it
+	//
+	// Writes evals/cases/{name}.yaml from the past agent run: its agent, and its item's title, body, type and lane as the input, checked by the agent's contract or by judge, with tries tries (default 1). The file goes into a new draft of the current version, which publishes as the next version through the same checks and eval gate as publishDraft (ADR 0025 decision 5). 400 invalid-request for a name that is not a slug; 404 run-not-found for a run that is not the factory's; 409 eval-case-exists when the current version has the case, draft-open when the factory already has a draft (the draft this call opened is discarded), and the publish's own conflicts. When the eval gate refuses (evals-pending, evals-failing) the draft stays open, so it publishes once its run passes. 503 evals-unavailable.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/cases (the `AddEvalCase` operationId).
+	AddEvalCaseWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AddEvalCaseResponse, error)
+
+	// AddEvalCaseWithResponse Add an eval case from a past run and publish it
+	//
+	// Writes evals/cases/{name}.yaml from the past agent run: its agent, and its item's title, body, type and lane as the input, checked by the agent's contract or by judge, with tries tries (default 1). The file goes into a new draft of the current version, which publishes as the next version through the same checks and eval gate as publishDraft (ADR 0025 decision 5). 400 invalid-request for a name that is not a slug; 404 run-not-found for a run that is not the factory's; 409 eval-case-exists when the current version has the case, draft-open when the factory already has a draft (the draft this call opened is discarded), and the publish's own conflicts. When the eval gate refuses (evals-pending, evals-failing) the draft stays open, so it publishes once its run passes. 503 evals-unavailable.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/cases (the `AddEvalCase` operationId).
+	AddEvalCaseWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body AddEvalCaseJSONRequestBody, reqEditors ...RequestEditorFn) (*AddEvalCaseResponse, error)
+
+	// EstimateEvalRunWithBodyWithResponse What an eval run would cost, about, without starting it
+	//
+	// Each try at the mean cost of its case's last finished tries or, for a case with none, at the median cost of its agent's newest finished runs; a case with neither is unpriced. The same refusals as startEvalRun.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/estimate (the `EstimateEvalRun` operationId).
+	EstimateEvalRunWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EstimateEvalRunResponse, error)
+
+	// EstimateEvalRunWithResponse What an eval run would cost, about, without starting it
+	//
+	// Each try at the mean cost of its case's last finished tries or, for a case with none, at the median cost of its agent's newest finished runs; a case with neither is unpriced. The same refusals as startEvalRun.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/estimate (the `EstimateEvalRun` operationId).
+	EstimateEvalRunWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body EstimateEvalRunJSONRequestBody, reqEditors ...RequestEditorFn) (*EstimateEvalRunResponse, error)
+
+	// StartEvalRunWithBodyWithResponse Start an eval run of every case, or of one, on the current version or the draft
+	//
+	// Queues a run (trigger manual) with one try per case and try, priced as estimateEvalRun prices it, and answers at once; goald's eval loop works the tries. 400 invalid-request for a case name that is not a slug, eval-case-unknown for a case the content does not have and for content without cases; 404 version-not-found for a factory never published (on current), no-draft for one without a draft (on draft); 503 evals-unavailable.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/runs (the `StartEvalRun` operationId).
+	StartEvalRunWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StartEvalRunResponse, error)
+
+	// StartEvalRunWithResponse Start an eval run of every case, or of one, on the current version or the draft
+	//
+	// Queues a run (trigger manual) with one try per case and try, priced as estimateEvalRun prices it, and answers at once; goald's eval loop works the tries. 400 invalid-request for a case name that is not a slug, eval-case-unknown for a case the content does not have and for content without cases; 404 version-not-found for a factory never published (on current), no-draft for one without a draft (on draft); 503 evals-unavailable.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/runs (the `StartEvalRun` operationId).
+	StartEvalRunWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body StartEvalRunJSONRequestBody, reqEditors ...RequestEditorFn) (*StartEvalRunResponse, error)
+
+	// GetEvalRunWithResponse One eval run with its results by case and try
+	//
+	// 404 eval-run-not-found for a run that is not the factory's; 503 evals-unavailable.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run} (the `GetEvalRun` operationId).
+	GetEvalRunWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, evalRun EvalRunRef, reqEditors ...RequestEditorFn) (*GetEvalRunResponse, error)
+
+	// CancelEvalRunWithResponse Cancel an eval run
+	//
+	// No further try of it starts and a try that is running stops at its next poll. 404 eval-run-not-found; 409 eval-run-finished for a run that is done, failed or cancelled; 503 evals-unavailable.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run}/cancel (the `CancelEvalRun` operationId).
+	CancelEvalRunWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, evalRun EvalRunRef, reqEditors ...RequestEditorFn) (*CancelEvalRunResponse, error)
 
 	// ListItemsWithResponse One page of a factory's items, newest first
 	//
@@ -20726,6 +21656,294 @@ func (r ValidateDraftResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ValidateDraftResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListEvalsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *EvalList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListEvalsResponse) GetJSON200() *EvalList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListEvalsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListEvalsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListEvalsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListEvalsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListEvalsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type AddEvalCaseResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Version
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r AddEvalCaseResponse) GetJSON201() *Version {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r AddEvalCaseResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r AddEvalCaseResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AddEvalCaseResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AddEvalCaseResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AddEvalCaseResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type EstimateEvalRunResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *EvalEstimate
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EstimateEvalRunResponse) GetJSON200() *EvalEstimate {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EstimateEvalRunResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EstimateEvalRunResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EstimateEvalRunResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EstimateEvalRunResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EstimateEvalRunResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type StartEvalRunResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *EvalRunStarted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r StartEvalRunResponse) GetJSON202() *EvalRunStarted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r StartEvalRunResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r StartEvalRunResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r StartEvalRunResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r StartEvalRunResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r StartEvalRunResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetEvalRunResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *EvalRun
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetEvalRunResponse) GetJSON200() *EvalRun {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetEvalRunResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetEvalRunResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetEvalRunResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetEvalRunResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetEvalRunResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CancelEvalRunResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *EvalRun
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r CancelEvalRunResponse) GetJSON200() *EvalRun {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CancelEvalRunResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CancelEvalRunResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CancelEvalRunResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CancelEvalRunResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CancelEvalRunResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -25093,7 +26311,7 @@ func (c *ClientWithResponses) RevertDraftSectionWithResponse(ctx context.Context
 
 // PublishDraftWithBodyWithResponse Publish the open draft as the factory's next version
 //
-// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken.
+// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken, and with eval cases evals-pending or evals-failing (the eval gate, with eval_run_id; the draft stays open).
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -25108,7 +26326,7 @@ func (c *ClientWithResponses) PublishDraftWithBodyWithResponse(ctx context.Conte
 
 // PublishDraftWithResponse Publish the open draft as the factory's next version
 //
-// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken.
+// One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken, and with eval cases evals-pending or evals-failing (the eval gate, with eval_run_id; the draft stays open).
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -25179,6 +26397,141 @@ func (c *ClientWithResponses) ValidateDraftWithResponse(ctx context.Context, org
 		return nil, err
 	}
 	return ParseValidateDraftResponse(rsp)
+}
+
+// ListEvalsWithResponse The eval cases of the current version, with their last tries and a summary
+//
+// Each case of the current version's evals/cases/, by name, with what checks it, its last 3 finished tries (newest first) and what it cost in the latest run that ran it. The summary counts the cases whose last tries all passed and the share of those tries that passed, and names the latest run of the current version's content. A factory never published has no cases and no version. 503 evals-unavailable while this goald does not run evals.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals (the `ListEvals` operationId).
+func (c *ClientWithResponses) ListEvalsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListEvalsResponse, error) {
+	rsp, err := c.ListEvals(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListEvalsResponse(rsp)
+}
+
+// AddEvalCaseWithBodyWithResponse Add an eval case from a past run and publish it
+//
+// Writes evals/cases/{name}.yaml from the past agent run: its agent, and its item's title, body, type and lane as the input, checked by the agent's contract or by judge, with tries tries (default 1). The file goes into a new draft of the current version, which publishes as the next version through the same checks and eval gate as publishDraft (ADR 0025 decision 5). 400 invalid-request for a name that is not a slug; 404 run-not-found for a run that is not the factory's; 409 eval-case-exists when the current version has the case, draft-open when the factory already has a draft (the draft this call opened is discarded), and the publish's own conflicts. When the eval gate refuses (evals-pending, evals-failing) the draft stays open, so it publishes once its run passes. 503 evals-unavailable.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/cases (the `AddEvalCase` operationId).
+func (c *ClientWithResponses) AddEvalCaseWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AddEvalCaseResponse, error) {
+	rsp, err := c.AddEvalCaseWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAddEvalCaseResponse(rsp)
+}
+
+// AddEvalCaseWithResponse Add an eval case from a past run and publish it
+//
+// Writes evals/cases/{name}.yaml from the past agent run: its agent, and its item's title, body, type and lane as the input, checked by the agent's contract or by judge, with tries tries (default 1). The file goes into a new draft of the current version, which publishes as the next version through the same checks and eval gate as publishDraft (ADR 0025 decision 5). 400 invalid-request for a name that is not a slug; 404 run-not-found for a run that is not the factory's; 409 eval-case-exists when the current version has the case, draft-open when the factory already has a draft (the draft this call opened is discarded), and the publish's own conflicts. When the eval gate refuses (evals-pending, evals-failing) the draft stays open, so it publishes once its run passes. 503 evals-unavailable.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/cases (the `AddEvalCase` operationId).
+func (c *ClientWithResponses) AddEvalCaseWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body AddEvalCaseJSONRequestBody, reqEditors ...RequestEditorFn) (*AddEvalCaseResponse, error) {
+	rsp, err := c.AddEvalCase(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAddEvalCaseResponse(rsp)
+}
+
+// EstimateEvalRunWithBodyWithResponse What an eval run would cost, about, without starting it
+//
+// Each try at the mean cost of its case's last finished tries or, for a case with none, at the median cost of its agent's newest finished runs; a case with neither is unpriced. The same refusals as startEvalRun.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/estimate (the `EstimateEvalRun` operationId).
+func (c *ClientWithResponses) EstimateEvalRunWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EstimateEvalRunResponse, error) {
+	rsp, err := c.EstimateEvalRunWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEstimateEvalRunResponse(rsp)
+}
+
+// EstimateEvalRunWithResponse What an eval run would cost, about, without starting it
+//
+// Each try at the mean cost of its case's last finished tries or, for a case with none, at the median cost of its agent's newest finished runs; a case with neither is unpriced. The same refusals as startEvalRun.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/estimate (the `EstimateEvalRun` operationId).
+func (c *ClientWithResponses) EstimateEvalRunWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body EstimateEvalRunJSONRequestBody, reqEditors ...RequestEditorFn) (*EstimateEvalRunResponse, error) {
+	rsp, err := c.EstimateEvalRun(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEstimateEvalRunResponse(rsp)
+}
+
+// StartEvalRunWithBodyWithResponse Start an eval run of every case, or of one, on the current version or the draft
+//
+// Queues a run (trigger manual) with one try per case and try, priced as estimateEvalRun prices it, and answers at once; goald's eval loop works the tries. 400 invalid-request for a case name that is not a slug, eval-case-unknown for a case the content does not have and for content without cases; 404 version-not-found for a factory never published (on current), no-draft for one without a draft (on draft); 503 evals-unavailable.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/runs (the `StartEvalRun` operationId).
+func (c *ClientWithResponses) StartEvalRunWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StartEvalRunResponse, error) {
+	rsp, err := c.StartEvalRunWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStartEvalRunResponse(rsp)
+}
+
+// StartEvalRunWithResponse Start an eval run of every case, or of one, on the current version or the draft
+//
+// Queues a run (trigger manual) with one try per case and try, priced as estimateEvalRun prices it, and answers at once; goald's eval loop works the tries. 400 invalid-request for a case name that is not a slug, eval-case-unknown for a case the content does not have and for content without cases; 404 version-not-found for a factory never published (on current), no-draft for one without a draft (on draft); 503 evals-unavailable.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/runs (the `StartEvalRun` operationId).
+func (c *ClientWithResponses) StartEvalRunWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body StartEvalRunJSONRequestBody, reqEditors ...RequestEditorFn) (*StartEvalRunResponse, error) {
+	rsp, err := c.StartEvalRun(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStartEvalRunResponse(rsp)
+}
+
+// GetEvalRunWithResponse One eval run with its results by case and try
+//
+// 404 eval-run-not-found for a run that is not the factory's; 503 evals-unavailable.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run} (the `GetEvalRun` operationId).
+func (c *ClientWithResponses) GetEvalRunWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, evalRun EvalRunRef, reqEditors ...RequestEditorFn) (*GetEvalRunResponse, error) {
+	rsp, err := c.GetEvalRun(ctx, org, factory, evalRun, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetEvalRunResponse(rsp)
+}
+
+// CancelEvalRunWithResponse Cancel an eval run
+//
+// No further try of it starts and a try that is running stops at its next poll. 404 eval-run-not-found; 409 eval-run-finished for a run that is done, failed or cancelled; 503 evals-unavailable.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run}/cancel (the `CancelEvalRun` operationId).
+func (c *ClientWithResponses) CancelEvalRunWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, evalRun EvalRunRef, reqEditors ...RequestEditorFn) (*CancelEvalRunResponse, error) {
+	rsp, err := c.CancelEvalRun(ctx, org, factory, evalRun, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCancelEvalRunResponse(rsp)
 }
 
 // ListItemsWithResponse One page of a factory's items, newest first
@@ -28451,6 +29804,204 @@ func ParseValidateDraftResponse(rsp *http.Response) (*ValidateDraftResponse, err
 	return response, nil
 }
 
+// ParseListEvalsResponse parses an HTTP response from a ListEvalsWithResponse call
+func ParseListEvalsResponse(rsp *http.Response) (*ListEvalsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListEvalsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EvalList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAddEvalCaseResponse parses an HTTP response from a AddEvalCaseWithResponse call
+func ParseAddEvalCaseResponse(rsp *http.Response) (*AddEvalCaseResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AddEvalCaseResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Version
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseEstimateEvalRunResponse parses an HTTP response from a EstimateEvalRunWithResponse call
+func ParseEstimateEvalRunResponse(rsp *http.Response) (*EstimateEvalRunResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EstimateEvalRunResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EvalEstimate
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseStartEvalRunResponse parses an HTTP response from a StartEvalRunWithResponse call
+func ParseStartEvalRunResponse(rsp *http.Response) (*StartEvalRunResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &StartEvalRunResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest EvalRunStarted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetEvalRunResponse parses an HTTP response from a GetEvalRunWithResponse call
+func ParseGetEvalRunResponse(rsp *http.Response) (*GetEvalRunResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetEvalRunResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EvalRun
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCancelEvalRunResponse parses an HTTP response from a CancelEvalRunWithResponse call
+func ParseCancelEvalRunResponse(rsp *http.Response) (*CancelEvalRunResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CancelEvalRunResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EvalRun
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListItemsResponse parses an HTTP response from a ListItemsWithResponse call
 func ParseListItemsResponse(rsp *http.Response) (*ListItemsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -30953,6 +32504,24 @@ type ServerInterface interface {
 	// ValidateDraft Validate the draft at its revision, as publish will
 	// (POST /v1/orgs/{org}/factories/{factory}/draft/validate)
 	ValidateDraft(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// ListEvals The eval cases of the current version, with their last tries and a summary
+	// (GET /v1/orgs/{org}/factories/{factory}/evals)
+	ListEvals(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// AddEvalCase Add an eval case from a past run and publish it
+	// (POST /v1/orgs/{org}/factories/{factory}/evals/cases)
+	AddEvalCase(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// EstimateEvalRun What an eval run would cost, about, without starting it
+	// (POST /v1/orgs/{org}/factories/{factory}/evals/estimate)
+	EstimateEvalRun(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// StartEvalRun Start an eval run of every case, or of one, on the current version or the draft
+	// (POST /v1/orgs/{org}/factories/{factory}/evals/runs)
+	StartEvalRun(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// GetEvalRun One eval run with its results by case and try
+	// (GET /v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run})
+	GetEvalRun(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, evalRun EvalRunRef)
+	// CancelEvalRun Cancel an eval run
+	// (POST /v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run}/cancel)
+	CancelEvalRun(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, evalRun EvalRunRef)
 	// ListItems One page of a factory's items, newest first
 	// (GET /v1/orgs/{org}/factories/{factory}/items)
 	ListItems(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params ListItemsParams)
@@ -33513,6 +35082,234 @@ func (siw *ServerInterfaceWrapper) ValidateDraft(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ValidateDraft(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListEvals operation middleware
+func (siw *ServerInterfaceWrapper) ListEvals(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListEvals(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddEvalCase operation middleware
+func (siw *ServerInterfaceWrapper) AddEvalCase(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddEvalCase(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// EstimateEvalRun operation middleware
+func (siw *ServerInterfaceWrapper) EstimateEvalRun(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.EstimateEvalRun(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StartEvalRun operation middleware
+func (siw *ServerInterfaceWrapper) StartEvalRun(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StartEvalRun(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetEvalRun operation middleware
+func (siw *ServerInterfaceWrapper) GetEvalRun(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "eval_run" -------------
+	var evalRun EvalRunRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "eval_run", r.PathValue("eval_run"), &evalRun, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "eval_run", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetEvalRun(w, r, org, factory, evalRun)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CancelEvalRun operation middleware
+func (siw *ServerInterfaceWrapper) CancelEvalRun(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "eval_run" -------------
+	var evalRun EvalRunRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "eval_run", r.PathValue("eval_run"), &evalRun, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "eval_run", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelEvalRun(w, r, org, factory, evalRun)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -36628,6 +38425,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/templates/{name}", wrapper.GetTemplate)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/definitions/validate", wrapper.ValidateDefinition)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/definitions/format", wrapper.FormatDefinition)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals", wrapper.ListEvals)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/runs", wrapper.StartEvalRun)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/estimate", wrapper.EstimateEvalRun)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run}", wrapper.GetEvalRun)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run}/cancel", wrapper.CancelEvalRun)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/cases", wrapper.AddEvalCase)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/items", wrapper.ListItems)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/items", wrapper.SubmitItem)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/board", wrapper.GetBoard)
@@ -39122,6 +40925,251 @@ type ValidateDraftdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ValidateDraftdefaultApplicationProblemPlusJSONResponse) VisitValidateDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEvalsRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type ListEvalsResponseObject interface {
+	VisitListEvalsResponse(w http.ResponseWriter) error
+}
+
+type ListEvals200JSONResponse EvalList
+
+func (response ListEvals200JSONResponse) VisitListEvalsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEvalsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListEvalsdefaultApplicationProblemPlusJSONResponse) VisitListEvalsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddEvalCaseRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Body    *AddEvalCaseJSONRequestBody
+}
+
+type AddEvalCaseResponseObject interface {
+	VisitAddEvalCaseResponse(w http.ResponseWriter) error
+}
+
+type AddEvalCase201JSONResponse Version
+
+func (response AddEvalCase201JSONResponse) VisitAddEvalCaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddEvalCasedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response AddEvalCasedefaultApplicationProblemPlusJSONResponse) VisitAddEvalCaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EstimateEvalRunRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Body    *EstimateEvalRunJSONRequestBody
+}
+
+type EstimateEvalRunResponseObject interface {
+	VisitEstimateEvalRunResponse(w http.ResponseWriter) error
+}
+
+type EstimateEvalRun200JSONResponse EvalEstimate
+
+func (response EstimateEvalRun200JSONResponse) VisitEstimateEvalRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EstimateEvalRundefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response EstimateEvalRundefaultApplicationProblemPlusJSONResponse) VisitEstimateEvalRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartEvalRunRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Body    *StartEvalRunJSONRequestBody
+}
+
+type StartEvalRunResponseObject interface {
+	VisitStartEvalRunResponse(w http.ResponseWriter) error
+}
+
+type StartEvalRun202JSONResponse EvalRunStarted
+
+func (response StartEvalRun202JSONResponse) VisitStartEvalRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartEvalRundefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response StartEvalRundefaultApplicationProblemPlusJSONResponse) VisitStartEvalRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEvalRunRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	EvalRun EvalRunRef `json:"eval_run"`
+}
+
+type GetEvalRunResponseObject interface {
+	VisitGetEvalRunResponse(w http.ResponseWriter) error
+}
+
+type GetEvalRun200JSONResponse EvalRun
+
+func (response GetEvalRun200JSONResponse) VisitGetEvalRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEvalRundefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetEvalRundefaultApplicationProblemPlusJSONResponse) VisitGetEvalRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelEvalRunRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	EvalRun EvalRunRef `json:"eval_run"`
+}
+
+type CancelEvalRunResponseObject interface {
+	VisitCancelEvalRunResponse(w http.ResponseWriter) error
+}
+
+type CancelEvalRun200JSONResponse EvalRun
+
+func (response CancelEvalRun200JSONResponse) VisitCancelEvalRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelEvalRundefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CancelEvalRundefaultApplicationProblemPlusJSONResponse) VisitCancelEvalRunResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -42252,6 +44300,24 @@ type StrictServerInterface interface {
 	// ValidateDraft Validate the draft at its revision, as publish will
 	// (POST /v1/orgs/{org}/factories/{factory}/draft/validate)
 	ValidateDraft(ctx context.Context, request ValidateDraftRequestObject) (ValidateDraftResponseObject, error)
+	// ListEvals The eval cases of the current version, with their last tries and a summary
+	// (GET /v1/orgs/{org}/factories/{factory}/evals)
+	ListEvals(ctx context.Context, request ListEvalsRequestObject) (ListEvalsResponseObject, error)
+	// AddEvalCase Add an eval case from a past run and publish it
+	// (POST /v1/orgs/{org}/factories/{factory}/evals/cases)
+	AddEvalCase(ctx context.Context, request AddEvalCaseRequestObject) (AddEvalCaseResponseObject, error)
+	// EstimateEvalRun What an eval run would cost, about, without starting it
+	// (POST /v1/orgs/{org}/factories/{factory}/evals/estimate)
+	EstimateEvalRun(ctx context.Context, request EstimateEvalRunRequestObject) (EstimateEvalRunResponseObject, error)
+	// StartEvalRun Start an eval run of every case, or of one, on the current version or the draft
+	// (POST /v1/orgs/{org}/factories/{factory}/evals/runs)
+	StartEvalRun(ctx context.Context, request StartEvalRunRequestObject) (StartEvalRunResponseObject, error)
+	// GetEvalRun One eval run with its results by case and try
+	// (GET /v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run})
+	GetEvalRun(ctx context.Context, request GetEvalRunRequestObject) (GetEvalRunResponseObject, error)
+	// CancelEvalRun Cancel an eval run
+	// (POST /v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run}/cancel)
+	CancelEvalRun(ctx context.Context, request CancelEvalRunRequestObject) (CancelEvalRunResponseObject, error)
 	// ListItems One page of a factory's items, newest first
 	// (GET /v1/orgs/{org}/factories/{factory}/items)
 	ListItems(ctx context.Context, request ListItemsRequestObject) (ListItemsResponseObject, error)
@@ -44246,6 +46312,191 @@ func (sh *strictHandler) ValidateDraft(w http.ResponseWriter, r *http.Request, o
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ValidateDraftResponseObject); ok {
 		if err := validResponse.VisitValidateDraftResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListEvals operation middleware
+func (sh *strictHandler) ListEvals(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request ListEvalsRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListEvals(ctx, request.(ListEvalsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListEvals")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListEvalsResponseObject); ok {
+		if err := validResponse.VisitListEvalsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddEvalCase operation middleware
+func (sh *strictHandler) AddEvalCase(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request AddEvalCaseRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	var body AddEvalCaseJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddEvalCase(ctx, request.(AddEvalCaseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddEvalCase")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddEvalCaseResponseObject); ok {
+		if err := validResponse.VisitAddEvalCaseResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// EstimateEvalRun operation middleware
+func (sh *strictHandler) EstimateEvalRun(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request EstimateEvalRunRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	var body EstimateEvalRunJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.EstimateEvalRun(ctx, request.(EstimateEvalRunRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "EstimateEvalRun")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(EstimateEvalRunResponseObject); ok {
+		if err := validResponse.VisitEstimateEvalRunResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// StartEvalRun operation middleware
+func (sh *strictHandler) StartEvalRun(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request StartEvalRunRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	var body StartEvalRunJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.StartEvalRun(ctx, request.(StartEvalRunRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "StartEvalRun")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(StartEvalRunResponseObject); ok {
+		if err := validResponse.VisitStartEvalRunResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetEvalRun operation middleware
+func (sh *strictHandler) GetEvalRun(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, evalRun EvalRunRef) {
+	var request GetEvalRunRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.EvalRun = evalRun
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetEvalRun(ctx, request.(GetEvalRunRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetEvalRun")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetEvalRunResponseObject); ok {
+		if err := validResponse.VisitGetEvalRunResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CancelEvalRun operation middleware
+func (sh *strictHandler) CancelEvalRun(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, evalRun EvalRunRef) {
+	var request CancelEvalRunRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.EvalRun = evalRun
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CancelEvalRun(ctx, request.(CancelEvalRunRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CancelEvalRun")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CancelEvalRunResponseObject); ok {
+		if err := validResponse.VisitCancelEvalRunResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
