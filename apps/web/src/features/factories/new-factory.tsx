@@ -21,7 +21,7 @@ const starts: readonly { id: From; label: string; sub: string; icon: LucideIcon 
 ];
 
 /** A link to the wizard's Start step, with a way to start chosen. */
-function StartLink({ from, className, children }: { from?: From; className?: string; children?: ReactNode }) {
+export function StartLink({ from, className, children }: { from?: From; className?: string; children?: ReactNode }) {
   const org = useOrg();
   return (
     <Link

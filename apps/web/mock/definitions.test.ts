@@ -154,7 +154,7 @@ describe('the draft', () => {
 
   it('asks where the items queued at a removed station go, and publishes with the move', async () => {
     const { model, value } = await lineSave((s) => {
-      s.splice(0, 1); // inbox, where #14 and #15 wait
+      s.splice(0, 1); // inbox, where #14, #15 and #145 wait
     });
     await call(`${goal}/draft/model/line`, put({ value }, model.etags.line));
 
@@ -163,7 +163,7 @@ describe('the draft', () => {
     const { body: v } = await validate({});
     const problem = v.problems.find((p) => p.code === 'items-at-removed-station');
     expect(v.ok).toBe(false);
-    expect(problem?.message).toMatch(/removes station inbox, where 2 items are waiting/);
+    expect(problem?.message).toMatch(/removes station inbox, where 3 items are waiting/);
     expect(problem?.fixes[0]).toMatchObject({
       label: 'Move them to spec',
       section: 'publish',

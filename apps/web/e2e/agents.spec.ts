@@ -226,3 +226,44 @@ test('add, rename and remove an agent; a station keeps its agent from being remo
   await blocked.getByRole('link', { name: 'Review' }).click();
   await expect(page).toHaveURL(/\/definition\/line\?station=review$/);
 });
+
+// The Agents page (build/agents) against the mock: goal's running line, with frontend-engineer on its own model.
+test.describe('Agents page', () => {
+  const index = '/o/acme/f/goal/agents';
+
+  test('shows the defaults, the line and each agent card, and passes the accessibility check', async ({ page }) => {
+    await page.goto(index);
+    await expect(page.getByRole('heading', { level: 1, name: 'Agents' })).toBeVisible();
+
+    const defaults = page.getByRole('region', { name: 'Factory defaults' });
+    await expect(defaults.getByRole('link', { name: 'Edit defaults' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Review' })).toBeVisible();
+    await expect(page.getByRole('link', { name: /frontend-engineer/ })).toContainText('Own model');
+    await expect(page.getByRole('link', { name: /reviewer/ })).toContainText('Default');
+    await expectAccessible(page);
+    await expectNoHorizontalScroll(page);
+  });
+
+  test('New agent is disabled and says it is not available yet', async ({ page }) => {
+    await page.goto(index);
+    const create = page.getByRole('button', { name: 'New agent' });
+
+    await expect(create).toHaveAttribute('aria-disabled', 'true');
+    await create.hover();
+    await expect(page.getByRole('tooltip', { name: 'Not available yet' })).toBeVisible();
+  });
+
+  test('an agent card opens the agent page', async ({ page }) => {
+    await page.goto(index);
+    await page.getByRole('link', { name: /backend-engineer/ }).click();
+
+    await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/agents\/backend-engineer$/);
+  });
+
+  test('View as files opens the definition', async ({ page }) => {
+    await page.goto(index);
+    await page.getByRole('link', { name: 'View as files' }).click();
+
+    await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/definition\/agents$/);
+  });
+});
