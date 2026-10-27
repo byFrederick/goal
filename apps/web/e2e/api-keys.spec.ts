@@ -134,7 +134,7 @@ test('a list that fails to load keeps the page and offers to try again', async (
 });
 
 test('an organization without keys says so', async ({ page }) => {
-  await page.goto('/o/example-labs/api-keys');
+  await page.goto('/o/goal/api-keys');
   await expect(page.getByRole('heading', { name: 'No keys yet' })).toBeVisible();
   await expect(page.getByText('Create one for CI or a script.')).toBeVisible();
   await expectAccessible(page);

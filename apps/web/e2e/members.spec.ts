@@ -8,6 +8,7 @@ import {
   expectNoHorizontalScroll,
   expectToast,
   isPhone,
+  openNavigation,
   orgMarkOf,
   orgNav,
   recordToasts,
@@ -191,7 +192,7 @@ test('a member sees everyone read-only, and leaves', async ({ page }) => {
   const confirm = page.getByRole('dialog', { name: 'Leave Acme?' });
   await confirm.getByRole('button', { name: 'Leave Acme' }).click();
   await expectToast(page, 'You left Acme');
-  await expect(page).toHaveURL(/\/o\/example-labs$/);
+  await expect(page).toHaveURL(/\/o\/goal$/);
 });
 
 test('an invitee signs in from the link, sees the invitation and joins', async ({ page, request }) => {
@@ -244,9 +245,9 @@ test('an invitation for someone else, one that cannot be used, and one to a memb
 
   await signedInAs(page.request, 'a.ortiz@example.com');
   await page.goto(invitation.toAMember);
-  await expect(page.getByRole('heading', { level: 1, name: 'You’re already in Example Labs' })).toBeVisible();
-  await page.getByRole('link', { name: 'Open Example Labs' }).click();
-  await expect(page).toHaveURL(/\/o\/example-labs$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'You’re already in Goal' })).toBeVisible();
+  await page.getByRole('link', { name: 'Open Goal' }).click();
+  await expect(page).toHaveURL(/\/o\/goal$/);
 
   // Declining keeps the person out and says so.
   await signedInAs(page.request, 'd.ross@example.com');
@@ -257,11 +258,11 @@ test('an invitation for someone else, one that cannot be used, and one to a memb
 
 test('an owner hands the organization to an admin and becomes one', async ({ page }) => {
   await signedInAs(page.request);
-  await page.goto('/o/example-labs/settings');
-  // Example Labs has no admin: there is nobody to hand it to.
+  await page.goto('/o/goal/settings');
+  // Goal has no admin: there is nobody to hand it to.
   await page.getByRole('button', { name: 'Transfer ownership…' }).click();
-  const none = page.getByRole('dialog', { name: 'Transfer ownership of Example Labs' });
-  await expect(none.getByText('Only an admin can become the owner, and Example Labs has none.')).toBeVisible();
+  const none = page.getByRole('dialog', { name: 'Transfer ownership of Goal' });
+  await expect(none.getByText('Only an admin can become the owner, and Goal has none.')).toBeVisible();
   await expect(none.getByRole('link', { name: 'Open Members and roles' })).toBeVisible();
   await expect(none.getByRole('button', { name: 'Transfer ownership' })).toBeDisabled();
   await page.keyboard.press('Escape');
@@ -295,16 +296,12 @@ test('a member sees the settings read-only', async ({ page }) => {
 test('the organization menu says the caller’s role and opens Members and roles', async ({ page }) => {
   await signedInAs(page.request);
   await page.goto('/o/acme');
+  // The same organization menu at every width; on a phone it opens from the drawer's top row.
+  await openNavigation(page);
   await orgMarkOf(page).click();
-  if (isPhone(page)) {
-    const sheet = page.getByRole('dialog', { name: 'Switch organization' });
-    await expect(sheet.getByRole('link', { name: /^Acme\s?3 factories, owner/ })).toBeVisible();
-    await sheet.getByRole('link', { name: 'Members and roles' }).click();
-  } else {
-    const menu = page.getByRole('menu', { name: 'Acme organization, switch organization' });
-    await expect(menu.getByRole('menuitemradio', { name: /^Acme\s?3 factories, owner$/ })).toBeVisible();
-    await menu.getByRole('menuitem', { name: 'Members and roles' }).click();
-  }
+  const menu = page.getByRole('menu');
+  await expect(menu.getByRole('menuitem', { name: /^Acme\s?3 factories, owner(\s?Current)?$/ })).toBeVisible();
+  await menu.getByRole('menuitem', { name: 'Members and roles' }).click();
   await expect(page).toHaveURL(/\/o\/acme\/members$/);
   await expect(heading(page)).toBeVisible();
 });
