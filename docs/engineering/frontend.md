@@ -67,7 +67,7 @@ main.tsx      QueryClient, router, providers
 routes/       file-based route files (TanStack Router plugin; routeTree.gen.ts is generated and committed)
                 /                               → the organization used last (localStorage goal.org), else the first
                 /f/*                            → old links: redirect to the factory's page under its organization
-                /sign-in?next=                  → Sign in (email code, Google), no sidebar; under GOAL_AUTH=none it opens `next` or /
+                /sign-in?next=                  → Sign in (email code, Google; a GitHub button, disabled until GitHub sign-in exists), no sidebar; under GOAL_AUTH=none it opens `next` or /
                 /sign-in/code?next=             → the emailed code; the address is in the history state, never the URL
                 /device                         → Device-Approve: goal login's code, typed (never read from the URL), who asks and from where, Approve (a recent sign-in) or Deny; signed out, "Sign in to approve the Goal CLI" (back here after)
                 /invite/$invitation             → an invitation email's link: signed out, "Sign in to see your invitation" (back here after); signed in, the invitation (Join, Decline; another address's, unusable, already a member)
