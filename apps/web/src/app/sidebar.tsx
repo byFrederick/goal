@@ -43,18 +43,22 @@ export function Sidebar({ org }: { org: OrgSummary }) {
 
   if (collapsed) {
     return (
-      <SidebarRail
-        org={org}
-        busy={busy}
-        waiting={attention.data?.waiting_on_you ?? 0}
-        trouble={trouble}
-        overview={overview.data}
-        focusOnMount={focus.current === 'rail'}
-        onExpand={() => {
-          focus.current = 'top';
-          setCollapsed(false);
-        }}
-      />
+      <>
+        {/* C keeps working with the rail shown, and on phones where the sidebar is hidden. */}
+        <NewItemFromSidebar button={false} />
+        <SidebarRail
+          org={org}
+          busy={busy}
+          waiting={attention.data?.waiting_on_you ?? 0}
+          trouble={trouble}
+          overview={overview.data}
+          focusOnMount={focus.current === 'rail'}
+          onExpand={() => {
+            focus.current = 'top';
+            setCollapsed(false);
+          }}
+        />
+      </>
     );
   }
 

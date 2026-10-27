@@ -1,7 +1,8 @@
 // The collapsed sidebar (MASTER.md "Collapsed rail", shell.html "Collapsed"): a 60 px column in the
 // sidebar's place, from 768 px up. Top to bottom: the Goal mark, Expand sidebar, New item (disabled
-// here, though the 256 px sidebar's opens the composer: new-item.tsx), the organization-wide pages as icons, the factories as squares with their counts, New factory
-// (+), the spend ring and the person's avatar. It reads the same data as the 256 px sidebar, which it
+// here, though the 256 px sidebar's opens the composer: new-item.tsx; C still opens it, since Sidebar keeps the
+// composer mounted while the rail shows), the organization-wide pages as icons, the factories as squares with
+// their counts, New factory (+), the spend ring and the person's avatar. It reads the same data as the 256 px sidebar, which it
 // replaces (sidebar.tsx), and it shares the factory squares with the phone's top row (rail-items.tsx).
 import { Link } from '@tanstack/react-router';
 import { PanelLeft, Plus } from 'lucide-react';

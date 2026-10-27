@@ -454,6 +454,20 @@ describe('the collapsed rail', () => {
     expect(await screen.findByRole('button', { name: 'Collapse sidebar' })).toBeTruthy();
   });
 
+  it('opens the composer with C when the saved choice is the rail', async () => {
+    const list = [factory('goal', { can: ['item:create'] })];
+    const { unmount } = renderSidebar({ list });
+    await collapse();
+    unmount();
+
+    renderSidebar({ list });
+    await screen.findByRole('button', { name: 'Expand sidebar' });
+    fireEvent.keyDown(document.body, { key: 'c' });
+
+    expect(await screen.findByRole('dialog', { name: 'New item' })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Factory' })).toBeTruthy();
+  });
+
   it('moves focus to the other control when the choice changes by the keyboard', async () => {
     renderSidebar();
     const expand = await collapse();
