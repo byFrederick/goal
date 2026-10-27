@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bake-off: frontend-engineer</title>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#FFFFFF}
+a{color:#2742F5}a:hover{color:#1B33C9}
+*{box-sizing:border-box}
+h1,h2,h3,p,ol,ul{margin:0}
+ol,ul{padding:0;list-style:none}
+.g{--bg:#FFFFFF;--side:#F3F4F9;--panel:#F7F8FC;--hover:#E9EBF4;--rule:#E3E6EF;--rule2:#CBD0DF;--ink:#14182B;--ink2:#464D6A;--ink3:#626986;--pri:#2742F5;--pri-ink:#1B33C9;--pri-t:#E8ECFF;--you:#7B3FE4;--you-t:#F1EBFE;--you-ink:#5A24B8;--red:#D63A1F;--red-t:#FDECE8;--red-ink:#AE2C14;--yel:#FFC21A;--yel-t:#FFF4D1;--yel-ink:#6E4B00;--grn:#0FA36B;--grn-t:#E1F5EB;--grn-ink:#0A7A4F;--navy:#121633;--navy2:#1C2147;--navy3:#2C3266;font-family:Archivo,system-ui,sans-serif;font-size:14px;line-height:1.45;color:var(--ink);background:var(--bg);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.g.dark{--bg:#0E1120;--side:#13172A;--panel:#161A2F;--hover:#1E2340;--rule:#252A45;--rule2:#3A4066;--ink:#ECEEF7;--ink2:#B7BCD4;--ink3:#9096B3;--pri:#4A63F5;--pri-ink:#A3B2FF;--pri-t:#1D2556;--you:#9061F5;--you-t:#2A1E4F;--you-ink:#CDB4FF;--red:#E2512F;--red-t:#3B1C16;--red-ink:#FFA08A;--yel-t:#3A3013;--yel-ink:#FFD666;--grn:#22C17F;--grn-t:#10301F;--grn-ink:#62DDA5;--navy:#090C1A;--navy2:#151A36;--navy3:#272D58}
+.h1{font-size:26px;line-height:1.15;font-weight:650;font-stretch:108%;letter-spacing:-0.015em}
+.h2{font-size:16px;line-height:1.3;font-weight:620}
+.num{font-stretch:112%;font-weight:600;letter-spacing:-0.01em}
+.m2{color:var(--ink2)}.m3{color:var(--ink3)}.sm{font-size:13px}.xs{font-size:12px}
+.code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12.5px}
+.app{display:flex;flex-wrap:wrap;align-items:stretch;min-height:100vh;background:var(--bg)}
+.side{width:256px;flex:none;background:var(--side);border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:1px;padding:10px 10px 12px;min-height:100vh}
+.srow{display:flex;align-items:center;gap:2px;margin-bottom:8px}
+.orgb{flex:1;min-width:0;display:flex;align-items:center;gap:9px;height:38px;padding:0 6px;border:0;border-radius:8px;background:none;font:inherit;font-weight:620;font-size:15px;color:var(--ink);cursor:pointer;text-align:left}
+.omk{width:26px;height:26px;flex:none;border-radius:7px;background:var(--pri);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:750;font-stretch:115%}
+.ib{width:32px;height:32px;flex:none;border:0;border-radius:8px;background:none;color:var(--ink2);display:grid;place-items:center;cursor:pointer;padding:0}
+.orgb:hover,.ib:hover,.ni:hover,.fh:hover,.sub a:hover,.me:hover{background:var(--hover);color:var(--ink)}
+.newb{display:flex;align-items:center;gap:8px;height:36px;padding:0 8px 0 12px;border-radius:9px;background:var(--pri);color:#fff;font-weight:620;text-decoration:none;margin:0 0 10px}
+.newb:hover{background:var(--pri-ink);color:#fff}
+.kb{margin-left:auto;min-width:20px;height:20px;padding:0 5px;border-radius:5px;background:rgba(255,255,255,.2);font-size:11px;font-weight:650;display:grid;place-items:center}
+.ni{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:8px;color:var(--ink2);text-decoration:none;font-weight:540}
+.ni svg{flex:none;color:var(--ink3)}
+.ni.on{background:var(--pri-t);color:var(--pri-ink)}.ni.on svg{color:var(--pri)}
+.cnt{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:6px;font-size:12px;font-weight:650;display:inline-grid;place-items:center;background:var(--you);color:#fff}
+.cnt.n{background:var(--hover);color:var(--ink2)}
+.sec{display:flex;align-items:center;justify-content:space-between;height:30px;margin-top:14px;padding:0 2px 0 10px;font-size:12.5px;font-weight:600;color:var(--ink3)}
+.sec .ib{width:26px;height:26px}
+.fh{display:flex;align-items:center;gap:10px;height:36px;padding:0 8px;border-radius:8px;color:var(--ink);text-decoration:none;font-weight:620}
+.fh .chev{margin-left:auto;color:var(--ink3);flex:none}
+.fb{width:22px;height:22px;flex:none;border-radius:6px;display:grid;place-items:center;color:#fff;font-size:11.5px;font-weight:750;font-stretch:112%}
+.sub{display:flex;flex-direction:column;gap:1px;margin:2px 0 6px 18px;padding-left:10px;border-left:1px solid var(--rule2)}
+.sub a{display:flex;align-items:center;height:30px;padding:0 10px;border-radius:7px;color:var(--ink2);text-decoration:none;font-size:13.5px;font-weight:520}
+.sub a.on{background:var(--bg);color:var(--ink);font-weight:640;box-shadow:0 0 0 1px var(--rule)}
+.sdot{width:8px;height:8px;border-radius:50%;flex:none}
+.sbot{margin-top:auto;display:flex;flex-direction:column;gap:8px;padding-top:12px}
+.use{display:flex;flex-direction:column;gap:7px;padding:10px 12px;border-radius:10px;border:1px solid var(--rule);background:var(--bg);text-decoration:none;color:var(--ink)}
+.use:hover{border-color:var(--rule2);color:var(--ink)}
+.bar{height:6px;border-radius:3px;background:var(--hover);overflow:hidden;display:flex}
+.bar span{display:block;height:100%}
+.me{display:flex;align-items:center;gap:10px;width:100%;padding:6px;border:0;border-radius:10px;background:none;font:inherit;color:var(--ink);cursor:pointer;text-align:left}
+.av{width:32px;height:32px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:12px;font-weight:700;color:#fff;background:#2F6F5E}
+.main{flex:999 1 560px;min-width:0;display:flex;flex-direction:column}
+.top{display:flex;align-items:center;gap:10px;min-height:56px;padding:10px 28px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.crumb{display:flex;align-items:center;gap:8px;font-weight:560;color:var(--ink2);min-width:0}
+.crumb a{color:var(--ink2);text-decoration:none}.crumb a:hover{color:var(--ink)}
+.tact{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:8px;border:1px solid var(--rule2);background:var(--bg);color:var(--ink);font:inherit;font-weight:580;font-size:13.5px;text-decoration:none;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--panel);color:var(--ink)}
+.btn.pri{background:var(--pri);border-color:var(--pri);color:#fff}.btn.pri:hover{background:var(--pri-ink);color:#fff}
+.btn.warn{color:var(--red-ink)}
+.btn.sm{height:30px;padding:0 10px;font-size:13px}
+.seg{display:inline-flex;padding:3px;border-radius:9px;background:var(--panel);border:1px solid var(--rule);gap:2px;flex-wrap:wrap}
+.seg button{height:28px;padding:0 10px;border:0;border-radius:6px;background:none;font:inherit;font-size:13px;font-weight:560;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.seg button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(20,24,43,.12),0 0 0 1px var(--rule)}
+.seg .k{font-size:12px;color:var(--ink3)}
+.page{padding:22px 28px 40px;display:flex;flex-direction:column;gap:18px}
+.card{border:1px solid var(--rule);border-radius:14px;background:var(--bg);padding:18px 20px;min-width:0;display:flex;flex-direction:column}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 7px;border-radius:6px;font-size:12px;font-weight:580;background:var(--panel);color:var(--ink2);border:1px solid var(--rule);white-space:nowrap;text-decoration:none}
+.chip.run{background:var(--pri-t);color:var(--pri-ink);border-color:transparent}
+.chip.you{background:var(--you-t);color:var(--you-ink);border-color:transparent}
+.chip.red{background:var(--red-t);color:var(--red-ink);border-color:transparent}
+.chip.yel{background:var(--yel-t);color:var(--yel-ink);border-color:transparent}
+.chip.grn{background:var(--grn-t);color:var(--grn-ink);border-color:transparent}
+.chip.big{height:28px;padding:0 10px;font-size:13px;border-radius:8px}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.live{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.3}}
+a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:760px){.side{width:100%;min-height:0;border-right:0;border-bottom:1px solid var(--rule)}.side .navs,.side .sbot{display:none}.top{padding:8px 16px}.page{padding:16px}}
+
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.tabs a{display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 10px;color:var(--ink2);text-decoration:none;font-weight:560;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs a:hover{color:var(--ink)}
+.tabs a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--pri);font-weight:640}
+.tabs .k{font-size:12px;color:var(--ink3);font-weight:560}
+.jhd{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.jav{width:44px;height:44px;flex:none;border-radius:12px;background:var(--navy);display:grid;place-items:center}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;align-items:start}
+@media (max-width:1100px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.ch{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.ch .h2{flex:1;min-width:0}
+.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13.5px}
+.tbl th{text-align:left;font-size:12.5px;font-weight:600;color:var(--ink3);padding:0 14px 10px;border-bottom:1px solid var(--rule);white-space:nowrap}
+.tbl td{padding:12px 14px;border-bottom:1px solid var(--rule);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:0}
+.tbl tbody tr:hover td{background:var(--panel)}
+.tbl a.nm{color:var(--ink);text-decoration:none;font-weight:620}
+.tbl a.nm:hover{color:var(--pri-ink)}
+.spk{width:96px;height:26px;display:block}
+.kv{display:grid;grid-template-columns:112px minmax(0,1fr);gap:10px 12px;font-size:13.5px;align-items:baseline;margin:0}
+.kv dt{color:var(--ink3);margin:0}.kv dd{margin:0;min-width:0}
+.stat{border:1px solid var(--rule);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.stat .v{font-size:24px;line-height:1.1;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.stat .was{font-size:15px;color:var(--ink3);text-decoration:line-through;font-weight:520;font-stretch:100%}
+.sts3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:12px}
+.tdot{display:inline-flex;gap:3px}
+.tdot i{width:10px;height:10px;border-radius:3px;display:block;background:var(--grn)}
+.tdot i.f{background:var(--red)}
+.tdot i.n{background:var(--hover)}
+.sw{width:36px;height:20px;border-radius:10px;border:0;padding:2px;background:var(--rule2);cursor:pointer;display:flex;flex:none}
+.sw span{width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);display:block}
+.sw[aria-checked="true"]{background:var(--pri);justify-content:flex-end}
+
+.rec{display:flex;flex-wrap:wrap;align-items:center;gap:14px 20px;padding:18px 20px;border-radius:14px;background:var(--grn-t)}
+.rec .t{font-size:17px;font-weight:650;color:var(--ink)}
+.plot{width:100%;height:auto;display:block}
+.hm{display:grid;grid-template-columns:minmax(0,1.6fr) repeat(3,minmax(0,1fr));gap:4px;font-size:13px;align-items:center}
+.hm .hd{font-size:12px;font-weight:600;color:var(--ink3);padding:0 4px 4px}
+.hm .c{height:34px;border-radius:7px;display:grid;place-items:center;font-weight:620}
+.hm .c3{background:#0A7A4F;color:#fff}
+.hm .c2{background:#BFE8D3;color:#0A5A3A}
+.hm .c1{background:#F7CFC4;color:#8E2410}
+.hm .nm{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;padding-right:8px;overflow-wrap:anywhere}
+
+</style>
+</helmet>
+<div class="g app">
+  <nav class="side" aria-label="Goal">
+    <div class="srow">
+      <button class="orgb" type="button" aria-haspopup="menu" aria-label="Goal organization, switch organization"><span class="omk" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="#FFC21A"></circle></svg></span><span style="flex: 1; min-width: 0">Goal</span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m4 5.5 3-3 3 3M4 8.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+      <button class="ib" type="button" aria-label="Search, Command K"><svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><circle cx="8" cy="8" r="5.25" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="m12 12 3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button>
+      <button class="ib" type="button" aria-label="Collapse sidebar"><svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><rect x="2.5" y="3" width="13" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"></rect><path d="M7 3v12" stroke="currentColor" stroke-width="1.6"></path></svg></button>
+    </div>
+    <a class="newb" href="#item"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>New item<span class="kb" aria-label="shortcut C">C</span></a>
+    <div class="navs" style="display: flex; flex-direction: column; gap: 1px">
+      <a class="ni" href="#home"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 8.25 9 3.5l6 4.75V15a1 1 0 0 1-1 1h-3.25v-4h-3.5v4H4a1 1 0 0 1-1-1Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>Home</a>
+      <a class="ni" href="#needs-you"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2.5 10.5h3.75l1 2h3.5l1-2h3.75M4.5 3.5h9l2 7v4a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-4Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>Needs you<span class="cnt">5</span></a>
+      <a class="ni" href="#runs"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 9.5h3l2-5.5 4 10 2-4.5h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>Runs</a>
+      <a class="ni" href="#connections"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M6.5 2.5v3M11.5 2.5v3M4.5 5.5h9v3a4.5 4.5 0 0 1-9 0ZM9 13v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>Connections</a>
+      <a class="ni" href="#credentials"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="6" cy="12" r="3.25" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M8.4 9.6 15 3M12.5 5.5l2 2M10.4 7.6l1.5 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>Credentials</a>
+      <a class="ni" href="#knowledge"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 4.5C3 3.7 3.7 3 4.5 3H8v12H4.5c-.8 0-1.5-.7-1.5-1.5ZM15 4.5c0-.8-.7-1.5-1.5-1.5H10v12h3.5c.8 0 1.5-.7 1.5-1.5Z" fill="none" stroke="currentColor" stroke-width="1.6"></path></svg>Knowledge</a>
+      <div class="sec"><span>Factories</span><a class="ib" href="#template" aria-label="New factory"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg></a></div>
+      <a class="fh" href="#floor" aria-expanded="true"><span class="fb" style="background: #2742F5" aria-hidden="true">S</span>Software<span class="cnt" style="margin-left: auto">3</span><svg class="chev" style="margin-left: 0" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m3.5 5.5 3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></a>
+      <div class="sub">
+        <a href="#floor">Floor</a>
+        <a href="#board">Board</a>
+        <a href="#items">Items</a>
+        <a href="#agents">Agents</a>
+        <a href="#intake">Intake</a>
+        <a class="on" href="#jonah" aria-current="page">Jonah<span class="cnt n" style="height: 18px; font-size: 11px">2</span></a>
+        <a href="#definition">Definition</a>
+        <a href="#factory-settings">Settings</a>
+      </div>
+      <a class="fh" href="#"><span class="fb" style="background: #0E8576" aria-hidden="true">R</span>SRE<span class="cnt" style="margin-left: auto; background: var(--red)">1</span><svg class="chev" style="margin-left: 0" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m5.5 3.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></a>
+      <a class="fh" href="#"><span class="fb" style="background: #C24E17" aria-hidden="true">P</span>Support<span class="cnt" style="margin-left: auto">1</span><svg class="chev" style="margin-left: 0" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m5.5 3.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></a>
+    </div>
+    <div class="sbot">
+      <a class="use" href="#spend"><span style="display: flex; justify-content: space-between; font-size: 13px"><span class="m2">Spend this week</span><span class="num" style="font-weight: 620">$512 of $1,400</span></span><span class="bar" aria-hidden="true"><span style="width: 37%; background: var(--pri)"></span></span></a>
+      <button class="me" type="button" aria-haspopup="menu"><span class="av" aria-hidden="true">FC</span><span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-weight: 620">Freddy Cruz</span><span class="xs m3">Owner</span></span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m4 5.5 3-3 3 3M4 8.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+    </div>
+  </nav>
+  <div class="main">
+
+    <header class="top">
+      <div class="crumb"><span class="fb" style="background: #2742F5; width: 20px; height: 20px; font-size: 11px" aria-hidden="true">S</span><a href="#floor">Software</a><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m4.5 2.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.4"></path></svg><a href="#jonah">Jonah</a><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m4.5 2.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.4"></path></svg><a href="#bake-off">Bake-offs</a><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m4.5 2.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.4"></path></svg><span style="color: var(--ink); font-weight: 640">frontend-engineer, Oct 25</span></div>
+      <div class="tact">
+        <button class="btn" type="button">Run again</button>
+        <button class="btn" type="button">New bake-off</button>
+      </div>
+    </header>
+
+    <main class="page">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <h1 class="h1">Which model for frontend-engineer?</h1>
+        <p class="sm m2">3 models on the same 5 frontend cases, 3 tries each. Finished Oct 25 at 18:40, cost $14.20.</p>
+      </div>
+      <nav class="tabs" aria-label="Jonah"><a href="#jonah">Overview</a><a href="#proposal">Proposals<span class="k">2</span></a><a href="#judges">Judges<span class="k">4</span></a><a href="#evals">Evals<span class="k">5</span></a><a href="#bake-off" aria-current="page">Bake-offs<span class="k">1</span></a></nav>
+
+      <section class="rec" aria-labelledby="rec-h">
+        <span style="width: 40px; height: 40px; border-radius: 11px; background: #0FA36B; display: grid; place-items: center; flex: none" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 20 20"><path d="m5 10.5 3.2 3.2L15 7" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+        <div style="display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 260px">
+          <h2 id="rec-h" class="t">claude-haiku-5-5: the same pass rate at a tenth of the cost</h2>
+          <span class="sm m2">93% of tries passed, like claude-opus-5-5, for $0.24 an item instead of $2.40.</span>
+        </div>
+        <button class="btn pri" type="button">Apply to the definition</button>
+      </section>
+
+      <div class="grid2" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr)">
+        <section class="card" aria-labelledby="pl-h">
+          <div class="ch"><h2 id="pl-h" class="h2">Pass rate against cost</h2><span class="sm m3">Up and left is better</span></div>
+          <svg class="plot" viewBox="0 0 520 320" role="img" aria-label="Scatter: haiku 93% at $0.24, sonnet 87% at $0.90, opus 93% at $2.40 per item">
+            <g font-family="Archivo, system-ui, sans-serif" font-size="12" fill="var(--ink3)">
+              <line x1="56" y1="20" x2="56" y2="270" stroke="var(--rule2)"></line>
+              <line x1="56" y1="270" x2="500" y2="270" stroke="var(--rule2)"></line>
+              <line x1="56" y1="20" x2="500" y2="20" stroke="var(--rule)" stroke-dasharray="3 4"></line>
+              <line x1="56" y1="103" x2="500" y2="103" stroke="var(--rule)" stroke-dasharray="3 4"></line>
+              <line x1="56" y1="187" x2="500" y2="187" stroke="var(--rule)" stroke-dasharray="3 4"></line>
+              <text x="48" y="24" text-anchor="end">100%</text>
+              <text x="48" y="107" text-anchor="end">90%</text>
+              <text x="48" y="191" text-anchor="end">80%</text>
+              <text x="48" y="274" text-anchor="end">70%</text>
+              <text x="56" y="292" text-anchor="middle">$0</text>
+              <text x="204" y="292" text-anchor="middle">$1</text>
+              <text x="352" y="292" text-anchor="middle">$2</text>
+              <text x="500" y="292" text-anchor="middle">$3</text>
+              <text x="278" y="314" text-anchor="middle">Cost per item</text>
+            </g>
+            <circle cx="92" cy="78" r="10" fill="#0FA36B"></circle>
+            <text x="110" y="70" font-family="Archivo, system-ui, sans-serif" font-size="13" font-weight="650" fill="var(--ink)">haiku 5.5</text>
+            <text x="110" y="86" font-family="Archivo, system-ui, sans-serif" font-size="12" fill="var(--ink2)">93%, $0.24</text>
+            <circle cx="189" cy="128" r="10" fill="#8C98FF"></circle>
+            <text x="207" y="132" font-family="Archivo, system-ui, sans-serif" font-size="13" font-weight="650" fill="var(--ink)">sonnet 5.5<tspan font-weight="400" fill="var(--ink2)">  87%, $0.90</tspan></text>
+            <circle cx="411" cy="78" r="10" fill="#2742F5"></circle>
+            <text x="427" y="74" font-family="Archivo, system-ui, sans-serif" font-size="13" font-weight="650" fill="var(--ink)">opus 5.5</text>
+            <text x="427" y="90" font-family="Archivo, system-ui, sans-serif" font-size="12" fill="var(--ink2)">93%, $2.40</text>
+          </svg>
+        </section>
+
+        <section class="card" aria-labelledby="hm-h">
+          <div class="ch"><h2 id="hm-h" class="h2">Tries passed per case</h2><span class="sm m3">Out of 3</span></div>
+          <div class="hm" role="table" aria-label="Tries passed per case and model">
+            <span class="hd" role="columnheader">Case</span><span class="hd" role="columnheader" style="text-align: center">haiku</span><span class="hd" role="columnheader" style="text-align: center">sonnet</span><span class="hd" role="columnheader" style="text-align: center">opus</span>
+            <span class="nm">empty-state-matches-design</span><span class="c c3">3</span><span class="c c3">3</span><span class="c c3">3</span>
+            <span class="nm">dark-theme-contrast</span><span class="c c3">3</span><span class="c c2">2</span><span class="c c3">3</span>
+            <span class="nm">board-card-move-menu</span><span class="c c2">2</span><span class="c c2">2</span><span class="c c3">3</span>
+            <span class="nm">form-errors-near-field</span><span class="c c3">3</span><span class="c c3">3</span><span class="c c2">2</span>
+            <span class="nm">usage-bar-thresholds</span><span class="c c3">3</span><span class="c c1">1</span><span class="c c3">3</span>
+          </div>
+        </section>
+      </div>
+
+      <section class="card" aria-labelledby="tb-h" style="padding: 18px 6px 6px">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 0 14px 12px"><h2 id="tb-h" class="h2">Results</h2></div>
+        <div style="overflow-x: auto">
+        <table class="tbl">
+          <thead><tr><th scope="col">Model</th><th scope="col">Pass rate</th><th scope="col">Cost per item</th><th scope="col">Time per item</th><th scope="col">Turns</th><th scope="col">Judged plain language</th></tr></thead>
+          <tbody>
+            <tr><td><span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 620"><span style="width: 10px; height: 10px; border-radius: 50%; background: #0FA36B"></span>claude-haiku-5-5</span> <span class="chip grn" style="margin-left: 6px">Recommended</span></td><td class="num">93%</td><td class="num">$0.24</td><td>14 min</td><td>38</td><td>95%</td></tr>
+            <tr><td><span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 620"><span style="width: 10px; height: 10px; border-radius: 50%; background: #8C98FF"></span>claude-sonnet-5-5</span></td><td class="num">87%</td><td class="num">$0.90</td><td>17 min</td><td>44</td><td>96%</td></tr>
+            <tr><td><span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 620"><span style="width: 10px; height: 10px; border-radius: 50%; background: #2742F5"></span>claude-opus-5-5</span> <span class="chip" style="margin-left: 6px">Now</span></td><td class="num">93%</td><td class="num">$2.40</td><td>22 min</td><td>41</td><td>97%</td></tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+    </main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { theme: this.props.dark ? 'dark' : '' };
+  }
+}
+</script>
+</body>
+</html>

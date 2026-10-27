@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Add a connection</title>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#FFFFFF}
+a{color:#2742F5}a:hover{color:#1B33C9}
+*{box-sizing:border-box}
+h1,h2,h3,p,ol,ul{margin:0}
+ol,ul{padding:0;list-style:none}
+.g{--bg:#FFFFFF;--side:#F3F4F9;--panel:#F7F8FC;--hover:#E9EBF4;--rule:#E3E6EF;--rule2:#CBD0DF;--ink:#14182B;--ink2:#464D6A;--ink3:#626986;--pri:#2742F5;--pri-ink:#1B33C9;--pri-t:#E8ECFF;--you:#7B3FE4;--you-t:#F1EBFE;--you-ink:#5A24B8;--red:#D63A1F;--red-t:#FDECE8;--red-ink:#AE2C14;--yel:#FFC21A;--yel-t:#FFF4D1;--yel-ink:#6E4B00;--grn:#0FA36B;--grn-t:#E1F5EB;--grn-ink:#0A7A4F;--navy:#121633;--navy2:#1C2147;--navy3:#2C3266;font-family:Archivo,system-ui,sans-serif;font-size:14px;line-height:1.45;color:var(--ink);background:var(--bg);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.g.dark{--bg:#0E1120;--side:#13172A;--panel:#161A2F;--hover:#1E2340;--rule:#252A45;--rule2:#3A4066;--ink:#ECEEF7;--ink2:#B7BCD4;--ink3:#9096B3;--pri:#4A63F5;--pri-ink:#A3B2FF;--pri-t:#1D2556;--you:#9061F5;--you-t:#2A1E4F;--you-ink:#CDB4FF;--red:#E2512F;--red-t:#3B1C16;--red-ink:#FFA08A;--yel-t:#3A3013;--yel-ink:#FFD666;--grn:#22C17F;--grn-t:#10301F;--grn-ink:#62DDA5;--navy:#090C1A;--navy2:#151A36;--navy3:#272D58}
+.h1{font-size:26px;line-height:1.15;font-weight:650;font-stretch:108%;letter-spacing:-0.015em}
+.h2{font-size:16px;line-height:1.3;font-weight:620}
+.num{font-stretch:112%;font-weight:600;letter-spacing:-0.01em}
+.m2{color:var(--ink2)}.m3{color:var(--ink3)}.sm{font-size:13px}.xs{font-size:12px}
+.code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12.5px}
+.app{display:flex;flex-wrap:wrap;align-items:stretch;min-height:100vh;background:var(--bg)}
+.side{width:256px;flex:none;background:var(--side);border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:1px;padding:10px 10px 12px;min-height:100vh}
+.srow{display:flex;align-items:center;gap:2px;margin-bottom:8px}
+.orgb{flex:1;min-width:0;display:flex;align-items:center;gap:9px;height:38px;padding:0 6px;border:0;border-radius:8px;background:none;font:inherit;font-weight:620;font-size:15px;color:var(--ink);cursor:pointer;text-align:left}
+.omk{width:26px;height:26px;flex:none;border-radius:7px;background:var(--pri);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:750;font-stretch:115%}
+.ib{width:32px;height:32px;flex:none;border:0;border-radius:8px;background:none;color:var(--ink2);display:grid;place-items:center;cursor:pointer;padding:0}
+.orgb:hover,.ib:hover,.ni:hover,.fh:hover,.sub a:hover,.me:hover{background:var(--hover);color:var(--ink)}
+.newb{display:flex;align-items:center;gap:8px;height:36px;padding:0 8px 0 12px;border-radius:9px;background:var(--pri);color:#fff;font-weight:620;text-decoration:none;margin:0 0 10px}
+.newb:hover{background:var(--pri-ink);color:#fff}
+.kb{margin-left:auto;min-width:20px;height:20px;padding:0 5px;border-radius:5px;background:rgba(255,255,255,.2);font-size:11px;font-weight:650;display:grid;place-items:center}
+.ni{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:8px;color:var(--ink2);text-decoration:none;font-weight:540}
+.ni svg{flex:none;color:var(--ink3)}
+.ni.on{background:var(--pri-t);color:var(--pri-ink)}.ni.on svg{color:var(--pri)}
+.cnt{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:6px;font-size:12px;font-weight:650;display:inline-grid;place-items:center;background:var(--you);color:#fff}
+.cnt.n{background:var(--hover);color:var(--ink2)}
+.sec{display:flex;align-items:center;justify-content:space-between;height:30px;margin-top:14px;padding:0 2px 0 10px;font-size:12.5px;font-weight:600;color:var(--ink3)}
+.sec .ib{width:26px;height:26px}
+.fh{display:flex;align-items:center;gap:10px;height:36px;padding:0 8px;border-radius:8px;color:var(--ink);text-decoration:none;font-weight:620}
+.fh .chev{margin-left:auto;color:var(--ink3);flex:none}
+.fb{width:22px;height:22px;flex:none;border-radius:6px;display:grid;place-items:center;color:#fff;font-size:11.5px;font-weight:750;font-stretch:112%}
+.sub{display:flex;flex-direction:column;gap:1px;margin:2px 0 6px 18px;padding-left:10px;border-left:1px solid var(--rule2)}
+.sub a{display:flex;align-items:center;height:30px;padding:0 10px;border-radius:7px;color:var(--ink2);text-decoration:none;font-size:13.5px;font-weight:520}
+.sub a.on{background:var(--bg);color:var(--ink);font-weight:640;box-shadow:0 0 0 1px var(--rule)}
+.sdot{width:8px;height:8px;border-radius:50%;flex:none}
+.sbot{margin-top:auto;display:flex;flex-direction:column;gap:8px;padding-top:12px}
+.use{display:flex;flex-direction:column;gap:7px;padding:10px 12px;border-radius:10px;border:1px solid var(--rule);background:var(--bg);text-decoration:none;color:var(--ink)}
+.use:hover{border-color:var(--rule2);color:var(--ink)}
+.bar{height:6px;border-radius:3px;background:var(--hover);overflow:hidden;display:flex}
+.bar span{display:block;height:100%}
+.me{display:flex;align-items:center;gap:10px;width:100%;padding:6px;border:0;border-radius:10px;background:none;font:inherit;color:var(--ink);cursor:pointer;text-align:left}
+.av{width:32px;height:32px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:12px;font-weight:700;color:#fff;background:#2F6F5E}
+.main{flex:999 1 560px;min-width:0;display:flex;flex-direction:column}
+.top{display:flex;align-items:center;gap:10px;min-height:56px;padding:10px 28px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.crumb{display:flex;align-items:center;gap:8px;font-weight:560;color:var(--ink2);min-width:0}
+.crumb a{color:var(--ink2);text-decoration:none}.crumb a:hover{color:var(--ink)}
+.tact{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:8px;border:1px solid var(--rule2);background:var(--bg);color:var(--ink);font:inherit;font-weight:580;font-size:13.5px;text-decoration:none;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--panel);color:var(--ink)}
+.btn.pri{background:var(--pri);border-color:var(--pri);color:#fff}.btn.pri:hover{background:var(--pri-ink);color:#fff}
+.btn.warn{color:var(--red-ink)}
+.btn.sm{height:30px;padding:0 10px;font-size:13px}
+.seg{display:inline-flex;padding:3px;border-radius:9px;background:var(--panel);border:1px solid var(--rule);gap:2px;flex-wrap:wrap}
+.seg button{height:28px;padding:0 10px;border:0;border-radius:6px;background:none;font:inherit;font-size:13px;font-weight:560;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.seg button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(20,24,43,.12),0 0 0 1px var(--rule)}
+.seg .k{font-size:12px;color:var(--ink3)}
+.page{padding:22px 28px 40px;display:flex;flex-direction:column;gap:18px}
+.card{border:1px solid var(--rule);border-radius:14px;background:var(--bg);padding:18px 20px;min-width:0;display:flex;flex-direction:column}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 7px;border-radius:6px;font-size:12px;font-weight:580;background:var(--panel);color:var(--ink2);border:1px solid var(--rule);white-space:nowrap;text-decoration:none}
+.chip.run{background:var(--pri-t);color:var(--pri-ink);border-color:transparent}
+.chip.you{background:var(--you-t);color:var(--you-ink);border-color:transparent}
+.chip.red{background:var(--red-t);color:var(--red-ink);border-color:transparent}
+.chip.yel{background:var(--yel-t);color:var(--yel-ink);border-color:transparent}
+.chip.grn{background:var(--grn-t);color:var(--grn-ink);border-color:transparent}
+.chip.big{height:28px;padding:0 10px;font-size:13px;border-radius:8px}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.live{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.3}}
+a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:760px){.side{width:100%;min-height:0;border-right:0;border-bottom:1px solid var(--rule)}.side .navs,.side .sbot{display:none}.top{padding:8px 16px}.page{padding:16px}}
+
+.pick{display:grid;grid-template-columns:300px minmax(0,1fr);border:1px solid var(--rule);border-radius:16px;overflow:hidden;min-height:760px}
+@media (max-width:1000px){.pick{grid-template-columns:minmax(0,1fr)}}
+.cat{background:var(--panel);border-right:1px solid var(--rule);padding:14px;display:flex;flex-direction:column;gap:4px}
+.cs{display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;border-radius:9px;border:1px solid var(--rule2);background:var(--bg);color:var(--ink3);margin-bottom:8px}
+.cs input{border:0;outline:0;background:none;font:inherit;color:var(--ink);width:100%}
+.cl{font-size:12px;font-weight:600;color:var(--ink3);padding:10px 8px 4px}
+.ci{display:flex;align-items:center;gap:10px;min-height:44px;padding:6px 8px;border-radius:9px;text-decoration:none;color:var(--ink)}
+.ci:hover{background:var(--hover);color:var(--ink)}
+.ci[aria-current="true"]{background:var(--bg);box-shadow:0 0 0 1px var(--rule2)}
+.ci .t{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.ci .t b{font-weight:620}
+.ci .t span{font-size:12px;color:var(--ink3)}
+.ci .tag{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--grn-ink)}
+.lt{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex:none;color:#fff;font-size:12px;font-weight:750;font-stretch:112%}
+.dt{padding:24px 28px;display:flex;flex-direction:column;gap:22px;min-width:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld > span,.fld > label{font-size:13px;font-weight:620}
+.in{height:38px;border-radius:9px;border:1px solid var(--rule2);padding:0 12px;font:inherit;font-size:14px;color:var(--ink);background:var(--bg);display:flex;align-items:center}
+.radios{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.rad{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:12px;border:1px solid var(--rule2);cursor:pointer}
+.rad.on{border-color:var(--pri);box-shadow:0 0 0 1px var(--pri);background:var(--pri-t)}
+.rad input{margin:3px 0 0;accent-color:var(--pri)}
+.tl{border:1px solid var(--rule);border-radius:12px;overflow:hidden}
+.th{display:flex;align-items:center;gap:8px;padding:9px 14px;background:var(--panel);font-size:12.5px;font-weight:620;color:var(--ink2);border-bottom:1px solid var(--rule)}
+.tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 14px;border-top:1px solid var(--rule);font-size:13.5px}
+.tr:first-of-type{border-top:0}
+.tri{display:inline-flex;padding:2px;border-radius:8px;background:var(--panel);border:1px solid var(--rule);gap:2px}
+.tri button{height:24px;padding:0 9px;border:0;border-radius:6px;background:none;font:inherit;font-size:12px;font-weight:580;color:var(--ink2);cursor:pointer}
+.tri button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 0 0 1px var(--rule2)}
+.tri button.ask[aria-pressed="true"]{background:var(--you-t);color:var(--you-ink);box-shadow:none}
+.tri button.off[aria-pressed="true"]{background:var(--hover);color:var(--ink2);box-shadow:none}
+.fct{display:flex;flex-wrap:wrap;gap:8px}
+.fc{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 12px 0 6px;border-radius:9px;border:1px solid var(--rule2);background:var(--bg);font:inherit;font-size:13.5px;font-weight:580;color:var(--ink);cursor:pointer}
+.fc[aria-pressed="true"]{border-color:var(--pri);background:var(--pri-t);color:var(--pri-ink)}
+.fc .fb{width:22px;height:22px}
+.ok{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;background:var(--grn-t);color:var(--grn-ink);font-size:13.5px}
+.foot{display:flex;align-items:center;gap:10px;padding-top:18px;border-top:1px solid var(--rule)}
+</style>
+</helmet>
+<div class="g app">
+  <nav class="side" aria-label="Goal">
+    <div class="srow">
+      <button class="orgb" type="button" aria-haspopup="menu" aria-label="Goal organization, switch organization"><span class="omk" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="#FFC21A"></circle></svg></span><span style="flex: 1; min-width: 0">Goal</span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m4 5.5 3-3 3 3M4 8.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+      <button class="ib" type="button" aria-label="Search, Command K"><svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><circle cx="8" cy="8" r="5.25" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="m12 12 3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button>
+      <button class="ib" type="button" aria-label="Collapse sidebar"><svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><rect x="2.5" y="3" width="13" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"></rect><path d="M7 3v12" stroke="currentColor" stroke-width="1.6"></path></svg></button>
+    </div>
+    <a class="newb" href="#item"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>New item<span class="kb" aria-label="shortcut C">C</span></a>
+    <div class="navs" style="display: flex; flex-direction: column; gap: 1px">
+      <a class="ni" href="#home"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 8.25 9 3.5l6 4.75V15a1 1 0 0 1-1 1h-3.25v-4h-3.5v4H4a1 1 0 0 1-1-1Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>Home</a>
+      <a class="ni" href="#needs-you"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2.5 10.5h3.75l1 2h3.5l1-2h3.75M4.5 3.5h9l2 7v4a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-4Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>Needs you<span class="cnt">5</span></a>
+      <a class="ni" href="#runs"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 9.5h3l2-5.5 4 10 2-4.5h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>Runs</a>
+      <a class="ni on" href="#connections" aria-current="page"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M6.5 2.5v3M11.5 2.5v3M4.5 5.5h9v3a4.5 4.5 0 0 1-9 0ZM9 13v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>Connections</a>
+      <a class="ni" href="#credentials"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="6" cy="12" r="3.25" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M8.4 9.6 15 3M12.5 5.5l2 2M10.4 7.6l1.5 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>Credentials</a>
+      <a class="ni" href="#knowledge"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 4.5C3 3.7 3.7 3 4.5 3H8v12H4.5c-.8 0-1.5-.7-1.5-1.5ZM15 4.5c0-.8-.7-1.5-1.5-1.5H10v12h3.5c.8 0 1.5-.7 1.5-1.5Z" fill="none" stroke="currentColor" stroke-width="1.6"></path></svg>Knowledge</a>
+      <div class="sec"><span>Factories</span><a class="ib" href="#template" aria-label="New factory"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg></a></div>
+      <a class="fh" href="#floor" aria-expanded="true"><span class="fb" style="background: #2742F5" aria-hidden="true">S</span>Software<span class="cnt" style="margin-left: auto">3</span><svg class="chev" style="margin-left: 0" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m3.5 5.5 3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></a>
+      <div class="sub">
+        <a href="#floor">Floor</a>
+        <a href="#board">Board</a>
+        <a href="#items">Items</a>
+        <a href="#agents">Agents</a>
+        <a href="#intake">Intake</a>
+        <a href="#jonah">Jonah<span class="cnt n" style="height: 18px; font-size: 11px">2</span></a>
+        <a href="#definition">Definition</a>
+        <a href="#factory-settings">Settings</a>
+      </div>
+      <a class="fh" href="#"><span class="fb" style="background: #0E8576" aria-hidden="true">R</span>SRE<span class="cnt" style="margin-left: auto; background: var(--red)">1</span><svg class="chev" style="margin-left: 0" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m5.5 3.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></a>
+      <a class="fh" href="#"><span class="fb" style="background: #C24E17" aria-hidden="true">P</span>Support<span class="cnt" style="margin-left: auto">1</span><svg class="chev" style="margin-left: 0" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m5.5 3.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></a>
+    </div>
+    <div class="sbot">
+      <a class="use" href="#spend"><span style="display: flex; justify-content: space-between; font-size: 13px"><span class="m2">Spend this week</span><span class="num" style="font-weight: 620">$512 of $1,400</span></span><span class="bar" aria-hidden="true"><span style="width: 37%; background: var(--pri)"></span></span></a>
+      <button class="me" type="button" aria-haspopup="menu"><span class="av" aria-hidden="true">FC</span><span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-weight: 620">Freddy Cruz</span><span class="xs m3">Owner</span></span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m4 5.5 3-3 3 3M4 8.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+    </div>
+  </nav>
+  <div class="main">
+    <header class="top">
+      <div class="crumb"><a href="#connections">Connections</a><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m4.5 2.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.4"></path></svg><span style="color: var(--ink); font-weight: 640">Add connection</span></div>
+      <div class="tact"><a class="btn" href="#connections">Cancel</a></div>
+    </header>
+
+    <main class="page">
+      <h1 class="h1">Add a connection</h1>
+      <div class="pick">
+        <nav class="cat" aria-label="Catalog">
+          <label class="cs"><svg width="15" height="15" viewBox="0 0 18 18" aria-hidden="true"><circle cx="8" cy="8" r="5.25" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="m12 12 3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0)">Search the catalog</span><input type="search" placeholder="Search apps and MCP servers"></label>
+          <p class="cl">Suggested for Software</p>
+          <a class="ci" href="#" aria-current="true"><span class="lt" style="background: #5E6AD2">Li</span><span class="t"><b>Linear</b><span>Issues and projects</span></span></a>
+          <a class="ci" href="#"><span class="lt" style="background: #362D59"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 1.5 13.5h4M8 2l6.5 11.5h-4M8 2 5.2 7a6 6 0 0 1 3.3 6.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg></span><span class="t"><b>Sentry</b><span>Errors and releases</span></span></a>
+          <a class="ci" href="#"><span class="lt" style="background: #2D8A4E"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9l7-4.5Z" fill="currentColor"></path></svg></span><span class="t"><b>Playwright</b><span>Drive a browser to check UI</span></span></a>
+          <p class="cl">Catalog</p>
+          <a class="ci" href="#"><span class="lt" style="background: #0B6E62">C7</span><span class="t"><b>Context7</b><span>Library documentation</span></span><span class="tag">Added</span></a>
+          <a class="ci" href="#"><span class="lt" style="background: #14182B">N</span><span class="t"><b>Notion</b><span>Pages and databases</span></span></a>
+          <a class="ci" href="#"><span class="lt" style="background: #A259FF">Fi</span><span class="t"><b>Figma</b><span>Designs and components</span></span></a>
+          <a class="ci" href="#"><span class="lt" style="background: #632CA6">Dd</span><span class="t"><b>Datadog</b><span>Metrics, logs, monitors</span></span></a>
+          <p class="cl">Your own</p>
+          <a class="ci" href="#"><span class="lt" style="background: var(--hover); color: var(--ink2)"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 5-3.5 3L6 11M10 5l3.5 3L10 11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></span><span class="t"><b>Custom MCP server</b><span>A URL, or a command to run</span></span></a>
+        </nav>
+
+        <section class="dt" aria-labelledby="li-h">
+          <div style="display: flex; gap: 14px; align-items: center">
+            <span class="lt" style="background: #5E6AD2; width: 44px; height: 44px; border-radius: 12px; font-size: 16px">Li</span>
+            <div style="display: flex; flex-direction: column; gap: 2px"><h2 id="li-h" class="h1" style="font-size: 22px">Linear</h2><span class="sm m2">Lets agents read issues and, with your OK, comment on them and move their status.</span></div>
+          </div>
+
+          <div class="fld"><span>Endpoint</span><span class="in code" style="background: var(--panel)">https://mcp.linear.app/mcp</span></div>
+
+          <fieldset class="fld" style="border: 0; padding: 0; margin: 0"><legend style="font-size: 13px; font-weight: 620; margin-bottom: 6px; padding: 0">Sign in with</legend>
+            <div class="radios">
+              <label class="rad on"><input type="radio" name="auth" checked><span><b style="font-weight: 620; display: block">Your Linear account</b><span class="sm m2">Opens Linear to approve. Agents act as the Goal app.</span></span></label>
+              <label class="rad"><input type="radio" name="auth"><span><b style="font-weight: 620; display: block">A credential</b><span class="sm m2">Use an API key from Credentials, written as <span class="code">{{linear-key}}</span>.</span></span></label>
+            </div>
+          </fieldset>
+
+          <div class="fld">
+            <span>Tools agents may use <span class="m3" style="font-weight: 500">14 found</span></span>
+            <div class="tl">
+              <div class="th">Read <span class="m3" style="font-weight: 500; margin-left: auto">Allowed without asking</span></div>
+              <div class="tr"><span><span class="code">list_issues</span>, <span class="code">get_issue</span>, <span class="code">search</span> <span class="m3">and 6 more</span></span><span class="tri" role="group" aria-label="Read tools"><button type="button" aria-pressed="true">Allow</button><button class="ask" type="button" aria-pressed="false">Ask first</button><button class="off" type="button" aria-pressed="false">Off</button></span></div>
+              <div class="th" style="border-top: 1px solid var(--rule)">Write <span class="m3" style="font-weight: 500; margin-left: auto">Writes reach people outside Goal</span></div>
+              <div class="tr"><span class="code">create_comment</span><span class="tri" role="group" aria-label="create_comment"><button type="button" aria-pressed="false">Allow</button><button class="ask" type="button" aria-pressed="true">Ask first</button><button class="off" type="button" aria-pressed="false">Off</button></span></div>
+              <div class="tr"><span class="code">update_issue_status</span><span class="tri" role="group" aria-label="update_issue_status"><button type="button" aria-pressed="true">Allow</button><button class="ask" type="button" aria-pressed="false">Ask first</button><button class="off" type="button" aria-pressed="false">Off</button></span></div>
+              <div class="tr"><span class="code">create_issue</span><span class="tri" role="group" aria-label="create_issue"><button type="button" aria-pressed="false">Allow</button><button class="ask" type="button" aria-pressed="false">Ask first</button><button class="off" type="button" aria-pressed="true">Off</button></span></div>
+              <div class="tr"><span><span class="code">delete_issue</span>, <span class="code">archive_project</span></span><span class="tri" role="group" aria-label="Destructive tools"><button type="button" aria-pressed="false">Allow</button><button class="ask" type="button" aria-pressed="false">Ask first</button><button class="off" type="button" aria-pressed="true">Off</button></span></div>
+            </div>
+          </div>
+
+          <div class="fld">
+            <span>Factories that can use it</span>
+            <div class="fct"><button class="fc" type="button" aria-pressed="true"><span class="fb" style="background: #2742F5">S</span>Software</button><button class="fc" type="button" aria-pressed="true"><span class="fb" style="background: #C24E17">P</span>Support</button><button class="fc" type="button" aria-pressed="false"><span class="fb" style="background: #0E8576">R</span>SRE</button></div>
+            <span class="xs m3">Each factory still chooses which of its agents get it, on the agent's page.</span>
+          </div>
+
+          <div class="ok" role="status"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="m5.8 9.2 2.2 2.2 4.2-4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg><span><b style="font-weight: 640">Connected as Freddy Cruz in the Goal workspace.</b> 14 tools answered in 820 ms.</span></div>
+
+          <div class="foot"><button class="btn" type="button">Test again</button><span class="xs m3">Agents get it on their next run</span><button class="btn pri" type="button" style="margin-left: auto">Add Linear</button></div>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":1120}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { theme: this.props.dark ? 'dark' : '' };
+  }
+}
+</script>
+</body>
+</html>

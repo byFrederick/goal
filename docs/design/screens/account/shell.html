@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sidebar states</title>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#EEF0F6}
+*{box-sizing:border-box}
+h1,h2,h3,p,ol,ul{margin:0}
+ol,ul{padding:0;list-style:none}
+a{color:#2742F5}a:hover{color:#1B33C9}
+.g{--bg:#FFFFFF;--side:#F3F4F9;--panel:#F7F8FC;--hover:#E9EBF4;--rule:#E3E6EF;--rule2:#CBD0DF;--ink:#14182B;--ink2:#464D6A;--ink3:#626986;--pri:#2742F5;--pri-ink:#1B33C9;--pri-t:#E8ECFF;--you:#7B3FE4;--you-t:#F1EBFE;--you-ink:#5A24B8;--red:#D63A1F;--grn-t:#E1F5EB;--grn-ink:#0A7A4F;--stage:#EEF0F6;font-family:Archivo,system-ui,sans-serif;font-size:14px;line-height:1.45;color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.g.dark{--bg:#0E1120;--side:#13172A;--panel:#161A2F;--hover:#1E2340;--rule:#252A45;--rule2:#3A4066;--ink:#ECEEF7;--ink2:#B7BCD4;--ink3:#9096B3;--pri:#4A63F5;--pri-ink:#A3B2FF;--pri-t:#1D2556;--you:#9061F5;--you-t:#2A1E4F;--you-ink:#CDB4FF;--red:#E2512F;--grn-t:#10301F;--grn-ink:#62DDA5;--stage:#080A14}
+.stage{width:1440px;height:980px;background:var(--stage);padding:48px 60px;display:grid;grid-template-columns:150px 300px 300px 300px;gap:56px;align-items:start}
+.lab{font-size:14px;font-weight:620;color:var(--ink2);margin-bottom:14px;display:block}
+.frame{height:820px;border-radius:14px;overflow:hidden;border:1px solid var(--rule2);background:var(--bg);display:flex;position:relative;box-shadow:0 18px 40px -24px rgba(20,24,43,.35)}
+.side{width:256px;flex:none;background:var(--side);border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:1px;padding:10px 10px 12px;position:relative}
+.srow{display:flex;align-items:center;gap:2px;margin-bottom:8px}
+.orgb{flex:1;min-width:0;display:flex;align-items:center;gap:9px;height:38px;padding:0 6px;border:0;border-radius:8px;background:none;font:inherit;font-weight:620;font-size:15px;color:var(--ink);cursor:pointer;text-align:left}
+.omk{width:26px;height:26px;flex:none;border-radius:7px;background:var(--pri);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:750;font-stretch:115%}
+.ib{width:32px;height:32px;flex:none;border:0;border-radius:8px;background:none;color:var(--ink2);display:grid;place-items:center;cursor:pointer;padding:0}
+.ib:hover,.ni:hover,.orgb:hover,.mi:hover{background:var(--hover);color:var(--ink)}
+.newb{display:flex;align-items:center;gap:8px;height:36px;padding:0 8px 0 12px;border-radius:9px;background:var(--pri);color:#fff;font-weight:620;text-decoration:none;margin:0 0 10px}
+.ni{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:8px;color:var(--ink2);text-decoration:none;font-weight:540}
+.ni svg{flex:none;color:var(--ink3)}
+.cnt{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:6px;font-size:12px;font-weight:650;display:inline-grid;place-items:center;background:var(--you);color:#fff}
+.sec{display:flex;align-items:center;justify-content:space-between;height:30px;margin-top:14px;padding:0 2px 0 10px;font-size:12.5px;font-weight:600;color:var(--ink3)}
+.fh{display:flex;align-items:center;gap:10px;height:36px;padding:0 8px;border-radius:8px;color:var(--ink);text-decoration:none;font-weight:620}
+.fb{width:22px;height:22px;flex:none;border-radius:6px;display:grid;place-items:center;color:#fff;font-size:11.5px;font-weight:750;font-stretch:112%}
+.me{display:flex;align-items:center;gap:10px;width:100%;padding:6px;border:0;border-radius:10px;background:none;font:inherit;color:var(--ink);cursor:pointer;text-align:left;margin-top:auto}
+.av{width:32px;height:32px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:12px;font-weight:700;color:#fff;background:#2F6F5E}
+.rail{width:60px;flex:none;background:var(--side);border-right:1px solid var(--rule);display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 0 12px}
+.rb{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:var(--ink2);border:0;background:none;cursor:pointer;position:relative;text-decoration:none;padding:0}
+.rb:hover{background:var(--hover)}
+.rb .fb{width:28px;height:28px;border-radius:8px;font-size:13px}
+.rb .b{position:absolute;top:2px;right:0;min-width:16px;height:16px;padding:0 4px;border-radius:5px;background:var(--you);color:#fff;font-size:10px;font-weight:700;display:grid;place-items:center;border:2px solid var(--side)}
+.rb .d{position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:var(--red);border:2px solid var(--side)}
+.rdv{width:28px;height:1px;background:var(--rule2);margin:6px 0}
+.pop{position:absolute;z-index:5;background:var(--bg);border:1px solid var(--rule2);border-radius:14px;box-shadow:0 20px 44px -18px rgba(20,24,43,.4);padding:6px;width:272px}
+.mi{display:flex;align-items:center;gap:10px;min-height:38px;padding:0 10px;border-radius:8px;color:var(--ink);text-decoration:none;font-size:14px;border:0;background:none;width:100%;font:inherit;cursor:pointer;text-align:left}
+.mi svg{flex:none;color:var(--ink3)}
+.mi .r{margin-left:auto;color:var(--ink3);font-size:12.5px}
+.hr{height:1px;background:var(--rule);margin:6px 4px}
+.ml{font-size:12px;font-weight:600;color:var(--ink3);padding:8px 10px 4px}
+.seg{display:inline-flex;padding:2px;border-radius:8px;background:var(--panel);border:1px solid var(--rule);gap:2px;margin-left:auto}
+.seg button{height:24px;padding:0 8px;border:0;border-radius:6px;background:none;font:inherit;font-size:12px;font-weight:560;color:var(--ink2);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 0 0 1px var(--rule)}
+.srch{flex:1;display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;border-radius:9px;border:1.5px solid var(--pri);background:var(--bg);color:var(--ink3)}
+.srch input{border:0;outline:0;background:none;font:inherit;font-size:14px;color:var(--ink);width:100%}
+.res{display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:8px;color:var(--ink);text-decoration:none;font-size:14px;white-space:nowrap;overflow:hidden}
+.res.on{background:var(--pri-t)}
+.res .k{margin-left:auto;font-size:12px;color:var(--ink3)}
+.key{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:5px;border:1px solid var(--rule2);font-size:11px;font-weight:650;color:var(--ink2)}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
+</style>
+</helmet>
+<div class="g">
+<div class="stage">
+
+  <section aria-labelledby="s1">
+    <span id="s1" class="lab">Collapsed</span>
+    <div class="frame" style="width: 150px">
+      <nav class="rail" aria-label="Goal, collapsed">
+        <button class="rb" type="button" aria-label="Goal organization"><span class="omk" style="width: 30px; height: 30px"><svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="#FFC21A"></circle></svg></span></button>
+        <button class="rb" type="button" aria-label="Expand sidebar"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="2.5" y="3" width="13" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"></rect><path d="M7 3v12" stroke="currentColor" stroke-width="1.6"></path></svg></button>
+        <a class="rb" href="#" aria-label="New item" style="background: var(--pri); color: #fff"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></a>
+        <span class="rdv" aria-hidden="true"></span>
+        <a class="rb" href="#" aria-label="Home"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 8.25 9 3.5l6 4.75V15a1 1 0 0 1-1 1h-3.25v-4h-3.5v4H4a1 1 0 0 1-1-1Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg></a>
+        <a class="rb" href="#" aria-label="Needs you, 5"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2.5 10.5h3.75l1 2h3.5l1-2h3.75M4.5 3.5h9l2 7v4a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-4Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg><span class="b" aria-hidden="true">5</span></a>
+        <a class="rb" href="#" aria-label="Runs"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 9.5h3l2-5.5 4 10 2-4.5h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+        <a class="rb" href="#" aria-label="Connections"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M6.5 2.5v3M11.5 2.5v3M4.5 5.5h9v3a4.5 4.5 0 0 1-9 0ZM9 13v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+        <a class="rb" href="#" aria-label="Credentials"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="6" cy="12" r="3.25" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M8.4 9.6 15 3M12.5 5.5l2 2M10.4 7.6l1.5 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></a>
+        <a class="rb" href="#" aria-label="Knowledge"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 4.5C3 3.7 3.7 3 4.5 3H8v12H4.5c-.8 0-1.5-.7-1.5-1.5ZM15 4.5c0-.8-.7-1.5-1.5-1.5H10v12h3.5c.8 0 1.5-.7 1.5-1.5Z" fill="none" stroke="currentColor" stroke-width="1.6"></path></svg></a>
+        <span class="rdv" aria-hidden="true"></span>
+        <a class="rb" href="#" aria-label="Software, 3 need you" style="background: var(--hover)"><span class="fb" style="background: #2742F5">S</span><span class="b" aria-hidden="true">3</span></a>
+        <a class="rb" href="#" aria-label="SRE, andon pulled"><span class="fb" style="background: #0E8576">R</span><span class="d" aria-hidden="true"></span></a>
+        <a class="rb" href="#" aria-label="Support"><span class="fb" style="background: #C24E17">P</span></a>
+        <button class="rb" type="button" aria-label="New factory" style="border: 1.5px dashed var(--rule2); width: 30px; height: 30px; border-radius: 8px; margin-top: 4px"><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></button>
+        <a class="rb" href="#" aria-label="Spend this week, 37% of budget" style="margin-top: auto"><svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="10" fill="none" stroke="var(--hover)" stroke-width="3.5"></circle><circle cx="13" cy="13" r="10" fill="none" stroke="var(--pri)" stroke-width="3.5" stroke-dasharray="23.2 62.8" transform="rotate(-90 13 13)" stroke-linecap="round"></circle></svg></a>
+        <button class="rb" type="button" aria-label="Freddy Cruz, account"><span class="av">FC</span></button>
+      </nav>
+      <div style="flex: 1; background: var(--bg)"></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="s2">
+    <span id="s2" class="lab">Search, from the icon or Command K</span>
+    <div class="frame" style="width: 300px">
+      <nav class="side" aria-label="Goal, searching" style="width: 300px; border-right: 0">
+        <div class="srow"><label class="srch"><svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><circle cx="8" cy="8" r="5.25" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="m12 12 3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0)">Search</span><input type="search" value="spend"></label><button class="ib" type="button" aria-label="Close search"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m3.5 3.5 7 7m0-7-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button></div>
+        <p class="ml">Items</p>
+        <a class="res on" href="#"><span class="fb" style="background: #2742F5; width: 18px; height: 18px; font-size: 10px">S</span>#147 Show this week's spend<span class="k">Build</span></a>
+        <a class="res" href="#"><span class="fb" style="background: #2742F5; width: 18px; height: 18px; font-size: 10px">S</span>#145 Check the budget<span class="k">Build</span></a>
+        <p class="ml">Pages</p>
+        <a class="res" href="#"><svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true" style="color: var(--ink3)"><path d="M2 9.5h3l2-5.5 4 10 2-4.5h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>Spend and usage<span class="k">Organization</span></a>
+        <a class="res" href="#"><svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true" style="color: var(--ink3)"><path d="M3 4h12M3 9h12M3 14h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>Budget, in Software settings<span class="k">Settings</span></a>
+        <p class="ml">Actions</p>
+        <a class="res" href="#"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style="color: var(--ink3)"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>New item about "spend"<span class="k"><span class="key">C</span></span></a>
+        <p class="xs" style="margin-top: auto; padding: 10px; color: var(--ink3); display: flex; gap: 6px; align-items: center; flex-wrap: wrap"><span class="key">↑</span><span class="key">↓</span>to move, <span class="key">↵</span>to open</p>
+      </nav>
+    </div>
+  </section>
+
+  <section aria-labelledby="s3">
+    <span id="s3" class="lab">Organization menu</span>
+    <div class="frame" style="width: 300px">
+      <nav class="side" aria-label="Goal, organization menu open" style="width: 300px; border-right: 0">
+        <div class="srow"><button class="orgb" type="button" aria-expanded="true" style="background: var(--hover)"><span class="omk"><svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="#FFC21A"></circle></svg></span><span style="flex: 1">Goal</span></button></div>
+                <span class="ni" style="opacity: .35">Home</span><span class="ni" style="opacity: .35">Needs you</span><span class="ni" style="opacity: .35">Runs</span>
+      </nav>
+      <div class="pop" role="menu" aria-label="Organization" style="left: 10px; top: 52px">
+        <p class="ml">Organizations</p>
+        <a class="mi" href="#" role="menuitem" style="min-height: 46px"><span style="display: flex; flex-direction: column; line-height: 1.3"><b style="font-weight: 620">Goal</b><span class="xs" style="color: var(--ink3)">3 factories, owner</span></span><svg class="r" width="16" height="16" viewBox="0 0 16 16" aria-label="Current" style="color: var(--pri)"><path d="m3.5 8.2 2.8 2.8L12.5 4.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></a>
+        <a class="mi" href="#" role="menuitem" style="min-height: 46px"><span style="display: flex; flex-direction: column; line-height: 1.3"><b style="font-weight: 620">Acme</b><span class="xs" style="color: var(--ink3)">1 factory, member</span></span></a>
+        <a class="mi" href="#" role="menuitem"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>Create organization</a>
+        <div class="hr"></div>
+        <p class="ml">Goal</p>
+        <a class="mi" href="#" role="menuitem"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6" cy="5.5" r="2.5" fill="none" stroke="currentColor" stroke-width="1.4"></circle><path d="M1.5 13.5a4.5 4.5 0 0 1 9 0M11 3a2.5 2.5 0 0 1 0 5M12.5 10a4 4 0 0 1 2 3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg>Members and roles<span class="r">4</span></a>
+        <a class="mi" href="#" role="menuitem"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3.5" width="12" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"></rect><path d="M2 6.5h12" stroke="currentColor" stroke-width="1.4"></path></svg>Spend and billing</a>
+        <a class="mi" href="#" role="menuitem"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5 13.5 4v4c0 3-2.3 5.2-5.5 6.5C4.8 13.2 2.5 11 2.5 8V4Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path></svg>Models and policies</a>
+        <a class="mi" href="#" role="menuitem"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 9.5 2.5 12l1.5 1.5L6.5 11M7.5 8.5l4-4M10 2.5l3.5 3.5-2 2L8 4.5Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path></svg>API keys</a>
+        <a class="mi" href="#" role="menuitem"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4"></circle><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg>Organization settings</a>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="s4">
+    <span id="s4" class="lab">Account menu</span>
+    <div class="frame" style="width: 300px">
+      <nav class="side" aria-label="Goal, account menu open" style="width: 300px; border-right: 0">
+        <span class="ni" style="opacity: .35">Home</span><span class="ni" style="opacity: .35">Needs you</span><span class="ni" style="opacity: .35">Runs</span>
+        <button class="me" type="button" aria-expanded="true" style="background: var(--hover)"><span class="av">FC</span><span style="flex: 1; display: flex; flex-direction: column"><span style="font-weight: 620">Freddy Cruz</span><span class="xs" style="color: var(--ink3)">Owner</span></span></button>
+      </nav>
+      <div class="pop" role="menu" aria-label="Account" style="left: 10px; bottom: 64px">
+        <div style="display: flex; gap: 10px; align-items: center; padding: 10px 10px 8px"><span class="av" style="width: 38px; height: 38px">FC</span><span style="display: flex; flex-direction: column; line-height: 1.35; min-width: 0"><span style="display: flex; align-items: center; gap: 6px"><b style="font-weight: 640">Freddy Cruz</b><span style="font-size: 11.5px; font-weight: 640; padding: 1px 6px; border-radius: 5px; background: var(--grn-t); color: var(--grn-ink)">Owner</span></span><span class="xs" style="color: var(--ink3)">GitHub: byFrederick</span></span></div>
+        <div class="hr"></div>
+        <div class="mi" role="group" aria-label="Theme"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4"></circle><path d="M8 2.5v11a5.5 5.5 0 0 0 0-11Z" fill="currentColor"></path></svg>Theme<span class="seg"><button type="button" aria-pressed="true">Auto</button><button type="button" aria-pressed="false">Light</button><button type="button" aria-pressed="false">Dark</button></span></div>
+        <a class="mi" href="#" role="menuitem"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5.5" r="2.8" fill="none" stroke="currentColor" stroke-width="1.4"></circle><path d="M2.5 14a5.5 5.5 0 0 1 11 0" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg>Profile</a>
+        <a class="mi" href="#" role="menuitem"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h7A1.5 1.5 0 0 1 13 4.5v4a1.5 1.5 0 0 1-1.5 1.5H8l-3 2.5V10A1.5 1.5 0 0 1 3 8.5Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path></svg>Notifications</a>
+        <a class="mi" href="#" role="menuitem"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="5.5" cy="10.5" r="3" fill="none" stroke="currentColor" stroke-width="1.4"></circle><path d="M7.7 8.3 13.5 2.5M11.5 4.5l1.5 1.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg>Personal tokens</a>
+        <a class="mi" href="#" role="menuitem"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"></rect><rect x="9" y="2" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"></rect><rect x="2" y="9" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"></rect><path d="M11.5 9v5M9 11.5h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg>Connected apps</a>
+        <a class="mi" href="#" role="menuitem"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="4" width="13" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"></rect><path d="M4 7h1M7 7h2M11 7h1M5 9.5h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg>Keyboard shortcuts<span class="r"><span class="key">?</span></span></a>
+        <div class="hr"></div>
+        <button class="mi" type="button" role="menuitem"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 2.5h-3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h3M10 5l3 3-3 3M13 8H6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>Sign out</button>
+        <button class="mi" type="button" role="menuitem" style="color: #AE2C14"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style="color: #AE2C14"><path d="M6.5 2.5h-3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h3M10 5l3 3-3 3M13 8H6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>Sign out everywhere</button>
+      </div>
+    </div>
+  </section>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { theme: this.props.dark ? 'dark' : '' };
+  }
+}
+</script>
+</body>
+</html>

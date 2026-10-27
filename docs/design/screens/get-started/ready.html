@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Software floor after setup</title>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#FFFFFF}
+a{color:#2742F5}a:hover{color:#1B33C9}
+*{box-sizing:border-box}
+h1,h2,h3,p,ol,ul{margin:0}
+ol,ul{padding:0;list-style:none}
+.g{--bg:#FFFFFF;--side:#F3F4F9;--panel:#F7F8FC;--hover:#E9EBF4;--rule:#E3E6EF;--rule2:#CBD0DF;--ink:#14182B;--ink2:#464D6A;--ink3:#626986;--pri:#2742F5;--pri-ink:#1B33C9;--pri-t:#E8ECFF;--you:#7B3FE4;--you-t:#F1EBFE;--you-ink:#5A24B8;--red:#D63A1F;--red-t:#FDECE8;--red-ink:#AE2C14;--yel:#FFC21A;--yel-t:#FFF4D1;--yel-ink:#6E4B00;--grn:#0FA36B;--grn-t:#E1F5EB;--grn-ink:#0A7A4F;--navy:#121633;--navy2:#1C2147;--navy3:#2C3266;font-family:Archivo,system-ui,sans-serif;font-size:14px;line-height:1.45;color:var(--ink);background:var(--bg);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.g.dark{--bg:#0E1120;--side:#13172A;--panel:#161A2F;--hover:#1E2340;--rule:#252A45;--rule2:#3A4066;--ink:#ECEEF7;--ink2:#B7BCD4;--ink3:#9096B3;--pri:#4A63F5;--pri-ink:#A3B2FF;--pri-t:#1D2556;--you:#9061F5;--you-t:#2A1E4F;--you-ink:#CDB4FF;--red:#E2512F;--red-t:#3B1C16;--red-ink:#FFA08A;--yel-t:#3A3013;--yel-ink:#FFD666;--grn:#22C17F;--grn-t:#10301F;--grn-ink:#62DDA5;--navy:#090C1A;--navy2:#151A36;--navy3:#272D58}
+.h1{font-size:26px;line-height:1.15;font-weight:650;font-stretch:108%;letter-spacing:-0.015em}
+.h2{font-size:16px;line-height:1.3;font-weight:620}
+.num{font-stretch:112%;font-weight:600;letter-spacing:-0.01em}
+.m2{color:var(--ink2)}.m3{color:var(--ink3)}.sm{font-size:13px}.xs{font-size:12px}
+.code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12.5px}
+.app{display:flex;flex-wrap:wrap;align-items:stretch;min-height:100vh;background:var(--bg)}
+.side{width:256px;flex:none;background:var(--side);border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:1px;padding:10px 10px 12px;min-height:100vh}
+.srow{display:flex;align-items:center;gap:2px;margin-bottom:8px}
+.orgb{flex:1;min-width:0;display:flex;align-items:center;gap:9px;height:38px;padding:0 6px;border:0;border-radius:8px;background:none;font:inherit;font-weight:620;font-size:15px;color:var(--ink);cursor:pointer;text-align:left}
+.omk{width:26px;height:26px;flex:none;border-radius:7px;background:var(--pri);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:750;font-stretch:115%}
+.ib{width:32px;height:32px;flex:none;border:0;border-radius:8px;background:none;color:var(--ink2);display:grid;place-items:center;cursor:pointer;padding:0}
+.orgb:hover,.ib:hover,.ni:hover,.fh:hover,.sub a:hover,.me:hover{background:var(--hover);color:var(--ink)}
+.newb{display:flex;align-items:center;gap:8px;height:36px;padding:0 8px 0 12px;border-radius:9px;background:var(--pri);color:#fff;font-weight:620;text-decoration:none;margin:0 0 10px}
+.newb:hover{background:var(--pri-ink);color:#fff}
+.kb{margin-left:auto;min-width:20px;height:20px;padding:0 5px;border-radius:5px;background:rgba(255,255,255,.2);font-size:11px;font-weight:650;display:grid;place-items:center}
+.ni{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:8px;color:var(--ink2);text-decoration:none;font-weight:540}
+.ni svg{flex:none;color:var(--ink3)}
+.ni.on{background:var(--pri-t);color:var(--pri-ink)}.ni.on svg{color:var(--pri)}
+.cnt{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:6px;font-size:12px;font-weight:650;display:inline-grid;place-items:center;background:var(--you);color:#fff}
+.cnt.n{background:var(--hover);color:var(--ink2)}
+.sec{display:flex;align-items:center;justify-content:space-between;height:30px;margin-top:14px;padding:0 2px 0 10px;font-size:12.5px;font-weight:600;color:var(--ink3)}
+.sec .ib{width:26px;height:26px}
+.fh{display:flex;align-items:center;gap:10px;height:36px;padding:0 8px;border-radius:8px;color:var(--ink);text-decoration:none;font-weight:620}
+.fh .chev{margin-left:auto;color:var(--ink3);flex:none}
+.fb{width:22px;height:22px;flex:none;border-radius:6px;display:grid;place-items:center;color:#fff;font-size:11.5px;font-weight:750;font-stretch:112%}
+.sub{display:flex;flex-direction:column;gap:1px;margin:2px 0 6px 18px;padding-left:10px;border-left:1px solid var(--rule2)}
+.sub a{display:flex;align-items:center;height:30px;padding:0 10px;border-radius:7px;color:var(--ink2);text-decoration:none;font-size:13.5px;font-weight:520}
+.sub a.on{background:var(--bg);color:var(--ink);font-weight:640;box-shadow:0 0 0 1px var(--rule)}
+.sdot{width:8px;height:8px;border-radius:50%;flex:none}
+.sbot{margin-top:auto;display:flex;flex-direction:column;gap:8px;padding-top:12px}
+.use{display:flex;flex-direction:column;gap:7px;padding:10px 12px;border-radius:10px;border:1px solid var(--rule);background:var(--bg);text-decoration:none;color:var(--ink)}
+.use:hover{border-color:var(--rule2);color:var(--ink)}
+.bar{height:6px;border-radius:3px;background:var(--hover);overflow:hidden;display:flex}
+.bar span{display:block;height:100%}
+.me{display:flex;align-items:center;gap:10px;width:100%;padding:6px;border:0;border-radius:10px;background:none;font:inherit;color:var(--ink);cursor:pointer;text-align:left}
+.av{width:32px;height:32px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:12px;font-weight:700;color:#fff;background:#2F6F5E}
+.main{flex:999 1 560px;min-width:0;display:flex;flex-direction:column}
+.top{display:flex;align-items:center;gap:10px;min-height:56px;padding:10px 28px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.crumb{display:flex;align-items:center;gap:8px;font-weight:560;color:var(--ink2);min-width:0}
+.crumb a{color:var(--ink2);text-decoration:none}.crumb a:hover{color:var(--ink)}
+.tact{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:8px;border:1px solid var(--rule2);background:var(--bg);color:var(--ink);font:inherit;font-weight:580;font-size:13.5px;text-decoration:none;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--panel);color:var(--ink)}
+.btn.pri{background:var(--pri);border-color:var(--pri);color:#fff}.btn.pri:hover{background:var(--pri-ink);color:#fff}
+.btn.warn{color:var(--red-ink)}
+.btn.sm{height:30px;padding:0 10px;font-size:13px}
+.seg{display:inline-flex;padding:3px;border-radius:9px;background:var(--panel);border:1px solid var(--rule);gap:2px;flex-wrap:wrap}
+.seg button{height:28px;padding:0 10px;border:0;border-radius:6px;background:none;font:inherit;font-size:13px;font-weight:560;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.seg button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(20,24,43,.12),0 0 0 1px var(--rule)}
+.seg .k{font-size:12px;color:var(--ink3)}
+.page{padding:22px 28px 40px;display:flex;flex-direction:column;gap:18px}
+.card{border:1px solid var(--rule);border-radius:14px;background:var(--bg);padding:18px 20px;min-width:0;display:flex;flex-direction:column}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 7px;border-radius:6px;font-size:12px;font-weight:580;background:var(--panel);color:var(--ink2);border:1px solid var(--rule);white-space:nowrap;text-decoration:none}
+.chip.run{background:var(--pri-t);color:var(--pri-ink);border-color:transparent}
+.chip.you{background:var(--you-t);color:var(--you-ink);border-color:transparent}
+.chip.red{background:var(--red-t);color:var(--red-ink);border-color:transparent}
+.chip.yel{background:var(--yel-t);color:var(--yel-ink);border-color:transparent}
+.chip.grn{background:var(--grn-t);color:var(--grn-ink);border-color:transparent}
+.chip.big{height:28px;padding:0 10px;font-size:13px;border-radius:8px}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.live{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.3}}
+a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:760px){.side{width:100%;min-height:0;border-right:0;border-bottom:1px solid var(--rule)}.side .navs,.side .sbot{display:none}.top{padding:8px 16px}.page{padding:16px}}
+
+.andon{background:var(--navy);color:#fff;border-radius:18px;padding:20px 24px 18px;display:flex;flex-direction:column;gap:18px;position:relative;overflow:hidden}
+.andon .lg{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:#C3C8EA}
+.andon .lg span{display:inline-flex;align-items:center;gap:6px}
+.sts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;position:relative}
+.trk{position:absolute;left:10%;right:10%;top:25px;height:4px;border-radius:2px;background:#3B4AE0}
+.st{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;position:relative;text-decoration:none;color:#fff;padding:0 4px 4px;border-radius:12px}
+.st:hover{color:#fff;background:rgba(255,255,255,.04)}
+.node{width:54px;height:54px;border-radius:50%;background:var(--navy2);border:3px solid #5C6CF0;display:grid;place-items:center;font-size:17px;font-weight:700;font-stretch:112%;position:relative;z-index:1}
+.st .nm{font-size:15px;font-weight:640;margin-top:2px}
+.st .mt{font-size:12.5px;color:#C3C8EA}
+.slots{display:flex;gap:4px;justify-content:center;flex-wrap:wrap;margin-top:2px}
+.slots i{width:14px;height:14px;border-radius:4px;display:block;border:1.5px solid #5A6197}
+.slots i.b{background:#5C6CF0;border-color:#5C6CF0}
+.slots i.y{background:#A27BFF;border-color:#A27BFF}
+.ctag{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;background:#FFC21A;color:#14182B;font-size:12px;font-weight:700}
+.afoot{display:flex;flex-wrap:wrap;gap:10px 28px;padding-top:14px;border-top:1px solid #262C58;font-size:13px;color:#C3C8EA}
+.afoot b{color:#fff;font-weight:620}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(176px,100%),1fr));gap:12px}
+.kpi{border:1px solid var(--rule);border-radius:14px;padding:14px 16px 12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.kpi .v{font-size:28px;line-height:1.05}
+.kpi .u{font-size:14px;font-weight:520;color:var(--ink2);margin-left:4px;font-stretch:100%}
+.dl{display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:620}
+.dl.bad{color:var(--red-ink)}.dl.good{color:var(--grn-ink)}
+.spark{width:100%;height:30px;display:block}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr));gap:16px}
+.ch{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.ch .h2{flex:1;min-width:0}
+.ask{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--rule)}
+.aico{width:34px;height:34px;border-radius:9px;display:grid;place-items:center}
+.at{font-weight:600;display:block}
+.acts{display:flex;gap:6px}
+.hb{display:grid;grid-template-columns:72px minmax(0,1fr) 44px;gap:10px;align-items:center;font-size:13px}
+.hb .tr{height:12px;border-radius:4px;background:var(--panel);border:1px solid var(--rule);overflow:hidden}
+.hb .tr span{display:block;height:100%}
+.feed li{display:grid;grid-template-columns:44px 26px minmax(0,1fr);gap:10px;align-items:start;padding:9px 0;border-top:1px solid var(--rule);font-size:13.5px}
+.fa{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:11px;font-weight:700}
+.wk{display:flex;align-items:flex-end;gap:8px;height:150px;position:relative;margin-top:26px}
+.wk span{flex:1;border-radius:4px 4px 2px 2px;background:#C9D1FF}
+.wk span.now{background:var(--pri)}
+.rcols{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:18px;align-items:start}
+@media (max-width:1100px){.rcols{grid-template-columns:minmax(0,1fr)}}
+.ck{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--rule);font-size:13.5px}
+.ck .c{width:22px;height:22px;border-radius:50%;display:grid;place-items:center}
+.ck .c.d{background:var(--grn-t);color:var(--grn-ink)}
+.ck .c.t{border:1.5px dashed var(--rule2)}
+.way{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--rule);font-size:13.5px}
+.way .i{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:#fff}
+.empty{display:flex;flex-direction:column;gap:4px;justify-content:center;min-height:62px}
+</style>
+</helmet>
+<div class="g app">
+  <nav class="side" aria-label="Goal">
+    <div class="srow">
+      <button class="orgb" type="button" aria-haspopup="menu" aria-label="Goal organization, switch organization"><span class="omk" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="#FFC21A"></circle></svg></span><span style="flex: 1; min-width: 0">Goal</span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m4 5.5 3-3 3 3M4 8.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+      <button class="ib" type="button" aria-label="Search, Command K"><svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><circle cx="8" cy="8" r="5.25" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="m12 12 3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button>
+      <button class="ib" type="button" aria-label="Collapse sidebar"><svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><rect x="2.5" y="3" width="13" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"></rect><path d="M7 3v12" stroke="currentColor" stroke-width="1.6"></path></svg></button>
+    </div>
+    <a class="newb" href="#item"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>New item<span class="kb" aria-label="shortcut C">C</span></a>
+    <div class="navs" style="display: flex; flex-direction: column; gap: 1px">
+      <a class="ni" href="#home"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 8.25 9 3.5l6 4.75V15a1 1 0 0 1-1 1h-3.25v-4h-3.5v4H4a1 1 0 0 1-1-1Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>Home</a>
+      <a class="ni" href="#needs-you"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2.5 10.5h3.75l1 2h3.5l1-2h3.75M4.5 3.5h9l2 7v4a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-4Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>Needs you</a>
+      <a class="ni" href="#runs"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 9.5h3l2-5.5 4 10 2-4.5h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>Runs</a>
+      <a class="ni" href="#connections"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M6.5 2.5v3M11.5 2.5v3M4.5 5.5h9v3a4.5 4.5 0 0 1-9 0ZM9 13v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>Connections</a>
+      <a class="ni" href="#credentials"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="6" cy="12" r="3.25" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M8.4 9.6 15 3M12.5 5.5l2 2M10.4 7.6l1.5 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>Credentials</a>
+      <a class="ni" href="#knowledge"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 4.5C3 3.7 3.7 3 4.5 3H8v12H4.5c-.8 0-1.5-.7-1.5-1.5ZM15 4.5c0-.8-.7-1.5-1.5-1.5H10v12h3.5c.8 0 1.5-.7 1.5-1.5Z" fill="none" stroke="currentColor" stroke-width="1.6"></path></svg>Knowledge</a>
+      <div class="sec"><span>Factories</span><a class="ib" href="#template" aria-label="New factory"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg></a></div>
+      <a class="fh" href="#floor" aria-expanded="true"><span class="fb" style="background: #2742F5" aria-hidden="true">S</span>Software<svg class="chev" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m3.5 5.5 3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></a>
+      <div class="sub">
+        <a class="on" href="#floor" aria-current="page">Floor</a>
+        <a href="#board">Board</a>
+        <a href="#items">Items</a>
+        <a href="#agents">Agents</a>
+        <a href="#intake">Intake</a>
+        <a href="#jonah">Jonah</a>
+        <a href="#definition">Definition</a>
+        <a href="#factory-settings">Settings</a>
+      </div>
+    </div>
+    <div class="sbot">
+      <a class="use" href="#spend"><span style="display: flex; justify-content: space-between; font-size: 13px"><span class="m2">Spend this week</span><span class="num" style="font-weight: 620">$0.97 of $800</span></span><span class="bar" aria-hidden="true"><span style="width: 1%; background: var(--pri)"></span></span></a>
+      <button class="me" type="button" aria-haspopup="menu"><span class="av" aria-hidden="true">FC</span><span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-weight: 620">Freddy Cruz</span><span class="xs m3">Owner</span></span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m4 5.5 3-3 3 3M4 8.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+    </div>
+  </nav>
+  <div class="main">
+    <header class="top">
+      <div class="crumb"><span class="fb" style="background: #2742F5; width: 20px; height: 20px; font-size: 11px" aria-hidden="true">S</span><a href="#floor">Software</a><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m4.5 2.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.4"></path></svg><span style="color: var(--ink); font-weight: 640">Floor</span></div>
+      <div class="tact">
+        <a class="btn pri" href="#item"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>New item</a>
+      </div>
+    </header>
+
+    <main class="page">
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+        <h1 class="h1">Floor</h1>
+        <span class="chip big grn"><span class="dot live"></span>Line running</span>
+        <span class="m2 sm">Software was set up 12 minutes ago</span>
+      </div>
+
+      <div class="rcols">
+        <div style="display: flex; flex-direction: column; gap: 18px; min-width: 0">
+          <section class="andon" aria-labelledby="line-h">
+            <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px">
+              <h2 id="line-h" class="h2" style="color: #fff">The line, now</h2>
+              <div class="lg" aria-label="Legend"><span><i style="width: 12px; height: 12px; border-radius: 3px; background: #5C6CF0; display: block"></i>Agent working</span><span><i style="width: 12px; height: 12px; border-radius: 3px; border: 1.5px solid #5A6197; display: block"></i>Free</span></div>
+            </div>
+            <div style="position: relative">
+              <span class="trk" aria-hidden="true"></span>
+              <ol class="sts" aria-label="Stations from intake to done">
+                <li><a class="st" href="#board"><span class="node" style="border-color: #8E96C9">0</span><span class="nm">Intake</span><span class="mt">Nothing waiting</span></a></li>
+                <li><a class="st" href="#board"><span class="node">0</span><span class="nm">Spec</span><span class="slots" aria-label="3 architects, all free"><i></i><i></i><i></i></span><span class="mt">Ready</span></a></li>
+                <li><a class="st" href="#board"><span class="node">0</span><span class="nm">Build</span><span class="slots" aria-label="6 engineers, all free"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="mt">Ready</span></a></li>
+                <li><a class="st" href="#board"><span class="node">0</span><span class="nm">Review</span><span class="slots" aria-label="3 reviewers, all free"><i></i><i></i><i></i></span><span class="mt">Ready</span></a></li>
+                <li><a class="st" href="#board"><span class="node" style="border-color: #22C17F; background: #0F3A2C"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="m5 10.5 3.2 3.2L15 7" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg></span><span class="nm">Done</span><span class="mt">1 merged: your first item</span></a></li>
+              </ol>
+            </div>
+            <div class="afoot"><span>In progress <b>0 of 18</b></span><span>Budget today <b>$0.97 of $150</b></span><span style="margin-left: auto">Andon <b>clear</b></span></div>
+          </section>
+
+          <section class="kpis" aria-label="Flow against targets">
+            <div class="kpi"><span class="sm m2">Throughput</span><div class="empty"><p class="num" style="font-size: 22px">1</p><span class="xs m3">item so far, target 10 a day</span></div></div>
+            <div class="kpi"><span class="sm m2">Lead time</span><div class="empty"><p class="num" style="font-size: 22px">18 min</p><span class="xs m3">for item #1, target 48 h</span></div></div>
+            <div class="kpi"><span class="sm m2">Cost per item</span><div class="empty"><p class="num" style="font-size: 22px">$0.97</p><span class="xs m3">cap $12</span></div></div>
+            <div class="kpi"><span class="sm m2">Trends</span><div class="empty"><span class="sm m2">Charts fill in after about 10 items</span></div></div>
+          </section>
+
+          <section class="card" aria-labelledby="act-h">
+            <div class="ch"><h2 id="act-h" class="h2">Activity</h2></div>
+            <ol class="feed">
+              <li><span class="xs m3" style="padding-top: 4px">10:18</span><span class="fa" style="background: #0A7A4F" aria-hidden="true">Rv</span><span><b style="font-weight: 620">#1 merged</b><span class="m2"> by reviewer, pull request #1 on byFrederick/goal</span></span></li>
+              <li><span class="xs m3" style="padding-top: 4px">10:09</span><span class="fa" style="background: #2742F5" aria-hidden="true">Be</span><span><b style="font-weight: 620">#1 opened pull request #1</b><span class="m2">, README.md, checks passing</span></span></li>
+              <li><span class="xs m3" style="padding-top: 4px">10:04</span><span class="fa" style="background: #7B3FE4" aria-hidden="true">Ar</span><span><b style="font-weight: 620">#1 spec accepted</b><span class="m2">, two criteria</span></span></li>
+              <li><span class="xs m3" style="padding-top: 4px">10:00</span><span class="fa" style="background: #445" aria-hidden="true">FC</span><span><b style="font-weight: 620">You set up Software</b><span class="m2"> with 3 triggers and 1 repository</span></span></li>
+            </ol>
+          </section>
+        </div>
+
+        <aside style="display: flex; flex-direction: column; gap: 14px; min-width: 0">
+          <section class="card" aria-labelledby="setup-h" style="padding-bottom: 8px">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px">
+              <svg width="40" height="40" viewBox="0 0 40 40" role="img" aria-label="6 of 9 done"><circle cx="20" cy="20" r="16" fill="none" stroke="var(--hover)" stroke-width="5"></circle><circle cx="20" cy="20" r="16" fill="none" stroke="var(--pri)" stroke-width="5" stroke-dasharray="67 100.5" transform="rotate(-90 20 20)" stroke-linecap="round"></circle></svg>
+              <div style="display: flex; flex-direction: column"><h2 id="setup-h" class="h2">Finish setting up</h2><span class="xs m3">6 of 9 done</span></div>
+              <button class="ib" type="button" aria-label="Hide setup" style="margin-left: auto"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m3.5 3.5 7 7m0-7-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button>
+            </div>
+            <div class="ck"><span class="c t" aria-label="To do"></span><span><b style="font-weight: 620; display: block">Invite people</b><span class="xs m3">Someone to approve writes when you are away</span></span><a class="btn sm" href="#members">Invite</a></div>
+            <div class="ck"><span class="c t" aria-label="To do"></span><span><b style="font-weight: 620; display: block">Connect Slack</b><span class="xs m3">Ask @software from any channel</span></span><a class="btn sm" href="#connection-add">Connect</a></div>
+            <div class="ck"><span class="c t" aria-label="To do"></span><span><b style="font-weight: 620; display: block">Add knowledge</b><span class="xs m3">Docs and decisions agents read first</span></span><a class="btn sm" href="#knowledge">Add</a></div>
+            <div class="ck"><span class="c d" aria-label="Done"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m2.5 6.2 2.2 2.2L9.5 3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></span><span class="m2">Organization</span><span></span></div>
+            <div class="ck"><span class="c d" aria-label="Done"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m2.5 6.2 2.2 2.2L9.5 3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></span><span class="m2">GitHub, 1 repository</span><span></span></div>
+            <div class="ck"><span class="c d" aria-label="Done"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m2.5 6.2 2.2 2.2L9.5 3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></span><span class="m2">The line, 4 stations</span><span></span></div>
+            <div class="ck"><span class="c d" aria-label="Done"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m2.5 6.2 2.2 2.2L9.5 3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></span><span class="m2">Budgets and targets</span><span></span></div>
+            <div class="ck"><span class="c d" aria-label="Done"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m2.5 6.2 2.2 2.2L9.5 3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></span><span class="m2">3 triggers</span><span></span></div>
+            <div class="ck"><span class="c d" aria-label="Done"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m2.5 6.2 2.2 2.2L9.5 3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></span><span class="m2">First item merged</span><span></span></div>
+          </section>
+
+          <section class="card" aria-labelledby="ways-h" style="padding-bottom: 8px">
+            <h2 id="ways-h" class="h2" style="margin-bottom: 10px">How work gets in</h2>
+            <div class="way"><span class="i" style="background: #14182B"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 0 0-2.05 12.67c.33.06.45-.14.45-.31v-1.1c-1.8.39-2.18-.87-2.18-.87-.3-.75-.72-.95-.72-.95-.59-.4.04-.39.04-.39.65.05 1 .67 1 .67.58 1 1.52.71 1.89.54.06-.42.23-.71.41-.87-1.44-.16-2.95-.72-2.95-3.2 0-.71.25-1.29.67-1.74-.07-.17-.29-.83.06-1.72 0 0 .55-.18 1.79.66a6.2 6.2 0 0 1 3.26 0c1.24-.84 1.79-.66 1.79-.66.35.89.13 1.55.06 1.72.42.45.67 1.03.67 1.74 0 2.49-1.52 3.04-2.96 3.2.23.2.44.6.44 1.21v1.79c0 .17.12.38.45.31A6.5 6.5 0 0 0 8 1.5Z" fill="currentColor"></path></svg></span><span>Label an issue <span class="chip">factory</span></span><button class="btn sm" type="button">Copy</button></div>
+            <div class="way"><span class="i" style="background: #4A154B"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5.5h12M2 10.5h12M6 2 5 14M11 2l-1 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></span><span class="m3">Mention <span class="chip">@software</span> in Slack</span><a class="btn sm" href="#connection-add">Connect</a></div>
+            <div class="way"><span class="i" style="background: var(--pri)"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></span><span>New item, or press <span class="chip">C</span></span><span></span></div>
+            <div class="way"><span class="i" style="background: #464D6A"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="m3 4.5 3.5 3.5L3 11.5M8.5 12h4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></span><span class="code">goal item create</span><button class="btn sm" type="button">Copy</button></div>
+          </section>
+        </aside>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { theme: this.props.dark ? 'dark' : '' };
+  }
+}
+</script>
+</body>
+</html>

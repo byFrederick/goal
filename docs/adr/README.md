@@ -19,3 +19,4 @@ One line per ADR: its number, its title and the first part of its status. To add
 - [ADR 0013](0013-repository-layout.md): Repository layout: a small root and one home per kind. Status: accepted.
 - [ADR 0014](0014-factory-rules.md): Factory rules: always-on guidance for a factory's agents. Status: accepted.
 - [ADR 0015](0015-overlapping-in-flight-work.md): Overlapping in-flight work: plans see open work, bind late and wait for the files they share. Status: accepted.
+- [ADR 0016](0016-ui-revamp.md): The UI revamp: the canvas screens are the UI's contract. Status: accepted.

@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Spend and billing</title>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#FFFFFF}
+a{color:#2742F5}a:hover{color:#1B33C9}
+*{box-sizing:border-box}
+h1,h2,h3,p,ol,ul{margin:0}
+ol,ul{padding:0;list-style:none}
+.g{--bg:#FFFFFF;--side:#F3F4F9;--panel:#F7F8FC;--hover:#E9EBF4;--rule:#E3E6EF;--rule2:#CBD0DF;--ink:#14182B;--ink2:#464D6A;--ink3:#626986;--pri:#2742F5;--pri-ink:#1B33C9;--pri-t:#E8ECFF;--you:#7B3FE4;--you-t:#F1EBFE;--you-ink:#5A24B8;--red:#D63A1F;--red-t:#FDECE8;--red-ink:#AE2C14;--yel:#FFC21A;--yel-t:#FFF4D1;--yel-ink:#6E4B00;--grn:#0FA36B;--grn-t:#E1F5EB;--grn-ink:#0A7A4F;--navy:#121633;--navy2:#1C2147;--navy3:#2C3266;font-family:Archivo,system-ui,sans-serif;font-size:14px;line-height:1.45;color:var(--ink);background:var(--bg);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.g.dark{--bg:#0E1120;--side:#13172A;--panel:#161A2F;--hover:#1E2340;--rule:#252A45;--rule2:#3A4066;--ink:#ECEEF7;--ink2:#B7BCD4;--ink3:#9096B3;--pri:#4A63F5;--pri-ink:#A3B2FF;--pri-t:#1D2556;--you:#9061F5;--you-t:#2A1E4F;--you-ink:#CDB4FF;--red:#E2512F;--red-t:#3B1C16;--red-ink:#FFA08A;--yel-t:#3A3013;--yel-ink:#FFD666;--grn:#22C17F;--grn-t:#10301F;--grn-ink:#62DDA5;--navy:#090C1A;--navy2:#151A36;--navy3:#272D58}
+.h1{font-size:26px;line-height:1.15;font-weight:650;font-stretch:108%;letter-spacing:-0.015em}
+.h2{font-size:16px;line-height:1.3;font-weight:620}
+.num{font-stretch:112%;font-weight:600;letter-spacing:-0.01em}
+.m2{color:var(--ink2)}.m3{color:var(--ink3)}.sm{font-size:13px}.xs{font-size:12px}
+.code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12.5px}
+.app{display:flex;flex-wrap:wrap;align-items:stretch;min-height:100vh;background:var(--bg)}
+.side{width:256px;flex:none;background:var(--side);border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:1px;padding:10px 10px 12px;min-height:100vh}
+.srow{display:flex;align-items:center;gap:2px;margin-bottom:8px}
+.orgb{flex:1;min-width:0;display:flex;align-items:center;gap:9px;height:38px;padding:0 6px;border:0;border-radius:8px;background:none;font:inherit;font-weight:620;font-size:15px;color:var(--ink);cursor:pointer;text-align:left}
+.omk{width:26px;height:26px;flex:none;border-radius:7px;background:var(--pri);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:750;font-stretch:115%}
+.ib{width:32px;height:32px;flex:none;border:0;border-radius:8px;background:none;color:var(--ink2);display:grid;place-items:center;cursor:pointer;padding:0}
+.orgb:hover,.ib:hover,.ni:hover,.fh:hover,.sub a:hover,.me:hover{background:var(--hover);color:var(--ink)}
+.newb{display:flex;align-items:center;gap:8px;height:36px;padding:0 8px 0 12px;border-radius:9px;background:var(--pri);color:#fff;font-weight:620;text-decoration:none;margin:0 0 10px}
+.newb:hover{background:var(--pri-ink);color:#fff}
+.kb{margin-left:auto;min-width:20px;height:20px;padding:0 5px;border-radius:5px;background:rgba(255,255,255,.2);font-size:11px;font-weight:650;display:grid;place-items:center}
+.ni{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:8px;color:var(--ink2);text-decoration:none;font-weight:540}
+.ni svg{flex:none;color:var(--ink3)}
+.ni.on{background:var(--pri-t);color:var(--pri-ink)}.ni.on svg{color:var(--pri)}
+.cnt{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:6px;font-size:12px;font-weight:650;display:inline-grid;place-items:center;background:var(--you);color:#fff}
+.cnt.n{background:var(--hover);color:var(--ink2)}
+.sec{display:flex;align-items:center;justify-content:space-between;height:30px;margin-top:14px;padding:0 2px 0 10px;font-size:12.5px;font-weight:600;color:var(--ink3)}
+.sec .ib{width:26px;height:26px}
+.fh{display:flex;align-items:center;gap:10px;height:36px;padding:0 8px;border-radius:8px;color:var(--ink);text-decoration:none;font-weight:620}
+.fh .chev{margin-left:auto;color:var(--ink3);flex:none}
+.fb{width:22px;height:22px;flex:none;border-radius:6px;display:grid;place-items:center;color:#fff;font-size:11.5px;font-weight:750;font-stretch:112%}
+.sub{display:flex;flex-direction:column;gap:1px;margin:2px 0 6px 18px;padding-left:10px;border-left:1px solid var(--rule2)}
+.sub a{display:flex;align-items:center;height:30px;padding:0 10px;border-radius:7px;color:var(--ink2);text-decoration:none;font-size:13.5px;font-weight:520}
+.sub a.on{background:var(--bg);color:var(--ink);font-weight:640;box-shadow:0 0 0 1px var(--rule)}
+.sdot{width:8px;height:8px;border-radius:50%;flex:none}
+.sbot{margin-top:auto;display:flex;flex-direction:column;gap:8px;padding-top:12px}
+.use{display:flex;flex-direction:column;gap:7px;padding:10px 12px;border-radius:10px;border:1px solid var(--rule);background:var(--bg);text-decoration:none;color:var(--ink)}
+.use:hover{border-color:var(--rule2);color:var(--ink)}
+.bar{height:6px;border-radius:3px;background:var(--hover);overflow:hidden;display:flex}
+.bar span{display:block;height:100%}
+.me{display:flex;align-items:center;gap:10px;width:100%;padding:6px;border:0;border-radius:10px;background:none;font:inherit;color:var(--ink);cursor:pointer;text-align:left}
+.av{width:32px;height:32px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:12px;font-weight:700;color:#fff;background:#2F6F5E}
+.main{flex:999 1 560px;min-width:0;display:flex;flex-direction:column}
+.top{display:flex;align-items:center;gap:10px;min-height:56px;padding:10px 28px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.crumb{display:flex;align-items:center;gap:8px;font-weight:560;color:var(--ink2);min-width:0}
+.crumb a{color:var(--ink2);text-decoration:none}.crumb a:hover{color:var(--ink)}
+.tact{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:8px;border:1px solid var(--rule2);background:var(--bg);color:var(--ink);font:inherit;font-weight:580;font-size:13.5px;text-decoration:none;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--panel);color:var(--ink)}
+.btn.pri{background:var(--pri);border-color:var(--pri);color:#fff}.btn.pri:hover{background:var(--pri-ink);color:#fff}
+.btn.warn{color:var(--red-ink)}
+.btn.sm{height:30px;padding:0 10px;font-size:13px}
+.seg{display:inline-flex;padding:3px;border-radius:9px;background:var(--panel);border:1px solid var(--rule);gap:2px;flex-wrap:wrap}
+.seg button{height:28px;padding:0 10px;border:0;border-radius:6px;background:none;font:inherit;font-size:13px;font-weight:560;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.seg button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(20,24,43,.12),0 0 0 1px var(--rule)}
+.seg .k{font-size:12px;color:var(--ink3)}
+.page{padding:22px 28px 40px;display:flex;flex-direction:column;gap:18px}
+.card{border:1px solid var(--rule);border-radius:14px;background:var(--bg);padding:18px 20px;min-width:0;display:flex;flex-direction:column}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 7px;border-radius:6px;font-size:12px;font-weight:580;background:var(--panel);color:var(--ink2);border:1px solid var(--rule);white-space:nowrap;text-decoration:none}
+.chip.run{background:var(--pri-t);color:var(--pri-ink);border-color:transparent}
+.chip.you{background:var(--you-t);color:var(--you-ink);border-color:transparent}
+.chip.red{background:var(--red-t);color:var(--red-ink);border-color:transparent}
+.chip.yel{background:var(--yel-t);color:var(--yel-ink);border-color:transparent}
+.chip.grn{background:var(--grn-t);color:var(--grn-ink);border-color:transparent}
+.chip.big{height:28px;padding:0 10px;font-size:13px;border-radius:8px}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.live{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.3}}
+a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:760px){.side{width:100%;min-height:0;border-right:0;border-bottom:1px solid var(--rule)}.side .navs,.side .sbot{display:none}.top{padding:8px 16px}.page{padding:16px}}
+
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:12px}
+.kpi{border:1px solid var(--rule);border-radius:14px;padding:14px 16px 12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.kpi .v{font-size:28px;line-height:1.05}
+.kpi .u{font-size:14px;font-weight:520;color:var(--ink2);margin-left:4px;font-stretch:100%}
+.dl{display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:620}
+.dl.bad{color:var(--red-ink)}.dl.good{color:var(--grn-ink)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr));gap:16px}
+.ch{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.ch .h2{flex:1;min-width:0}
+.days{display:grid;grid-template-columns:36px minmax(0,1fr);gap:0 10px;height:220px}
+.yax{display:flex;flex-direction:column;justify-content:space-between;font-size:11.5px;color:var(--ink3);text-align:right;padding-bottom:22px}
+.plot{position:relative;display:flex;align-items:flex-end;gap:14px;padding-bottom:22px;border-bottom:0}
+.plot .gl{position:absolute;left:0;right:0;border-top:1px dashed var(--rule)}
+.day{flex:1;display:flex;flex-direction:column-reverse;gap:2px;position:relative;height:100%;justify-content:flex-start}
+.day span{display:block;border-radius:3px}
+.day b{position:absolute;bottom:-22px;left:0;right:0;text-align:center;font-size:11.5px;font-weight:500;color:var(--ink3)}
+.lgd{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--ink2)}
+.lgd span{display:inline-flex;align-items:center;gap:6px}
+.lgd i{width:10px;height:10px;border-radius:3px;display:block}
+.hb{display:grid;grid-template-columns:150px minmax(0,1fr) 64px;gap:10px;align-items:center;font-size:13.5px;padding:6px 0}
+.hb .tr{height:10px;border-radius:4px;background:var(--panel);overflow:hidden}
+.hb .tr span{display:block;height:100%;border-radius:4px}
+.bud{display:grid;grid-template-columns:minmax(200px,1.3fr) minmax(0,2fr) auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--rule)}
+.bud .bar{height:8px}
+.acct{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--rule)}
+.acct .ic{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:none}
+</style>
+</helmet>
+<div class="g app">
+  <nav class="side" aria-label="Goal">
+    <div class="srow">
+      <button class="orgb" type="button" aria-haspopup="menu" aria-label="Goal organization, switch organization"><span class="omk" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="#FFC21A"></circle></svg></span><span style="flex: 1; min-width: 0">Goal</span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m4 5.5 3-3 3 3M4 8.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+      <button class="ib" type="button" aria-label="Search, Command K"><svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><circle cx="8" cy="8" r="5.25" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="m12 12 3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button>
+      <button class="ib" type="button" aria-label="Collapse sidebar"><svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><rect x="2.5" y="3" width="13" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"></rect><path d="M7 3v12" stroke="currentColor" stroke-width="1.6"></path></svg></button>
+    </div>
+    <a class="newb" href="#item"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>New item<span class="kb" aria-label="shortcut C">C</span></a>
+    <div class="navs" style="display: flex; flex-direction: column; gap: 1px">
+      <a class="ni" href="#home"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 8.25 9 3.5l6 4.75V15a1 1 0 0 1-1 1h-3.25v-4h-3.5v4H4a1 1 0 0 1-1-1Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>Home</a>
+      <a class="ni" href="#needs-you"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2.5 10.5h3.75l1 2h3.5l1-2h3.75M4.5 3.5h9l2 7v4a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-4Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>Needs you<span class="cnt">5</span></a>
+      <a class="ni" href="#runs"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 9.5h3l2-5.5 4 10 2-4.5h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>Runs</a>
+      <a class="ni" href="#connections"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M6.5 2.5v3M11.5 2.5v3M4.5 5.5h9v3a4.5 4.5 0 0 1-9 0ZM9 13v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>Connections</a>
+      <a class="ni" href="#credentials"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="6" cy="12" r="3.25" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M8.4 9.6 15 3M12.5 5.5l2 2M10.4 7.6l1.5 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>Credentials</a>
+      <a class="ni" href="#knowledge"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 4.5C3 3.7 3.7 3 4.5 3H8v12H4.5c-.8 0-1.5-.7-1.5-1.5ZM15 4.5c0-.8-.7-1.5-1.5-1.5H10v12h3.5c.8 0 1.5-.7 1.5-1.5Z" fill="none" stroke="currentColor" stroke-width="1.6"></path></svg>Knowledge</a>
+      <div class="sec"><span>Factories</span><a class="ib" href="#template" aria-label="New factory"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg></a></div>
+      <a class="fh" href="#floor" aria-expanded="true"><span class="fb" style="background: #2742F5" aria-hidden="true">S</span>Software<span class="cnt" style="margin-left: auto">3</span><svg class="chev" style="margin-left: 0" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m3.5 5.5 3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></a>
+      <div class="sub">
+        <a href="#floor">Floor</a>
+        <a href="#board">Board</a>
+        <a href="#items">Items</a>
+        <a href="#agents">Agents</a>
+        <a href="#intake">Intake</a>
+        <a href="#jonah">Jonah<span class="cnt n" style="height: 18px; font-size: 11px">2</span></a>
+        <a href="#definition">Definition</a>
+        <a href="#factory-settings">Settings</a>
+      </div>
+      <a class="fh" href="#"><span class="fb" style="background: #0E8576" aria-hidden="true">R</span>SRE<span class="cnt" style="margin-left: auto; background: var(--red)">1</span><svg class="chev" style="margin-left: 0" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m5.5 3.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></a>
+      <a class="fh" href="#"><span class="fb" style="background: #C24E17" aria-hidden="true">P</span>Support<span class="cnt" style="margin-left: auto">1</span><svg class="chev" style="margin-left: 0" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m5.5 3.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></a>
+    </div>
+    <div class="sbot">
+      <a class="use" href="#spend"><span style="display: flex; justify-content: space-between; font-size: 13px"><span class="m2">Spend this week</span><span class="num" style="font-weight: 620">$512 of $1,400</span></span><span class="bar" aria-hidden="true"><span style="width: 37%; background: var(--pri)"></span></span></a>
+      <button class="me" type="button" aria-haspopup="menu"><span class="av" aria-hidden="true">FC</span><span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-weight: 620">Freddy Cruz</span><span class="xs m3">Owner</span></span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m4 5.5 3-3 3 3M4 8.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+    </div>
+  </nav>
+  <div class="main">
+    <header class="top">
+      <div class="crumb"><span>Goal</span><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m4.5 2.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.4"></path></svg><span style="color: var(--ink); font-weight: 640">Spend and billing</span></div>
+      <div class="tact">
+        <div class="seg" role="group" aria-label="Time window"><button type="button" aria-pressed="true">This week</button><button type="button" aria-pressed="false">This month</button><button type="button" aria-pressed="false">Last 90 days</button></div>
+        <button class="btn" type="button"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>Export CSV</button>
+      </div>
+    </header>
+
+    <main class="page">
+      <h1 class="h1">Spend and billing</h1>
+
+      <section class="kpis" aria-label="This week, Oct 20 to 26">
+        <div class="kpi"><span class="sm m2">Spend this week</span><p class="num v">$512<span class="u">of $1,400</span></p><span class="bar" aria-label="37% of the weekly budgets combined"><span style="width: 37%; background: var(--pri)"></span></span><span class="xs m3" style="display: flex; justify-content: space-between"><span>All factory budgets</span><span class="dl good">▼ $38</span></span></div>
+        <div class="kpi"><span class="sm m2">This month</span><p class="num v">$1,940</p><span class="xs m3" style="display: flex; justify-content: space-between; margin-top: auto"><span>Oct 1 to 26</span><span>September $2,310</span></span></div>
+        <div class="kpi"><span class="sm m2">Cost per merged item</span><p class="num v">$3.40</p><svg style="width: 100%; height: 26px; display: block" viewBox="0 0 100 26" preserveAspectRatio="none" aria-label="Falling from $4.90 to $3.40 over 8 weeks"><polyline points="0,5 14,7 28,6 42,11 57,13 71,15 85,18 100,20" fill="none" stroke="#2742F5" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"></polyline></svg><span class="xs m3" style="display: flex; justify-content: space-between"><span>8 weeks</span><span class="dl good">▼ $1.50</span></span></div>
+        <div class="kpi"><span class="sm m2">Spent on rework</span><p class="num v">$61</p><span class="bar" aria-label="12% of this week's spend"><span style="width: 12%; background: var(--red)"></span></span><span class="xs m3" style="display: flex; justify-content: space-between"><span>12% of the week</span><span>Runs sent back</span></span></div>
+      </section>
+
+      <section class="card" aria-labelledby="day-h">
+        <div class="ch"><h2 id="day-h" class="h2">Spend by day</h2><div class="lgd"><span><i style="background: #2742F5"></i>Software $412</span><span><i style="background: #0E8576"></i>SRE $71</span><span><i style="background: #C24E17"></i>Support $29</span></div></div>
+        <div class="days" role="img" aria-label="Spend by day, Monday to Sunday, between $41 and $108 a day, mostly Software">
+          <div class="yax" aria-hidden="true"><span>$120</span><span>$80</span><span>$40</span><span>$0</span></div>
+          <div class="plot" aria-hidden="true">
+            <span class="gl" style="top: 0"></span><span class="gl" style="top: 33%"></span><span class="gl" style="top: 66%"></span>
+            <div class="day"><span style="height: 55%; background: #2742F5"></span><span style="height: 9%; background: #0E8576"></span><span style="height: 4%; background: #C24E17"></span><b>Mon</b></div>
+            <div class="day"><span style="height: 62%; background: #2742F5"></span><span style="height: 8%; background: #0E8576"></span><span style="height: 5%; background: #C24E17"></span><b>Tue</b></div>
+            <div class="day"><span style="height: 48%; background: #2742F5"></span><span style="height: 12%; background: #0E8576"></span><span style="height: 4%; background: #C24E17"></span><b>Wed</b></div>
+            <div class="day"><span style="height: 71%; background: #2742F5"></span><span style="height: 10%; background: #0E8576"></span><span style="height: 6%; background: #C24E17"></span><b>Thu</b></div>
+            <div class="day"><span style="height: 58%; background: #2742F5"></span><span style="height: 7%; background: #0E8576"></span><span style="height: 3%; background: #C24E17"></span><b>Fri</b></div>
+            <div class="day"><span style="height: 20%; background: #2742F5"></span><span style="height: 6%; background: #0E8576"></span><span style="height: 2%; background: #C24E17"></span><b>Sat</b></div>
+            <div class="day"><span style="height: 80%; background: #2742F5; opacity: .45"></span><span style="height: 0"></span><b>Today</b></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="two">
+        <section class="card" aria-labelledby="ag-h">
+          <div class="ch"><h2 id="ag-h" class="h2">By agent</h2><span class="sm m3">This week</span></div>
+          <div class="hb"><span>backend-engineer</span><span class="tr"><span style="width: 78%; background: #2742F5"></span></span><span class="num" style="text-align: right">$168</span></div>
+          <div class="hb"><span>frontend-engineer</span><span class="tr"><span style="width: 22%; background: #2742F5"></span></span><span class="num" style="text-align: right">$47</span></div>
+          <div class="hb"><span>infra-engineer</span><span class="tr"><span style="width: 30%; background: #2742F5"></span></span><span class="num" style="text-align: right">$64</span></div>
+          <div class="hb"><span>reviewer</span><span class="tr"><span style="width: 44%; background: #2742F5"></span></span><span class="num" style="text-align: right">$94</span></div>
+          <div class="hb"><span>architect</span><span class="tr"><span style="width: 18%; background: #2742F5"></span></span><span class="num" style="text-align: right">$39</span></div>
+          <div class="hb"><span class="m2">SRE and Support agents</span><span class="tr"><span style="width: 47%; background: #9AA6FF"></span></span><span class="num" style="text-align: right">$100</span></div>
+        </section>
+
+        <section class="card" aria-labelledby="md-h">
+          <div class="ch"><h2 id="md-h" class="h2">By model</h2><span class="sm m3">This week</span></div>
+          <div class="hb"><span>claude-opus-5-5</span><span class="tr"><span style="width: 82%; background: #2742F5"></span></span><span class="num" style="text-align: right">$398</span></div>
+          <div class="hb"><span>claude-haiku-5-5</span><span class="tr"><span style="width: 10%; background: #2742F5"></span></span><span class="num" style="text-align: right">$47</span></div>
+          <div class="hb"><span>claude-sonnet-5-5</span><span class="tr"><span style="width: 9%; background: #2742F5"></span></span><span class="num" style="text-align: right">$41</span></div>
+          <div class="hb"><span class="m2">Boxes, compute time</span><span class="tr"><span style="width: 6%; background: #9AA6FF"></span></span><span class="num" style="text-align: right">$26</span></div>
+          <p class="xs m3" style="margin-top: 10px">frontend-engineer moved to Haiku on Oct 25: its items now cost about a tenth as much.</p>
+        </section>
+      </div>
+
+      <div class="two">
+        <section class="card" aria-labelledby="bud-h" style="padding-bottom: 8px">
+          <div class="ch" style="margin-bottom: 6px"><h2 id="bud-h" class="h2">Budgets</h2><span class="sm m3">Set in each factory's definition</span></div>
+          <div class="bud"><span style="display: flex; align-items: center; gap: 10px"><span class="fb" style="background: #2742F5">S</span><span style="display: flex; flex-direction: column; line-height: 1.3"><b style="font-weight: 620">Software</b><span class="xs m3">$150 a day, $800 a week</span></span></span><span style="display: flex; flex-direction: column; gap: 5px"><span class="bar" aria-label="64% of today"><span style="width: 64%; background: var(--yel)"></span></span><span class="xs m3">Today $96 of $150</span></span><span class="chip yel">64% today</span></div>
+          <div class="bud"><span style="display: flex; align-items: center; gap: 10px"><span class="fb" style="background: #0E8576">R</span><span style="display: flex; flex-direction: column; line-height: 1.3"><b style="font-weight: 620">SRE</b><span class="xs m3">$40 a day, $250 a week</span></span></span><span style="display: flex; flex-direction: column; gap: 5px"><span class="bar" aria-label="0% of today, line stopped"><span style="width: 0%; background: var(--pri)"></span></span><span class="xs m3">Andon pulled, no runs today</span></span><span class="chip red">Stopped</span></div>
+          <div class="bud"><span style="display: flex; align-items: center; gap: 10px"><span class="fb" style="background: #C24E17">P</span><span style="display: flex; flex-direction: column; line-height: 1.3"><b style="font-weight: 620">Support</b><span class="xs m3">$30 a day, $350 a week</span></span></span><span style="display: flex; flex-direction: column; gap: 5px"><span class="bar" aria-label="21% of today"><span style="width: 21%; background: var(--grn)"></span></span><span class="xs m3">Today $6.30 of $30</span></span><span class="chip grn">21% today</span></div>
+          <div style="display: grid; grid-template-columns: auto minmax(0,1fr); gap: 6px 12px; padding: 14px 0 10px; border-top: 1px solid var(--rule); font-size: 13px"><span style="font-weight: 620">At 80%</span><span class="m2">Owners and admins get a Needs you alert</span><span style="font-weight: 620">At 100%</span><span class="m2">The factory drains: running items finish, nothing new starts until midnight UTC</span><span style="font-weight: 620">Per item</span><span class="m2">A run stops at the item's cap and asks you</span></div>
+        </section>
+
+        <section class="card" aria-labelledby="acc-h" style="padding-bottom: 8px">
+          <div class="ch" style="margin-bottom: 6px"><h2 id="acc-h" class="h2">Who pays for models</h2></div>
+          <div class="acct"><span class="ic" style="background: #F6E7DD; color: #A9502A"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 2v14M2 9h14M4 4l10 10M14 4 4 14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg></span><span style="flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.35"><b style="font-weight: 620">Claude subscription</b><span class="sm m3">Connection claude, used by all 3 factories</span></span><span class="chip grn"><span class="dot"></span>Connected</span></div>
+          <div class="acct"><span class="ic" style="background: var(--panel); color: var(--ink2); border: 1px solid var(--rule)"><svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><circle cx="6" cy="12" r="3.25" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M8.4 9.6 15 3M12.5 5.5l2 2M10.4 7.6l1.5 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></span><span style="flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.35"><b style="font-weight: 620">Anthropic API key</b><span class="sm m3">Pay per token instead, from Credentials</span></span><a class="btn sm" href="#credential-new">Add a key</a></div>
+          <div class="acct"><span class="ic" style="background: var(--panel); color: var(--ink3); border: 1px dashed var(--rule2)"><svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 3v12M3 9h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></span><span style="flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.35"><b style="font-weight: 620">Another provider through a router</b><span class="sm m3">Bedrock, Vertex or an OpenAI-compatible endpoint</span></span><a class="btn sm" href="#models">Set up</a></div>
+          <p class="sm m2" style="padding: 12px 0 10px; border-top: 1px solid var(--rule)">Goal does not bill for usage. Model costs are billed by your provider; box time is billed by the cloud account Goal runs in. Amounts here are Goal's estimates from token counts.</p>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":1260}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { theme: this.props.dark ? 'dark' : '' };
+  }
+}
+</script>
+</body>
+</html>
