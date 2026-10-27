@@ -274,7 +274,7 @@ export function ItemDecisions({
       ) : null}
       {ctl.move && controls ? (
         <MoveDialog
-          item={{ ...item, id: controls.id, station: controls.station }}
+          items={[{ ...item, id: controls.id, station: controls.station }]}
           factory={controls.factory}
           open={open === 'move'}
           onOpenChange={(o) => setOpen(o ? 'move' : null)}

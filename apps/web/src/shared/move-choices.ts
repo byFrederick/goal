@@ -17,6 +17,21 @@ export function moveChoices(stations: LineStation[], current: string): MoveChoic
     .filter((s) => s.id !== current && s.kind !== 'done');
 }
 
+/**
+ * The choices for several items moved together: every station one of them could go to, in line
+ * order. A station counts as upstream when it is upstream of any of the items.
+ */
+export function moveChoicesFor(stations: LineStation[], currents: string[]): MoveChoice[] {
+  const byId = new Map<string, MoveChoice>();
+  for (const current of new Set(currents)) {
+    for (const choice of moveChoices(stations, current)) {
+      const seen = byId.get(choice.id);
+      byId.set(choice.id, seen ? { ...seen, upstream: seen.upstream || choice.upstream } : choice);
+    }
+  }
+  return stations.flatMap((s) => byId.get(s.id) ?? []);
+}
+
 /** The state an item arrives in at a station of this kind. */
 export function arrivalState(kind: Station['kind']): ItemState {
   return kind === 'human' ? 'waiting_human' : 'queued';
