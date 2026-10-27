@@ -188,18 +188,18 @@ describe('the sidebar', () => {
     expect(links.some((text) => text?.startsWith('Knowledge'))).toBe(true);
   });
 
-  it.each([
-    ['Needs you', /^Needs you/],
-    ['Credentials', /^Credentials$/],
-  ])('renders %s as not available: aria-disabled, focusable, and inert', async (_, name) => {
-    const { router } = renderSidebar({ can: ['connection:read', 'knowledge:read'] });
-    const control = within(await nav()).getByRole('button', { name });
+  it.each([['Credentials', /^Credentials$/]])(
+    'renders %s as not available: aria-disabled, focusable, and inert',
+    async (_, name) => {
+      const { router } = renderSidebar({ can: ['connection:read', 'knowledge:read'] });
+      const control = within(await nav()).getByRole('button', { name });
 
-    expect(control.getAttribute('aria-disabled')).toBe('true');
-    expect(control.tabIndex).not.toBe(-1);
-    fireEvent.click(control);
-    expect(router.state.location.pathname).toBe('/o/acme');
-  });
+      expect(control.getAttribute('aria-disabled')).toBe('true');
+      expect(control.tabIndex).not.toBe(-1);
+      fireEvent.click(control);
+      expect(router.state.location.pathname).toBe('/o/acme');
+    },
+  );
 
   it('links Runs to the runs page', async () => {
     renderSidebar();
@@ -213,7 +213,7 @@ describe('the sidebar', () => {
 
   it('shows the not-available tooltip on hover', async () => {
     renderSidebar();
-    fireEvent.focus(within(await nav()).getByRole('button', { name: /^Needs you/ }));
+    fireEvent.focus(within(await nav()).getByRole('button', { name: /^Credentials$/ }));
 
     expect(await screen.findByText('Not available yet')).toBeTruthy();
   });
@@ -256,7 +256,7 @@ describe('the sidebar', () => {
     renderSidebar();
     const sidebar = await nav();
 
-    expect(within(sidebar).getByRole('button', { name: /Needs you/ }).textContent).toContain('waiting on you');
+    expect(within(sidebar).getByRole('link', { name: /Needs you/ }).textContent).toContain('waiting on you');
     expect(within(sidebar).getByRole('link', { name: /sre factory, 3 waiting on you/ })).toBeTruthy();
     expect(within(sidebar).getByRole('link', { name: /support factory.*andon pulled/ })).toBeTruthy();
   });
@@ -301,7 +301,7 @@ describe('the sidebar', () => {
     await waitFor(() => expect(sidebar.getAttribute('aria-busy')).toBe('false'));
     expect(within(sidebar).queryByText('Spend this week')).toBeNull();
     expect(within(sidebar).queryByText(/waiting on you/)).toBeNull();
-    expect(within(sidebar).getByRole('button', { name: 'Needs you' })).toBeTruthy();
+    expect(within(sidebar).getByRole('link', { name: 'Needs you' })).toBeTruthy();
     expect(within(sidebar).getByRole('link', { name: /sre factory/ })).toBeTruthy();
   });
 
@@ -424,7 +424,16 @@ describe('the collapsed rail', () => {
     expect(names.slice(11)).toEqual(['New factory', 'Spend this week, 37% of budget', 'FC, Freddy Cruz, account']);
   });
 
-  it.each(['New item', 'Needs you', 'Credentials'])('keeps %s disabled, and says what it is and why', async (name) => {
+  it('links Needs you to its page, with the count it waits on', async () => {
+    renderSidebar();
+    await collapse();
+    const link = within(await nav()).getByRole('link', { name: /^Needs you/ });
+
+    expect(link.getAttribute('href')).toMatch(/\/needs-you$/);
+    expect(link.getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it.each(['New item', 'Credentials'])('keeps %s disabled, and says what it is and why', async (name) => {
     renderSidebar();
     await collapse();
     const control = within(await nav()).getByRole('button', { name: new RegExp(`^${name}`) });
@@ -518,7 +527,7 @@ describe('the collapsed rail', () => {
     const rail = await nav();
 
     await waitFor(() => expect(rail.getAttribute('aria-busy')).toBe('false'));
-    expect(within(rail).getByRole('button', { name: 'Needs you' })).toBeTruthy();
+    expect(within(rail).getByRole('link', { name: 'Needs you' })).toBeTruthy();
     expect(within(rail).queryByRole('img', { name: /Spend/ })).toBeNull();
     expect(within(rail).getByRole('link', { name: /sre factory/ })).toBeTruthy();
   });

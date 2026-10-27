@@ -1516,6 +1516,43 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return typeof stats === 'string' ? problem(res, 400, 'Bad Request', stats) : json(res, 200, stats);
     }
 
+    // GET …/activity: the factory's milestone events, newest first (listFactoryActivity). Run events are
+    // never listed, and each event carries its item's ref, number and title.
+    m = rest.match(/^\/factories\/([^/]+)\/activity$/);
+    if (m && method === 'GET') {
+      const key = decodeURIComponent(m[1] ?? '');
+      const factory = findFactory(key, org.id);
+      if (!factory) return problem(res, 404, 'Factory not found', key);
+      const limit = Number(url.searchParams.get('limit') ?? 20);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+        return problem(res, 400, 'Bad Request', 'limit must be in [1, 50]');
+      }
+      const milestones = new Set([
+        'created',
+        'moved',
+        'gate_approved',
+        'gate_rejected',
+        'approved',
+        'rejected',
+        'blocked',
+        'check_failed',
+        'merged',
+        'done',
+        'assembled',
+        'cancelled',
+      ]);
+      const events = state.events
+        .flatMap((e) => {
+          const it = state.items.find((o) => o.id === e.item_id);
+          return it && it.factory === factory.name && milestones.has(e.kind)
+            ? [{ ...e, ref: ref(it), number: it.number, title: it.title }]
+            : [];
+        })
+        .sort((a, b) => b.at.localeCompare(a.at) || b.id - a.id)
+        .slice(0, limit);
+      return json(res, 200, { events });
+    }
+
     m = rest.match(
       /^\/factories\/([^/]+)\/(board|items|constraint|metrics|metrics\/weekly|metrics\/lead-time|metrics\/touches|andon|andon\/clear)$/,
     );
