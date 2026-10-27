@@ -69,6 +69,67 @@ type evalCase struct {
 	} `json:"spec"`
 }
 
+// caseSpec is an eval case file as EvalCases reads it.
+type caseSpec struct {
+	Metadata struct {
+		Description string `json:"description"`
+	} `json:"metadata"`
+	Spec struct {
+		Agent string `json:"agent"`
+		Input struct {
+			Title   string         `json:"title"`
+			Body    string         `json:"body"`
+			Type    string         `json:"type"`
+			Lane    string         `json:"lane"`
+			Outputs map[string]any `json:"outputs"`
+			Ref     string         `json:"ref"`
+		} `json:"input"`
+		Tries int `json:"tries"`
+		Check struct {
+			Contract       bool   `json:"contract"`
+			Judge          string `json:"judge"`
+			ReferencePatch string `json:"referencePatch"`
+		} `json:"check"`
+	} `json:"spec"`
+}
+
+// EvalCases parses every eval case of a definition, evals/cases/<name>.yaml (or .yml), by name,
+// each with the hash of its file: the cases an eval run and the publish gate run. It checks
+// nothing Check does; a file that does not parse is an error. A definition without cases has
+// none.
+func EvalCases(files fs.FS) ([]domain.EvalCaseSpec, error) {
+	var out []domain.EvalCaseSpec
+
+	for _, p := range evalFiles(files, CasesDir, ".yaml", ".yml") {
+		raw, err := fs.ReadFile(files, p)
+		if err != nil {
+			return nil, fmt.Errorf("read eval case %s: %w", p, err)
+		}
+
+		doc, bad := parseYAML(p, raw)
+		if bad != nil {
+			return nil, fmt.Errorf("eval case %s: %s", p, bad.Message)
+		}
+
+		var c caseSpec
+		if err := json.Unmarshal(doc.json, &c); err != nil {
+			return nil, fmt.Errorf("eval case %s: %w", p, err)
+		}
+
+		in := c.Spec.Input
+		out = append(out, domain.EvalCaseSpec{
+			Name: strings.TrimSuffix(path.Base(p), path.Ext(p)), SHA256: domain.HashBlob(raw), Agent: c.Spec.Agent,
+			Description: c.Metadata.Description, Tries: c.Spec.Tries,
+			Input:    domain.EvalInput{Title: in.Title, Body: in.Body, Type: in.Type, Lane: in.Lane, Outputs: in.Outputs, Ref: in.Ref},
+			Contract: c.Spec.Check.Contract, Judge: c.Spec.Check.Judge, ReferencePatch: c.Spec.Check.ReferencePatch,
+		})
+	}
+
+	slices.SortFunc(out, func(a, b domain.EvalCaseSpec) int { return strings.Compare(a.Name, b.Name) })
+
+	return out, nil
+}
+
 // evalFile is a judge's front matter or a case, parsed, for locating its problems in its own file.
 type evalFile struct {
 	path string
