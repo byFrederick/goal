@@ -100,9 +100,18 @@ test('signing in by code returns to the page that asked, and the session stays o
   expect(await page.evaluate(() => document.cookie)).not.toContain('session_token');
   await expectNoSessionTokenInScripts(page);
 
-  // The account names the person, their role here and that they are a platform admin.
-  await orgNav(page).getByRole('button', { name: 'FC, F. Cruz, account' }).click();
-  const account = page.getByRole('dialog', { name: 'Account' });
+  // The account names the person, their role here and that they are a platform admin. On a phone it is
+  // also at the bottom of the organization sheet, so the rows are checked in whichever one is open.
+  let panel: Locator;
+  let account: Locator;
+  if (isPhone(page)) {
+    panel = await openOrgMenu(page);
+    account = panel.getByRole('region', { name: 'Account' });
+  } else {
+    await orgNav(page).getByRole('button', { name: 'FC, F. Cruz, account' }).click();
+    panel = page.getByRole('dialog', { name: 'Account' });
+    account = panel;
+  }
   await expect(account.getByText('F. Cruz', { exact: true })).toBeVisible();
   await expect(account.getByText('Owner', { exact: true })).toBeVisible();
   await expect(account.getByText('Platform admin')).toBeVisible();
@@ -116,13 +125,14 @@ test('signing in by code returns to the page that asked, and the session stays o
   }
   await expectAccessible(page);
   await page.keyboard.press('Escape');
-  await expect(account).toBeHidden();
+  await expect(panel).toBeHidden();
 
-  // The organization menu names the organization's pages, and the two not built yet are disabled.
-  await page.getByRole('button', { name: 'Acme organization, switch organization' }).click();
-  const orgMenu = page.getByRole('menu', { name: 'Acme organization, switch organization' });
-  await expect(orgMenu.getByRole('menuitem', { name: 'Spend and billing' })).toHaveAttribute('aria-disabled', 'true');
-  await expect(orgMenu.getByRole('menuitem', { name: 'Models and policies' })).toHaveAttribute('aria-disabled', 'true');
+  // The organization menu names the organization's pages, and the two not built yet are disabled. A
+  // phone shows them as buttons in its sheet; wider screens show menu items.
+  const orgMenu = await openOrgMenu(page);
+  const pageRole = isPhone(page) ? 'button' : 'menuitem';
+  await expect(orgMenu.getByRole(pageRole, { name: 'Spend and billing' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(orgMenu.getByRole(pageRole, { name: 'Models and policies' })).toHaveAttribute('aria-disabled', 'true');
   await page.keyboard.press('Escape');
 });
 
