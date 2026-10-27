@@ -78,6 +78,7 @@ import { membersFor, orgCanOf } from './people.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
 import { orgRunsOf } from './runs.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
+import { createWebhooks } from './webhooks.ts';
 
 type Next = (err?: unknown) => void;
 
@@ -214,6 +215,11 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       }
     },
     acme: acmeOrg,
+  });
+
+  const webhooks = createWebhooks({
+    clock,
+    factories: (org) => state.factories.filter((f) => f.org_id === org),
   });
 
   const ref = (it: MockItem) => `${it.factory}#${it.number}`;
@@ -1285,6 +1291,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       apiKeys.reset(clock());
       connections.reset(clock());
       knowledge.reset(clock());
+      webhooks.reset();
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
       const cookie = auth.reset(authSettings(body.auth));
       if (cookie) res.setHeader('Set-Cookie', cookie);
@@ -1375,6 +1382,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await apiKeys.handle(forCaller(req, org), rest, method, req, res, () => readBody(req))) return;
     if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
+    if (await webhooks.handle(org.id, rest, method, req, res, () => readBody(req))) return;
 
     if (rest === '' && method === 'GET') return json(res, 200, forCaller(req, withCount(org)));
     if (rest === '' && method === 'DELETE') {
