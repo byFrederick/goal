@@ -142,6 +142,7 @@ func testSearchItems(f *fixture) {
 		}
 
 		out := []string{}
+
 		for _, it := range items {
 			at := "this"
 			if it.FactoryID == other {

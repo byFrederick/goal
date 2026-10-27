@@ -105,6 +105,7 @@ func searchAgents(fs []*config.Factory, q string, limit int) []gen.AgentHit {
 			}
 
 			stations := []string{}
+
 			for _, st := range l.Stations {
 				if slices.Contains(st.LaneAgents(), a.Name) {
 					stations = append(stations, st.ID)
@@ -143,7 +144,9 @@ func searchFactories(fs []*config.Factory, q string, limit int) []gen.FactoryHit
 		return r
 	}
 
-	slices.SortFunc(out, func(a, b gen.FactoryHit) int { return cmp.Or(cmp.Compare(rank(a), rank(b)), cmp.Compare(a.Name, b.Name)) })
+	slices.SortFunc(out, func(a, b gen.FactoryHit) int {
+		return cmp.Or(cmp.Compare(rank(a), rank(b)), cmp.Compare(a.Name, b.Name))
+	})
 
 	return firstOf(out, limit)
 }
@@ -152,8 +155,10 @@ func searchFactories(fs []*config.Factory, q string, limit int) []gen.FactoryHit
 // who holds connection:read; anyone else finds none.
 func (s *server) searchConnections(ctx context.Context, q string, limit int) ([]gen.ConnectionHit, error) {
 	out := []gen.ConnectionHit{}
-	if s.ask(ctx, permConnectionRead, "") != nil {
-		return out, nil
+
+	// Without connection:read the group is empty, not a refusal: the search still answers.
+	if err := s.ask(ctx, permConnectionRead, ""); err != nil {
+		return out, nil //nolint:nilerr // a denial empties the group
 	}
 
 	conns, err := s.connections.List(ctx)

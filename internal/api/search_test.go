@@ -63,10 +63,10 @@ func TestSearchOrg_HidesFactoriesTheCallerCannotRead(t *testing.T) {
 	t.Parallel()
 
 	h := newSignedIn(t)
-	h.seedTitled(t, "Fix the frontend build")
+	h.seedTitled(t, "Fix the backend build")
 
 	if _, err := h.store.CreateItem(inOrg(t), domain.NewItem{
-		FactoryID: acmeID, Type: typeFeature, Title: "Write the frontend guide", Station: "inbox",
+		FactoryID: acmeID, Type: typeFeature, Title: "Write the user guide", Station: stInbox,
 		State: domain.StateQueued, Class: domain.ClassStandard, CreatedAt: t0,
 	}); err != nil {
 		t.Fatal(err)
@@ -75,14 +75,14 @@ func TestSearchOrg_HidesFactoriesTheCallerCannotRead(t *testing.T) {
 	for _, c := range []struct{ name, token, q, want string }{
 		{
 			"the viewer", viewerToken, "e",
-			"items [acme#1 Write the frontend guide] agents [acme/writer at ] factories [acme] connections []",
+			"items [acme#1 Write the user guide] agents [acme/writer at ] factories [acme] connections []",
 		},
 		{
 			"the owner", ownerToken, "e",
-			"items [line#1 Fix the frontend build; acme#1 Write the frontend guide] agents [acme/writer at ; line/backend at build; line/frontend at build] " +
+			"items [line#1 Fix the backend build; acme#1 Write the user guide] agents [acme/writer at ; line/backend at build; line/frontend at build] " +
 				"factories [acme; line] connections []",
 		},
-		{"the viewer, line's agent", viewerToken, "frontend", "items [acme#1 Write the frontend guide] agents [] factories [] connections []"},
+		{"the viewer, line's agent", viewerToken, "backend", "items [] agents [] factories [] connections []"},
 	} {
 		got := decode[gen.OrgSearch](t, h.as(t, c.token, http.MethodGet, searchFor(c.q), ""), http.StatusOK)
 		if line := searchLine(got); line != c.want {
@@ -97,10 +97,8 @@ func TestSearchOrg_ConnectionsNeedConnectionRead(t *testing.T) {
 
 	h := keyed(t)
 
-	if _, err := h.conns.Create(domain.WithOrg(t.Context(), testOrg), domain.NewConnection{
-		Name: kindGitHub, Kind: kindGitHub, Secrets: map[string]string{"token": githubToken},
-	}, domain.LocalUser); err != nil {
-		t.Fatal(err)
+	if res := h.as(t, freshToken, http.MethodPost, connectionsPath, `{"name":"github","kind":"github","secrets":{"token":"t"}}`); res.status != http.StatusCreated {
+		t.Fatalf("create the connection = %d %s; want 201", res.status, res.body)
 	}
 
 	created, _ := h.createToken(t, freshToken, laptop) // org:read and factory:read, no connection:read

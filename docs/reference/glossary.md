@@ -50,6 +50,7 @@ The words Goal's code, API and UI use, one sentence each, with the place in the 
 | Rule | Always-on guidance a factory gives the agents, stations, lanes or work types it targets, from a `rules/<name>.md` file of the definition. | `internal/core/domain/rule.go` (`Rule`), `internal/config/rules.go` |
 | Run | One agent's work on one item at one station, in its own box. | `internal/core/domain/run.go` (`Run`), `internal/core/engine` |
 | Saved view | A name plus the Items page's URL search params, stored in PostgreSQL per factory, personal to its owner or shared with the factory, so that it reopens exactly that URL; planned, not built yet. | `internal/adapters/store/postgres` (planned); [ADR 0020](../adr/0020-saved-views-and-csv-exports.md) |
+| Search | The shell's search box: one read that finds the items, agents, factories and connections of an organization that the caller sees, each group best first. | `internal/api/search.go` (`SearchOrg`), `Store.SearchItems` in `internal/core/ports/ports.go` |
 | Skill | A folder of instructions an agent loads, from the definition or a skills.sh source. | `internal/core/domain/line.go` (`SkillRef`), `internal/core/domain/skill.go` |
 | Station | One step of the line, worked by a queue, agents, people or nobody (done). | `internal/core/domain/line.go` (`Station`, `StationKind`) |
 | Task token | The short-lived token a run uses to reach Goal, scoped to its organization, factory, item, station and connections. | `internal/core/domain/token.go` (`TaskClaims`) |
