@@ -88,6 +88,10 @@ type Item struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DoneAt    time.Time // zero until the item reaches the done station
+	// Source is where the item came from and Trigger the trigger that created it; "" when its
+	// creator did not say.
+	Source  ItemSource
+	Trigger string
 }
 
 // Position returns the item's station and state.
@@ -154,6 +158,10 @@ type NewItem struct {
 	State     ItemState
 	Class     ClassOfService
 	CreatedAt time.Time
+	// Source is where the item came from and Trigger the trigger that created it, for Intake; ""
+	// when the creator does not say.
+	Source  ItemSource
+	Trigger string
 }
 
 // Assembly is an item with parts: a request split into several items (each part's ParentID is
