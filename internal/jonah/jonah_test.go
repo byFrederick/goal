@@ -117,6 +117,13 @@ func newWorld(t *testing.T) *world {
 func (w *world) finishedRun(agent string, endedAt time.Time) domain.Run {
 	w.t.Helper()
 
+	return w.finishedRunCosting(agent, endedAt, 0)
+}
+
+// finishedRunCosting is finishedRun of a run that cost cost.
+func (w *world) finishedRunCosting(agent string, endedAt time.Time, cost float64) domain.Run {
+	w.t.Helper()
+
 	it, err := w.store.CreateItem(w.ctx(), domain.NewItem{FactoryID: factory, Title: "Fix the lease", Station: "build", CreatedAt: endedAt.Add(-time.Hour)})
 	if err != nil {
 		w.t.Fatal(err)
@@ -129,7 +136,7 @@ func (w *world) finishedRun(agent string, endedAt time.Time) domain.Run {
 		w.t.Fatal(err)
 	}
 
-	if err := w.store.FinishRun(w.ctx(), id, domain.RunResult{Status: domain.RunSucceeded}, endedAt); err != nil {
+	if err := w.store.FinishRun(w.ctx(), id, domain.RunResult{Status: domain.RunSucceeded, CostUSD: cost}, endedAt); err != nil {
 		w.t.Fatal(err)
 	}
 
