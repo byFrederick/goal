@@ -2,7 +2,8 @@
 // fake in porttest and the PostgreSQL adapter run it, so tests on the fake hold for the
 // database's rules: sources and their connections, leases that end so another goald takes the
 // sync over, documents replaced with their chunks, unseen documents deleted, uploads, the one
-// hybrid ranking and its sources filter, and organizations kept apart.
+// hybrid ranking and its sources filter, organizations kept apart, and knowledge use and
+// verdicts (uses.go).
 package knowledgetest
 
 import (
@@ -53,6 +54,11 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Search_HybridRanking", testSearchRanking},
 		{"SearchOnlyListedSources", testSearchSources},
 		{"OtherOrg_SeesNothing", testIsolation},
+		{"Uses_UpsertIsIdempotent", testUsesUpsert},
+		{"Verdicts_LaterReplacesEarlier", testVerdictsReplace},
+		{"Usage_WindowCountsOnlyRunsInside", testUsageWindow},
+		{"Uses_OtherOrgSeesNothing", testUsesIsolation},
+		{"DocumentDelete_CascadesUsesAndVerdicts", testDeleteCascades},
 		{"Methods_NoOrgIsAnError", testNoOrg},
 	}
 
@@ -943,6 +949,23 @@ func testNoOrg(f *fixture) {
 			_, err := f.Knowledge.Search(ctx, domain.KnowledgeQuery{Text: "x", Sources: []string{"abc"}, Limit: 1})
 			return err
 		},
+		"RecordUse": func() error {
+			return f.Knowledge.RecordUse(ctx, newRun().use(domain.KnowledgeDocument{ID: "01900000-0000-7000-8000-000000000001", Source: id},
+				domain.KnowledgeRead, nil, now))
+		},
+		"GiveVerdict": func() error {
+			_, err := f.Knowledge.GiveVerdict(ctx, domain.KnowledgeVerdict{
+				Document: "01900000-0000-7000-8000-000000000001", Verdict: domain.KnowledgeHelped, By: admin,
+			})
+
+			return err
+		},
+		"SourceUsage": func() error { _, err := f.Knowledge.SourceUsage(ctx, "abc", 7); return err },
+		"DocumentUses": func() error {
+			_, err := f.Knowledge.DocumentUses(ctx, "01900000-0000-7000-8000-000000000001", "", 1)
+			return err
+		},
+		"RunUses": func() error { _, err := f.Knowledge.RunUses(ctx, newRun().run); return err },
 	}
 
 	for name, call := range calls {

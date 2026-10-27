@@ -53,6 +53,21 @@ type fakeSource struct {
 type fakeDocument struct {
 	doc    domain.KnowledgeDocument
 	chunks []fakeChunk
+	// uses and verdicts go with the document, as 00072's cascade takes them.
+	uses     map[useKey]domain.KnowledgeUse
+	verdicts map[verdictKey]domain.KnowledgeVerdict
+}
+
+// useKey is a use's key: one per run, document and kind.
+type useKey struct {
+	run  domain.RunID
+	kind domain.KnowledgeUseKind
+}
+
+// verdictKey is a verdict's key: one per actor, document and run ("" its own).
+type verdictKey struct {
+	actor string
+	run   domain.RunID
 }
 
 type fakeChunk struct {
