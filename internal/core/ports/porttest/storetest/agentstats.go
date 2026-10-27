@@ -124,8 +124,15 @@ func testAgentStats(f *fixture) {
 func (f *fixture) run(t *testing.T, it domain.Item, agent string, at time.Time, res domain.RunResult) domain.RunID {
 	t.Helper()
 
+	return f.runAt(t, it, stWork, agent, at, res)
+}
+
+// runAt is run at station.
+func (f *fixture) runAt(t *testing.T, it domain.Item, station, agent string, at time.Time, res domain.RunResult) domain.RunID {
+	t.Helper()
+
 	id, err := f.Store.StartRun(f.ctx(t), ports.NewRun{
-		FactoryID: it.FactoryID, ItemID: it.ID, Station: stWork, Agent: agent, Model: model, StartedAt: at,
+		FactoryID: it.FactoryID, ItemID: it.ID, Station: station, Agent: agent, Model: model, StartedAt: at,
 	})
 	if err != nil {
 		t.Fatal(err)

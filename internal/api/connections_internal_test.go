@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -193,6 +194,10 @@ func TestConnectionProblem_Codes(t *testing.T) {
 		{connectionError(ports.ErrConflict, connGitHub, errConnectionNotFound), http.StatusConflict, "connection-in-use"},
 		{connectionError(domain.ErrInvalid, connGitHub, errConnectionNotFound), http.StatusBadRequest, ""},
 		{connectionError(errors.Join(domain.ErrFieldRequired, domain.ErrInvalid), connGitHub, errConnectionNotFound), http.StatusBadRequest, "field-required"},
+		{fmt.Errorf("%w: kind docs", errNotCodeHost), http.StatusUnprocessableEntity, "connection-not-code-host"},
+		{fmt.Errorf("%w: gitlab", errReposUnsupported), http.StatusUnprocessableEntity, "repositories-not-supported"},
+		{fmt.Errorf("%w: nobody", errOwnerNotFound), http.StatusNotFound, "owner-not-found"},
+		{fmt.Errorf("%w: GitHub answered 401", errCodeHost), http.StatusBadGateway, "code-host-error"},
 	}
 
 	for _, tt := range tests {

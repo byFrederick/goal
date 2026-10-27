@@ -179,8 +179,8 @@ func (t stationTally) at(station string) *domain.StationTimes {
 	return st
 }
 
-// read adds the lease times, the waiting items and the gate verdicts of factory fid over
-// [since, until).
+// read adds the lease times, the waiting items, the gate verdicts and the run spend of factory
+// fid over [since, until).
 func (t stationTally) read(ctx context.Context, q *db.Queries, fid uuid.UUID, since, until time.Time) error {
 	held, err := q.StationLeaseTimes(ctx, db.StationLeaseTimesParams{FactoryID: fid, Since: since, Until: until})
 	if err != nil {
@@ -224,6 +224,15 @@ func (t stationTally) read(ctx context.Context, q *db.Queries, fid uuid.UUID, si
 	for _, r := range verdicts {
 		st := t.at(deref(r.Station))
 		st.Verdicts, st.Rejected = int(r.Verdicts), int(r.Rejected)
+	}
+
+	spend, err := q.StationSpend(ctx, db.StationSpendParams{FactoryID: fid, Since: since, Until: until})
+	if err != nil {
+		return fmt.Errorf("spend: %w", err)
+	}
+
+	for _, r := range spend {
+		t.at(r.Station).SpendUSD = r.SpendUsd
 	}
 
 	return nil

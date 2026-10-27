@@ -41,6 +41,14 @@ func (e *Engine) Approve(ctx context.Context, id domain.ItemID, by domain.Actor)
 		return domain.Item{}, err
 	}
 
+	// An item with an open question waits for its answer, not an approval (ADR 0018).
+	switch open, err := e.openQuestion(ctx, id); {
+	case err != nil:
+		return domain.Item{}, fmt.Errorf("approve %s: %w", id, err)
+	case open:
+		return domain.Item{}, fmt.Errorf("approve %s: %w", id, ErrQuestionOpen)
+	}
+
 	// The line requires an approval at a human station; a gate's escalation is no decision it
 	// planned for (spec 4 §4.9).
 	st, _ := l.Station(it.Station)

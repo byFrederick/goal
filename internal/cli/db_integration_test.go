@@ -337,7 +337,7 @@ func TestDB_Rekey(t *testing.T) {
 	rotated := entry("k2", 2) + "," + entry("k1", 1)
 	env := testEnv(t, "http://127.0.0.1:1", map[string]string{migrateURLEnv: d.ownerURL, masterkey.KeysEnv: rotated})
 
-	for _, want := range []string{"✓ 1 connections resealed under master key k2", "✓ 0 connections resealed"} {
+	for _, want := range []string{"✓ 1 connections and credentials resealed under master key k2", "✓ 0 connections and credentials resealed"} {
 		var buf bytes.Buffer
 
 		if err := run(t.Context(), []string{"db", "rekey"}, &printer{w: &buf}, env, nil); err != nil || !strings.Contains(buf.String(), want) {

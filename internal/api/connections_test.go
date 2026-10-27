@@ -2,8 +2,10 @@ package api_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -390,5 +392,134 @@ func TestAPI_StreamSendsConnectionEvents(t *testing.T) {
 	var e gen.ConnectionEvent
 	if err := json.Unmarshal([]byte(strings.TrimPrefix(got[1], "data: ")), &e); err != nil || e.Change != gen.Tested || e.Name != kindGitHub {
 		t.Errorf("connection event = %+v, %v; want github tested", e, err)
+	}
+}
+
+// codeConnectionNotFound is the problem code of an unknown connection.
+const codeConnectionNotFound = "connection-not-found"
+
+// reposPath lists what the github connection reaches; octoLogin is the account it signs in as,
+// octoOrg the organization that account belongs to.
+const (
+	reposPath = githubPath + "/repositories"
+	octoLogin = "octo"
+	octoOrg   = "acme"
+)
+
+// octoRepositories makes the harness's code host sign in as octo, a member of acme, with one
+// repository of its own and acme's 100 most recent of more.
+func (h *harness) octoRepositories() {
+	owners := []ports.RepositoryOwner{{Login: octoLogin, Kind: ports.RepositoryOwnerUser}, {Login: octoOrg, Kind: ports.RepositoryOwnerOrganization}}
+
+	h.codehost.SetRepositories(ports.RepositoryList{
+		Login: octoLogin, Owners: owners, Owner: octoLogin,
+		Repositories: []ports.Repository{{
+			FullName: "octo/goal", CloneURL: "https://github.com/octo/goal.git", Languages: []string{"Go", "TypeScript"}, UpdatedAt: t0,
+		}},
+	})
+
+	acme := make([]ports.Repository, 0, ports.MaxRepositories)
+	for i := range ports.MaxRepositories {
+		acme = append(acme, ports.Repository{FullName: fmt.Sprintf("acme/app-%d", i), CloneURL: "https://github.com/acme/app.git", UpdatedAt: t0})
+	}
+
+	h.codehost.SetRepositories(ports.RepositoryList{Login: octoLogin, Owners: owners, Owner: octoOrg, Repositories: acme, Truncated: true})
+}
+
+// The github connection lists the account it signs in as, its owners and the repositories of the
+// account or of the owner asked, and the use is recorded; no secret is answered.
+func TestConnectionRepositories_ListsOwnersAndRepositories(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.createGitHub(t)
+	h.octoRepositories()
+
+	res := h.request(t, http.MethodGet, reposPath, "", nil)
+	if strings.Contains(string(res.body), githubToken) {
+		t.Errorf("the answer holds the connection's token: %s", res.body)
+	}
+
+	got := decode[gen.RepositoryList](t, res, http.StatusOK)
+	want := gen.RepositoryList{
+		Login: octoLogin, Owner: octoLogin,
+		Owners: []gen.RepositoryOwner{{Login: octoLogin, Kind: gen.RepositoryOwnerKindUser}, {Login: octoOrg, Kind: gen.RepositoryOwnerKindOrganization}},
+		Repositories: []gen.Repository{{
+			FullName: "octo/goal", CloneUrl: "https://github.com/octo/goal.git", Languages: []string{"Go", "TypeScript"}, UpdatedAt: t0,
+		}},
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("repositories = %+v; want %+v", got, want)
+	}
+
+	acme := decode[gen.RepositoryList](t, h.request(t, http.MethodGet, reposPath+"?owner=acme", "", nil), http.StatusOK)
+	if acme.Owner != octoOrg || len(acme.Repositories) != ports.MaxRepositories || !acme.Truncated || acme.Repositories[0].Languages == nil {
+		t.Errorf("acme's = owner %s, %d repositories, truncated %v; want acme, 100, truncated, languages []", acme.Owner, len(acme.Repositories), acme.Truncated)
+	}
+
+	if c := decode[gen.Connection](t, h.request(t, http.MethodGet, githubPath, "", nil), http.StatusOK); c.LastUsedAt == nil {
+		t.Errorf("github after listing = %+v; want it used", c)
+	}
+}
+
+// Only a code host connection goald reaches lists repositories, of owners its host knows.
+func TestConnectionRepositories_Refusals(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.createGitHub(t)
+	h.octoRepositories()
+
+	for _, body := range []string{
+		`{"name":"docs","kind":"mcp-server","fields":{"url":"https://docs.example.com/mcp"}}`,
+		`{"name":"gitlab","kind":"gitlab","secrets":{"token":"glpat-test-token"}}`,
+	} {
+		decode[gen.Connection](t, h.request(t, http.MethodPost, connectionsPath, body, nil), http.StatusCreated)
+	}
+
+	tests := []struct {
+		name, path string
+		status     int
+		code       string
+	}{
+		{"unknown connection", connectionsPath + "/nothing/repositories", http.StatusNotFound, codeConnectionNotFound},
+		{"a kind with no code host", connectionsPath + "/docs/repositories", http.StatusUnprocessableEntity, "connection-not-code-host"},
+		{"a code host that lists none", connectionsPath + "/gitlab/repositories", http.StatusUnprocessableEntity, "repositories-not-supported"},
+		{"unknown owner", reposPath + "?owner=nobody", http.StatusNotFound, "owner-not-found"},
+	}
+
+	for _, tt := range tests {
+		if p := refused(t, tt.name, h.request(t, http.MethodGet, tt.path, "", nil), tt.status, tt.code); strings.Contains(deref(p.Detail), "glpat-test-token") {
+			t.Errorf("%s: the problem holds a secret: %s", tt.name, deref(p.Detail))
+		}
+	}
+
+	// A kind refused before the connection is used records no use.
+	if c := decode[gen.Connection](t, h.request(t, http.MethodGet, connectionsPath+"/docs", "", nil), http.StatusOK); c.LastUsedAt != nil {
+		t.Errorf("docs after a refused listing = %+v; want it unused", c)
+	}
+}
+
+// Members browse what a connection reaches (connection:browse) without a recent sign-in;
+// another organization's people do not see it.
+func TestConnectionRepositories_AMemberMayBrowse(t *testing.T) {
+	t.Parallel()
+
+	h := newSignedIn(t)
+	h.octoRepositories()
+
+	if _, err := h.conns.Create(domain.WithOrg(t.Context(), testOrg), domain.NewConnection{
+		Name: kindGitHub, Kind: kindGitHub, Secrets: map[string]string{"token": githubToken},
+	}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := decode[gen.RepositoryList](t, h.as(t, viewerToken, http.MethodGet, reposPath, ""), http.StatusOK); got.Login != octoLogin {
+		t.Errorf("a member's listing = %+v; want octo's", got)
+	}
+
+	if res := h.as(t, strangerToken, http.MethodGet, reposPath, ""); res.status != http.StatusNotFound {
+		t.Errorf("another organization's owner listing = %d; want 404", res.status)
 	}
 }

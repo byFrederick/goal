@@ -1,4 +1,4 @@
-# ADR 0021 — Notifications by email and Slack, the daily digest and sign-up by domain
+# ADR 0023 — Notifications by email and Slack, the daily digest and sign-up by domain
 
 Status: accepted · 2026-10-27 · Builds on [ADR 0016](0016-ui-revamp.md) (the screens are the contract, controls for features not built yet), [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (outside systems are connections of a connection kind) and [ADR 0018](0018-agents-ask-questions.md) (questions, one of the events)
 
@@ -48,7 +48,7 @@ Assembly software#274 builds these in eight parts: preferences, the outbox, emai
    - Nothing is held in memory or in another store (AGENTS.md rules 3 and 4). Rows that are `sent`, `failed` or `skipped` are deleted after 30 days.
 
 4. **Email is sent by goald through a new `Mailer` port, with an SMTP adapter.**
-   - **The port.** `ports.Mailer` has one method, `Send(ctx, Message) error`. A `Message` holds the recipient, the subject, a plain-text body and a minimal HTML body. The error says whether the failure is permanent. The in-memory fake goes in `internal/ports/porttest`, and the adapter in `internal/adapters/mailer/smtp`, wired in `cmd/goald/main.go`.
+   - **The port.** `ports.Mailer` has one method, `Send(ctx, Message) error`. A `Message` holds the recipient, the subject, a plain-text body and a minimal HTML body. The error says whether the failure is permanent. The in-memory fake goes in `internal/core/ports/porttest`, and the adapter in `internal/adapters/mailer/smtp`, wired in `cmd/goald/main.go`.
    - **The settings.** goald becomes a reader of `GOAL_SMTP_URL`, `GOAL_SMTP_FROM` and `GOAL_SMTP_PLAINTEXT`, with the auth service's meanings: plaintext only to compose's Mailpit, and STARTTLS off loopback. The email part adds `goald` to their `readers` in `contracts/env.yaml` and reads them in `cmd/goald/settings.go`.
    - **Email off.** While `GOAL_SMTP_URL` is unset, goald has no mailer and the account screen's Email column is off.
    - **The message.** It is plain text with a minimal HTML copy: no images, no tracking and no remote content. Every link is built from `GOAL_PUBLIC_URL` and never from request data.

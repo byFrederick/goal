@@ -5,6 +5,10 @@ export const paths = {
   /** What goal-agent prepare writes from the run bundle. */
   goal: '/goal',
   spec: '/goal/spec.json',
+  /** Definition mode: each draft file's starting sha256, by its path in /workspace. */
+  definition: '/goal/definition.json',
+  /** Definition mode: the factory schema, when the bundle ships it. */
+  factorySchema: '/goal/definition/factory.schema.json',
   agent: '/goal/agent',
   workspace: '/workspace',
   /** Claude Code's config dir for this run, in the sandbox's throwaway home; never the host's. */
@@ -50,10 +54,18 @@ export const Rule = z.object({
 });
 export type Rule = z.infer<typeof Rule>;
 
-/** The task as /goal/spec.json holds it: the bundle's spec plus the gateway's URL. It holds no secrets. */
-export const TaskSpec = z.object({
+/** A draft request (ADR 0021): what a person asked to change in the factory's draft, and the agent it is about. */
+export const DraftRequest = z.object({
+  id: z.string().min(1),
+  text: z.string().min(1).max(2000),
+  agent: z.string().min(1).optional(),
+});
+export type DraftRequest = z.infer<typeof DraftRequest>;
+
+const taskFields = z.object({
   factory_id: z.string().min(1),
-  item_id: z.string().min(1),
+  /** Empty only in definition mode, which has no item. */
+  item_id: z.string(),
   run_id: z.string().min(1),
   station: z.string(),
   agent: z.string(),
@@ -79,7 +91,17 @@ export const TaskSpec = z.object({
    * branch; it aborted, so the branch is as pushed and the agent resolves them first.
    */
   base_conflicts: z.array(z.string()).optional(),
+  /** Definition mode (ADR 0021): the run changes the factory's draft files in /workspace for this request. */
+  draft_request: DraftRequest.optional(),
 });
+
+/** An item's run names its item; only a draft request's run (definition mode) may leave it empty. */
+const itemNamed = (s: { item_id: string; draft_request?: DraftRequest | undefined }) =>
+  s.draft_request !== undefined || s.item_id.length > 0;
+const itemMessage = { message: 'item_id is required outside definition mode', path: ['item_id'] };
+
+/** The task as /goal/spec.json holds it: the bundle's spec plus the gateway's URL. It holds no secrets. */
+export const TaskSpec = taskFields.refine(itemNamed, itemMessage);
 export type TaskSpec = z.infer<typeof TaskSpec>;
 
 /** The agent's files from /goal/agent. */
@@ -94,12 +116,16 @@ export function parseSpec(raw: string): TaskSpec {
   return TaskSpec.parse(JSON.parse(raw));
 }
 
-/** A path inside /goal: relative, without "." or ".." segments. */
-const bundlePath = z
+/** A relative path without "." or ".." segments. */
+const relativePath = z
   .string()
   .regex(/^[A-Za-z0-9_@+-][A-Za-z0-9_.@+-]*(\/[A-Za-z0-9_@+-][A-Za-z0-9_.@+-]*)*$/)
-  .refine((p) => !p.split('/').some((seg) => seg === '.' || seg === '..'), 'no . or .. segments')
-  .refine((p) => p !== 'spec.json', 'spec.json is the spec');
+  .refine((p) => !p.split('/').some((seg) => seg === '.' || seg === '..'), 'no . or .. segments');
+
+/** A path inside /goal; never one of the files prepare writes itself. */
+const bundlePath = relativePath
+  .refine((p) => p !== 'spec.json', 'spec.json is the spec')
+  .refine((p) => p !== 'definition.json', 'definition.json is the definition baseline');
 
 /** A git login for https://<host>: the user name and the variable that holds the password. */
 export const GitCredential = z.object({
@@ -116,22 +142,36 @@ const toolSpec = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9@:/._+-]*$/);
  * The run bundle, GET <gateway origin>/run with the run's task token (internal/gateway, ServeRun).
  * It holds no secrets: git credentials name the variables that carry their passwords.
  */
-export const Bundle = z.object({
-  spec: TaskSpec.omit({ gateway_url: true, base_conflicts: true }),
-  /** Files under /goal by path, base64. */
-  files: z.record(bundlePath, z.base64()),
-  /** Cloned into /workspace with the item's branch checked out; absent leaves it empty. */
-  repository: z
-    .object({
-      /** A clone URL with a scheme (goald's definitions allow https only), never an option. */
-      url: z.string().regex(/^[A-Za-z][A-Za-z0-9+.-]*:\/\/\S+$/),
-      branch: z.string().min(1),
-      /** How an existing branch is brought up to date with the default branch; rebase when absent. */
-      fresh_base: z.enum(['rebase', 'merge']).optional(),
-    })
-    .optional(),
-  git_credentials: z.array(GitCredential).default([]),
-  /** The definition's runtime.tools, installed after the repository's own. */
-  tools: z.array(toolSpec).default([]),
-});
+export const Bundle = z
+  .object({
+    spec: taskFields.omit({ gateway_url: true, base_conflicts: true }).refine(itemNamed, itemMessage),
+    /** Files under /goal by path, base64. */
+    files: z.record(bundlePath, z.base64()),
+    /** Cloned into /workspace with the item's branch checked out; absent leaves it empty. */
+    repository: z
+      .object({
+        /** A clone URL with a scheme (goald's definitions allow https only), never an option. */
+        url: z.string().regex(/^[A-Za-z][A-Za-z0-9+.-]*:\/\/\S+$/),
+        branch: z.string().min(1),
+        /** How an existing branch is brought up to date with the default branch; rebase when absent. */
+        fresh_base: z.enum(['rebase', 'merge']).optional(),
+      })
+      .optional(),
+    git_credentials: z.array(GitCredential).default([]),
+    /** The definition's runtime.tools, installed after the repository's own. */
+    tools: z.array(toolSpec).default([]),
+    /**
+     * Definition mode (ADR 0021): the factory's draft files by path, base64, written into /workspace
+     * instead of a repository. It comes with the spec's draft_request, and never with a repository.
+     */
+    definition: z.object({ files: z.record(relativePath, z.base64()) }).optional(),
+  })
+  .refine((b) => !(b.definition && b.repository), {
+    message: 'a bundle has a definition or a repository, not both',
+    path: ['definition'],
+  })
+  .refine((b) => (b.definition === undefined) === (b.spec.draft_request === undefined), {
+    message: "a bundle's definition and its spec's draft_request come together",
+    path: ['definition'],
+  });
 export type Bundle = z.infer<typeof Bundle>;

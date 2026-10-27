@@ -31,6 +31,9 @@ type KindParser func(data []byte) (domain.ConnectionKind, error)
 const (
 	connectionTestTimeout = 10 * time.Second
 	connectionTestBody    = 64 << 10
+	// repositoriesTimeout bounds one listing of a connection's repositories: up to 103 code host
+	// requests, 8 at a time.
+	repositoriesTimeout = time.Minute
 )
 
 // Errors of the connection routes, answered with their codes by connectionProblem.
@@ -43,6 +46,12 @@ var (
 	errKindInUse          = errors.New("connection kind in use")
 	errNotTestable        = errors.New("connection not testable")
 	errKindInvalid        = errors.New("connection kind invalid")
+	// The refusals of a listing of a connection's repositories: a kind that is no code host goald
+	// reaches, a code host that cannot list them, an owner it does not know, any other failure.
+	errNotCodeHost      = errors.New("connection is not a code host")
+	errReposUnsupported = errors.New("the code host cannot list repositories")
+	errOwnerNotFound    = errors.New("owner not found")
+	errCodeHost         = errors.New("the code host failed")
 	// errConnectionInvalid is a connection the rules refuse (400): field-unknown and
 	// field-required when a field rule says which.
 	errConnectionInvalid = errors.New("connection invalid")
@@ -63,6 +72,10 @@ func connectionProblem(err error) (gen.Problem, bool) {
 		{errKindInUse, http.StatusConflict, "connection-kind-in-use"},
 		{errNotTestable, http.StatusConflict, "connection-not-testable"},
 		{errKindInvalid, http.StatusBadRequest, "connection-kind-invalid"},
+		{errNotCodeHost, http.StatusUnprocessableEntity, "connection-not-code-host"},
+		{errReposUnsupported, http.StatusUnprocessableEntity, "repositories-not-supported"},
+		{errOwnerNotFound, http.StatusNotFound, "owner-not-found"},
+		{errCodeHost, http.StatusBadGateway, "code-host-error"},
 		{domain.ErrFieldUnknown, http.StatusBadRequest, "field-unknown"},
 		{domain.ErrFieldRequired, http.StatusBadRequest, "field-required"},
 		{errConnectionInvalid, http.StatusBadRequest, ""},
@@ -388,6 +401,75 @@ func (s *server) TestConnection(ctx context.Context, req gen.TestConnectionReque
 	}
 
 	return gen.TestConnection200JSONResponse(out), nil
+}
+
+// ListConnectionRepositories lists what a code host connection reaches with its credential: the
+// connection is resolved for the caller (audited as connection.used) only once its kind names a
+// code host goald has. The code host's refusals are answered scrubbed of the connection's secrets.
+func (s *server) ListConnectionRepositories(ctx context.Context, req gen.ListConnectionRepositoriesRequestObject) (gen.ListConnectionRepositoriesResponseObject, error) {
+	by, ok := domain.ActorFrom(ctx)
+	if !ok {
+		return nil, errors.New("list connection repositories: the request has no actor")
+	}
+
+	c, err := s.connections.Get(ctx, req.Connection)
+	if err != nil {
+		return nil, connectionError(err, req.Connection, errConnectionNotFound)
+	}
+
+	kind, err := s.connections.Kind(ctx, c.Kind)
+	if err != nil {
+		return nil, err
+	}
+
+	ch, ok := s.codehosts[kind.Spec.CodeHost]
+	if kind.Spec.CodeHost == "" || !ok {
+		return nil, fmt.Errorf("%w: connection %s is of kind %s, which names no code host goald reaches", errNotCodeHost, c.Name, kind.Name)
+	}
+
+	resolved, err := s.connections.Resolve(ctx, []string{c.Name}, domain.ConnectionUse{By: by})
+	if err != nil {
+		return nil, connectionError(err, req.Connection, errConnectionNotFound)
+	}
+
+	rc := resolved[0]
+
+	ctx, cancel := context.WithTimeout(ctx, repositoriesTimeout)
+	defer cancel()
+
+	list, err := ch.Repositories(ctx, rc, deref(req.Params.Owner))
+
+	switch {
+	case errors.Is(err, errors.ErrUnsupported):
+		return nil, fmt.Errorf("%w: %s (kind %s)", errReposUnsupported, kind.Spec.CodeHost, kind.Name)
+	case errors.Is(err, ports.ErrNotFound):
+		return nil, fmt.Errorf("%w: %s", errOwnerNotFound, scrub(err.Error(), rc))
+	case err != nil:
+		return nil, fmt.Errorf("%w: %s", errCodeHost, scrub(err.Error(), rc))
+	}
+
+	return gen.ListConnectionRepositories200JSONResponse(repositoriesOut(list)), nil
+}
+
+// repositoriesOut is list as the contract has it.
+func repositoriesOut(list ports.RepositoryList) gen.RepositoryList {
+	out := gen.RepositoryList{
+		Login: list.Login, Owner: list.Owner, Truncated: list.Truncated,
+		Owners:       make([]gen.RepositoryOwner, 0, len(list.Owners)),
+		Repositories: make([]gen.Repository, 0, len(list.Repositories)),
+	}
+
+	for _, o := range list.Owners {
+		out.Owners = append(out.Owners, gen.RepositoryOwner{Login: o.Login, Kind: gen.RepositoryOwnerKind(o.Kind)})
+	}
+
+	for _, r := range list.Repositories {
+		out.Repositories = append(out.Repositories, gen.Repository{
+			FullName: r.FullName, CloneUrl: r.CloneURL, Languages: append([]string{}, r.Languages...), UpdatedAt: r.UpdatedAt,
+		})
+	}
+
+	return out
 }
 
 // probe sends rc's test request and returns the status it got; an error when there is none, or

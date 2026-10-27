@@ -172,11 +172,17 @@ func (s *Store) StationTimes(ctx context.Context, factory domain.FactoryID, sinc
 		}
 	}
 
+	for _, r := range s.runs {
+		if s.ofFactory(r.ItemID, org, factory) {
+			m.run(r)
+		}
+	}
+
 	return m.sorted(), m.history, nil
 }
 
 // stationMeter measures a factory's stations over [since, until) as StationTimes does, from its
-// leases, spans and events one at a time.
+// leases, spans, events and runs one at a time.
 type stationMeter struct {
 	since, until time.Time
 	stations     map[string]*domain.StationTimes
@@ -287,6 +293,15 @@ func (m *stationMeter) event(e domain.Event) {
 	if e.Kind == domain.EventGateRejected {
 		st.Rejected++
 	}
+}
+
+// run counts the cost of a run started in the window.
+func (m *stationMeter) run(r *domain.Run) {
+	if r.StartedAt.Before(m.since) || !r.StartedAt.Before(m.until) {
+		return
+	}
+
+	m.at(r.Station).SpendUSD += r.Result.CostUSD
 }
 
 func (m *stationMeter) sorted() []domain.StationTimes {
