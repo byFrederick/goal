@@ -1,7 +1,9 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "extends": ["@goal/config/biome.json"],
-  "files": { "includes": ["src/**", "mock/**", "e2e/**", "e2e-auth/**", "*.ts", "*.json", "!**/*.gen.*"] },
+  "files": {
+    "includes": ["src/**", "scripts/**", "mock/**", "e2e/**", "e2e-auth/**", "*.ts", "*.json", "!**/*.gen.*"]
+  },
   "javascript": { "formatter": { "jsxQuoteStyle": "double" } },
   "css": { "parser": { "tailwindDirectives": true } }
 }
