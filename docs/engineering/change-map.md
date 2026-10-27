@@ -2,7 +2,7 @@
 
 # Change map
 
-Keep this map accurate: every pull request that adds a new coupling between files adds or updates its row. Each row is one entry file in [change-map/](change-map/) (`NNN-<slug>.md`, with the sections `## When you change`, `## Also change` and `## Run`, one line each; rows follow the file names), and `task docs:gen` renders this page from them and from `change-map/_page.md`. Never edit this page itself: `task check` fails when it differs from a fresh render.
+Keep this map accurate: every pull request that adds a new coupling between files adds or updates its row. Each row is one entry file in [change-map/](change-map/) (`NNN-<slug>.md`, with the sections `## When you change`, `## Also change` and `## Run`, one line each; rows follow the file names), and `task docs:gen` renders this page from them and from `change-map/_page.md`. A branch adds or edits only its entry file: never edit or regenerate this page in a branch. The docs-gen workflow (`.github/workflows/docs-gen.yml`) regenerates it on main after the merge.
 
 When you change X, also change Y, and run Z. Paths are today's; the moves of [ADR 0013](../adr/0013-repository-layout.md) update them.
 
@@ -35,7 +35,7 @@ When you change X, also change Y, and run Z. Paths are today's; the moves of [AD
 
 ## Generated files
 
-Every generated file has `.gen.` before its extension ([ADR 0013](../adr/0013-repository-layout.md), decision 4), and nobody edits one by hand: change its source and run its task. `task gen` runs every generator; `task gen:check` (part of `task check`) fails when any file below differs from the commit or is untracked, checked before the generators run (an uncommitted hand edit) and after. `.golangci.yml` and the `biome.json` files ignore `*.gen.*`. The change map and the ADR index are not part of `task gen`: `task docs:gen` writes them and `task docs:check` (part of `task check`) fails when either differs from a fresh render.
+Every generated file has `.gen.` before its extension ([ADR 0013](../adr/0013-repository-layout.md), decision 4), and nobody edits one by hand: change its source and run its task. `task gen` runs every generator; `task gen:check` (part of `task check`) fails when any file below differs from the commit or is untracked, checked before the generators run (an uncommitted hand edit) and after. `.golangci.yml` and the `biome.json` files ignore `*.gen.*`. The change map and the ADR index are not part of `task gen` and are the exception to "run its task": a branch changes only their entry files, the docs-gen workflow (`.github/workflows/docs-gen.yml`) runs `task docs:gen` on main after the merge and commits them, and `task docs:check` (part of `task check`) only validates their sources, so a stale copy in a branch passes.
 
 | File | Generator | Source | Task |
 | --- | --- | --- | --- |
@@ -46,5 +46,5 @@ Every generated file has `.gen.` before its extension ([ADR 0013](../adr/0013-re
 | `internal/adapters/store/postgres/db/db.gen.go`, `models.gen.go`, `batch.gen.go`, `<query>.sql.gen.go` | sqlc (`db/sqlc.yaml`; the names come from its `output_*_file_name` and `output_files_suffix` options) | `db/queries/`, `db/migrations/` | `task sqlc` |
 | `apps/web/src/routeTree.gen.ts` | the TanStack router plugin in `apps/web/vite.config.ts`, during the web build | `apps/web/src/routes/` | `task web:build` (`task gen` runs the build directly) |
 | `docs/reference/environment.md` (the one exception to the name rule: a reference page other docs link to) | `tools/envcheck -write` | `contracts/env.yaml` | `task env:check -- -write` |
-| `docs/engineering/change-map.md` (an exception to the name rule, like `docs/reference/environment.md`: a page other docs link to) | `tools/gendocs` | `docs/engineering/change-map/` (`_page.md` and one entry file per row) | `task docs:gen` (`task docs:check` checks it) |
-| `docs/adr/README.md` (an exception to the name rule: the index of `docs/adr/`) | `tools/gendocs` | the heading and `Status:` line of each `docs/adr/NNNN-*.md` | `task docs:gen` (`task docs:check` checks it) |
+| `docs/engineering/change-map.md` (an exception to the name rule, like `docs/reference/environment.md`: a page other docs link to) | `tools/gendocs` | `docs/engineering/change-map/` (`_page.md` and one entry file per row) | `task docs:gen`, run on main by the docs-gen workflow (`task docs:check` validates the sources) |
+| `docs/adr/README.md` (an exception to the name rule: the index of `docs/adr/`) | `tools/gendocs` | the heading and `Status:` line of each `docs/adr/NNNN-*.md` | `task docs:gen`, run on main by the docs-gen workflow (`task docs:check` validates the sources) |
