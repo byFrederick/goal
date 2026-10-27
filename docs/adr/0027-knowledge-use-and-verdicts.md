@@ -1,4 +1,4 @@
-# ADR 0026 — Knowledge use and verdicts
+# ADR 0027 — Knowledge use and verdicts
 
 Status: proposed · 2026-10-27 · Builds on [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (the knowledge base and the gateway's knowledge tools), [ADR 0015](0015-overlapping-in-flight-work.md) (decision 6: the generated ADR index) and [ADR 0016](0016-ui-revamp.md) (decision 2: the screens are the contract)
 

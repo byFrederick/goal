@@ -4,6 +4,7 @@ import { ChevronLeft } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { eventsQuery, itemQuery, runsQuery } from '../../api/queries';
 import type { Item, Station } from '../../api/types';
+import { TopBarSlot } from '../../app/top-bar';
 import { factoryTitle, itemKey, useFactory, useFactoryParams } from '../../shared/factory';
 import { humanize, plural } from '../../shared/format';
 import { type ItemControls, ItemDecisions } from '../../shared/item-actions';
@@ -132,6 +133,7 @@ export function ItemPage() {
 
   return (
     <>
+      <TopBarSlot crumb={`#${item.number}`} />
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex max-w-[820px] min-w-0 flex-col gap-2.5">
           <Link
