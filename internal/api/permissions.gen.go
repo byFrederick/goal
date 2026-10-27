@@ -120,6 +120,7 @@ var operationScopes = map[string]string{
 	"listOrgs":                    "authenticated",
 	"listPersonalTokens":          "personal_token:read",
 	"listPlatformAdmins":          "platform:read",
+	"listRuns":                    "org:read",
 	"listTemplates":               "org:read",
 	"listVersions":                "factory:read",
 	"mergeItem":                   "item:decide",

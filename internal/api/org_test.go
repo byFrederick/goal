@@ -264,6 +264,7 @@ var probes = map[string]probe{
 	"getFactoryOverview":  {method: http.MethodGet, path: "/v1/orgs/acme/overview", org: testOrg},
 	"searchOrg":           {method: http.MethodGet, path: "/v1/orgs/acme/search?q=acme", org: testOrg},
 	"getInbox":            {method: http.MethodGet, path: "/v1/orgs/acme/inbox?factory=acme", org: testOrg, factory: acmeID},
+	"listRuns":            {method: http.MethodGet, path: "/v1/orgs/acme/runs?factory=acme", org: testOrg, factory: acmeID},
 	"listItems":           {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/items", org: testOrg, factory: acmeID},
 	"submitItem":          {method: http.MethodPost, path: acmeItems, body: submitFix, org: testOrg, factory: acmeID},
 	"getBoard":            {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/board", org: testOrg, factory: acmeID},
