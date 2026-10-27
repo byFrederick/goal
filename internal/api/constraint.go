@@ -136,6 +136,11 @@ func candidateOf(c domain.Candidate, st domain.Station, span time.Duration) gen.
 		out.AvgWaiting = t.Waiting.Seconds() / span.Seconds()
 	}
 
+	// What one more agent there would cost a day: what each slot cost a day over the range.
+	if span > 0 && c.Slots > 0 && t.SpendUSD > 0 {
+		out.SpendPerSlotDayUsd = new(t.SpendUSD / float64(c.Slots) / (span.Hours() / 24))
+	}
+
 	var wait, service time.Duration
 
 	if t.Waiters > 0 {
