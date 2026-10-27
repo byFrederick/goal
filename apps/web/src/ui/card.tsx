@@ -9,7 +9,7 @@ interface SectionCardProps extends Omit<ComponentProps<'section'>, 'title'> {
   headingLevel?: 'h2' | 'h3';
 }
 
-/** A titled card (the card token, 12px radius) labelled by its heading. */
+/** A titled card (the card token, 14px radius) labelled by its heading. */
 export function SectionCard({
   title,
   description,
@@ -60,8 +60,8 @@ export function StatGrid({ className, children }: { className?: string; children
 /** One cell of a `StatGrid`: its label (`dt`) and the `dd`s the caller passes. */
 export function Stat({ label, className, children }: { label: ReactNode; className?: string; children: ReactNode }) {
   return (
-    <div className={cn('flex min-w-0 flex-col gap-1 bg-card px-3.5 py-3', className)}>
-      <dt className="text-[13px] text-muted">{label}</dt>
+    <div className={cn('flex min-w-0 flex-col gap-1 bg-card px-4 py-3', className)}>
+      <dt className="text-secondary text-muted">{label}</dt>
       {children}
     </div>
   );
@@ -72,7 +72,7 @@ export function StatRow({ label, children, className }: { label: ReactNode; chil
   return (
     <div
       className={cn(
-        'flex items-center justify-between gap-3 border-t border-line py-2.5 text-[15px] tabular-nums',
+        'flex items-center justify-between gap-3 border-t border-line py-3 text-body tabular-nums',
         className,
       )}
     >
