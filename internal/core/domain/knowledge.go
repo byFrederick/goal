@@ -373,7 +373,7 @@ const (
 	KnowledgeMisled KnowledgeVerdictKind = "misled"
 )
 
-// Limits of knowledge use and verdicts (00067's checks).
+// Limits of knowledge use and verdicts (00069's checks).
 const (
 	// MaxVerdictNote is a verdict's note in characters.
 	MaxVerdictNote = 500
