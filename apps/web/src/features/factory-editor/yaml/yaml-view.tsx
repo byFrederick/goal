@@ -1,12 +1,14 @@
-// The YAML view of the whole draft (D §10.9, board Define-YAML): the file tabs over the draft's
-// files, the code editor (Monaco, the textarea on phones) with B's problems as markers and blocks
-// under their lines, the change gutter against the base version, Format (B's encoder) and Copy,
-// a status bar; on the right Problems, Changes from vN and "Same draft, two views". Typing saves
-// the file through the draft session (800 ms) and, between saves, validates the unsaved text as
-// an overlay (500 ms, latest wins) so problems follow the typing. The cursor's line is kept in
-// `?line=`, so Visual opens at the entity under it; a line asked for in the URL (a tile, a
-// problem, Visual's entity) is revealed. Without a draft it shows the running version, and the
-// first keystroke opens a draft.
+// The YAML view of the whole draft (D §10.9, screens build/definition): the file tree beside the
+// editor (Find a file, folders with counts, changed dots), the open file's tab with the Form |
+// YAML toggle, the code editor (Monaco, the textarea on phones) with B's problems as markers and
+// blocks under their lines, the change gutter against the base version, Format (B's encoder) and
+// Copy, the Problems panel under the editor and the Outline column beside it. Typing saves the
+// file through the draft session (800 ms) and, between saves, validates the unsaved text as an
+// overlay (500 ms, latest wins) so problems follow the typing. The cursor's line is kept in
+// `?line=`, so Form opens at the entity under it; a line asked for in the URL (a problem, Form's
+// entity) is revealed. Without a draft it shows the running version, and the first keystroke opens
+// a draft. Below 640 px of `main` the tree waits behind a Files button; below 1024 px the Outline
+// waits.
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
 import { Copy, Download, WandSparkles } from 'lucide-react';
@@ -25,37 +27,38 @@ import {
   defKeys,
   draftFileQuery,
   draftFilesQuery,
-  draftModelQuery,
   draftQuery,
   factoryQuery,
   versionFileQuery,
   versionQuery,
 } from '../../../api/queries';
-import type { DefinitionProblem, ProblemFix } from '../../../api/types';
+import type { DefinitionProblem } from '../../../api/types';
 import { cleanPath, lineOfPlace } from '../../../shared/definition/place';
+import { useFactory } from '../../../shared/factory';
 import { formatClock } from '../../../shared/format';
 import { Button } from '../../../ui/button';
-import { applyFix } from '../draft/ops';
+import { cn } from '../../../ui/cn';
 import { useDraft, useDraftSession, useModel, useViewOnly } from '../draft/use-draft';
-import { problemPlace } from '../frame/state';
 import { useValidation } from '../frame/use-editor';
+import { ViewToggle } from '../frame/view-toggle';
 import { useGoTo } from '../search-link';
 import type { SectionViewProps } from '../section-views';
 import { type EditorSection, isEditorSection } from '../sections';
 import { CodeEditor, type CodeEditorHandle, type CursorPosition, type EditorMarker } from './code-editor';
 import { type FileDialog, FileDialogs } from './file-dialogs';
-import { FileTabs } from './file-tabs';
+import { FileTree } from './file-tree';
 import {
   binarySentence,
   changedLines,
   factoryFile,
-  fileGroups,
+  fileTree,
   isBinary,
   languageNames,
   languageOf,
   newFileText,
 } from './files';
-import { ChangesPanel, ProblemBlock, ProblemsPanel, TwoViewsNote } from './panels';
+import { outlineOf } from './outline';
+import { Outline, ProblemBlock, ProblemsPanel } from './panels';
 
 /** A value that settles `ms` after its last change. */
 function useDebounced<T>(value: T, ms: number): T {
@@ -99,11 +102,15 @@ export function YamlView({ search }: SectionViewProps) {
   const session = useDraftSession();
   const viewOnly = useViewOnly();
   const { org, factory: f } = session;
+  const factory = useFactory();
   const client = useQueryClient();
   const go = useGoTo();
   const section = useRouteSection();
   const maxLines = useEditorLines();
   const panelId = useId();
+  const treeId = useId();
+  const problemsId = useId();
+  const [filesOpen, setFilesOpen] = useState(false);
 
   const hasDraft = useDraft((s) => s.hasDraft);
   const revision = useDraft((s) => s.revision);
@@ -119,7 +126,7 @@ export function YamlView({ search }: SectionViewProps) {
   const draftFiles = useQuery({ ...draftFilesQuery(org, f), enabled: hasDraft }).data;
   const currentDetail = useQuery({ ...versionQuery(org, f, 'current'), enabled: !hasDraft && current !== null }).data;
   const files = (hasDraft ? draftFiles : currentDetail?.files) ?? [];
-  const groups = useMemo(() => fileGroups(files), [files]);
+  const tree = useMemo(() => fileTree(files), [files]);
   const info = files.find((x) => x.path === path);
   const fileState = useDraft((s) => s.files.get(path));
   const missing = fileState === undefined;
@@ -154,6 +161,16 @@ export function YamlView({ search }: SectionViewProps) {
   const here = problems.filter((p) => cleanPath(p.file ?? factoryFile) === path && p.line > 0);
   const unparseable =
     path === factoryFile && (here.some((p) => p.code === 'yaml-invalid') || (!dirty && parseError !== null));
+  // The file tree's marks: errors per file, and the files that differ from the base version.
+  const errorsByFile = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of problems) {
+      if (p.severity === 'info') continue;
+      const file = cleanPath(p.file ?? factoryFile);
+      counts.set(file, (counts.get(file) ?? 0) + 1);
+    }
+    return counts;
+  }, [problems]);
 
   // The change gutter: this file against the version the draft is based on.
   const comparison = useQuery({
@@ -162,6 +179,10 @@ export function YamlView({ search }: SectionViewProps) {
     enabled: hasDraft,
     placeholderData: keepPreviousData,
   }).data;
+  const changedFiles = useMemo(
+    () => new Set((hasDraft ? (comparison?.files ?? []) : []).filter((x) => x.op !== 'unchanged').map((x) => x.path)),
+    [comparison, hasDraft],
+  );
   const fileChange = hasDraft ? comparison?.files.find((x) => x.path === path) : undefined;
   const baseText = useQuery({
     ...versionFileQuery(org, f, 'base', path, fileChange?.from_sha256 ?? ''),
@@ -172,6 +193,15 @@ export function YamlView({ search }: SectionViewProps) {
     if (fileChange.op === 'added') return changedLines(null, text);
     return baseText === undefined ? [] : changedLines(baseText, text);
   }, [fileChange, text, baseText]);
+
+  // The Outline: the keys of the open YAML file, with the lines that have problems.
+  const outline = useMemo(() => {
+    if (text === undefined || languageOf(path) !== 'yaml') return [];
+    const problemLines = problems
+      .filter((p) => p.severity !== 'info' && p.line > 0 && cleanPath(p.file ?? factoryFile) === path)
+      .map((p) => p.line);
+    return outlineOf(text, problemLines);
+  }, [text, path, problems]);
 
   // Keeping the place: the cursor's line goes to ?line=; a line asked for elsewhere is revealed.
   const [editor, setEditor] = useState<CodeEditorHandle | null>(null);
@@ -210,25 +240,8 @@ export function YamlView({ search }: SectionViewProps) {
     if (file !== path) go(undefined, { mode: 'yaml', ...(file !== factoryFile ? { file } : {}), line: p.line });
     else editor?.reveal(p.line, true);
   };
-  const openVisual = (p: DefinitionProblem) => {
-    const { section: target, ...place } = problemPlace(p, model) as { section: EditorSection };
-    go(target, place);
-  };
-  /** A fix patches the model as the saved text says it is: the text first, then the section. */
-  const fix = async (fixToApply: ProblemFix) => {
-    await session.flush();
-    try {
-      session.adopt(await client.fetchQuery({ ...draftModelQuery(org, f), staleTime: 0 }));
-    } catch {
-      // Still not parsing, or goald unreachable: the section save says so.
-    }
-    const states = session.getSnapshot().sections;
-    const now = Object.fromEntries(Object.entries(states).map(([k, v]) => [k, v.local])) as never;
-    session.edit(applyFix(now, fixToApply));
-    void session.flush();
-  };
 
-  // Zones: under each line with problems, its problems with their fixes (Monaco only).
+  // Zones: under each line with problems, its problems (Monaco only).
   const byLine = new Map<number, DefinitionProblem[]>();
   for (const p of here) {
     if (p.severity === 'info') continue;
@@ -238,13 +251,16 @@ export function YamlView({ search }: SectionViewProps) {
   const zones = [...byLine].map(([line, list]) => ({
     key: `problems-${line}`,
     line,
-    content: <ProblemBlock problems={list} onFix={(x) => void fix(x)} onVisual={openVisual} />,
+    content: <ProblemBlock problems={list} />,
   }));
 
   // Files.
   const [dialog, setDialog] = useState<FileDialog>(null);
   const refresh = () => client.invalidateQueries({ queryKey: defKeys.draft(org, f) });
-  const open = (file: string) => go(undefined, { mode: 'yaml', ...(file !== factoryFile ? { file } : {}) });
+  const open = (file: string) => {
+    setFilesOpen(false);
+    go(undefined, { mode: 'yaml', ...(file !== factoryFile ? { file } : {}) });
+  };
   const create = (file: string) => {
     session.editFile(file, newFileText(file));
     open(file);
@@ -310,30 +326,129 @@ export function YamlView({ search }: SectionViewProps) {
   const formatHint = useId();
 
   return (
-    <div className="grid min-w-0 gap-4 @[1024px]:grid-cols-[minmax(0,1fr)_minmax(280px,320px)] @[1024px]:items-start">
+    <>
       <h2 className="sr-only" data-route-focus="" tabIndex={-1}>
         YAML of the {version}
       </h2>
-      <section
-        aria-label="Files and editor"
-        className="min-w-0 overflow-hidden rounded-card border border-line bg-card"
-      >
-        <FileTabs
-          groups={groups}
-          path={path}
-          panelId={panelId}
-          onOpen={open}
-          onNew={(g) => setDialog({ kind: 'new', folder: g.folder ?? '' })}
-          onRename={(p) => setDialog({ kind: 'rename', path: p })}
-          onDelete={(p) => setDialog({ kind: 'delete', path: p })}
-          readOnly={viewOnly}
-          actions={
-            <>
-              {path === factoryFile && !viewOnly ? (
+      <div className="grid min-h-180 min-w-0 overflow-hidden rounded-card border border-line @[640px]:grid-cols-[250px_minmax(0,1fr)] @[1024px]:grid-cols-[250px_minmax(0,1fr)_260px]">
+        <div id={treeId} className={cn(filesOpen ? 'flex' : 'hidden', '@[640px]:flex', 'min-w-0 border-r border-line')}>
+          <FileTree
+            nodes={tree}
+            path={path}
+            changed={changedFiles}
+            problems={errorsByFile}
+            factoryName={factory.name}
+            readOnly={viewOnly}
+            onOpen={open}
+            onNew={(folder) => setDialog({ kind: 'new', folder })}
+            onRename={(p) => setDialog({ kind: 'rename', path: p })}
+            onDelete={(p) => setDialog({ kind: 'delete', path: p })}
+          />
+        </div>
+
+        <div className="flex min-w-0 flex-col">
+          <div className="flex flex-wrap items-stretch justify-between gap-x-3 gap-y-2 border-b border-line bg-panel">
+            <div className="flex min-w-0 items-stretch">
+              <button
+                type="button"
+                aria-expanded={filesOpen}
+                aria-controls={treeId}
+                onClick={() => setFilesOpen((v) => !v)}
+                className="inline-flex items-center px-3 text-secondary font-control text-ink @[640px]:hidden"
+              >
+                Files
+              </button>
+              <div role="tablist" aria-label="Open files" className="flex min-w-0">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected="true"
+                  aria-controls={panelId}
+                  tabIndex={0}
+                  className="inline-flex h-10 min-w-0 items-center gap-2 border-t-2 border-run bg-shell px-4 font-mono text-secondary text-ink"
+                >
+                  <span className="truncate">{path}</span>
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center px-3 py-1">
+              <ViewToggle section={section} yaml />
+            </div>
+          </div>
+
+          {unparseable ? (
+            <p
+              id={formatHint}
+              className="m-0 border-b border-line bg-rework-tint px-4 py-2 text-secondary text-rework-ink"
+            >
+              factory.yaml doesn’t parse{parseError?.line ? ` at line ${parseError.line}` : ''}: Format and Form wait
+              until it does.
+            </p>
+          ) : null}
+
+          <div id={panelId} role="tabpanel" aria-label={label} className="min-w-0">
+            {text === undefined ? (
+              info === undefined && files.length > 0 ? (
+                <p className="m-0 p-5 text-secondary text-muted">
+                  {path} is not in the draft.{' '}
+                  <button
+                    type="button"
+                    onClick={() => open(factoryFile)}
+                    className="text-ink underline underline-offset-3"
+                  >
+                    Open factory.yaml
+                  </button>
+                </p>
+              ) : (
+                <div aria-busy="true" className="h-64">
+                  <span className="sr-only">Loading {path}</span>
+                </div>
+              )
+            ) : binary ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 p-5 text-secondary">
+                <span>{binarySentence(info?.size ?? text.length)}</span>
                 <Button
                   size="sm"
                   variant="white"
                   className="h-11 md:h-8"
+                  onClick={() => void download(org, f, hasDraft ? 'draft' : 'current', path)}
+                >
+                  <Download size={14} strokeWidth={1.75} aria-hidden="true" />
+                  Download
+                </Button>
+              </div>
+            ) : (
+              <CodeEditor
+                ref={setEditor}
+                path={path}
+                value={text}
+                label={label}
+                language={language}
+                onChange={(v: string) => session.editFile(path, v)}
+                onBlur={() => void session.flush()}
+                readOnly={readOnly}
+                minLines={12}
+                maxLines={maxLines}
+                markers={here.map(toMarker)}
+                changedLines={changed}
+                zones={zones}
+                onCursor={setCursor}
+              />
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line px-4 py-2 text-meta text-muted">
+            <span>
+              Line {cursor?.line ?? 1}, column {cursor?.column ?? 1}. {languageNames[language]}
+              {path === factoryFile ? ', schema goal/v1' : ''}
+              {viewOnly ? '. View only' : readOnly && !binary ? '. Read-only: edited from Jonah later' : ''}
+            </span>
+            <span className="flex flex-wrap items-center gap-2">
+              {path === factoryFile && !viewOnly ? (
+                <Button
+                  size="sm"
+                  variant="white"
+                  className="h-11 md:h-7"
                   onClick={() => void format()}
                   disabled={unparseable || text === undefined}
                   aria-describedby={unparseable ? formatHint : undefined}
@@ -346,7 +461,7 @@ export function YamlView({ search }: SectionViewProps) {
                 <Button
                   size="sm"
                   variant="white"
-                  className="h-11 md:h-8"
+                  className="h-11 md:h-7"
                   onClick={() => void copy()}
                   disabled={text === undefined}
                 >
@@ -354,92 +469,17 @@ export function YamlView({ search }: SectionViewProps) {
                   Copy
                 </Button>
               )}
-            </>
-          }
-        />
-        {unparseable ? (
-          <p id={formatHint} className="m-0 border-b border-line bg-rework-tint px-4 py-2 text-[13px] text-rework-ink">
-            factory.yaml doesn’t parse{parseError?.line ? ` at line ${parseError.line}` : ''}: Format and Visual wait
-            until it does.
-          </p>
-        ) : null}
-        <div id={panelId} role="tabpanel" aria-label={label} className="min-w-0 border-b border-line">
-          {text === undefined ? (
-            info === undefined && files.length > 0 ? (
-              <p className="m-0 p-5 text-sm text-muted">
-                {path} is not in the draft.{' '}
-                <button
-                  type="button"
-                  onClick={() => open(factoryFile)}
-                  className="text-ink underline underline-offset-3"
-                >
-                  Open factory.yaml
-                </button>
-              </p>
-            ) : (
-              <div aria-busy="true" className="h-64 bg-card">
-                <span className="sr-only">Loading {path}</span>
-              </div>
-            )
-          ) : binary ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-card p-5 text-sm">
-              <span>{binarySentence(info?.size ?? text.length)}</span>
-              <Button
-                size="sm"
-                variant="white"
-                className="h-11 md:h-8"
-                onClick={() => void download(org, f, hasDraft ? 'draft' : 'current', path)}
-              >
-                <Download size={14} strokeWidth={1.75} aria-hidden="true" />
-                Download
-              </Button>
-            </div>
-          ) : (
-            <CodeEditor
-              ref={setEditor}
-              path={path}
-              value={text}
-              label={label}
-              language={language}
-              onChange={(v: string) => session.editFile(path, v)}
-              onBlur={() => void session.flush()}
-              readOnly={readOnly}
-              minLines={12}
-              maxLines={maxLines}
-              markers={here.map(toMarker)}
-              changedLines={changed}
-              zones={zones}
-              onCursor={setCursor}
-            />
-          )}
-        </div>
-        <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 px-4 py-2.5 text-[13px] text-muted">
-          <span>
-            Line {cursor?.line ?? 1}, column {cursor?.column ?? 1}. {languageNames[language]}
-            {path === factoryFile ? ', schema goal/v1' : ''}
-            {viewOnly ? '. View only' : readOnly && !binary ? '. Read-only: edited from Jonah later' : ''}
-          </span>
-          <span role="status">
-            {path === factoryFile ? 'Checked as you type. ' : ''}
-            {savedLine}
-          </span>
-        </div>
-      </section>
+              <span role="status">
+                {path === factoryFile ? 'Checked as you type. ' : ''}
+                {savedLine}
+              </span>
+            </span>
+          </div>
 
-      <div className="flex min-w-0 flex-col gap-4">
-        <ProblemsPanel
-          problems={problems}
-          model={model}
-          onGo={revealProblem}
-          onFix={(x) => void fix(x)}
-          onVisual={openVisual}
-        />
-        <ChangesPanel
-          comparison={hasDraft ? comparison : undefined}
-          base={draft?.base?.number ?? null}
-          onLine={(line) => (path === factoryFile ? editor?.reveal(line, true) : go(undefined, { mode: 'yaml', line }))}
-        />
-        <TwoViewsNote />
+          <ProblemsPanel problems={problems} onGo={revealProblem} headingId={problemsId} />
+        </div>
+
+        <Outline items={outline} onGo={(line) => editor?.reveal(line, true)} />
       </div>
 
       <FileDialogs
@@ -450,7 +490,7 @@ export function YamlView({ search }: SectionViewProps) {
         onRename={rename}
         onDelete={remove}
       />
-    </div>
+    </>
   );
 }
 

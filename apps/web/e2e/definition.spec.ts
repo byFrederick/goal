@@ -30,15 +30,16 @@ async function openBasics(page: Page) {
 test('the definition frame is accessible and fits the screen', async ({ page }) => {
   await openBasics(page);
   await expect(page).toHaveTitle('Basics · Definition · goal · Acme · Goal');
-  await expect(page.getByText('Draft of v9', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Draft' })).toContainText('Draft of v9, 3 changes');
   await expect(status(page)).toContainText('Based on v8, the version running now.');
   await expect(page.getByRole('link', { name: '3 changes in 2 sections' })).toBeVisible();
   await expect(tile(page, /^Basics, No changes$/)).toHaveAttribute('aria-current', 'location');
   await expect(tile(page, /^Agents, 1 change, 1 problem$/)).toBeAttached();
   await expect(tile(page, /^Review and publish, Fix 1 problem first$/)).toBeAttached();
-  await expect(
-    page.getByRole('navigation', { name: 'Editor view' }).getByRole('link', { name: 'Visual' }),
-  ).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('group', { name: 'Editor view' }).getByRole('button', { name: 'Form' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   await expect(page.getByRole('textbox', { name: 'Name' })).toHaveValue('goal');
   await expect(page.getByText('6f0c2a7e-3d1b-4c55-9a7e-1f2b3c4d5e60')).toBeVisible();
   await expectAccessible(page);
@@ -146,26 +147,26 @@ test('a field changed here and elsewhere asks which value to keep', async ({ pag
 
 test('discard the draft: the running version shows, and the next change opens a new draft', async ({ page }) => {
   await openBasics(page);
-  const review = page.getByRole('link', { name: 'Review and publish', exact: true }).first();
+  const review = page.getByRole('link', { name: 'Review changes', exact: true }).first();
   await expect(review).not.toHaveAccessibleDescription('No changes yet');
 
-  await page.getByRole('button', { name: 'Discard draft…' }).click();
+  await page.getByRole('button', { name: 'Discard draft', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Discard the draft of v9?' });
   await expect(dialog).toContainText('3 changes in 2 sections are lost. v8 keeps running.');
   await dialog.getByRole('button', { name: 'Discard draft' }).click();
 
   await expect(dialog).toBeHidden();
   await expect(status(page)).toContainText('v8 runs now. Your first change opens a draft.');
-  await expect(page.getByText('v8', { exact: true }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Discard draft…' })).toHaveCount(0);
+  await expect(page.getByText('Live: v8', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Discard draft', exact: true })).toHaveCount(0);
   await expect(tile(page, /^Line, No changes$/)).toBeAttached();
-  // Nothing to publish: Review and publish is not the page's primary action.
+  // Nothing to publish: Review changes is not the page's primary action.
   await expect(review).toHaveAccessibleDescription('No changes yet');
 
   await title(page).fill('Fresh start');
   await expect(status(page)).toContainText('Based on v8, the version running now.');
   await expect(status(page)).toContainText('Autosaved');
-  await expect(page.getByText('Draft of v9', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Draft' })).toContainText('Draft of v9');
   await expect(tile(page, /^Basics, 1 change$/)).toBeAttached();
   await expect(review).not.toHaveAccessibleDescription('No changes yet');
 });
@@ -181,4 +182,18 @@ test('a draft discarded elsewhere keeps the changes here for a new draft', async
   await title(page).fill('After the discard');
   await expect(status(page)).toContainText('Autosaved');
   await expect(tile(page, /^Basics, 1 change$/)).toBeAttached();
+});
+
+test('the YAML editor at 375 px: the file tree waits behind Files, and the Outline is left out', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto('/o/acme/f/goal/definition/line?mode=yaml');
+  const files = page.getByRole('button', { name: 'Files', exact: true });
+  await expect(files).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByRole('navigation', { name: 'Definition files' })).toBeHidden();
+  await expect(page.getByRole('complementary', { name: 'Outline' })).toBeHidden();
+  await expectNoHorizontalScroll(page);
+
+  await files.click();
+  await expect(page.getByRole('navigation', { name: 'Definition files' })).toBeVisible();
+  await expectAccessible(page);
 });
