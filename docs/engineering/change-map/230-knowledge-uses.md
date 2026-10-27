@@ -1,6 +1,6 @@
 ## When you change
 
-Knowledge use and verdicts: the `knowledge_uses` and `knowledge_verdicts` tables (`db/migrations/00069_knowledge_uses.sql` and the migrations after it), their queries (the use and verdict queries at the end of `db/queries/knowledge.sql`) or the adapter (`internal/adapters/store/postgres/knowledge_uses.go`)
+Knowledge use and verdicts: the `knowledge_uses` and `knowledge_verdicts` tables (`db/migrations/00070_knowledge_uses.sql` and the migrations after it), their queries (the use and verdict queries at the end of `db/queries/knowledge.sql`) or the adapter (`internal/adapters/store/postgres/knowledge_uses.go`)
 
 ## Also change
 

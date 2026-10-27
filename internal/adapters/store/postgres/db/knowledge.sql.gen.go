@@ -1119,7 +1119,7 @@ type UpsertKnowledgeUseParams struct {
 	At         time.Time
 }
 
-// Knowledge use and verdicts (00069, ADR 0027).
+// Knowledge use and verdicts (00070, ADR 0027).
 // One use per run, document and kind: a second merges its chunk ids into the first's, sorted
 // and distinct, and keeps the earlier time. A document of another source or organization fails
 // the document key, or changes no row when the use exists (ports.ErrNotFound); a merge past
