@@ -121,29 +121,9 @@ func (c *checker) ruleScope(r *Rule, p []string) {
 
 // parseRule splits a rule file into its frontmatter and its body, the markdown after it.
 func parseRule(raw []byte) (ruleFront, string, error) {
-	text := strings.ReplaceAll(string(raw), "\r\n", "\n")
-
-	rest, ok := strings.CutPrefix(text, "---\n")
-	if !ok {
-		return ruleFront{}, "", errNoFrontMatter
-	}
-
-	var front, body string
-
-	switch {
-	case strings.HasPrefix(rest, "---\n") || rest == "---":
-		body = strings.TrimPrefix(rest, "---")
-	default:
-		end := strings.Index(rest, "\n---\n")
-		if end < 0 {
-			if !strings.HasSuffix(rest, "\n---") {
-				return ruleFront{}, "", errNoFrontMatter
-			}
-
-			end = len(rest) - len("\n---")
-		}
-
-		front, body = rest[:end], rest[end+len("\n---"):]
+	front, body, err := splitFrontMatter(raw)
+	if err != nil {
+		return ruleFront{}, "", err
 	}
 
 	var fm ruleFront
@@ -155,5 +135,35 @@ func parseRule(raw []byte) (ruleFront, string, error) {
 		return ruleFront{}, "", err
 	}
 
-	return fm, strings.TrimLeft(body, "\n"), nil
+	return fm, body, nil
+}
+
+// splitFrontMatter splits a markdown file that starts with a --- block into the YAML inside the
+// block, which starts on the file's second line, and the body after it. A file without the
+// block is errNoFrontMatter.
+func splitFrontMatter(raw []byte) (front, body string, err error) {
+	text := strings.ReplaceAll(string(raw), "\r\n", "\n")
+
+	rest, ok := strings.CutPrefix(text, "---\n")
+	if !ok {
+		return "", "", errNoFrontMatter
+	}
+
+	switch {
+	case strings.HasPrefix(rest, "---\n") || rest == "---":
+		body = strings.TrimPrefix(rest, "---")
+	default:
+		end := strings.Index(rest, "\n---\n")
+		if end < 0 {
+			if !strings.HasSuffix(rest, "\n---") {
+				return "", "", errNoFrontMatter
+			}
+
+			end = len(rest) - len("\n---")
+		}
+
+		front, body = rest[:end], rest[end+len("\n---"):]
+	}
+
+	return front, strings.TrimLeft(body, "\n"), nil
 }

@@ -1,6 +1,6 @@
 # ADR 0002 — Jonah: evaluation and self-remediation
 
-Status: accepted as amended for phase 5 (2026-10-24; [amendment](#amendment--phase-5-the-minimal-loop)) · first proposed 2026-10-23 · amended by [ADR 0005](0005-factory-definitions-in-object-storage.md) (definitions and visible cases live in the bucket) · Plan: [docs/history/jonah/README.md](../history/jonah/README.md)
+Status: accepted as amended for phase 5 (2026-10-24; [amendment](#amendment--phase-5-the-minimal-loop)) · Amended 2026-10-27 by [ADR 0025](0025-judges-and-evals-as-the-screens-show-them.md) ([amendment](#amendment--2026-10-27-judges-and-evals-as-the-screens-show-them)) · first proposed 2026-10-23 · amended by [ADR 0005](0005-factory-definitions-in-object-storage.md) (definitions and visible cases live in the bucket) · Plan: [docs/history/jonah/README.md](../history/jonah/README.md)
 
 ## Context
 
@@ -61,3 +61,9 @@ Status: accepted · 2026-10-24 · replaces decisions 1–9 and 11 where they dif
 5. **People decide** through one review list. Two opt-in switches replace the autonomy levels: auto-accept facts, and auto-publish an edit only when it touches `agents/` or `skills/` alone, the eval set has at least five cases, nothing errored and nothing regressed. Jonah never changes `evals/` without a person. Restore is the undo, and touches per definition version are the check after publish.
 
 **Consequences.** Much less to build and to explain; the measuring stick (cases) still changes only by review. Overfitting to retro-made cases and judge errors are accepted risks while judges stay advisory; calibration, the holdout and online sampling can return later on the same tables.
+
+## Amendment — 2026-10-27: judges and evals as the screens show them
+
+Status: accepted · 2026-10-27 · changes decisions 3, 4 and 5 of the phase 5 amendment; decided in [ADR 0025](0025-judges-and-evals-as-the-screens-show-them.md).
+
+The binding Jonah screens ([ADR 0016](0016-ui-revamp.md)) show judges as their own files, `evals/judges/<slug>.md`, that score a sample of production runs against a pass mark. They show eval cases, `evals/cases/<name>.yaml`, that run on one version and gate every publish. ADR 0025 records that design. It replaces decision 3's advisory rubric inside a case, decision 4's comparison of a candidate with a baseline, and decision 5's auto-publish once there are five cases. The rest of the phase 5 amendment stands.
