@@ -331,6 +331,75 @@
         }
       ]
     },
+    "trigger": {
+      "type": "object",
+      "description": "One intake trigger: when an event arrives (on, filter) and its checks pass (only), create an item (create) within the limits (ADR 0026).",
+      "required": ["name", "on", "create"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/slug", "description": "Names the trigger in the API, the UI and the firing log; unique within the factory." },
+        "enabled": { "type": "boolean", "default": true, "description": "A disabled trigger matches nothing." },
+        "on": {
+          "type": "string",
+          "pattern": "^(github\\.check_run\\.failed|github\\.issues\\.labeled|schedule|webhook\\.[a-z][a-z0-9-]{1,38}[a-z0-9](\\.[A-Za-z0-9_][A-Za-z0-9_.-]*)?)$",
+          "description": "The event key: github.check_run.failed, github.issues.labeled, schedule, or webhook.<endpoint name> with an optional .<event> matched against the delivery's event field."
+        },
+        "cron": { "type": "string", "description": "When on is schedule, and only then: five cron fields (minute, hour, day of month, month, day of week)." },
+        "timeZone": { "type": "string", "description": "When on is schedule, and only then: the IANA time zone the cron is read in. Defaults to UTC." },
+        "filter": {
+          "type": "object",
+          "description": "Filters on the event's fields; every one given must match.",
+          "additionalProperties": false,
+          "properties": {
+            "branch": { "type": "string", "description": "The event's branch equals this." },
+            "repo": { "type": "string", "description": "The event's repository, owner/name, equals this." },
+            "label": { "type": "string", "description": "The event's label equals this." },
+            "paths": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Globs; the event matches when any changed path matches one." },
+            "authors": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "The event's sender is one of these." },
+            "skipBots": { "type": "boolean", "description": "Drop events whose sender is a bot." }
+          }
+        },
+        "only": {
+          "type": "object",
+          "description": "Checks made before an item is created, in this order.",
+          "additionalProperties": false,
+          "properties": {
+            "failuresInARow": { "type": "integer", "minimum": 1, "description": "Passes when the same check failed on the last n events for it." },
+            "dedupe": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
+              "description": "An event field, dotted (check.name); passes when no open item this trigger created holds the same value of it."
+            }
+          }
+        },
+        "create": {
+          "type": "object",
+          "description": "The item the trigger creates.",
+          "required": ["type", "station"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "type": "string", "description": "One of board.workTypes." },
+            "station": { "type": "string", "description": "The station id the item starts at." },
+            "lane": { "type": "string", "description": "The item's lane: a key of that station's route." },
+            "expedite": { "type": "boolean", "description": "Put the item in the expedite flow." },
+            "title": { "type": "string", "description": "The item's title; {{field}} placeholders take the event's fields." },
+            "brief": { "type": "string", "description": "The item's brief; {{field}} placeholders take the event's fields, which reach agents only as untrusted data." }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "description": "Caps on what the trigger creates.",
+          "additionalProperties": false,
+          "properties": {
+            "perDay": { "type": "integer", "minimum": 1, "description": "At most this many items created by the trigger since the start of the UTC day." },
+            "pauseOnBudget": { "type": "boolean", "description": "Skip events while the factory's budget is spent (today the weekly budget)." }
+          }
+        }
+      },
+      "if": { "required": ["on"], "properties": { "on": { "const": "schedule" } } },
+      "then": { "required": ["cron"] },
+      "else": { "properties": { "cron": false, "timeZone": false } }
+    },
     "station": {
       "type": "object",
       "required": ["id", "kind"],
@@ -407,8 +476,14 @@
       "additionalProperties": false,
       "properties": {
         "workTypes": { "type": "array", "items": { "$ref": "#/$defs/slug" } },
+        "triggers": {
+          "type": "array",
+          "description": "Rules that turn an event, a schedule or a webhook delivery into a work item (ADR 0026). Each name is unique within the factory.",
+          "items": { "$ref": "#/$defs/trigger" }
+        },
         "intake": {
           "type": "array",
+          "description": "Deprecated and ignored: nothing reads it, and board.triggers replaces it (ADR 0026). Still accepted so existing definitions load.",
           "items": {
             "type": "object",
             "required": ["source"],

@@ -1,5 +1,5 @@
 # Test fixture for config.Load: a small support factory that uses every part of the schema
-# (connections and knowledge sources, intake sources, checks, buffer, flow policy and targets, learning).
+# (connections and knowledge sources, intake sources and triggers, checks, buffer, flow policy and targets, learning).
 # Self-contained: tests never read factory definitions from outside testdata.
 apiVersion: goal/v1
 kind: Factory
@@ -43,6 +43,18 @@ spec:
       - { source: manual }
       - { source: github-issues, repo: acme/shop, labels: [support] }
       - { source: schedule, cron: "0 8 * * MON-FRI", template: inbox-sweep, type: question }
+    triggers:
+      - name: morning-sweep
+        on: schedule
+        cron: "0 8 * * MON-FRI"
+        timeZone: Europe/Berlin
+        create: { type: question, station: inbox, title: "Inbox sweep" }
+      - name: shop-incident
+        on: webhook.shop-alerts.failed
+        filter: { repo: acme/shop, skipBots: true }
+        only: { failuresInARow: 2, dedupe: service }
+        create: { type: incident, station: triage, expedite: true, title: "{{service}} is failing", brief: "Alert: {{alert.summary}}" }
+        limits: { perDay: 3, pauseOnBudget: true }
     stations:
       - { id: inbox, kind: queue }
       - { id: triage, kind: agent, agent: triager, agents: 1, wip: 4 }

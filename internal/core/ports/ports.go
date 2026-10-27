@@ -235,6 +235,10 @@ type Store interface {
 	// ErrNotFound.
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
 
+	// FactoryActivity returns up to limit of the factory's latest events whose kind is one of
+	// domain.ActivityKinds, newest first (by at, then id), each with its item's number and title.
+	FactoryActivity(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ActivityEvent, error)
+
 	// ItemByNumber returns a factory's item by its per-factory number, or ErrNotFound.
 	ItemByNumber(ctx context.Context, factory domain.FactoryID, number int64) (domain.Item, error)
 

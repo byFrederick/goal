@@ -229,11 +229,12 @@ func (r *BuiltinRun) UnmarshalJSON(data []byte) error {
 type Board struct {
 	WorkTypes []string  `json:"workTypes,omitempty"`
 	Intake    []Intake  `json:"intake,omitempty"`
+	Triggers  []Trigger `json:"triggers,omitempty"`
 	Stations  []Station `json:"stations"`
 	Flow      *Flow     `json:"flow,omitempty"`
 }
 
-// Intake is one source of new work items.
+// Intake is one source of new work items. Deprecated and ignored: Triggers replaces it (ADR 0026).
 type Intake struct {
 	Source   string   `json:"source"`
 	Repo     string   `json:"repo,omitempty"`
@@ -241,6 +242,53 @@ type Intake struct {
 	Cron     string   `json:"cron,omitempty"`
 	Template string   `json:"template,omitempty"`
 	Type     string   `json:"type,omitempty"`
+}
+
+// Trigger turns an event, a schedule or a webhook delivery into a work item (ADR 0026).
+type Trigger struct {
+	Name    string `json:"name"`
+	Enabled *bool  `json:"enabled,omitempty"` // nil means enabled
+	On      string `json:"on"`
+	// Cron (five fields) and TimeZone (IANA, "" for UTC) are set only when On is "schedule".
+	Cron     string         `json:"cron,omitempty"`
+	TimeZone string         `json:"timeZone,omitempty"`
+	Filter   *TriggerFilter `json:"filter,omitempty"`
+	Only     *TriggerOnly   `json:"only,omitempty"`
+	Create   TriggerCreate  `json:"create"`
+	Limits   *TriggerLimits `json:"limits,omitempty"`
+}
+
+// TriggerFilter holds filters on an event's fields; every one set must match.
+type TriggerFilter struct {
+	Branch   string   `json:"branch,omitempty"`
+	Repo     string   `json:"repo,omitempty"`
+	Label    string   `json:"label,omitempty"`
+	Paths    []string `json:"paths,omitempty"`
+	Authors  []string `json:"authors,omitempty"`
+	SkipBots bool     `json:"skipBots,omitempty"`
+}
+
+// TriggerOnly holds the checks made before an item is created.
+type TriggerOnly struct {
+	FailuresInARow int    `json:"failuresInARow,omitempty"`
+	Dedupe         string `json:"dedupe,omitempty"`
+}
+
+// TriggerCreate is the item a trigger creates. Title and Brief are templates whose {{field}}
+// placeholders take the event's fields.
+type TriggerCreate struct {
+	Type     string `json:"type"`
+	Station  string `json:"station"`
+	Lane     string `json:"lane,omitempty"`
+	Expedite bool   `json:"expedite,omitempty"`
+	Title    string `json:"title,omitempty"`
+	Brief    string `json:"brief,omitempty"`
+}
+
+// TriggerLimits caps what a trigger creates.
+type TriggerLimits struct {
+	PerDay        int  `json:"perDay,omitempty"`
+	PauseOnBudget bool `json:"pauseOnBudget,omitempty"`
 }
 
 // Station is one step of the line.

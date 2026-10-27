@@ -1572,6 +1572,33 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Board" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/activity:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: listFactoryActivity
+      x-goal-scope: factory:read
+      tags: [work]
+      summary: The factory's latest milestone events, newest first
+      description: >-
+        The latest events of the factory's items, newest first (by at, then id), each with its
+        item's ref, number and title. Only these kinds are listed: created, moved, gate_approved,
+        gate_rejected, approved, rejected, blocked, check_failed, merged, done, assembled and
+        cancelled; a run's per-turn events (tool_call, tool_result, agent_message, usage and the
+        others) never are. data is the stored event data, as listItemEvents returns it. There is
+        no paging past the limit. 400 for a limit outside 1 to 50, 404 for an unknown factory.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        "200":
+          description: The factory's latest milestone events
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Activity" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/metrics:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -4743,6 +4770,32 @@ components:
         station: { type: string }
         state: { $ref: "#/components/schemas/ItemState" }
         at: { type: string, format: date-time }
+    Activity:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          description: Newest first
+          items: { $ref: "#/components/schemas/ActivityEvent" }
+    ActivityEvent:
+      type: object
+      description: An Event with its item's ref, number and title
+      required: [id, item_id, at, kind, actor, data, ref, number, title]
+      properties:
+        id: { type: integer, format: int64 }
+        item_id: { type: string }
+        run_id: { type: string }
+        at: { type: string, format: date-time }
+        kind: { type: string }
+        station: { type: string }
+        actor: { type: string }
+        data:
+          type: object
+          additionalProperties: {}
+        ref: { type: string, description: "<factory name>#<number>, as in goal#2" }
+        number: { type: integer, format: int64 }
+        title: { type: string }
     EventPage:
       type: object
       required: [events, next_after]

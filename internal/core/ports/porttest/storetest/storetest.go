@@ -93,6 +93,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Notes_AppendToOpenItemsReadSinceTheLatestRun", testNotes},
 		{"Notes_RefusedOnClosedItems", testNotesOnClosedItems},
 		{"ItemEvents_PagesInAppendOrder", testItemEvents},
+		{"FactoryActivity_NewestMilestonesOfOneFactory", testFactoryActivity},
 		{"ItemByNumber_PerFactory", testItemByNumber},
 		{"ListItems_NewestFirstFilteredAndPaged", testListItems},
 		{"SearchItems_MatchesTitleAndNumber", testSearchItems},
