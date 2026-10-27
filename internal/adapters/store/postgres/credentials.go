@@ -527,27 +527,43 @@ func sealedCredentialRow(r db.SealedCredentialsRow) db.CredentialRow {
 // resealCredentials reseals a batch of credentials of every organization sealed under another
 // key than key's active one, and returns how many.
 func resealCredentials(ctx context.Context, q *db.Queries, key ports.MasterKey) (int, error) {
-	active := key.Active()
-
-	rows, err := q.StaleSealedCredentials(ctx, db.StaleSealedCredentialsParams{Active: active, Batch: rekeyBatch})
+	rows, err := q.StaleSealedCredentials(ctx, db.StaleSealedCredentialsParams{Active: key.Active(), Batch: rekeyBatch})
 	if err != nil {
 		return 0, err
 	}
 
+	return resealRows(key, "credential", rows, credentialAAD, func(id uuid.UUID, s sealedValue) error {
+		return q.ResealCredential(ctx, db.ResealCredentialParams{KeyID: s.keyID, Nonce: s.nonce, Ciphertext: s.ciphertext, ID: id})
+	})
+}
+
+func credentialAAD(org domain.OrgID, id uuid.UUID, keyID string) []byte {
+	return domain.CredentialAAD(org, domain.CredentialID(id.String()), keyID)
+}
+
+// resealRows opens each of rows (rows of kind; another table's stale rows convert to this type)
+// under its key and seals it again under key's active one, each bound to aad, and saves it; it
+// returns how many. A row that does not open stops it with an error naming the row's id and
+// never its value.
+func resealRows(key ports.MasterKey, kind string, rows []db.StaleSealedCredentialsRow,
+	aad func(org domain.OrgID, id uuid.UUID, keyID string) []byte, save func(id uuid.UUID, s sealedValue) error,
+) (int, error) {
+	active := key.Active()
+
 	for _, r := range rows {
-		org, id := domain.OrgID(r.OrgID.String()), domain.CredentialID(r.ID.String())
+		org := domain.OrgID(r.OrgID.String())
 
-		plain, err := key.Open(r.KeyID, r.Nonce, r.Ciphertext, domain.CredentialAAD(org, id, r.KeyID))
+		plain, err := key.Open(r.KeyID, r.Nonce, r.Ciphertext, aad(org, r.ID, r.KeyID))
 		if err != nil {
-			return 0, fmt.Errorf("credential %s: %w", id, err)
+			return 0, fmt.Errorf("%s %s: %w", kind, r.ID, err)
 		}
 
-		keyID, nonce, ct, err := key.Seal(plain, domain.CredentialAAD(org, id, active))
+		keyID, nonce, ct, err := key.Seal(plain, aad(org, r.ID, active))
 		if err != nil {
-			return 0, fmt.Errorf("credential %s: %w", id, err)
+			return 0, fmt.Errorf("%s %s: %w", kind, r.ID, err)
 		}
 
-		if err := q.ResealCredential(ctx, db.ResealCredentialParams{KeyID: keyID, Nonce: nonce, Ciphertext: ct, ID: r.ID}); err != nil {
+		if err := save(r.ID, sealedValue{keyID: keyID, nonce: nonce, ciphertext: ct}); err != nil {
 			return 0, err
 		}
 	}
