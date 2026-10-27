@@ -26,3 +26,4 @@ One line per ADR: its number, its title and the first part of its status. To add
 - [ADR 0020](0020-saved-views-and-csv-exports.md): Saved views and CSV exports. Status: accepted.
 - [ADR 0021](0021-asked-definition-changes-draft-requests.md): Asked definition changes: draft requests. Status: accepted.
 - [ADR 0022](0022-model-presets-in-the-new-factory-wizard.md): Model presets in the new-factory wizard. Status: accepted.
+- [ADR 0023](0023-notifications-and-sign-up-by-domain.md): Notifications by email and Slack, the daily digest and sign-up by domain. Status: accepted.
