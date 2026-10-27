@@ -97,33 +97,38 @@ func TestAsk_RecordsTheQuestionAndEndsTheRun(t *testing.T) {
 				t.Errorf("runs %+v; want the one run cancelled", runs)
 			}
 
-			asked := h.eventsOf(it.ID, domain.EventQuestionAsked)
-			if len(asked) != 1 {
-				t.Fatalf("events %v; want one question_asked", h.kinds(it.ID))
-			}
-
-			q := domain.QuestionOf(asked[0])
-			if q.Text != "Organization or factory spend?" || strings.Join(q.Choices, ",") != "Organization,Factory" ||
-				q.Agent != agWorker || q.RunID != run || q.Station != stWork || asked[0].RunID != run {
-				t.Errorf("question %+v (event %+v); want the agent's question with its run", q, asked[0])
-			}
-
-			if open, ok := domain.OpenQuestion(h.store.Events(it.ID)); !ok || open.EventID != asked[0].ID {
-				t.Errorf("open question %+v, %v; want the one asked", open, ok)
-			}
-
-			for _, k := range []domain.EventKind{domain.EventLeaseTaken, domain.EventWaitingHuman} {
-				if n := len(h.eventsOf(it.ID, k)); n != 1 {
-					t.Errorf("events %v; want one %s", h.kinds(it.ID), k)
-				}
-			}
-
-			for _, k := range []domain.EventKind{domain.EventReleased, domain.EventAgentCancelled, domain.EventBlocked} {
-				if n := len(h.eventsOf(it.ID, k)); n != 0 {
-					t.Errorf("events %v; the ended run must not move the item (%s)", h.kinds(it.ID), k)
-				}
-			}
+			h.expectAsked(t, it.ID, run)
 		})
+	}
+}
+
+// expectAsked checks the item's one question_asked event, left open, and the events around it.
+func (h *harness) expectAsked(t *testing.T, id domain.ItemID, run domain.RunID) {
+	t.Helper()
+
+	asked := h.eventsOf(id, domain.EventQuestionAsked)
+	if len(asked) != 1 {
+		t.Fatalf("events %v; want one question_asked", h.kinds(id))
+	}
+
+	q := domain.QuestionOf(asked[0])
+	if q.Text != "Organization or factory spend?" || strings.Join(q.Choices, ",") != "Organization,Factory" ||
+		q.Agent != agWorker || q.RunID != run || q.Station != stWork || asked[0].RunID != run {
+		t.Errorf("question %+v (event %+v); want the agent's question with its run", q, asked[0])
+	}
+
+	if open, ok := domain.OpenQuestion(h.store.Events(id)); !ok || open.EventID != asked[0].ID {
+		t.Errorf("open question %+v, %v; want the one asked", open, ok)
+	}
+
+	// One lease_taken and waiting_human; the ended run moves the item no further.
+	for k, want := range map[domain.EventKind]int{
+		domain.EventLeaseTaken: 1, domain.EventWaitingHuman: 1,
+		domain.EventReleased: 0, domain.EventAgentCancelled: 0, domain.EventBlocked: 0,
+	} {
+		if n := len(h.eventsOf(id, k)); n != want {
+			t.Errorf("events %v; want %d %s", h.kinds(id), want, k)
+		}
 	}
 }
 
@@ -275,7 +280,7 @@ func TestQuestion_WithdrawnByAPersonsControl(t *testing.T) {
 		"pause": func(e *engine.Engine, ctx context.Context, id domain.ItemID) (domain.Item, error) {
 			return e.Pause(ctx, id, human, "")
 		},
-		"reject": func(e *engine.Engine, ctx context.Context, id domain.ItemID) (domain.Item, error) {
+		"send back": func(e *engine.Engine, ctx context.Context, id domain.ItemID) (domain.Item, error) {
 			return e.Reject(ctx, id, human, "wrong question")
 		},
 		"cancel": func(e *engine.Engine, ctx context.Context, id domain.ItemID) (domain.Item, error) {

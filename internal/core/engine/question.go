@@ -215,15 +215,20 @@ func (e *Engine) itemEvents(ctx context.Context, id domain.ItemID) ([]domain.Eve
 	}
 }
 
-// answersSinceLastRun reads the questions answered since the item's latest run started: what
-// its next run's brief carries.
-func (e *Engine) answersSinceLastRun(ctx context.Context, id domain.ItemID) ([]domain.Answer, error) {
-	events, err := e.itemEvents(ctx, id)
+// peopleSaid reads what people said since the item's latest run started, which its next run's
+// brief carries: their notes and the questions they answered.
+func (e *Engine) peopleSaid(ctx context.Context, id domain.ItemID) ([]domain.Event, []domain.Answer, error) {
+	notes, err := e.withNotes(ctx, id, nil)
 	if err != nil {
-		return nil, fmt.Errorf("read answers: %w", err)
+		return nil, nil, err
 	}
 
-	return domain.AnswersSinceLastRun(events), nil
+	events, err := e.itemEvents(ctx, id)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read answers: %w", err)
+	}
+
+	return notes, domain.AnswersSinceLastRun(events), nil
 }
 
 // answersSection is the questions the item's agents asked and the answers people gave since its

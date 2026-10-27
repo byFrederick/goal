@@ -48,8 +48,8 @@ var withdraws = []EventKind{EventMoved, EventPaused, EventRejected, EventCancell
 // OpenQuestion finds an item's open question in its events, in append order: the latest
 // question_asked with no question_answered, moved, paused, rejected or cancelled after it.
 func OpenQuestion(events []Event) (Question, bool) {
-	for i := len(events) - 1; i >= 0; i-- {
-		switch e := events[i]; {
+	for _, e := range slices.Backward(events) {
+		switch {
 		case e.Kind == EventQuestionAsked:
 			return QuestionOf(e), true
 		case e.Kind == EventQuestionAnswered || slices.Contains(withdraws, e.Kind):

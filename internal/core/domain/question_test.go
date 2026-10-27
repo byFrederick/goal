@@ -8,11 +8,16 @@ import (
 
 var qt0 = time.Date(2026, 10, 27, 9, 0, 0, 0, time.UTC)
 
+// answerer is the person who answers the tests' questions.
+const answerer = "Grace"
+
 // asked is a question_asked event as the engine writes it; JSON-decoded choices are []any.
 func asked(id int64, text string, choices ...any) Event {
-	return Event{ID: id, At: qt0.Add(time.Duration(id) * time.Minute), Kind: EventQuestionAsked, Station: "build",
+	return Event{
+		ID: id, At: qt0.Add(time.Duration(id) * time.Minute), Kind: EventQuestionAsked, Station: "build",
 		Actor: "frontend-engineer", RunID: "run-1",
-		Data: map[string]any{KeyQuestion: text, KeyChoices: choices, KeyAgent: "frontend-engineer", KeyRunID: "run-1"}}
+		Data: map[string]any{KeyQuestion: text, KeyChoices: choices, KeyAgent: "frontend-engineer", KeyRunID: "run-1"},
+	}
 }
 
 func answered(id int64, answer string, choice any) Event {
@@ -21,7 +26,7 @@ func answered(id int64, answer string, choice any) Event {
 		data[KeyChoiceIndex] = choice
 	}
 
-	return Event{ID: id, At: qt0.Add(time.Duration(id) * time.Minute), Kind: EventQuestionAnswered, Actor: "Ada", Data: data}
+	return Event{ID: id, At: qt0.Add(time.Duration(id) * time.Minute), Kind: EventQuestionAnswered, Actor: answerer, Data: data}
 }
 
 func ev(id int64, kind EventKind) Event { return Event{ID: id, Kind: kind} }
@@ -37,8 +42,10 @@ func TestOpenQuestion(t *testing.T) {
 		{name: "no events"},
 		{name: "asked", events: []Event{ev(1, EventRunStarted), asked(2, "Org or factory?")}, want: "Org or factory?"},
 		{name: "answered", events: []Event{asked(1, "Org or factory?"), answered(2, "Org", nil)}},
-		{name: "asked again after an answer", events: []Event{asked(1, "One?"), answered(2, "yes", nil), ev(3, EventRunStarted),
-			asked(4, "Two?")}, want: "Two?"},
+		{name: "asked again after an answer", events: []Event{
+			asked(1, "One?"), answered(2, "yes", nil), ev(3, EventRunStarted),
+			asked(4, "Two?"),
+		}, want: "Two?"},
 		{name: "withdrawn by a move", events: []Event{asked(1, "One?"), ev(2, EventMoved)}},
 		{name: "withdrawn by a pause", events: []Event{asked(1, "One?"), ev(2, EventPaused)}},
 		{name: "withdrawn by a rejection", events: []Event{asked(1, "One?"), ev(2, EventRejected)}},
@@ -60,8 +67,10 @@ func TestOpenQuestion_ReadsTheAskedEvent(t *testing.T) {
 	t.Parallel()
 
 	q, ok := OpenQuestion([]Event{asked(3, "Org or factory spend?", "Organization", "Factory")})
-	want := Question{EventID: 3, Text: "Org or factory spend?", Choices: []string{"Organization", "Factory"},
-		Agent: "frontend-engineer", RunID: "run-1", Station: "build", At: qt0.Add(3 * time.Minute)}
+	want := Question{
+		EventID: 3, Text: "Org or factory spend?", Choices: []string{"Organization", "Factory"},
+		Agent: "frontend-engineer", RunID: "run-1", Station: "build", At: qt0.Add(3 * time.Minute),
+	}
 
 	if !ok || !reflect.DeepEqual(q, want) {
 		t.Errorf("OpenQuestion = %+v, %v; want %+v", q, ok, want)
@@ -86,8 +95,8 @@ func TestAnswersSinceLastRun(t *testing.T) {
 	}
 
 	if got[0].Question.Text != "Org or factory?" || got[0].Answer != "Factory" || got[0].ChoiceIndex == nil ||
-		*got[0].ChoiceIndex != two || got[0].By != "Ada" {
-		t.Errorf("first answer %+v; want Factory, choice 1, by Ada", got[0])
+		*got[0].ChoiceIndex != two || got[0].By != answerer {
+		t.Errorf("first answer %+v; want Factory, choice 1, by the answerer", got[0])
 	}
 
 	if got[1].Question.Text != "Free?" || got[1].Answer != "Write it short." || got[1].ChoiceIndex != nil {

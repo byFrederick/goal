@@ -65,15 +65,9 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 		return
 	}
 
-	// The notes people left since the item's last run; a retry adds those left meanwhile.
-	notes, err := e.withNotes(ctx, it.ID, nil)
-	if err != nil {
-		e.block(ctx, log, c, err.Error())
-		return
-	}
-
-	// The questions its agents asked and people answered since then (ADR 0018).
-	answers, err := e.answersSinceLastRun(ctx, it.ID)
+	// What people said since the item's last run: their notes (a retry adds those left
+	// meanwhile) and their answers to its agents' questions (ADR 0018).
+	notes, answers, err := e.peopleSaid(ctx, it.ID)
 	if err != nil {
 		e.block(ctx, log, c, err.Error())
 		return
