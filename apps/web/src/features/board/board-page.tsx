@@ -1,20 +1,20 @@
-import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
-import { Link, useNavigate, useSearch } from '@tanstack/react-router';
+import { useSuspenseQuery } from '@tanstack/react-query';
+import { useNavigate, useSearch } from '@tanstack/react-router';
+import { SlidersHorizontal } from 'lucide-react';
 import { Tabs } from 'radix-ui';
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { boardQuery, touchesQuery } from '../../api/queries';
-import type { Board, BoardStation, ItemCard } from '../../api/types';
+import { boardQuery } from '../../api/queries';
+import type { Board, Factory, ItemCard } from '../../api/types';
 import { usePhone } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
-import { AndonButton, LineStatus } from '../../shared/andon';
-import { factoryTitle, itemKey, useFactory, useFactoryParams } from '../../shared/factory';
+import { LineStatus } from '../../shared/andon';
+import { itemKey, useFactory } from '../../shared/factory';
 import { humanize } from '../../shared/format';
-import { InboxButton } from '../../shared/inbox-drawer';
 import { MoveDialog } from '../../shared/move-menu';
+import { NeedsYouLink } from '../../shared/needs-you-link';
 import { NewItemButton } from '../../shared/new-item';
 import { useOrg } from '../../shared/org';
 import { factoryRoleNote, holds, reasons } from '../../shared/permissions';
-import { perItem, stationRates } from '../../shared/touches';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { NativeSelect } from '../../ui/field';
@@ -29,35 +29,19 @@ import {
   type BoardView,
   knownView,
   laneOptions,
-  openAssemblies,
   roleOptions,
   statusChoices,
   typeOptions,
 } from './board-filters';
 import { BoardTopBarActions, BoardViewControl, SearchItems } from './board-header';
-import { type OpenAssemblies, StationBody } from './board-lane';
-import {
-  constraintSentence,
-  expediteHeader,
-  expediteUse,
-  firstStation,
-  isExpedite,
-  stationStat,
-  wipText,
-} from './stats';
+import { columnCount, expediteHeader, expediteUse, firstStation, isExpedite } from './stats';
 
 /** Opens the Move menu for a card, with the station a drop chose; undefined: the caller may not move work. */
 type OnMove = ((item: ItemCard, to?: string) => void) | undefined;
 
-const constraintRing = 'border-amber shadow-[inset_0_3px_0_var(--color-amber)]';
-
-/** A station's touches per finished item over the board's week; null when no item finished. */
-type RateOf = (station: BoardStation) => number | null;
-
-/** "0.38 touches per item" for a station, or nothing when no item finished. */
-function stationTouches(rateOf: RateOf, s: BoardStation): string | null {
-  const rate = rateOf(s);
-  return rate === null ? null : `${perItem(rate, 2)} touches per item`;
+/** The expedite zone is drawn when the line has an expedite lane or an expedite item is on the board. */
+function drawsExpedite(board: Board): boolean {
+  return expediteHeader(board.line, board.stations.flatMap((s) => s.items).filter(isExpedite).length) !== null;
 }
 
 function Columns({
@@ -84,21 +68,6 @@ function Columns({
   );
 }
 
-/** Phones, in the status line: the link to where the touches happen, a 44 px target beside the line. */
-function PhoneTouchesLink() {
-  const params = useFactoryParams();
-  return (
-    <Link
-      to="/o/$org/f/$factory"
-      params={params}
-      hash="touches-summary"
-      className="inline-flex min-h-11 shrink-0 items-center text-ink underline underline-offset-2 transition-colors duration-200 hover:text-run"
-    >
-      By station
-    </Link>
-  );
-}
-
 /** From 768 px: the stations side by side, each a StationColumn, with the expedite lane's caption above them. */
 function DesktopColumns({
   board,
@@ -111,9 +80,7 @@ function DesktopColumns({
   decides: boolean;
   finishedThisWeek: number;
 }) {
-  const expedite = expediteHeader(board.line, board.stations.flatMap((s) => s.items).filter(isExpedite).length);
-  // The expedite zone is drawn when the line has a lane or an expedite item is on the board.
-  const showExpedite = expedite !== null;
+  const showExpedite = drawsExpedite(board);
   return (
     <section aria-label="Stations" className="-mx-1 hidden overflow-x-auto px-1 pb-2 md:block">
       {showExpedite ? (
@@ -146,24 +113,27 @@ function DesktopColumns({
   );
 }
 
-/** Phones: a station picker, the constraint's sentence, and the picked station's cards. */
+/**
+ * Phones: a row of one-line station tabs, the picked station's column below them. The column is the
+ * desktop's (its header, its expedite zone, the drum's Ready and In progress zones and its cards), with
+ * no drag: a card moves by its 44 px Move button.
+ */
 function StationTabs({
   board,
   selected,
   onMove,
-  rateOf,
-  headers,
+  decides,
+  finishedThisWeek,
 }: {
   board: Board;
   selected: string;
   onMove: OnMove;
-  rateOf: RateOf;
-  headers: OpenAssemblies | undefined;
+  decides: boolean;
+  finishedThisWeek: number;
 }) {
   const navigate = useNavigate({ from: '/o/$org/f/$factory/board' });
   const list = useRef<HTMLDivElement>(null);
-  const picked = board.stations.find((s) => s.id === selected);
-  const sentence = picked && picked.id === board.constraint ? constraintSentence(picked) : null;
+  const showExpedite = drawsExpedite(board);
 
   // Keep the picked station visible in the scrolling picker.
   useEffect(() => {
@@ -181,70 +151,39 @@ function StationTabs({
       className="flex flex-col gap-3 md:hidden"
     >
       <Tabs.List ref={list} aria-label="Stations" className="-mx-4 flex gap-2 overflow-x-auto px-4 py-1">
-        {board.stations.map((s) => {
-          const drum = s.id === board.constraint;
-          const load = stationStat(s);
-          return (
-            <Tabs.Trigger
-              key={s.id}
-              value={s.id}
-              data-station={s.id}
-              className={cn(
-                'flex min-h-14 w-36 shrink-0 flex-col items-start justify-center gap-0.5 rounded-control border border-line bg-card px-3 py-2 text-ink',
-                'data-[state=active]:border-ink data-[state=active]:bg-ink data-[state=active]:text-white',
-                drum && 'shadow-[inset_0_-3px_0_var(--color-amber)]',
-              )}
-            >
-              <span className="block w-full truncate text-sm font-medium" title={humanize(s.id)}>
-                {humanize(s.id)}
-              </span>
-              <span className="block w-full truncate text-xs opacity-80" title={load}>
-                {load}
-              </span>
-            </Tabs.Trigger>
-          );
-        })}
+        {board.stations.map((s) => (
+          <Tabs.Trigger
+            key={s.id}
+            value={s.id}
+            data-station={s.id}
+            className={cn(
+              'flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-andon border border-line bg-card px-4 text-sm font-medium text-ink-soft',
+              'data-[state=active]:border-ink data-[state=active]:bg-ink data-[state=active]:text-white',
+            )}
+          >
+            {s.id === board.constraint ? (
+              <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-amber" />
+            ) : null}
+            {humanize(s.id)}
+            <span className="tabular-nums opacity-80">{columnCount(s)}</span>
+          </Tabs.Trigger>
+        ))}
       </Tabs.List>
-      {sentence ? (
-        <p className="m-0 truncate text-sm text-ink-soft" title={sentence}>
-          {sentence}
-        </p>
-      ) : null}
-      {board.stations.map((s) => {
-        const drum = s.id === board.constraint;
-        return (
-          <Tabs.Content key={s.id} value={s.id} className="outline-none">
-            <section
-              aria-labelledby={`st-${s.id}`}
-              className={cn(
-                'flex flex-col gap-2 rounded-card border border-line bg-card p-3.5',
-                drum && constraintRing,
-              )}
-            >
-              <div className="flex items-baseline justify-between gap-2">
-                <h2 id={`st-${s.id}`} className="m-0 text-base font-medium">
-                  {humanize(s.id)}
-                </h2>
-                <span className="text-secondary text-muted">{stationStat(s)}</span>
-              </div>
-              <StationNote station={s} rateOf={rateOf} />
-              {!s.lanes?.length && s.items.length === 0 ? (
-                <p className="m-0 text-sm text-muted">Nothing here right now.</p>
-              ) : null}
-              <StationBody station={s} onMove={onMove} draggable={false} compact headers={headers} />
-            </section>
-          </Tabs.Content>
-        );
-      })}
+      {board.stations.map((s) => (
+        <Tabs.Content key={s.id} value={s.id} className="outline-none">
+          <StationColumn
+            board={board}
+            station={s}
+            showExpedite={showExpedite}
+            decides={decides}
+            onMove={onMove}
+            draggable={false}
+            finishedThisWeek={finishedThisWeek}
+          />
+        </Tabs.Content>
+      ))}
     </Tabs.Root>
   );
-}
-
-/** On a phone, under the station's name: its touches per item, when one finished. */
-function StationNote({ station, rateOf }: { station: BoardStation; rateOf: RateOf }) {
-  const touches = stationTouches(rateOf, station);
-  if (!touches) return null;
-  return <p className="m-0 mb-1 text-secondary text-ink-soft">{touches}.</p>;
 }
 
 const groupChoices: SegmentedOption<'none' | 'assembly'>[] = [
@@ -371,6 +310,35 @@ function FilterRow({
   );
 }
 
+/** Phones: the top bar's Filter button, which shows or hides the filters row, and New item. */
+function PhoneBoardActions({
+  factory,
+  open,
+  controls,
+  onToggle,
+}: {
+  factory: Factory;
+  open: boolean;
+  controls: string;
+  onToggle: () => void;
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="Filter"
+        aria-expanded={open}
+        aria-controls={open ? controls : undefined}
+        onClick={onToggle}
+        className="flex size-11 flex-none items-center justify-center rounded-control text-ink-soft hover:bg-hover hover:text-ink"
+      >
+        <SlidersHorizontal size={18} strokeWidth={1.75} aria-hidden="true" />
+      </button>
+      <NewItemButton factory={factory} compact />
+    </>
+  );
+}
+
 /** Puts focus back on a card after it moved (it is rendered in its new column by then). */
 function focusCard(id: string) {
   requestAnimationFrame(() => {
@@ -384,11 +352,6 @@ export function BoardPage() {
   const factory = useFactory();
   const org = useOrg();
   const { data: board } = useSuspenseQuery(boardQuery(org.id, factory.id));
-  // The board's window is the last 7 days, as the touch metrics' default range. The rates wait
-  // for them (or go without when they fail); the line's headline is the board's own.
-  const touches = useQuery(touchesQuery(org.id, factory.id)).data?.stats;
-  const rates = touches ? stationRates(touches) : undefined;
-  const rateOf: RateOf = (s) => (!rates || touches?.finished === 0 ? null : (rates.get(s.id) ?? 0));
   const search = useSearch({ from: '/o/$org/f/$factory/board' });
   const navigate = useNavigate({ from: '/o/$org/f/$factory/board' });
   // The filters and the grouping: the URL's choices, those the board offers only.
@@ -396,84 +359,71 @@ export function BoardPage() {
   const shown = arrangeBoard(board, view);
   const changeView = (change: BoardView) =>
     navigate({ search: (prev) => ({ ...prev, ...change }), replace: true, resetScroll: false });
-  // Grouped by assembly, each open assembly heads its parts; ungrouped, the parts keep their assembly line.
-  const headers = view.group === 'assembly' ? openAssemblies(board) : undefined;
-  // The phone's status line: the line, its WIP and the week's touches per item, in one truncated line.
-  const headline = board.line.touches;
-  const touchesHeadline = `${perItem(headline.per_item_mean)} touches per item`;
-  const phoneLine = [
-    board.line.andon ? `Line stopped: ${board.line.andon.reason}` : 'Line running',
-    wipText(board.line),
-    headline.finished > 0 ? touchesHeadline : null,
-  ]
-    .filter(Boolean)
-    .join(', ');
   const selected = board.stations.find((s) => s.id === search.station)?.id ?? firstStation(board);
   const [moving, setMoving] = useState<{ item: ItemCard; to?: string | undefined } | null>(null);
   const onMove: OnMove = holds(factory, 'item:operate') ? (item, to) => setMoving({ item, to }) : undefined;
   const role = factoryRoleNote(factory.role, factory.name);
-  // From 768 px the top bar holds Pull andon and New item; a phone keeps its own header.
+  // A phone keeps its filters row behind the top bar's Filter button; from 768 px the top bar holds Pull andon and New item.
   const phone = usePhone();
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersId = useId();
   const actions = useMemo(
-    () => (phone ? undefined : <BoardTopBarActions factory={factory} andon={board.line.andon} />),
-    [phone, factory, board.line.andon],
+    () =>
+      phone ? (
+        <PhoneBoardActions
+          factory={factory}
+          open={filtersOpen}
+          controls={filtersId}
+          onToggle={() => setFiltersOpen((open) => !open)}
+        />
+      ) : (
+        <BoardTopBarActions factory={factory} andon={board.line.andon} />
+      ),
+    [phone, factory, board.line.andon, filtersOpen, filtersId],
   );
   const filters = <FilterRow board={board} view={view} phone={phone} onChange={changeView} />;
 
   return (
     <>
       <TopBarSlot actions={actions} />
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
-          <h1 className="m-0 text-page-title tracking-display">{phone ? `${factoryTitle(factory)} board` : 'Board'}</h1>
-          {role ? <Chip tone="plain">{role}</Chip> : null}
-          {phone ? null : (
+      {phone ? null : (
+        <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+            <h1 className="m-0 text-page-title tracking-display">Board</h1>
+            {role ? <Chip tone="plain">{role}</Chip> : null}
             <span role="status">
               <Chip tone={board.line.andon ? 'rework' : 'ok'} dot size="lg">
                 {board.line.andon ? `Line stopped: ${board.line.andon.reason}` : 'Line running'}
               </Chip>
             </span>
-          )}
-        </div>
-        <div className="ml-auto flex min-w-0 flex-wrap items-center gap-2">
-          <InboxButton factory={factory} />
-          {phone ? <NewItemButton factory={factory} compact /> : null}
-          {phone ? null : <SearchItems value={view.q ?? ''} onChange={(q) => changeView({ q: q || undefined })} />}
-          {phone ? null : <BoardViewControl />}
-          {phone ? null : filters}
-        </div>
-      </header>
-      {phone ? (
-        <>
-          <div className="-mt-3 flex min-w-0 items-center gap-2 text-sm text-muted">
-            <LineStatus
-              andon={board.line.andon}
-              className="min-w-0 flex-1"
-              title={phoneLine}
-              suffix={
-                <>
-                  , <span className="whitespace-nowrap">{wipText(board.line)}</span>
-                  {headline.finished > 0 ? (
-                    <>
-                      , <span className="whitespace-nowrap">{touchesHeadline}</span>
-                    </>
-                  ) : null}
-                </>
-              }
-            />
-            {headline.finished > 0 ? <PhoneTouchesLink /> : null}
-            <AndonButton factory={factory} andon={board.line.andon} className="min-h-11" />
           </div>
-          {filters}
-        </>
+          <div className="ml-auto flex min-w-0 flex-wrap items-center gap-2">
+            <NeedsYouLink factory={factory} />
+            <SearchItems value={view.q ?? ''} onChange={(q) => changeView({ q: q || undefined })} />
+            <BoardViewControl />
+            {filters}
+          </div>
+        </header>
+      )}
+      {phone && board.line.andon ? (
+        <div className="text-sm text-muted">
+          <LineStatus andon={board.line.andon} />
+        </div>
       ) : null}
+      {phone && filtersOpen ? <div id={filtersId}>{filters}</div> : null}
       <Columns
         board={shown}
         onMove={onMove}
         decides={holds(factory, 'item:decide')}
         finishedThisWeek={board.line.touches.finished}
       />
-      <StationTabs board={shown} selected={selected} onMove={onMove} rateOf={rateOf} headers={headers} />
+      <StationTabs
+        board={shown}
+        selected={selected}
+        onMove={onMove}
+        decides={holds(factory, 'item:decide')}
+        finishedThisWeek={board.line.touches.finished}
+      />
       {onMove ? (
         <>
           <p className="m-0 hidden text-secondary text-muted md:block">

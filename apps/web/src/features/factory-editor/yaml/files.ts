@@ -1,82 +1,73 @@
-// What the YAML view knows about the draft's files (D §10.9), as pure functions: the file tabs'
-// groups (factory.yaml, agents/, one per local skill folder, contracts/, evals/, other files),
-// each file's language, names a new file may take, binary content, and the lines a file adds or
-// changes against the version the draft is based on (the change gutter).
+// What the YAML view knows about the draft's files (D §10.9), as pure functions: the file tree
+// (factory.yaml, folders with their file counts, the rest), each file's language, names a new file
+// may take, binary content, and the lines a file adds or changes against the version the draft is
+// based on (the change gutter).
 import { diffLines } from 'diff';
 import type { FileInfo } from '../../../api/types';
 import { plural } from '../../../shared/format';
 
 export const factoryFile = 'factory.yaml';
 
-export interface FileGroup {
-  /** Stable key: the folder, or factory.yaml, or "" for files at the root. */
-  id: string;
-  /** "agents/ (6)", "skills/acme-conventions", "contracts/ (2)". */
-  label: string;
-  /** Where New file… creates files; null for factory.yaml. */
-  folder: string | null;
-  files: FileInfo[];
-  /** evals/ is edited from Jonah later. */
-  readOnly: boolean;
+/** A file of the tree, named by its last segment. */
+export interface TreeFile {
+  kind: 'file';
+  path: string;
+  name: string;
 }
 
-const sortByPath = (a: FileInfo, b: FileInfo) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
-
-/** The tabs over a draft's files, in the order of the board: factory.yaml, agents, skills, contracts, evals, the rest. */
-export function fileGroups(files: readonly FileInfo[]): FileGroup[] {
-  const sorted = [...files].sort(sortByPath);
-  const under = (folder: string) => sorted.filter((f) => f.path.startsWith(`${folder}/`));
-  const groups: FileGroup[] = [
-    {
-      id: factoryFile,
-      label: factoryFile,
-      folder: null,
-      files: sorted.filter((f) => f.path === factoryFile),
-      readOnly: false,
-    },
-  ];
-  const agents = under('agents');
-  groups.push({ id: 'agents', label: `agents/ (${agents.length})`, folder: 'agents', files: agents, readOnly: false });
-
-  const skillFolders = [
-    ...new Set(
-      under('skills')
-        .map((f) => f.path.split('/')[1])
-        .filter((s): s is string => Boolean(s)),
-    ),
-  ];
-  for (const skill of skillFolders) {
-    const folder = `skills/${skill}`;
-    groups.push({ id: folder, label: folder, folder, files: under(folder), readOnly: false });
-  }
-
-  const contracts = under('contracts');
-  groups.push({
-    id: 'contracts',
-    label: `contracts/ (${contracts.length})`,
-    folder: 'contracts',
-    files: contracts,
-    readOnly: false,
-  });
-  const evals = under('evals');
-  if (evals.length > 0) {
-    groups.push({ id: 'evals', label: `evals/ (${evals.length})`, folder: 'evals', files: evals, readOnly: true });
-  }
-  const known = new Set(groups.flatMap((g) => g.files.map((f) => f.path)));
-  const rest = sorted.filter((f) => !known.has(f.path) && !f.path.startsWith('skills/'));
-  if (rest.length > 0) {
-    groups.push({ id: '', label: `other files (${rest.length})`, folder: '', files: rest, readOnly: false });
-  }
-  return groups;
+/** A folder of the tree: its path, its name and how many files lie under it. */
+export interface TreeFolder {
+  kind: 'folder';
+  path: string;
+  name: string;
+  count: number;
+  children: TreeNode[];
 }
 
-/** The group a path belongs to (by folder), for a file the list does not have yet (a new file). */
-export function groupOf(groups: readonly FileGroup[], path: string): FileGroup | undefined {
-  if (path === factoryFile) return groups[0];
-  const byFile = groups.find((g) => g.files.some((f) => f.path === path));
-  if (byFile) return byFile;
-  return groups.find((g) => g.folder && path.startsWith(`${g.folder}/`)) ?? groups.find((g) => g.folder === '');
+export type TreeNode = TreeFile | TreeFolder;
+
+/** The folders a definition always has, so New file… has a place even while they are empty. */
+const alwaysFolders = ['agents', 'contracts'];
+
+/**
+ * The draft's files as a tree (the file tree of the YAML view): factory.yaml first, then the
+ * folders by name, then the other files by name. agents/ and contracts/ are always there.
+ */
+export function fileTree(files: readonly FileInfo[]): TreeNode[] {
+  const root: TreeFolder = { kind: 'folder', path: '', name: '', count: 0, children: [] };
+  const folderIn = (parent: TreeFolder, name: string, path: string): TreeFolder => {
+    const found = parent.children.find((c): c is TreeFolder => c.kind === 'folder' && c.name === name);
+    if (found) return found;
+    const made: TreeFolder = { kind: 'folder', path, name, count: 0, children: [] };
+    parent.children.push(made);
+    return made;
+  };
+  for (const name of alwaysFolders) folderIn(root, name, name);
+  for (const f of files) {
+    const parts = f.path.split('/');
+    let folder = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+      folder = folderIn(folder, parts[i] ?? '', parts.slice(0, i + 1).join('/'));
+      folder.count += 1;
+    }
+    folder.children.push({ kind: 'file', path: f.path, name: parts.at(-1) ?? f.path });
+  }
+  return sortNodes(root.children);
 }
+
+/** factory.yaml, then folders, then files, each by name. */
+function sortNodes(nodes: TreeNode[]): TreeNode[] {
+  const rank = (n: TreeNode) => (n.kind === 'file' && n.path === factoryFile ? 0 : n.kind === 'folder' ? 1 : 2);
+  const sorted = [...nodes].sort((a, b) => rank(a) - rank(b) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  for (const n of sorted) if (n.kind === 'folder') n.children = sortNodes(n.children);
+  return sorted;
+}
+
+/** The folder a file lives in ("" at the root). */
+export const folderOf = (path: string) => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '');
+
+/** evals/ is edited from Jonah later: it is shown, not changed here. */
+export const isReadOnlyPath = (path: string) => path === 'evals' || path.startsWith('evals/');
 
 export type Language = 'yaml' | 'markdown' | 'plaintext';
 

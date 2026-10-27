@@ -8,12 +8,10 @@ import { Link, useParams, useRouterState } from '@tanstack/react-router';
 import { Ellipsis, Inbox, Kanban, LayoutGrid, type LucideIcon, TextAlignStart, X } from 'lucide-react';
 import { Dialog as D } from 'radix-ui';
 import { type ReactNode, type RefObject, useEffect, useRef, useSyncExternalStore } from 'react';
-import { factoriesQuery } from '../api/queries';
+import { attentionQuery, factoriesQuery } from '../api/queries';
 import type { Factory, OrgSummary } from '../api/types';
 import { lastFactory } from '../shared/org';
-import { cn } from '../ui/cn';
 import { GoalMark } from '../ui/goal-mark';
-import { NotAvailable } from '../ui/not-available';
 import { SidebarContent, useSidebarBusy } from './sidebar';
 
 const phoneQuery = '(max-width: 767px)';
@@ -37,6 +35,8 @@ interface PhoneTopBarProps {
   title: string | undefined;
   /** The page's actions, from its TopBarSlot. */
   actions: ReactNode | undefined;
+  /** The page's Back link, from its TopBarSlot: after the Goal mark, before the title. */
+  back?: ReactNode | undefined;
   /** Opens the drawer (the sidebar's content). */
   onMenu: () => void;
   drawerOpen: boolean;
@@ -45,7 +45,7 @@ interface PhoneTopBarProps {
 }
 
 /** The top bar: the Goal mark (opens the drawer), the page title and the page's actions. */
-export function PhoneTopBar({ title, actions, onMenu, drawerOpen, menuRef }: PhoneTopBarProps) {
+export function PhoneTopBar({ title, actions, back, onMenu, drawerOpen, menuRef }: PhoneTopBarProps) {
   return (
     <header className="sticky top-0 z-20 flex min-h-14 flex-none items-center gap-1 border-b border-rule bg-shell pt-[env(safe-area-inset-top)] px-1 md:hidden">
       <button
@@ -59,6 +59,7 @@ export function PhoneTopBar({ title, actions, onMenu, drawerOpen, menuRef }: Pho
       >
         <GoalMark size="shell" />
       </button>
+      {back ? <div className="flex-none">{back}</div> : null}
       <p className="m-0 min-w-0 flex-1 truncate text-heading text-ink">{title}</p>
       {actions ? <div className="flex min-w-0 flex-none items-center gap-2">{actions}</div> : null}
     </header>
@@ -156,7 +157,7 @@ interface PhoneTabBarProps {
 }
 
 /**
- * Needs you (not built yet), Floor, Board, Items and More. Floor, Board and Items go to the open
+ * Needs you (with its violet count), Floor, Board, Items and More. Floor, Board and Items go to the open
  * factory; outside a factory, to the last factory visited here, else the first one, else the
  * organization's Factories home.
  */
@@ -171,13 +172,7 @@ export function PhoneTabBar({ org, onMore }: PhoneTabBarProps) {
       aria-label="Tabs"
       className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-card pb-[env(safe-area-inset-bottom)] md:hidden"
     >
-      {/* A button, not a span: it stays in the tab order so a keyboard user reaches the tooltip (ADR 0016, decision 4). */}
-      <NotAvailable>
-        <button type="button" className={cn(tab, 'cursor-default')}>
-          <Inbox size={20} strokeWidth={1.5} aria-hidden="true" />
-          Needs you
-        </button>
-      </NotAvailable>
+      <NeedsYouTab org={org} />
       <FactoryTab org={org} factory={factory} to="/o/$org/f/$factory" exact label="Floor" icon={LayoutGrid} />
       <FactoryTab org={org} factory={factory} to="/o/$org/f/$factory/board" label="Board" icon={Kanban} />
       <FactoryTab org={org} factory={factory} to="/o/$org/f/$factory/items" label="Items" icon={TextAlignStart} />
@@ -186,6 +181,33 @@ export function PhoneTabBar({ org, onMore }: PhoneTabBarProps) {
         More
       </button>
     </nav>
+  );
+}
+
+/** Needs you: the organization's page, with the count of what waits on a person in a violet badge. */
+function NeedsYouTab({ org }: { org: OrgSummary }) {
+  const waiting = useQuery(attentionQuery(org.id)).data?.waiting_on_you ?? 0;
+  return (
+    <Link
+      to="/o/$org/needs-you"
+      params={{ org: org.slug }}
+      className={tab}
+      activeProps={tabActive}
+      aria-label={waiting > 0 ? `Needs you, ${waiting} waiting on you` : 'Needs you'}
+    >
+      <span className="relative">
+        <Inbox size={20} strokeWidth={1.5} aria-hidden="true" />
+        {waiting > 0 ? (
+          <span
+            aria-hidden="true"
+            className="absolute -top-1 -right-2 flex h-4 min-w-4 items-center justify-center rounded-chip bg-you px-1 text-meta leading-none font-semibold text-white"
+          >
+            {waiting}
+          </span>
+        ) : null}
+      </span>
+      Needs you
+    </Link>
   );
 }
 

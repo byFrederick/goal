@@ -41,7 +41,7 @@ export function VersionsSection({ search }: SectionViewProps) {
             <span className="sr-only">Loading the versions</span>
           </div>
         ) : pages.isError ? (
-          <p className="m-0 text-sm text-rework-ink">The versions could not load.</p>
+          <p className="m-0 text-body text-rework-ink">The versions could not load.</p>
         ) : (
           <>
             <ul className="m-0 list-none p-0 [&>li:first-child]:border-t-0">
@@ -56,7 +56,7 @@ export function VersionsSection({ search }: SectionViewProps) {
               ))}
             </ul>
             {versions.length === 0 ? (
-              <p className="m-0 text-sm text-muted">Never published. Publish v1 from Review and publish.</p>
+              <p className="m-0 text-body text-muted">Never published. Publish v1 from Review and publish.</p>
             ) : null}
             {pages.hasNextPage ? (
               <div>
@@ -77,7 +77,7 @@ export function VersionsSection({ search }: SectionViewProps) {
         <ChangesCard pair={pair} />
       ) : (
         <SectionCard title="Compare">
-          <p className="m-0 text-sm text-muted">
+          <p className="m-0 text-body text-muted">
             Choose Compare on a version to see what it changes
             {hasDraft ? ' against the draft' : ' from the version before it'}.
           </p>
