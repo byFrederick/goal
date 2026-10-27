@@ -1,4 +1,4 @@
-// The inbox drawer's groups (E §10.2): what waits on a person, grouped by what they do about it, one
+// The Floor's Needs you card groups (E §10.2): what waits on a person, grouped by what they do about it, one
 // row per entry, oldest first. Pure, so the grouping and each row's action are tested without a DOM.
 // Expedite entries wait on no person and the board already shows them, so they are left out; a kind
 // this build does not know is an Open row under Needs a decision.

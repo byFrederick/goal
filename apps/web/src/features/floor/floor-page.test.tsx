@@ -492,6 +492,17 @@ describe('the cards below the figures', () => {
     expect(within(card).queryByRole('button', { name: 'Approve sre#3' })).toBeNull();
   });
 
+  it('Needs you links Open all to the Needs you page filtered to this factory', async () => {
+    renderFloor({ entries: [deciding] });
+
+    const card = await screen.findByRole('region', { name: 'Needs you' });
+    expect(
+      within(card)
+        .getByRole('link', { name: /Open all|See all/ })
+        .getAttribute('href'),
+    ).toBe('/o/acme/needs-you?factory=sre');
+  });
+
   it('Needs you says when nothing waits on the person', async () => {
     renderFloor();
 
