@@ -123,6 +123,7 @@ func TestAPI_APIKeys_ActWithTheirGrants(t *testing.T) {
 		{"does not see another factory", http.MethodGet, "/v1/orgs/acme/factories/line/board", "", http.StatusNotFound},
 		{"does not decide without the scope", http.MethodPost, "/v1/orgs/acme/items/acme%231/approve", "", http.StatusForbidden},
 		{"never manages keys", http.MethodGet, keysPath, "", http.StatusForbidden},
+		{"never creates an org", http.MethodPost, orgsPath, `{"slug":"new","name":"New"}`, http.StatusForbidden},
 		{"is unknown to another org", http.MethodGet, "/v1/orgs/example-labs", "", http.StatusNotFound},
 	} {
 		if res := h.request(t, c.method, c.path, c.body, bearer(created.Secret)); res.status != c.want {
