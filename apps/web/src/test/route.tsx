@@ -1,6 +1,7 @@
 // A router harness for component tests: mounts one screen under a factory's route with the route
 // context the screens read (the organization and the factory), and with the queries it reads seeded,
 // so no request leaves the test. Used by tests only.
+
 import { QueryClient, QueryClientProvider, type QueryKey } from '@tanstack/react-query';
 import {
   createMemoryHistory,
@@ -14,6 +15,7 @@ import { render } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { boardQuery, builderMetaQuery, factoriesQuery, itemQuery, partsQuery } from '../api/queries';
 import type { AssemblyParts, Board, BuilderMeta, Factory, Item, OrgSummary } from '../api/types';
+import { TooltipProvider } from '../ui/tooltip';
 
 /** jsdom has no CSS.escape, scrollIntoView or scrollTo, which the board's picker and the router call. */
 function polyfillLayout() {
@@ -98,7 +100,9 @@ export function renderFactoryPage({
   return {
     ...render(
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <TooltipProvider>
+          <RouterProvider router={router} />
+        </TooltipProvider>
       </QueryClientProvider>,
     ),
     router,
@@ -142,7 +146,9 @@ export function renderOrgPage({
   return {
     ...render(
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <TooltipProvider>
+          <RouterProvider router={router} />
+        </TooltipProvider>
       </QueryClientProvider>,
     ),
     router,
