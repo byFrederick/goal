@@ -548,6 +548,115 @@ func (in *Intake) TriggerStats(ctx context.Context, factory domain.FactoryID, si
 	return out, nil
 }
 
+// ItemSources implements ports.Intake.
+func (in *Intake) ItemSources(ctx context.Context, factory domain.FactoryID, last int) (domain.SourceWindow, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.SourceWindow{}, err
+	}
+
+	items := in.items(org, factory, time.Time{})
+	slices.SortFunc(items, func(a, b domain.Item) int { return cmp.Or(b.CreatedAt.Compare(a.CreatedAt), cmp.Compare(b.ID, a.ID)) })
+	items = items[:min(len(items), max(last, 0))]
+
+	w := domain.SourceWindow{Counts: []domain.SourceCount{}}
+	counts := map[domain.ItemSource]int{}
+
+	for i, it := range items {
+		counts[it.Source]++
+
+		if i == 0 {
+			w.To = it.CreatedAt
+		}
+
+		w.From = it.CreatedAt
+	}
+
+	for _, src := range slices.Sorted(maps.Keys(counts)) {
+		w.Counts = append(w.Counts, domain.SourceCount{Source: src, Items: counts[src]})
+	}
+
+	return w, nil
+}
+
+// TriggerDays implements ports.Intake.
+func (in *Intake) TriggerDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.TriggerDay, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	type key struct {
+		trigger string
+		day     time.Time
+	}
+
+	counts := map[key]int{}
+
+	in.d.mu.Lock()
+	for _, r := range in.d.firings {
+		if r.org == org && r.f.FactoryID == factory && r.f.Outcome == domain.FiringCreated && !r.f.At.Before(since) {
+			counts[key{r.f.Trigger, r.f.At.UTC().Truncate(24 * time.Hour)}]++
+		}
+	}
+	in.d.mu.Unlock()
+
+	out := []domain.TriggerDay{}
+	for k, n := range counts {
+		out = append(out, domain.TriggerDay{Trigger: k.trigger, Day: k.day, Created: n})
+	}
+
+	slices.SortFunc(out, func(a, b domain.TriggerDay) int { return cmp.Or(cmp.Compare(a.Trigger, b.Trigger), a.Day.Compare(b.Day)) })
+
+	return out, nil
+}
+
+// Firings implements ports.Intake.
+func (in *Intake) Firings(ctx context.Context, factory domain.FactoryID, trigger string, limit int) ([]domain.FiringEntry, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	in.d.mu.Lock()
+	var mine []domain.TriggerFiring
+
+	for _, r := range in.d.firings {
+		if r.org == org && r.f.FactoryID == factory && r.f.Trigger == trigger {
+			mine = append(mine, r.f)
+		}
+	}
+	in.d.mu.Unlock()
+
+	slices.SortFunc(mine, func(a, b domain.TriggerFiring) int { return cmp.Or(b.At.Compare(a.At), cmp.Compare(b.ID, a.ID)) })
+	mine = mine[:min(len(mine), max(limit, 0))]
+
+	in.store.mu.Lock()
+	defer in.store.mu.Unlock()
+
+	merged := map[domain.ItemID]bool{}
+
+	for _, e := range in.store.events {
+		if e.Kind == domain.EventMerged {
+			merged[e.ItemID] = true
+		}
+	}
+
+	out := make([]domain.FiringEntry, 0, len(mine))
+
+	for _, f := range mine {
+		e := domain.FiringEntry{Firing: f}
+
+		if it, ok := in.store.visible(f.ItemID, org); ok && f.ItemID != "" {
+			e.ItemNumber, e.Merged = it.Number, merged[f.ItemID]
+		}
+
+		out = append(out, e)
+	}
+
+	return out, nil
+}
+
 // items are copies of org's items of factory created at or after since.
 func (in *Intake) items(org domain.OrgID, factory domain.FactoryID, since time.Time) []domain.Item {
 	in.store.mu.Lock()
