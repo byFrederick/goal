@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // runEnv is what one run's commands get from its connections (spec 4 §4.5), each exec only what
@@ -28,8 +29,10 @@ type runEnv struct {
 }
 
 // runEnv resolves the run's connections, each use audited as connection.used: the runtime's model
-// and repository connections and the organization connections of the agent's list. The line runs
-// (domain.Line.Refusal), so it has a model connection.
+// and repository connections and the organization connections of the agent's list. It opens the
+// credentials they refer to and the ones listed for the run's agent (ADR 0017 decisions 5 to 7),
+// each use audited as credential.used by the port. The line runs (domain.Line.Refusal), so it has
+// a model connection.
 func (e *Engine) runEnv(ctx context.Context, c claimed, run domain.RunID) (runEnv, error) {
 	rt := c.line.Runtime
 	own := slices.DeleteFunc(slices.Clone(c.agent.Connections), func(n string) bool { return !slices.Contains(c.line.Connections, n) })
@@ -42,7 +45,9 @@ func (e *Engine) runEnv(ctx context.Context, c claimed, run domain.RunID) (runEn
 		}
 	}
 
-	conns, err := e.resolve(ctx, names, run)
+	use := domain.CredentialUse{Factory: c.line.FactoryID, Agent: c.agent.Name, Run: run}
+
+	conns, opened, err := e.resolve(ctx, names, use)
 	if err != nil {
 		return runEnv{}, err
 	}
@@ -52,7 +57,17 @@ func (e *Engine) runEnv(ctx context.Context, c claimed, run domain.RunID) (runEn
 		env.secrets = append(env.secrets, rc.secrets...)
 	}
 
+	for _, rc := range opened {
+		if rc.Value != "" {
+			env.secrets = append(env.secrets, rc.Value)
+		}
+	}
+
 	if err := agentEnv(rt.ModelConnection, own, conns, &env); err != nil {
+		return runEnv{}, err
+	}
+
+	if err := credentialEnv(use, opened, conns, &env); err != nil {
 		return runEnv{}, err
 	}
 
@@ -95,6 +110,33 @@ func agentEnv(model string, own []string, conns map[string]runConnection, env *r
 	return nil
 }
 
+// credentialEnv gives the agent each opened credential whose agent list names it for the run's
+// factory, as the variable domain.CredentialEnvName (ADR 0017 decision 6). It refuses a variable a
+// connection of the run sets, since a run gets one value per variable.
+func credentialEnv(use domain.CredentialUse, opened []domain.ResolvedCredential, conns map[string]runConnection, env *runEnv) error {
+	for _, rc := range opened {
+		cred := rc.Credential
+		if !cred.ForAgent(use.Factory, use.Agent) {
+			continue
+		}
+
+		name, err := domain.CredentialEnvName(cred.Name)
+		if err != nil {
+			return fmt.Errorf("credential %s: %w", cred.Name, err)
+		}
+
+		for _, n := range slices.Sorted(maps.Keys(conns)) {
+			if _, ok := conns[n].Env[name]; ok {
+				return fmt.Errorf("credential %s and connection %s both set %s; a run gets one value per variable", cred.Name, n, name)
+			}
+		}
+
+		env.agent[name] = rc.Value
+	}
+
+	return nil
+}
+
 // repositoryEnv gives prepare what clones the repository: its connection's git password; a public
 // repository needs none.
 func repositoryEnv(r domain.Repository, conns map[string]runConnection, env *runEnv) error {
@@ -122,35 +164,119 @@ type runConnection struct {
 	secrets []string
 }
 
-// resolve opens and renders the named connections for run, by name.
-func (e *Engine) resolve(ctx context.Context, names []string, run domain.RunID) (map[string]runConnection, error) {
+// resolve opens and renders the named connections for use's run, by name, each secret field that
+// refers to a credential filled with its value before its kind renders it (ADR 0017 decision 5),
+// and returns the credentials it opened: those and the ones listed for use's agent.
+func (e *Engine) resolve(ctx context.Context, names []string, use domain.CredentialUse) (map[string]runConnection, []domain.ResolvedCredential, error) {
 	out := make(map[string]runConnection, len(names))
-	if len(names) == 0 {
-		return out, nil
+
+	var resolved []domain.ResolvedConnection
+
+	if len(names) > 0 {
+		var err error
+		if resolved, err = e.connections.Resolve(ctx, names, domain.ConnectionUse{Run: use.Run}); err != nil {
+			return nil, nil, fmt.Errorf("connections: %w", err)
+		}
 	}
 
-	resolved, err := e.connections.Resolve(ctx, names, domain.ConnectionUse{Run: run})
+	opened, err := e.openCredentials(ctx, resolved, use)
 	if err != nil {
-		return nil, fmt.Errorf("connections: %w", err)
+		return nil, nil, err
+	}
+
+	values := make(map[string]string, len(opened))
+	for _, rc := range opened {
+		values[rc.Credential.Name] = rc.Value
 	}
 
 	for _, r := range resolved {
+		if len(r.SecretRefs) > 0 {
+			r.Values = maps.Clone(r.Values)
+			for field, cred := range r.SecretRefs {
+				r.Values[field] = values[cred]
+			}
+		}
+
 		rc := runConnection{name: r.Connection.Name, kind: r.Kind, secrets: r.SecretValues()}
 
-		minted, err := e.mint(ctx, r, run, &rc)
+		minted, err := e.mint(ctx, r, use.Run, &rc)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		if rc.RunConnection, err = r.Kind.Render(r.Values, minted); err != nil {
-			// A kind stored before Check refused it can make a value an env name the error quotes.
-			return nil, fmt.Errorf("connection %s: %w", rc.name, newScrubber(rc.secrets...).err(err))
+			// A kind stored before Check refused it can make a value an env name the error quotes;
+			// its secrets hold the credentials' values its fields refer to.
+			return nil, nil, fmt.Errorf("connection %s: %w", rc.name, newScrubber(rc.secrets...).err(err))
 		}
 
 		out[rc.name] = rc
 	}
 
-	return out, nil
+	return out, opened, nil
+}
+
+// openCredentials opens, once each, the credentials resolved's connections refer to and the ones
+// whose agent list names use's agent for its factory. A referred credential that is missing or
+// does not allow the factory fails with an error that names it and the connections that refer to
+// it, wrapping ports.ErrNotFound or ports.ErrCredentialNotAllowed. Resolve audits each use as
+// credential.used and sets its last use; no error holds a value.
+func (e *Engine) openCredentials(ctx context.Context, resolved []domain.ResolvedConnection, use domain.CredentialUse) ([]domain.ResolvedCredential, error) {
+	refs := map[string][]string{} // credential → the connections that refer to it
+
+	for _, r := range resolved {
+		for _, cred := range r.SecretRefs {
+			if !slices.Contains(refs[cred], r.Connection.Name) {
+				refs[cred] = append(refs[cred], r.Connection.Name)
+			}
+		}
+	}
+
+	all, err := e.credentials.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("credentials: %w", err)
+	}
+
+	byName := make(map[string]domain.Credential, len(all))
+
+	var names []string
+
+	for _, c := range all {
+		byName[c.Name] = c
+		if c.ForAgent(use.Factory, use.Agent) {
+			names = append(names, c.Name)
+		}
+	}
+
+	for _, cred := range slices.Sorted(maps.Keys(refs)) {
+		users := strings.Join(slices.Sorted(slices.Values(refs[cred])), ", ")
+
+		c, ok := byName[cred]
+		switch {
+		case !ok:
+			return nil, fmt.Errorf("connection %s: credential %s: %w", users, cred, ports.ErrNotFound)
+		case !c.Scope.Allows(use.Factory):
+			return nil, fmt.Errorf("connection %s: credential %s: %w", users, cred, ports.ErrCredentialNotAllowed)
+		}
+
+		if !slices.Contains(names, cred) {
+			names = append(names, cred)
+		}
+	}
+
+	if len(names) == 0 {
+		return nil, nil
+	}
+
+	opened, err := e.credentials.Resolve(ctx, names, use)
+	if err != nil {
+		return nil, fmt.Errorf("credentials %s: %w", strings.Join(names, ", "), err)
+	}
+
+	e.log.InfoContext(ctx, "credential used", slog.String("run", string(use.Run)), slog.String("agent", use.Agent),
+		slog.Any("credentials", names))
+
+	return opened, nil
 }
 
 // mintMargin is how much longer than a run's task timeout minted credentials live (spec 4 §4.5).

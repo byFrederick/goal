@@ -5,7 +5,7 @@ description: Add or change an HTTP endpoint of goald end to end, from contracts/
 
 # Change the API
 
-`contracts/api/openapi.yaml` is the only contract between goald and TypeScript. The contract rules are in [contracts.md](../../rules/contracts.md); what else moves with the spec is the `contracts/api/openapi.yaml` and `contracts/api/permissions.yaml` rows of the [change map](../../../docs/engineering/change-map.md). Read [architecture.md](../../../docs/engineering/architecture.md) before the handler and [testing.md](../../../docs/engineering/testing.md) before the tests.
+`contracts/api/openapi.yaml` is the only contract between goald and TypeScript. The contract rules are in [contracts.md](../../rules/contracts.md); what else moves with the spec is the `contracts/api/openapi.yaml` and `contracts/api/permissions.yaml` rows of the [change map](../../../docs/engineering/change-map.md). Read [architecture.md](../../../docs/engineering/architecture.md) before the handler and [testing.md](../../../docs/engineering/testing.md) before the tests. A new change-map row is only its entry file in `docs/engineering/change-map/`: never edit or regenerate `docs/engineering/change-map.md` in the branch; the docs-gen workflow does it on main.
 
 1. **Write the contract first.** Edit `contracts/api/openapi.yaml`: the path, the operation id, the request and response schemas, the problem responses, and the operation's `x-goal-scope`.
 2. **Name the permission.** A new permission goes in `contracts/api/permissions.yaml`, with the roles that hold it. An existing permission only needs the operation's `x-goal-scope`.

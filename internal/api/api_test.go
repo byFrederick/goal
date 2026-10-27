@@ -144,6 +144,8 @@ type harness struct {
 	// servers) allowed unless publicOnly is set.
 	conns      *porttest.Connections
 	publicOnly atomic.Bool
+	// creds keeps the organizations' credentials, sealed under key k1, referred to by conns.
+	creds *porttest.Credentials
 	// kb is the organizations' knowledge base, its uploads in kbObjects, at most testUploadMax
 	// bytes each; searches are by keywords.
 	kb        *porttest.Knowledge
@@ -354,6 +356,22 @@ func jsonLog(w io.Writer) *slog.Logger {
 	return slog.New(slog.NewJSONHandler(w, nil))
 }
 
+// addIdentity gives the harness one identity that keeps the people and the organizations' API
+// keys: the sign-in's under GOAL_AUTH=session, so a key made through the API signs requests in.
+func (h *harness) addIdentity(in *signIn) {
+	h.keys = porttest.NewIdentity(h.clock.Now)
+	if in != nil {
+		h.keys = in.identity
+	}
+
+	h.keys.AddOrg(domain.Org{ID: testOrg, Slug: acmeSlug, Name: "Acme"})
+	h.keys.AddOrg(domain.Org{ID: otherOrg, Slug: labsSlug, Name: "Example Labs"})
+	h.keys.AddFactory(testOrg, acmeID)
+	h.keys.AddFactory(testOrg, lineID)
+
+	h.platform = porttest.NewPlatform(h.keys)
+}
+
 // newHarnessLogged is newHarnessWith with goald's log written to logs (JSON) when it is set, and
 // the API's collaborators changed by each of opts.
 func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*api.Deps)) *harness {
@@ -391,6 +409,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ap
 		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock,
 		CodeHosts:   map[string]ports.CodeHost{"github": h.codehost},
 		Connections: engineConnections(t, newTenancy(t)),
+		Credentials: porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), tenancy, nil),
 	}, engine.Config{Image: "ghcr.io/acme/goal-agent:1", GatewayURL: "http://gateway.example.com/mcp", GatewayKeyRef: "env:GOAL_GATEWAY_KEY"})
 	if err != nil {
 		t.Fatal(err)
@@ -440,26 +459,14 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ap
 		Models: []builder.Model{{ID: "claude-opus-5-5", Label: "Claude Opus 5.5"}, {ID: "claude-haiku-5-5", Label: "Claude Haiku 5.5"}},
 	})
 
-	// One identity keeps the people and the organizations' API keys: the sign-in's under
-	// GOAL_AUTH=session, so a key made through the API signs requests in.
-	h.keys = porttest.NewIdentity(h.clock.Now)
-	if in != nil {
-		h.keys = in.identity
-	}
-
-	h.keys.AddOrg(domain.Org{ID: testOrg, Slug: acmeSlug, Name: "Acme"})
-	h.keys.AddOrg(domain.Org{ID: otherOrg, Slug: labsSlug, Name: "Example Labs"})
-	h.keys.AddFactory(testOrg, acmeID)
-	h.keys.AddFactory(testOrg, lineID)
-
-	h.platform = porttest.NewPlatform(h.keys)
+	h.addIdentity(in)
 
 	connections := h.connections(t, tenancy)
 
 	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
 		Access: h.keys, OrgRetention: retention, Authorizer: h.seam, Auth: api.AuthConfig{Mode: api.AuthNone}, Platform: h.platform, Feed: feed,
-		Builder: h.builder, Connections: h.conns, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
+		Builder: h.builder, Connections: h.conns, Credentials: h.creds, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
 		// GitLab's code host lists no repositories, as the gitlab adapter.
 		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()},
 		Knowledge: h.kb, KnowledgeUploads: h.uploads, KnowledgeSearch: knowledge.NewSearcher(h.kb, nil, nil), UploadMaxBytes: testUploadMax, Clock: h.clock,
@@ -548,6 +555,7 @@ func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
 	t.Helper()
 
 	h.conns = porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), audit)
+	h.creds = porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), audit, h.conns)
 	h.kb, h.kbObjects = porttest.NewKnowledge(h.conns, audit), porttest.NewObjectStore()
 	h.uploads = knowledge.NewUploads(h.kb, h.kbObjects, testUploadMax)
 

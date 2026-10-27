@@ -2,7 +2,7 @@
 // goald's HTTP API, always within one organization (org.go resolves which), it changes factory definitions (factory.go: goald keeps them as
 // drafts and published versions; a folder pulled with goal factory pull is edited and sent back
 // with goal factory push, which is the one way a definition changes outside the builder),
-// manages organizations, searches one (search.go), lists and tries Jonah's judges (judge.go), and submits, follows and decides on work items. It also starts the
+// manages organizations, searches one (search.go), lists its agent runs (runs.go), lists and tries Jonah's judges (judge.go), and submits, follows and decides on work items. It also starts the
 // local platform (goal up), validates folders offline (goal validate), and keeps the install's
 // skills and template catalogs in the bucket (catalog.go).
 //
@@ -135,6 +135,14 @@ const usage = `usage:
                                                   and connections, by group, best first (--limit: per
                                                   group, 1 to 20, default 5; --json: goald's answer as
                                                   it came)
+  goal runs [--factory F] [--status S] [--since T] [--until T] [--search Q] [--limit N] [--cursor C] [--json]
+                                                  the organization's agent runs, newest first: factory,
+                                                  item, station, agent, model, start, duration, turns,
+                                                  cost and status, then the window's totals and spend
+                                                  (--since/--until: RFC 3339, default the current UTC
+                                                  day; --status: running, succeeded, failed or
+                                                  cancelled; --search: item title, agent, model or
+                                                  #147; another page prints its --cursor)
   goal judge list [--factory F] [--json]          the factory's judges (default: the organization's only
                                                   factory): enabled, sample, pass mark, and over the last
                                                   30 days the pass rate, runs scored and cost; then what
@@ -187,7 +195,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, move, pause, the decisions, status, andon, factory, connection, knowledge, search, judge) acts in one
+Every command that talks to goald (run, follow, item, note, move, pause, the decisions, status, andon, factory, connection, knowledge, search, runs, judge) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or
@@ -256,7 +264,7 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 	if handler, ok := map[string]command{
 		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbMove: moveItem, verbPause: pauseItem,
 		"status": status, "factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
-		"connection": connectionCommand, "knowledge": knowledgeCommand, "search": search, "judge": judgeCommand,
+		"connection": connectionCommand, "knowledge": knowledgeCommand, "search": search, "runs": runs, "judge": judgeCommand,
 	}[cmd]; ok {
 		return handler(ctx, out, getenv, rest)
 	}

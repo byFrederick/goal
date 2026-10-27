@@ -113,6 +113,14 @@ usage:
                                                   and connections, by group, best first (--limit: per
                                                   group, 1 to 20, default 5; --json: goald's answer as
                                                   it came)
+  goal runs [--factory F] [--status S] [--since T] [--until T] [--search Q] [--limit N] [--cursor C] [--json]
+                                                  the organization's agent runs, newest first: factory,
+                                                  item, station, agent, model, start, duration, turns,
+                                                  cost and status, then the window's totals and spend
+                                                  (--since/--until: RFC 3339, default the current UTC
+                                                  day; --status: running, succeeded, failed or
+                                                  cancelled; --search: item title, agent, model or
+                                                  #147; another page prints its --cursor)
   goal judge list [--factory F] [--json]          the factory's judges (default: the organization's only
                                                   factory): enabled, sample, pass mark, and over the last
                                                   30 days the pass rate, runs scored and cost; then what
@@ -165,7 +173,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, move, pause, the decisions, status, andon, factory, connection, knowledge, search, judge) acts in one
+Every command that talks to goald (run, follow, item, note, move, pause, the decisions, status, andon, factory, connection, knowledge, search, runs, judge) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or

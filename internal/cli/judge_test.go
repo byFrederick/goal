@@ -158,7 +158,7 @@ func TestJudgeCommand_Try(t *testing.T) {
 		"POST /v1/orgs/acme/factories/web/judges/spec-followed/try": answerJSON(t, http.StatusAccepted, "application/json", gen.JudgeTries{
 			Tries: []gen.JudgeTry{
 				{Id: "s1", State: gen.JudgeScoreStateQueued, ItemRef: "web#14", ItemTitle: "Log in with a key"},
-				{Id: "s2", State: gen.JudgeScoreStateQueued, ItemRef: "web#2", ItemTitle: "Fix the login page"},
+				{Id: "s2", State: gen.JudgeScoreStateQueued, ItemRef: "web#2", ItemTitle: "Add a sign-up form"},
 			},
 		}),
 	})
@@ -203,7 +203,7 @@ func TestJudgeCommand_Problems(t *testing.T) {
 func TestJudgeCommand_Usage(t *testing.T) {
 	t.Parallel()
 
-	for _, args := range [][]string{{}, {"show"}, {"try"}, {"try", "a", "b"}, {"list", "extra"}} {
+	for _, args := range [][]string{{}, {"show"}, {"try"}, {"try", "a", "b"}, {"list", "more"}} {
 		if _, err := goalJudge(t, "http://127.0.0.1:1", args...); !errors.Is(err, errUsage) {
 			t.Errorf("goal judge %v = %v, want the usage", args, err)
 		}
