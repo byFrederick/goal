@@ -75,7 +75,7 @@ RETURNING updated_at;
 SELECT id FROM credentials WHERE name = sqlc.arg(name) FOR UPDATE;
 
 -- name: CredentialUsers :many
--- The connections that refer to credential name as {{name}} (00066's secret_refs), by name.
+-- The connections that refer to credential name as {{name}} (00070's secret_refs), by name.
 SELECT c.name FROM connections c
 WHERE EXISTS (SELECT 1 FROM jsonb_each_text(c.secret_refs) AS r (field, credential) WHERE r.credential = sqlc.arg(name)::text)
 ORDER BY c.name;

@@ -390,7 +390,7 @@ func TestAPI_StreamSendsConnectionEvents(t *testing.T) {
 	}
 
 	var e gen.ConnectionEvent
-	if err := json.Unmarshal([]byte(strings.TrimPrefix(got[1], "data: ")), &e); err != nil || e.Change != gen.Tested || e.Name != kindGitHub {
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(got[1], "data: ")), &e); err != nil || e.Change != gen.ConnectionEventChangeTested || e.Name != kindGitHub {
 		t.Errorf("connection event = %+v, %v; want github tested", e, err)
 	}
 }

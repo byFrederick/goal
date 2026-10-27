@@ -17,7 +17,7 @@ import (
 
 var _ ports.Intake = (*Intake)(nil)
 
-// Intake implements ports.Intake over 00070's webhook_endpoints, webhook_deliveries and
+// Intake implements ports.Intake over 00071's webhook_endpoints, webhook_deliveries and
 // trigger_firings, as goal_app under row-level security: every statement sees the organization in
 // ctx, except EndpointOrg and PruneDeliveries, which go through their definers. Each signing
 // secret is sealed with key under domain.WebhookSecretAAD (organization, endpoint id and key id);

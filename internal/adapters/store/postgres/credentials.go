@@ -24,7 +24,7 @@ var _ ports.Credentials = (*Credentials)(nil)
 // (organization, credential id and key id) and opened only by Resolve; a rename keeps the sealed
 // value, which is bound to the id. Without a master key (the zero masterkey.Keys) metadata works
 // and Create, a Replace and Resolve fail with ports.ErrNoMasterKey. Connections refer to a
-// credential as {{name}} in 00066's secret_refs: UsedBy and ImportPreview count them, and Delete
+// credential as {{name}} in 00070's secret_refs: UsedBy and ImportPreview count them, and Delete
 // locks the credential and refuses while one does, as a connection's write locks the credentials it
 // refers to (ShareReferencedCredentials), so neither can slip past the other.
 type Credentials struct {

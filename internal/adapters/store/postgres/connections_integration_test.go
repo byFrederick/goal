@@ -112,7 +112,7 @@ func seedConnections(t *testing.T, c *Connections, org domain.OrgID, secret stri
 	return conn
 }
 
-// ADR 0017 decision 5 and 00066: a connection whose every secret field refers to a credential
+// ADR 0017 decision 5 and 00070: a connection whose every secret field refers to a credential
 // stores its references in secret_refs and no ciphertext, and the table refuses a row whose set
 // secret field is neither sealed nor a reference.
 func TestConnections_ReferenceOnlyHasNoCiphertext(t *testing.T) {
