@@ -17,7 +17,7 @@ import (
 
 var _ ports.OrgPolicies = (*OrgPolicies)(nil)
 
-// OrgPolicies implements ports.OrgPolicies over 00067's org_policies, as goal_app under row-level
+// OrgPolicies implements ports.OrgPolicies over 00068's org_policies, as goal_app under row-level
 // security: every statement sees the organization in ctx. An organization without a row reads
 // as domain.DefaultOrgPolicy of the platform's models. A save inserts the first row or updates
 // the one at the caller's revision, and appends its audit entry in the same transaction.
