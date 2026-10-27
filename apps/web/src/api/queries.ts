@@ -20,6 +20,7 @@ import {
   getAuthConfig,
   getBoard,
   getConstraint,
+  getFactoryActivity,
   getFactoryOverview,
   getInbox,
   getItem,
@@ -38,7 +39,9 @@ import {
   listItemRuns,
   listItems,
   listMembers,
+  listOrgRuns,
   listOrgs,
+  type RunsFilter,
 } from './client';
 import {
   type ConnectionFilter,
@@ -169,6 +172,8 @@ export const keys = {
   move: (org: string, factory: string) => ['org', org, 'factory', factory, 'move'] as const,
   metrics: (org: string, factory: string, range: FlowRange) =>
     ['org', org, 'factory', factory, 'metrics', range] as const,
+  /** The factory's latest milestone events (listFactoryActivity); the stream refreshes it, nothing polls. */
+  activity: (org: string, factory: string) => ['org', org, 'factory', factory, 'activity'] as const,
   weekly: (org: string, factory: string, to: string | undefined, type: string | undefined) =>
     ['org', org, 'factory', factory, 'weekly', to ?? 'today', type ?? 'all'] as const,
   constraint: (org: string, factory: string, from: string | undefined, to: string | undefined) =>
@@ -185,7 +190,10 @@ export const keys = {
     ['org', org, 'factory', factory, 'items', filter] as const,
   item: (org: string, item: string) => ['org', org, 'item', item] as const,
   events: (org: string, item: string) => ['org', org, 'item', item, 'events'] as const,
-  runs: (org: string, item: string) => ['org', org, 'item', item, 'runs'] as const,
+  itemRuns: (org: string, item: string) => ['org', org, 'item', item, 'runs'] as const,
+  /** The organization's agent runs across factories (the Runs page). Rooted at ['org', org, 'runs']: the stream invalidates that prefix. */
+  runs: (org: string, filter?: RunsFilter) =>
+    filter ? (['org', org, 'runs', filter] as const) : (['org', org, 'runs'] as const),
   parts: (org: string, item: string) => ['org', org, 'item', item, 'parts'] as const,
 };
 
@@ -406,6 +414,16 @@ export const weeklyQuery = (org: string, factory: string, { to, type }: FlowRang
     staleTime: 30_000,
   });
 
+/** The rows the Floor's Activity card shows. */
+const activityLimit = 5;
+
+/** The factory's latest milestone events, newest first (the Floor's Activity card). */
+export const activityQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: keys.activity(org, factory),
+    queryFn: ({ signal }) => getFactoryActivity(org, factory, { limit: activityLimit }, signal),
+  });
+
 /** The constraint over a range (the work type does not change it). */
 export const constraintQuery = (org: string, factory: string, { from, to }: FlowRange = {}) =>
   queryOptions({
@@ -609,8 +627,12 @@ function retryUnlessRefused(failures: number, error: Error): boolean {
 }
 
 /** An item's runs: under the item's key, so every event of the item refreshes them. */
-export const runsQuery = (org: string, item: string) =>
-  queryOptions({ queryKey: keys.runs(org, item), queryFn: ({ signal }) => listItemRuns(org, item, signal) });
+export const itemRunsQuery = (org: string, item: string) =>
+  queryOptions({ queryKey: keys.itemRuns(org, item), queryFn: ({ signal }) => listItemRuns(org, item, signal) });
+
+/** The organization's runs in one window and filter (the Runs page). The stream refreshes them; nothing polls. */
+export const runsQuery = (org: string, filter: RunsFilter) =>
+  queryOptions({ queryKey: keys.runs(org, filter), queryFn: ({ signal }) => listOrgRuns(org, filter, signal) });
 
 const eventPage = 500;
 

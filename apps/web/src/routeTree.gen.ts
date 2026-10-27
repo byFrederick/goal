@@ -20,6 +20,8 @@ import { Route as OOrgOrgRouteImport } from './routes/o.$org._org'
 import { Route as OOrgOrgIndexRouteImport } from './routes/o.$org._org.index'
 import { Route as OOrgOrgApiKeysRouteImport } from './routes/o.$org._org.api-keys'
 import { Route as OOrgOrgMembersRouteImport } from './routes/o.$org._org.members'
+import { Route as OOrgOrgNeedsYouRouteImport } from './routes/o.$org._org.needs-you'
+import { Route as OOrgOrgRunsRouteImport } from './routes/o.$org._org.runs'
 import { Route as OOrgOrgSettingsRouteImport } from './routes/o.$org._org.settings'
 import { Route as OOrgFFactoryRouteImport } from './routes/o.$org.f.$factory'
 import { Route as OOrgNewStepRouteImport } from './routes/o.$org.new.$step'
@@ -33,6 +35,7 @@ import { Route as OOrgFFactoryIndexRouteImport } from './routes/o.$org.f.$factor
 import { Route as OOrgFFactoryBoardRouteImport } from './routes/o.$org.f.$factory.board'
 import { Route as OOrgFFactoryDefinitionRouteImport } from './routes/o.$org.f.$factory.definition'
 import { Route as OOrgFFactorySettingsRouteImport } from './routes/o.$org.f.$factory.settings'
+import { Route as OOrgFFactoryAgentsIndexRouteImport } from './routes/o.$org.f.$factory.agents.index'
 import { Route as OOrgFFactoryAgentsAgentRouteImport } from './routes/o.$org.f.$factory.agents.$agent'
 import { Route as OOrgFFactoryDefinitionIndexRouteImport } from './routes/o.$org.f.$factory.definition.index'
 import { Route as OOrgFFactoryDefinitionSectionRouteImport } from './routes/o.$org.f.$factory.definition.$section'
@@ -91,6 +94,16 @@ const OOrgOrgApiKeysRoute = OOrgOrgApiKeysRouteImport.update({
 const OOrgOrgMembersRoute = OOrgOrgMembersRouteImport.update({
   id: '/members',
   path: '/members',
+  getParentRoute: () => OOrgOrgRoute,
+} as any)
+const OOrgOrgNeedsYouRoute = OOrgOrgNeedsYouRouteImport.update({
+  id: '/needs-you',
+  path: '/needs-you',
+  getParentRoute: () => OOrgOrgRoute,
+} as any)
+const OOrgOrgRunsRoute = OOrgOrgRunsRouteImport.update({
+  id: '/runs',
+  path: '/runs',
   getParentRoute: () => OOrgOrgRoute,
 } as any)
 const OOrgOrgSettingsRoute = OOrgOrgSettingsRouteImport.update({
@@ -159,6 +172,11 @@ const OOrgFFactorySettingsRoute = OOrgFFactorySettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => OOrgFFactoryRoute,
 } as any)
+const OOrgFFactoryAgentsIndexRoute = OOrgFFactoryAgentsIndexRouteImport.update({
+  id: '/agents/',
+  path: '/agents/',
+  getParentRoute: () => OOrgFFactoryRoute,
+} as any)
 const OOrgFFactoryAgentsAgentRoute = OOrgFFactoryAgentsAgentRouteImport.update({
   id: '/agents/$agent',
   path: '/agents/$agent',
@@ -197,6 +215,8 @@ export interface FileRoutesByFullPath {
   '/sign-in/code': typeof SignInCodeRoute
   '/o/$org/api-keys': typeof OOrgOrgApiKeysRoute
   '/o/$org/members': typeof OOrgOrgMembersRoute
+  '/o/$org/needs-you': typeof OOrgOrgNeedsYouRoute
+  '/o/$org/runs': typeof OOrgOrgRunsRoute
   '/o/$org/settings': typeof OOrgOrgSettingsRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
   '/o/$org/new/$step': typeof OOrgNewStepRoute
@@ -214,6 +234,7 @@ export interface FileRoutesByFullPath {
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
   '/o/$org/f/$factory/items/$ref': typeof OOrgFFactoryItemsRefRoute
+  '/o/$org/f/$factory/agents/': typeof OOrgFFactoryAgentsIndexRoute
   '/o/$org/f/$factory/definition/': typeof OOrgFFactoryDefinitionIndexRoute
   '/o/$org/f/$factory/items/': typeof OOrgFFactoryItemsIndexRoute
 }
@@ -227,6 +248,8 @@ export interface FileRoutesByTo {
   '/sign-in/code': typeof SignInCodeRoute
   '/o/$org/api-keys': typeof OOrgOrgApiKeysRoute
   '/o/$org/members': typeof OOrgOrgMembersRoute
+  '/o/$org/needs-you': typeof OOrgOrgNeedsYouRoute
+  '/o/$org/runs': typeof OOrgOrgRunsRoute
   '/o/$org/settings': typeof OOrgOrgSettingsRoute
   '/o/$org/new/$step': typeof OOrgNewStepRoute
   '/o/$org/connections/$connection': typeof OOrgOrgConnectionsConnectionRoute
@@ -241,6 +264,7 @@ export interface FileRoutesByTo {
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
   '/o/$org/f/$factory/items/$ref': typeof OOrgFFactoryItemsRefRoute
+  '/o/$org/f/$factory/agents': typeof OOrgFFactoryAgentsIndexRoute
   '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionIndexRoute
   '/o/$org/f/$factory/items': typeof OOrgFFactoryItemsIndexRoute
 }
@@ -256,6 +280,8 @@ export interface FileRoutesById {
   '/o/$org/_org': typeof OOrgOrgRouteWithChildren
   '/o/$org/_org/api-keys': typeof OOrgOrgApiKeysRoute
   '/o/$org/_org/members': typeof OOrgOrgMembersRoute
+  '/o/$org/_org/needs-you': typeof OOrgOrgNeedsYouRoute
+  '/o/$org/_org/runs': typeof OOrgOrgRunsRoute
   '/o/$org/_org/settings': typeof OOrgOrgSettingsRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
   '/o/$org/new/$step': typeof OOrgNewStepRoute
@@ -273,6 +299,7 @@ export interface FileRoutesById {
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
   '/o/$org/f/$factory/items/$ref': typeof OOrgFFactoryItemsRefRoute
+  '/o/$org/f/$factory/agents/': typeof OOrgFFactoryAgentsIndexRoute
   '/o/$org/f/$factory/definition/': typeof OOrgFFactoryDefinitionIndexRoute
   '/o/$org/f/$factory/items/': typeof OOrgFFactoryItemsIndexRoute
 }
@@ -288,6 +315,8 @@ export interface FileRouteTypes {
     | '/sign-in/code'
     | '/o/$org/api-keys'
     | '/o/$org/members'
+    | '/o/$org/needs-you'
+    | '/o/$org/runs'
     | '/o/$org/settings'
     | '/o/$org/f/$factory'
     | '/o/$org/new/$step'
@@ -305,6 +334,7 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
     | '/o/$org/f/$factory/items/$ref'
+    | '/o/$org/f/$factory/agents/'
     | '/o/$org/f/$factory/definition/'
     | '/o/$org/f/$factory/items/'
   fileRoutesByTo: FileRoutesByTo
@@ -318,6 +348,8 @@ export interface FileRouteTypes {
     | '/sign-in/code'
     | '/o/$org/api-keys'
     | '/o/$org/members'
+    | '/o/$org/needs-you'
+    | '/o/$org/runs'
     | '/o/$org/settings'
     | '/o/$org/new/$step'
     | '/o/$org/connections/$connection'
@@ -332,6 +364,7 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
     | '/o/$org/f/$factory/items/$ref'
+    | '/o/$org/f/$factory/agents'
     | '/o/$org/f/$factory/definition'
     | '/o/$org/f/$factory/items'
   id:
@@ -346,6 +379,8 @@ export interface FileRouteTypes {
     | '/o/$org/_org'
     | '/o/$org/_org/api-keys'
     | '/o/$org/_org/members'
+    | '/o/$org/_org/needs-you'
+    | '/o/$org/_org/runs'
     | '/o/$org/_org/settings'
     | '/o/$org/f/$factory'
     | '/o/$org/new/$step'
@@ -363,6 +398,7 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
     | '/o/$org/f/$factory/items/$ref'
+    | '/o/$org/f/$factory/agents/'
     | '/o/$org/f/$factory/definition/'
     | '/o/$org/f/$factory/items/'
   fileRoutesById: FileRoutesById
@@ -456,6 +492,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OOrgOrgMembersRouteImport
       parentRoute: typeof OOrgOrgRoute
     }
+    '/o/$org/_org/needs-you': {
+      id: '/o/$org/_org/needs-you'
+      path: '/needs-you'
+      fullPath: '/o/$org/needs-you'
+      preLoaderRoute: typeof OOrgOrgNeedsYouRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
+    '/o/$org/_org/runs': {
+      id: '/o/$org/_org/runs'
+      path: '/runs'
+      fullPath: '/o/$org/runs'
+      preLoaderRoute: typeof OOrgOrgRunsRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
     '/o/$org/_org/settings': {
       id: '/o/$org/_org/settings'
       path: '/settings'
@@ -547,6 +597,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OOrgFFactorySettingsRouteImport
       parentRoute: typeof OOrgFFactoryRoute
     }
+    '/o/$org/f/$factory/agents/': {
+      id: '/o/$org/f/$factory/agents/'
+      path: '/agents'
+      fullPath: '/o/$org/f/$factory/agents/'
+      preLoaderRoute: typeof OOrgFFactoryAgentsIndexRouteImport
+      parentRoute: typeof OOrgFFactoryRoute
+    }
     '/o/$org/f/$factory/agents/$agent': {
       id: '/o/$org/f/$factory/agents/$agent'
       path: '/agents/$agent'
@@ -588,6 +645,8 @@ declare module '@tanstack/react-router' {
 interface OOrgOrgRouteChildren {
   OOrgOrgApiKeysRoute: typeof OOrgOrgApiKeysRoute
   OOrgOrgMembersRoute: typeof OOrgOrgMembersRoute
+  OOrgOrgNeedsYouRoute: typeof OOrgOrgNeedsYouRoute
+  OOrgOrgRunsRoute: typeof OOrgOrgRunsRoute
   OOrgOrgSettingsRoute: typeof OOrgOrgSettingsRoute
   OOrgOrgIndexRoute: typeof OOrgOrgIndexRoute
   OOrgOrgConnectionsConnectionRoute: typeof OOrgOrgConnectionsConnectionRoute
@@ -601,6 +660,8 @@ interface OOrgOrgRouteChildren {
 const OOrgOrgRouteChildren: OOrgOrgRouteChildren = {
   OOrgOrgApiKeysRoute: OOrgOrgApiKeysRoute,
   OOrgOrgMembersRoute: OOrgOrgMembersRoute,
+  OOrgOrgNeedsYouRoute: OOrgOrgNeedsYouRoute,
+  OOrgOrgRunsRoute: OOrgOrgRunsRoute,
   OOrgOrgSettingsRoute: OOrgOrgSettingsRoute,
   OOrgOrgIndexRoute: OOrgOrgIndexRoute,
   OOrgOrgConnectionsConnectionRoute: OOrgOrgConnectionsConnectionRoute,
@@ -637,6 +698,7 @@ interface OOrgFFactoryRouteChildren {
   OOrgFFactoryIndexRoute: typeof OOrgFFactoryIndexRoute
   OOrgFFactoryAgentsAgentRoute: typeof OOrgFFactoryAgentsAgentRoute
   OOrgFFactoryItemsRefRoute: typeof OOrgFFactoryItemsRefRoute
+  OOrgFFactoryAgentsIndexRoute: typeof OOrgFFactoryAgentsIndexRoute
   OOrgFFactoryItemsIndexRoute: typeof OOrgFFactoryItemsIndexRoute
 }
 
@@ -647,6 +709,7 @@ const OOrgFFactoryRouteChildren: OOrgFFactoryRouteChildren = {
   OOrgFFactoryIndexRoute: OOrgFFactoryIndexRoute,
   OOrgFFactoryAgentsAgentRoute: OOrgFFactoryAgentsAgentRoute,
   OOrgFFactoryItemsRefRoute: OOrgFFactoryItemsRefRoute,
+  OOrgFFactoryAgentsIndexRoute: OOrgFFactoryAgentsIndexRoute,
   OOrgFFactoryItemsIndexRoute: OOrgFFactoryItemsIndexRoute,
 }
 

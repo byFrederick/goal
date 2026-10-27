@@ -27,7 +27,7 @@ How to use them:
 
 | Screen | Route | Status | Not built yet |
 |---|---|---|---|
-| `sign-up`, `code` | `/sign-in`, `/sign-in/code` | restyle; sign-up is the same flow for a new address | |
+| `sign-up`, `code` | `/sign-in`, `/sign-in/code` | restyle; sign-up is the same flow for a new address | GitHub sign-in (its button is disabled) |
 | `org` | onboarding step 1 | new (create organization exists for platform admins) | |
 | `github` | step 2 | new (uses the github connection kind) | GitLab |
 | `template`, `line` | steps 3 and 4 | restyle of the new-factory wizard (`/o/$org/new/$step`) | quality-first or cost-first model preset |

@@ -72,8 +72,8 @@ test.describe('a viewer', () => {
     await page.goto('/o/acme/f/goal/definition/basics');
     await expect(page.getByText('View only. Editors of goal change its definition.')).toBeVisible();
     await expect(page.getByText('v8, running')).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Review and publish' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Discard draft…' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Review changes' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Discard draft', exact: true })).toHaveCount(0);
     await expect(page.getByRole('navigation', { name: 'Definition sections' }).getByRole('link')).toHaveCount(4);
 
     const name = page.getByRole('textbox', { name: 'Name' });
@@ -140,7 +140,7 @@ test.describe('an editor', () => {
 
   test('edits the Definition but starts no factory', async ({ page }) => {
     await page.goto('/o/acme/f/goal/definition/basics');
-    await expect(page.getByRole('link', { name: 'Review and publish', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Review changes', exact: true }).first()).toBeVisible();
     await expect(page.getByText(/^View only/)).toHaveCount(0);
     await expect(page.getByRole('textbox', { name: 'Name' })).not.toHaveAttribute('readonly', '');
     await expect(page.getByText('You’re a viewer of goal')).toHaveCount(0);

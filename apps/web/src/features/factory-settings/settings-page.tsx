@@ -1,22 +1,25 @@
-// A factory's settings (C §10.9): Pause or Resume, and the Danger zone. Pause needs factory:manage on
-// the factory's `can`, and is left out for an archived factory (Restore starts it paused). The Danger
-// zone reads the organization's `can` (factory:archive, factory:delete), since those permissions are
-// organization-level. The factory is the detail goald answers, so archived and paused stay current
-// after an action; the sidebar's factory list leaves archived factories out.
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { ApiError, pauseFactory, resumeFactory } from '../../api/client';
-import { defKeys, factoryQuery } from '../../api/queries';
-import type { Factory, OrgSummary } from '../../api/types';
+// Settings of a factory (canvas "Settings"): the title, General, People with access and the Danger zone,
+// with a list of the sections at the right from 1024 px. The Danger zone shows the rows the caller may use:
+// Pause on factory:manage in the factory's `can` (not for an archived factory), Archive or Restore on
+// factory:archive and Delete on factory:delete, both in the organization's `can`. The card shows when at
+// least one row does. The factory is the detail goald answers, so archived and paused stay current after an
+// action; the sidebar's factory list leaves archived factories out.
+import { useQuery } from '@tanstack/react-query';
+import { factoryQuery } from '../../api/queries';
 import { useFactory } from '../../shared/factory';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { holds } from '../../shared/permissions';
-import { Button } from '../../ui/button';
-import { descriptionClass, PageHeader } from '../../ui/page-header';
-import { SettingsSection } from '../org-settings/section';
+import { SectionCard } from '../../ui/card';
 import { DangerZone } from './danger-zone';
-import { refreshFactory } from './refresh';
+import { GeneralCard } from './general';
+import { PauseRow } from './pause-row';
+import { PeopleCard } from './people';
+
+const sections = [
+  { id: 'general', label: 'General' },
+  { id: 'people', label: 'People with access' },
+  { id: 'danger', label: 'Danger zone' },
+];
 
 export function FactorySettingsPage() {
   const org = useOrg();
@@ -25,70 +28,40 @@ export function FactorySettingsPage() {
   const factory = useQuery(factoryQuery(org.id, listed.id)).data ?? listed;
   const mayArchive = useOrgHolds('factory:archive');
   const mayDelete = useOrgHolds('factory:delete');
+  const mayPause = holds(factory, 'factory:manage') && !factory.archived_at;
+  const showDanger = mayPause || mayArchive || mayDelete;
 
   return (
-    <div className="flex max-w-[980px] flex-col">
-      <PageHeader
-        title="Factory settings"
-        description={<p className={descriptionClass}>Settings for {factory.name}.</p>}
-      />
-      {holds(factory, 'factory:manage') && !factory.archived_at ? <PauseSection org={org} factory={factory} /> : null}
-      {mayArchive ? <DangerZone org={org} factory={factory} deletes={mayDelete} /> : null}
-    </div>
-  );
-}
-
-function PauseSection({ org, factory }: { org: OrgSummary; factory: Factory }) {
-  const client = useQueryClient();
-  const [error, setError] = useState<string | null>(null);
-
-  const toggle = useMutation({
-    mutationFn: () => (factory.paused ? resumeFactory(org.id, factory.id) : pauseFactory(org.id, factory.id)),
-    onMutate: () => setError(null),
-    onSuccess: (answer) => {
-      client.setQueryData(defKeys.factory(org.id, factory.id), answer);
-      toast.success(answer.paused ? `Paused ${factory.name}` : `Resumed ${factory.name}`);
-    },
-    onError: (err) => {
-      setError(
-        err instanceof ApiError ? (err.detail ?? err.title) : 'goald is not answering. Try again once it is running.',
-      );
-    },
-    onSettled: () => refreshFactory(client, org.id, factory.id),
-  });
-
-  return (
-    <SettingsSection
-      title="Work"
-      lede="A paused factory takes no work. Runs in progress finish, and Resume starts it again."
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-card p-4">
-        <p className="m-0 flex min-w-0 flex-col">
-          <span className="text-[15px] font-medium">{factory.paused ? 'Paused' : 'Running'}</span>
-          <span className="text-sm text-muted">
-            {factory.paused ? 'It takes no work.' : 'It takes work from its queue.'}
-          </span>
-        </p>
-        <Button
-          variant="raised"
-          className="h-11 border border-line shadow-none md:h-10"
-          disabled={toggle.isPending}
-          onClick={() => toggle.mutate()}
+    <div className="flex max-w-6xl flex-col gap-4">
+      <h1 className="m-0 text-page-title">Settings</h1>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_200px] lg:gap-10">
+        <div className="flex min-w-0 flex-col gap-4">
+          <GeneralCard factory={factory} />
+          <PeopleCard org={org} />
+          {showDanger ? (
+            <SectionCard
+              id="danger"
+              title={<span className="text-rework-ink">Danger zone</span>}
+              className="border-rework/40"
+            >
+              {mayPause ? <PauseRow org={org} factory={factory} /> : null}
+              <DangerZone org={org} factory={factory} archives={mayArchive} deletes={mayDelete} />
+            </SectionCard>
+          ) : null}
+        </div>
+        <nav
+          aria-label="On this page"
+          className="hidden lg:sticky lg:top-6 lg:flex lg:flex-col lg:gap-1 lg:self-start lg:border-l lg:border-line lg:pl-4"
         >
-          {factory.paused
-            ? toggle.isPending
-              ? 'Resuming…'
-              : 'Resume factory'
-            : toggle.isPending
-              ? 'Pausing…'
-              : 'Pause factory'}
-        </Button>
+          {sections
+            .filter((section) => section.id !== 'danger' || showDanger)
+            .map((section) => (
+              <a key={section.id} href={`#${section.id}`} className="py-1 text-secondary text-ink-soft hover:text-ink">
+                {section.label}
+              </a>
+            ))}
+        </nav>
       </div>
-      {error ? (
-        <p role="alert" className="m-0 text-sm text-rework-ink">
-          {error}
-        </p>
-      ) : null}
-    </SettingsSection>
+    </div>
   );
 }

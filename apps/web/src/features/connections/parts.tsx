@@ -26,8 +26,8 @@ export function Status({
 export function ToneText({ tone, text, className }: { tone: Tone; text: string; className?: string | undefined }) {
   const Icon = toneIcon[tone];
   return (
-    <span className={cn('inline-flex items-start gap-1.5', toneText[tone], className)}>
-      <Icon size={15} strokeWidth={1.75} aria-hidden="true" className="mt-[3px] shrink-0" />
+    <span className={cn('inline-flex items-center gap-2', toneText[tone], className)}>
+      <Icon size={15} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
       <span>{text}</span>
     </span>
   );
@@ -39,7 +39,7 @@ export function Monogram({ name, className }: { name: string; className?: string
     <span
       aria-hidden="true"
       className={cn(
-        'flex size-9 shrink-0 items-center justify-center rounded-control bg-panel text-[13px] font-semibold text-ink',
+        'flex size-9 shrink-0 items-center justify-center rounded-control bg-panel text-secondary font-control text-ink',
         className,
       )}
     >
@@ -67,7 +67,7 @@ export function Modes({ kind }: { kind: ConnectionKind | undefined }) {
 export function KindNotes({ kind }: { kind: ConnectionKind | undefined }) {
   if (!kind?.model && !kind?.mint) return null;
   return (
-    <span className="flex flex-col gap-0.5 text-[13px] text-run">
+    <span className="flex flex-col gap-1 text-secondary text-run">
       {kind.model ? (
         <span className="inline-flex items-center gap-1">
           <Lock size={13} strokeWidth={1.75} aria-hidden="true" />
@@ -96,15 +96,11 @@ export function WriteOnly() {
 
 /** The env names a run gets, as code chips; "None" when it sets none. */
 export function EnvNames({ names, className }: { names: string[]; className?: string }) {
-  if (names.length === 0) return <span className={cn('text-sm text-muted', className)}>None</span>;
+  if (names.length === 0) return <span className={cn('text-body text-muted', className)}>None</span>;
   return (
     <span className={cn('flex flex-wrap gap-1', className)}>
       {names.map((n) => (
-        <code
-          key={n}
-          translate="no"
-          className="rounded-chip border border-line bg-card px-1.5 py-0.5 font-mono text-xs"
-        >
+        <code key={n} translate="no" className="rounded-chip border border-line bg-card px-2 py-1 font-mono text-meta">
           {n}
         </code>
       ))}
