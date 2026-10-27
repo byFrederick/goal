@@ -108,6 +108,7 @@ spec:
     - name: frontend-engineer
       description: Builds web changes from the spec.
       prompt: ./agents/frontend-engineer.md
+      model: claude-haiku-5-5
       skills: [acme-conventions]
       connections: [playwright]
       builtins: { read: allowed, edit: allowed, run: { mode: allowed, commands: [pnpm, git] }, web: ${o.draft ? 'ask' : 'off'} }
