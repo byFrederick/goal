@@ -14,6 +14,7 @@ const (
 	trFlaky   = "flaky-test-on-main"
 	onFailed  = "github.check_run.failed"
 	fieldName = "check.name"
+	laneBack  = "backend"
 )
 
 // failedCheck is a trigger on failed check runs of main that creates an expedited item at the
@@ -22,7 +23,7 @@ func failedCheck() domain.Trigger {
 	return domain.Trigger{
 		Name: trFlaky, Enabled: true, On: onFailed, Filter: domain.TriggerFilter{Branch: "main"},
 		Create: domain.TriggerCreate{
-			Type: typeFeature, Station: stWork, Lane: "backend", Expedite: true,
+			Type: typeFeature, Station: stWork, Lane: laneBack, Expedite: true,
 			Title: "{{check.name}} failed on main", Brief: "Fix the check {{check.name}}.",
 		},
 	}
@@ -105,30 +106,35 @@ func TestIntake_MatchCreatesItem(t *testing.T) {
 	f := h.receive(t, failure("check-run-1", "unit"))
 	wantCreated(t, f)
 
-	if f.Trigger != trFlaky || f.Source != domain.TriggerGitHub || f.EventKey != onFailed || f.IdempotencyKey != "check-run-1" || f.ID == "" {
-		t.Errorf("firing = %+v; want the trigger's, recorded", f)
+	if got, ok, err := h.intake.Firing(inOrg(t), factoryID, trFlaky, "check-run-1"); err != nil || !ok || got != f ||
+		f.Source != domain.TriggerGitHub || f.EventKey != onFailed {
+		t.Errorf("recorded firing = %+v, %v, %v; want %+v, the trigger's", got, ok, err, f)
 	}
 
-	it, err := h.store.Item(inOrg(t), f.ItemID)
-	if err != nil {
-		t.Fatal(err)
+	it := h.item(t, f.ItemID)
+
+	type placed struct {
+		Type, Station, Lane string
+		State               domain.ItemState
+		Class               domain.ClassOfService
+		Source              domain.ItemSource
+		Trigger             string
 	}
 
-	if it.Type != typeFeature || it.Station != stWork || it.State != domain.StateQueued || it.Lane != "backend" ||
-		it.Class != domain.ClassExpedite || it.Source != domain.ItemFromGitHub || it.Trigger != trFlaky {
-		t.Errorf("item = %s at %s/%s lane %q class %s from %s/%s; want the trigger's create", it.Type, it.Station, it.State,
-			it.Lane, it.Class, it.Source, it.Trigger)
+	got := placed{it.Type, it.Station, it.Lane, it.State, it.Class, it.Source, it.Trigger}
+	if want := (placed{typeFeature, stWork, laneBack, domain.StateQueued, domain.ClassExpedite, domain.ItemFromGitHub, trFlaky}); got != want {
+		t.Errorf("item = %+v; want the trigger's create %+v", got, want)
 	}
 
 	if it.Title != "unit failed on main" || !strings.HasPrefix(it.Body, `Fix the check "unit".`+"\n\n<untrusted-event-data>\n") {
 		t.Errorf("item title %q body %q; want the rendered templates, then the event block", it.Title, it.Body)
 	}
+}
 
-	if got, ok, err := h.intake.Firing(inOrg(t), factoryID, trFlaky, "check-run-1"); err != nil || !ok || got.ItemID != it.ID {
-		t.Errorf("recorded firing = %+v, %v, %v; want the one naming the item", got, ok, err)
-	}
+// Without create.expedite the item takes the class the line gives its type.
+func TestIntake_ClassFollowsTheLineWithoutExpedite(t *testing.T) {
+	t.Parallel()
 
-	// Without create.expedite the line's class of its type applies.
 	plain := failedCheck()
 	plain.Create.Expedite = false
 	h2 := intakeHarness(t, plain)

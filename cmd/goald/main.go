@@ -618,7 +618,7 @@ func refresh(ctx context.Context, log *slog.Logger, defs *definitions.Cache, eve
 }
 
 // fireSchedules fires the schedule triggers that are due and deletes webhook deliveries past
-// their retention, at once and then every every until ctx ends (ADR 0026 decision 4). Every
+// their retention, at once and then on each tick of every until ctx ends (ADR 0026 decision 4). Every
 // goald ticks; the one holding the schedule lock does the work and the others skip the tick.
 func fireSchedules(ctx context.Context, log *slog.Logger, eng *engine.Engine, clock ports.Clock, every time.Duration) {
 	t := clock.NewTicker(every)

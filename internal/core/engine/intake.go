@@ -122,6 +122,15 @@ func (e *Engine) fire(ctx context.Context, l domain.Line, t domain.Trigger, ev d
 // triggerChecks runs t's only and limits steps in order and returns why the first that fails
 // skips the event, "" when all pass. Reasons hold no event text.
 func (e *Engine) triggerChecks(ctx context.Context, l domain.Line, t domain.Trigger, dedupe string, now time.Time) (string, error) {
+	if reason, err := e.onlyChecks(ctx, l, t, dedupe); reason != "" || err != nil {
+		return reason, err
+	}
+
+	return e.limitChecks(ctx, l, t, now)
+}
+
+// onlyChecks runs only.failuresInARow, then only.dedupe.
+func (e *Engine) onlyChecks(ctx context.Context, l domain.Line, t domain.Trigger, dedupe string) (string, error) {
 	if n := t.Only.FailuresInARow; n > 1 {
 		streak, err := e.intake.FailureStreak(ctx, l.FactoryID, t.Name, dedupe)
 		if err != nil {
@@ -144,6 +153,11 @@ func (e *Engine) triggerChecks(ctx context.Context, l domain.Line, t domain.Trig
 		}
 	}
 
+	return "", nil
+}
+
+// limitChecks runs limits.perDay, then limits.pauseOnBudget.
+func (e *Engine) limitChecks(ctx context.Context, l domain.Line, t domain.Trigger, now time.Time) (string, error) {
 	if n := t.Limits.PerDay; n > 0 {
 		created, err := e.intake.CreatedSince(ctx, l.FactoryID, t.Name, now.UTC().Truncate(24*time.Hour))
 		if err != nil {

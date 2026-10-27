@@ -30,7 +30,9 @@ func TestTrigger_Matches(t *testing.T) {
 	}{
 		{"on and filter match", func(*domain.Trigger, *domain.IntakeEvent) {}, true},
 		{"another key", func(_ *domain.Trigger, e *domain.IntakeEvent) { e.Key = "github.issues.labeled" }, false},
-		{"another branch", func(_ *domain.Trigger, e *domain.IntakeEvent) { e.Fields = map[string]string{"branch": "dev", "repo": "acme/app"} }, false},
+		{"another branch", func(_ *domain.Trigger, e *domain.IntakeEvent) {
+			e.Fields = map[string]string{"branch": "dev", "repo": "acme/app"}
+		}, false},
 		{"disabled", func(tr *domain.Trigger, _ *domain.IntakeEvent) { tr.Enabled = false }, false},
 		{"a schedule never matches an event", func(tr *domain.Trigger, e *domain.IntakeEvent) { tr.On, e.Key = domain.OnSchedule, domain.OnSchedule }, false},
 		{"label", func(tr *domain.Trigger, _ *domain.IntakeEvent) { tr.Filter.Label = "flaky" }, false},

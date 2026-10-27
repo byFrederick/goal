@@ -586,6 +586,9 @@ func TestLoad_RefusesUnknownDependencyKeys(t *testing.T) {
 	}
 }
 
+// workIncident is the support factory's expedited work type.
+const workIncident = "incident"
+
 // The line carries board.triggers in order, an unset enabled as enabled.
 func TestLine_Triggers(t *testing.T) {
 	t.Parallel()
@@ -605,7 +608,7 @@ func TestLine_Triggers(t *testing.T) {
 			Filter: domain.TriggerFilter{Repo: "acme/shop", SkipBots: true},
 			Only:   domain.TriggerOnly{FailuresInARow: 2, Dedupe: "service"},
 			Create: domain.TriggerCreate{
-				Type: "incident", Station: "triage", Expedite: true, Title: "{{service}} is failing", Brief: "Alert: {{alert.summary}}",
+				Type: workIncident, Station: "triage", Expedite: true, Title: "{{service}} is failing", Brief: "Alert: {{alert.summary}}",
 			},
 			Limits: domain.TriggerLimits{PerDay: 3, PauseOnBudget: true},
 		},

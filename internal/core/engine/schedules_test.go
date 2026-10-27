@@ -23,30 +23,9 @@ func TestSchedules_FireOncePerInstantAcrossInstances(t *testing.T) {
 
 	h := intakeHarness(t, everyQuarter())
 	other := h.engine(t, h.store) // a second goald on the same database
-	now := t0.Add(2 * time.Minute)  // 09:02, two minutes after the 09:00 instant
 
-	var (
-		wg    sync.WaitGroup
-		mu    sync.Mutex
-		ticks []bool
-	)
-
-	for _, e := range []*engine.Engine{h.e, other} {
-		wg.Go(func() {
-			for range 3 {
-				got, err := e.FireSchedules(t.Context(), now)
-				if err != nil {
-					t.Error(err)
-				}
-
-				mu.Lock()
-				ticks = append(ticks, got.Ran)
-				mu.Unlock()
-			}
-		})
-	}
-
-	wg.Wait()
+	// 09:02, two minutes after the 09:00 instant: both instances tick three times at once.
+	fireConcurrently(t, t0.Add(2*time.Minute), h.e, other)
 
 	if n := h.items(t); n != 1 {
 		t.Fatalf("%d items after six ticks of two instances; want 1", n)
@@ -57,12 +36,7 @@ func TestSchedules_FireOncePerInstantAcrossInstances(t *testing.T) {
 		t.Fatalf("Firing of the 09:00 instant = %v, %v; want it recorded", ok, err)
 	}
 
-	it, err := h.store.Item(inOrg(t), f.ItemID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if it.Title != "Sweep for 2026-10-23T09:00:00Z" || it.Source != domain.ItemFromSchedule || f.Source != domain.TriggerSchedule {
+	if it := h.item(t, f.ItemID); it.Title != "Sweep for 2026-10-23T09:00:00Z" || it.Source != domain.ItemFromSchedule || f.Source != domain.TriggerSchedule {
 		t.Errorf("item %q from %s, firing from %s; want the schedule's", it.Title, it.Source, f.Source)
 	}
 
@@ -75,6 +49,25 @@ func TestSchedules_FireOncePerInstantAcrossInstances(t *testing.T) {
 	if got, err := h.e.FireSchedules(t.Context(), t0.Add(25*time.Minute)); err != nil || len(got.Firings) != 0 {
 		t.Errorf("FireSchedules at 09:25 = %+v, %v; want nothing due", got, err)
 	}
+}
+
+// fireConcurrently runs three FireSchedules at now on each engine, all at once.
+func fireConcurrently(t *testing.T, now time.Time, engines ...*engine.Engine) {
+	t.Helper()
+
+	var wg sync.WaitGroup
+
+	for _, e := range engines {
+		wg.Go(func() {
+			for range 3 {
+				if _, err := e.FireSchedules(t.Context(), now); err != nil {
+					t.Error(err)
+				}
+			}
+		})
+	}
+
+	wg.Wait()
 }
 
 func TestSchedules_SkippedWhileAnotherHoldsTheLock(t *testing.T) {

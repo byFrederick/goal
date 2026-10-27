@@ -107,7 +107,7 @@ type Deps struct {
 	// leaves Intake and FireSchedules failing with errNoIntake.
 	Intake ports.Intake
 	Clock  ports.Clock
-	Logger  *slog.Logger // nil discards logs
+	Logger *slog.Logger // nil discards logs
 }
 
 func (d Deps) complete() bool {

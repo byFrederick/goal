@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Cron is a standard five-field cron (minute, hour, day of month, month, day of week) read in a
+// Cron is a standard five-field cron (minute, hour, day of the month, month and weekday) read in a
 // time zone, as a schedule trigger declares it (ADR 0026 decision 1). It takes numbers, *, ranges
 // (a-b), steps (*/n, a-b/n), lists and month and weekday names, like internal/config's check.
 // When both the day of month and the day of week are restricted (neither starts with *), a day matching either matches,
@@ -133,7 +133,7 @@ func (cs cronSpec) value(s string) (int, bool) {
 // never matches).
 const cronHorizon = 5 * 366 * 24 * time.Hour
 
-// Next is the first instant after after that c matches, in UTC; the zero time when none comes
+// Next is the first instant c matches that is later than after, in UTC; the zero time when none comes
 // within five years.
 func (c Cron) Next(after time.Time) time.Time {
 	t := after.In(c.loc).Truncate(time.Minute).Add(time.Minute)
@@ -161,7 +161,7 @@ func (c Cron) Next(after time.Time) time.Time {
 	return time.Time{}
 }
 
-// Latest is the newest instant c matches after after and at or before upTo, in UTC; the zero
+// Latest is the newest instant c matches that is later than after and at or before upTo, in UTC; the zero
 // time when there is none.
 func (c Cron) Latest(after, upTo time.Time) time.Time {
 	var last time.Time

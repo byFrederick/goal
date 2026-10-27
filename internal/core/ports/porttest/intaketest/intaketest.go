@@ -64,6 +64,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Tally_SourcesAndTriggerStatsOverAWindow", testTallies},
 		{"OtherOrg_ReachesNoEndpoint", testIsolation},
 		{"OtherOrg_CountsNothing", testIsolatedReads},
+		{"OtherOrg_ReadsNoFiring", testIsolatedFirings},
 		{"Methods_NoOrgIsAnError", testNoOrg},
 	}
 
@@ -803,20 +804,28 @@ func testIsolatedReads(f *fixture) {
 		t.Errorf("labs OpenItemByDedupe = %q, %v, %v; want none", got, ok, err)
 	}
 
-	if got, ok, err := f.in.Firing(labs, f.factory, flaky, "e1"); err != nil || ok {
-		t.Errorf("labs Firing = %+v, %v, %v; want none", got, ok, err)
-	}
-
-	if n, err := f.in.FailureStreak(labs, f.factory, flaky, "unit"); err != nil || n != 0 {
-		t.Errorf("labs FailureStreak = %d, %v; want 0", n, err)
-	}
-
 	if got, err := f.in.SourceTally(labs, f.factory, t0.Add(-time.Hour)); err != nil || len(got) != 0 {
 		t.Errorf("labs SourceTally = %v, %v; want none", got, err)
 	}
 
 	if got, err := f.in.TriggerStats(labs, f.factory, t0.Add(-time.Hour)); err != nil || len(got) != 0 {
 		t.Errorf("labs TriggerStats = %v, %v; want none", got, err)
+	}
+}
+
+// Another organization reads none of the fixture's firings.
+func testIsolatedFirings(f *fixture) {
+	t := f.t
+	f.fire(flaky, "e1", "unit", "", t0)
+
+	labs := domain.WithOrg(t.Context(), f.NewOrg(t))
+
+	if got, ok, err := f.in.Firing(labs, f.factory, flaky, "e1"); err != nil || ok {
+		t.Errorf("labs Firing = %+v, %v, %v; want none", got, ok, err)
+	}
+
+	if n, err := f.in.FailureStreak(labs, f.factory, flaky, "unit"); err != nil || n != 0 {
+		t.Errorf("labs FailureStreak = %d, %v; want 0", n, err)
 	}
 }
 
