@@ -146,7 +146,7 @@ test('a factory from a template, step by step (flow 1)', async ({ page }) => {
   // The Floor has the published line at once, not the factory as it was before its first version
   // (New item is in the Floor's header from 768 px).
   if (isPhone(page)) return;
-  await page.getByRole('button', { name: 'New item' }).click();
+  await page.getByRole('main').getByRole('button', { name: 'New item' }).click();
   const newItem = page.getByRole('dialog', { name: 'New item' });
   await expect(newItem).toContainText(/It enters \w+ and waits to be pulled\./);
   await expect(newItem).not.toContainText('It enters The line');
