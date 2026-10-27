@@ -11,12 +11,6 @@ import { ApiError } from '../../api/client';
 import { createPersonalToken } from '../../api/keys';
 import type { CreatedPersonalToken, Factory, OrgSummary } from '../../api/types';
 import { formatDay } from '../../shared/format';
-import { Button } from '../../ui/button';
-import { Callout } from '../../ui/callout';
-import { cn } from '../../ui/cn';
-import { Dialog, DialogContent } from '../../ui/dialog';
-import { Field, Input } from '../../ui/field';
-import { SegmentedControl } from '../../ui/segmented-control';
 import {
   cliWorkPreset,
   emptyTokenForm,
@@ -27,7 +21,13 @@ import {
   tokenExpiryDays,
   tokenFormErrors,
   tokenScopeGroups,
-} from './tokens';
+} from '../../shared/tokens/tokens';
+import { Button } from '../../ui/button';
+import { Callout } from '../../ui/callout';
+import { cn } from '../../ui/cn';
+import { Dialog, DialogContent } from '../../ui/dialog';
+import { Field, Input } from '../../ui/field';
+import { SegmentedControl } from '../../ui/segmented-control';
 
 interface NewTokenDialogProps {
   org: OrgSummary;
@@ -120,7 +120,7 @@ export function NewTokenDialog({ org, orgCan, factories, onClose, onCreated }: N
               describedBy={`${ids}-expires-note`}
               className="max-w-full self-start"
             />
-            <p id={`${ids}-expires-note`} className="m-0 text-[13px] text-muted">
+            <p id={`${ids}-expires-note`} className="m-0 text-secondary text-muted">
               Expires {expires}. No token lasts longer than 90 days.
             </p>
           </div>
@@ -149,9 +149,9 @@ export function NewTokenDialog({ org, orgCan, factories, onClose, onCreated }: N
                 <fieldset
                   key={g.id}
                   aria-describedby={g.id === 'high' ? `${ids}-high` : undefined}
-                  className="m-0 flex min-w-0 flex-col gap-1.5 border-0 p-0"
+                  className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0"
                 >
-                  <legend className="mb-1.5 p-0 text-sm font-medium">{g.label}</legend>
+                  <legend className="mb-2 p-0 text-sm font-medium">{g.label}</legend>
                   {g.scopes.map((s) => {
                     const off = !held(s);
                     const noteId = `${ids}-${s.id}-off`;
@@ -159,13 +159,13 @@ export function NewTokenDialog({ org, orgCan, factories, onClose, onCreated }: N
                       <label
                         key={s.id}
                         className={cn(
-                          'flex min-h-11 cursor-pointer items-start gap-2.5 text-[15px] md:min-h-0',
+                          'flex min-h-11 cursor-pointer items-start gap-3 text-body md:min-h-0',
                           off && 'cursor-not-allowed text-muted',
                         )}
                       >
                         <input
                           type="checkbox"
-                          className={cn(checkbox, 'mt-[3px]')}
+                          className={cn(checkbox, 'mt-1')}
                           checked={form.scopes.includes(s.id) && !off}
                           disabled={off}
                           aria-describedby={off ? noteId : undefined}
@@ -183,7 +183,7 @@ export function NewTokenDialog({ org, orgCan, factories, onClose, onCreated }: N
                     );
                   })}
                   {g.id === 'high' ? (
-                    <p id={`${ids}-high`} className="m-0 mt-1 text-[13px] leading-snug text-rework-ink">
+                    <p id={`${ids}-high`} className="m-0 mt-1 text-secondary leading-snug text-rework-ink">
                       Publishing a version controls the prompts agents run and the repository they push to. Give this
                       only to a token you keep safe.
                     </p>
@@ -191,12 +191,12 @@ export function NewTokenDialog({ org, orgCan, factories, onClose, onCreated }: N
                 </fieldset>
               ))}
             </fieldset>
-            <p id={`${ids}-scopes-note`} className="m-0 mt-2 text-[13px] text-muted">
+            <p id={`${ids}-scopes-note`} className="m-0 mt-2 text-secondary text-muted">
               The token acts as you: never more than your role allows at each request, and never people, keys or
               ownership.
             </p>
             {submitted && errors.scopes ? (
-              <p className="m-0 mt-1 text-[13px] text-rework-ink">{errors.scopes}</p>
+              <p className="m-0 mt-1 text-secondary text-rework-ink">{errors.scopes}</p>
             ) : null}
           </div>
 

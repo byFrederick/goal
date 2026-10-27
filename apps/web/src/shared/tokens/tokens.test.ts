@@ -93,7 +93,7 @@ describe('the New token form', () => {
   // Spec 3 §11.1 row 49: a link must not set a token up for someone else's use. The dialog keeps
   // its own state only; it never reads the URL (search params, hash or location).
   it('takes nothing from the URL', () => {
-    const source = readFileSync(join(import.meta.dirname, 'new-token-dialog.tsx'), 'utf8');
+    const source = readFileSync(join(import.meta.dirname, '../../features/account/new-token-dialog.tsx'), 'utf8');
     expect(source).not.toMatch(/useSearch|useLocation|useParams|useRouterState|window\.location|URLSearchParams/);
   });
 });
