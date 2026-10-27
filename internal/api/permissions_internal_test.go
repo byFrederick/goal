@@ -192,7 +192,7 @@ func TestPermissions_PersonalTokensCarryExactlyThese(t *testing.T) {
 
 	want := []string{
 		"andon:manage", "authenticated", "connection:browse", "connection:read", "credential:read", "definition:edit", "definition:publish",
-		"factory:archive", "factory:create", "factory:delete", string(permFactoryRead), "item:create", "item:decide", "item:operate", "knowledge:read", "org:read",
+		"factory:archive", "factory:create", "factory:delete", string(permFactoryRead), "intake:read", "item:create", "item:decide", "item:operate", "knowledge:read", "org:read",
 	}
 
 	var got []string
@@ -595,7 +595,7 @@ func TestServer_VisibleAndCan(t *testing.T) {
 		can      []domain.Permission // exactly, when set
 		canHolds domain.Permission
 	}{
-		{name: "viewer on their factory", p: viewer, f: mxF, visible: true, can: []domain.Permission{"factory:read"}},
+		{name: "viewer on their factory", p: viewer, f: mxF, visible: true, can: []domain.Permission{"factory:read", "intake:read"}},
 		{name: "viewer on another", p: viewer, f: mxG, visible: false, can: []domain.Permission{}},
 		{name: "member's org permissions", p: viewer, can: []domain.Permission{"connection:browse", "connection:read", "credential:read", "knowledge:read", "member:read", "org:read", "personal_token:read"}},
 		{name: "a stale owner may still be offered deleting", p: stale, canHolds: "org:delete"},

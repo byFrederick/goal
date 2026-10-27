@@ -130,3 +130,37 @@ FROM work_items w
 WHERE w.factory_id = sqlc.arg(factory_id) AND w.trigger IS NOT NULL AND w.created_at >= sqlc.arg(since)
 GROUP BY w.trigger
 ORDER BY w.trigger;
+
+-- name: LastItemSources :many
+-- The factory's newest items (created_at, then id) by source, with each source's first and last
+-- instants.
+WITH last AS (
+  SELECT source, created_at FROM work_items
+  WHERE factory_id = sqlc.arg(factory_id)
+  ORDER BY created_at DESC, id DESC
+  LIMIT sqlc.arg(max_items)
+)
+SELECT coalesce(source, '')::text AS source, count(*) AS items, min(created_at)::timestamptz AS first_at,
+       max(created_at)::timestamptz AS last_at
+FROM last
+GROUP BY 1
+ORDER BY 1;
+
+-- name: TriggerDays :many
+-- The factory's firings that created an item, per trigger and UTC day.
+SELECT trigger, (date_trunc('day', at AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')::timestamptz AS day, count(*) AS created
+FROM trigger_firings
+WHERE factory_id = sqlc.arg(factory_id) AND outcome = 'created' AND at >= sqlc.arg(since)
+GROUP BY 1, 2
+ORDER BY 1, 2;
+
+-- name: TriggerFirings :many
+-- The trigger's firings newest first, with their items' numbers (0 for none) and merged events.
+SELECT f.id, f.factory_id, f.trigger, f.source, f.event_key, f.idempotency_key, f.dedupe, f.outcome, f.reason, f.item_id, f.at,
+       coalesce(w.number, 0)::bigint AS item_number,
+       EXISTS (SELECT 1 FROM item_events e WHERE e.item_id = f.item_id AND e.kind = 'merged') AS merged
+FROM trigger_firings f
+LEFT JOIN work_items w ON w.id = f.item_id
+WHERE f.factory_id = sqlc.arg(factory_id) AND f.trigger = sqlc.arg(trigger)
+ORDER BY f.at DESC, f.id DESC
+LIMIT sqlc.arg(max_rows);

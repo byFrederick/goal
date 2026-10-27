@@ -286,3 +286,27 @@ type TriggerStat struct {
 	Merged   int
 	SpendUSD float64
 }
+
+// SourceWindow is where a factory's newest items came from: how many of them by source (as
+// SourceCount, by source) and when the oldest (From) and the newest (To) of them were created.
+// From and To are zero without items.
+type SourceWindow struct {
+	Counts   []SourceCount
+	From, To time.Time
+}
+
+// TriggerDay is how many items a trigger's firings created on one UTC day, Day its midnight.
+type TriggerDay struct {
+	Trigger string
+	Day     time.Time
+	Created int
+}
+
+// FiringEntry is one firing as a trigger's recent events show it: the firing, the number of the
+// item it created (0 when it created none or that item is gone) and whether that item has a
+// merged event.
+type FiringEntry struct {
+	Firing     TriggerFiring
+	ItemNumber int64
+	Merged     bool
+}

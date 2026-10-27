@@ -1593,6 +1593,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/intake": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Where the factory's newest items came from, and its triggers
+         * @description The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
+         */
+        get: operations["getIntake"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One trigger with this week's results and its recent events
+         * @description The trigger as getIntake shows it, what the items it created in the weekly budget's window (the last 7×24 hours) came to, and its 20 newest events. Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
+         */
+        get: operations["getIntakeTrigger"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/metrics/lead-time": {
         parameters: {
             query?: never;
@@ -4251,6 +4303,91 @@ export interface components {
                  */
                 per_day: number;
             }[];
+        };
+        Intake: {
+            /** @description How many items the sources count */
+            items: number;
+            /**
+             * Format: date
+             * @description The UTC day the oldest of them was created; null without items
+             */
+            from: string | null;
+            /**
+             * Format: date
+             * @description The UTC day the newest of them was created; null without items
+             */
+            to: string | null;
+            /** @description How many of the items came from each source, zero included. Items whose creator recorded no source count in items only. */
+            sources: {
+                people: number;
+                cli: number;
+                api: number;
+                schedule: number;
+                webhook: number;
+                github: number;
+            };
+            /** @description The current definition's board.triggers, in definition order */
+            triggers: components["schemas"]["IntakeTrigger"][];
+        };
+        IntakeTrigger: {
+            name: string;
+            enabled: boolean;
+            /** @enum {string} */
+            source: "schedule" | "webhook" | "github";
+            /** @description The trigger's event key, as in the definition (schedule, github.check_run.failed, webhook.<endpoint>[.<event>]) */
+            on: string;
+            /** @description A plain summary of when it fires: the cron and its time zone for a schedule ("0 8 * * MON-FRI, Europe/Berlin"), the event key otherwise */
+            when: string;
+            create: {
+                type: string;
+                station: string;
+                lane: string | null;
+                expedite: boolean;
+            };
+            /** @description The items it created on each of the last 7 UTC days, oldest first, ending today */
+            days: number[];
+            /** @description Why it may not be creating items. missing_connection: it listens on a webhook endpoint the factory does not have (no endpoint of its name for webhook.<name>, none of kind github for github.*). refused_deliveries: its endpoints refused deliveries in the last 7 days, counted over each endpoint's 100 newest deliveries. */
+            problem: {
+                /** @enum {string} */
+                kind: "missing_connection" | "refused_deliveries";
+                message: string;
+            } | null;
+        };
+        IntakeTriggerDetail: {
+            trigger: components["schemas"]["IntakeTrigger"];
+            /** @description The items it created in the weekly budget's window (the last 7×24 hours) */
+            week: {
+                created: number;
+                /** @description How many of them have been merged */
+                merged: number;
+                /**
+                 * Format: double
+                 * @description What their agent runs cost
+                 */
+                spend_usd: number;
+            };
+            /** @description Its 20 newest events, newest first */
+            events: components["schemas"]["IntakeEvent"][];
+        };
+        IntakeEvent: {
+            /** @description The event's value of the trigger's only.dedupe field, or its event key without one */
+            title: string;
+            /** @description The event key it matched */
+            event: string;
+            /** Format: date-time */
+            at: string;
+            /**
+             * @description created an item; merged once that item has been merged; skipped with the reason
+             * @enum {string}
+             */
+            outcome: "created" | "merged" | "skipped";
+            /**
+             * Format: int64
+             * @description The item it created; null when it created none or that item is gone
+             */
+            item_number: number | null;
+            /** @description Why it was skipped; null otherwise */
+            reason: string | null;
         };
         LeadTimeBridge: {
             /** Format: date */
@@ -8263,6 +8400,63 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConstraintReport"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getIntake: {
+        parameters: {
+            query?: {
+                /** @description How many of the newest items the sources count (default 48) */
+                items?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The factory's intake */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Intake"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getIntakeTrigger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The trigger */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntakeTriggerDetail"];
                 };
             };
             default: components["responses"]["Problem"];

@@ -64,6 +64,9 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Firing_FailureStreakCountsSinceTheLastCreated", testFailureStreak},
 		{"ScheduleLock_OneHolderAtATime", testScheduleLock},
 		{"Tally_SourcesAndTriggerStatsOverAWindow", testTallies},
+		{"Tally_LastItemsSources", testItemSources},
+		{"Tally_TriggerDaysByUTCDay", testTriggerDays},
+		{"Firing_ListNewestFirstWithItems", testFirings},
 		{"OtherOrg_ReachesNoEndpoint", testIsolation},
 		{"OtherOrg_CountsNothing", testIsolatedReads},
 		{"OtherOrg_ReadsNoFiring", testIsolatedFirings},
@@ -813,6 +816,119 @@ func testTallies(f *fixture) {
 	}
 }
 
+// ItemSources counts the factory's newest items only, by source, with their first and last
+// instants; a factory without items has none.
+func testItemSources(f *fixture) {
+	t := f.t
+
+	if got, err := f.in.ItemSources(f.ctx(), f.factory, 48); err != nil || len(got.Counts) != 0 || !got.From.IsZero() || !got.To.IsZero() {
+		t.Errorf("ItemSources of no items = %+v, %v; want none", got, err)
+	}
+
+	f.item(domain.ItemFromPeople, "", t0.Add(-4*time.Hour)) // older than the newest 4
+	f.item(domain.ItemFromCLI, "", t0.Add(-3*time.Hour))
+	f.item(domain.ItemFromGitHub, flaky, t0.Add(-2*time.Hour))
+	f.item(domain.ItemFromGitHub, flaky, t0.Add(-time.Hour))
+	f.item("", "", t0)
+
+	otherFactory := f.NewFactory(t, f.org)
+	if _, err := f.Store.CreateItem(f.ctx(), domain.NewItem{
+		FactoryID: otherFactory, Type: "fix", Title: "elsewhere", Station: station, State: domain.StateQueued,
+		Class: domain.ClassStandard, CreatedAt: t0.Add(time.Hour), Source: domain.ItemFromAPI,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.in.ItemSources(f.ctx(), f.factory, 4)
+	want := []domain.SourceCount{{Source: "", Items: 1}, {Source: domain.ItemFromCLI, Items: 1}, {Source: domain.ItemFromGitHub, Items: 2}}
+
+	if err != nil || !slices.Equal(got.Counts, want) || !got.From.Equal(t0.Add(-3*time.Hour)) || !got.To.Equal(t0) {
+		t.Errorf("ItemSources(4) = %+v, %v; want %v from %v to %v", got, err, want, t0.Add(-3*time.Hour), t0)
+	}
+}
+
+// TriggerDays count created firings only, at or after since, per trigger and UTC day.
+func testTriggerDays(f *fixture) {
+	t := f.t
+	day1 := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+
+	f.fire(flaky, "before", "", f.item(domain.ItemFromGitHub, flaky, t0).ID, t0.Add(-2*time.Hour))
+	f.fire(flaky, "e1", "", f.item(domain.ItemFromGitHub, flaky, t0).ID, t0)
+	f.fire(flaky, "e2", "", f.item(domain.ItemFromGitHub, flaky, t0).ID, t0.Add(time.Hour))
+	f.fire(flaky, "e3", "", f.item(domain.ItemFromGitHub, flaky, t0).ID, t0.Add(13*time.Hour)) // 01:00 the next day
+	f.fire(flaky, "skipped", "", "", t0)
+	f.fire(nightly, "n1", "", f.item(domain.ItemFromSchedule, nightly, t0).ID, t0)
+
+	got, err := f.in.TriggerDays(f.ctx(), f.factory, t0.Add(-time.Hour))
+	want := []domain.TriggerDay{
+		{Trigger: flaky, Day: day1, Created: 2}, {Trigger: flaky, Day: day1.AddDate(0, 0, 1), Created: 1}, {Trigger: nightly, Day: day1, Created: 1},
+	}
+
+	if err != nil || len(got) != len(want) {
+		t.Fatalf("TriggerDays = %+v, %v; want %+v", got, err, want)
+	}
+
+	for i := range want {
+		if got[i].Trigger != want[i].Trigger || !got[i].Day.Equal(want[i].Day) || got[i].Created != want[i].Created {
+			t.Errorf("TriggerDays[%d] = %+v; want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+// Firings are the trigger's own, newest first, with their items' numbers and merged events.
+func testFirings(f *fixture) {
+	t := f.t
+	a := f.item(domain.ItemFromGitHub, flaky, t0)
+	b := f.item(domain.ItemFromGitHub, flaky, t0)
+
+	if err := f.Store.AppendEvents(f.ctx(), domain.Event{
+		FactoryID: f.factory, ItemID: a.ID, At: t0, Kind: domain.EventMerged, Station: station, Actor: domain.ActorEngine,
+		Data: map[string]any{"sha": "abc123"},
+	}); err != nil {
+		t.Fatalf("AppendEvents merged: %v", err)
+	}
+
+	f.fire(flaky, "e1", "", a.ID, t0)
+
+	if _, _, err := f.in.RecordFiring(f.ctx(), domain.TriggerFiring{
+		FactoryID: f.factory, Trigger: flaky, Source: domain.TriggerGitHub, EventKey: "github.check_run.failed",
+		IdempotencyKey: "e2", Outcome: domain.FiringSkipped, Reason: "dedupe: an open item has this check", At: t0.Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	f.fire(flaky, "e3", "", b.ID, t0.Add(2*time.Hour))
+	f.fire(nightly, "n1", "", "", t0.Add(3*time.Hour))
+
+	got, err := f.in.Firings(f.ctx(), f.factory, flaky, 10)
+	if err != nil || len(got) != 3 {
+		t.Fatalf("Firings = %+v, %v; want 3", got, err)
+	}
+
+	type entry struct {
+		key, reason string
+		number      int64
+		merged      bool
+	}
+
+	want := []entry{{key: "e3", number: b.Number}, {key: "e2", reason: "dedupe: an open item has this check"}, {key: "e1", number: a.Number, merged: true}}
+
+	for i, w := range want {
+		g := entry{key: got[i].Firing.IdempotencyKey, reason: got[i].Firing.Reason, number: got[i].ItemNumber, merged: got[i].Merged}
+		if g != w {
+			t.Errorf("Firings[%d] = %+v; want %+v", i, g, w)
+		}
+	}
+
+	if !got[2].Firing.At.Equal(t0) || got[2].Firing.ItemID != a.ID || got[2].Firing.Trigger != flaky {
+		t.Errorf("Firings[2] = %+v; want e1 at %v with item %s", got[2].Firing, t0, a.ID)
+	}
+
+	if page, err := f.in.Firings(f.ctx(), f.factory, flaky, 2); err != nil || len(page) != 2 || page[0].Firing.IdempotencyKey != "e3" {
+		t.Errorf("Firings(2) = %+v, %v; want e3 and e2", page, err)
+	}
+}
+
 // spent records a finished run of it that cost usd.
 func (f *fixture) spent(it domain.Item, usd float64) {
 	f.t.Helper()
@@ -903,6 +1019,21 @@ func testIsolatedReads(f *fixture) {
 	if got, err := f.in.TriggerStats(labs, f.factory, t0.Add(-time.Hour)); err != nil || len(got) != 0 {
 		t.Errorf("labs TriggerStats = %v, %v; want none", got, err)
 	}
+
+	f.isolatedIntakeReads(labs)
+}
+
+// isolatedIntakeReads checks that labs reads none of the fixture's sources and trigger days.
+func (f *fixture) isolatedIntakeReads(labs context.Context) {
+	t := f.t
+
+	if got, err := f.in.ItemSources(labs, f.factory, 48); err != nil || len(got.Counts) != 0 || !got.From.IsZero() {
+		t.Errorf("labs ItemSources = %+v, %v; want none", got, err)
+	}
+
+	if got, err := f.in.TriggerDays(labs, f.factory, t0.Add(-time.Hour)); err != nil || len(got) != 0 {
+		t.Errorf("labs TriggerDays = %v, %v; want none", got, err)
+	}
 }
 
 // Another organization reads none of the fixture's firings.
@@ -918,6 +1049,10 @@ func testIsolatedFirings(f *fixture) {
 
 	if n, err := f.in.FailureStreak(labs, f.factory, flaky, "unit"); err != nil || n != 0 {
 		t.Errorf("labs FailureStreak = %d, %v; want 0", n, err)
+	}
+
+	if got, err := f.in.Firings(labs, f.factory, flaky, 10); err != nil || len(got) != 0 {
+		t.Errorf("labs Firings = %+v, %v; want none", got, err)
 	}
 }
 
@@ -958,6 +1093,9 @@ func testNoOrg(f *fixture) {
 		"FailureStreak":    func() error { _, err := f.in.FailureStreak(ctx, f.factory, flaky, "unit"); return err },
 		"SourceTally":      func() error { _, err := f.in.SourceTally(ctx, f.factory, t0); return err },
 		"TriggerStats":     func() error { _, err := f.in.TriggerStats(ctx, f.factory, t0); return err },
+		"ItemSources":      func() error { _, err := f.in.ItemSources(ctx, f.factory, 48); return err },
+		"TriggerDays":      func() error { _, err := f.in.TriggerDays(ctx, f.factory, t0); return err },
+		"Firings":          func() error { _, err := f.in.Firings(ctx, f.factory, flaky, 10); return err },
 	}
 
 	for name, call := range calls {
