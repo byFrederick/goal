@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -49,6 +50,13 @@ type claimed struct {
 	item    domain.Item
 	lease   domain.Lease
 	agent   domain.AgentSpec
+	// What the organization policy decided at run start (ADR 0024), the same for each of the
+	// claim's runs: the model, the commands added to the agent's deny rules, how long one run
+	// may take and how long the box may live (0: no policy limit).
+	model    string
+	deny     []string
+	timeout  time.Duration
+	boxLimit time.Duration
 }
 
 // work runs the agent on a claimed item until the item moves on, is blocked, is released (at
@@ -62,6 +70,17 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 	var err error
 	if c.agent, err = agentFor(l, st, it.Lane); err != nil {
 		e.block(ctx, log, c, err.Error())
+		return
+	}
+
+	refusal, err := e.applyPolicy(ctx, &c)
+
+	switch {
+	case err != nil:
+		e.block(ctx, log, c, err.Error())
+		return
+	case refusal != "":
+		e.escalate(ctx, log, c, refusal)
 		return
 	}
 
@@ -203,6 +222,53 @@ func (e *Engine) backoff(ctx context.Context, lease domain.Lease, d time.Duratio
 	return ctx.Err()
 }
 
+// applyPolicy reads the organization policy once for the claim and applies it as a ceiling over
+// the version (ADR 0024 decision 3): the run's model is its agent's, its factory's or the
+// policy's default; its deny rules get the policy's denied commands; its run and box take no
+// longer than the policy's box time limit. It returns why the claim may not run, when its model
+// is not one the policy allows, and an error when the policy cannot be read. Without Policies
+// only the version decides.
+func (e *Engine) applyPolicy(ctx context.Context, c *claimed) (string, error) {
+	c.model, c.timeout = cmp.Or(c.agent.Model, c.line.Runtime.Model), e.cfg.TaskTimeout
+
+	if e.policies == nil {
+		return "", nil
+	}
+
+	p, err := e.policies.Get(ctx)
+	if err != nil {
+		return "", fmt.Errorf("read the organization policy: %w", err)
+	}
+
+	c.model = cmp.Or(c.model, p.DefaultModel)
+	if c.model != "" && !slices.Contains(p.AllowedModels, c.model) {
+		return fmt.Sprintf("the organization policy no longer allows model %s, which agent %s runs on: "+
+			"choose one of %s for it, or allow it in the policy", c.model, c.agent.Name, strings.Join(p.AllowedModels, ", ")), nil
+	}
+
+	c.deny = p.DeniedCommands
+
+	if p.BoxTimeLimitMinutes > 0 {
+		c.boxLimit = time.Duration(p.BoxTimeLimitMinutes) * time.Minute
+		c.timeout = min(c.timeout, c.boxLimit)
+	}
+
+	return "", nil
+}
+
+// escalate hands a claimed item that may not run to a person: it waits at its station with the
+// reason in its event, and the lease is released.
+func (e *Engine) escalate(ctx context.Context, log *slog.Logger, c claimed, reason string) {
+	now := e.clock.Now()
+
+	e.transition(ctx, log, ports.Transition{
+		ItemID: c.item.ID, From: domain.Position{Station: c.station.ID, State: domain.StateInProgress},
+		To: domain.Position{Station: c.station.ID, State: domain.StateWaitingHuman}, Lease: &c.lease, Outcome: domain.LeaseEscalated,
+		At:     now,
+		Events: []domain.Event{event(c.item, domain.EventWaitingHuman, now, domain.ActorEngine, map[string]any{keyReason: reason})},
+	})
+}
+
 // agentFor is the agent that works on an item of lane at st, or why none can: no agent for the
 // lane, or a line that does not run on connections alone (domain.Line.Refusal), refused before
 // any run, box or connection.
@@ -301,13 +367,13 @@ func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (
 func (e *Engine) runOnce(ctx context.Context, c claimed, b *box, feedback string) (domain.RunResult, checked, error) {
 	runID, err := e.store.StartRun(ctx, ports.NewRun{
 		FactoryID: c.line.FactoryID, DefinitionVersionID: c.line.VersionID, ItemID: c.item.ID, Station: c.station.ID,
-		Agent: c.agent.Name, Model: modelOf(c), StartedAt: e.clock.Now(),
+		Agent: c.agent.Name, Model: c.model, StartedAt: e.clock.Now(),
 	})
 	if err != nil {
 		return domain.RunResult{}, checked{}, fmt.Errorf("record run: %w", err)
 	}
 
-	taskCtx, stop := context.WithTimeout(ctx, e.cfg.TaskTimeout)
+	taskCtx, stop := context.WithTimeout(ctx, c.timeout)
 	defer stop()
 
 	// Heartbeat from before the start: pulling the image, preparing the sandbox and the checks
@@ -403,7 +469,7 @@ func (e *Engine) agent(ctx context.Context, c claimed, runID domain.RunID, b *bo
 
 	started := e.clock.Now()
 
-	st, err := execLines(ctx, b.sandbox, ports.Exec{Argv: argvAgent, Env: env}, func(line []byte) {
+	st, err := execLines(ctx, b.sandbox, ports.Exec{Argv: argvAgent, Env: env, Timeout: c.timeout}, func(line []byte) {
 		ev, f, err := domain.DecodeWorkerLine(line, e.clock.Now())
 
 		switch {
@@ -431,8 +497,8 @@ func (e *Engine) agent(ctx context.Context, c claimed, runID domain.RunID, b *bo
 	}
 
 	switch {
-	case errors.Is(ctx.Err(), context.DeadlineExceeded):
-		res.Status, res.Output, res.Error = domain.RunFailed, nil, fmt.Sprintf("timed out after %s", e.cfg.TaskTimeout)
+	case errors.Is(ctx.Err(), context.DeadlineExceeded), err == nil && st.TimedOut:
+		res.Status, res.Output, res.Error = domain.RunFailed, nil, fmt.Sprintf("timed out after %s", c.timeout)
 	case ctx.Err() != nil:
 		res.Status, res.Output, res.Error = domain.RunCancelled, nil, ctx.Err().Error()
 	case err != nil:
@@ -594,7 +660,7 @@ func (e *Engine) gatewayToken(ctx context.Context, c claimed, runID domain.RunID
 
 	token, err := domain.SignTaskToken([]byte(key), domain.TaskClaims{
 		OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, VersionID: c.line.VersionID, ItemID: c.item.ID, Station: c.station.ID, Agent: c.agent.Name, RunID: runID,
-		Connections: c.agent.Connections, ExpiresAt: e.clock.Now().Add(e.cfg.TaskTimeout + e.cfg.LeaseTTL).Unix(),
+		Connections: c.agent.Connections, Model: c.model, DeniedCommands: c.deny, ExpiresAt: e.clock.Now().Add(c.timeout + e.cfg.LeaseTTL).Unix(),
 	})
 	if err != nil {
 		return "", fmt.Errorf("gateway token: %w", err)
@@ -840,12 +906,4 @@ func agentSpec(l domain.Line, name string) (domain.AgentSpec, error) {
 	}
 
 	return a, nil
-}
-
-func modelOf(c claimed) string {
-	if c.agent.Model != "" {
-		return c.agent.Model
-	}
-
-	return c.line.Runtime.Model
 }

@@ -19,8 +19,9 @@ var ErrBadTaskToken = errors.New("bad task token")
 const TaskAudience = "goal-gateway"
 
 // TaskClaims scope one agent task's access to the MCP gateway: which organization, factory,
-// definition version, item, station, agent and run it acts for, which connections it may use
-// and until when.
+// definition version, item, station, agent and run it acts for, which connections it may use,
+// what the organization policy decided at run start (the model and the denied commands) and
+// until when.
 type TaskClaims struct {
 	// Audience is always TaskAudience: SignTaskToken sets it and VerifyTaskToken requires it.
 	Audience  string    `json:"aud"`
@@ -34,7 +35,13 @@ type TaskClaims struct {
 	Agent       string              `json:"a"`
 	RunID       RunID               `json:"r"`
 	Connections []string            `json:"c,omitempty"`
-	ExpiresAt   int64               `json:"e"` // unix seconds
+	// Model is the run's model: its agent's, its factory's or the organization policy's default
+	// (ADR 0024). Tokens issued before the policy name none; the gateway then takes the version's.
+	Model string `json:"m,omitempty"`
+	// DeniedCommands are the organization policy's denied commands at run start, which the
+	// gateway adds to the agent's deny rules whatever the version says.
+	DeniedCommands []string `json:"d,omitempty"`
+	ExpiresAt      int64    `json:"e"` // unix seconds
 }
 
 // SignTaskToken issues a per-task gateway token for TaskAudience, whatever c.Audience says. Any
