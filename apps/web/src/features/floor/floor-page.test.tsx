@@ -278,13 +278,12 @@ function renderFloor({
 }
 
 describe('FloorPage', () => {
-  it('the Inbox button opens the drawer with what waits on this factory', async () => {
+  it('the header Needs you link counts what waits on this factory and leads to its page', async () => {
     renderFloor({ entries: [ship] });
 
-    fireEvent.click(await screen.findByRole('button', { name: /^Inbox/ }));
-    const drawer = await screen.findByRole('dialog', { name: 'Inbox' });
-    expect(within(drawer).getByText('Ready to merge')).toBeTruthy();
-    expect(within(drawer).getByRole('button', { name: 'Merge sre#3' })).toBeTruthy();
+    const link = await screen.findByRole('link', { name: /^Needs you/ });
+    expect(link.getAttribute('href')).toBe('/o/acme/needs-you?factory=sre');
+    expect(link.textContent).toContain('1');
   });
 
   it('has no Needs you card, with or without waiting entries', async () => {
@@ -292,7 +291,6 @@ describe('FloorPage', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Floor' })).toBeTruthy();
     expect(screen.queryByRole('region', { name: 'Needs you' })).toBeNull();
-    expect(screen.queryByText('Needs you')).toBeNull();
   });
 
   it('shows the line running and the range it covers, against the 7 days before', async () => {

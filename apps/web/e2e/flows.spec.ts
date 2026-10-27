@@ -85,11 +85,9 @@ test('the factories home shows each factory’s week and what waits on you', asy
     );
   }
 
-  const waiting = page.getByRole('region', { name: 'Waiting on you', exact: true });
+  const waiting = page.getByRole('region', { name: 'Needs you first', exact: true });
   await expect(waiting.getByRole('listitem')).toHaveCount(5);
-  const newest = waiting.getByRole('link', { name: /^Open \S+#\d+$/ });
-  const ref = (await newest.textContent())?.replace('Open ', '') ?? '';
-  await expect(waiting.getByRole('listitem').first()).toContainText(ref);
+  await expect(waiting.getByRole('link', { name: 'Open all' })).toHaveAttribute('href', '/o/acme/needs-you');
 
   // Someone else approves (the CLI, another tab): the stream brings the change.
   await request.post('/v1/orgs/acme/items/goal%2312/approve');
@@ -112,8 +110,8 @@ test('on a phone: the banner leads to what waits, a card to its floor', async ({
   );
 
   await banner.click();
-  await expect(page).toHaveURL(/\/o\/acme#waiting$/);
-  await expect(page.getByRole('region', { name: 'Waiting on you', exact: true })).toBeInViewport();
+  await expect(page).toHaveURL(/\/o\/acme\/needs-you$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Needs you' })).toBeVisible();
 
   // The whole card is the link: a tap on its stats opens the factory.
   await page.getByRole('article', { name: 'sre', exact: true }).click();
@@ -129,7 +127,7 @@ test('an organization without budgets or factories says so', async ({ page, requ
         : /^Goal’s factories\. Nothing is waiting on you, and \$\d+\.\d\d was spent this week\.$/,
     ),
   ).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Waiting on you', exact: true })).toContainText(
+  await expect(page.getByRole('region', { name: 'Needs you first', exact: true })).toContainText(
     'Nothing is waiting on you.',
   );
 
@@ -253,55 +251,49 @@ test('the sidebar marks Home on the organization pages', async ({ page }) => {
 test('the floor says what waits on you and leads to it', async ({ page }) => {
   await page.goto('/o/acme/f/goal');
 
-  // What waits on you is the Inbox: the decisions, then blocked work, each a row that leads to its item.
-  await page.getByRole('button', { name: /^Inbox/ }).click();
-  const drawer = page.getByRole('dialog', { name: 'Inbox' });
-  await expect(drawer.getByRole('heading', { name: 'Needs a decision' })).toBeVisible();
-  await expect(drawer.getByRole('link', { name: /goal#5 .*Blocked at Build/ })).toBeVisible();
-  await expect(drawer.getByRole('link', { name: /goal#16/ })).toHaveCount(0);
+  // What waits on you is the Needs you page, filtered to this factory: the decisions and blocked work,
+  // each a row that leads to its item.
+  await page.getByRole('link', { name: /^Needs you/ }).click();
+  await expect(page).toHaveURL(/\/o\/acme\/needs-you\?factory=goal$/);
+  await expect(page.getByRole('link', { name: /goal#5 .*Blocked at Build/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /goal#16/ })).toHaveCount(0);
   await expectAccessible(page);
 
-  await drawer.getByRole('link', { name: /goal#5 .*Blocked at Build/ }).click();
+  await page.getByRole('link', { name: /goal#5 .*Blocked at Build/ }).click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/items\/5$/);
 });
 
 test('a stopped line is what its floor needs first, and clears from it', async ({ page, request }) => {
-  await page.goto('/o/acme/f/support');
-  await page.getByRole('button', { name: /^Inbox/ }).click();
-  const drawer = page.getByRole('dialog', { name: 'Inbox' });
+  await page.goto('/o/acme/needs-you?factory=support');
   await expect(
-    drawer.getByRole('link', { name: /^Line stopped: Answers sent back 4 of the last 10 times/ }),
+    page.getByRole('link', { name: /^Line stopped: Answers sent back 4 of the last 10 times/ }),
   ).toBeVisible();
 
   // Someone clears it (the CLI, another tab): the stream brings the change.
   await request.post('/v1/orgs/acme/factories/support/andon/clear', { data: {} });
-  await expect(drawer.getByRole('link', { name: /^Line stopped/ })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /^Line stopped/ })).toHaveCount(0);
 });
 
-test('approve from the phone: the Inbox drawer decides the oldest decision', async ({ page }) => {
-  test.skip(!isPhone(page), 'the phone Board is the one that opens the Inbox drawer (the Items header has none)');
-  await page.goto('/o/acme/f/sre/board');
-  await expect(page.getByRole('heading', { name: 'Needs you' })).toHaveCount(0);
+test('approve from the phone: the Needs you page decides the oldest decision', async ({ page }) => {
+  test.skip(!isPhone(page), 'the approve view is the phone layout of the Needs you page');
+  await page.goto('/o/acme/needs-you?factory=sre');
 
-  await page.getByRole('button', { name: /^Inbox/ }).click();
-  const drawer = page.getByRole('dialog', { name: 'Inbox' });
-  await expect(drawer.getByRole('link', { name: /sre#4/ })).toBeVisible();
+  await page.getByRole('link', { name: /sre#4/ }).click();
+  await expect(page).toHaveURL(/\/o\/acme\/needs-you\?.*factory=sre/);
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
-  await drawer.getByRole('button', { name: 'Approve sre#4' }).click();
+  await page.getByRole('button', { name: 'Approve', exact: true }).click();
   await expectToast(page, 'Approved sre#4.');
-  await expect(drawer.getByRole('button', { name: 'Approve sre#4' })).toHaveCount(0);
 });
 
 test('merging from the phone names every pull request the merge lands', async ({ page, request }) => {
-  test.skip(!isPhone(page), 'the phone Board is the one that opens the Inbox drawer (the Items header has none)');
+  test.skip(!isPhone(page), 'the approve view is the phone layout of the Needs you page');
   // goal#12 is older; once approved, goal#6 (two pull requests, at Merge) is the one to decide.
   await request.post('/v1/orgs/acme/items/goal%2312/approve', { data: {} });
-  await page.goto('/o/acme/f/goal/board');
-  await page.getByRole('button', { name: /^Inbox/ }).click();
-  const drawer = page.getByRole('dialog', { name: 'Inbox' });
-  await drawer.getByRole('button', { name: 'Merge goal#6' }).click();
+  await page.goto('/o/acme/needs-you?factory=goal');
+  await page.getByRole('link', { name: /goal#6/ }).click();
+  await page.getByRole('button', { name: 'Merge', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Merge 2 pull requests?' });
   await expect(dialog.getByRole('link', { name: /Review acme\/goal PR #38 first/ })).toBeVisible();
   await expect(dialog.getByRole('link', { name: /Review acme\/design-tokens MR !12 first/ })).toBeVisible();

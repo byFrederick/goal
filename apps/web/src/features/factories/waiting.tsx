@@ -1,5 +1,5 @@
-// What waits on people across the organization (C §10.7): the "Waiting on you" list (newest
-// first, from GET /inbox) and, on a phone, the violet banner above the cards that leads to it.
+// What waits on people across the organization (C §10.7): the "Needs you first" list (newest first,
+// from GET /inbox) and, on a phone, the violet banner above the cards. Both lead to the Needs you page.
 import { Link } from '@tanstack/react-router';
 import { ChevronRight, CircleCheck, CircleDot } from 'lucide-react';
 import type { FactoryOverviewList, Inbox, InboxEntry, OrgSummary } from '../../api/types';
@@ -9,9 +9,6 @@ import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { ListRow } from '../../ui/list-row';
 import { bannerDetail, possessive } from './sentences';
-
-/** The list's anchor: the phone banner links to it. */
-export const waitingId = 'waiting';
 
 const iconProps = { size: 18, strokeWidth: 1.5 } as const;
 
@@ -26,29 +23,25 @@ const newestFirst = (entries: readonly InboxEntry[]) =>
 
 export function WaitingList({ org, inbox, className }: { org: OrgSummary; inbox: Inbox; className?: string }) {
   const entries = newestFirst(inbox.entries);
-  const newest = entries.find((e) => e.item !== null);
   const now = Date.now();
 
   return (
     <SectionCard
-      id={waitingId}
-      title="Waiting on you"
+      title="Needs you first"
       description={`Across ${possessive(org.name)} factories, newest first`}
       aside={
-        newest?.item ? (
-          <Link
-            to="/o/$org/f/$factory/items/$ref"
-            params={{ org: org.slug, factory: newest.factory.name, ref: refParam(newest.item.ref) }}
-            className="shrink-0 text-sm whitespace-nowrap underline transition-colors duration-200 hover:text-run"
-          >
-            Open {newest.item.ref}
-          </Link>
-        ) : null
+        <Link
+          to="/o/$org/needs-you"
+          params={{ org: org.slug }}
+          className="shrink-0 text-sm whitespace-nowrap underline transition-colors duration-200 hover:text-run"
+        >
+          Open all
+        </Link>
       }
       className={className}
     >
       {entries.length === 0 ? (
-        <p className="m-0 border-t border-line pt-3 text-[15px] text-muted">Nothing is waiting on you.</p>
+        <p className="m-0 border-t border-line pt-3 text-body text-muted">Nothing is waiting on you.</p>
       ) : (
         <ul className="@container m-0 -mt-1 -mb-2 list-none p-0">
           {entries.map((entry) => (
@@ -59,7 +52,9 @@ export function WaitingList({ org, inbox, className }: { org: OrgSummary; inbox:
         </ul>
       )}
       {inbox.truncated ? (
-        <p className="m-0 text-[13px] text-muted">Showing the newest {plural(entries.length, 'entry', 'entries')}.</p>
+        <p className="m-0 text-secondary text-muted">
+          Showing the newest {plural(entries.length, 'entry', 'entries')}.
+        </p>
       ) : null}
     </SectionCard>
   );
@@ -71,7 +66,7 @@ function WaitingRow({ org, entry, now }: { org: string; entry: InboxEntry; now: 
   const aside = (
     <>
       <Chip>{entry.factory.name}</Chip>
-      <time dateTime={entry.since} className="text-[13px] text-muted @[480px]:min-w-11 @[480px]:text-right">
+      <time dateTime={entry.since} className="text-secondary text-muted @[480px]:min-w-11 @[480px]:text-right">
         {age}
       </time>
     </>
@@ -122,17 +117,20 @@ export function WaitingBanner({
 
   const only = total === 1 ? newestFirst(inbox.entries).find((e) => e.item !== null) : undefined;
   const className =
-    'grid min-h-14 grid-cols-[36px_minmax(0,1fr)_12px] items-center gap-3 rounded-card bg-you-tint px-3.5 py-2 text-ink no-underline md:hidden';
+    'flex min-h-14 items-center gap-3 rounded-card bg-you-tint px-4 py-2 text-ink no-underline md:hidden';
   const content = (
     <>
-      <span aria-hidden="true" className="flex size-9 items-center justify-center rounded-control bg-card text-you">
+      <span
+        aria-hidden="true"
+        className="flex size-9 shrink-0 items-center justify-center rounded-control bg-card text-you"
+      >
         <CircleCheck {...iconProps} />
       </span>
-      <span className="min-w-0">
-        <span className="block text-[15px] font-medium">{total} waiting on you</span>
-        <span className="block text-[13px] text-you-ink">{bannerDetail(overview.factories)}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-body font-medium">{total} waiting on you</span>
+        <span className="block text-secondary text-you-ink">{bannerDetail(overview.factories)}</span>
       </span>
-      <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" className="text-you-ink" />
+      <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-you-ink" />
     </>
   );
 
@@ -145,8 +143,8 @@ export function WaitingBanner({
       {content}
     </Link>
   ) : (
-    <a href={`#${waitingId}`} className={className}>
+    <Link to="/o/$org/needs-you" params={{ org: org.slug }} className={className}>
       {content}
-    </a>
+    </Link>
   );
 }
