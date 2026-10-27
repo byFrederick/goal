@@ -113,6 +113,9 @@ type StationTimes struct {
 	// rejections among them.
 	Verdicts int
 	Rejected int
+	// SpendUSD is the cost of the agent runs at the station that started in the window, failed
+	// and retried runs included.
+	SpendUSD float64
 }
 
 // BusyRatio is the share of the window's slot time (slots × window, at least one slot) that

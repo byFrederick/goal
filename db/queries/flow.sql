@@ -87,6 +87,14 @@ WHERE factory_id = sqlc.arg(factory_id) AND kind IN ('gate_approved', 'gate_reje
   AND at >= sqlc.arg(since)::timestamptz AND at < sqlc.arg(until)::timestamptz
 GROUP BY station;
 
+-- name: StationSpend :many
+-- The cost of each station's runs started in [since, until), failed and retried ones included, on
+-- agent_runs_factory_started_idx.
+SELECT station, coalesce(sum(cost_usd), 0)::float8 AS spend_usd
+FROM agent_runs
+WHERE factory_id = sqlc.arg(factory_id) AND started_at >= sqlc.arg(since)::timestamptz AND started_at < sqlc.arg(until)::timestamptz
+GROUP BY station;
+
 -- Windowed metrics (FlowStats.FlowMetrics, DoneByBucket) over [since, until). Each keeps the
 -- items of one work type, every type when type is ''.
 

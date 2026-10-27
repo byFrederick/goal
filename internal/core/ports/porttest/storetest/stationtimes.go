@@ -13,8 +13,9 @@ import (
 // Every station is measured over the window: lease time clipped to it (a lease span that
 // straddles its start counts from the start, a live lease up to its end, one that ended before it
 // not at all), the items waiting at its end and a day before, since when the oldest of them
-// waits, and the gate verdicts given in it. The lease history begins with the earliest lease,
-// inside the window or not. Another organization measures nothing.
+// waits, the gate verdicts given in it and the cost of the agent runs started in it, failed ones
+// included, even at a station that held no lease. The lease history begins with the earliest
+// lease, inside the window or not. Another organization measures nothing.
 func testStationTimes(f *fixture) {
 	t := f.t
 	since, until := t1, t1.Add(10*time.Hour)
@@ -50,6 +51,13 @@ func testStationTimes(f *fixture) {
 		t.Fatal(err)
 	}
 
+	succeeded := func(usd float64) domain.RunResult { return domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd} }
+	f.runAt(t, c, stWork, agWorker, h(-1), succeeded(8)) // started before the window
+	f.runAt(t, c, stWork, agWorker, h(5), succeeded(0.5))
+	f.runAt(t, c, stWork, agWorker, h(6), domain.RunResult{Status: domain.RunFailed, CostUSD: 0.25})
+	f.runAt(t, c, stWork, agWorker, until, succeeded(4))  // started at the window's end
+	f.runAt(t, c, stReview, agWorker, h(7), succeeded(2)) // review held no lease
+
 	got, coverage, err := f.Flow.StationTimes(f.ctx(t), f.factory, since, until)
 	if err != nil {
 		t.Fatal(err)
@@ -64,11 +72,13 @@ func testStationTimes(f *fixture) {
 	want := []domain.StationTimes{
 		// a waits at next from 1 h to the end: 9 h.
 		{Station: stNext, WaitingNow: 1, OldestWaiting: h(1), Waiting: 9 * time.Hour, Waiters: 1},
+		// review only ran an agent.
+		{Station: stReview, SpendUSD: 2},
 		// At work the item made at 2 h waits 1 h and c from 4 h to the end; a's wait ended
 		// before the window.
 		{
 			Station: stWork, Busy: 8 * time.Hour, Leases: 2, WaitingNow: 1, WaitingDayAgo: 1, OldestWaiting: h(4),
-			Waiting: 7 * time.Hour, Waiters: 2, Verdicts: 2, Rejected: 1,
+			Waiting: 7 * time.Hour, Waiters: 2, Verdicts: 2, Rejected: 1, SpendUSD: 0.75,
 		},
 	}
 	if !reflect.DeepEqual(got, want) {
