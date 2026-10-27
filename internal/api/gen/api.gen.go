@@ -855,6 +855,24 @@ func (e QueueTrend) Valid() bool {
 	}
 }
 
+// Defines values for RepositoryOwnerKind.
+const (
+	RepositoryOwnerKindOrganization RepositoryOwnerKind = "organization"
+	RepositoryOwnerKindUser         RepositoryOwnerKind = "user"
+)
+
+// Valid indicates whether the value is a known member of the RepositoryOwnerKind enum.
+func (e RepositoryOwnerKind) Valid() bool {
+	switch e {
+	case RepositoryOwnerKindOrganization:
+		return true
+	case RepositoryOwnerKindUser:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RunStatus.
 const (
 	RunStatusCancelled RunStatus = "cancelled"
@@ -3498,6 +3516,46 @@ type Rejection struct {
 	Reason string `json:"reason"`
 }
 
+// Repository defines model for Repository.
+type Repository struct {
+	// CloneUrl Its https clone URL
+	CloneUrl string `json:"clone_url"`
+
+	// FullName <owner>/<name>
+	FullName string `json:"full_name"`
+
+	// Languages The largest first, at most 3
+	Languages []string  `json:"languages"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// RepositoryList What a code host connection reaches (GET …/connections/{connection}/repositories)
+type RepositoryList struct {
+	// Login The account the connection's credential signs in as
+	Login string `json:"login"`
+
+	// Owner The owner the repositories belong to
+	Owner string `json:"owner"`
+
+	// Owners The account first, then its organizations
+	Owners []RepositoryOwner `json:"owners"`
+
+	// Repositories The most recently updated first, at most 100
+	Repositories []Repository `json:"repositories"`
+
+	// Truncated The owner has more repositories than the 100 answered
+	Truncated bool `json:"truncated"`
+}
+
+// RepositoryOwner defines model for RepositoryOwner.
+type RepositoryOwner struct {
+	Kind  RepositoryOwnerKind `json:"kind"`
+	Login string              `json:"login"`
+}
+
+// RepositoryOwnerKind defines model for RepositoryOwner.Kind.
+type RepositoryOwnerKind string
+
 // RestoreRequest defines model for RestoreRequest.
 type RestoreRequest struct {
 	// ExpectedCurrentVersionId The version the caller saw running
@@ -4187,6 +4245,12 @@ type ListConnectionsParams struct {
 
 	// Kind Only connections of this kind
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty"`
+}
+
+// ListConnectionRepositoriesParams defines parameters for ListConnectionRepositories.
+type ListConnectionRepositoriesParams struct {
+	// Owner The account or organization whose repositories to list; absent, the connection's own account
+	Owner *string `form:"owner,omitempty" json:"owner,omitempty"`
 }
 
 // ListFactoriesParams defines parameters for ListFactories.
@@ -5060,6 +5124,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
 	UpdateConnection(ctx context.Context, org OrgRef, connection ConnectionRef, body UpdateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListConnectionRepositories The owners and repositories a code host connection reaches
+	//
+	// Signs in to the code host with the connection's credential, from goald, and answers the account it signs in as, the owners it can list (the account, then its organizations) and the repositories of owner (the account when owner is absent). At most 100 repositories, the most recently updated first, with no paging: truncated is true when the owner has more. Each has at most 3 languages, the largest first. Audited as connection.used; no secret value is answered. 404 connection-not-found for an unknown connection, 404 owner-not-found for an owner the code host does not know, 422 connection-not-code-host for a connection whose kind is not a code host goald reaches, 422 repositories-not-supported for a code host that cannot list them yet (GitLab), 502 code-host-error when the code host refuses or fails, and 503 connections-unavailable for a sealed connection while goald has no master key.
+	//
+	// Corresponds with GET /v1/orgs/{org}/connections/{connection}/repositories (the `ListConnectionRepositories` operationId).
+	ListConnectionRepositories(ctx context.Context, org OrgRef, connection ConnectionRef, params *ListConnectionRepositoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// TestConnection Run the connection's test
 	//
@@ -6516,6 +6587,23 @@ func (c *Client) UpdateConnectionWithBody(ctx context.Context, org OrgRef, conne
 // Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
 func (c *Client) UpdateConnection(ctx context.Context, org OrgRef, connection ConnectionRef, body UpdateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateConnectionRequest(c.Server, org, connection, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListConnectionRepositories The owners and repositories a code host connection reaches
+//
+// Signs in to the code host with the connection's credential, from goald, and answers the account it signs in as, the owners it can list (the account, then its organizations) and the repositories of owner (the account when owner is absent). At most 100 repositories, the most recently updated first, with no paging: truncated is true when the owner has more. Each has at most 3 languages, the largest first. Audited as connection.used; no secret value is answered. 404 connection-not-found for an unknown connection, 404 owner-not-found for an owner the code host does not know, 422 connection-not-code-host for a connection whose kind is not a code host goald reaches, 422 repositories-not-supported for a code host that cannot list them yet (GitLab), 502 code-host-error when the code host refuses or fails, and 503 connections-unavailable for a sealed connection while goald has no master key.
+//
+// Corresponds with GET /v1/orgs/{org}/connections/{connection}/repositories (the `ListConnectionRepositories` operationId).
+func (c *Client) ListConnectionRepositories(ctx context.Context, org OrgRef, connection ConnectionRef, params *ListConnectionRepositoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListConnectionRepositoriesRequest(c.Server, org, connection, params)
 	if err != nil {
 		return nil, err
 	}
@@ -9779,6 +9867,74 @@ func NewUpdateConnectionRequestWithBody(server string, org OrgRef, connection Co
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListConnectionRepositoriesRequest constructs an http.Request for the ListConnectionRepositories method
+func NewListConnectionRepositoriesRequest(server string, org OrgRef, connection ConnectionRef, params *ListConnectionRepositoriesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "connection", connection, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/connections/%s/repositories", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Owner != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "owner", *params.Owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -15229,6 +15385,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
 	UpdateConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, body UpdateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateConnectionResponse, error)
 
+	// ListConnectionRepositoriesWithResponse The owners and repositories a code host connection reaches
+	//
+	// Signs in to the code host with the connection's credential, from goald, and answers the account it signs in as, the owners it can list (the account, then its organizations) and the repositories of owner (the account when owner is absent). At most 100 repositories, the most recently updated first, with no paging: truncated is true when the owner has more. Each has at most 3 languages, the largest first. Audited as connection.used; no secret value is answered. 404 connection-not-found for an unknown connection, 404 owner-not-found for an owner the code host does not know, 422 connection-not-code-host for a connection whose kind is not a code host goald reaches, 422 repositories-not-supported for a code host that cannot list them yet (GitLab), 502 code-host-error when the code host refuses or fails, and 503 connections-unavailable for a sealed connection while goald has no master key.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/connections/{connection}/repositories (the `ListConnectionRepositories` operationId).
+	ListConnectionRepositoriesWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, params *ListConnectionRepositoriesParams, reqEditors ...RequestEditorFn) (*ListConnectionRepositoriesResponse, error)
+
 	// TestConnectionWithResponse Run the connection's test
 	//
 	// Sends the kind's test request from goald with the connection's values: to public addresses only (a URL naming a private, loopback, link-local or metadata address fails the test), within 10 seconds, following no redirect. ok when the status is the one the kind expects. A test that fails is a 200 with ok false and why; the outcome is the connection's last test. 409 connection-not-testable for a kind without a test, 503 connections-unavailable for a sealed connection while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.tested.
@@ -17412,6 +17577,54 @@ func (r UpdateConnectionResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r UpdateConnectionResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListConnectionRepositoriesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *RepositoryList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListConnectionRepositoriesResponse) GetJSON200() *RepositoryList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListConnectionRepositoriesResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListConnectionRepositoriesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListConnectionRepositoriesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListConnectionRepositoriesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListConnectionRepositoriesResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -22409,6 +22622,21 @@ func (c *ClientWithResponses) UpdateConnectionWithResponse(ctx context.Context, 
 	return ParseUpdateConnectionResponse(rsp)
 }
 
+// ListConnectionRepositoriesWithResponse The owners and repositories a code host connection reaches
+//
+// Signs in to the code host with the connection's credential, from goald, and answers the account it signs in as, the owners it can list (the account, then its organizations) and the repositories of owner (the account when owner is absent). At most 100 repositories, the most recently updated first, with no paging: truncated is true when the owner has more. Each has at most 3 languages, the largest first. Audited as connection.used; no secret value is answered. 404 connection-not-found for an unknown connection, 404 owner-not-found for an owner the code host does not know, 422 connection-not-code-host for a connection whose kind is not a code host goald reaches, 422 repositories-not-supported for a code host that cannot list them yet (GitLab), 502 code-host-error when the code host refuses or fails, and 503 connections-unavailable for a sealed connection while goald has no master key.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/connections/{connection}/repositories (the `ListConnectionRepositories` operationId).
+func (c *ClientWithResponses) ListConnectionRepositoriesWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, params *ListConnectionRepositoriesParams, reqEditors ...RequestEditorFn) (*ListConnectionRepositoriesResponse, error) {
+	rsp, err := c.ListConnectionRepositories(ctx, org, connection, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListConnectionRepositoriesResponse(rsp)
+}
+
 // TestConnectionWithResponse Run the connection's test
 //
 // Sends the kind's test request from goald with the connection's values: to public addresses only (a URL naming a private, loopback, link-local or metadata address fails the test), within 10 seconds, following no redirect. ok when the status is the one the kind expects. A test that fails is a 200 with ok false and why; the outcome is the connection's last test. 409 connection-not-testable for a kind without a test, 503 connections-unavailable for a sealed connection while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.tested.
@@ -24967,6 +25195,39 @@ func ParseUpdateConnectionResponse(rsp *http.Response) (*UpdateConnectionRespons
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Connection
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListConnectionRepositoriesResponse parses an HTTP response from a ListConnectionRepositoriesWithResponse call
+func ParseListConnectionRepositoriesResponse(rsp *http.Response) (*ListConnectionRepositoriesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListConnectionRepositoriesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RepositoryList
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -28281,6 +28542,9 @@ type ServerInterface interface {
 	// UpdateConnection Rename a connection, or change its description, fields or secrets
 	// (PATCH /v1/orgs/{org}/connections/{connection})
 	UpdateConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef)
+	// ListConnectionRepositories The owners and repositories a code host connection reaches
+	// (GET /v1/orgs/{org}/connections/{connection}/repositories)
+	ListConnectionRepositories(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef, params ListConnectionRepositoriesParams)
 	// TestConnection Run the connection's test
 	// (POST /v1/orgs/{org}/connections/{connection}/test)
 	TestConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef)
@@ -29362,6 +29626,57 @@ func (siw *ServerInterfaceWrapper) UpdateConnection(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateConnection(w, r, org, connection)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListConnectionRepositories operation middleware
+func (siw *ServerInterfaceWrapper) ListConnectionRepositories(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "connection" -------------
+	var connection ConnectionRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "connection", r.PathValue("connection"), &connection, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "connection", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListConnectionRepositoriesParams
+
+	// ------------- Optional query parameter "owner" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "owner", r.URL.Query(), &params.Owner, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "owner"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "owner", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListConnectionRepositories(w, r, org, connection, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -33615,6 +33930,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}", wrapper.GetConnection)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}", wrapper.UpdateConnection)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}/test", wrapper.TestConnection)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}/repositories", wrapper.ListConnectionRepositories)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources", wrapper.ListKnowledgeSources)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources", wrapper.CreateKnowledgeSource)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}", wrapper.DeleteKnowledgeSource)
@@ -34529,6 +34845,47 @@ type UpdateConnectiondefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response UpdateConnectiondefaultApplicationProblemPlusJSONResponse) VisitUpdateConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListConnectionRepositoriesRequestObject struct {
+	Org        OrgRef        `json:"org"`
+	Connection ConnectionRef `json:"connection"`
+	Params     ListConnectionRepositoriesParams
+}
+
+type ListConnectionRepositoriesResponseObject interface {
+	VisitListConnectionRepositoriesResponse(w http.ResponseWriter) error
+}
+
+type ListConnectionRepositories200JSONResponse RepositoryList
+
+func (response ListConnectionRepositories200JSONResponse) VisitListConnectionRepositoriesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListConnectionRepositoriesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListConnectionRepositoriesdefaultApplicationProblemPlusJSONResponse) VisitListConnectionRepositoriesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -38684,6 +39041,9 @@ type StrictServerInterface interface {
 	// UpdateConnection Rename a connection, or change its description, fields or secrets
 	// (PATCH /v1/orgs/{org}/connections/{connection})
 	UpdateConnection(ctx context.Context, request UpdateConnectionRequestObject) (UpdateConnectionResponseObject, error)
+	// ListConnectionRepositories The owners and repositories a code host connection reaches
+	// (GET /v1/orgs/{org}/connections/{connection}/repositories)
+	ListConnectionRepositories(ctx context.Context, request ListConnectionRepositoriesRequestObject) (ListConnectionRepositoriesResponseObject, error)
 	// TestConnection Run the connection's test
 	// (POST /v1/orgs/{org}/connections/{connection}/test)
 	TestConnection(ctx context.Context, request TestConnectionRequestObject) (TestConnectionResponseObject, error)
@@ -39668,6 +40028,34 @@ func (sh *strictHandler) UpdateConnection(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateConnectionResponseObject); ok {
 		if err := validResponse.VisitUpdateConnectionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListConnectionRepositories operation middleware
+func (sh *strictHandler) ListConnectionRepositories(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef, params ListConnectionRepositoriesParams) {
+	var request ListConnectionRepositoriesRequestObject
+
+	request.Org = org
+	request.Connection = connection
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListConnectionRepositories(ctx, request.(ListConnectionRepositoriesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListConnectionRepositories")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListConnectionRepositoriesResponseObject); ok {
+		if err := validResponse.VisitListConnectionRepositoriesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

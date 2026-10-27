@@ -44,17 +44,16 @@ test('organization settings is accessible and fits the screen', async ({ page })
   await expectNoHorizontalScroll(page);
 });
 
-test('the organization sidebar opens Settings', async ({ page }) => {
-  test.skip(isPhone(page), 'sidebars are the 768 px and wider navigation');
+test('the organization menu opens Organization settings', async ({ page }) => {
+  test.skip(isPhone(page), 'the organization menu is the 768 px and wider navigation');
   await page.goto('/o/acme');
-  const sidebar = page.getByRole('navigation', { name: 'Acme organization' });
-  await sidebar.getByRole('link', { name: 'Settings' }).click();
+  await orgMarkOf(page).click();
+  await page.getByRole('menuitem', { name: 'Organization settings' }).click();
   await expect(page).toHaveURL(/\/o\/acme\/settings$/);
-  await expect(sidebar.getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
   await expect(heading(page)).toBeFocused();
 });
 
-test('a new name and short mark show in the rail once saved', async ({ page }) => {
+test('a new name shows in the sidebar and the top row once saved', async ({ page }) => {
   await page.goto('/o/acme/settings');
   await page.getByLabel('Name').fill('Acme Robotics');
   await page.getByLabel('Short mark').fill('AR');
@@ -62,7 +61,7 @@ test('a new name and short mark show in the rail once saved', async ({ page }) =
 
   await expectToast(page, 'Saved');
   await expect(save(page)).toBeDisabled();
-  await expect(orgMarkOf(page, 'AR, Acme Robotics organization, switch organization')).toBeVisible();
+  await expect(orgMarkOf(page, 'Acme Robotics')).toBeVisible();
   await expect(page.getByText('Settings for Acme Robotics and all 3 of its factories.')).toBeVisible();
   await expect(page).toHaveTitle('Settings · Acme Robotics · Goal');
 });

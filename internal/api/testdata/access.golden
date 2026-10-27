@@ -1586,6 +1586,32 @@ listConnectionKinds  pat-demoted      200                      404 org-not-found
 listConnectionKinds  pat-removed      401 unauthenticated      401 unauthenticated
 listConnectionKinds  pat-platform     200                      404 org-not-found
 listConnectionKinds  pat-deleted-org  401 unauthenticated      401 unauthenticated
+listConnectionRepositories anonymous        401 unauthenticated      401 unauthenticated
+listConnectionRepositories owner            200                      404 org-not-found
+listConnectionRepositories admin            200                      404 org-not-found
+listConnectionRepositories viewer           200                      404 org-not-found
+listConnectionRepositories approver         200                      404 org-not-found
+listConnectionRepositories editor           200                      404 org-not-found
+listConnectionRepositories member-no-roles  200                      404 org-not-found
+listConnectionRepositories other-org-owner  404 org-not-found        200
+listConnectionRepositories platform-admin   404 org-not-found        404 org-not-found
+listConnectionRepositories stale-owner      200                      404 org-not-found
+listConnectionRepositories key-scoped       403 forbidden            404 org-not-found
+listConnectionRepositories key-restricted   200                      404 org-not-found
+listConnectionRepositories key-other-org    404 org-not-found        200
+listConnectionRepositories key-expired      401 unauthenticated      401 unauthenticated
+listConnectionRepositories key-revoked      401 unauthenticated      401 unauthenticated
+listConnectionRepositories bearer-owner     200                      404 org-not-found
+listConnectionRepositories pat-approver     403 forbidden            404 org-not-found
+listConnectionRepositories pat-owner        200                      404 org-not-found
+listConnectionRepositories pat-viewer       200                      404 org-not-found
+listConnectionRepositories pat-other-org    404 org-not-found        200
+listConnectionRepositories pat-expired      401 unauthenticated      401 unauthenticated
+listConnectionRepositories pat-revoked      401 unauthenticated      401 unauthenticated
+listConnectionRepositories pat-demoted      200                      404 org-not-found
+listConnectionRepositories pat-removed      401 unauthenticated      401 unauthenticated
+listConnectionRepositories pat-platform     200                      404 org-not-found
+listConnectionRepositories pat-deleted-org  401 unauthenticated      401 unauthenticated
 listConnections      anonymous        401 unauthenticated      401 unauthenticated
 listConnections      owner            200                      404 org-not-found
 listConnections      admin            200                      404 org-not-found

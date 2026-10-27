@@ -203,7 +203,7 @@ func TestAPI_SignIn_OrgsByMembership(t *testing.T) {
 
 	org := decode[gen.Org](t, h.as(t, viewerToken, http.MethodGet, acmePath, ""), http.StatusOK)
 
-	wantCan := []string{"connection:read", "knowledge:read", "member:read", "org:read", "personal_token:manage", "personal_token:read"}
+	wantCan := []string{"connection:browse", "connection:read", "knowledge:read", "member:read", "org:read", "personal_token:manage", "personal_token:read"}
 	if org.Role == nil || *org.Role != gen.OrgRoleMember || !slices.Equal(org.Can, wantCan) || org.FactoryCount != 1 {
 		t.Errorf("acme for its viewer = role %v can %v count %d, want member, %v, 1", org.Role, org.Can, org.FactoryCount, wantCan)
 	}
@@ -285,7 +285,7 @@ func TestAPI_SignIn_RemovalHoldsAtOnce(t *testing.T) {
 	}
 }
 
-// A new organization is its creator's (NewOrg.Owner), a platform admin's or a member's (ADR 0019,
+// A new organization is its creator's (NewOrg.Owner), a platform admin's or a member's (ADR 0023,
 // decision 1).
 func TestAPI_SignIn_CreateOrgOwnedByTheCaller(t *testing.T) {
 	t.Parallel()
@@ -304,7 +304,7 @@ func TestAPI_SignIn_CreateOrgOwnedByTheCaller(t *testing.T) {
 	}
 }
 
-// ADR 0019, decision 1: any person signed in with a session creates an organization and owns it,
+// ADR 0023, decision 1: any person signed in with a session creates an organization and owns it,
 // without being a platform admin.
 func TestAPI_SignIn_AnyPersonCreatesAnOrg(t *testing.T) {
 	t.Parallel()

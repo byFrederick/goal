@@ -309,10 +309,11 @@ var probes = map[string]probe{
 	"createConnection": {
 		method: http.MethodPost, path: "/v1/orgs/acme/connections", org: testOrg, body: `{"name":"docs","kind":"mcp-server"}`,
 	},
-	"getConnection":    {method: http.MethodGet, path: "/v1/orgs/acme/connections/docs", org: testOrg},
-	"updateConnection": {method: http.MethodPatch, path: "/v1/orgs/acme/connections/docs", body: `{"description":"d"}`, org: testOrg},
-	"testConnection":   {method: http.MethodPost, path: "/v1/orgs/acme/connections/docs/test", org: testOrg},
-	"deleteConnection": {method: http.MethodDelete, path: "/v1/orgs/acme/connections/docs", org: testOrg},
+	"getConnection":              {method: http.MethodGet, path: "/v1/orgs/acme/connections/docs", org: testOrg},
+	"updateConnection":           {method: http.MethodPatch, path: "/v1/orgs/acme/connections/docs", body: `{"description":"d"}`, org: testOrg},
+	"testConnection":             {method: http.MethodPost, path: "/v1/orgs/acme/connections/docs/test", org: testOrg},
+	"listConnectionRepositories": {method: http.MethodGet, path: "/v1/orgs/acme/connections/docs/repositories", org: testOrg},
+	"deleteConnection":           {method: http.MethodDelete, path: "/v1/orgs/acme/connections/docs", org: testOrg},
 
 	"listKnowledgeSources": {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/sources?factory=acme", org: testOrg, factory: acmeID},
 	"createKnowledgeSource": {

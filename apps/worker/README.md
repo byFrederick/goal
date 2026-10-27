@@ -104,6 +104,28 @@ After a rebase the local branch has diverged from `origin/<branch>`, so the agen
 
 `connections` are the agent's organization connections its token grants (the model and repository connections are not among them unless the agent names them): the names of the variables each sets in `goal-agent run`'s env, never a value, its MCP server and its kind's docs. `rules` are the factory rules that apply to the run ([ADR 0014](../../docs/adr/0014-factory-rules.md)), from the definition version it started on: each rule's name, the sha256 of its rule file, its `paths` (omitted when it has none) and `content`, the markdown file to write to the agent's rules; prepare writes each to `$CLAUDE_CONFIG_DIR/rules/<name>.md` (step 2). `base_conflicts` (only after a conflict in prepare's step 4) names the files that conflict with the default branch.
 
+### Definition mode
+
+A draft request (ADR 0021: the Definition screen's Ask bar, Ask Jonah for a fix) runs in a box with no repository and no item: goald starts it with an empty item and station, and goal-agent changes the files of the factory's draft. The bundle then carries a `definition` block instead of `repository`, and its spec a `draft_request`; they always come together, and a bundle with both `definition` and `repository` is refused.
+
+```json
+{
+  "spec": { "item_id": "", "station": "", "…": "as above", "draft_request": { "id": "…", "text": "Give review a 4th reviewer", "agent": "reviewer" } },
+  "files": { "definition/factory.schema.json": "<base64>" },
+  "definition": { "files": { "factory.yaml": "<base64>", "agents/reviewer.md": "<base64>", "evals/review.yaml": "<base64>" } }
+}
+```
+
+- `draft_request`: the request's `id`, its `text` (1 to 2000 characters) and, for Ask Jonah for a fix, the `agent` it is about. Only with it may `item_id` be empty.
+- `definition.files`: the draft's files by path (relative, no `.` or `..`), base64. prepare writes each into `/workspace` and `/goal/definition.json`, `{ "<path>": "<sha256>" }`, the baseline the result is compared with. It configures no credential helper, clones nothing and runs no `mise install`; its `prepared` line adds `"definition_files": N`. The bundle may ship the factory schema at `/goal/definition/factory.schema.json`.
+
+`goal-agent run` with a `draft_request` reads no `prompt.md` and installs no skills (`src/definition.ts`):
+
+- System prompt: Claude Code's, with a fixed `## Definition mode` text appended: change only the files the request needs, keep `factory.yaml` valid against the factory schema (goald runs the publish checks afterwards), never create, change or delete anything under `evals/` or `contracts/`, leave the work in `/workspace`. The user prompt is the request's `text`, then the agent's name when it is set.
+- Tools: `Read`, `Write`, `Edit`, `MultiEdit`, `Glob` and `Grep`, none pre-approved; the permission check lets them write only inside `/workspace` and read only it and `/goal/definition`, both as written and with symlinks resolved. No Bash, no MCP server (`strictMcpConfig`), no skills. `model`, `max_turns` and `max_usd` apply as for any run. The output contract is `{ "summary": string }`.
+- At the end the worker walks `/workspace` (never following a symlink) and compares it with `/goal/definition.json`. The allowlist is `factory.yaml` and files under `agents/`, `rules/` and `skills/`. A new or modified regular file there is `changed`, a missing one `deleted`; a change anywhere else, and any symlink or other non-regular file, is `rejected` and dropped.
+- `finished`'s `output` is `{ "summary": "…", "changed": [{ "path", "sha256", "content" (base64) }], "deleted": ["path"], "rejected": ["path"] }`, with `cost_usd` and `turns` as for any run. When anything is rejected, `status` is `failed` and `error` names the paths. goald applies only a succeeded result.
+
 ## How the agent runs
 
 - Working directory `/workspace`; Claude Code's system prompt with, appended, `## This factory` and the `purpose` (when set), then `prompt.md`, then `## Connections`: each connection's name and kind title, the names of its variables, its MCP server (`mcp__<name>__*`) and its kind's docs, never a value, then `## Knowledge` naming the `knowledge_sources` and the gateway's `knowledge__search` and `knowledge__read` (when the factory lists sources); the brief, earlier outputs and the finishing instruction as the user prompt (the first input message, see Live notes). With `base_conflicts` the user prompt starts with a note (`## First: conflicts with the default branch`) listing the files and telling the agent to rebase or merge the default branch, resolve them and push before the brief.

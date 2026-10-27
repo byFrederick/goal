@@ -2505,6 +2505,39 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConnectionTestResult" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/connections/{connection}/repositories:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/ConnectionRef"
+    get:
+      operationId: listConnectionRepositories
+      x-goal-scope: connection:browse
+      tags: [connections]
+      summary: The owners and repositories a code host connection reaches
+      description: >-
+        Signs in to the code host with the connection's credential, from goald, and answers the
+        account it signs in as, the owners it can list (the account, then its organizations) and
+        the repositories of owner (the account when owner is absent). At most 100 repositories,
+        the most recently updated first, with no paging: truncated is true when the owner has
+        more. Each has at most 3 languages, the largest first. Audited as connection.used; no
+        secret value is answered. 404 connection-not-found for an unknown connection, 404
+        owner-not-found for an owner the code host does not know, 422 connection-not-code-host
+        for a connection whose kind is not a code host goald reaches, 422
+        repositories-not-supported for a code host that cannot list them yet (GitLab), 502
+        code-host-error when the code host refuses or fails, and 503 connections-unavailable for
+        a sealed connection while goald has no master key.
+      parameters:
+        - name: owner
+          in: query
+          description: The account or organization whose repositories to list; absent, the connection's own account
+          schema: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        "200":
+          description: The owners and repositories
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RepositoryList" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/knowledge/sources:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -5858,6 +5891,41 @@ components:
         status: { type: integer, description: "The test request's HTTP status, when it got one" }
         error: { type: string, description: Why it failed (never a secret value) }
         at: { type: string, format: date-time }
+    RepositoryList:
+      type: object
+      description: What a code host connection reaches (GET …/connections/{connection}/repositories)
+      required: [login, owner, owners, repositories, truncated]
+      properties:
+        login: { type: string, description: The account the connection's credential signs in as }
+        owner: { type: string, description: The owner the repositories belong to }
+        owners:
+          type: array
+          description: The account first, then its organizations
+          items: { $ref: "#/components/schemas/RepositoryOwner" }
+        repositories:
+          type: array
+          description: The most recently updated first, at most 100
+          maxItems: 100
+          items: { $ref: "#/components/schemas/Repository" }
+        truncated: { type: boolean, description: The owner has more repositories than the 100 answered }
+    RepositoryOwner:
+      type: object
+      required: [login, kind]
+      properties:
+        login: { type: string }
+        kind: { type: string, enum: [user, organization] }
+    Repository:
+      type: object
+      required: [full_name, clone_url, languages, updated_at]
+      properties:
+        full_name: { type: string, description: "<owner>/<name>" }
+        clone_url: { type: string, description: Its https clone URL }
+        languages:
+          type: array
+          description: The largest first, at most 3
+          maxItems: 3
+          items: { type: string }
+        updated_at: { type: string, format: date-time }
     ConnectionEvent:
       type: object
       description: "The data of one `event: connection` on /v1/orgs/{org}/stream; it carries no value"

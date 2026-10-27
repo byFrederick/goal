@@ -86,7 +86,7 @@ spec:
     size: large
     tools: [golangci-lint@2.1, sqlc@1.27]
     repository: { url: "https://github.com/acme/goal", connection: github }
-    budget: { weeklyUsd: 60, perItemUsd: 4, onExhausted: drain }
+    budget: { weeklyUsd: 1000, perItemUsd: 4, onExhausted: drain }
   connections:
     # pull requests and issues of the repository
     - github
@@ -184,7 +184,7 @@ spec:
   runtime:
     model: claude-sonnet-5-5
     modelConnection: claude
-    budget: { weeklyUsd: 20, onExhausted: stop }
+    budget: { weeklyUsd: 400, onExhausted: stop }
   connections: [aws-prod, datadog, pagerduty]
   knowledge: { sources: [handbook] }
   skills:

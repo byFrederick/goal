@@ -2,6 +2,7 @@ package porttest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"slices"
@@ -24,11 +25,29 @@ type CodeHost struct {
 	moves    map[string]string // url → the head a push moves it to once it is next read
 	merges   []MergeCall
 	branches []string
-	updated  []string                     // urls whose branches were updated, in order
-	conflict map[string][]string          // url → the files its branch conflicts with its base in
-	current  map[string]bool              // urls whose branches already hold their base
-	heads    map[string]map[string]string // repo → branch ("" the default) → head SHA
-	history  map[string][]ports.Commit    // repo → its linear history, oldest first
+	updated  []string                        // urls whose branches were updated, in order
+	conflict map[string][]string             // url → the files its branch conflicts with its base in
+	current  map[string]bool                 // urls whose branches already hold their base
+	heads    map[string]map[string]string    // repo → branch ("" the default) → head SHA
+	history  map[string][]ports.Commit       // repo → its linear history, oldest first
+	repos    map[string]ports.RepositoryList // owner → what Repositories answers for it
+	login    string                          // the owner an empty one means
+}
+
+// SetRepositories makes list what Repositories answers for list.Owner; the first list set is
+// the signed-in account's, which an empty owner means. A CodeHost given none cannot list
+// repositories: Repositories answers errors.ErrUnsupported, as GitLab does.
+func (c *CodeHost) SetRepositories(list ports.RepositoryList) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.repos == nil {
+		c.repos, c.login = map[string]ports.RepositoryList{}, list.Owner
+	}
+
+	list.Owners = slices.Clone(list.Owners)
+	list.Repositories = slices.Clone(list.Repositories)
+	c.repos[list.Owner] = list
 }
 
 // SetBranchHead makes sha the head of branch in the repository at repo; the empty branch is the
@@ -306,6 +325,34 @@ func (c *CodeHost) Compare(_ context.Context, conn domain.ResolvedConnection, re
 	}
 
 	return out, nil
+}
+
+// Repositories implements ports.CodeHost from SetRepositories.
+func (c *CodeHost) Repositories(_ context.Context, conn domain.ResolvedConnection, owner string) (ports.RepositoryList, error) {
+	if _, _, err := conn.GitLogin(); err != nil {
+		return ports.RepositoryList{}, err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.repos == nil {
+		return ports.RepositoryList{}, fmt.Errorf("repositories: %w", errors.ErrUnsupported)
+	}
+
+	if owner == "" {
+		owner = c.login
+	}
+
+	list, ok := c.repos[owner]
+	if !ok {
+		return ports.RepositoryList{}, fmt.Errorf("repositories of %s: %w", owner, ports.ErrNotFound)
+	}
+
+	list.Owners = slices.Clone(list.Owners)
+	list.Repositories = slices.Clone(list.Repositories)
+
+	return list, nil
 }
 
 // onHost refuses a pull request or repository URL that is not on the host of the connection's git login.

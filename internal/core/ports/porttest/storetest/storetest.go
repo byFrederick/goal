@@ -125,6 +125,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"AgentStats_TasksSendBacksRunsAndDenials", testAgentStats},
 		{"FlowStats_NeedAnOrgAndSeeOnlyItsItems", testFlowStatsTenancy},
 		{"Transition_TakeLeaseRemovesAnyLease", testTakeLease},
+		{"Transition_TakeLeaseRecordsTheAskedOutcome", testTakeLeaseAsked},
 		{"ItemTimes_LeadTimeAndComponentsOfItemsDone", testItemTimes},
 		{"Andon_OneOpenPullPerFactoryClearedWithANote", testAndonPullAndClear},
 		{"Andon_PullsAreHistoryNewestFirst", testAndonHistory},

@@ -16,7 +16,7 @@ permissions:
   - {name: public,             level: install}                       # no credential needed
   - {name: authenticated,      level: install, keys: true, pat: true} # any valid principal
   - {name: device:read,        level: install}                       # signed-in users, not keys
-  - {name: org:create,         level: install}                       # signed-in users, not keys (ADR 0019)
+  - {name: org:create,         level: install}                       # signed-in users, not keys (ADR 0023)
   - {name: platform:read,      level: install, platform_admin: true}
   - {name: platform:manage,    level: install, platform_admin: true, fresh: true}
   - {name: org:read,           level: org, org_roles: [owner, admin, member], keys: true, pat: true}
@@ -41,6 +41,9 @@ permissions:
   # value; owners and admins change and test them after a recent sign-in, never with a key.
   - {name: connection:read,    level: org, org_roles: [owner, admin, member], keys: true, pat: true}
   - {name: connection:manage,  level: org, org_roles: [owner, admin], fresh: true}
+  # Browsing what a code host connection reaches (its owners and repositories) uses its
+  # credential from goald, which connection:read never does; members, keys and tokens may.
+  - {name: connection:browse,  level: org, org_roles: [owner, admin, member], keys: true, pat: true}
   # The organization's knowledge base (spec 4 §8.1): members, keys and tokens search and read it;
   # owners, admins and keys add, sync and delete sources and documents.
   - {name: knowledge:read,     level: org, org_roles: [owner, admin, member], keys: true, pat: true}

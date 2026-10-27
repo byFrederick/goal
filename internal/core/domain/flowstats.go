@@ -42,6 +42,8 @@ const (
 	LeaseExpired LeaseOutcome = "expired"
 	// LeaseTaken: a person moved, paused or sent the item back while it ran.
 	LeaseTaken LeaseOutcome = "taken"
+	// LeaseAsked: the agent asked a person a question (ADR 0018); the item waits for the answer.
+	LeaseAsked LeaseOutcome = "asked"
 )
 
 // Finished reports whether the agent completed its task: advanced, rejected or escalated.
@@ -111,6 +113,9 @@ type StationTimes struct {
 	// rejections among them.
 	Verdicts int
 	Rejected int
+	// SpendUSD is the cost of the agent runs at the station that started in the window, failed
+	// and retried runs included.
+	SpendUSD float64
 }
 
 // BusyRatio is the share of the window's slot time (slots × window, at least one slot) that
