@@ -11,11 +11,12 @@ UPDATE factories SET last_item_number = last_item_number + 1 WHERE id = $1 RETUR
 -- name: InsertItem :one
 INSERT INTO work_items (
   id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service,
-  priority, created_at, updated_at
+  priority, created_at, updated_at, source, trigger
 ) VALUES (
   sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(number), sqlc.narg(parent_id), sqlc.arg(type),
   sqlc.narg(lane), sqlc.arg(title), sqlc.arg(body), sqlc.arg(station), sqlc.arg(state),
-  sqlc.arg(class_of_service), sqlc.arg(priority)::bigint, sqlc.arg(created_at), sqlc.arg(created_at)
+  sqlc.arg(class_of_service), sqlc.arg(priority)::bigint, sqlc.arg(created_at), sqlc.arg(created_at),
+  sqlc.narg(source), sqlc.narg(trigger)
 )
 RETURNING *;
 
