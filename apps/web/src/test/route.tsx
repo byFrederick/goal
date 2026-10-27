@@ -117,27 +117,32 @@ export function renderOrgPage({
   org,
   seed = [],
   search,
+  path,
 }: {
   page: () => ReactNode;
   org: OrgSummary;
   seed?: readonly Seed[];
   search?: Record<string, string> | undefined;
+  /** The page's own path under the organization ('/needs-you'), when its navigation names it. */
+  path?: string;
 }) {
   polyfillLayout();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   for (const [key, data] of seed) queryClient.setQueryData(key, data);
 
   const rootRoute = createRootRoute();
+  // With a path, the page is a child of the organization's route, as a real page under it is.
   const orgRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/o/$org',
     beforeLoad: () => ({ org }),
-    component: page,
+    component: path ? Outlet : page,
   });
+  if (path) orgRoute.addChildren([createRoute({ getParentRoute: () => orgRoute, path, component: page })]);
   const query = search && Object.keys(search).length > 0 ? `?${new URLSearchParams(search)}` : '';
   const router = createRouter({
     routeTree: rootRoute.addChildren([orgRoute]),
-    history: createMemoryHistory({ initialEntries: [`/o/${org.slug}${query}`] }),
+    history: createMemoryHistory({ initialEntries: [`/o/${org.slug}${path ?? ''}${query}`] }),
   });
 
   return {
