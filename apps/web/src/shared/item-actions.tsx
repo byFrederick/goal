@@ -311,7 +311,7 @@ function runStops(item: DecidableItem): string {
   return item.state === 'in_progress' ? ' The agent working on it now stops.' : '';
 }
 
-function RejectDialog({
+export function RejectDialog({
   item,
   to,
   open,
