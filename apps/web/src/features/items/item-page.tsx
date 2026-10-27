@@ -50,10 +50,7 @@ function TraceCard({
         <span aria-live="polite" className="inline-flex items-center gap-2 text-sm text-run">
           {run ? (
             <>
-              <span
-                aria-hidden="true"
-                className="size-2 rounded-full bg-run shadow-[0_0_0_4px_var(--color-run-tint)]"
-              />
+              <span aria-hidden="true" className="size-2 rounded-full bg-run ring-4 ring-run-tint" />
               {runRole(run)} working, {run.tools.length} tool calls
             </>
           ) : null}
