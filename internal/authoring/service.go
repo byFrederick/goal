@@ -234,7 +234,10 @@ type Deps struct {
 	// Credentials is the connections check: ConnectionsCheck; nil skips it.
 	// Nil leaves the credentials check out.
 	Credentials Credentials
-	Clock       ports.Clock
+	// Policies is the organization policy whose allowed models a version may name (ADR 0024
+	// decision 3); nil leaves the policy check out.
+	Policies ports.OrgPolicies
+	Clock    ports.Clock
 	// NewID returns a new factory id (a UUIDv7); uuid.NewV7 when nil.
 	NewID func() string
 }
@@ -245,6 +248,7 @@ type Service struct {
 	store       ports.DefinitionStore
 	loads       Loads
 	credentials Credentials
+	policies    ports.OrgPolicies
 	clock       ports.Clock
 	newID       func() string
 	templates   *TemplateCatalog
@@ -258,7 +262,7 @@ func New(d Deps) *Service {
 	}
 
 	return &Service{
-		store: d.Store, loads: d.Loads, credentials: d.Credentials,
+		store: d.Store, loads: d.Loads, credentials: d.Credentials, policies: d.Policies,
 		clock: d.Clock, newID: newID,
 		templates: NewTemplateCatalog(d.Templates, d.Clock),
 	}
