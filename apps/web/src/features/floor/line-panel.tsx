@@ -180,7 +180,7 @@ export function Slots({ station, compact = false }: { station: BoardStation; com
   const label = `${role}: ${busy} working, ${waiting} waiting on you, ${free} free`;
 
   return (
-    <span role="img" aria-label={label} className={cn('flex flex-wrap gap-1 md:justify-center', compact && 'gap-0.5')}>
+    <span role="img" aria-label={label} className="flex flex-wrap gap-1 md:justify-center">
       {Array.from({ length: total }, (_, i) => (
         <span
           // biome-ignore lint/suspicious/noArrayIndexKey: the squares are fixed by the slot count and never reorder

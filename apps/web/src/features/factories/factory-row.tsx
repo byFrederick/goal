@@ -138,7 +138,7 @@ function Figures({
 
 function Figure({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5">
+    <div className="flex min-w-0 flex-col gap-1">
       <dt className="text-meta text-muted">{label}</dt>
       <dd className="m-0 whitespace-nowrap tabular-nums">{children}</dd>
     </div>

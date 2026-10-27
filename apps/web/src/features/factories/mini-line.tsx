@@ -70,7 +70,7 @@ function Line({
       )}
     >
       <div className="relative w-max">
-        <span aria-hidden="true" className="absolute top-3 right-8 left-8 h-0.5 rounded-full bg-run" />
+        <span aria-hidden="true" className="absolute top-3 right-8 left-8 h-px rounded-full bg-run" />
         <ol aria-label={`${name}, stations from intake to done`} className="relative m-0 flex list-none gap-5 p-0">
           {stations.map((s) => (
             <Station key={s.id} station={s} tone={toneOf(s, constraint)} />
