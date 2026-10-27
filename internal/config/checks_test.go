@@ -260,6 +260,18 @@ var locatedCases = []struct {
 		name: "tool spec", doc: edited(runtimeModel, runtimeModel+"    tools: [\"go@1.26.10\", \"go 1.26; rm -rf /\"] #here\n"),
 		code: codeToolSpecInvalid, section: domain.SectionBasics, pointer: "/basics/tools/1", wantFixes: 1,
 	},
+	{
+		name: "trigger cron", doc: withTriggers(`        cron: "0 6 * * MON-FRI"`, `        cron: "0 25 * * *" #here`),
+		code: codeCronInvalid, section: domain.SectionFiles,
+	},
+	{
+		name: "trigger time zone", doc: withTriggers("        timeZone: Europe/Berlin\n", "        timeZone: Local #here\n"),
+		code: codeTimeZoneInvalid, section: domain.SectionFiles,
+	},
+	{
+		name: "trigger placeholder", doc: withTriggers(`          title: "Sweep {{ repo }}"`, `          title: "Sweep {{}}" #here`),
+		code: codePlaceholderInvalid, section: domain.SectionFiles,
+	},
 }
 
 // Every problem config reports names its code and severity and is located for both editors:

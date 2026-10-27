@@ -342,7 +342,8 @@ const sreFactory: Factory = {
 const supportFactory: Factory = {
   id: '5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a01',
   org_id: acmeOrg,
-  can: factoryCan,
+  // No item:create here, so the sidebar's New item picker leaves this factory out.
+  can: factoryCan.filter((p) => p !== 'item:create'),
   name: 'support',
   title: 'Support',
   description: 'Answers questions from the acme shop, citing runbooks.',
@@ -393,6 +394,29 @@ const specRun = (tools: Tool[], cost: number, turns: number): Step => ({
 });
 
 const goalSeeds: Seed[] = [
+  // The sidebar search's "spend" (shell.jpg s2): items whose titles match it at the Build station.
+  {
+    number: 147,
+    title: "Show this week's spend",
+    type: 'feature',
+    body: 'The sidebar shows the spend of the week against the budget, with the factories it is spent on.',
+    station: 'build',
+    state: 'queued',
+    createdMin: 95,
+    updatedMin: 12,
+    steps: [],
+  },
+  {
+    number: 145,
+    title: 'Check the spend against the budget',
+    type: 'refactor',
+    body: 'Compare the week’s spend with each factory’s budget and say which ones are close.',
+    station: 'build',
+    state: 'queued',
+    createdMin: 120,
+    updatedMin: 30,
+    steps: [],
+  },
   {
     number: 16,
     title: 'goald exits when the bucket has no factories',

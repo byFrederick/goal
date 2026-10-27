@@ -34,3 +34,13 @@ FROM item_events e
 JOIN work_items w ON w.id = e.item_id
 WHERE e.factory_id = sqlc.arg(factory_id) AND e.kind = 'merged' AND e.data->>'sha' = ANY (sqlc.arg(shas)::text[])
 ORDER BY e.data->>'sha', e.id DESC;
+
+-- name: FactoryActivity :many
+-- The factory's latest events of the given kinds, newest first, with their item's number and
+-- title (item_events_factory_at_idx).
+SELECT sqlc.embed(e), w.number, w.title
+FROM item_events e
+JOIN work_items w ON w.id = e.item_id
+WHERE e.factory_id = sqlc.arg(factory_id) AND e.kind = ANY (sqlc.arg(kinds)::text[])
+ORDER BY e.at DESC, e.id DESC
+LIMIT sqlc.arg(max_events)::bigint;

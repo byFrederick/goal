@@ -39,7 +39,7 @@ const factory = (name: string, extra: Partial<Factory> = {}): Factory =>
     paused: false,
     created_at: '2026-10-01T00:00:00Z',
     role: 'editor',
-    can: [],
+    can: ['item:create'],
     ...extra,
   }) as Factory;
 
@@ -182,7 +182,7 @@ describe('the drawer', () => {
     expect(mark.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(mark);
     const drawer = await screen.findByRole('dialog', { name: 'Acme' });
-    expect(within(drawer).getByRole('button', { name: /New item/ })).toBeTruthy();
+    expect(await within(drawer).findByRole('button', { name: /New item/ })).toBeTruthy();
     expect(within(drawer).getByRole('link', { name: 'Home' })).toBeTruthy();
   });
 

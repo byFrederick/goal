@@ -1,17 +1,19 @@
 // The sidebar (≥ 768 px, MASTER.md "The shell"): 256 px, pinned left at full height beside the content
 // on every organization page and on the New factory wizard. Top to bottom: the Goal mark and the
-// organization's name (its menu), Search and Collapse (not built yet); New item (not built yet); the
-// organization-wide pages; Factories (sidebar-factories.tsx); and at the bottom the spend this week and
-// the person (account-menu.tsx). Below 768 px the same content opens as the phone's drawer from the
-// Goal mark (phone-chrome.tsx), so SidebarContent is the one list of entries for both.
+// organization's name (its menu), Search (sidebar-search.tsx) and Collapse (not built yet); New item (new-item.tsx,
+// with C); the organization-wide pages; Factories (sidebar-factories.tsx); and at the bottom the spend this week
+// and the person (account-menu.tsx). Search replaces that body with its input and results. Below 768 px the same
+// content opens as the phone's drawer from the Goal mark (phone-chrome.tsx), so SidebarContent is the one list of
+// entries for both.
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ChevronsUpDown, PanelLeft, Plus, Search } from 'lucide-react';
-import { type ReactNode, useRef, useState } from 'react';
+import { ChevronsUpDown, PanelLeft, Search } from 'lucide-react';
+import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { attentionQuery, overviewQuery } from '../api/queries';
 import type { FactoryOverviewList, OrgSummary } from '../api/types';
 import { useConnectionTrouble } from '../shared/connections';
 import { formatUsdCompact } from '../shared/format';
+import { NewItemFromSidebar } from '../shared/new-item';
 import { useOrgGrants } from '../shared/org';
 import { Count } from '../ui/count';
 import { GoalMark } from '../ui/goal-mark';
@@ -22,11 +24,9 @@ import { CreateOrgDialog } from './create-org-dialog';
 import { OrgMenuContent } from './org-menu';
 import { screensFor, sidebarOrgScreens } from './screens';
 import { FactoryGroups, rowClass } from './sidebar-factories';
+import { iconButton, SidebarSearch, useSearchShortcut } from './sidebar-search';
 
 const iconProps = { size: 18, strokeWidth: 1.5, 'aria-hidden': true } as const;
-
-const iconButton =
-  'flex size-8 flex-none items-center justify-center rounded-control text-ink-soft hover:bg-hover hover:text-ink aria-disabled:cursor-default aria-disabled:text-muted aria-disabled:hover:bg-transparent';
 
 /** The 256 px sidebar from 768 px. Its content is SidebarContent, which the phone's drawer renders too. */
 export function Sidebar({ org }: { org: OrgSummary }) {
@@ -53,6 +53,7 @@ interface SidebarContentProps {
 /**
  * The sidebar's content: the organization's menu, Search, New item, the organization pages,
  * Factories, the spend and the person. Shared by the sidebar and the phone's drawer (phone-chrome.tsx).
+ * Search lives here, so the drawer searches the same way the sidebar does.
  */
 export function SidebarContent({ org, onNavigate, close }: SidebarContentProps) {
   const can = useOrgGrants()?.can;
@@ -60,32 +61,56 @@ export function SidebarContent({ org, onNavigate, close }: SidebarContentProps) 
   const overview = useQuery(overviewQuery(org.id));
   const trouble = useConnectionTrouble(org.id);
   const busy = useSidebarBusy(org.id);
+  const [searching, setSearching] = useState(false);
+  const searchIcon = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef(false);
+
+  const openSearch = useCallback(() => setSearching(true), []);
+  useSearchShortcut(openSearch);
+
+  const closeSearch = useCallback((focusIcon: boolean) => {
+    returnFocus.current = focusIcon;
+    setSearching(false);
+  }, []);
+  // The Search icon is back in the DOM once the search closes; Escape and Close search return focus to it.
+  useEffect(() => {
+    if (!searching && returnFocus.current) {
+      returnFocus.current = false;
+      searchIcon.current?.focus();
+    }
+  }, [searching]);
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
       {busy ? <span className="sr-only">Loading</span> : null}
-      <SidebarTop org={org} close={close} />
-      <NewItem />
-      <ul className="m-0 mt-2 flex list-none flex-col gap-1 p-0">
-        {screensFor(sidebarOrgScreens, can).map((screen) => (
-          <li key={screen.id}>
-            <OrgEntry
-              org={org}
-              screen={screen}
-              waiting={attention.data?.waiting_on_you ?? 0}
-              trouble={trouble}
-              onNavigate={onNavigate}
-            />
-          </li>
-        ))}
-      </ul>
-      <div className="mt-4">
-        <FactoryGroups org={org} onNavigate={onNavigate} />
-      </div>
-      <div className="mt-auto flex flex-col gap-2 pt-4">
-        <SpendThisWeek overview={overview.data} />
-        <AccountMenu org={org} />
-      </div>
+      {searching ? (
+        <SidebarSearch org={org} onClose={closeSearch} />
+      ) : (
+        <>
+          <SidebarTop org={org} close={close} searchIcon={searchIcon} onSearch={openSearch} />
+          <NewItemFromSidebar />
+          <ul className="m-0 mt-2 flex list-none flex-col gap-1 p-0">
+            {screensFor(sidebarOrgScreens, can).map((screen) => (
+              <li key={screen.id}>
+                <OrgEntry
+                  org={org}
+                  screen={screen}
+                  waiting={attention.data?.waiting_on_you ?? 0}
+                  trouble={trouble}
+                  onNavigate={onNavigate}
+                />
+              </li>
+            ))}
+          </ul>
+          <div className="mt-4">
+            <FactoryGroups org={org} onNavigate={onNavigate} />
+          </div>
+          <div className="mt-auto flex flex-col gap-2 pt-4">
+            <SpendThisWeek overview={overview.data} />
+            <AccountMenu org={org} />
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -98,10 +123,20 @@ export function useSidebarBusy(orgId: string): boolean {
 }
 
 /**
- * The organization's name opens its menu; Search is not built yet (ADR 0016, decision 4). Collapse is
- * not built yet either, so the top row shows it disabled, unless `close` takes its place (the drawer).
+ * The organization's name opens its menu, and Search opens search; Collapse is not built yet (ADR 0016,
+ * decision 4), so the top row shows it disabled, unless `close` takes its place (the drawer).
  */
-function SidebarTop({ org, close }: { org: OrgSummary; close?: ReactNode }) {
+function SidebarTop({
+  org,
+  close,
+  searchIcon,
+  onSearch,
+}: {
+  org: OrgSummary;
+  close?: ReactNode;
+  searchIcon: RefObject<HTMLButtonElement | null>;
+  onSearch: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -128,11 +163,16 @@ function SidebarTop({ org, close }: { org: OrgSummary; close?: ReactNode }) {
           navigating={navigating}
         />
       </Menu>
-      <NotAvailable>
-        <button type="button" aria-label="Search" aria-keyshortcuts="Meta+K" className={iconButton}>
-          <Search {...iconProps} />
-        </button>
-      </NotAvailable>
+      <button
+        ref={searchIcon}
+        type="button"
+        aria-label="Search"
+        aria-keyshortcuts="Meta+K Control+K"
+        onClick={onSearch}
+        className={iconButton}
+      >
+        <Search {...iconProps} />
+      </button>
       {close ?? (
         <NotAvailable>
           <button type="button" aria-label="Collapse sidebar" className={iconButton}>
@@ -142,24 +182,6 @@ function SidebarTop({ org, close }: { org: OrgSummary; close?: ReactNode }) {
       )}
       <CreateOrgDialog open={creating} onOpenChange={setCreating} returnFocus={trigger} />
     </div>
-  );
-}
-
-/** The one way to add work; its shortcut C is not built yet, so the hint is shown and inert. */
-function NewItem() {
-  return (
-    <NotAvailable>
-      <button
-        type="button"
-        className="flex h-9 w-full items-center gap-2 rounded-control bg-run pr-2 pl-3 font-control text-white aria-disabled:cursor-default"
-      >
-        <Plus {...iconProps} size={16} />
-        <span className="flex-1 text-left text-body">New item</span>
-        <kbd className="grid size-5 place-items-center rounded-chip border border-white/40 text-meta font-semibold">
-          C
-        </kbd>
-      </button>
-    </NotAvailable>
   );
 }
 

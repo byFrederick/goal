@@ -62,9 +62,44 @@ export const DraftRequest = z.object({
 });
 export type DraftRequest = z.infer<typeof DraftRequest>;
 
+/** A judge's outcome (ADR 0025): its score from 0 to 1, its label and what it means. */
+export const JudgeOutcome = z.object({
+  score: z.number().min(0).max(1),
+  label: z.string().min(1).max(40),
+  meaning: z.string().min(1).max(300),
+});
+export type JudgeOutcome = z.infer<typeof JudgeOutcome>;
+
+/**
+ * What a judge reads: a finished run (its events, its spec and its pull request diff) or an eval
+ * try (the case's brief, the agent's output and the git diff), each as text.
+ */
+export const JudgeMaterial = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('run'), events: z.string(), spec: z.string(), diff: z.string() }),
+  z.object({ kind: z.literal('eval_try'), brief: z.string(), output: z.string(), diff: z.string() }),
+]);
+export type JudgeMaterial = z.infer<typeof JudgeMaterial>;
+
+/**
+ * Judge mode (ADR 0025): the judge evals/judges/<slug>.md, its rubric (the file's Markdown body),
+ * its outcomes and pass mark, and the material it scores.
+ */
+export const Judge = z.object({
+  slug: z.string().regex(/^[a-z][a-z0-9-]{1,38}[a-z0-9]$/),
+  rubric: z.string().min(1),
+  outcomes: z
+    .array(JudgeOutcome)
+    .min(1)
+    .refine((os) => new Set(os.map((o) => o.label)).size === os.length, 'outcome labels are unique')
+    .refine((os) => new Set(os.map((o) => o.score)).size === os.length, 'outcome scores are unique'),
+  pass_mark: z.number().min(0).max(1),
+  material: JudgeMaterial,
+});
+export type Judge = z.infer<typeof Judge>;
+
 const taskFields = z.object({
   factory_id: z.string().min(1),
-  /** Empty only in definition mode, which has no item. */
+  /** Empty only in definition mode and judge mode, which need no item. */
   item_id: z.string(),
   run_id: z.string().min(1),
   station: z.string(),
@@ -93,15 +128,22 @@ const taskFields = z.object({
   base_conflicts: z.array(z.string()).optional(),
   /** Definition mode (ADR 0021): the run changes the factory's draft files in /workspace for this request. */
   draft_request: DraftRequest.optional(),
+  /** Judge mode (ADR 0025): the run scores this material with this judge, in one model call without tools. */
+  judge: Judge.optional(),
 });
 
-/** An item's run names its item; only a draft request's run (definition mode) may leave it empty. */
-const itemNamed = (s: { item_id: string; draft_request?: DraftRequest | undefined }) =>
-  s.draft_request !== undefined || s.item_id.length > 0;
-const itemMessage = { message: 'item_id is required outside definition mode', path: ['item_id'] };
+type ModeFields = { item_id: string; draft_request?: DraftRequest | undefined; judge?: Judge | undefined };
+
+/** An item's run names its item; only definition mode and judge mode may leave it empty. */
+const itemNamed = (s: ModeFields) => s.draft_request !== undefined || s.judge !== undefined || s.item_id.length > 0;
+const itemMessage = { message: 'item_id is required outside definition mode and judge mode', path: ['item_id'] };
+
+/** A run is in one mode at most: a draft request's or a judge's. */
+const oneMode = (s: ModeFields) => !(s.draft_request && s.judge);
+const modeMessage = { message: 'a spec has a draft_request or a judge, not both', path: ['judge'] };
 
 /** The task as /goal/spec.json holds it: the bundle's spec plus the gateway's URL. It holds no secrets. */
-export const TaskSpec = taskFields.refine(itemNamed, itemMessage);
+export const TaskSpec = taskFields.refine(itemNamed, itemMessage).refine(oneMode, modeMessage);
 export type TaskSpec = z.infer<typeof TaskSpec>;
 
 /** The agent's files from /goal/agent. */
@@ -144,7 +186,10 @@ const toolSpec = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9@:/._+-]*$/);
  */
 export const Bundle = z
   .object({
-    spec: taskFields.omit({ gateway_url: true, base_conflicts: true }).refine(itemNamed, itemMessage),
+    spec: taskFields
+      .omit({ gateway_url: true, base_conflicts: true })
+      .refine(itemNamed, itemMessage)
+      .refine(oneMode, modeMessage),
     /** Files under /goal by path, base64. */
     files: z.record(bundlePath, z.base64()),
     /** Cloned into /workspace with the item's branch checked out; absent leaves it empty. */
@@ -173,5 +218,9 @@ export const Bundle = z
   .refine((b) => (b.definition === undefined) === (b.spec.draft_request === undefined), {
     message: "a bundle's definition and its spec's draft_request come together",
     path: ['definition'],
+  })
+  .refine((b) => !(b.spec.judge && (b.repository || b.definition)), {
+    message: "a judge's bundle has no repository and no definition",
+    path: ['spec', 'judge'],
   });
 export type Bundle = z.infer<typeof Bundle>;
