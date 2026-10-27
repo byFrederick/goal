@@ -132,7 +132,7 @@ With `board.flow.assemblies.changedSince: true` (default false), plans bind late
 
 ## Judges and eval cases
 
-Jonah's two file kinds live under `evals/` ([ADR 0025](../adr/0025-judges-and-evals-as-the-screens-show-them.md)). `contracts/definitions/evals.schema.json` defines both, and `config.Check` validates them with the factory (`internal/config/evals.go`). Judge runs, eval runs and the publish gate are not built yet.
+Jonah's two file kinds live under `evals/` ([ADR 0025](../adr/0025-judges-and-evals-as-the-screens-show-them.md)). `contracts/definitions/evals.schema.json` defines both, and `config.Check` validates them with the factory (`internal/config/evals.go`). Judge runs and eval runs are built in `internal/jonah` but goald does not run them yet; the publish eval gate is described under [Publishing with eval cases](#publishing-with-eval-cases).
 
 ### Judges: `evals/judges/<slug>.md`
 
@@ -199,6 +199,20 @@ Each problem is a `DefinitionProblem` in section `files`. Its `File` is the judg
 
 Only files directly in `evals/judges/` (`.md`) and `evals/cases/` (`.yaml`, `.yml`) are judges and cases. Fixtures such as reference patches go elsewhere, for example `evals/fixtures/`.
 
+### Publishing with eval cases
+
+Every publish of a draft that has eval cases runs them on the draft first ([ADR 0025](../adr/0025-judges-and-evals-as-the-screens-show-them.md), decision 4). The gate is in `authoring.Service.Publish` (`internal/authoring/evalgate.go`), after the checks pass, so every way to publish goes through it: `POST …/draft/publish`, `goal factory publish` and push, and adding a case or a judge from the UI. It compares runs by the draft's exact content, `domain.ManifestSHA256` of its files, so any change to any file needs a new run:
+
+- **No cases.** A draft without files in `evals/cases/` publishes as before.
+- **No run yet.** When no run of the content exists, or its newest run ran one case only (`goal eval run --case`), the publish starts a run of every case (trigger `publish`) and refuses with 409 `evals-pending`, naming the run in `eval_run_id`. The draft stays open.
+- **Pending.** While that run is queued or running, the publish refuses with 409 `evals-pending` and starts no other run.
+- **Failing.** When the run finished with a case that has any try that is not `pass` (a `fail`, an `error`, or a try a cancelled run never ran), the publish refuses with 409 `evals-failing`, with `eval_run_id` and `failing_cases`. Fix the case or the definition, which changes the content, and publish again.
+- **Passing.** When every try of every case passed, the draft publishes.
+
+The gate is off while goald does not wire it (`authoring.Deps.EvalGate` is nil): goald has no `EvalSuites` or `EvalRunner` adapter yet, so today a factory with cases publishes without running them, unlike ADR 0025 decision 4. The evals routes answer 503 `evals-unavailable` for the same reason.
+
+`POST …/evals/cases` (and the evals screen's "Add a case from a past run") writes `evals/cases/<name>.yaml` from a past run's agent and item, with `check: {contract: true}` or `{judge: <slug>}` and the requested tries, into a new draft, and publishes it through the same gate.
+
 ## Triggers: `board.triggers`
 
 A trigger turns an event, a schedule or a webhook delivery into a work item ([ADR 0026](../adr/0026-intake-triggers.md)). Triggers are part of `factory.yaml`, so saving one publishes a new version. `internal/config` parses and checks them (`config.Trigger`, `internal/config/triggers.go`). The engine that matches events, runs the checks and fires schedules is not built yet. `board.intake` is deprecated and ignored: the schema still accepts it so existing definitions load, and nothing reads it.
@@ -264,4 +278,11 @@ The organization policy ([ADR 0024](../adr/0024-organization-policy.md)) is a ce
 - The policy's denied commands are added to the agent's `tools.deny` rules in the run bundle, whatever the version says. A denied command fails its tool call and shows on the item's timeline as a denied tool call (`tool_denied`).
 - The policy's box time limit caps the run: each run's timeout is the smaller of goald's task timeout and the limit, and the box lives no longer than the limit.
 
-The engine signs the model and the denied commands into the run's task token, so a policy change never reaches a run already in its box. A run keeps the policy it started with.
+The four tool defaults ("What agents may do without a person") narrow the agent through the mechanism that already decides each one. An agent that allows less keeps less:
+
+- **Read the web and docs.** `off` or `ask` adds `WebFetch` and `WebSearch` (the `builtins.web` tools) to the agent's deny rules, whatever its `builtins.web` says. `ask` is served as `off`, as it is for builtins, because no tool approval is enforced. `allowed` leaves the agent's setting. Documentation MCP servers are connections, so Use credentials covers them.
+- **Merge a pull request.** `review_approval` is the definition's behavior: an agent gate whose station `action` is `merge` merges on approval. `off` stops that merge. The approval is recorded, and the item waits for a person at the gate (`waiting_human`) with a reason that names the organization policy; a person's merge (`goal merge <item>`) then merges it.
+- **Use credentials.** `attached_only` is the definition's behavior: the agent gets the connections its `connections` list names. `off` gives the agent none of them, neither their env nor their tools in the run bundle. The runtime's model connection and repository connection still reach the run, because it cannot start without them.
+- **Write outside the item's branch** is not enforced. Comments, issues, tickets and messages go through connections' CLIs and MCP servers, and no engine or gateway step can ask a person for one. Its value is stored and changes nothing at run start.
+
+The engine signs the model, the denied commands and the denied web tools into the run's task token, so a policy change never reaches a run already in its box. A run keeps the policy it started with.
