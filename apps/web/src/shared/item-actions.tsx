@@ -6,7 +6,7 @@
 // decisions show disabled with who decides ("Approvers of sre decide here."); without
 // item:operate pause and move are not offered. goald refuses them anyway.
 import { type QueryKey, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, Check, ExternalLink, GitMerge, Pause, Play, RotateCcw, Undo2 } from 'lucide-react';
+import { ArrowRight, Check, Ellipsis, ExternalLink, GitMerge, Pause, Play, RotateCcw, Undo2 } from 'lucide-react';
 import { type FormEvent, useId, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError, approveItem, mergeItem, pauseItem, rejectItem, retryItem } from '../api/client';
@@ -15,6 +15,7 @@ import type { Factory, Item, ItemState, Station } from '../api/types';
 import { Button } from '../ui/button';
 import { cn } from '../ui/cn';
 import { Dialog, DialogClose, DialogContent } from '../ui/dialog';
+import { Menu, MenuContent, MenuItem, MenuTrigger } from '../ui/menu';
 import { useFactoryById } from './factory';
 import { humanize } from './format';
 import { factoryWorkInvalidations } from './invalidation';
@@ -124,6 +125,8 @@ interface Props {
   size?: 'md' | 'lg';
   /** The send back button's words where there are no controls ("Send back" by default). */
   sendBackLabel?: string;
+  /** Move goes into a "More actions" menu beside the other controls (the Item page's top bar). */
+  moveInMenu?: boolean;
   className?: string;
 }
 
@@ -136,6 +139,7 @@ export function ItemDecisions({
   layout = 'row',
   size = 'md',
   sendBackLabel = 'Send back',
+  moveInMenu = false,
   className,
 }: Props) {
   const decide = useDecision(item, factory);
@@ -211,7 +215,7 @@ export function ItemDecisions({
           {pending === 'reject' ? 'Sending back…' : backTo}
         </Button>
       ) : null}
-      {ctl.move && controls ? (
+      {ctl.move && controls && !moveInMenu ? (
         <Button
           variant="secondary"
           size={s}
@@ -222,6 +226,28 @@ export function ItemDecisions({
           <ArrowRight size={16} strokeWidth={1.75} aria-hidden="true" />
           Move
         </Button>
+      ) : null}
+      {ctl.move && controls && moveInMenu ? (
+        <Menu>
+          <MenuTrigger asChild>
+            <Button variant="secondary" size="icon" aria-label="More actions">
+              <Ellipsis size={16} strokeWidth={1.75} aria-hidden="true" />
+            </Button>
+          </MenuTrigger>
+          {/* Move's dialog opens from the menu: focus goes to it, not back to the trigger. */}
+          <MenuContent
+            align="end"
+            className="w-52"
+            onCloseAutoFocus={(event) => {
+              if (open === 'move') event.preventDefault();
+            }}
+          >
+            <MenuItem onSelect={() => setOpen('move')}>
+              <ArrowRight size={16} strokeWidth={1.75} aria-hidden="true" />
+              Move
+            </MenuItem>
+          </MenuContent>
+        </Menu>
       ) : null}
       {decisions && !mayDecide ? (
         <p id={reasonId} className={cn('m-0 text-sm text-muted', layout === 'row' && 'basis-full')}>
@@ -317,7 +343,7 @@ export function RejectDialog({
         description={`It goes back to the agent for rework.${runStops(item)} Say what must change; the agent reads your reason first.`}
       >
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-2">
             <label htmlFor={id} className="text-sm text-muted">
               What must change
             </label>
@@ -330,7 +356,7 @@ export function RejectDialog({
               aria-invalid={touched && missing}
               aria-describedby={touched && missing ? `${id}-error` : undefined}
               placeholder="The spec misses the empty-bucket case; cover it with a test."
-              className="min-h-28 w-full resize-y rounded-control border border-rule bg-card px-3 py-2.5 text-base text-ink placeholder:text-muted aria-[invalid=true]:border-rework"
+              className="min-h-28 w-full resize-y rounded-control border border-rule bg-card px-3 py-3 text-base text-ink placeholder:text-muted aria-[invalid=true]:border-rework"
             />
             {touched && missing ? (
               <p id={`${id}-error`} className="m-0 text-sm text-rework">
@@ -369,7 +395,7 @@ function PauseDialog({ item, open, onOpenChange, onConfirm, pending }: DialogPro
             onConfirm(reason.trim());
           }}
         >
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-2">
             <label htmlFor={id} className="text-sm text-muted">
               Why (optional)
             </label>
@@ -379,7 +405,7 @@ function PauseDialog({ item, open, onOpenChange, onConfirm, pending }: DialogPro
               onChange={(e) => setReason(e.target.value)}
               rows={3}
               maxLength={500}
-              className="min-h-20 w-full resize-y rounded-control border border-rule bg-card px-3 py-2.5 text-base text-ink"
+              className="min-h-20 w-full resize-y rounded-control border border-rule bg-card px-3 py-3 text-base text-ink"
             />
           </div>
           <div className="flex flex-wrap justify-end gap-2">
@@ -438,7 +464,7 @@ export function MergeDialog({
             onConfirm();
           }}
         >
-          <p className="m-0 text-[15px] leading-snug">{item.title}</p>
+          <p className="m-0 text-body leading-snug">{item.title}</p>
           {prs.length > 0 ? (
             <ul className="m-0 flex list-none flex-col gap-1 p-0">
               {prs.map((pr) => (
@@ -447,7 +473,7 @@ export function MergeDialog({
                     href={pr}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm hover:text-run"
+                    className="inline-flex items-center gap-2 text-sm hover:text-run"
                   >
                     Review {pullRequestLabel(pr, prs.length > 1)} first
                     <ExternalLink size={14} strokeWidth={1.5} aria-hidden="true" />
@@ -460,7 +486,7 @@ export function MergeDialog({
           {refusal ? (
             <p
               role="alert"
-              className="m-0 rounded-control border border-rework-tint bg-rework-tint px-3 py-2.5 text-sm leading-snug text-rework-ink"
+              className="m-0 rounded-control border border-rework-tint bg-rework-tint px-3 py-3 text-sm leading-snug text-rework-ink"
             >
               {refusal}
             </p>
