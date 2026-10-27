@@ -90,7 +90,7 @@ function renderShell({ at, list = factories }: { at: string; list?: Factory[] })
     path: '/o/$org',
     beforeLoad: () => ({ org }),
     component: () => (
-      <AccountProvider org={org}>
+      <AccountProvider>
         <Outlet />
       </AccountProvider>
     ),

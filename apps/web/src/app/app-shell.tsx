@@ -18,7 +18,7 @@ import { TopBar, TopBarSetContext, type TopBarState, usePageLabel } from './top-
 
 export function AppShell({ org, children }: { org: OrgSummary; children: ReactNode }) {
   return (
-    <AccountProvider org={org}>
+    <AccountProvider>
       <div className="flex min-h-dvh flex-col bg-shell pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] md:flex-row">
         <a
           href="#main"

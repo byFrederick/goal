@@ -2,9 +2,9 @@
 // what each can do, where it reaches, how far it acts, who made it, when it expires and when it
 // was last used; New key (with api_key:manage) and Revoke…. Revoked keys stay listed for 30 days,
 // greyed (on phones they are counted, not shown). The list loads on its own: when it fails the
-// page keeps its header and New key. The secret of a new key is shown once (created-dialog.tsx).
-// Below them, everyone's own personal tokens (personal_token:read) and, for owners and admins, the
-// members' tokens (personal-tokens.tsx); a member without api_key:read sees only their own tokens.
+// page keeps its header and New key. The secret of a new key is shown once (shared/tokens/created-dialog.tsx).
+// Below them, for owners and admins (api_key:read), the members' tokens (member-tokens.tsx). A
+// person's own personal tokens are on the account page (/account, features/account/personal-tokens.tsx).
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SquareTerminal } from 'lucide-react';
 import { useState } from 'react';
@@ -15,16 +15,16 @@ import { apiKeysQuery, factoriesQuery, keys } from '../../api/queries';
 import type { ApiKey, CreatedApiKey } from '../../api/types';
 import { formatDay, plural } from '../../shared/format';
 import { useOrg, useOrgHolds } from '../../shared/org';
+import { CreatedKeyDialog } from '../../shared/tokens/created-dialog';
+import { ceilings, expiryText, lastUsedText } from '../../shared/tokens/scopes';
+import { Scopes, Soon } from '../../shared/tokens/shared';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { cn } from '../../ui/cn';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { EmptyState } from '../../ui/empty-state';
-import { CreatedKeyDialog } from './created-dialog';
+import { MemberTokensSection } from './member-tokens';
 import { NewKeyDialog } from './new-key-dialog';
-import { MemberTokensSection, PersonalTokensSection } from './personal-tokens';
-import { ceilings, expiryText, lastUsedText } from './scopes';
-import { Scopes, Soon } from './shared';
 
 const roleLabel = (role: string) => ceilings.find((c) => c.value === role)?.label ?? role;
 
@@ -32,7 +32,6 @@ export function ApiKeysPage() {
   const org = useOrg();
   const client = useQueryClient();
   const readKeys = useOrgHolds('api_key:read');
-  const readTokens = useOrgHolds('personal_token:read');
   const manage = useOrgHolds('api_key:manage');
   const list = useQuery({ ...apiKeysQuery(org.id), enabled: readKeys });
   const factories = useQuery(factoriesQuery(org.id));
@@ -228,7 +227,6 @@ export function ApiKeysPage() {
         </section>
       )}
 
-      {readTokens ? <PersonalTokensSection org={org} /> : null}
       {readKeys ? <MemberTokensSection org={org} /> : null}
 
       {readKeys ? (

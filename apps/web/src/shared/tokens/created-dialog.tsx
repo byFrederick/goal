@@ -87,12 +87,12 @@ function Shown({ secret, title, description, what, warning, onDone }: ShownProps
 
   return (
     <DialogContent title={title} description={description} dismissible={false} initialFocus={secretRef}>
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-start gap-2 rounded-control border border-line bg-card p-2.5 pl-3">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-start gap-2 rounded-control border border-line bg-card p-3 pl-3">
           <code
             ref={secretRef}
             tabIndex={-1}
-            className="min-w-0 flex-1 font-mono text-[13px] leading-relaxed break-all outline-none"
+            className="min-w-0 flex-1 font-mono text-secondary leading-relaxed break-all outline-none"
           >
             {secret}
           </code>
@@ -101,14 +101,14 @@ function Shown({ secret, title, description, what, warning, onDone }: ShownProps
             {copied === 'yes' ? 'Copied' : 'Copy'}
           </Button>
         </div>
-        <p aria-live="polite" className="m-0 text-[13px] text-muted">
+        <p aria-live="polite" className="m-0 text-secondary text-muted">
           {copied === 'failed'
             ? `Couldn’t reach the clipboard: the ${what} is selected, copy it with your keyboard.`
             : ''}
         </p>
       </div>
       {warning ? <Callout tone="rework">{warning}</Callout> : null}
-      <label htmlFor={id} className="flex min-h-11 cursor-pointer items-center gap-3 text-[15px]">
+      <label htmlFor={id} className="flex min-h-11 cursor-pointer items-center gap-3 text-body">
         <input
           id={id}
           type="checkbox"
