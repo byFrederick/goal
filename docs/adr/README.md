@@ -20,3 +20,7 @@ One line per ADR: its number, its title and the first part of its status. To add
 - [ADR 0014](0014-factory-rules.md): Factory rules: always-on guidance for a factory's agents. Status: accepted.
 - [ADR 0015](0015-overlapping-in-flight-work.md): Overlapping in-flight work: plans see open work, bind late and wait for the files they share. Status: accepted.
 - [ADR 0016](0016-ui-revamp.md): The UI revamp: the canvas screens are the UI's contract. Status: accepted.
+- [ADR 0017](0017-credentials.md): Credentials: organization-owned sealed secrets, scoped to factories and agents, that connections refer to as {{name}}. Status: accepted.
+- [ADR 0018](0018-agents-ask-questions.md): Agents ask questions: the run ends until a person answers. Status: accepted.
+- [ADR 0019](0019-item-watch-live-trace-teardown.md): Watch live, Trace and Teardown on an item, and OAuth consent with phase 6. Status: proposed.
+- [ADR 0020](0020-saved-views-and-csv-exports.md): Saved views and CSV exports. Status: accepted.
