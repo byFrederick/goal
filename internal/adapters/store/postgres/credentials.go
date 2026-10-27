@@ -51,15 +51,15 @@ func (c *Credentials) List(ctx context.Context) ([]domain.Credential, error) {
 // Get implements ports.Credentials.
 func (c *Credentials) Get(ctx context.Context, name string) (domain.Credential, error) {
 	r, err := fetch(ctx, c.s.read, func(q *db.Queries) (db.CredentialRow, error) { return q.Credential(ctx, name) })
-	if notFound(err) {
+
+	switch {
+	case notFound(err):
 		return domain.Credential{}, fmt.Errorf("credential %q: %w", name, ports.ErrNotFound)
-	}
-
-	if err != nil {
+	case err != nil:
 		return domain.Credential{}, fmt.Errorf("credential %q: %w", name, err)
+	default:
+		return credentialFrom(r)
 	}
-
-	return credentialFrom(r)
 }
 
 // Create implements ports.Credentials.
@@ -431,7 +431,7 @@ func credentialColumns(c domain.Credential) (columns, error) {
 		return columns{}, fmt.Errorf("encode agents: %w", err)
 	}
 
-	if c.RemindDays > math.MaxInt32 {
+	if c.RemindDays < 0 || c.RemindDays > math.MaxInt32 {
 		return columns{}, fmt.Errorf("a rotation reminder of %d days is too long: %w", c.RemindDays, domain.ErrInvalid)
 	}
 

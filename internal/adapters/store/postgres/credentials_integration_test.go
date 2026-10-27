@@ -14,8 +14,12 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports/porttest/credentialtest"
 )
 
-// seededFactory is the factory seedCredential's credentials allow.
-const seededFactory = domain.FactoryID("00000000-0000-7000-8000-0000000000f1")
+// seededFactory is the factory seedCredential's credentials allow; seededCredential the name the
+// tests give the credential they seed first.
+const (
+	seededFactory    = domain.FactoryID("00000000-0000-7000-8000-0000000000f1")
+	seededCredential = "sentry-token"
+)
 
 var credentialUse = domain.CredentialUse{Factory: seededFactory, Agent: "backend", Run: "00000000-0000-7000-8000-0000000000aa"}
 
@@ -63,14 +67,14 @@ func TestCredentials_NoPlaintextInAnyColumn(t *testing.T) {
 
 	const first, second = "sk-credential-first-7d3a", "sk-credential-second-1e8c"
 
-	seedCredential(t, c, org, "sentry-token", first)
+	seedCredential(t, c, org, seededCredential, first)
 
 	v := second
-	if _, err := c.Patch(ctx, "sentry-token", domain.CredentialPatch{Replace: &v}, domain.LocalUser); err != nil {
+	if _, err := c.Patch(ctx, seededCredential, domain.CredentialPatch{Replace: &v}, domain.LocalUser); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := c.Resolve(ctx, []string{"sentry-token"}, credentialUse); err != nil {
+	if _, err := c.Resolve(ctx, []string{seededCredential}, credentialUse); err != nil {
 		t.Fatal(err)
 	}
 
@@ -121,9 +125,9 @@ func TestCredentials_AADMismatchRefused(t *testing.T) {
 
 	const acmeValue = "sk-acme-credential-5c2b"
 
-	seedCredential(t, c, acme, "sentry-token", acmeValue)
+	seedCredential(t, c, acme, seededCredential, acmeValue)
 	seedCredential(t, c, acme, "deploy-key", "sk-acme-other-0a9f")
-	seedCredential(t, c, labs, "sentry-token", "sk-labs-credential-6d1e")
+	seedCredential(t, c, labs, seededCredential, "sk-labs-credential-6d1e")
 
 	copySealed := func(t *testing.T, toOrg domain.OrgID, to string) {
 		t.Helper()
@@ -142,7 +146,7 @@ func TestCredentials_AADMismatchRefused(t *testing.T) {
 		name string
 	}{
 		{"another credential of the organization", acme, "deploy-key"},
-		{"a credential of another organization", labs, "sentry-token"},
+		{"a credential of another organization", labs, seededCredential},
 	} {
 		copySealed(t, to.org, to.name)
 
@@ -155,7 +159,7 @@ func TestCredentials_AADMismatchRefused(t *testing.T) {
 		}
 	}
 
-	got, err := c.Resolve(domain.WithOrg(t.Context(), acme), []string{"sentry-token"}, credentialUse)
+	got, err := c.Resolve(domain.WithOrg(t.Context(), acme), []string{seededCredential}, credentialUse)
 	if err != nil || len(got) != 1 || got[0].Value != acmeValue {
 		t.Errorf("the original no longer opens: %v", err)
 	}
@@ -169,7 +173,7 @@ func TestConnectionKeyIDs_IncludesCredentials(t *testing.T) {
 	d := newConnectionsDB(t)
 	org := newOrgID(t, d.store)
 	seedConnections(t, NewConnections(d.store, testKey(t, "k1")), org, "s3cret")
-	seedCredential(t, NewCredentials(d.store, testKey(t, "k9")), org, "sentry-token", "sk-only-k9")
+	seedCredential(t, NewCredentials(d.store, testKey(t, "k9")), org, seededCredential, "sk-only-k9")
 
 	ids, err := ConnectionKeyIDs(t.Context(), d.store)
 	if err != nil || !slices.Equal(ids, []string{"k1", "k9"}) {
@@ -184,7 +188,7 @@ func TestRekey_ResealsCredentials(t *testing.T) {
 
 	d := newConnectionsDB(t)
 	org := newOrgID(t, d.store)
-	cred := seedCredential(t, NewCredentials(d.store, testKey(t, "k1")), org, "sentry-token", "sk-rekeyed-3b7c")
+	cred := seedCredential(t, NewCredentials(d.store, testKey(t, "k1")), org, seededCredential, "sk-rekeyed-3b7c")
 
 	if _, err := Rekey(t.Context(), d.owner, testKey(t, "k3")); err == nil || !strings.Contains(err.Error(), string(cred.ID)) ||
 		strings.Contains(err.Error(), "sk-rekeyed-3b7c") {
@@ -196,7 +200,7 @@ func TestRekey_ResealsCredentials(t *testing.T) {
 		t.Fatalf("Rekey = %d, %v; want the one credential", n, err)
 	}
 
-	got, err := NewCredentials(d.store, testKey(t, "k2")).Resolve(domain.WithOrg(t.Context(), org), []string{"sentry-token"}, credentialUse)
+	got, err := NewCredentials(d.store, testKey(t, "k2")).Resolve(domain.WithOrg(t.Context(), org), []string{seededCredential}, credentialUse)
 	if err != nil || len(got) != 1 || got[0].Value != "sk-rekeyed-3b7c" {
 		t.Errorf("Resolve under k2 after Rekey: %v", err)
 	}
@@ -218,7 +222,7 @@ func TestCredentials_RLSAndGrants(t *testing.T) {
 	d := newConnectionsDB(t)
 	c := NewCredentials(d.store, testKey(t, "k1"))
 	acme, labs := newOrgID(t, d.store), newOrgID(t, d.store)
-	seedCredential(t, c, acme, "sentry-token", "sk-rls-4e2d")
+	seedCredential(t, c, acme, seededCredential, "sk-rls-4e2d")
 
 	err := inOrgTx(t, d.store.pool, labs, func(tx pgx.Tx) error {
 		var n int
