@@ -49,12 +49,15 @@ func (s *session) intercept(next mcp.MethodHandler) mcp.MethodHandler {
 	}
 }
 
-// listTools lists the tools the task may call: the knowledge tools when its version lists sources.
+// listTools lists the tools the task may call: the knowledge tools when its version lists sources,
+// and the question tool always.
 func (s *session) listTools() *mcp.ListToolsResult {
 	tools := []*mcp.Tool{}
 	if len(s.sources) > 0 {
 		tools = append(tools, knowledgeTools(s.sources)...)
 	}
+
+	tools = append(tools, askTool())
 
 	// The list depends on the task's token, so it is private. The result bypasses the SDK's own
 	// tools/list handler, which would fill in the cache scope; clients reject an empty one.
@@ -66,6 +69,10 @@ func (s *session) listTools() *mcp.ListToolsResult {
 func (s *session) callTool(ctx context.Context, p *mcp.CallToolParamsRaw) (*mcp.CallToolResult, error) {
 	if tool, ok := s.knowledgeTool(p.Name); ok {
 		return s.callKnowledge(ctx, tool, p.Arguments), nil
+	}
+
+	if p.Name == questionServer+sep+toolAsk {
+		return s.callQuestion(ctx, p.Arguments), nil
 	}
 
 	start := s.g.clock.Now()
