@@ -26,6 +26,7 @@ const (
 	checkContracts  = "contracts"  // every output contract is a schema the model API takes as a tool's input
 	// checkAvailability: what the definition declares that this install cannot serve yet.
 	checkAvailability = "availability"
+	checkEvals        = "evals" // judges and eval cases are well formed (ADR 0025)
 )
 
 // Problem codes config reports. They are stable: the UI, the CLI and tests key on them.
@@ -72,6 +73,12 @@ const (
 	codeInlineRemoved       = "connection-inline-removed"
 
 	codeBuiltinAsk = "builtin-ask-unavailable"
+
+	codeJudgeFrontMissing     = "judge-front-matter-missing"
+	codeJudgeOutcomeDuplicate = "judge-outcome-duplicate"
+	codeEvalNameInvalid       = "eval-name-invalid"
+	codeUnknownJudge          = "unknown-judge"
+	codePatchNotFound         = "patch-not-found"
 )
 
 // toolSpec is a mise tool spec: an optional backend ("aqua:", "npm:"), a tool name (a path for
@@ -104,6 +111,7 @@ func (c *checker) run() []domain.DefinitionProblem {
 	c.tools()
 	c.outputContracts()
 	c.removedForms()
+	c.evals()
 
 	return c.problems
 }
@@ -539,8 +547,8 @@ func (f *Factory) exists(rel string) bool {
 	return err == nil
 }
 
-// otherFileProblems reports YAML and JSON files besides factory.yaml (contracts, evals) that
-// do not parse. Hidden folders (a working copy's .goal/) are skipped.
+// otherFileProblems reports YAML and JSON files besides factory.yaml (contracts, eval cases)
+// that do not parse. Hidden folders (a working copy's .goal/) are skipped.
 func otherFileProblems(files fs.FS) []domain.DefinitionProblem {
 	var out []domain.DefinitionProblem
 
