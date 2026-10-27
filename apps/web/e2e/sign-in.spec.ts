@@ -7,6 +7,7 @@ import {
   expectNoHorizontalScroll,
   expectToast,
   isPhone,
+  openNavigation,
   orgMarkOf,
   orgNav,
   recordToasts,
@@ -315,13 +316,9 @@ test('edit name, sign out everywhere, sign out', async ({ page }) => {
   await signInOn(page.request, { signed_in: 'fresh' });
   await page.goto('/o/acme');
   if (isPhone(page)) {
-    // On a phone the account is also at the bottom of the organization sheet.
-    await orgNav(page)
-      .getByRole('button', { name: /switch organization/ })
-      .click();
-    const block = page.getByRole('region', { name: 'Account' });
-    await expect(block.getByText('f.cruz@example.com, owner of Acme')).toBeVisible();
-    await block.getByRole('button', { name: 'Sign out', exact: true }).click();
+    // On a phone the account is at the bottom of the drawer, in the same menu as the sidebar's.
+    await openNavigation(page);
+    await (await openAccount('FC, F. Cruz')).getByRole('button', { name: 'Sign out', exact: true }).click();
   } else {
     await (await openAccount('FC, F. Cruz')).getByRole('button', { name: 'Sign out', exact: true }).click();
   }
@@ -367,16 +364,16 @@ test('cancelling the confirmation leaves the change undone', async ({ page }) =>
   expect((await page.request.get('/v1/orgs/acme')).status()).toBe(200);
 });
 
-/** Opens the organization menu, or the phone's sheet, and returns it. */
+/** Opens the organization menu (on a phone, from the drawer) and returns it. */
 async function openOrgMenu(page: Page) {
+  await openNavigation(page);
   await orgMarkOf(page).click();
-  const menu = isPhone(page) ? page.getByRole('dialog', { name: 'Switch organization' }) : page.getByRole('menu');
-  await expect(menu.getByRole(isPhone(page) ? 'link' : 'menuitem', { name: 'Organization settings' })).toBeVisible();
+  const menu = page.getByRole('menu');
+  await expect(menu.getByRole('menuitem', { name: 'Organization settings' })).toBeVisible();
   return menu;
 }
 
-const createOrg = (page: Page, menu: Locator) =>
-  menu.getByRole(isPhone(page) ? 'button' : 'menuitem', { name: 'Create organization' });
+const createOrg = (_page: Page, menu: Locator) => menu.getByRole('menuitem', { name: 'Create organization' });
 
 test('only platform admins are offered Create organization, and goald refuses anyone else', async ({ page }) => {
   await signInOn(page.request, { signed_in: 'fresh', platform_admin: false });
