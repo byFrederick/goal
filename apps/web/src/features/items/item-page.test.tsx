@@ -182,6 +182,44 @@ describe('the item page header', () => {
   });
 });
 
+describe('the item decisions at each width', () => {
+  // The top bar holds the decisions from 768 px; a phone has them in a card under the title. Never both.
+  function stubWidth(phone: boolean) {
+    window.matchMedia = (query: string) =>
+      ({
+        matches: phone && query === '(max-width: 767px)',
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as unknown as MediaQueryList;
+  }
+
+  afterEach(() => {
+    delete (window as { matchMedia?: unknown }).matchMedia;
+  });
+
+  it('shows Send back once at 768 px and wider, in the top bar', async () => {
+    stubWidth(false);
+    renderPage(item());
+
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.getAllByRole('button', { name: 'Send back to Spec' })).toHaveLength(1);
+    expect(within(screen.getByLabelText('Top bar')).getByRole('button', { name: 'Send back to Spec' })).toBeTruthy();
+  });
+
+  it('shows Send back once on a phone, in its card under the title', async () => {
+    stubWidth(true);
+    renderPage(item());
+
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.getAllByRole('button', { name: 'Send back to Spec' })).toHaveLength(1);
+    expect(within(screen.getByLabelText('Top bar')).queryByRole('button', { name: 'Send back to Spec' })).toBeNull();
+  });
+});
+
 describe('the stepper', () => {
   it('lists every station, the done ones with their time and outcome', async () => {
     renderPage(item());

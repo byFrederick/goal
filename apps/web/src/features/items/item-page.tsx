@@ -186,14 +186,17 @@ export function ItemPage() {
 
       <div className="flex flex-col gap-3 @[720px]:grid @[720px]:grid-cols-3 @[720px]:items-start @[720px]:gap-4">
         <div className="contents @[720px]:flex @[720px]:flex-col @[720px]:gap-4">
-          <ItemDecisionsCard
-            item={decidable}
-            factory={factory.id}
-            station={station}
-            controls={controls}
-            // A decision or a retry leads; pausing or moving work in flow comes after the trace.
-            className={deciding || item.state === 'blocked' ? 'order-1' : 'order-9'}
-          />
+          {/* Only on a phone: the top bar holds these actions from 768 px, so they never show twice. */}
+          {phone ? (
+            <ItemDecisionsCard
+              item={decidable}
+              factory={factory.id}
+              station={station}
+              controls={controls}
+              // A decision or a retry leads; pausing or moving work in flow comes after the trace.
+              className={deciding || item.state === 'blocked' ? 'order-1' : 'order-9'}
+            />
+          ) : null}
           <RunCard item={item} factory={factory} trace={trace} className="order-2 @[720px]:order-none" />
           <TouchesCard
             item={item}
@@ -269,7 +272,7 @@ function ItemDecisionsCard({
       station={station}
       controls={controls}
       layout="stack"
-      className={cn(className, 'rounded-card border border-line bg-card p-4 @[720px]:hidden')}
+      className={cn(className, 'rounded-card border border-line bg-card p-4')}
     />
   );
 }
