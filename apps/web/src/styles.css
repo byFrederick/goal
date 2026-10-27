@@ -80,6 +80,9 @@
   --text-kpi--line-height: 1.1;
   --text-kpi--font-weight: 600;
 
+  /* The weight of buttons, chips and segments (MASTER.md, Components: 520 to 580). One value, not one per control. */
+  --font-weight-control: 580;
+
   --radius-andon: 18px;
   --radius-card: 14px;
   --radius-cell: 10px;
@@ -88,6 +91,17 @@
 
   /* Borders, not shadows, except the one shadow of a popover or dialog (MASTER.md, Shape). */
   --shadow-pop: 0 20px 44px -18px color-mix(in srgb, var(--color-shadow) 40%, transparent);
+  /* The selected segment of a segmented control lifts off its track: a hairline shadow and its rule. */
+  --shadow-raised: 0 1px 2px color-mix(in srgb, var(--color-shadow) 12%, transparent), 0 0 0 1px var(--color-rule);
+
+  /* The pulse of a running status dot: 1.6s, eased, turned off by prefers-reduced-motion (chip.tsx). */
+  --animate-pulse-dot: pulse-dot 1.6s ease infinite;
+
+  @keyframes pulse-dot {
+    50% {
+      opacity: 0.3;
+    }
+  }
 
   @keyframes fade-in {
     from {

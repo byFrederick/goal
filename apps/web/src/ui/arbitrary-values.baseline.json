@@ -117,7 +117,6 @@
     "shared/reauth-dialog.tsx": 2,
     "ui/bars.tsx": 2,
     "ui/bridge.tsx": 1,
-    "ui/button.tsx": 2,
     "ui/date-range.tsx": 2,
     "ui/empty-state.tsx": 1,
     "ui/field.tsx": 5,
@@ -126,7 +125,6 @@
     "ui/menu.tsx": 2,
     "ui/page-header.tsx": 3,
     "ui/radio-cards.tsx": 4,
-    "ui/segmented-control.tsx": 1,
     "ui/sheet.tsx": 1,
     "ui/target-bar.tsx": 1,
     "ui/tooltip.tsx": 1
@@ -242,9 +240,7 @@
     "shared/waiting-for.tsx": 2,
     "ui/bars.tsx": 4,
     "ui/bridge.tsx": 4,
-    "ui/button.tsx": 2,
     "ui/callout.tsx": 4,
-    "ui/chip.tsx": 2,
     "ui/count.tsx": 1,
     "ui/date-range.tsx": 4,
     "ui/field.tsx": 2,
@@ -254,7 +250,6 @@
     "ui/mark.tsx": 1,
     "ui/menu.tsx": 4,
     "ui/radio-cards.tsx": 3,
-    "ui/segmented-control.tsx": 3,
     "ui/sheet.tsx": 4,
     "ui/tooltip.tsx": 2,
     "ui/view-only-banner.tsx": 3
@@ -276,7 +271,6 @@
     "ui/logo.tsx": 3,
     "ui/mark.tsx": 1,
     "ui/sheet.tsx": 1,
-    "ui/switch.tsx": 1,
     "ui/target-bar.tsx": 3
   }
 }
