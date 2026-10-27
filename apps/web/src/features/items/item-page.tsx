@@ -11,16 +11,15 @@ import { humanize } from '../../shared/format';
 import { type ItemControls, ItemDecisions } from '../../shared/item-actions';
 import { pausedNow, pullRequestsOf } from '../../shared/item-state';
 import { useOrg } from '../../shared/org';
-import { WaitingFor } from '../../shared/waiting-for';
 import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { NotAvailable } from '../../ui/not-available';
 import { Stepper } from '../../ui/stepper';
-import { RunCard } from './flow-cards';
 import { NoteComposer } from './note-composer';
 import { OutputsCard } from './outputs';
+import { CostCard, DetailsCard, OverlapsCard, RulesCard } from './side-cards';
 import { noFlow, stepsOf } from './steps';
 import { activeRun, buildTrace, latestToolCalls, noteRecipient, runRole, type Trace } from './timeline';
 import { TouchesCard } from './touches-card';
@@ -182,8 +181,6 @@ export function ItemPage() {
         <Stepper label="Progress through the line" steps={steps} waiting={item.state === 'waiting_human'} />
       </header>
 
-      <WaitingFor waiting={item.waiting} />
-
       <div className="flex flex-col gap-3 @[720px]:grid @[720px]:grid-cols-3 @[720px]:items-start @[720px]:gap-4">
         <div className="contents @[720px]:flex @[720px]:flex-col @[720px]:gap-4">
           {/* Only on a phone: the top bar holds these actions from 768 px, so they never show twice. */}
@@ -197,7 +194,16 @@ export function ItemPage() {
               className={deciding || item.state === 'blocked' ? 'order-1' : 'order-9'}
             />
           ) : null}
-          <RunCard item={item} factory={factory} trace={trace} className="order-2 @[720px]:order-none" />
+          <DetailsCard
+            item={item}
+            factory={factory}
+            events={events}
+            trace={trace}
+            className="order-2 @[720px]:order-none"
+          />
+          <CostCard item={item} factory={factory} runs={runs?.runs ?? []} className="order-2 @[720px]:order-none" />
+          <OverlapsCard item={item} className="order-2 @[720px]:order-none" />
+          <RulesCard item={item} factory={factory} trace={trace} className="order-2 @[720px]:order-none" />
           <TouchesCard
             item={item}
             itemKey={key}
