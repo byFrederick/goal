@@ -160,7 +160,7 @@ test('the board and the floor work while the touch metrics fail, and the floor o
   await expect(page.getByRole('heading', { level: 1, name: 'SRE board' })).toBeVisible();
 
   await page.goto('/o/acme/f/sre');
-  await expect(page.getByRole('heading', { level: 1, name: 'SRE floor' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
   const card = page.getByRole('region', { name: 'Human touches' });
   await expect(card.getByText('Couldn’t load the human touches.')).toBeVisible({ timeout: 15_000 });
   await expectAccessible(page);

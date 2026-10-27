@@ -24,11 +24,11 @@ async function showTrace(page: Page) {
 
 for (const [name, path, heading] of [
   ['factories', '/o/acme', 'Factories'],
-  ['floor', '/o/acme/f/goal', 'Goal floor'],
+  ['floor', '/o/acme/f/goal', 'Floor'],
   ['board', '/o/acme/f/goal/board', 'Goal board'],
   ['item', '/o/acme/f/goal/items/6', 'Floor: throughput bars per day'],
   ['items', '/o/acme/f/goal/items', 'Goal items'],
-  ['another factory', '/o/acme/f/sre', 'SRE floor'],
+  ['another factory', '/o/acme/f/sre', 'Floor'],
 ] as const) {
   test(`${name} is accessible and fits the screen`, async ({ page }) => {
     await page.goto(path);
@@ -117,7 +117,7 @@ test('on a phone: the banner leads to what waits, a card to its floor', async ({
 
   // The whole card is the link: a tap on its stats opens the factory.
   await page.getByRole('article', { name: 'sre', exact: true }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'SRE floor' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
 });
 
 test('an organization without budgets or factories says so', async ({ page, request }) => {
@@ -182,7 +182,7 @@ test('the sidebar opens a factory and marks its pages', async ({ page }) => {
   await sre.click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/sre$/);
   await expect(sre).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByRole('heading', { level: 1, name: 'SRE floor' })).toBeFocused();
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeFocused();
   await expect(sidebar.getByRole('link', { name: 'Floor' })).toHaveAttribute('aria-current', 'page');
   // Agents has no page yet: listed, disabled, and it says so.
   await expect(sidebar.getByRole('button', { name: 'Agents' })).toHaveAttribute('aria-disabled', 'true');
@@ -217,7 +217,7 @@ test('the drawer opens a factory on a phone', async ({ page }) => {
   await sre.click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/sre$/);
   await expect(page.getByRole('dialog', { name: 'Acme' })).toBeHidden();
-  await expect(page.getByRole('heading', { level: 1, name: 'SRE floor' })).toBeFocused();
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeFocused();
   // The top bar names the page; the factory is in the drawer, not in a crumb.
   await expect(page.getByRole('banner')).toContainText('Floor');
 });
@@ -247,7 +247,7 @@ test('the sidebar marks Home on the organization pages', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Factories' })).toBeFocused();
 
   await page.getByRole('link', { name: 'Open sre' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'SRE floor' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
 });
 
 test('the floor says what waits on you and leads to it', async ({ page }) => {
@@ -324,11 +324,11 @@ test('an item shows its time at each station against its target', async ({ page 
   // Below 720 px of content (phones, and tablets beside the sidebar) the card is compact.
   if ((await page.locator('main').evaluate((main) => main.clientWidth)) < 720) {
     await expect(time.getByText('target 60 min')).toBeVisible();
-    await expect(time.getByText('spec-writer-1 on turn 3 of 80, $0.31 of $4.00')).toBeVisible();
+    await expect(time.getByText('spec-writer-1 on turn 3 of 80, $0.31 of $12.00')).toBeVisible();
   } else {
     await expect(time.getByText('Expedite target: within 60 minutes')).toBeVisible();
     await expect(time.getByText('3 of 80', { exact: true })).toBeVisible();
-    await expect(time.getByText('$0.31 of $4.00', { exact: true })).toBeVisible();
+    await expect(time.getByText('$0.31 of $12.00', { exact: true })).toBeVisible();
     await expect(time.getByText('spec', { exact: true })).toBeVisible();
   }
 
@@ -611,7 +611,7 @@ test('on a phone: floor to board to item and back', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Goal board' })).toBeVisible();
 
   await tabs.getByRole('link', { name: 'Floor' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Goal floor' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
 });
 
 test('on a phone: More opens the drawer, which leads to the organization pages', async ({ page }) => {
@@ -642,7 +642,7 @@ test('on a phone: More opens the drawer, which leads to the organization pages',
 test('switch organization from the menu by keyboard', async ({ page }) => {
   test.skip(isPhone(page), 'the menu is the 768 px and wider navigation; phones open it from the drawer');
   await page.goto('/o/acme/f/sre');
-  await expect(page.getByRole('heading', { level: 1, name: 'SRE floor' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
   const mark = orgMarkOf(page);
   await mark.focus();
 
@@ -713,7 +713,7 @@ async function openCreateOrg(page: Page) {
 
 test('create an organization and land on its empty factories', async ({ page }) => {
   await page.goto('/o/acme/f/goal');
-  await expect(page.getByRole('heading', { level: 1, name: 'Goal floor' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
 
   const dialog = await openCreateOrg(page);
   const name = dialog.getByRole('textbox', { name: 'Name' });

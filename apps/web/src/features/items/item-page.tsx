@@ -11,7 +11,6 @@ import { type ItemControls, ItemDecisions } from '../../shared/item-actions';
 import { describeState, pausedNow, pullRequestsOf } from '../../shared/item-state';
 import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
-import { WaitingFor } from '../../shared/waiting-for';
 import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
@@ -20,6 +19,7 @@ import { PathCard, TimeCard } from './flow-cards';
 import { ItemStateChip } from './item-state-chip';
 import { NoteComposer } from './note-composer';
 import { OutputsCard } from './outputs';
+import { CostCard, DetailsCard, OverlapsCard, RulesCard } from './side-cards';
 import { activeRun, buildTrace, latestToolCalls, noteRecipient, runRole, type Trace } from './timeline';
 import { TouchesCard } from './touches-card';
 import { ToolRow, TraceList } from './trace-view';
@@ -73,7 +73,7 @@ function LatestSteps({ trace, onShowAll, className }: { trace: Trace; onShowAll:
       {steps.length === 0 ? (
         <p className="m-0 text-sm text-muted">No tool calls yet.</p>
       ) : (
-        <ol className="m-0 flex list-none flex-col gap-1.5 p-0">
+        <ol className="m-0 flex list-none flex-col gap-2 p-0">
           {steps.map((t) => (
             <ToolRow key={`${t.at}-${t.id}`} call={t} />
           ))}
@@ -81,7 +81,7 @@ function LatestSteps({ trace, onShowAll, className }: { trace: Trace; onShowAll:
       )}
       <Button
         variant="ghost"
-        className="h-11 self-start px-2 text-[15px] underline underline-offset-3"
+        className="h-11 self-start px-2 text-body underline underline-offset-3"
         onClick={onShowAll}
       >
         Full trace
@@ -135,7 +135,7 @@ export function ItemPage() {
     <>
       <TopBarSlot crumb={`#${item.number}`} />
       <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex max-w-[820px] min-w-0 flex-col gap-2.5">
+        <div className="flex max-w-[820px] min-w-0 flex-col gap-3">
           <Link
             to="/o/$org/f/$factory/board"
             params={params}
@@ -184,8 +184,6 @@ export function ItemPage() {
         />
       </header>
 
-      <WaitingFor waiting={item.waiting} />
-
       <div className="flex flex-col gap-3 @[720px]:grid @[720px]:grid-cols-3 @[720px]:items-start @[720px]:gap-4">
         <div className="contents @[720px]:flex @[720px]:flex-col @[720px]:gap-4">
           <ItemDecisionsCard
@@ -196,6 +194,16 @@ export function ItemPage() {
             // A decision or a retry leads; pausing or moving work in flow comes after the trace.
             className={deciding || item.state === 'blocked' ? 'order-1' : 'order-9'}
           />
+          <DetailsCard
+            item={item}
+            factory={factory}
+            events={events}
+            trace={trace}
+            className="order-2 @[720px]:order-none"
+          />
+          <CostCard item={item} factory={factory} runs={runs?.runs ?? []} className="order-2 @[720px]:order-none" />
+          <OverlapsCard item={item} className="order-2 @[720px]:order-none" />
+          <RulesCard item={item} factory={factory} trace={trace} className="order-2 @[720px]:order-none" />
           <TimeCard item={item} factory={factory} trace={trace} className="order-2 @[720px]:order-none" />
           <TouchesCard
             item={item}
@@ -221,7 +229,7 @@ export function ItemPage() {
           />
           {item.body ? (
             <SectionCard title="Request" className="order-5 @[720px]:order-none">
-              <p className="m-0 text-[15px] leading-relaxed whitespace-pre-wrap">{item.body}</p>
+              <p className="m-0 text-body leading-relaxed whitespace-pre-wrap">{item.body}</p>
             </SectionCard>
           ) : null}
           <TraceCard

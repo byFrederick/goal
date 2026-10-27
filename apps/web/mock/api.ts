@@ -66,6 +66,7 @@ import {
   type MockItem,
   type MockSlots,
   type MockState,
+  type MockStationConfig,
   orgCan,
   seed,
   trackSpan,
@@ -1050,6 +1051,45 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     return { ...measured, agent, from: day(range.from), to: day(range.to), stations };
   };
 
+  /**
+   * A station's lanes as goald describes them: one per agent that works there, its slots and the
+   * leases it holds (the items in progress); a person's lane at a human station counts the items
+   * waiting on them. Stations with neither (queue and done) have none.
+   */
+  const lanesOf = (
+    s: { id: string; kind: BoardStation['kind'] },
+    config: MockStationConfig | undefined,
+    here: MockItem[],
+  ): NonNullable<BoardStation['lanes']> => {
+    if (s.kind === 'agent') {
+      const slots = config?.copies ?? config?.wip_limit ?? Math.max(config?.agents.length ?? 0, 1);
+      const busy = here.filter((it) => it.state === 'in_progress').length;
+      return (config?.agents ?? []).map((agent) => ({
+        key: agent,
+        kind: 'agent',
+        role: agent.replace(/-\d+$/, '').replace(/^./, (c) => c.toUpperCase()),
+        model: null,
+        model_label: null,
+        slots,
+        busy,
+      }));
+    }
+    if (s.kind === 'human') {
+      return [
+        {
+          key: s.id,
+          kind: 'person',
+          role: s.id.replace(/^./, (c) => c.toUpperCase()),
+          model: null,
+          model_label: null,
+          slots: null,
+          busy: here.filter((it) => it.state === 'waiting_human').length,
+        },
+      ];
+    }
+    return [];
+  };
+
   const board = (name: string): Board | undefined => {
     const factory = findFactory(name);
     if (!factory) return undefined;
@@ -1071,6 +1111,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         // In progress, and waiting for a person's decision (a human station's work).
         in_progress: here.filter((it) => it.state === 'in_progress' || it.state === 'waiting_human').length,
         items: here.map(card),
+        lanes: lanesOf(s, config[s.id], here),
         ...stationStats(factory.name, s, here),
       };
     });
