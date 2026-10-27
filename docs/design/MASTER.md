@@ -1,6 +1,6 @@
 # Goal design system
 
-The one source for how Goal looks, reads and behaves. It replaces the "control room" system of 2026-10-23: the user approved this revamp on 2026-10-26. The reference is the **Goal UI canvas** artifact, on its "Revamp" pages, where every screen is an artboard named `V2-<Screen>.dc.html`. The pages called "Current" show the old screens and are history.
+The one source for how Goal looks, reads and behaves. It replaces the "control room" system of 2026-10-23: the user approved this revamp on 2026-10-26. Every screen is exported to [screens/](screens/README.md) as a picture and its HTML, from the owner's Goal UI canvas; [ADR 0016](../adr/0016-ui-revamp.md) makes them binding.
 
 > **LOGIC:** when building a page, check `docs/design/pages/<page>.md` first. A rule there overrides this file. Otherwise, follow this file exactly.
 
@@ -184,7 +184,7 @@ Keep using Floor, Board, Items, line, station, lane, WIP, buffer, expedite lane,
 
 ## Screens
 
-The canvas's "Revamp" pages hold the screens, one page per flow:
+The screens, one folder per flow in [screens/](screens/README.md):
 
 - **Get started:** sign up, the email code, then eight steps:
   1. name the organization;

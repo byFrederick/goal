@@ -43,7 +43,7 @@ Rules:
 
 ## The design revamp
 
-The user approved a revamp of the UI on 2026-10-26. [MASTER.md](../design/MASTER.md) now describes it: Archivo, the cobalt palette with one meaning per colour, one collapsible sidebar in place of the rail and the factory sidebar, and the vocabulary (Needs you, Intake and triggers, Jonah's proposals, judges, evals and bake-offs). The Goal UI canvas's "Revamp" pages hold every screen. The app moves to it one work item at a time. Until an item lands, the sections below describe the screens as built.
+The user approved a revamp of the UI on 2026-10-26. [MASTER.md](../design/MASTER.md) now describes it: Archivo, the cobalt palette with one meaning per colour, one collapsible sidebar in place of the rail and the factory sidebar, and the vocabulary (Needs you, Intake and triggers, Jonah's proposals, judges, evals and bake-offs). Every screen is in [docs/design/screens/](../design/screens/README.md), binding by [ADR 0016](../adr/0016-ui-revamp.md). The app moves to it one work item at a time. Until an item lands, the sections below describe the screens as built.
 
 ## Web app architecture
 

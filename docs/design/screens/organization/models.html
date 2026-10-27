@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Models and policies</title>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#FFFFFF}
+a{color:#2742F5}a:hover{color:#1B33C9}
+*{box-sizing:border-box}
+h1,h2,h3,p,ol,ul{margin:0}
+ol,ul{padding:0;list-style:none}
+.g{--bg:#FFFFFF;--side:#F3F4F9;--panel:#F7F8FC;--hover:#E9EBF4;--rule:#E3E6EF;--rule2:#CBD0DF;--ink:#14182B;--ink2:#464D6A;--ink3:#626986;--pri:#2742F5;--pri-ink:#1B33C9;--pri-t:#E8ECFF;--you:#7B3FE4;--you-t:#F1EBFE;--you-ink:#5A24B8;--red:#D63A1F;--red-t:#FDECE8;--red-ink:#AE2C14;--yel:#FFC21A;--yel-t:#FFF4D1;--yel-ink:#6E4B00;--grn:#0FA36B;--grn-t:#E1F5EB;--grn-ink:#0A7A4F;--navy:#121633;--navy2:#1C2147;--navy3:#2C3266;font-family:Archivo,system-ui,sans-serif;font-size:14px;line-height:1.45;color:var(--ink);background:var(--bg);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.g.dark{--bg:#0E1120;--side:#13172A;--panel:#161A2F;--hover:#1E2340;--rule:#252A45;--rule2:#3A4066;--ink:#ECEEF7;--ink2:#B7BCD4;--ink3:#9096B3;--pri:#4A63F5;--pri-ink:#A3B2FF;--pri-t:#1D2556;--you:#9061F5;--you-t:#2A1E4F;--you-ink:#CDB4FF;--red:#E2512F;--red-t:#3B1C16;--red-ink:#FFA08A;--yel-t:#3A3013;--yel-ink:#FFD666;--grn:#22C17F;--grn-t:#10301F;--grn-ink:#62DDA5;--navy:#090C1A;--navy2:#151A36;--navy3:#272D58}
+.h1{font-size:26px;line-height:1.15;font-weight:650;font-stretch:108%;letter-spacing:-0.015em}
+.h2{font-size:16px;line-height:1.3;font-weight:620}
+.num{font-stretch:112%;font-weight:600;letter-spacing:-0.01em}
+.m2{color:var(--ink2)}.m3{color:var(--ink3)}.sm{font-size:13px}.xs{font-size:12px}
+.code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12.5px}
+.app{display:flex;flex-wrap:wrap;align-items:stretch;min-height:100vh;background:var(--bg)}
+.side{width:256px;flex:none;background:var(--side);border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:1px;padding:10px 10px 12px;min-height:100vh}
+.srow{display:flex;align-items:center;gap:2px;margin-bottom:8px}
+.orgb{flex:1;min-width:0;display:flex;align-items:center;gap:9px;height:38px;padding:0 6px;border:0;border-radius:8px;background:none;font:inherit;font-weight:620;font-size:15px;color:var(--ink);cursor:pointer;text-align:left}
+.omk{width:26px;height:26px;flex:none;border-radius:7px;background:var(--pri);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:750;font-stretch:115%}
+.ib{width:32px;height:32px;flex:none;border:0;border-radius:8px;background:none;color:var(--ink2);display:grid;place-items:center;cursor:pointer;padding:0}
+.orgb:hover,.ib:hover,.ni:hover,.fh:hover,.sub a:hover,.me:hover{background:var(--hover);color:var(--ink)}
+.newb{display:flex;align-items:center;gap:8px;height:36px;padding:0 8px 0 12px;border-radius:9px;background:var(--pri);color:#fff;font-weight:620;text-decoration:none;margin:0 0 10px}
+.newb:hover{background:var(--pri-ink);color:#fff}
+.kb{margin-left:auto;min-width:20px;height:20px;padding:0 5px;border-radius:5px;background:rgba(255,255,255,.2);font-size:11px;font-weight:650;display:grid;place-items:center}
+.ni{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:8px;color:var(--ink2);text-decoration:none;font-weight:540}
+.ni svg{flex:none;color:var(--ink3)}
+.ni.on{background:var(--pri-t);color:var(--pri-ink)}.ni.on svg{color:var(--pri)}
+.cnt{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:6px;font-size:12px;font-weight:650;display:inline-grid;place-items:center;background:var(--you);color:#fff}
+.cnt.n{background:var(--hover);color:var(--ink2)}
+.sec{display:flex;align-items:center;justify-content:space-between;height:30px;margin-top:14px;padding:0 2px 0 10px;font-size:12.5px;font-weight:600;color:var(--ink3)}
+.sec .ib{width:26px;height:26px}
+.fh{display:flex;align-items:center;gap:10px;height:36px;padding:0 8px;border-radius:8px;color:var(--ink);text-decoration:none;font-weight:620}
+.fh .chev{margin-left:auto;color:var(--ink3);flex:none}
+.fb{width:22px;height:22px;flex:none;border-radius:6px;display:grid;place-items:center;color:#fff;font-size:11.5px;font-weight:750;font-stretch:112%}
+.sub{display:flex;flex-direction:column;gap:1px;margin:2px 0 6px 18px;padding-left:10px;border-left:1px solid var(--rule2)}
+.sub a{display:flex;align-items:center;height:30px;padding:0 10px;border-radius:7px;color:var(--ink2);text-decoration:none;font-size:13.5px;font-weight:520}
+.sub a.on{background:var(--bg);color:var(--ink);font-weight:640;box-shadow:0 0 0 1px var(--rule)}
+.sdot{width:8px;height:8px;border-radius:50%;flex:none}
+.sbot{margin-top:auto;display:flex;flex-direction:column;gap:8px;padding-top:12px}
+.use{display:flex;flex-direction:column;gap:7px;padding:10px 12px;border-radius:10px;border:1px solid var(--rule);background:var(--bg);text-decoration:none;color:var(--ink)}
+.use:hover{border-color:var(--rule2);color:var(--ink)}
+.bar{height:6px;border-radius:3px;background:var(--hover);overflow:hidden;display:flex}
+.bar span{display:block;height:100%}
+.me{display:flex;align-items:center;gap:10px;width:100%;padding:6px;border:0;border-radius:10px;background:none;font:inherit;color:var(--ink);cursor:pointer;text-align:left}
+.av{width:32px;height:32px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:12px;font-weight:700;color:#fff;background:#2F6F5E}
+.main{flex:999 1 560px;min-width:0;display:flex;flex-direction:column}
+.top{display:flex;align-items:center;gap:10px;min-height:56px;padding:10px 28px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.crumb{display:flex;align-items:center;gap:8px;font-weight:560;color:var(--ink2);min-width:0}
+.crumb a{color:var(--ink2);text-decoration:none}.crumb a:hover{color:var(--ink)}
+.tact{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:8px;border:1px solid var(--rule2);background:var(--bg);color:var(--ink);font:inherit;font-weight:580;font-size:13.5px;text-decoration:none;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--panel);color:var(--ink)}
+.btn.pri{background:var(--pri);border-color:var(--pri);color:#fff}.btn.pri:hover{background:var(--pri-ink);color:#fff}
+.btn.warn{color:var(--red-ink)}
+.btn.sm{height:30px;padding:0 10px;font-size:13px}
+.seg{display:inline-flex;padding:3px;border-radius:9px;background:var(--panel);border:1px solid var(--rule);gap:2px;flex-wrap:wrap}
+.seg button{height:28px;padding:0 10px;border:0;border-radius:6px;background:none;font:inherit;font-size:13px;font-weight:560;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.seg button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(20,24,43,.12),0 0 0 1px var(--rule)}
+.seg .k{font-size:12px;color:var(--ink3)}
+.page{padding:22px 28px 40px;display:flex;flex-direction:column;gap:18px}
+.card{border:1px solid var(--rule);border-radius:14px;background:var(--bg);padding:18px 20px;min-width:0;display:flex;flex-direction:column}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 7px;border-radius:6px;font-size:12px;font-weight:580;background:var(--panel);color:var(--ink2);border:1px solid var(--rule);white-space:nowrap;text-decoration:none}
+.chip.run{background:var(--pri-t);color:var(--pri-ink);border-color:transparent}
+.chip.you{background:var(--you-t);color:var(--you-ink);border-color:transparent}
+.chip.red{background:var(--red-t);color:var(--red-ink);border-color:transparent}
+.chip.yel{background:var(--yel-t);color:var(--yel-ink);border-color:transparent}
+.chip.grn{background:var(--grn-t);color:var(--grn-ink);border-color:transparent}
+.chip.big{height:28px;padding:0 10px;font-size:13px;border-radius:8px}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.live{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.3}}
+a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:760px){.side{width:100%;min-height:0;border-right:0;border-bottom:1px solid var(--rule)}.side .navs,.side .sbot{display:none}.top{padding:8px 16px}.page{padding:16px}}
+
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(460px,100%),1fr));gap:16px;align-items:start}
+.ch{display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+.ch .h2{flex:1;min-width:0}
+.mrow{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--rule)}
+.mrow:first-of-type{border-top:0}
+.mi{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:none;background:#F6E7DD;color:#A9502A}
+.mt{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.35}
+.mt b{font-weight:620}
+.sw{width:36px;height:20px;border-radius:10px;border:0;padding:2px;background:var(--rule2);cursor:pointer;display:flex;flex:none}
+.sw span{width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);display:block}
+.sw[aria-checked="true"]{background:var(--pri);justify-content:flex-end}
+.sel{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--rule2);background:var(--bg);font:inherit;font-size:13px;font-weight:580;color:var(--ink);cursor:pointer;white-space:nowrap}
+.pol{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 16px;align-items:center;padding:12px 0;border-top:1px solid var(--rule)}
+.hn{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.opt{display:flex;gap:10px;align-items:flex-start;padding:14px;border-radius:12px;border:1px solid var(--rule2);cursor:pointer}
+.opt.on{border-color:var(--pri);box-shadow:0 0 0 1px var(--pri);background:var(--pri-t)}
+.opt input{margin:3px 0 0;accent-color:var(--pri)}
+.deny{display:flex;flex-wrap:wrap;gap:8px}
+.deny span{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 6px 0 10px;border-radius:7px;background:var(--red-t);color:var(--red-ink);font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12.5px}
+.deny span button{width:20px;height:20px;border:0;border-radius:5px;background:none;color:inherit;cursor:pointer;display:grid;place-items:center;padding:0}
+.box{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.bx{border:1px solid var(--rule2);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:4px}
+.bx.off{border-style:dashed;background:var(--panel)}
+.ips{display:flex;flex-direction:column;border:1px solid var(--rule);border-radius:10px;overflow:hidden}
+.ips span{padding:8px 12px;border-top:1px solid var(--rule);font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12.5px}
+.ips span:first-child{border-top:0}
+</style>
+</helmet>
+<div class="g app">
+  <nav class="side" aria-label="Goal">
+    <div class="srow">
+      <button class="orgb" type="button" aria-haspopup="menu" aria-label="Goal organization, switch organization"><span class="omk" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="#FFC21A"></circle></svg></span><span style="flex: 1; min-width: 0">Goal</span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m4 5.5 3-3 3 3M4 8.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+      <button class="ib" type="button" aria-label="Search, Command K"><svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><circle cx="8" cy="8" r="5.25" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="m12 12 3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button>
+      <button class="ib" type="button" aria-label="Collapse sidebar"><svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><rect x="2.5" y="3" width="13" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"></rect><path d="M7 3v12" stroke="currentColor" stroke-width="1.6"></path></svg></button>
+    </div>
+    <a class="newb" href="#item"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>New item<span class="kb" aria-label="shortcut C">C</span></a>
+    <div class="navs" style="display: flex; flex-direction: column; gap: 1px">
+      <a class="ni" href="#home"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 8.25 9 3.5l6 4.75V15a1 1 0 0 1-1 1h-3.25v-4h-3.5v4H4a1 1 0 0 1-1-1Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>Home</a>
+      <a class="ni" href="#needs-you"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2.5 10.5h3.75l1 2h3.5l1-2h3.75M4.5 3.5h9l2 7v4a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-4Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>Needs you<span class="cnt">5</span></a>
+      <a class="ni" href="#runs"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 9.5h3l2-5.5 4 10 2-4.5h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>Runs</a>
+      <a class="ni" href="#connections"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M6.5 2.5v3M11.5 2.5v3M4.5 5.5h9v3a4.5 4.5 0 0 1-9 0ZM9 13v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>Connections</a>
+      <a class="ni" href="#credentials"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="6" cy="12" r="3.25" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M8.4 9.6 15 3M12.5 5.5l2 2M10.4 7.6l1.5 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>Credentials</a>
+      <a class="ni" href="#knowledge"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 4.5C3 3.7 3.7 3 4.5 3H8v12H4.5c-.8 0-1.5-.7-1.5-1.5ZM15 4.5c0-.8-.7-1.5-1.5-1.5H10v12h3.5c.8 0 1.5-.7 1.5-1.5Z" fill="none" stroke="currentColor" stroke-width="1.6"></path></svg>Knowledge</a>
+      <div class="sec"><span>Factories</span><a class="ib" href="#template" aria-label="New factory"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg></a></div>
+      <a class="fh" href="#floor" aria-expanded="true"><span class="fb" style="background: #2742F5" aria-hidden="true">S</span>Software<span class="cnt" style="margin-left: auto">3</span><svg class="chev" style="margin-left: 0" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m3.5 5.5 3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></a>
+      <div class="sub">
+        <a href="#floor">Floor</a>
+        <a href="#board">Board</a>
+        <a href="#items">Items</a>
+        <a href="#agents">Agents</a>
+        <a href="#intake">Intake</a>
+        <a href="#jonah">Jonah<span class="cnt n" style="height: 18px; font-size: 11px">2</span></a>
+        <a href="#definition">Definition</a>
+        <a href="#factory-settings">Settings</a>
+      </div>
+      <a class="fh" href="#"><span class="fb" style="background: #0E8576" aria-hidden="true">R</span>SRE<span class="cnt" style="margin-left: auto; background: var(--red)">1</span><svg class="chev" style="margin-left: 0" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m5.5 3.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></a>
+      <a class="fh" href="#"><span class="fb" style="background: #C24E17" aria-hidden="true">P</span>Support<span class="cnt" style="margin-left: auto">1</span><svg class="chev" style="margin-left: 0" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m5.5 3.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></a>
+    </div>
+    <div class="sbot">
+      <a class="use" href="#spend"><span style="display: flex; justify-content: space-between; font-size: 13px"><span class="m2">Spend this week</span><span class="num" style="font-weight: 620">$512 of $1,400</span></span><span class="bar" aria-hidden="true"><span style="width: 37%; background: var(--pri)"></span></span></a>
+      <button class="me" type="button" aria-haspopup="menu"><span class="av" aria-hidden="true">FC</span><span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-weight: 620">Freddy Cruz</span><span class="xs m3">Owner</span></span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m4 5.5 3-3 3 3M4 8.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+    </div>
+  </nav>
+  <div class="main">
+    <header class="top">
+      <div class="crumb"><span>Goal</span><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m4.5 2.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.4"></path></svg><span style="color: var(--ink); font-weight: 640">Models and policies</span></div>
+      <div class="tact">
+        <button class="btn pri" type="button">Save changes</button>
+      </div>
+    </header>
+
+    <main class="page">
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <h1 class="h1">Models and policies</h1>
+        <p class="m2">Defaults for every factory in Goal. A factory or an agent can choose less, never more.</p>
+      </div>
+
+      <div class="two">
+        <div style="display: flex; flex-direction: column; gap: 16px; min-width: 0">
+          <section class="card" aria-labelledby="mod-h">
+            <div class="ch"><h2 id="mod-h" class="h2">Models agents may use</h2></div>
+            <div class="mrow"><span class="mi" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 18 18"><path d="M9 2v14M2 9h14M4 4l10 10M14 4 4 14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg></span><span class="mt"><b>Claude Opus 5.5 <span class="chip run" style="margin-left: 6px">Default</span></b><span class="sm m3">All agents unless they choose another</span></span><button class="sw" type="button" role="switch" aria-checked="true" aria-label="Allow Claude Opus 5.5"><span></span></button></div>
+            <div class="mrow"><span class="mi" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 18 18"><path d="M9 2v14M2 9h14M4 4l10 10M14 4 4 14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg></span><span class="mt"><b>Claude Sonnet 5.5</b><span class="sm m3">Used by Support's responder</span></span><button class="sw" type="button" role="switch" aria-checked="true" aria-label="Allow Claude Sonnet 5.5"><span></span></button></div>
+            <div class="mrow"><span class="mi" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 18 18"><path d="M9 2v14M2 9h14M4 4l10 10M14 4 4 14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg></span><span class="mt"><b>Claude Haiku 5.5</b><span class="sm m3">Used by Software's frontend-engineer</span></span><button class="sw" type="button" role="switch" aria-checked="true" aria-label="Allow Claude Haiku 5.5"><span></span></button></div>
+            <div class="mrow"><span class="mi" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 18 18"><path d="M9 2v14M2 9h14M4 4l10 10M14 4 4 14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg></span><span class="mt"><b>Claude Fable 5.1</b><span class="sm m3">Not used yet</span></span><button class="sw" type="button" role="switch" aria-checked="true" aria-label="Allow Claude Fable 5.1"><span></span></button></div>
+            <div class="mrow"><span class="mi" aria-hidden="true" style="background: var(--panel); color: var(--ink3); border: 1px dashed var(--rule2)"><svg width="16" height="16" viewBox="0 0 18 18"><path d="M3 5h4l4 8h4M11 5h4M3 13h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></span><span class="mt"><b>Other providers, through a router</b><span class="sm m3">Bedrock, Vertex or any OpenAI-compatible endpoint</span></span><button class="btn sm" type="button">Add a router</button></div>
+          </section>
+
+          <section class="card" aria-labelledby="har-h" style="gap: 12px">
+            <div class="ch" style="margin-bottom: 0"><h2 id="har-h" class="h2">Harness</h2><span class="sm m3">The program that runs the model in a box</span></div>
+            <div class="hn" role="radiogroup" aria-labelledby="har-h">
+              <label class="opt on"><input type="radio" name="harness" checked><span style="display: flex; flex-direction: column; gap: 2px"><b style="font-weight: 620">Claude Code</b><span class="sm m2">Skills, rules, MCP tools and tool permissions from the definition</span></span></label>
+              <label class="opt"><input type="radio" name="harness"><span style="display: flex; flex-direction: column; gap: 2px"><b style="font-weight: 620">Another harness</b><span class="sm m2">Codex or your own command, per agent</span></span></label>
+            </div>
+          </section>
+
+          <section class="card" aria-labelledby="box-h" style="gap: 12px">
+            <div class="ch" style="margin-bottom: 0"><h2 id="box-h" class="h2">Box sizes</h2><span class="sm m3">Each run gets a fresh box</span></div>
+            <div class="box">
+              <div class="bx"><b style="font-weight: 620">Small</b><span class="sm m2">2 vCPU, 4 GB</span><span class="xs m3">Support, SRE</span></div>
+              <div class="bx"><b style="font-weight: 620">Medium</b><span class="sm m2">4 vCPU, 8 GB</span><span class="xs m3">Not used</span></div>
+              <div class="bx"><b style="font-weight: 620">Large</b><span class="sm m2">8 vCPU, 16 GB</span><span class="xs m3">Software</span></div>
+            </div>
+            <label style="display: flex; align-items: center; gap: 10px; font-size: 13.5px"><input type="checkbox" checked style="width: 16px; height: 16px; accent-color: var(--pri)">Stop a box after 3 hours, whatever the run is doing</label>
+          </section>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 16px; min-width: 0">
+          <section class="card" aria-labelledby="pol-h" style="padding-bottom: 8px">
+            <div class="ch"><h2 id="pol-h" class="h2">Tool policy</h2><span class="sm m3">What agents may do without a person</span></div>
+            <div class="pol" style="border-top: 0"><span style="display: flex; flex-direction: column"><b style="font-weight: 600">Write outside the item's branch</b><span class="sm m3">Comments, issues, tickets, messages</span></span><button class="sel" type="button" style="color: var(--you-ink); border-color: #C9B2F7">Ask a person<svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4"></path></svg></button></div>
+            <div class="pol"><span style="display: flex; flex-direction: column"><b style="font-weight: 600">Merge a pull request</b><span class="sm m3">Only a review station with merge on approval</span></span><button class="sel" type="button">Review approval<svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4"></path></svg></button></div>
+            <div class="pol"><span style="display: flex; flex-direction: column"><b style="font-weight: 600">Read the web and docs</b><span class="sm m3">Search, fetch, context7</span></span><button class="sel" type="button" style="color: var(--grn-ink)">Allowed<svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4"></path></svg></button></div>
+            <div class="pol"><span style="display: flex; flex-direction: column"><b style="font-weight: 600">Use credentials</b><span class="sm m3">Only the ones attached to the agent</span></span><button class="sel" type="button">Attached only<svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4"></path></svg></button></div>
+          </section>
+
+          <section class="card" aria-labelledby="den-h" style="gap: 12px">
+            <div class="ch" style="margin-bottom: 0"><h2 id="den-h" class="h2">Commands no agent may run</h2><span class="sm m3">In every factory</span></div>
+            <div class="deny">
+              <span>terraform apply<button type="button" aria-label="Remove terraform apply"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="m2 2 6 6m0-6-6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg></button></span>
+              <span>terraform destroy<button type="button" aria-label="Remove terraform destroy"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="m2 2 6 6m0-6-6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg></button></span>
+              <span>git push --force<button type="button" aria-label="Remove git push --force"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="m2 2 6 6m0-6-6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg></button></span>
+              <span>git push … main<button type="button" aria-label="Remove git push to main"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="m2 2 6 6m0-6-6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg></button></span>
+              <span>--no-verify<button type="button" aria-label="Remove no-verify"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="m2 2 6 6m0-6-6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg></button></span>
+              <span>wrangler deploy<button type="button" aria-label="Remove wrangler deploy"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="m2 2 6 6m0-6-6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg></button></span>
+              <span>gh release<button type="button" aria-label="Remove gh release"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="m2 2 6 6m0-6-6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg></button></span>
+              <button class="btn sm" type="button" style="height: 28px">+ Add a command</button>
+            </div>
+            <p class="xs m3">A denied command fails the tool call and shows on the item's timeline.</p>
+          </section>
+
+          <section class="card" aria-labelledby="ip-h" style="gap: 12px">
+            <div class="ch" style="margin-bottom: 0"><h2 id="ip-h" class="h2">Where agents connect from</h2><button class="btn sm" type="button">Copy all</button></div>
+            <p class="sm m2">Allow these addresses in firewalls your agents must reach.</p>
+            <div class="ips"><span>104.30.132.0/24</span><span>104.30.133.0/24</span><span>2a09:bac0:1000::/40</span></div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { theme: this.props.dark ? 'dark' : '' };
+  }
+}
+</script>
+</body>
+</html>

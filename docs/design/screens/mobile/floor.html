@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Software floor on a phone</title>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#FFFFFF}
+a{color:#2742F5}a:hover{color:#1B33C9}
+*{box-sizing:border-box}
+h1,h2,h3,p,ol,ul{margin:0}
+ol,ul{padding:0;list-style:none}
+.g{--bg:#FFFFFF;--side:#F3F4F9;--panel:#F7F8FC;--hover:#E9EBF4;--rule:#E3E6EF;--rule2:#CBD0DF;--ink:#14182B;--ink2:#464D6A;--ink3:#626986;--pri:#2742F5;--pri-ink:#1B33C9;--pri-t:#E8ECFF;--you:#7B3FE4;--you-t:#F1EBFE;--you-ink:#5A24B8;--red:#D63A1F;--red-t:#FDECE8;--red-ink:#AE2C14;--yel:#FFC21A;--yel-t:#FFF4D1;--yel-ink:#6E4B00;--grn:#0FA36B;--grn-t:#E1F5EB;--grn-ink:#0A7A4F;--navy:#121633;--navy2:#1C2147;--navy3:#2C3266;font-family:Archivo,system-ui,sans-serif;font-size:14px;line-height:1.45;color:var(--ink);background:var(--bg);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.g.dark{--bg:#0E1120;--side:#13172A;--panel:#161A2F;--hover:#1E2340;--rule:#252A45;--rule2:#3A4066;--ink:#ECEEF7;--ink2:#B7BCD4;--ink3:#9096B3;--pri:#4A63F5;--pri-ink:#A3B2FF;--pri-t:#1D2556;--you:#9061F5;--you-t:#2A1E4F;--you-ink:#CDB4FF;--red:#E2512F;--red-t:#3B1C16;--red-ink:#FFA08A;--yel-t:#3A3013;--yel-ink:#FFD666;--grn:#22C17F;--grn-t:#10301F;--grn-ink:#62DDA5;--navy:#090C1A;--navy2:#151A36;--navy3:#272D58}
+.h1{font-size:26px;line-height:1.15;font-weight:650;font-stretch:108%;letter-spacing:-0.015em}
+.h2{font-size:16px;line-height:1.3;font-weight:620}
+.num{font-stretch:112%;font-weight:600;letter-spacing:-0.01em}
+.m2{color:var(--ink2)}.m3{color:var(--ink3)}.sm{font-size:13px}.xs{font-size:12px}
+.code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12.5px}
+.app{display:flex;flex-wrap:wrap;align-items:stretch;min-height:100vh;background:var(--bg)}
+.side{width:256px;flex:none;background:var(--side);border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:1px;padding:10px 10px 12px;min-height:100vh}
+.srow{display:flex;align-items:center;gap:2px;margin-bottom:8px}
+.orgb{flex:1;min-width:0;display:flex;align-items:center;gap:9px;height:38px;padding:0 6px;border:0;border-radius:8px;background:none;font:inherit;font-weight:620;font-size:15px;color:var(--ink);cursor:pointer;text-align:left}
+.omk{width:26px;height:26px;flex:none;border-radius:7px;background:var(--pri);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:750;font-stretch:115%}
+.ib{width:32px;height:32px;flex:none;border:0;border-radius:8px;background:none;color:var(--ink2);display:grid;place-items:center;cursor:pointer;padding:0}
+.orgb:hover,.ib:hover,.ni:hover,.fh:hover,.sub a:hover,.me:hover{background:var(--hover);color:var(--ink)}
+.newb{display:flex;align-items:center;gap:8px;height:36px;padding:0 8px 0 12px;border-radius:9px;background:var(--pri);color:#fff;font-weight:620;text-decoration:none;margin:0 0 10px}
+.newb:hover{background:var(--pri-ink);color:#fff}
+.kb{margin-left:auto;min-width:20px;height:20px;padding:0 5px;border-radius:5px;background:rgba(255,255,255,.2);font-size:11px;font-weight:650;display:grid;place-items:center}
+.ni{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:8px;color:var(--ink2);text-decoration:none;font-weight:540}
+.ni svg{flex:none;color:var(--ink3)}
+.ni.on{background:var(--pri-t);color:var(--pri-ink)}.ni.on svg{color:var(--pri)}
+.cnt{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:6px;font-size:12px;font-weight:650;display:inline-grid;place-items:center;background:var(--you);color:#fff}
+.cnt.n{background:var(--hover);color:var(--ink2)}
+.sec{display:flex;align-items:center;justify-content:space-between;height:30px;margin-top:14px;padding:0 2px 0 10px;font-size:12.5px;font-weight:600;color:var(--ink3)}
+.sec .ib{width:26px;height:26px}
+.fh{display:flex;align-items:center;gap:10px;height:36px;padding:0 8px;border-radius:8px;color:var(--ink);text-decoration:none;font-weight:620}
+.fh .chev{margin-left:auto;color:var(--ink3);flex:none}
+.fb{width:22px;height:22px;flex:none;border-radius:6px;display:grid;place-items:center;color:#fff;font-size:11.5px;font-weight:750;font-stretch:112%}
+.sub{display:flex;flex-direction:column;gap:1px;margin:2px 0 6px 18px;padding-left:10px;border-left:1px solid var(--rule2)}
+.sub a{display:flex;align-items:center;height:30px;padding:0 10px;border-radius:7px;color:var(--ink2);text-decoration:none;font-size:13.5px;font-weight:520}
+.sub a.on{background:var(--bg);color:var(--ink);font-weight:640;box-shadow:0 0 0 1px var(--rule)}
+.sdot{width:8px;height:8px;border-radius:50%;flex:none}
+.sbot{margin-top:auto;display:flex;flex-direction:column;gap:8px;padding-top:12px}
+.use{display:flex;flex-direction:column;gap:7px;padding:10px 12px;border-radius:10px;border:1px solid var(--rule);background:var(--bg);text-decoration:none;color:var(--ink)}
+.use:hover{border-color:var(--rule2);color:var(--ink)}
+.bar{height:6px;border-radius:3px;background:var(--hover);overflow:hidden;display:flex}
+.bar span{display:block;height:100%}
+.me{display:flex;align-items:center;gap:10px;width:100%;padding:6px;border:0;border-radius:10px;background:none;font:inherit;color:var(--ink);cursor:pointer;text-align:left}
+.av{width:32px;height:32px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:12px;font-weight:700;color:#fff;background:#2F6F5E}
+.main{flex:999 1 560px;min-width:0;display:flex;flex-direction:column}
+.top{display:flex;align-items:center;gap:10px;min-height:56px;padding:10px 28px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.crumb{display:flex;align-items:center;gap:8px;font-weight:560;color:var(--ink2);min-width:0}
+.crumb a{color:var(--ink2);text-decoration:none}.crumb a:hover{color:var(--ink)}
+.tact{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:8px;border:1px solid var(--rule2);background:var(--bg);color:var(--ink);font:inherit;font-weight:580;font-size:13.5px;text-decoration:none;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--panel);color:var(--ink)}
+.btn.pri{background:var(--pri);border-color:var(--pri);color:#fff}.btn.pri:hover{background:var(--pri-ink);color:#fff}
+.btn.warn{color:var(--red-ink)}
+.btn.sm{height:30px;padding:0 10px;font-size:13px}
+.seg{display:inline-flex;padding:3px;border-radius:9px;background:var(--panel);border:1px solid var(--rule);gap:2px;flex-wrap:wrap}
+.seg button{height:28px;padding:0 10px;border:0;border-radius:6px;background:none;font:inherit;font-size:13px;font-weight:560;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.seg button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(20,24,43,.12),0 0 0 1px var(--rule)}
+.seg .k{font-size:12px;color:var(--ink3)}
+.page{padding:22px 28px 40px;display:flex;flex-direction:column;gap:18px}
+.card{border:1px solid var(--rule);border-radius:14px;background:var(--bg);padding:18px 20px;min-width:0;display:flex;flex-direction:column}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 7px;border-radius:6px;font-size:12px;font-weight:580;background:var(--panel);color:var(--ink2);border:1px solid var(--rule);white-space:nowrap;text-decoration:none}
+.chip.run{background:var(--pri-t);color:var(--pri-ink);border-color:transparent}
+.chip.you{background:var(--you-t);color:var(--you-ink);border-color:transparent}
+.chip.red{background:var(--red-t);color:var(--red-ink);border-color:transparent}
+.chip.yel{background:var(--yel-t);color:var(--yel-ink);border-color:transparent}
+.chip.grn{background:var(--grn-t);color:var(--grn-ink);border-color:transparent}
+.chip.big{height:28px;padding:0 10px;font-size:13px;border-radius:8px}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.live{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.3}}
+a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+.ph{width:390px;position:relative;overflow:hidden;background:var(--bg);display:flex;flex-direction:column}
+.tb{height:56px;flex:none;display:flex;align-items:center;gap:4px;padding:0 6px;border-bottom:1px solid var(--rule);background:var(--bg)}
+.hb{width:44px;height:44px;flex:none;border:0;border-radius:10px;background:none;color:var(--ink2);display:grid;place-items:center;cursor:pointer;padding:0;text-decoration:none}
+.hb:hover{background:var(--hover);color:var(--ink)}
+.hb .omk{width:30px;height:30px;border-radius:8px}
+.ttl{flex:1;min-width:0;display:flex;align-items:center;gap:8px;font-size:17px;font-weight:650;font-stretch:106%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tbtn{height:36px;padding:0 12px;border-radius:9px;border:0;background:var(--pri);color:#fff;font:inherit;font-size:14px;font-weight:620;display:inline-flex;align-items:center;gap:6px;text-decoration:none;flex:none;margin-right:4px}
+.bd{flex:1;padding:16px 16px 96px;display:flex;flex-direction:column;gap:14px;min-height:0}
+.tabs{position:absolute;left:0;right:0;bottom:0;height:64px;border-top:1px solid var(--rule);display:grid;grid-template-columns:repeat(5,minmax(0,1fr));background:var(--bg);z-index:4}
+.tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11.5px;font-weight:580;color:var(--ink3);text-decoration:none;position:relative}
+.tab:hover{color:var(--ink)}
+.tab.on{color:var(--pri-ink)}
+.tab .ic{position:relative;display:grid;place-items:center;width:28px;height:24px}
+.tab .b{position:absolute;top:-4px;right:-8px;min-width:18px;height:18px;padding:0 5px;border-radius:6px;background:var(--you);color:#fff;font-size:10.5px;font-weight:700;display:grid;place-items:center;border:2px solid var(--bg)}
+.mbtn{display:flex;align-items:center;justify-content:center;gap:8px;height:48px;border-radius:12px;border:1px solid var(--rule2);background:var(--bg);color:var(--ink);font:inherit;font-size:15px;font-weight:600;text-decoration:none;cursor:pointer;width:100%}
+.mbtn.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+.mbtn.you{background:var(--you);border-color:var(--you);color:#fff}
+.mbtn.ink{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.mcard{border:1px solid var(--rule);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px;background:var(--bg)}
+.sx{display:flex;gap:8px;overflow-x:auto;margin:0 -16px;padding:0 16px 2px;scrollbar-width:none}
+.fchip{flex:none;display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:18px;border:1px solid var(--rule2);background:var(--bg);font:inherit;font-size:13.5px;font-weight:580;color:var(--ink2);cursor:pointer;white-space:nowrap}
+.fchip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.fchip .k{font-size:12px;opacity:.75}
+.kc{background:var(--bg);border:1px solid var(--rule);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:7px;text-decoration:none;color:var(--ink)}
+.kc.you{border-color:#C9B2F7;box-shadow:0 0 0 1px #C9B2F7}
+.kr{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink3);flex-wrap:wrap}
+.kr .age{margin-left:auto;white-space:nowrap}
+.kt{font-size:15px;font-weight:620;line-height:1.35}
+.ag{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2)}
+.ag .a{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:9.5px;font-weight:700;flex:none}
+.ag .c{margin-left:auto;color:var(--ink3)}
+.asm{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:580;color:#0B6E62}
+.asm .of{margin-left:auto;color:var(--ink3);font-weight:560}
+.lbl{font-size:13px;font-weight:620;color:var(--ink2)}
+.sw{width:44px;height:26px;border-radius:13px;border:0;padding:3px;background:var(--rule2);cursor:pointer;display:flex;flex:none}
+.sw span{width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);display:block}
+.sw[aria-checked="true"]{background:var(--pri);justify-content:flex-end}
+
+
+.andon{background:var(--navy);color:#fff;border-radius:16px;padding:16px 16px 12px;display:flex;flex-direction:column;gap:6px}
+.lg{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12px;color:#C3C8EA}
+.lg span{display:inline-flex;align-items:center;gap:5px}
+.lg i{width:10px;height:10px;border-radius:3px;display:block}
+.vst{position:relative;display:flex;flex-direction:column}
+.vtrk{position:absolute;left:20px;top:30px;bottom:30px;width:3px;background:#3B4AE0;border-radius:2px}
+.vs{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:12px;align-items:center;padding:7px 0;position:relative;text-decoration:none;color:#fff;min-height:58px}
+.vs:hover{color:#fff}
+.vn{width:44px;height:44px;border-radius:50%;background:var(--navy2);border:3px solid #5C6CF0;display:grid;place-items:center;font-weight:700;font-stretch:112%;font-size:15px;position:relative;z-index:1}
+.vs .nm{font-size:15px;font-weight:640;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.vs .mt{font-size:12.5px;color:#C3C8EA;display:block}
+.slots{display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end;max-width:100px}
+.slots i{width:12px;height:12px;border-radius:3px;display:block;border:1.5px solid #5A6197}
+.slots i.b{background:#5C6CF0;border-color:#5C6CF0}
+.slots i.y{background:#A27BFF;border-color:#A27BFF}
+.ctag{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:6px;background:#FFC21A;color:#14182B;font-size:11.5px;font-weight:700}
+.afoot{display:flex;justify-content:space-between;gap:10px;padding-top:10px;border-top:1px solid #262C58;font-size:12.5px;color:#C3C8EA}
+.afoot b{color:#fff;font-weight:620}
+.kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.kpi{border:1px solid var(--rule);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.kpi .v{font-size:26px;line-height:1.05}
+.kpi .u{font-size:13px;font-weight:520;color:var(--ink2);margin-left:3px;font-stretch:100%}
+.dl{display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:620}
+.dl.bad{color:var(--red-ink)}.dl.good{color:var(--grn-ink)}
+.ask{display:grid;grid-template-columns:36px minmax(0,1fr);gap:12px;align-items:start;padding:12px 0;border-top:1px solid var(--rule)}
+.aico{width:36px;height:36px;border-radius:10px;display:grid;place-items:center}
+.at{font-weight:620;display:block;font-size:14.5px;line-height:1.35}
+
+</style>
+</helmet>
+<div class="g ph" style="height: 1160px">
+  <header class="tb">
+    <a class="hb" href="#drawer" aria-label="Open menu"><span class="omk" aria-hidden="true"><svg width="19" height="19" viewBox="0 0 24 24"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="#FFC21A"></circle></svg></span></a>
+    <h1 class="ttl"><span class="fb" style="background: #2742F5; width: 22px; height: 22px" aria-hidden="true">S</span> Floor</h1>
+    <button class="hb" type="button" aria-label="Pull andon" style="color: var(--red-ink)"><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2v12M5 3h7l-1.5 2.5L12 8H5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg></button><a class="hb" href="#" aria-label="New item" style="background: var(--pri); color: #fff; width: 40px; height: 40px; margin-right: 4px"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path></svg></a>
+  </header>
+  <main class="bd">
+    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap"><span class="chip big grn"><span class="dot live"></span>Line running</span><span class="sm m2">Last 7 days</span></div>
+    <section class="andon" aria-labelledby="ln">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px"><h2 id="ln" class="h2" style="color: #fff">The line, now</h2><span class="xs" style="color: #C3C8EA">In progress <b style="color: #fff">10 of 18</b></span></div>
+      <div class="lg" aria-label="Legend"><span><i style="background: #5C6CF0"></i>Working</span><span><i style="background: #A27BFF"></i>Waiting on you</span><span><i style="border: 1.5px solid #5A6197"></i>Free</span></div>
+      <div class="vst">
+        <span class="vtrk" aria-hidden="true"></span>
+        <ol aria-label="Stations from intake to done">
+          <li><a class="vs" href="#board"><span class="vn" style="border-color: #8E96C9">4</span><span><span class="nm">Intake</span><span class="mt">4 waiting, oldest 3 h</span></span><span></span></a></li>
+          <li><a class="vs" href="#board"><span class="vn">2</span><span><span class="nm">Spec</span><span class="mt">2 in progress, busy 41%</span></span><span class="slots" aria-label="3 architects: 1 working, 1 waiting on you, 1 free"><i class="b"></i><i class="y"></i><i></i></span></a></li>
+          <li><a class="vs" href="#board"><span class="vn" style="border-color: #FFC21A; box-shadow: 0 0 0 5px rgba(255,194,26,.16)">8</span><span><span class="nm">Build <span class="ctag">Constraint</span></span><span class="mt">2 ready, busy 94%</span></span><span class="slots" aria-label="6 engineers: 5 working, 1 waiting on you"><i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="y"></i></span></a></li>
+          <li><a class="vs" href="#board"><span class="vn">2</span><span><span class="nm">Review</span><span class="mt">2 in progress, sends back 14%</span></span><span class="slots" aria-label="3 reviewers: 1 working, 1 waiting on you, 1 free"><i class="b"></i><i class="y"></i><i></i></span></a></li>
+          <li><a class="vs" href="#board"><span class="vn" style="border-color: #22C17F; background: #0F3A2C"><svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><path d="m5 10.5 3.2 3.2L15 7" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg></span><span><span class="nm">Done</span><span class="mt">7 merged today, 53 this week</span></span><span></span></a></li>
+        </ol>
+      </div>
+      <div class="afoot"><span>New work enters <b>when Build has room</b></span><span>Andon <b>clear</b></span></div>
+    </section>
+    <section class="kpis" aria-label="Flow against targets, last 7 days">
+      <div class="kpi"><span class="sm m2">Throughput</span><p class="num v">7.6<span class="u">a day</span></p><span class="bar" aria-hidden="true"><span style="width: 76%; background: var(--pri)"></span></span><span class="xs m3" style="display: flex; justify-content: space-between; gap: 6px"><span>Target 10</span><span class="dl bad">▼ 0.6</span></span></div>
+      <div class="kpi"><span class="sm m2">Lead time, p85</span><p class="num v">31<span class="u">h</span></p><span class="bar" aria-hidden="true"><span style="width: 65%; background: var(--grn)"></span></span><span class="xs m3" style="display: flex; justify-content: space-between; gap: 6px"><span>Target 48 h</span><span class="dl good">▼ 4 h</span></span></div>
+      <div class="kpi"><span class="sm m2">Sent back</span><p class="num v">14<span class="u">%</span></p><span class="bar" aria-hidden="true"><span style="width: 35%; background: var(--red)"></span></span><span class="xs m3" style="display: flex; justify-content: space-between; gap: 6px"><span>Andon at 40%</span><span class="dl bad">▲ 2 pts</span></span></div>
+      <div class="kpi"><span class="sm m2">Spend today</span><p class="num v">$96<span class="u">of $150</span></p><span class="bar" aria-hidden="true"><span style="width: 64%; background: var(--yel)"></span></span><span class="xs m3" style="display: flex; justify-content: space-between; gap: 6px"><span>Week $412</span><span class="dl ">Limit drains</span></span></div>
+    </section>
+    <section class="card" aria-labelledby="nd" style="padding: 14px 16px 4px">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px"><h2 id="nd" class="h2" style="flex: 1">Needs you</h2><span class="cnt">3</span><a class="sm" href="#needs-you" style="text-decoration: none; font-weight: 600; min-height: 44px; display: inline-flex; align-items: center; padding-left: 6px">See all</a></div>
+      <div class="ask"><span class="aico" style="background: var(--you-t); color: var(--you-ink)"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 2.5 15 5v4c0 3.5-2.5 5.6-6 6.5C5.5 14.6 3 12.5 3 9V5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path><path d="m6.5 9 1.8 1.8L11.8 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></span><span style="display: flex; flex-direction: column; gap: 8px"><span><span class="at">architect wants to comment on issue #212</span><span class="sm m3">#151 at Spec, 4 min</span></span><span style="display: flex; gap: 8px"><button class="btn" type="button" style="height: 44px; flex: 1; justify-content: center">Deny</button><a class="btn pri" href="#approve" style="height: 44px; flex: 1; justify-content: center; background: var(--you); border-color: var(--you)">Review</a></span></span></div>
+      <div class="ask"><span class="aico" style="background: var(--you-t); color: var(--you-ink)"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5v6a1.5 1.5 0 0 1-1.5 1.5H8l-3.5 3v-3h0A1.5 1.5 0 0 1 3 10.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg></span><a href="#item" style="text-decoration: none; color: var(--ink); min-height: 44px"><span class="at">frontend-engineer asked a question</span><span class="sm m3">#147 at Build, 12 min</span></a></div>
+    </section>
+  </main>
+  <nav class="tabs" aria-label="Main">
+    <a class="tab" href="#needs-you" aria-label="Needs you, 5 waiting"><span class="ic"><svg width="22" height="22" viewBox="0 0 18 18" aria-hidden="true"><path d="M2.5 10.5h3.75l1 2h3.5l1-2h3.75M4.5 3.5h9l2 7v4a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-4Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg><span class="b" aria-hidden="true">5</span></span><span aria-hidden="true">Needs you</span></a>
+    <a class="tab on" href="#floor" aria-current="page" aria-label="Floor"><span class="ic"><svg width="22" height="22" viewBox="0 0 18 18" aria-hidden="true"><circle cx="3.5" cy="9" r="2" fill="none" stroke="currentColor" stroke-width="1.6"></circle><circle cx="14.5" cy="9" r="2" fill="none" stroke="currentColor" stroke-width="1.6"></circle><circle cx="9" cy="9" r="2" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M5.5 9h1.5M11 9h1.5" stroke="currentColor" stroke-width="1.6"></path></svg></span><span aria-hidden="true">Floor</span></a>
+    <a class="tab" href="#board" aria-label="Board"><span class="ic"><svg width="22" height="22" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2.5" width="3.5" height="11" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"></rect><rect x="6.25" y="2.5" width="3.5" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"></rect><rect x="10.5" y="2.5" width="3.5" height="9" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"></rect></svg></span><span aria-hidden="true">Board</span></a>
+    <a class="tab" href="#item" aria-label="Items"><span class="ic"><svg width="22" height="22" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 4.5h12M3 9h12M3 13.5h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></span><span aria-hidden="true">Items</span></a>
+    <a class="tab" href="#drawer" aria-label="More"><span class="ic"><svg width="22" height="22" viewBox="0 0 18 18" aria-hidden="true"><circle cx="4" cy="9" r="1.4" fill="currentColor"></circle><circle cx="9" cy="9" r="1.4" fill="currentColor"></circle><circle cx="14" cy="9" r="1.4" fill="currentColor"></circle></svg></span><span aria-hidden="true">More</span></a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":390,"height":1160}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { theme: this.props.dark ? 'dark' : '' };
+  }
+}
+</script>
+</body>
+</html>

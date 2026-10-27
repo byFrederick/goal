@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Choose where work comes from</title>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#FFFFFF}
+a{color:#2742F5}a:hover{color:#1B33C9}
+*{box-sizing:border-box}
+h1,h2,h3,p,ol,ul{margin:0}
+ol,ul{padding:0;list-style:none}
+.g{--bg:#FFFFFF;--side:#F3F4F9;--panel:#F7F8FC;--hover:#E9EBF4;--rule:#E3E6EF;--rule2:#CBD0DF;--ink:#14182B;--ink2:#464D6A;--ink3:#626986;--pri:#2742F5;--pri-ink:#1B33C9;--pri-t:#E8ECFF;--you:#7B3FE4;--you-t:#F1EBFE;--you-ink:#5A24B8;--red:#D63A1F;--red-t:#FDECE8;--red-ink:#AE2C14;--yel:#FFC21A;--yel-t:#FFF4D1;--yel-ink:#6E4B00;--grn:#0FA36B;--grn-t:#E1F5EB;--grn-ink:#0A7A4F;--navy:#121633;--navy2:#1C2147;--navy3:#2C3266;font-family:Archivo,system-ui,sans-serif;font-size:14px;line-height:1.45;color:var(--ink);background:var(--bg);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.g.dark{--bg:#0E1120;--side:#13172A;--panel:#161A2F;--hover:#1E2340;--rule:#252A45;--rule2:#3A4066;--ink:#ECEEF7;--ink2:#B7BCD4;--ink3:#9096B3;--pri:#4A63F5;--pri-ink:#A3B2FF;--pri-t:#1D2556;--you:#9061F5;--you-t:#2A1E4F;--you-ink:#CDB4FF;--red:#E2512F;--red-t:#3B1C16;--red-ink:#FFA08A;--yel-t:#3A3013;--yel-ink:#FFD666;--grn:#22C17F;--grn-t:#10301F;--grn-ink:#62DDA5;--navy:#090C1A;--navy2:#151A36;--navy3:#272D58}
+.h1{font-size:26px;line-height:1.15;font-weight:650;font-stretch:108%;letter-spacing:-0.015em}
+.h2{font-size:16px;line-height:1.3;font-weight:620}
+.num{font-stretch:112%;font-weight:600;letter-spacing:-0.01em}
+.m2{color:var(--ink2)}.m3{color:var(--ink3)}.sm{font-size:13px}.xs{font-size:12px}
+.code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12.5px}
+.app{display:flex;flex-wrap:wrap;align-items:stretch;min-height:100vh;background:var(--bg)}
+.side{width:256px;flex:none;background:var(--side);border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:1px;padding:10px 10px 12px;min-height:100vh}
+.srow{display:flex;align-items:center;gap:2px;margin-bottom:8px}
+.orgb{flex:1;min-width:0;display:flex;align-items:center;gap:9px;height:38px;padding:0 6px;border:0;border-radius:8px;background:none;font:inherit;font-weight:620;font-size:15px;color:var(--ink);cursor:pointer;text-align:left}
+.omk{width:26px;height:26px;flex:none;border-radius:7px;background:var(--pri);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:750;font-stretch:115%}
+.ib{width:32px;height:32px;flex:none;border:0;border-radius:8px;background:none;color:var(--ink2);display:grid;place-items:center;cursor:pointer;padding:0}
+.orgb:hover,.ib:hover,.ni:hover,.fh:hover,.sub a:hover,.me:hover{background:var(--hover);color:var(--ink)}
+.newb{display:flex;align-items:center;gap:8px;height:36px;padding:0 8px 0 12px;border-radius:9px;background:var(--pri);color:#fff;font-weight:620;text-decoration:none;margin:0 0 10px}
+.newb:hover{background:var(--pri-ink);color:#fff}
+.kb{margin-left:auto;min-width:20px;height:20px;padding:0 5px;border-radius:5px;background:rgba(255,255,255,.2);font-size:11px;font-weight:650;display:grid;place-items:center}
+.ni{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:8px;color:var(--ink2);text-decoration:none;font-weight:540}
+.ni svg{flex:none;color:var(--ink3)}
+.ni.on{background:var(--pri-t);color:var(--pri-ink)}.ni.on svg{color:var(--pri)}
+.cnt{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:6px;font-size:12px;font-weight:650;display:inline-grid;place-items:center;background:var(--you);color:#fff}
+.cnt.n{background:var(--hover);color:var(--ink2)}
+.sec{display:flex;align-items:center;justify-content:space-between;height:30px;margin-top:14px;padding:0 2px 0 10px;font-size:12.5px;font-weight:600;color:var(--ink3)}
+.sec .ib{width:26px;height:26px}
+.fh{display:flex;align-items:center;gap:10px;height:36px;padding:0 8px;border-radius:8px;color:var(--ink);text-decoration:none;font-weight:620}
+.fh .chev{margin-left:auto;color:var(--ink3);flex:none}
+.fb{width:22px;height:22px;flex:none;border-radius:6px;display:grid;place-items:center;color:#fff;font-size:11.5px;font-weight:750;font-stretch:112%}
+.sub{display:flex;flex-direction:column;gap:1px;margin:2px 0 6px 18px;padding-left:10px;border-left:1px solid var(--rule2)}
+.sub a{display:flex;align-items:center;height:30px;padding:0 10px;border-radius:7px;color:var(--ink2);text-decoration:none;font-size:13.5px;font-weight:520}
+.sub a.on{background:var(--bg);color:var(--ink);font-weight:640;box-shadow:0 0 0 1px var(--rule)}
+.sdot{width:8px;height:8px;border-radius:50%;flex:none}
+.sbot{margin-top:auto;display:flex;flex-direction:column;gap:8px;padding-top:12px}
+.use{display:flex;flex-direction:column;gap:7px;padding:10px 12px;border-radius:10px;border:1px solid var(--rule);background:var(--bg);text-decoration:none;color:var(--ink)}
+.use:hover{border-color:var(--rule2);color:var(--ink)}
+.bar{height:6px;border-radius:3px;background:var(--hover);overflow:hidden;display:flex}
+.bar span{display:block;height:100%}
+.me{display:flex;align-items:center;gap:10px;width:100%;padding:6px;border:0;border-radius:10px;background:none;font:inherit;color:var(--ink);cursor:pointer;text-align:left}
+.av{width:32px;height:32px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:12px;font-weight:700;color:#fff;background:#2F6F5E}
+.main{flex:999 1 560px;min-width:0;display:flex;flex-direction:column}
+.top{display:flex;align-items:center;gap:10px;min-height:56px;padding:10px 28px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.crumb{display:flex;align-items:center;gap:8px;font-weight:560;color:var(--ink2);min-width:0}
+.crumb a{color:var(--ink2);text-decoration:none}.crumb a:hover{color:var(--ink)}
+.tact{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:8px;border:1px solid var(--rule2);background:var(--bg);color:var(--ink);font:inherit;font-weight:580;font-size:13.5px;text-decoration:none;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--panel);color:var(--ink)}
+.btn.pri{background:var(--pri);border-color:var(--pri);color:#fff}.btn.pri:hover{background:var(--pri-ink);color:#fff}
+.btn.warn{color:var(--red-ink)}
+.btn.sm{height:30px;padding:0 10px;font-size:13px}
+.seg{display:inline-flex;padding:3px;border-radius:9px;background:var(--panel);border:1px solid var(--rule);gap:2px;flex-wrap:wrap}
+.seg button{height:28px;padding:0 10px;border:0;border-radius:6px;background:none;font:inherit;font-size:13px;font-weight:560;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.seg button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(20,24,43,.12),0 0 0 1px var(--rule)}
+.seg .k{font-size:12px;color:var(--ink3)}
+.page{padding:22px 28px 40px;display:flex;flex-direction:column;gap:18px}
+.card{border:1px solid var(--rule);border-radius:14px;background:var(--bg);padding:18px 20px;min-width:0;display:flex;flex-direction:column}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 7px;border-radius:6px;font-size:12px;font-weight:580;background:var(--panel);color:var(--ink2);border:1px solid var(--rule);white-space:nowrap;text-decoration:none}
+.chip.run{background:var(--pri-t);color:var(--pri-ink);border-color:transparent}
+.chip.you{background:var(--you-t);color:var(--you-ink);border-color:transparent}
+.chip.red{background:var(--red-t);color:var(--red-ink);border-color:transparent}
+.chip.yel{background:var(--yel-t);color:var(--yel-ink);border-color:transparent}
+.chip.grn{background:var(--grn-t);color:var(--grn-ink);border-color:transparent}
+.chip.big{height:28px;padding:0 10px;font-size:13px;border-radius:8px}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.live{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.3}}
+a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:760px){.side{width:100%;min-height:0;border-right:0;border-bottom:1px solid var(--rule)}.side .navs,.side .sbot{display:none}.top{padding:8px 16px}.page{padding:16px}}
+
+.ob{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);min-height:100vh;background:var(--bg)}
+.ob.wide{grid-template-columns:minmax(0,1.45fr) minmax(0,1fr)}
+.ob.wide .foot{max-width:none}
+@media (max-width:1000px){.ob,.ob.wide{grid-template-columns:minmax(0,1fr)}.pv{display:none}}
+.lf{display:flex;flex-direction:column;gap:30px;padding:28px 64px 32px;min-width:0}
+.brand{display:flex;align-items:center;gap:10px;font-weight:720;font-size:19px;font-stretch:112%;letter-spacing:-0.01em;color:var(--ink);text-decoration:none}
+.brand .omk{width:30px;height:30px;border-radius:8px;background:var(--pri);display:grid;place-items:center;flex:none}
+.tophd{display:flex;align-items:center;gap:16px}
+.tophd .ex{margin-left:auto;font-size:13px;font-weight:580;color:var(--ink2);text-decoration:none}
+.stp{display:flex;gap:8px;max-width:720px}
+.stp li{flex:1 1 auto;display:flex;flex-direction:column;gap:7px;font-size:12px;color:var(--ink3);font-weight:560;white-space:nowrap}
+.stp li span{height:4px;border-radius:2px;background:var(--rule)}
+.stp li.d{color:var(--ink2)}.stp li.d span{background:#9AA6FF}
+.stp li.c{color:var(--ink);font-weight:660}.stp li.c span{background:var(--pri)}
+.form{max-width:560px;display:flex;flex-direction:column;gap:22px}
+.ttl{font-size:32px;line-height:1.1;font-weight:660;font-stretch:110%;letter-spacing:-0.02em}
+.lead{font-size:15.5px;color:var(--ink2);margin-top:8px;max-width:48ch}
+.fld{display:flex;flex-direction:column;gap:7px}
+.lbl{font-size:13.5px;font-weight:620;color:var(--ink)}
+.in{height:42px;border:1px solid var(--rule2);border-radius:10px;padding:0 12px;font:inherit;font-size:15px;color:var(--ink);background:var(--bg);width:100%}
+.inrow{display:flex;align-items:center;border:1px solid var(--rule2);border-radius:10px;overflow:hidden;height:42px;background:var(--bg)}
+.inrow span{padding:0 4px 0 12px;color:var(--ink3);font-size:14.5px;white-space:nowrap}
+.inrow input{border:0;outline:0;height:100%;font:inherit;font-size:15px;color:var(--ink);background:none;flex:1;min-width:0}
+.hint{font-size:12.5px;color:var(--ink3)}
+.pick{display:flex;flex-wrap:wrap;gap:8px}
+.pk{height:38px;padding:0 14px;border-radius:10px;border:1px solid var(--rule2);background:var(--bg);font:inherit;font-weight:580;font-size:14px;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.pk[aria-pressed="true"]{background:var(--pri-t);border-color:var(--pri);color:var(--pri-ink)}
+.btn.lg{height:42px;padding:0 18px;font-size:14.5px;border-radius:10px}
+.foot{display:flex;align-items:center;gap:10px;max-width:560px;margin-top:auto;padding-top:8px}
+.foot .btn.pri{margin-left:auto}
+.box{border:1px solid var(--rule);border-radius:14px;background:var(--bg)}
+.sw{width:36px;height:20px;border-radius:10px;border:0;padding:2px;background:var(--rule2);cursor:pointer;display:flex;flex:none}
+.sw span{width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);display:block}
+.sw[aria-checked="true"]{background:var(--pri);justify-content:flex-end}
+.sw:disabled{opacity:.45;cursor:not-allowed}
+.pv{background:var(--navy);color:#fff;padding:30px 36px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.pvh{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:#C3C8EA;margin-bottom:4px}
+.pvh b{color:#fff;font-weight:620;font-size:14px}
+.pb{border-radius:14px;background:var(--navy2);padding:14px 16px;display:flex;flex-direction:column;gap:8px;border:1px solid #262C58;min-width:0}
+.pb.on{border-color:#7C8BFF;box-shadow:0 0 0 4px rgba(92,108,240,.22)}
+.pb.empty{background:transparent;border:1.5px dashed #363E78}
+.pb .k{font-size:12px;color:#A3ABDB}
+.pb .v{font-size:17px;font-weight:640;line-height:1.25}
+.pb .m{font-size:12.5px;color:#C3C8EA}
+.ph{height:10px;border-radius:5px;background:#252B5A;display:block}
+.pg2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pg3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.ln{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));position:relative;padding:4px 0 2px}
+.ln .tk{position:absolute;left:10%;right:10%;top:22px;height:3px;border-radius:2px;background:#3B4AE0}
+.ln .s{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:12.5px;position:relative;text-align:center}
+.ln .n{width:38px;height:38px;border-radius:50%;background:var(--navy);border:2.5px solid #5C6CF0;display:grid;place-items:center;z-index:1;font-weight:700;font-size:13px;position:relative}
+.ln .n.q{border-color:#8E96C9}.ln .n.dn{border-color:#22C17F;background:#0F3A2C}
+.ln .n.hl{box-shadow:0 0 0 5px rgba(124,139,255,.3)}
+.ln .tok{position:absolute;top:-9px;right:-9px;width:20px;height:20px;border-radius:6px;background:#FFC21A;color:#14182B;font-size:10px;font-weight:800;display:grid;place-items:center;border:2px solid var(--navy2)}
+.ln .sl{display:flex;gap:3px;justify-content:center}
+.ln .sl i{width:10px;height:10px;border-radius:3px;border:1.5px solid #5A6197;display:block}
+.ln .sl i.b{background:#5C6CF0;border-color:#5C6CF0}
+.ln.dim{opacity:.55}
+.pa{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;margin-left:-7px;border:2px solid var(--navy2);color:#fff}
+.pa:first-child{margin-left:0}
+.trg{display:flex;align-items:center;gap:8px;font-size:12.5px;color:#DDE1F7}
+.trg i{width:18px;height:18px;border-radius:5px;display:grid;place-items:center;background:#2C3266;flex:none;font-style:normal}
+.cen{min-height:100vh;background:var(--side);display:flex;flex-direction:column;align-items:center;padding:28px 32px 40px}.cen .tophd{align-self:stretch}.card2{width:440px;max-width:100%;margin-top:56px;border-radius:20px;overflow:hidden;background:var(--bg);border:1px solid var(--rule);box-shadow:0 30px 60px -36px rgba(20,24,43,.4)}.band{background:var(--navy);padding:26px 28px 20px;color:#fff}.cb{padding:26px 28px 28px;display:flex;flex-direction:column;gap:14px}.or{display:flex;align-items:center;gap:12px;font-size:12.5px;color:var(--ink3)}.or::before,.or::after{content:"";flex:1;height:1px;background:var(--rule)}.wide-btn{width:100%;justify-content:center}
+</style>
+</helmet>
+<div class="g ob">
+<main class="lf">
+<div class="tophd"><a class="brand" href="#sign-up"><span class="omk"><svg width="19" height="19" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="#FFC21A"></circle></svg></span>Goal</a><a class="ex" href="#">Save and finish later</a></div>
+<ol class="stp" aria-label="Setup, step 6 of 8"><li class="d"><span></span>Organization</li><li class="d"><span></span>Code</li><li class="d"><span></span>Factory</li><li class="d"><span></span>Line</li><li class="d"><span></span>Budget</li><li class="c" aria-current="step"><span></span>Intake</li><li class=""><span></span>People</li><li class=""><span></span>First item</li></ol>
+<div class="form">
+<div><h1 class="ttl">Choose where work comes from</h1><p class="lead">Triggers turn events and schedules into items on the line. You can change them any time in Intake.</p></div>
+<div class="box" style="overflow: hidden"><div style="padding: 12px 16px; font-weight: 640">Starter triggers</div>
+<div style="display: grid; grid-template-columns: 34px minmax(0,1fr) auto; gap: 12px; align-items: center; padding: 14px 16px; border-top: 1px solid var(--rule) ; opacity: 1"><span style="width: 34px; height: 34px; border-radius: 9px; background: #14182B; color: #fff; display: grid; place-items: center"><svg width="17" height="17" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 0 0-2.05 12.67c.33.06.45-.14.45-.31v-1.1c-1.8.39-2.18-.87-2.18-.87-.3-.75-.72-.95-.72-.95-.59-.4.04-.39.04-.39.65.05 1 .67 1 .67.58 1 1.52.71 1.89.54.06-.42.23-.71.41-.87-1.44-.16-2.95-.72-2.95-3.2 0-.71.25-1.29.67-1.74-.07-.17-.29-.83.06-1.72 0 0 .55-.18 1.79.66a6.2 6.2 0 0 1 3.26 0c1.24-.84 1.79-.66 1.79-.66.35.89.13 1.55.06 1.72.42.45.67 1.03.67 1.74 0 2.49-1.52 3.04-2.96 3.2.23.2.44.6.44 1.21v1.79c0 .17.12.38.45.31A6.5 6.5 0 0 0 8 1.5Z" fill="currentColor"></path></svg></span><span style="display: flex; flex-direction: column; gap: 2px"><b style="font-weight: 620">Issues labeled factory</b><span class="hint" style="color: var(--ink2)">An issue gets the label factory in byFrederick/goal</span><span class="hint">Creates a feature at Spec</span></span><span style="display: flex; align-items: center; gap: 10px"><button class="sw" type="button" role="switch" aria-checked="true" aria-label="Issues labeled factory"><span></span></button></span></div><div style="display: grid; grid-template-columns: 34px minmax(0,1fr) auto; gap: 12px; align-items: center; padding: 14px 16px; border-top: 1px solid var(--rule) ; opacity: 1"><span style="width: 34px; height: 34px; border-radius: 9px; background: #14182B; color: #fff; display: grid; place-items: center"><svg width="17" height="17" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 0 0-2.05 12.67c.33.06.45-.14.45-.31v-1.1c-1.8.39-2.18-.87-2.18-.87-.3-.75-.72-.95-.72-.95-.59-.4.04-.39.04-.39.65.05 1 .67 1 .67.58 1 1.52.71 1.89.54.06-.42.23-.71.41-.87-1.44-.16-2.95-.72-2.95-3.2 0-.71.25-1.29.67-1.74-.07-.17-.29-.83.06-1.72 0 0 .55-.18 1.79.66a6.2 6.2 0 0 1 3.26 0c1.24-.84 1.79-.66 1.79-.66.35.89.13 1.55.06 1.72.42.45.67 1.03.67 1.74 0 2.49-1.52 3.04-2.96 3.2.23.2.44.6.44 1.21v1.79c0 .17.12.38.45.31A6.5 6.5 0 0 0 8 1.5Z" fill="currentColor"></path></svg></span><span style="display: flex; flex-direction: column; gap: 2px"><b style="font-weight: 620">Flaky test on main</b><span class="hint" style="color: var(--ink2)">The same check fails twice in a row on main</span><span class="hint">Creates a fix in the expedite lane</span></span><span style="display: flex; align-items: center; gap: 10px"><button class="sw" type="button" role="switch" aria-checked="true" aria-label="Flaky test on main"><span></span></button></span></div><div style="display: grid; grid-template-columns: 34px minmax(0,1fr) auto; gap: 12px; align-items: center; padding: 14px 16px; border-top: 1px solid var(--rule) ; opacity: 1"><span style="width: 34px; height: 34px; border-radius: 9px; background: #C24E17; color: #fff; display: grid; place-items: center"><svg width="17" height="17" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="M8 4.5V8l2.5 1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></span><span style="display: flex; flex-direction: column; gap: 2px"><b style="font-weight: 620">Weekly dependency audit</b><span class="hint" style="color: var(--ink2)">Every Monday at 09:00</span><span class="hint">Creates an infra item at Spec</span></span><span style="display: flex; align-items: center; gap: 10px"><button class="sw" type="button" role="switch" aria-checked="true" aria-label="Weekly dependency audit"><span></span></button></span></div><div style="display: grid; grid-template-columns: 34px minmax(0,1fr) auto; gap: 12px; align-items: center; padding: 14px 16px; border-top: 1px solid var(--rule)"><span style="width: 34px; height: 34px; border-radius: 9px; background: #4A154B; color: #fff; display: grid; place-items: center"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5.5h12M2 10.5h12M6 2 5 14M11 2l-1 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></span><span style="display: flex; flex-direction: column; gap: 2px"><b style="font-weight: 620">Requests in Slack</b><span class="hint" style="color: var(--ink2)">Someone mentions @software in a channel</span><span class="hint">Needs Slack</span></span><span style="display: flex; align-items: center; gap: 10px"><button class="btn sm" type="button">Connect Slack</button><button class="sw" type="button" role="switch" aria-checked="false" aria-label="Requests in Slack" disabled><span></span></button></span></div></div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px"><span class="m2">Always on:</span><span class="chip">New item</span><span class="chip">goal item create</span><span class="chip">The API</span></div>
+</div>
+<div class="foot"><a class="btn lg" href="#budget">Back</a><a class="btn lg pri" href="#invite">Turn on 3 triggers</a></div>
+</main>
+<aside class="pv" aria-label="Preview of your factory"><div class="pvh"><b>Your factory, as you build it</b><span>Updates as you go</span></div><div class="pg2"><div class="pb"><span class="k">Organization</span><span class="v">Goal</span><span class="m">goal.byfrederick.work/o/goal</span></div><div class="pb"><span class="k">Code</span><span class="v" style="display: flex; align-items: center; gap: 8px"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 0 0-2.05 12.67c.33.06.45-.14.45-.31v-1.1c-1.8.39-2.18-.87-2.18-.87-.3-.75-.72-.95-.72-.95-.59-.4.04-.39.04-.39.65.05 1 .67 1 .67.58 1 1.52.71 1.89.54.06-.42.23-.71.41-.87-1.44-.16-2.95-.72-2.95-3.2 0-.71.25-1.29.67-1.74-.07-.17-.29-.83.06-1.72 0 0 .55-.18 1.79.66a6.2 6.2 0 0 1 3.26 0c1.24-.84 1.79-.66 1.79-.66.35.89.13 1.55.06 1.72.42.45.67 1.03.67 1.74 0 2.49-1.52 3.04-2.96 3.2.23.2.44.6.44 1.21v1.79c0 .17.12.38.45.31A6.5 6.5 0 0 0 8 1.5Z" fill="currentColor"></path></svg>byFrederick/goal</span><span class="m">GitHub, read and pull requests</span></div></div><div class="pb" style="gap: 14px"><div style="display: flex; align-items: center; gap: 10px"><span style="width: 28px; height: 28px; border-radius: 8px; background: #2742F5; display: grid; place-items: center; font-weight: 750; font-stretch: 112%; flex: none">S</span><span style="display: flex; flex-direction: column"><span class="v">Software</span><span class="m">Builds Goal from its own repository</span></span></div><div class="ln" role="img" aria-label="The line: Intake, Spec, Build, Review, Done"><span class="tk" aria-hidden="true"></span><div class="s"><span class="n q"></span><span>Intake</span></div><div class="s"><span class="n "></span><span>Spec</span><span class="sl"><i></i><i></i><i></i></span></div><div class="s"><span class="n "></span><span>Build</span><span class="sl"><i></i><i></i><i></i><i></i><i></i><i></i></span></div><div class="s"><span class="n "></span><span>Review</span><span class="sl"><i></i><i></i><i></i></span></div><div class="s"><span class="n dn"><svg width="15" height="15" viewBox="0 0 20 20" aria-hidden="true"><path d="m5 10.5 3.2 3.2L15 7" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"></path></svg></span><span>Done</span></div></div></div><div class="pg3"><div class="pb" style="align-items: center"><span class="k" style="align-self: flex-start">Budget</span><svg width="110" height="62" viewBox="0 0 110 62" role="img" aria-label="$150 a day"><path d="M10 56a45 45 0 0 1 90 0" fill="none" stroke="#2C3266" stroke-width="10" stroke-linecap="round"></path><path d="M10 56a45 45 0 0 1 90 0" fill="none" stroke="#FFC21A" stroke-width="10" stroke-linecap="round" stroke-dasharray="42.4 200"></path></svg><span class="v" style="margin-top: -6px">$150</span><span class="m">a day, $800 a week</span></div><div class="pb on"><span class="k">Intake</span><span class="trg"><i><svg width="11" height="11" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 0 0-2.05 12.67c.33.06.45-.14.45-.31v-1.1c-1.8.39-2.18-.87-2.18-.87-.3-.75-.72-.95-.72-.95-.59-.4.04-.39.04-.39.65.05 1 .67 1 .67.58 1 1.52.71 1.89.54.06-.42.23-.71.41-.87-1.44-.16-2.95-.72-2.95-3.2 0-.71.25-1.29.67-1.74-.07-.17-.29-.83.06-1.72 0 0 .55-.18 1.79.66a6.2 6.2 0 0 1 3.26 0c1.24-.84 1.79-.66 1.79-.66.35.89.13 1.55.06 1.72.42.45.67 1.03.67 1.74 0 2.49-1.52 3.04-2.96 3.2.23.2.44.6.44 1.21v1.79c0 .17.12.38.45.31A6.5 6.5 0 0 0 8 1.5Z" fill="currentColor"></path></svg></i>Issues labeled factory</span><span class="trg"><i><svg width="11" height="11" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 0 0-2.05 12.67c.33.06.45-.14.45-.31v-1.1c-1.8.39-2.18-.87-2.18-.87-.3-.75-.72-.95-.72-.95-.59-.4.04-.39.04-.39.65.05 1 .67 1 .67.58 1 1.52.71 1.89.54.06-.42.23-.71.41-.87-1.44-.16-2.95-.72-2.95-3.2 0-.71.25-1.29.67-1.74-.07-.17-.29-.83.06-1.72 0 0 .55-.18 1.79.66a6.2 6.2 0 0 1 3.26 0c1.24-.84 1.79-.66 1.79-.66.35.89.13 1.55.06 1.72.42.45.67 1.03.67 1.74 0 2.49-1.52 3.04-2.96 3.2.23.2.44.6.44 1.21v1.79c0 .17.12.38.45.31A6.5 6.5 0 0 0 8 1.5Z" fill="currentColor"></path></svg></i>Flaky test on main</span><span class="trg"><i><svg width="11" height="11" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M8 4.5V8l2.5 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></i>Dependency audit</span><span class="m">And New item, CLI, API</span></div><div class="pb empty" style="min-height: 150px"></div></div></aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":880}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { theme: this.props.dark ? 'dark' : '' };
+  }
+}
+</script>
+</body>
+</html>
