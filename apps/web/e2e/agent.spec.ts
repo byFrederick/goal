@@ -54,6 +54,21 @@ test('the agent page reads as pictured: the prompt, settings and the Not availab
   await expect(page.getByText(/You build Goal's web app/)).toBeVisible();
   await expect(page.getByRole('region', { name: 'Settings' }).getByText('claude-haiku-5-5')).toBeVisible();
 
+  // The Settings aside stacks under the main column below xl (1280 px) and sits beside it at xl and up.
+  const viewport = page.viewportSize();
+  const settings = await page.getByRole('region', { name: 'Settings' }).boundingBox();
+  const measures = await page.getByRole('region', { name: 'Last 7 days' }).boundingBox();
+  expect(viewport && settings && measures).toBeTruthy();
+  if (viewport && settings && measures) {
+    if (viewport.width >= 1280) {
+      expect(settings.x).toBeGreaterThanOrEqual(measures.x + measures.width);
+      expect(settings.y).toBeLessThan(measures.y + measures.height);
+    } else {
+      expect(settings.x).toBeLessThan(measures.x + measures.width / 2);
+      expect(settings.y).toBeGreaterThanOrEqual(measures.y + measures.height);
+    }
+  }
+
   for (const name of ['Bake off this agent', 'Ask Jonah for a fix']) {
     const control = page.getByRole('button', { name });
     await expect(control).toHaveAttribute('aria-disabled', 'true');
