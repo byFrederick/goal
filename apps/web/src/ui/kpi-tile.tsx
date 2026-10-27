@@ -65,15 +65,15 @@ export function KpiTile({
 }: {
   label: ReactNode;
   value: ReactNode;
-  unit?: string;
-  bar?: KpiBar;
-  sparkline?: KpiSparkline;
+  unit?: string | undefined;
+  bar?: KpiBar | undefined;
+  sparkline?: KpiSparkline | undefined;
   /** The left of the meta line: "Target 10". */
   target?: ReactNode;
-  delta?: KpiDelta;
+  delta?: KpiDelta | undefined;
   /** The right of the meta line when there is no delta. */
   note?: ReactNode;
-  className?: string;
+  className?: string | undefined;
 }) {
   return (
     <div

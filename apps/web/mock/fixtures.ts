@@ -339,6 +339,29 @@ const sreFactory: Factory = {
   created_at: '2026-09-15T09:00:00Z',
 };
 
+// The Software factory of the Floor screens (daily-work/floor.jpg): intake, spec, build (the
+// constraint), review and done.
+const softwareFactory: Factory = {
+  id: '0c3e8f42-7a19-4d6b-9e25-5b1f0a7c3d88',
+  org_id: acmeOrg,
+  can: factoryCan,
+  name: 'software',
+  title: 'Software',
+  description: 'Turns intake requests into reviewed pull requests for the product repositories.',
+  work_types: ['feature', 'fix', 'refactor'],
+  stations: [
+    { id: 'intake', kind: 'queue', description: 'Requests arrive here' },
+    { id: 'spec', kind: 'agent', description: 'Writes the change the build starts from' },
+    { id: 'build', kind: 'agent', description: 'Makes the change on a branch' },
+    { id: 'review', kind: 'agent', description: 'Checks the change against its spec' },
+    { id: 'done', kind: 'done', description: 'Merged' },
+  ],
+  current: published('019a1c00-0000-7000-8000-0000000000f1', 2, '2026-10-18T09:00:00Z'),
+  draft: null,
+  paused: false,
+  created_at: '2026-09-20T09:00:00Z',
+};
+
 const supportFactory: Factory = {
   id: '5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a01',
   org_id: acmeOrg,
@@ -1165,6 +1188,128 @@ const sreSeeds: Seed[] = [
   },
 ];
 
+// The Software factory's line on the Floor: four intake requests, two specs in flight (one waiting
+// on a person), the build with two ready in the buffer, five engineers working and one waiting, the
+// review with one reviewer working and one waiting, and the day's merged work.
+const softwareSeeds: Seed[] = [
+  ...[1, 2, 3, 4].map((number) => ({
+    number,
+    title: ['Add rate limits to the public API', 'Fix invoice PDF margins', 'Split the billing module', 'Document webhook retries'][number - 1] ?? '',
+    type: number === 2 ? 'fix' : 'feature',
+    body: 'A request from the intake queue.',
+    station: 'intake',
+    state: 'queued' as const,
+    createdMin: 200 - number * 10,
+    updatedMin: 180 - number * 5,
+    steps: [],
+  })),
+  {
+    number: 5,
+    title: 'Export the audit log as CSV',
+    type: 'feature',
+    body: 'Admins export the audit log for a date range.',
+    station: 'spec',
+    state: 'in_progress',
+    agent: 'architect',
+    createdMin: 90,
+    updatedMin: 20,
+    steps: [],
+  },
+  {
+    number: 6,
+    title: 'Invite teammates by email',
+    type: 'feature',
+    body: 'Owners invite people to the organization by email.',
+    station: 'spec',
+    state: 'waiting_human',
+    agent: 'architect',
+    createdMin: 150,
+    updatedMin: 40,
+    steps: [],
+  },
+  {
+    number: 7,
+    title: 'Sign in with SSO',
+    type: 'feature',
+    body: 'Organizations sign in through their identity provider.',
+    station: 'build',
+    state: 'ready',
+    createdMin: 300,
+    updatedMin: 60,
+    steps: [],
+  },
+  {
+    number: 8,
+    title: 'Expire idle sessions after 30 minutes',
+    type: 'fix',
+    body: 'Sessions stay open after the user leaves the page.',
+    station: 'build',
+    state: 'ready',
+    createdMin: 280,
+    updatedMin: 55,
+    steps: [],
+  },
+  ...[9, 10, 11, 12, 13].map((number) => ({
+    number,
+    title: `Build change ${number}`,
+    type: 'feature',
+    body: 'A change the engineer is making on its branch.',
+    station: 'build',
+    state: 'in_progress' as const,
+    agent: 'engineer',
+    createdMin: 240 - number,
+    updatedMin: 10 + number,
+    steps: [],
+  })),
+  {
+    number: 14,
+    title: 'Rework the export schema',
+    type: 'refactor',
+    body: 'The engineer needs a decision on the export schema.',
+    station: 'build',
+    state: 'waiting_human',
+    agent: 'engineer',
+    createdMin: 210,
+    updatedMin: 35,
+    steps: [],
+  },
+  {
+    number: 15,
+    title: 'Add the reviewer checklist',
+    type: 'feature',
+    body: 'Reviews check the change against its spec.',
+    station: 'review',
+    state: 'in_progress',
+    agent: 'reviewer',
+    createdMin: 120,
+    updatedMin: 15,
+    steps: [],
+  },
+  {
+    number: 16,
+    title: 'Retry failed webhook deliveries',
+    type: 'feature',
+    body: 'Failed deliveries are retried with backoff.',
+    station: 'review',
+    state: 'waiting_human',
+    agent: 'reviewer',
+    createdMin: 180,
+    updatedMin: 50,
+    steps: [],
+  },
+  ...[17, 18, 19, 20, 21, 22, 23].map((number) => ({
+    number,
+    title: `Merged change ${number}`,
+    type: 'feature',
+    body: 'A change that merged today.',
+    station: 'done',
+    state: 'done' as const,
+    createdMin: 600 + number,
+    updatedMin: 30 + number,
+    steps: [],
+  })),
+];
+
 function uuid(prefix: number, n: number): string {
   const hex = (prefix * 1000 + n).toString(16).padStart(12, '0');
   return `00000000-0000-4000-8000-${hex}`;
@@ -1332,7 +1477,7 @@ export function seed(now = Date.now()): MockState {
         can: orgCan,
       },
     ],
-    factories: [goalFactory, sreFactory, supportFactory, researchFactory].map((f) => structuredClone(f)),
+    factories: [goalFactory, sreFactory, supportFactory, researchFactory, softwareFactory].map((f) => structuredClone(f)),
     people: seedPeople(now, {
       acme: acmeOrg,
       labs: labsOrg,
@@ -1386,8 +1531,15 @@ export function seed(now = Date.now()): MockState {
         read: { agents: ['reader'], wip_limit: 1 },
         done: { agents: [], wip_limit: null },
       },
+      software: {
+        intake: { agents: [], wip_limit: null },
+        spec: { agents: ['architect'], wip_limit: 3 },
+        build: { agents: ['engineer'], wip_limit: 6, copies: 6 },
+        review: { agents: ['reviewer'], wip_limit: 3 },
+        done: { agents: [], wip_limit: null },
+      },
     },
-    constraint: { goal: 'build', sre: 'investigate', support: null, research: null },
+    constraint: { goal: 'build', sre: 'investigate', support: null, research: null, software: 'build' },
     stationStats: {
       goal: {
         spec: { busy_ratio: 0.41, queue_trend: 'steady' },
@@ -1398,6 +1550,12 @@ export function seed(now = Date.now()): MockState {
         triage: { busy_ratio: 0.38, queue_trend: 'steady' },
         investigate: { busy_ratio: 0.94, queue_trend: 'growing' },
         inbox: { queue_trend: 'growing' },
+      },
+      software: {
+        intake: { queue_trend: 'growing' },
+        spec: { busy_ratio: 0.41, queue_trend: 'steady' },
+        build: { busy_ratio: 0.94, queue_trend: 'growing' },
+        review: { send_back_ratio: 0.14 },
       },
     },
     history: {},
@@ -1450,6 +1608,15 @@ export function seed(now = Date.now()): MockState {
         lead_time: 6 * 3600,
         expedite_lead_time: 3600,
         per_item_usd: 2,
+        max_turns_per_task: 40,
+        release: 'drum-buffer-rope',
+        expedite_wip: 1,
+      },
+      software: {
+        throughput_per_day: 10,
+        lead_time: 48 * 3600,
+        expedite_lead_time: 3600,
+        per_item_usd: 3.1,
         max_turns_per_task: 40,
         release: 'drum-buffer-rope',
         expedite_wip: 1,
@@ -1534,6 +1701,7 @@ export function seed(now = Date.now()): MockState {
 
   build(goalFactory, 0, goalSeeds, now, state);
   build(sreFactory, 1, sreSeeds, now, state);
+  build(softwareFactory, 4, softwareSeeds, now, state);
 
   for (const f of state.factories) state.history[f.name] = seedHistory(f, now, state.constraint[f.name] ?? null);
   fitWeeklySpend(state, ['goal', 'sre', 'support'], now, 512);
