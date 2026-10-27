@@ -231,6 +231,24 @@ describe('DetailsCard', () => {
   });
 });
 
+describe('DetailsCard on a phone', () => {
+  it('shows the four rows, with the cost of the cap and its bar, and no station, model or branch', async () => {
+    renderCards(() => (
+      <DetailsCard item={item()} factory={factory} events={events} trace={trace()} runs={runs} summary />
+    ));
+
+    const details = await screen.findByRole('region', { name: 'Details' });
+    expect(details.textContent).toContain('Working on itFrontend engineer');
+    expect(details.textContent).toContain('$3.00 of $12');
+    expect(details.textContent).toContain('OwnerFreddy Cruz');
+    expect(screen.getByRole('link', { name: '#318' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Spec $0.62, Build $2.38 of a $12 cap' })).toBeTruthy();
+    expect(details.textContent).not.toContain('Station');
+    expect(details.textContent).not.toContain('Model');
+    expect(details.textContent).not.toContain('Branch');
+  });
+});
+
 describe('CostCard', () => {
   it('shows the cost of the cap, a bar of each station and the legend, and that it stops at the cap', async () => {
     renderCards(() => <CostCard item={item()} factory={factory} runs={runs} />);

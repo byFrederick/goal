@@ -1,12 +1,12 @@
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useParams, useSearch } from '@tanstack/react-router';
 import { ChevronLeft, Eye, LayoutGrid } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import { eventsQuery, inboxQuery, itemQuery, runsQuery } from '../../api/queries';
 import type { Station } from '../../api/types';
 import { usePhone } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
-import { factoryTitle, itemKey, refParam, useFactory, useFactoryParams } from '../../shared/factory';
+import { itemKey, refParam, useFactory, useFactoryParams } from '../../shared/factory';
 import { type ItemControls, ItemDecisions } from '../../shared/item-actions';
 import { pausedNow, pullRequestsOf } from '../../shared/item-state';
 import { useOrg } from '../../shared/org';
@@ -21,7 +21,7 @@ import { NoteComposer } from './note-composer';
 import { OutputsCard } from './outputs';
 import { QuestionCard } from './question-card';
 import { CostCard, DetailsCard, OverlapsCard, RulesCard } from './side-cards';
-import { noFlow, stepsOf } from './steps';
+import { noFlow, stepsOf, summaryOf } from './steps';
 import { activeRun, buildTrace, criteriaOf, editedFiles, latestToolCalls, runRole, type Trace } from './timeline';
 import { TouchesCard } from './touches-card';
 import { EventList, type TimelineStatus, ToolRow, TraceList } from './trace-view';
@@ -67,6 +67,36 @@ function LatestSteps({ trace, onShowAll, className }: { trace: Trace; onShowAll:
         Full trace
       </Button>
     </SectionCard>
+  );
+}
+
+/**
+ * Phones: "Latest in this run", the last three events of the item's latest run (the run's events are the
+ * entries from its start on, the runs themselves left out). "All N events" opens the full timeline.
+ */
+function LatestInRun({ trace, onShowAll, className }: { trace: Trace; onShowAll: () => void; className?: string }) {
+  const start = Math.max(
+    trace.entries.findLastIndex((e) => e.kind === 'run'),
+    0,
+  );
+  const events = trace.entries.slice(start).filter((e) => e.kind !== 'run');
+  const id = useId();
+  return (
+    <section aria-labelledby={id} className={cn('flex flex-col gap-2', className)}>
+      <div className="flex items-center gap-2">
+        <h2 id={id} className="m-0 flex-1 text-heading text-ink">
+          Latest in this run
+        </h2>
+        <Button variant="ghost" className="h-11 px-2 text-secondary font-semibold" onClick={onShowAll}>
+          All {events.length} events
+        </Button>
+      </div>
+      {events.length > 0 ? (
+        <EventList entries={events.slice(-3)} />
+      ) : (
+        <p className="m-0 text-body text-muted">No events yet.</p>
+      )}
+    </section>
   );
 }
 
@@ -125,9 +155,12 @@ export function ItemPage() {
   // The top bar's actions: Watch live (not built yet), then the item's decisions, Move in a menu.
   // A phone has its decisions in its card under the title, so the bar has no actions there.
   const phone = usePhone();
+  // On a phone the bar's More actions menu holds Pause, Send back and Move; its Back link goes to the board.
   const actions = useMemo(
     () =>
-      phone ? undefined : (
+      phone ? (
+        <ItemDecisions item={decidable} factory={factory.id} station={station} controls={controls} split="controls" />
+      ) : (
         <div className="flex items-center gap-2">
           <NotAvailable>
             <Button variant="secondary">
@@ -140,22 +173,26 @@ export function ItemPage() {
       ),
     [phone, decidable, factory.id, station, controls],
   );
-  const board = `${factoryTitle(factory)} board`;
+  const back = useMemo(
+    () => (
+      <Link
+        to="/o/$org/f/$factory/board"
+        params={{ org: org.slug, factory: factory.name }}
+        aria-label="Back to Board"
+        className="flex size-11 flex-none items-center justify-center rounded-control text-ink-soft no-underline hover:bg-hover hover:text-ink"
+      >
+        <ChevronLeft size={20} strokeWidth={1.5} aria-hidden="true" />
+      </Link>
+    ),
+    [org.slug, factory.name],
+  );
   // At a decision, what is being decided on comes before how it was made.
   const deciding = item.state === 'waiting_human';
 
   return (
     <>
-      <TopBarSlot crumb={`#${item.number}`} actions={actions} />
+      <TopBarSlot crumb={`#${item.number}`} actions={actions} back={phone ? back : undefined} />
       <header className="flex flex-col gap-3">
-        <Link
-          to="/o/$org/f/$factory/board"
-          params={params}
-          className="inline-flex min-h-11 items-center gap-2 self-start text-body text-muted no-underline md:hidden"
-        >
-          <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" />
-          {board}
-        </Link>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-secondary font-semibold text-muted">#{item.number}</span>
           {item.class_of_service === 'expedite' ? <Chip tone="rework">Expedite</Chip> : null}
@@ -176,6 +213,11 @@ export function ItemPage() {
         </div>
         <h1 className="m-0 text-page-title tracking-display text-balance">{item.title}</h1>
         <Stepper label="Progress through the line" steps={steps} waiting={item.state === 'waiting_human'} />
+        {phone ? (
+          <p className="m-0 text-center text-secondary text-muted">
+            {summaryOf({ item, flow: item.flow ?? noFlow, now: Date.now() })}
+          </p>
+        ) : null}
       </header>
 
       <div className="flex flex-col gap-3 @[720px]:grid @[720px]:grid-cols-3 @[720px]:items-start @[720px]:gap-4">
@@ -191,22 +233,25 @@ export function ItemPage() {
               className={deciding || item.state === 'blocked' ? 'order-1' : 'order-9'}
             />
           ) : null}
+          {/* On a phone, Details is the one card of the four rows; the Cost card is the desktop's. */}
           <DetailsCard
             item={item}
             factory={factory}
             events={events}
             trace={trace}
-            className="order-2 @[720px]:order-none"
+            runs={runs?.runs ?? []}
+            summary={phone}
+            className="order-4 @[720px]:order-none"
           />
-          <CostCard item={item} factory={factory} runs={runs?.runs ?? []} className="order-2 @[720px]:order-none" />
-          <OverlapsCard item={item} className="order-2 @[720px]:order-none" />
-          <RulesCard item={item} factory={factory} trace={trace} className="order-2 @[720px]:order-none" />
+          {phone ? null : <CostCard item={item} factory={factory} runs={runs?.runs ?? []} />}
+          <OverlapsCard item={item} className="order-4 @[720px]:order-none" />
+          <RulesCard item={item} factory={factory} trace={trace} className="order-4 @[720px]:order-none" />
           <TouchesCard
             item={item}
             itemKey={key}
             factory={factory}
             events={events}
-            className="order-2 @[720px]:order-none"
+            className="order-4 @[720px]:order-none"
           />
         </div>
         <div className="contents @[720px]:col-span-2 @[720px]:flex @[720px]:flex-col @[720px]:gap-4">
@@ -219,7 +264,9 @@ export function ItemPage() {
               className="order-2 @[720px]:order-none"
             />
           ) : null}
-          {fullTrace ? null : (
+          {fullTrace ? null : phone ? (
+            <LatestInRun trace={trace} onShowAll={() => setFullTrace(true)} className="order-3 @[720px]:hidden" />
+          ) : (
             <LatestSteps
               trace={trace}
               onShowAll={() => setFullTrace(true)}
@@ -288,8 +335,10 @@ export function ItemPage() {
           state={item.state}
           compact
           fieldRef={compactNoteField}
-          className="order-8 @[720px]:hidden"
+          className="order-8 @[720px]:hidden max-md:fixed max-md:inset-x-0 max-md:bottom-16 max-md:z-20 max-md:border-t max-md:border-line max-md:bg-card max-md:px-4 max-md:py-2"
         />
+        {/* Keeps the end of the page clear of the pinned note field and the tab bar on a phone. */}
+        <div aria-hidden="true" className="h-24 @[720px]:hidden" />
       </div>
     </>
   );
@@ -316,6 +365,7 @@ function ItemDecisionsCard({
       station={station}
       controls={controls}
       layout="stack"
+      split="decisions"
       className={cn(className, 'rounded-card border border-line bg-card p-4')}
     />
   );

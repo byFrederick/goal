@@ -109,6 +109,7 @@ function TopBarHarness({ children }: { children: ReactNode }) {
     <TooltipProvider>
       <TopBarSetContext.Provider value={setTop}>
         <section aria-label="Top bar">
+          {top?.back}
           {top?.crumb}
           {top?.actions}
         </section>
@@ -210,13 +211,66 @@ describe('the item decisions at each width', () => {
     expect(within(screen.getByLabelText('Top bar')).getByRole('button', { name: 'Send back to Spec' })).toBeTruthy();
   });
 
-  it('shows Send back once on a phone, in its card under the title', async () => {
+  it('keeps Send back out of the phone card and in the More actions menu of the top bar', async () => {
+    stubWidth(true);
+    renderPage(item());
+
+    const bar = await screen.findByLabelText('Top bar');
+    expect(within(bar).queryByRole('button', { name: 'Send back to Spec' })).toBeNull();
+    fireEvent.keyDown(await within(bar).findByRole('button', { name: 'More actions' }), { key: 'Enter' });
+    expect(await screen.findByRole('menuitem', { name: 'Send back to Spec' })).toBeTruthy();
+    expect(screen.getAllByRole('menuitem', { name: 'Send back to Spec' })).toHaveLength(1);
+  });
+
+  it('puts Back to Board, the ref and the More actions menu in the phone top bar, with no board link in the page', async () => {
+    stubWidth(true);
+    renderPage(item());
+
+    const bar = await screen.findByLabelText('Top bar');
+    const back = within(bar).getByRole('link', { name: 'Back to Board' });
+    expect(back.getAttribute('href')).toBe('/o/acme/f/goal/board');
+    expect(within(bar).getByText('#147')).toBeTruthy();
+    expect(within(bar).getByRole('button', { name: 'More actions' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Goal board' })).toBeNull();
+  });
+
+  it('shows the summary line under the stepper, with the time at the station and in the line', async () => {
     stubWidth(true);
     renderPage(item());
 
     await screen.findByRole('heading', { level: 1 });
-    expect(screen.getAllByRole('button', { name: 'Send back to Spec' })).toHaveLength(1);
-    expect(within(screen.getByLabelText('Top bar')).queryByRole('button', { name: 'Send back to Spec' })).toBeNull();
+    expect(screen.getByText(/ in Build, .* in the line/)).toBeTruthy();
+  });
+
+  it('shows Latest in this run with All N events, which opens the full timeline', async () => {
+    stubWidth(true);
+    renderPage(item());
+
+    const latest = await screen.findByRole('heading', { name: 'Latest in this run' });
+    const section = latest.closest('section') as HTMLElement;
+    fireEvent.click(within(section).getByRole('button', { name: /^All \d+ events$/ }));
+    expect(await screen.findByRole('region', { name: 'Timeline' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Latest in this run' })).toBeNull();
+  });
+
+  it('shows one Details card on a phone and no separate Cost card', async () => {
+    stubWidth(true);
+    renderPage(item());
+
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.getByRole('heading', { name: 'Details' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Cost' })).toBeNull();
+    expect(screen.getByText('Cost')).toBeTruthy();
+    expect(screen.queryByText('Station')).toBeNull();
+  });
+
+  it('shows the phone note field as a labelled pill with a round Send note button', async () => {
+    stubWidth(true);
+    renderPage(item());
+
+    const field = await screen.findAllByRole('textbox', { name: 'Note for the agent' });
+    expect(field.length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Send note' }).length).toBeGreaterThan(0);
   });
 });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Item, ItemEvent, ItemFlow, Station } from '../../api/types';
-import { noFlow, stepsOf } from './steps';
+import { noFlow, stepsOf, summaryOf } from './steps';
 
 const stations: Station[] = [
   { id: 'intake', kind: 'queue' },
@@ -127,5 +127,24 @@ describe('stepsOf', () => {
     const steps = stepsOf({ item: item(), stations, events: [], flow: { ...flow, target_seconds: null }, now });
 
     expect(steps[4]?.detail).toBe('3 h so far');
+  });
+});
+
+describe('the phone summary line under the stepper', () => {
+  it('says the time at the station, the time in the line and the target', () => {
+    expect(summaryOf({ item: item(), flow, now })).toBe('2 h 10 min in Build, 3 h in the line of a 48 h target');
+  });
+
+  it('leaves the target out when the flow has none', () => {
+    expect(summaryOf({ item: item(), flow: { ...flow, target_seconds: null }, now })).toBe(
+      '2 h 10 min in Build, 3 h in the line',
+    );
+  });
+
+  it('stops the clock at the item's end once it is done', () => {
+    const done = item({ state: 'done', station: 'done', done_at: '2026-10-25T09:00:00Z' });
+    expect(summaryOf({ item: done, flow: { ...flow, target_seconds: null }, now })).toBe(
+      '0 s in Done, 1 h in the line',
+    );
   });
 });

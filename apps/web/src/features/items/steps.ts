@@ -83,3 +83,16 @@ export function stepsOf({ item, stations, events, flow, now }: StepsInput): Step
     return step(name, 'todo', s.description);
   });
 }
+
+/**
+ * The phone's summary line under the stepper: the time so far at the item's station, the time in the
+ * line, and the lead-time target when the flow has one, e.g. "2 h 12 min in Build, 3 h in the line of a
+ * 48 h target".
+ */
+export function summaryOf({ item, flow, now }: Pick<StepsInput, 'item' | 'flow' | 'now'>): string {
+  const end = item.done_at ? Date.parse(item.done_at) : now;
+  const atStation = visitsAt(flow.spans, item.station, end).spent;
+  const inLine = formatDuration(end - Date.parse(item.created_at));
+  const target = flow.target_seconds ? ` of a ${formatTarget(flow.target_seconds, 'short')} target` : '';
+  return `${formatDuration(atStation)} in ${humanize(item.station)}, ${inLine} in the line${target}`;
+}
