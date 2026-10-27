@@ -1,18 +1,30 @@
 import { useQuery } from '@tanstack/react-query';
-import { overviewQuery } from '../../api/queries';
+import { overviewQuery, touchesQuery } from '../../api/queries';
 import type { Factory, Metrics } from '../../api/types';
+import { useFactory } from '../../shared/factory';
 import { formatUsdCompact } from '../../shared/format';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
 import { type KpiBar, KpiTile } from '../../ui/kpi-tile';
-import { NotAvailable } from '../../ui/not-available';
+import { handsOffDelta } from './deltas';
+import { type FloorRange, previousRange } from './range';
 
 // The six flow figures of the Floor, in one row (MASTER.md, Components: KPI tile). Throughput, lead
 // time and sent back come from the range's metrics against the previous range and the factory's
-// targets. Spend comes from the overview, one day and seven days. Hands-off is not built yet, so
-// its tile is disabled rather than given a number (ADR 0016, decision 4). A phone shows four.
-export function KpiRow({ factory, metrics, className }: { factory: Factory; metrics: Metrics; className?: string }) {
+// targets. Hands-off comes from the touches over the range. Spend comes from the overview, one day
+// and seven days. A phone shows four.
+export function KpiRow({
+  factory,
+  metrics,
+  range,
+  className,
+}: {
+  factory: Factory;
+  metrics: Metrics;
+  range: FloorRange;
+  className?: string;
+}) {
   const { targets, previous } = metrics;
   const noItems = metrics.items_done === 0;
 
@@ -69,17 +81,9 @@ export function KpiRow({ factory, metrics, className }: { factory: Factory; metr
         delta={sentBackDelta !== null ? { value: sentBackDelta, unit: 'pts', good: sentBackDelta <= 0 } : undefined}
       />
 
-      {/* Not built yet: disabled with a tip, never a number (ADR 0016, decision 4). */}
-      <NotAvailable>
-        <button type="button" aria-label="Hands-off" className="hidden min-w-0 rounded-card text-left md:flex">
-          <KpiTile
-            label="Hands-off"
-            value={<span className="text-body text-ink-soft">Not built yet</span>}
-            target="No human touch"
-            className="flex-1 opacity-60"
-          />
-        </button>
-      </NotAvailable>
+      <div className="hidden min-w-0 md:flex">
+        <HandsOffTile range={range} />
+      </div>
 
       <div className="hidden min-w-0 md:flex">
         <KpiTile
@@ -92,6 +96,72 @@ export function KpiRow({ factory, metrics, className }: { factory: Factory; metr
 
       <SpendToday factory={factory} />
     </section>
+  );
+}
+
+/**
+ * Hands-off: the share of the range's finished items no person touched, over the seven days of the trend.
+ * Its delta is against the range before, in points. With nothing finished it shows the empty value.
+ */
+function HandsOffTile({ range }: { range: FloorRange }) {
+  const org = useOrg();
+  const factory = useFactory();
+  const current = useQuery(touchesQuery(org.id, factory.id, range));
+  const before = useQuery(touchesQuery(org.id, factory.id, previousRange(range)));
+
+  if (current.isPending) {
+    return (
+      <div aria-busy="true" className="flex min-w-0 flex-1">
+        <KpiTile label="Hands-off" value={<span className="sr-only">Loading</span>} className="flex-1" />
+      </div>
+    );
+  }
+  if (current.isError) {
+    return (
+      <KpiTile
+        label="Hands-off"
+        className="flex-1"
+        value={<span className="text-body text-ink-soft">Could not load</span>}
+        note={
+          <Button size="sm" variant="ghost" onClick={() => void current.refetch()}>
+            Retry
+          </Button>
+        }
+      />
+    );
+  }
+
+  const { stats, daily } = current.data;
+  if (stats.finished === 0) {
+    return <KpiTile label="Hands-off" value={notEnough} target="No human touch" className="flex-1" />;
+  }
+
+  const rate = Math.round(stats.touchless_rate * 100);
+  const delta = handsOffDelta(stats, before.data?.stats);
+  const first = Math.round((daily[0]?.touchless_rate ?? 0) * 100);
+  const last = Math.round((daily.at(-1)?.touchless_rate ?? 0) * 100);
+  const trend = last > first ? 'Rising' : last < first ? 'Falling' : 'Flat';
+  const sparkline =
+    daily.length > 1
+      ? {
+          points: daily.map((d) => d.touchless_rate * 100),
+          label:
+            trend === 'Flat'
+              ? `Flat at ${last}% over ${daily.length} days`
+              : `${trend} from ${first}% to ${last}% over ${daily.length} days`,
+        }
+      : undefined;
+
+  return (
+    <KpiTile
+      label="Hands-off"
+      value={rate}
+      unit="%"
+      sparkline={sparkline}
+      target="No human touch"
+      delta={delta !== null ? { value: delta, unit: 'pts', good: delta > 0 } : undefined}
+      className="flex-1"
+    />
   );
 }
 

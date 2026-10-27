@@ -362,8 +362,8 @@ export interface ConstraintInput {
 
 /** A mean lease of the mock's agents, in hours. */
 const serviceHours = 1.5;
-/** What one of the mock's agent runs costs, in dollars. */
-const runCostUsd = 0.9;
+/** What one of the mock's agent runs costs, in dollars: with 1.2, the software Floor's build adds about $18 a day. */
+const runCostUsd = 1.2;
 
 /**
  * GET …/constraint: the agent stations with a seeded busy share, busiest first, at most 3; the

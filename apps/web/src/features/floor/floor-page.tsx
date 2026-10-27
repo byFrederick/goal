@@ -30,17 +30,19 @@ export function FloorPage() {
   // The week's finished items for the line's Done station; the Spend tile reads the same query.
   const week = useQuery(overviewQuery(org.id, '7d'));
   const weekRow = week.data?.factories.find((f) => f.factory.id === factory.id);
+  // The lead time the what-if measures against: the range's p85, once an item finished in it.
+  const leadTimeP85 = metrics.items_done === 0 ? null : (metrics.lead_time_hours?.p85 ?? null);
   const doneThisWeek = weekRow ? weekRow.throughput.days.reduce((sum, day) => sum + day.done, 0) : null;
 
   return (
     <div className="flex flex-col gap-4 md:gap-5">
       <FloorHeader factory={factory} board={board} metrics={metrics} />
       <LinePanel board={board} constraint={constraint.constraint ?? board.constraint} doneThisWeek={doneThisWeek} />
-      <KpiRow factory={factory} metrics={metrics} />
+      <KpiRow factory={factory} metrics={metrics} range={range} />
 
       <div className={grid}>
         <NeedsYouCard />
-        <WaitsCard range={range} />
+        <WaitsCard range={range} leadTimeP85={leadTimeP85} />
         <WeeklyCard range={range} />
         <ActivityCard />
       </div>
