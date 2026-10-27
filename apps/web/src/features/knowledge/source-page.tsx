@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { deleteKnowledgeSource, updateKnowledgeSource } from '../../api/knowledge';
 import { connectionKindsQuery, connectionsQuery, keys, knowledgeSourceQuery } from '../../api/queries';
 import type { KnowledgeSource } from '../../api/types';
+import { TopBarSlot } from '../../app/top-bar';
 import { namesText } from '../../shared/connections';
 import { useCreatedOnce } from '../../shared/created';
 import { plural } from '../../shared/format';
@@ -46,6 +47,7 @@ export function SourcePage() {
 
   return (
     <>
+      <TopBarSlot crumb={source.name} />
       <nav aria-label="Breadcrumb" className="text-sm text-muted">
         <ol className="m-0 flex list-none gap-1.5 p-0">
           <li>

@@ -21,18 +21,24 @@ var english = message.NewPrinter(language.English)
 
 // compiledSchema compiles the embedded schema once; Check is safe for concurrent use.
 var compiledSchema = sync.OnceValues(func() (*jsonschema.Schema, error) {
-	s, err := jsonschema.UnmarshalJSON(bytes.NewReader(definitions.Factory))
+	return compileSchema(definitions.Factory, "factory.schema.json", "")
+})
+
+// compileSchema compiles the schema raw, added as name, at fragment ("" for its root, or a
+// pointer such as "#/$defs/case").
+func compileSchema(raw []byte, name, fragment string) (*jsonschema.Schema, error) {
+	s, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
 
 	c := jsonschema.NewCompiler()
-	if err := c.AddResource("factory.schema.json", s); err != nil {
+	if err := c.AddResource(name, s); err != nil {
 		return nil, err
 	}
 
-	return c.Compile("factory.schema.json")
-})
+	return c.Compile(name + fragment)
+}
 
 // schemaProblems validates factory.yaml against the schema: one problem per failed rule, at
 // the line of the value it is about.
@@ -47,29 +53,41 @@ func (d *document) schemaProblems() []domain.DefinitionProblem {
 		return []domain.DefinitionProblem{*yamlInvalid(FileName, err)}
 	}
 
-	err = compiled.Validate(v)
-
-	var ve *jsonschema.ValidationError
-	if !errors.As(err, &ve) {
-		if err != nil {
-			return []domain.DefinitionProblem{d.schemaProblem(nil, codeSchemaInvalid, err.Error())}
-		}
-
-		return nil
+	failed, err := failedRules(compiled, v)
+	if err != nil {
+		return []domain.DefinitionProblem{d.schemaProblem(nil, codeSchemaInvalid, err.Error())}
 	}
 
 	var out []domain.DefinitionProblem
-
-	for _, l := range leaves(ve) {
-		p := d.schemaProblem(l.path, l.code, l.message)
-		if !slices.ContainsFunc(out, func(q domain.DefinitionProblem) bool {
-			return q.Pointer == p.Pointer && q.Line == p.Line && q.Message == p.Message
-		}) {
-			out = append(out, p)
-		}
+	for _, l := range failed {
+		out = appendNew(out, d.schemaProblem(l.path, l.code, l.message))
 	}
 
 	return out
+}
+
+// failedRules validates v against s: the rules it fails, none when it satisfies s. The error is
+// a failure other than a rule's.
+func failedRules(s *jsonschema.Schema, v any) ([]leaf, error) {
+	err := s.Validate(v)
+
+	var ve *jsonschema.ValidationError
+	if !errors.As(err, &ve) {
+		return nil, err
+	}
+
+	return leaves(ve), nil
+}
+
+// appendNew appends p unless out has a problem at the same place saying the same.
+func appendNew(out []domain.DefinitionProblem, p domain.DefinitionProblem) []domain.DefinitionProblem {
+	if slices.ContainsFunc(out, func(q domain.DefinitionProblem) bool {
+		return q.File == p.File && q.Pointer == p.Pointer && q.Line == p.Line && q.Message == p.Message
+	}) {
+		return out
+	}
+
+	return append(out, p)
 }
 
 func (d *document) schemaProblem(path []string, code, message string) domain.DefinitionProblem {

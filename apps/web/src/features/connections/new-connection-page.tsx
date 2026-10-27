@@ -12,6 +12,7 @@ import { ApiError } from '../../api/client';
 import { createConnection } from '../../api/connections';
 import { connectionKindsQuery, connectionsQuery, keys } from '../../api/queries';
 import type { ConnectionKind } from '../../api/types';
+import { TopBarSlot } from '../../app/top-bar';
 import { connectionName, runEnv } from '../../shared/connections';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { reasons } from '../../shared/permissions';
@@ -39,6 +40,7 @@ export function NewConnectionPage() {
 
   return (
     <>
+      <TopBarSlot crumb="New connection" />
       <nav aria-label="Breadcrumb" className="text-sm text-muted">
         <ol className="m-0 flex list-none gap-1.5 p-0">
           <li>

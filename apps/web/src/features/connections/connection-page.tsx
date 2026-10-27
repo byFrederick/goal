@@ -13,6 +13,7 @@ import { ApiError } from '../../api/client';
 import { deleteConnection, updateConnection } from '../../api/connections';
 import { connectionActivityQuery, connectionKindsQuery, connectionQuery, keys } from '../../api/queries';
 import type { Connection, ConnectionKind, ConnectionKindField } from '../../api/types';
+import { TopBarSlot } from '../../app/top-bar';
 import { connectionName, modeLabels, namesText, statusLine, testedText } from '../../shared/connections';
 import { useCreatedOnce } from '../../shared/created';
 import { useOrg, useOrgHolds } from '../../shared/org';
@@ -57,6 +58,7 @@ export function ConnectionPage() {
 
   return (
     <>
+      <TopBarSlot crumb={connection.name} />
       <nav aria-label="Breadcrumb" className="text-sm text-muted">
         <ol className="m-0 flex list-none gap-1.5 p-0">
           <li>
