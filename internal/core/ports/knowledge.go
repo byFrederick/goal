@@ -87,6 +87,27 @@ type Knowledge interface {
 	// ranking and, with q.Embedding, their nearest neighbours among the chunks of q.Model
 	// (domain.FuseRanks); there is no unfiltered variant.
 	Search(ctx context.Context, q domain.KnowledgeQuery) ([]domain.KnowledgeHit, error)
+
+	// RecordUse records a run's use of a document (ADR 0027): one per run, document and kind, a
+	// second merging its chunk ids into the first and keeping the earlier time. Its rules are
+	// KnowledgeUse.Check's (domain.ErrInvalid); ErrNotFound when the source has no such document.
+	RecordUse(ctx context.Context, u domain.KnowledgeUse) error
+	// GiveVerdict records v and returns it as stored, with its document's source and its time:
+	// one per actor, document and run (none counting as its own), so a later one replaces the
+	// earlier one's verdict, note, item and time. Its rules are KnowledgeVerdict.Check's
+	// (domain.ErrInvalid); ErrNotFound for an unknown document.
+	GiveVerdict(ctx context.Context, v domain.KnowledgeVerdict) (domain.KnowledgeVerdict, error)
+	// SourceUsage is the use of the source name's documents over the last days days (1 to
+	// domain.MaxUsageDays, else domain.ErrInvalid): per document with a use or a verdict in the
+	// window, the distinct runs with a use and the verdicts given, at most
+	// domain.MaxUsageDocuments, by runs descending then id. ErrNotFound for an unknown source.
+	SourceUsage(ctx context.Context, source string, days int) ([]domain.DocumentUsage, error)
+	// DocumentUses are one page of the runs that used a document, newest first use first (ties
+	// by run id descending), after the run after ("" from the first). ErrNotFound for an unknown
+	// document.
+	DocumentUses(ctx context.Context, document domain.KnowledgeDocumentID, after domain.RunID, limit int) ([]domain.KnowledgeRunUse, error)
+	// RunUses are a run's uses, by time, document and kind; none for an unknown run.
+	RunUses(ctx context.Context, run domain.RunID) ([]domain.KnowledgeUse, error)
 }
 
 // DropBlobs deletes the objects of uploads' contents no document holds any more. A deletion calls

@@ -351,6 +351,148 @@ func FuseRanks(rankings ...[]int64) []Ranked {
 	return out
 }
 
+// Knowledge use and verdicts (ADR 0027): which documents each run used, and whether they helped
+// or misled the agents and people who judged them. Neither copies a document's text, a snippet
+// or a title (decision 6).
+
+// KnowledgeUseKind is how a run used a document.
+type KnowledgeUseKind string
+
+// The kinds of knowledge use: a search returned some of the document's chunks, or a read opened it.
+const (
+	KnowledgeSearched KnowledgeUseKind = "search"
+	KnowledgeRead     KnowledgeUseKind = "read"
+)
+
+// KnowledgeVerdictKind is what an actor says a document did.
+type KnowledgeVerdictKind string
+
+// The verdicts.
+const (
+	KnowledgeHelped KnowledgeVerdictKind = "helped"
+	KnowledgeMisled KnowledgeVerdictKind = "misled"
+)
+
+// Limits of knowledge use and verdicts (00067's checks).
+const (
+	// MaxVerdictNote is a verdict's note in characters.
+	MaxVerdictNote = 500
+	// MaxUseChunks is how many chunk ids one use keeps.
+	MaxUseChunks = 1000
+	// DefaultUsageDays and MaxUsageDays bound a source's usage window.
+	DefaultUsageDays = 7
+	MaxUsageDays     = 90
+	// MaxUsageDocuments is how many documents a source's usage lists, most used first.
+	MaxUsageDocuments = 500
+)
+
+// KnowledgeUse is one run's use of one document by one kind: one per run, document and kind.
+// Chunks are the chunk ids a search returned (none for a read), At the run's first use.
+type KnowledgeUse struct {
+	Factory  FactoryID
+	Item     ItemID
+	Run      RunID
+	Source   KnowledgeSourceID
+	Document KnowledgeDocumentID
+	Kind     KnowledgeUseKind
+	Chunks   []int64
+	At       time.Time
+}
+
+// Check enforces a use's rules: every id, a known kind and at most MaxUseChunks chunks. Errors
+// wrap ErrInvalid.
+func (u KnowledgeUse) Check() error {
+	var errs []error
+
+	if u.Factory == "" || u.Item == "" || u.Run == "" || u.Source == "" || u.Document == "" {
+		errs = append(errs, fmt.Errorf("a knowledge use names its factory, item, run, source and document: %w", ErrInvalid))
+	}
+
+	if u.Kind != KnowledgeSearched && u.Kind != KnowledgeRead {
+		errs = append(errs, fmt.Errorf("knowledge use kind %q is not search or read: %w", u.Kind, ErrInvalid))
+	}
+
+	if len(u.Chunks) > MaxUseChunks {
+		errs = append(errs, fmt.Errorf("a knowledge use keeps at most %d chunks: %w", MaxUseChunks, ErrInvalid))
+	}
+
+	return errors.Join(errs...)
+}
+
+// KnowledgeVerdict is By's verdict on a document, of a run and its item when Run is set. There is
+// one per actor, document and run (no run counting as its own); a later one replaces it. Source is
+// the document's, which the store fills; At zero is the store's now.
+type KnowledgeVerdict struct {
+	Document KnowledgeDocumentID
+	Source   KnowledgeSourceID
+	Run      RunID
+	Item     ItemID
+	Verdict  KnowledgeVerdictKind
+	Note     string
+	By       Actor
+	At       time.Time
+}
+
+// Check enforces a verdict's rules: a document, a known verdict, a note of at most
+// MaxVerdictNote characters, a person or an agent as its actor, and an item only with a run.
+// Errors wrap ErrInvalid.
+func (v KnowledgeVerdict) Check() error {
+	var errs []error
+
+	if v.Document == "" {
+		errs = append(errs, fmt.Errorf("a verdict names its document: %w", ErrInvalid))
+	}
+
+	if v.Verdict != KnowledgeHelped && v.Verdict != KnowledgeMisled {
+		errs = append(errs, fmt.Errorf("verdict %q is not helped or misled: %w", v.Verdict, ErrInvalid))
+	}
+
+	if utf8.RuneCountInString(v.Note) > MaxVerdictNote {
+		errs = append(errs, fmt.Errorf("a verdict's note has at most %d characters: %w", MaxVerdictNote, ErrInvalid))
+	}
+
+	if (v.By.Kind != ActorUser && v.By.Kind != ActorAgent) || v.By.ID == "" {
+		errs = append(errs, fmt.Errorf("a verdict is a person's or an agent's, not %q: %w", v.By.Ref(), ErrInvalid))
+	}
+
+	if v.Item != "" && v.Run == "" {
+		errs = append(errs, fmt.Errorf("a verdict names an item only with its run: %w", ErrInvalid))
+	}
+
+	return errors.Join(errs...)
+}
+
+// CheckUsageDays refuses a usage window outside 1 to MaxUsageDays days (ErrInvalid).
+func CheckUsageDays(days int) error {
+	if days < 1 || days > MaxUsageDays {
+		return fmt.Errorf("a usage window is 1 to %d days, not %d: %w", MaxUsageDays, days, ErrInvalid)
+	}
+
+	return nil
+}
+
+// DocumentUsage is one document's use over a source's window: the distinct runs that used it and
+// the verdicts given on it, agents' and people's apart.
+type DocumentUsage struct {
+	Document     KnowledgeDocumentID
+	Title        string
+	Runs         int
+	AgentsHelped int
+	AgentsMisled int
+	PeopleHelped int
+	PeopleMisled int
+}
+
+// KnowledgeRunUse is one run that used a document: its item and factory, the kinds of its uses
+// in order, and its first use.
+type KnowledgeRunUse struct {
+	Run     RunID
+	Item    ItemID
+	Factory FactoryID
+	Kinds   []KnowledgeUseKind
+	At      time.Time
+}
+
 // Audit actions of the knowledge base (spec 4 §12).
 const (
 	AuditKnowledgeSourceCreated    = "knowledge_source.created"
