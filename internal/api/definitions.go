@@ -49,6 +49,8 @@ type Definitions interface {
 	ReplaceTree(ctx context.Context, f domain.FactoryID, files map[string][]byte, expected *int64) (authoring.SaveResult, error)
 	ValidateDraft(ctx context.Context, f domain.FactoryID, r authoring.ValidateRequest) (authoring.Validation, error)
 	Publish(ctx context.Context, f domain.FactoryID, r authoring.PublishRequest) (domain.DefinitionVersion, error)
+	// EvalContent reads the eval cases of a version or the draft, with its content hash.
+	EvalContent(ctx context.Context, f domain.FactoryID, sel authoring.VersionSelector) (authoring.EvalContent, error)
 
 	Versions(ctx context.Context, f domain.FactoryID, before, limit int) (authoring.VersionPage, error)
 	Version(ctx context.Context, f domain.FactoryID, sel authoring.VersionSelector) (authoring.VersionDetail, error)
@@ -423,11 +425,27 @@ var definitionStatus = map[string]int{
 	authoring.CodeFactoryBusy:        http.StatusConflict,
 	authoring.CodeFactoryNotArchived: http.StatusConflict,
 	authoring.CodeYAMLInvalid:        http.StatusConflict,
+	authoring.CodeEvalsPending:       http.StatusConflict,
+	authoring.CodeEvalsFailing:       http.StatusConflict,
 	authoring.CodeDraftConflict:      http.StatusPreconditionFailed,
 	authoring.CodeModelInvalid:       http.StatusUnprocessableEntity,
 	authoring.CodeImportInvalid:      http.StatusUnprocessableEntity,
 	authoring.CodeBadPath:            http.StatusUnprocessableEntity,
 	authoring.CodeTooLarge:           http.StatusRequestEntityTooLarge,
+}
+
+// evalGateProblem names, in p, the eval run a publish the eval gate refused waits on or failed,
+// and its failing cases.
+func evalGateProblem(p *gen.Problem, err error) {
+	e, ok := errors.AsType[*authoring.EvalGateError](err)
+	if !ok {
+		return
+	}
+
+	p.EvalRunId = optional(string(e.Run))
+	if len(e.Failing) > 0 {
+		p.FailingCases = &e.Failing
+	}
 }
 
 // definitionProblem is the problem of a definition refusal, with what the client needs to act on
@@ -469,6 +487,8 @@ func definitionProblem(err error) (gen.Problem, bool) {
 	if e, ok := errors.AsType[*ports.ItemsAtRemovedStationError](err); ok {
 		p.Items = &gen.ItemsAtRemovedStations{InProgress: itemsAtOut(e.InProgress), Unmapped: itemsAtOut(e.Unmapped)}
 	}
+
+	evalGateProblem(&p, err)
 
 	switch code {
 	case authoring.CodeFactoryRunning:

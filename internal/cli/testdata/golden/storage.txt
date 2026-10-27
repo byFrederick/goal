@@ -135,6 +135,12 @@ usage:
                                                   day; --status: running, succeeded, failed or
                                                   cancelled; --search: item title, agent, model or
                                                   #147; another page prints its --cursor)
+  goal eval run [--case C] [--draft] [--factory F] [--json]
+                                                  start an eval run of the factory's eval cases (every
+                                                  one, or --case), on the current version or --draft,
+                                                  and print what it is about to cost
+  goal eval show <run> [--factory F] [--json]     an eval run's state and cost, and each case's tries:
+                                                  pass, fail or error
   goal spend [--window week|month|90d] [--json]   what the organization's agent runs cost (default this
                                                   week), per merged item and on rework, and each
                                                   factory's budget: running, stopped or over_budget,
@@ -185,7 +191,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, move, pause, the decisions, status, andon, factory, connection, credential, knowledge, search, runs, spend) acts in one
+Every command that talks to goald (run, follow, item, note, move, pause, the decisions, status, andon, factory, connection, credential, knowledge, search, runs, eval, spend) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or
