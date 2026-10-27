@@ -32,3 +32,4 @@ One line per ADR: its number, its title and the first part of its status. To add
 - [ADR 0026](0026-intake-triggers.md): Intake triggers. Status: accepted.
 - [ADR 0027](0027-knowledge-use-and-verdicts.md): Knowledge use and verdicts. Status: proposed.
 - [ADR 0028](0028-trigger-try-and-model-check.md): Trying a trigger with a past event, and the model check in Only if. Status: proposed.
+- [ADR 0032](0032-self-serve-onboarding.md): Self-serve onboarding: anyone signed in creates an organization, and progress comes from existing data. Status: accepted.
