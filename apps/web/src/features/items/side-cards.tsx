@@ -60,12 +60,17 @@ export function DetailsCard({
   factory,
   events,
   trace,
+  runs = [],
+  summary = false,
   className,
 }: {
   item: Item;
   factory: Factory;
   events: readonly ItemEvent[];
   trace: Trace;
+  runs?: readonly Run[];
+  /** Phones: the four rows the phone's Details card shows (Working on it, Pull request, Cost, Owner). */
+  summary?: boolean;
   className?: string;
 }) {
   const org = useOrg();
@@ -78,41 +83,46 @@ export function DetailsCard({
     item.outputs,
     factory.stations.map((s) => s.id),
   );
+  const pullLinks = pulls.map((url, i) => (
+    <Fragment key={url}>
+      {i > 0 ? ', ' : null}
+      <a href={url} target="_blank" rel="noreferrer" className="font-medium text-run no-underline hover:underline">
+        {pullRequestNumber(url)}
+      </a>
+    </Fragment>
+  ));
 
   const rows: { label: string; value: ReactNode }[] = [];
-  if (owner) rows.push({ label: 'Owner', value: owner });
-  if (run) rows.push({ label: 'Working on it', value: runRole(run) });
-  if (run?.model) rows.push({ label: 'Model', value: run.model });
-  const station = item.lane ? `${humanize(item.station)}, ${item.lane} lane` : humanize(item.station);
-  rows.push({ label: 'Station', value: station });
-  if (branch) rows.push({ label: 'Branch', value: <span className="font-mono">{branch}</span> });
-  if (pulls.length > 0) {
-    const links = pulls.map((url, i) => (
-      <Fragment key={url}>
-        {i > 0 ? ', ' : null}
-        <a href={url} target="_blank" rel="noreferrer" className="font-medium text-run no-underline hover:underline">
-          {pullRequestNumber(url)}
-        </a>
-      </Fragment>
-    ));
-    rows.push({ label: 'Pull request', value: links });
-  }
-  if (item.assembly) {
-    const { ref, title } = item.assembly;
-    const value = (
-      <>
-        Part of{' '}
-        <Link
-          to="/o/$org/f/$factory/items/$ref"
-          params={{ org: org.slug, factory: factoryOf(ref), ref: refParam(ref) }}
-          className="font-medium text-run no-underline hover:underline"
-        >
-          {ref}
-        </Link>{' '}
-        {title}
-      </>
-    );
-    rows.push({ label: 'Came from', value });
+  if (summary) {
+    if (run) rows.push({ label: 'Working on it', value: runRole(run) });
+    if (pulls.length > 0) rows.push({ label: 'Pull request', value: pullLinks });
+    rows.push({ label: 'Cost', value: <CostValue item={item} factory={factory} runs={runs} /> });
+    if (owner) rows.push({ label: 'Owner', value: owner });
+  } else {
+    if (owner) rows.push({ label: 'Owner', value: owner });
+    if (run) rows.push({ label: 'Working on it', value: runRole(run) });
+    if (run?.model) rows.push({ label: 'Model', value: run.model });
+    const station = item.lane ? `${humanize(item.station)}, ${item.lane} lane` : humanize(item.station);
+    rows.push({ label: 'Station', value: station });
+    if (branch) rows.push({ label: 'Branch', value: <span className="font-mono">{branch}</span> });
+    if (pulls.length > 0) rows.push({ label: 'Pull request', value: pullLinks });
+    if (item.assembly) {
+      const { ref, title } = item.assembly;
+      const value = (
+        <>
+          Part of{' '}
+          <Link
+            to="/o/$org/f/$factory/items/$ref"
+            params={{ org: org.slug, factory: factoryOf(ref), ref: refParam(ref) }}
+            className="font-medium text-run no-underline hover:underline"
+          >
+            {ref}
+          </Link>{' '}
+          {title}
+        </>
+      );
+      rows.push({ label: 'Came from', value });
+    }
   }
 
   return (
@@ -126,6 +136,52 @@ export function DetailsCard({
         ))}
       </dl>
     </SectionCard>
+  );
+}
+
+/** The item's cost, "$3.00 of $12" against its cap, with the cost bar under it: the phone's Details row. */
+function CostValue({ item, factory, runs }: { item: Item; factory: Factory; runs: readonly Run[] }) {
+  const cap = item.flow?.budget.per_item_usd ?? null;
+  const segments = costByStation(
+    runs,
+    factory.stations.map((s) => s.id),
+  );
+  return (
+    <>
+      <span className="tabular-nums">
+        {formatUsd(item.cost_usd)}
+        {cap !== null ? <span className="font-normal text-muted"> of {formatUsdCompact(cap)}</span> : null}
+      </span>
+      {cap !== null && cap > 0 ? <CostBar segments={segments} cap={cap} className="mt-2" /> : null}
+    </>
+  );
+}
+
+/** The cost bar: each station's share of the cap, in the line's order. Its label names the stations. */
+function CostBar({
+  segments,
+  cap,
+  className,
+}: {
+  segments: { id: string; cost: number }[];
+  cap: number;
+  className?: string;
+}) {
+  const legend = segments.map((s) => `${humanize(s.id)} ${formatUsd(s.cost)}`);
+  return (
+    <span
+      role="img"
+      aria-label={`${legend.join(', ')} of a ${formatUsdCompact(cap)} cap`}
+      className={cn('flex h-1.5 overflow-hidden rounded-full bg-hover', className)}
+    >
+      {segments.map((s, i) => (
+        <span
+          key={s.id}
+          className={cn('h-full', i % 2 === 0 ? 'bg-run-soft' : 'bg-run')}
+          style={{ width: `${(s.cost / cap) * 100}%` }}
+        />
+      ))}
+    </span>
   );
 }
 
@@ -169,21 +225,7 @@ export function CostCard({
         </span>
       }
     >
-      {cap !== null && cap > 0 ? (
-        <span
-          role="img"
-          aria-label={`${legend.join(', ')} of a ${formatUsdCompact(cap)} cap`}
-          className="flex h-1.5 overflow-hidden rounded-full bg-hover"
-        >
-          {segments.map((s, i) => (
-            <span
-              key={s.id}
-              className={cn('h-full', i % 2 === 0 ? 'bg-run-soft' : 'bg-run')}
-              style={{ width: `${(s.cost / cap) * 100}%` }}
-            />
-          ))}
-        </span>
-      ) : null}
+      {cap !== null && cap > 0 ? <CostBar segments={segments} cap={cap} /> : null}
       {segments.length > 0 || cap !== null ? (
         <ul className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 text-meta text-muted">
           {legend.map((text) => (
