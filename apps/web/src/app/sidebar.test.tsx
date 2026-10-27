@@ -252,13 +252,14 @@ describe('the sidebar', () => {
     expect(within(sidebar).getByRole('link', { name: /support factory.*andon pulled/ })).toBeTruthy();
   });
 
-  it('shows the spend this week against the budget, and is not a link', async () => {
+  it('shows the spend this week against the budget, as a link to Spend and billing', async () => {
     renderSidebar();
     const sidebar = await nav();
 
     expect(within(sidebar).getByText('Spend this week')).toBeTruthy();
     expect(within(sidebar).getByText('$512 of $1,400')).toBeTruthy();
-    expect(within(sidebar).queryByRole('link', { name: /Spend/ })).toBeNull();
+    const link = within(sidebar).getByRole('link', { name: /Spend this week/ });
+    expect(link.getAttribute('href')).toBe('/o/acme/spend');
   });
 
   it('shows the amount alone when no factory has a budget', async () => {

@@ -1,6 +1,6 @@
 // The contract's shapes, generated from contracts/api/openapi.yaml into @goal/api-client, under the names
 // the screens use. Nothing here is written by hand: a shape changes in the contract first.
-import type { ItemPage, MergeRequest } from '@goal/api-client';
+import type { components, ItemPage, MergeRequest } from '@goal/api-client';
 
 export type {
   Actor,
@@ -168,3 +168,14 @@ export type ItemList = ItemPage;
 
 /** How goald merges a pull request (POST /v1/orgs/{org}/items/{item}/merge). */
 export type MergeMethod = NonNullable<MergeRequest['method']>;
+
+// The spend shapes are the contract's, read from the generated schema (the api-client does not re-export them).
+type Schemas = components['schemas'];
+export type AgentSpend = Schemas['AgentSpend'];
+export type ModelSpend = Schemas['ModelSpend'];
+export type OrgSpend = Schemas['OrgSpend'];
+export type SpendBudget = Schemas['SpendBudget'];
+export type SpendBudgetState = Schemas['SpendBudgetState'];
+export type SpendDay = Schemas['SpendDay'];
+export type SpendWindow = Schemas['SpendWindow'];
+export type WeekCost = Schemas['WeekCost'];

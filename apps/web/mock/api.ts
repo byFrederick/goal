@@ -76,6 +76,7 @@ import { createKeys } from './keys.ts';
 import { createKnowledge } from './knowledge.ts';
 import { membersFor, orgCanOf } from './people.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
+import { createSpend } from './spend.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
 
 type Next = (err?: unknown) => void;
@@ -708,6 +709,16 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const last = state.andon[f.name]?.at(-1);
     return last && last.cleared_at === null ? last : null;
   };
+
+  // The spend figures: the factories the organization has, with the andon pull that stops one (spend.ts).
+  const spend = createSpend({
+    clock,
+    factoriesOf,
+    reasonOf: (_org, f) => {
+      const last = state.andon[f.name]?.at(-1);
+      return last && last.cleared_at === null ? last.reason : null;
+    },
+  });
 
   /** A pull or a clear: its audit entry and the organization's `event: factory`, as goald's trigger sends it. */
   const andonChanged = (f: Factory, pull: AndonPull) => {
@@ -1374,6 +1385,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await apiKeys.handle(forCaller(req, org), rest, method, req, res, () => readBody(req))) return;
     if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
+    if (await spend.handle(org, rest, method, url, res)) return;
 
     if (rest === '' && method === 'GET') return json(res, 200, forCaller(req, withCount(org)));
     if (rest === '' && method === 'DELETE') {
