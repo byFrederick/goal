@@ -2118,6 +2118,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/connections/{connection}/repositories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The connection's name */
+                connection: components["parameters"]["ConnectionRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The owners and repositories a code host connection reaches
+         * @description Signs in to the code host with the connection's credential, from goald, and answers the account it signs in as, the owners it can list (the account, then its organizations) and the repositories of owner (the account when owner is absent). At most 100 repositories, the most recently updated first, with no paging: truncated is true when the owner has more. Each has at most 3 languages, the largest first. Audited as connection.used; no secret value is answered. 404 connection-not-found for an unknown connection, 404 owner-not-found for an owner the code host does not know, 422 connection-not-code-host for a connection whose kind is not a code host goald reaches, 422 repositories-not-supported for a code host that cannot list them yet (GitLab), 502 code-host-error when the code host refuses or fails, and 503 connections-unavailable for a sealed connection while goald has no master key.
+         */
+        get: operations["listConnectionRepositories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/knowledge/sources": {
         parameters: {
             query?: never;
@@ -4747,6 +4772,34 @@ export interface components {
             error?: string;
             /** Format: date-time */
             at: string;
+        };
+        /** @description What a code host connection reaches (GET …/connections/{connection}/repositories) */
+        RepositoryList: {
+            /** @description The account the connection's credential signs in as */
+            login: string;
+            /** @description The owner the repositories belong to */
+            owner: string;
+            /** @description The account first, then its organizations */
+            owners: components["schemas"]["RepositoryOwner"][];
+            /** @description The most recently updated first, at most 100 */
+            repositories: components["schemas"]["Repository"][];
+            /** @description The owner has more repositories than the 100 answered */
+            truncated: boolean;
+        };
+        RepositoryOwner: {
+            login: string;
+            /** @enum {string} */
+            kind: "user" | "organization";
+        };
+        Repository: {
+            /** @description <owner>/<name> */
+            full_name: string;
+            /** @description Its https clone URL */
+            clone_url: string;
+            /** @description The largest first, at most 3 */
+            languages: string[];
+            /** Format: date-time */
+            updated_at: string;
         };
         /** @description The data of one `event: connection` on /v1/orgs/{org}/stream; it carries no value */
         ConnectionEvent: {
@@ -7904,6 +7957,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConnectionTestResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listConnectionRepositories: {
+        parameters: {
+            query?: {
+                /** @description The account or organization whose repositories to list; absent, the connection's own account */
+                owner?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The connection's name */
+                connection: components["parameters"]["ConnectionRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The owners and repositories */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepositoryList"];
                 };
             };
             default: components["responses"]["Problem"];
