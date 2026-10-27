@@ -9,6 +9,15 @@
     "allowImportingTsExtensions": true
   },
   // The service worker is checked against the WebWorker lib in src/sw/tsconfig.json (typecheck).
-  "include": ["src", "mock", "e2e", "e2e-auth", "vite.config.ts", "playwright.config.ts", "playwright.auth.config.ts"],
+  "include": [
+    "src",
+    "scripts",
+    "mock",
+    "e2e",
+    "e2e-auth",
+    "vite.config.ts",
+    "playwright.config.ts",
+    "playwright.auth.config.ts"
+  ],
   "exclude": ["src/sw/sw.ts"]
 }

@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit && tsc -p src/sw/tsconfig.json",
     "lint": "biome check .",
     "test": "vitest run",
+    "baseline:arbitrary": "node scripts/baseline-arbitrary.ts",
     "e2e": "playwright test"
   },
   "dependencies": {
