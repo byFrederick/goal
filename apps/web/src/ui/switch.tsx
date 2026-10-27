@@ -36,7 +36,7 @@ export function Switch({ checked, onCheckedChange, disabled: off, className, ...
       <span
         aria-hidden="true"
         className={cn(
-          'absolute top-[3px] left-[3px] size-4 rounded-[4px] bg-card transition-transform duration-200',
+          'absolute top-0.75 left-0.75 size-4 rounded-full bg-card transition-transform duration-200',
           checked && 'translate-x-4',
         )}
       />

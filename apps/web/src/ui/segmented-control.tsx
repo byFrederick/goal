@@ -11,6 +11,8 @@ import { Tooltip } from './tooltip';
 export interface SegmentedOption<T extends string> {
   value: T;
   label: string;
+  /** Shown after the label ("Needs you 3"); the radio's accessible name includes it. */
+  count?: number | undefined;
   /** Why the option cannot be chosen; the option is disabled when set. */
   disabledReason?: string | undefined;
 }
@@ -41,7 +43,7 @@ export function SegmentedControl<T extends string>({
   return (
     <fieldset
       aria-describedby={describedBy}
-      className={cn('m-0 inline-flex shrink-0 gap-0.5 rounded-control border-0 bg-panel p-[3px]', className)}
+      className={cn('m-0 inline-flex shrink-0 gap-px rounded-control border border-line bg-panel p-1', className)}
     >
       <legend className="sr-only">{label}</legend>
       {options.map((o, i) => {
@@ -51,12 +53,12 @@ export function SegmentedControl<T extends string>({
           <label
             key={o.value}
             className={cn(
-              'relative inline-flex h-11 cursor-pointer items-center rounded-chip px-2.5 text-[13px] whitespace-nowrap text-muted transition-colors duration-200 hover:text-ink md:h-[30px]',
+              'relative inline-flex h-11 cursor-pointer items-center gap-1 rounded-chip px-3 text-secondary whitespace-nowrap text-muted transition-colors duration-200 hover:text-ink md:h-7.5',
               'has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-run',
               readOnly
                 ? 'cursor-default hover:text-muted'
                 : 'has-[:disabled]:cursor-not-allowed has-[:disabled]:text-muted has-[:disabled]:hover:text-muted',
-              checked && 'bg-card font-medium text-ink hover:text-ink',
+              checked && 'bg-card font-control text-ink shadow-raised hover:text-ink',
             )}
           >
             <input
@@ -73,6 +75,12 @@ export function SegmentedControl<T extends string>({
               )}
             />
             {o.label}
+            {o.count !== undefined ? (
+              <>
+                {' '}
+                <span className="tabular-nums text-muted">{o.count}</span>
+              </>
+            ) : null}
             {o.disabledReason && !readOnly ? (
               <span id={reasonId} className="sr-only">
                 {o.disabledReason}
