@@ -5,9 +5,12 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
+	"github.com/byFrederick/goal/internal/core/ports/porttest"
 )
 
 // noBuildYAML is acmeYAML with the build station replaced by a code station.
@@ -440,5 +443,56 @@ func TestPublish_RulesFiles(t *testing.T) {
 	i := slices.IndexFunc(detail.Files, func(fi authoring.FileInfo) bool { return fi.Path == ruleFile })
 	if i < 0 || detail.Files[i].SHA256 != domain.HashBlob(files[ruleFile]) {
 		t.Errorf("v%d files = %+v, want %s with its hash", v.Number, detail.Files, ruleFile)
+	}
+}
+
+// withPolicies checks definitions against the organization policy p.
+func withPolicies(p ports.OrgPolicies) option {
+	return func(d *authoring.Deps) { d.Policies = p }
+}
+
+// A version that names a model the organization policy does not allow is refused, with a
+// problem at that key that names the agent and the model; once its models are allowed, it publishes.
+func TestPublish_RefusesAModelThePolicyDoesNotAllow(t *testing.T) {
+	t.Parallel()
+
+	// The platform offers only sonnet and haiku, so the organization's default policy allows only them.
+	h := newHarness(t, withPolicies(porttest.NewOrgPolicies([]string{"claude-sonnet-5-5", "claude-haiku-5-5"}, nil, time.Now)))
+	opus := strings.Replace(acmeYAML, "      prompt: ./agents/engineer.md\n", "      prompt: ./agents/engineer.md\n      model: claude-opus-5-5\n", 1)
+	f := h.imported(t, acmeFiles(opus))
+
+	val, err := h.svc.ValidateDraft(h.ctx, f, authoring.ValidateRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if val.OK || !slices.ContainsFunc(val.Checks, func(c authoring.CheckResult) bool { return c.ID == "policy" && c.Status == authoring.CheckFailed }) {
+		t.Errorf("validation = ok %v, checks %+v; want the policy check failed", val.OK, val.Checks)
+	}
+
+	_, err = h.svc.Publish(h.ctx, f, h.publishRequest(t, f))
+
+	invalid, ok := errors.AsType[*authoring.InvalidError](err)
+	if !ok {
+		t.Fatalf("publish with a model the policy does not allow = %v", err)
+	}
+
+	i := slices.IndexFunc(invalid.Problems, func(p domain.DefinitionProblem) bool { return p.Code == "model-not-allowed" })
+	if i < 0 {
+		t.Fatalf("problems %v, want model-not-allowed", codes(invalid.Problems))
+	}
+
+	if p := invalid.Problems[i]; p.Check != "policy" || p.Line == 0 ||
+		!strings.Contains(p.Message, "engineer") || !strings.Contains(p.Message, "claude-opus-5-5") {
+		t.Errorf("problem %+v; want the policy check at the agent's model, naming engineer and claude-opus-5-5", p)
+	}
+
+	sonnet := strings.Replace(opus, "claude-opus-5-5", "claude-sonnet-5-5", 1)
+	if _, err := h.svc.PutFile(h.ctx, f, authoring.FileWrite{Path: yamlFile, Content: []byte(sonnet)}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.svc.Publish(h.ctx, f, h.publishRequest(t, f)); err != nil {
+		t.Errorf("publish with an allowed model = %v", err)
 	}
 }
