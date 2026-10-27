@@ -53,7 +53,7 @@ type fakeSource struct {
 type fakeDocument struct {
 	doc    domain.KnowledgeDocument
 	chunks []fakeChunk
-	// uses and verdicts go with the document, as 00071's cascade takes them.
+	// uses and verdicts go with the document, as 00072's cascade takes them.
 	uses     map[useKey]domain.KnowledgeUse
 	verdicts map[verdictKey]domain.KnowledgeVerdict
 }

@@ -13,7 +13,7 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
-// Knowledge use and verdicts (ADR 0027) over 00071's knowledge_uses and knowledge_verdicts, under
+// Knowledge use and verdicts (ADR 0027) over 00072's knowledge_uses and knowledge_verdicts, under
 // row-level security like the rest of the knowledge base. Both reference their document with
 // its source and organization, so another organization's document fails the key, and both go
 // with their document.
