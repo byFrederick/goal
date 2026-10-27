@@ -782,6 +782,8 @@ test('a malformed address is caught before sending, and Escape returns to the ma
 
 test('with sign-in off the account names the local user and offers nothing to sign out of', async ({ page }) => {
   await page.goto('/o/acme');
+  // The account menu at every width; on a phone it opens from the drawer's person row.
+  await openNavigation(page);
   const account = orgNav(page).getByRole('button', { name: 'LU, Local user, account' });
   await account.click();
   const panel = page.getByRole('dialog', { name: 'Account' });

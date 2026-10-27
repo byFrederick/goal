@@ -6,7 +6,6 @@ import {
   expectAccessible,
   expectNoHorizontalScroll,
   expectToast,
-  isPhone,
   openNavigation,
   orgMarkOf,
   orgNav,
@@ -101,18 +100,11 @@ test('signing in by code returns to the page that asked, and the session stays o
   expect(await page.evaluate(() => document.cookie)).not.toContain('session_token');
   await expectNoSessionTokenInScripts(page);
 
-  // The account names the person, their role here and that they are a platform admin. On a phone it is
-  // also at the bottom of the organization sheet, so the rows are checked in whichever one is open.
-  let panel: Locator;
-  let account: Locator;
-  if (isPhone(page)) {
-    panel = await openOrgMenu(page);
-    account = panel.getByRole('region', { name: 'Account' });
-  } else {
-    await orgNav(page).getByRole('button', { name: 'FC, F. Cruz, account' }).click();
-    panel = page.getByRole('dialog', { name: 'Account' });
-    account = panel;
-  }
+  // The account menu names the person, their role here and that they are a platform admin. It is the
+  // same popover at every width; on a phone it opens from the drawer's top row.
+  await openNavigation(page);
+  await orgNav(page).getByRole('button', { name: 'FC, F. Cruz, account' }).click();
+  const account = page.getByRole('dialog', { name: 'Account' });
   await expect(account.getByText('F. Cruz', { exact: true })).toBeVisible();
   await expect(account.getByText('Owner', { exact: true })).toBeVisible();
   await expect(account.getByText('Platform admin')).toBeVisible();
@@ -126,14 +118,12 @@ test('signing in by code returns to the page that asked, and the session stays o
   }
   await expectAccessible(page);
   await page.keyboard.press('Escape');
-  await expect(panel).toBeHidden();
+  await expect(account).toBeHidden();
 
-  // The organization menu names the organization's pages, and the two not built yet are disabled. A
-  // phone shows them as buttons in its sheet; wider screens show menu items.
+  // The organization menu names the organization's pages, and the two not built yet are disabled.
   const orgMenu = await openOrgMenu(page);
-  const pageRole = isPhone(page) ? 'button' : 'menuitem';
-  await expect(orgMenu.getByRole(pageRole, { name: 'Spend and billing' })).toHaveAttribute('aria-disabled', 'true');
-  await expect(orgMenu.getByRole(pageRole, { name: 'Models and policies' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(orgMenu.getByRole('menuitem', { name: 'Spend and billing' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(orgMenu.getByRole('menuitem', { name: 'Models and policies' })).toHaveAttribute('aria-disabled', 'true');
   await page.keyboard.press('Escape');
 });
 
@@ -297,7 +287,9 @@ test('edit name, sign out everywhere, sign out', async ({ page }) => {
   await signInOn(page.request, { signed_in: 'fresh' });
   await page.goto('/o/acme');
 
+  // The account menu opens from the sidebar's person row, or from the phone drawer's at every width.
   const openAccount = async (name: string) => {
+    await openNavigation(page);
     await orgNav(page)
       .getByRole('button', { name: `${name}, account` })
       .click();
@@ -338,13 +330,7 @@ test('edit name, sign out everywhere, sign out', async ({ page }) => {
   // Sign out (here only).
   await signInOn(page.request, { signed_in: 'fresh' });
   await page.goto('/o/acme');
-  if (isPhone(page)) {
-    // On a phone the account is at the bottom of the drawer, in the same menu as the sidebar's.
-    await openNavigation(page);
-    await (await openAccount('FC, F. Cruz')).getByRole('button', { name: 'Sign out', exact: true }).click();
-  } else {
-    await (await openAccount('FC, F. Cruz')).getByRole('button', { name: 'Sign out', exact: true }).click();
-  }
+  await (await openAccount('FC, F. Cruz')).getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in to Goal' })).toBeVisible();
   await page.goto('/o/acme');
   await expect(page).toHaveURL(/\/sign-in\?next=%2Fo%2Facme$/);

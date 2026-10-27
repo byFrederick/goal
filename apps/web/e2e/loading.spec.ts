@@ -2,7 +2,7 @@
 // cancelled, and the next page's loader that shares it must load again, not fail), and lists
 // cached before an organization or factory was made elsewhere.
 import { expect, type Page, test } from '@playwright/test';
-import { isPhone, orgMarkOf } from './support';
+import { openNavigation, orgMarkOf } from './support';
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
@@ -18,11 +18,10 @@ test('a page whose data the page left was still loading loads it again instead o
   await expect(page.getByRole('heading', { level: 2, name: 'Line', exact: true })).toBeVisible();
 
   // Organization settings shares that read; leaving the Line section cancels it.
+  // The organization menu at every width; on a phone it opens from the drawer's top row.
+  await openNavigation(page);
   await orgMarkOf(page).click();
-  const settings = isPhone(page)
-    ? page.getByRole('dialog', { name: 'Switch organization' }).getByRole('link', { name: 'Organization settings' })
-    : page.getByRole('menuitem', { name: 'Organization settings' });
-  await settings.click();
+  await page.getByRole('menu').getByRole('menuitem', { name: 'Organization settings' }).click();
 
   await expect(page.getByRole('heading', { level: 1, name: 'Organization settings' })).toBeVisible();
   await expect(page.getByLabel('Name')).toHaveValue('Acme');

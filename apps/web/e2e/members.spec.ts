@@ -8,6 +8,7 @@ import {
   expectNoHorizontalScroll,
   expectToast,
   isPhone,
+  openNavigation,
   orgMarkOf,
   orgNav,
   recordToasts,
@@ -295,16 +296,12 @@ test('a member sees the settings read-only', async ({ page }) => {
 test('the organization menu says the caller’s role and opens Members and roles', async ({ page }) => {
   await signedInAs(page.request);
   await page.goto('/o/acme');
+  // The same organization menu at every width; on a phone it opens from the drawer's top row.
+  await openNavigation(page);
   await orgMarkOf(page).click();
-  if (isPhone(page)) {
-    const sheet = page.getByRole('dialog', { name: 'Switch organization' });
-    await expect(sheet.getByRole('link', { name: /^Acme\s?3 factories, owner/ })).toBeVisible();
-    await sheet.getByRole('link', { name: 'Members and roles' }).click();
-  } else {
-    const menu = page.getByRole('menu', { name: 'Acme organization, switch organization' });
-    await expect(menu.getByRole('menuitem', { name: /^Acme\s?3 factories, owner(\s?Current)?$/ })).toBeVisible();
-    await menu.getByRole('menuitem', { name: 'Members and roles' }).click();
-  }
+  const menu = page.getByRole('menu');
+  await expect(menu.getByRole('menuitem', { name: /^Acme\s?3 factories, owner(\s?Current)?$/ })).toBeVisible();
+  await menu.getByRole('menuitem', { name: 'Members and roles' }).click();
   await expect(page).toHaveURL(/\/o\/acme\/members$/);
   await expect(heading(page)).toBeVisible();
 });
