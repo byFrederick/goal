@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Change, DefinitionProblem } from '../../../api/types';
 import {
+  allVersionsText,
   blockedSentence,
   defaultMessage,
   hunksOf,
@@ -12,6 +13,18 @@ import {
   reviewCompare,
   sourceText,
 } from './review';
+
+describe('the publish explainer', () => {
+  it('says a first publish saves v1 and offers no roll-back', () => {
+    const text = publishExplainer(null, 1);
+    expect(text).toContain('Publishing saves version 1.');
+    expect(text).not.toContain('roll back');
+  });
+
+  it('offers the roll-back once a version is published', () => {
+    expect(publishExplainer(7, 8)).toBe('You can roll back to any earlier version later.');
+  });
+});
 
 const change = (over: Partial<Change>): Change => ({
   section: 'line',
@@ -101,12 +114,8 @@ describe('publishing', () => {
     ]);
   });
 
-  it('says what stands in the way and what publishing changes', () => {
+  it('says what stands in the way of a publish', () => {
     expect(blockedSentence(1)).toBe('Fix 1 problem first. Your draft stays saved.');
-    expect(publishExplainer(8, 9)).toBe(
-      'v8 keeps running until you publish. Runs already started finish on v8; new runs start on v9.',
-    );
-    expect(publishExplainer(null, 1)).toMatch(/^Publishing saves version 1\./);
   });
 });
 
@@ -117,5 +126,16 @@ describe('version rows', () => {
     );
     expect(sourceText({ kind: 'template', template: 'cost-review@2' }, 'Cost review')).toBe('Template Cost review v2');
     expect(sourceText({ kind: 'clone', factory: 'sre', version: '3' })).toBe('Clone of sre v3');
+  });
+});
+
+describe('the versions link', () => {
+  it('counts every version from the newest number, not the rows of the page', () => {
+    const page = Array.from({ length: 20 }, (_, i) => ({ number: 21 - i }));
+    expect(allVersionsText(page)).toBe('All 21 versions');
+  });
+
+  it('names the link without a count when there are no versions', () => {
+    expect(allVersionsText([])).toBe('All versions');
   });
 });

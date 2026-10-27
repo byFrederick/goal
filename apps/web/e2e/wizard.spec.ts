@@ -40,7 +40,7 @@ async function openAgent(page: Page, agent: string) {
 
 test('a factory from a template, step by step (flow 1)', async ({ page }) => {
   await page.goto('/o/acme');
-  await page.getByRole('main').getByRole('link', { name: 'New factory' }).first().click();
+  await page.getByRole('banner').getByRole('link', { name: 'New factory' }).first().click();
   await expect(page).toHaveURL(/\/o\/acme\/new\/start$/);
   await expect(page).toHaveTitle('Start · New factory · Acme · Goal');
   await expect(page.getByRole('heading', { level: 1, name: 'New factory' })).toBeVisible();
