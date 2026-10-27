@@ -136,7 +136,7 @@ func TestSpend_JSONAsSent(t *testing.T) {
 func TestSpend_BadWindowIsUsage(t *testing.T) {
 	t.Parallel()
 
-	for _, args := range [][]string{{flagWindow, "year"}, {flagWindow, "7d"}, {"extra"}} {
+	for _, args := range [][]string{{flagWindow, "year"}, {flagWindow, "7d"}, {"unexpected"}} {
 		if _, err := goalSpend(t, "http://127.0.0.1:1", args...); !errors.Is(err, errUsage) {
 			t.Errorf("goal spend %q = %v; want the usage", args, err)
 		}
