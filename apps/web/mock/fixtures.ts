@@ -304,7 +304,7 @@ const goalFactory: Factory = {
   org_id: acmeOrg,
   can: factoryCan,
   name: 'goal',
-  title: 'Goal',
+  title: 'Software',
   description: 'Builds the Goal platform from this repository: engine, UI, infrastructure and its own factories.',
   work_types: ['feature', 'fix', 'refactor', 'infra', 'design'],
   stations: [

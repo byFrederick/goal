@@ -211,20 +211,20 @@ describe('the drawer', () => {
     await waitFor(() => expect(document.activeElement).toBe(mark));
   });
 
-  it('disables Needs you with the not-available tooltip', async () => {
+  it('does not list Needs you as not available in the drawer', async () => {
     renderShell({ at: '/o/acme/f/software' });
     fireEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
     const drawer = await screen.findByRole('dialog', { name: 'Acme' });
-    const needs = within(drawer).getByRole('button', { name: 'Needs you' });
-    expect(needs.getAttribute('aria-disabled')).toBe('true');
+    expect(within(drawer).queryByRole('button', { name: 'Needs you' })).toBeNull();
   });
 });
 
 describe('the tab bar', () => {
-  it('marks Needs you as not available', async () => {
+  it('links Needs you to /o/$org/needs-you, with the count it waits on', async () => {
     renderShell({ at: '/o/acme/f/software' });
-    const needs = within(await tabs()).getByRole('button', { name: 'Needs you' });
-    expect(needs.getAttribute('aria-disabled')).toBe('true');
+    const needs = within(await tabs()).getByRole('link', { name: /^Needs you/ });
+    expect(needs.getAttribute('href')).toBe('/o/acme/needs-you');
+    expect(needs.getAttribute('aria-disabled')).toBeNull();
   });
 
   it('opens the factory the page is in, and marks the current tab', async () => {
