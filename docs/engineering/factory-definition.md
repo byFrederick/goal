@@ -1,6 +1,6 @@
 # Factory definition reference
 
-A factory definition is a file tree with `factory.yaml` at its root ([ADR 0005](../adr/0005-factory-definitions-in-object-storage.md)): `agents/` (prompts), `skills/`, `rules/`, `contracts/` and `evals/`. `contracts/definitions/factory.schema.json` is the reference for every key of `factory.yaml`. `internal/config` loads a tree and validates it (`config.Check`): every file parses, `factory.yaml` satisfies the schema, and every name and path it uses points at something that exists. `goal factory validate` (and `goal validate`, its offline form), the builder and publish all run the same checks. This page covers what the schema alone cannot explain.
+A factory definition is a file tree with `factory.yaml` at its root ([ADR 0005](../adr/0005-factory-definitions-in-object-storage.md)): `agents/` (prompts), `skills/`, `rules/`, `contracts/` and `evals/`. `contracts/definitions/factory.schema.json` is the reference for every key of `factory.yaml`, and `contracts/definitions/evals.schema.json` for judges and eval cases ([below](#judges-and-eval-cases)). `internal/config` loads a tree and validates it (`config.Check`): every file parses, `factory.yaml` satisfies the schema, and every name and path it uses points at something that exists. `goal factory validate` (and `goal validate`, its offline form), the builder and publish all run the same checks. This page covers what the schema alone cannot explain.
 
 ## Rules
 
@@ -129,3 +129,72 @@ With `board.flow.assemblies.changedSince: true` (default false), plans bind late
 - Every later run of an item with a base commit and paths, a rework after a merge conflict included, gets a `## Changed since your plan` section in its feedback when the default branch has commits since then that changed files the item's paths match. Each line names the item that merged the commit (`<factory>#<number>` and title, matched by its `merged` event's sha) or else the commit's short sha and subject, and lists the matching files (at most 20). Commits that change none of the item's files add nothing; a comparison over 100 commits says it was truncated.
 - It states what it lists and nothing else: telling agents to re-derive the brief's paths against current main belongs in the factory's prompts and rules.
 - A code-host error is logged: the item finishes without a base commit, or runs without the section.
+
+## Judges and eval cases
+
+Jonah's two file kinds live under `evals/` ([ADR 0025](../adr/0025-judges-and-evals-as-the-screens-show-them.md)). `contracts/definitions/evals.schema.json` defines both, and `config.Check` validates them with the factory (`internal/config/evals.go`). Judge runs, eval runs and the publish gate are not built yet.
+
+### Judges: `evals/judges/<slug>.md`
+
+A judge scores a sample of the finished production runs of the agents it names. Its file name is its slug, and cases refer to it by that slug. The YAML front matter holds its settings, and the Markdown body is the rubric the judge run reads.
+
+```markdown
+---
+title: Review reason actionable
+criterion: A sent-back reason says what to change and how to prove it
+agents: [reviewer]          # spec.agents names; empty or omitted: every agent
+outcomes:
+  - score: 1
+    label: Actionable
+    meaning: Names what failed, what to change and the proof
+  - score: 0.5
+    label: Vague
+    meaning: Says something is wrong but not what would fix it
+  - score: 0
+    label: Missing
+    meaning: No reason, or only "looks wrong"
+passMark: 0.7               # a score below it fails and goes to Jonah
+sample: 0.25                # share of the agents' finished runs it scores; 0 pauses it
+model: claude-sonnet-5-5    # omitted: runtime.model
+enabled: true               # default true
+---
+Only score runs where the reviewer sent the change back. …
+```
+
+### Eval cases: `evals/cases/<name>.yaml`
+
+A case is one task an agent must get right. Its file name is its name. `tries` says how often it runs, and it passes when every try passes. `check` names exactly one way to decide a try: `contract: true` (the output satisfies the agent's station contract), `judge: <slug>` (the judge's score reaches its pass mark) or `referencePatch: ./path` (a known-good patch, relative to the root of the definition, such as `./evals/fixtures/…`).
+
+```yaml
+apiVersion: goal/v1
+kind: EvalCase
+metadata:
+  description: A criterion without evidence is sent back with a clear reason
+spec:
+  agent: reviewer
+  input:
+    title: Retry policy for lost leases
+    body: "…"
+    type: feature           # optional: work type, lane, earlier stations' outputs, starting commit (ref)
+    outputs: {spec: {}}
+  tries: 3
+  check:
+    judge: review-reason-actionable
+```
+
+### Checks
+
+Each problem is a `DefinitionProblem` in section `files`. Its `File` is the judge's or case's path, and its line is in that file.
+
+| Problem | Code |
+| --- | --- |
+| A case or a judge's front matter fails the schema: a missing or unknown key, `passMark`, `sample` or an outcome's `score` outside 0 to 1, empty `outcomes`, `tries` outside 1 to 10, no `check` or more than one, a `kind` other than `EvalCase` | `schema-required`, `schema-unknown-key`, `schema-enum`, `schema-invalid` |
+| A judge file has no front matter, or an empty one | `judge-front-matter-missing` |
+| A judge's front matter or a case does not parse | `yaml-invalid` |
+| Two outcomes of a judge share a score, or a label (case-insensitive) | `judge-outcome-duplicate` |
+| A judge's `agents` or a case's `agent` is not in `spec.agents` | `unknown-agent` |
+| A case's `check.judge` is not a file in `evals/judges/` | `unknown-judge` |
+| A case's `check.referencePatch` is not a file in the definition; a path that leaves the tree never matches | `patch-not-found` |
+| A judge's or case's file name is not a slug (3 to 40 lowercase letters, digits and hyphens) | `eval-name-invalid` |
+
+Only files directly in `evals/judges/` (`.md`) and `evals/cases/` (`.yaml`, `.yml`) are judges and cases. Fixtures such as reference patches go elsewhere, for example `evals/fixtures/`.

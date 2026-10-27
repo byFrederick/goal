@@ -362,6 +362,8 @@ export interface ConstraintInput {
 
 /** A mean lease of the mock's agents, in hours. */
 const serviceHours = 1.5;
+/** What one of the mock's agent runs costs, in dollars. */
+const runCostUsd = 0.9;
 
 /**
  * GET …/constraint: the agent stations with a seeded busy share, busiest first, at most 3; the
@@ -388,6 +390,7 @@ export function constraintOf(i: ConstraintInput): ConstraintReport {
         mean_wait_minutes: wait === null ? null : wait * 60,
         mean_service_minutes: leases > 0 ? serviceHours * 60 : null,
         leases,
+        spend_per_slot_day_usd: hours > 0 && leases > 0 ? (leases * runCostUsd) / slots / (hours / 24) : null,
         estimate: saved === null ? null : { extra_slot_saves_hours: saved },
       };
     })
