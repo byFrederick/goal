@@ -1071,6 +1071,48 @@ func (e SignInMethod) Valid() bool {
 	}
 }
 
+// Defines values for SpendBudgetState.
+const (
+	SpendBudgetStateOverBudget SpendBudgetState = "over_budget"
+	SpendBudgetStateRunning    SpendBudgetState = "running"
+	SpendBudgetStateStopped    SpendBudgetState = "stopped"
+)
+
+// Valid indicates whether the value is a known member of the SpendBudgetState enum.
+func (e SpendBudgetState) Valid() bool {
+	switch e {
+	case SpendBudgetStateOverBudget:
+		return true
+	case SpendBudgetStateRunning:
+		return true
+	case SpendBudgetStateStopped:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SpendWindow.
+const (
+	Month SpendWindow = "month"
+	N90d  SpendWindow = "90d"
+	Week  SpendWindow = "week"
+)
+
+// Valid indicates whether the value is a known member of the SpendWindow enum.
+func (e SpendWindow) Valid() bool {
+	switch e {
+	case Month:
+		return true
+	case N90d:
+		return true
+	case Week:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for StationAction.
 const (
 	Merge StationAction = "merge"
@@ -1261,6 +1303,14 @@ type AgentHit struct {
 
 	// Stations The ids of the stations the agent works at, in line order
 	Stations []string `json:"stations"`
+}
+
+// AgentSpend defines model for AgentSpend.
+type AgentSpend struct {
+	// Agent The agent's name in its factory
+	Agent     string  `json:"agent"`
+	FactoryId string  `json:"factory_id"`
+	Usd       float64 `json:"usd"`
 }
 
 // AgentStation defines model for AgentStation.
@@ -2247,6 +2297,12 @@ type CurrentRun struct {
 
 	// Turn Turns the run has reported so far
 	Turn int `json:"turn"`
+}
+
+// DayFactorySpend defines model for DayFactorySpend.
+type DayFactorySpend struct {
+	FactoryId string  `json:"factory_id"`
+	Usd       float64 `json:"usd"`
 }
 
 // DefinitionCounts defines model for DefinitionCounts.
@@ -3613,6 +3669,12 @@ type MetricsSummary struct {
 	To               openapi_types.Date `json:"to"`
 }
 
+// ModelSpend defines model for ModelSpend.
+type ModelSpend struct {
+	Model string  `json:"model"`
+	Usd   float64 `json:"usd"`
+}
+
 // MoveRequest defines model for MoveRequest.
 type MoveRequest struct {
 	// Reason Why; required when the station is upstream of the item's (the agent reads it)
@@ -3911,6 +3973,55 @@ type OrgSlots struct {
 type OrgSlotsPatch struct {
 	Factories *[]FactorySlotsPatch `json:"factories,omitempty"`
 	Max       *int                 `json:"max"`
+}
+
+// OrgSpend defines model for OrgSpend.
+type OrgSpend struct {
+	// Budgets One per factory goald runs that the caller sees and that is not archived, by name
+	Budgets []SpendBudget `json:"budgets"`
+
+	// ByAgent The window's spend by agent of a factory, most first
+	ByAgent []AgentSpend `json:"by_agent"`
+
+	// ByModel The window's spend by model, most first; empty when not complete
+	ByModel []ModelSpend `json:"by_model"`
+
+	// Complete False when a factory the caller does not see spent: the figures the store does not split by factory are then null or empty
+	Complete bool `json:"complete"`
+
+	// CostPerMergedUsd total_usd over merged, 0 when none merged; null when not complete
+	CostPerMergedUsd *float64 `json:"cost_per_merged_usd"`
+
+	// Days Every UTC day of the window, oldest first
+	Days []SpendDay `json:"days"`
+
+	// LastMonthUsd The UTC month before; null when not complete
+	LastMonthUsd *float64 `json:"last_month_usd"`
+
+	// Merged The items that reached done in the window and are still done; null when not complete
+	Merged *int `json:"merged"`
+
+	// ReworkShare rework_usd over total_usd, 0 when nothing was spent; null when not complete
+	ReworkShare *float64 `json:"rework_share"`
+
+	// ReworkUsd The window's spend on runs that started after their item was sent back (a rework round of 1 or more); null when not complete
+	ReworkUsd *float64 `json:"rework_usd"`
+
+	// Since The window's start, 00:00 UTC
+	Since time.Time `json:"since"`
+
+	// ThisMonthUsd This UTC month so far; null when not complete
+	ThisMonthUsd *float64 `json:"this_month_usd"`
+
+	// TotalUsd The window's spend, the sum of days[].usd
+	TotalUsd float64 `json:"total_usd"`
+
+	// Until The window's end, the time measured (now)
+	Until time.Time `json:"until"`
+
+	// Weekly The cost per merged item of the last 8 UTC weeks (from Monday), this week last; empty when not complete
+	Weekly []WeekCost  `json:"weekly"`
+	Window SpendWindow `json:"window"`
 }
 
 // OrgSummary An organization as the organization list shows it
@@ -4379,6 +4490,45 @@ type SkillPage struct {
 	Skills    []SkillListing `json:"skills"`
 }
 
+// SpendBudget defines model for SpendBudget.
+type SpendBudget struct {
+	// DailyUsd runtime.budget.dailyUsd, shown and not enforced; null when unset
+	DailyUsd *float64   `json:"daily_usd"`
+	Factory  FactoryHit `json:"factory"`
+
+	// ModelConnections The organization's connections that give the factory's runs their model (runtime.modelConnection), for "Who pays for models"; empty when it names none
+	ModelConnections []ConnectionHit `json:"model_connections"`
+
+	// Reason The open andon pull's reason when stopped, the spend against the cap when over_budget, else null
+	Reason *string `json:"reason"`
+
+	// State stopped while an andon pull is open, over_budget while week_usd is at or over weekly_usd (no new agent work starts), else running
+	State SpendBudgetState `json:"state"`
+
+	// TodayUsd The cost of the factory's runs started this UTC day
+	TodayUsd float64 `json:"today_usd"`
+
+	// WeekUsd The cost of the factory's runs started in the last 7×24 hours, rolling: the window the engine enforces weekly_usd over, not the UTC week since Monday
+	WeekUsd float64 `json:"week_usd"`
+
+	// WeeklyUsd runtime.budget.weeklyUsd, the cap the engine enforces; null when unset
+	WeeklyUsd *float64 `json:"weekly_usd"`
+}
+
+// SpendBudgetState stopped while an andon pull is open, over_budget while week_usd is at or over weekly_usd (no new agent work starts), else running
+type SpendBudgetState string
+
+// SpendDay defines model for SpendDay.
+type SpendDay struct {
+	// ByFactory The factories that spent that day, by id
+	ByFactory []DayFactorySpend  `json:"by_factory"`
+	Day       openapi_types.Date `json:"day"`
+	Usd       float64            `json:"usd"`
+}
+
+// SpendWindow defines model for SpendWindow.
+type SpendWindow string
+
 // Station defines model for Station.
 type Station struct {
 	// Action What goald does when a human acts at this human station (merge → POST /v1/orgs/{org}/items/{item}/merge)
@@ -4795,6 +4945,17 @@ type WaitingSummary struct {
 	} `json:"tool_approvals"`
 }
 
+// WeekCost defines model for WeekCost.
+type WeekCost struct {
+	// CostPerMergedUsd 0 when none merged
+	CostPerMergedUsd float64 `json:"cost_per_merged_usd"`
+	Merged           int     `json:"merged"`
+	SpendUsd         float64 `json:"spend_usd"`
+
+	// WeekStart The week's Monday
+	WeekStart openapi_types.Date `json:"week_start"`
+}
+
 // WeeklyThroughput defines model for WeeklyThroughput.
 type WeeklyThroughput struct {
 	// Targets The flow targets of the factory's definition (spec.board.flow.targets); null when not set
@@ -5159,6 +5320,12 @@ type SearchOrgParams struct {
 
 	// Limit How many results each group holds at most
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetOrgSpendParams defines parameters for GetOrgSpend.
+type GetOrgSpendParams struct {
+	// Window week starts on Monday 00:00 UTC, month on the 1st 00:00 UTC, 90d at 00:00 UTC 89 days before today; each ends now
+	Window *SpendWindow `form:"window,omitempty" json:"window,omitempty"`
 }
 
 // StreamEventsParams defines parameters for StreamEvents.
@@ -6857,6 +7024,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
 	UpdateOrgSettings(ctx context.Context, org OrgRef, body UpdateOrgSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetOrgSpend What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
+	//
+	// A run counts on the UTC day it started, with its cost so far (a running run counts). Only the factories the caller sees are shown and summed. When a factory the caller does not see spent since the start of last month or of the weekly series, complete is false and the figures the store does not split by factory (this_month_usd, last_month_usd, by_model, merged, cost_per_merged_usd, weekly, rework_usd and rework_share) are null or empty, so they never show what a hidden factory spent. A window outside the enum is a 400 problem.
+	//
+	// Corresponds with GET /v1/orgs/{org}/spend (the `GetOrgSpend` operationId).
+	GetOrgSpend(ctx context.Context, org OrgRef, params *GetOrgSpendParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	//
@@ -9791,6 +9965,23 @@ func (c *Client) UpdateOrgSettingsWithBody(ctx context.Context, org OrgRef, cont
 // Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
 func (c *Client) UpdateOrgSettings(ctx context.Context, org OrgRef, body UpdateOrgSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateOrgSettingsRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetOrgSpend What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
+//
+// A run counts on the UTC day it started, with its cost so far (a running run counts). Only the factories the caller sees are shown and summed. When a factory the caller does not see spent since the start of last month or of the weekly series, complete is false and the figures the store does not split by factory (this_month_usd, last_month_usd, by_model, merged, cost_per_merged_usd, weekly, rework_usd and rework_share) are null or empty, so they never show what a hidden factory spent. A window outside the enum is a 400 problem.
+//
+// Corresponds with GET /v1/orgs/{org}/spend (the `GetOrgSpend` operationId).
+func (c *Client) GetOrgSpend(ctx context.Context, org OrgRef, params *GetOrgSpendParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetOrgSpendRequest(c.Server, org, params)
 	if err != nil {
 		return nil, err
 	}
@@ -16681,6 +16872,67 @@ func NewUpdateOrgSettingsRequestWithBody(server string, org OrgRef, contentType 
 	return req, nil
 }
 
+// NewGetOrgSpendRequest constructs an http.Request for the GetOrgSpend method
+func NewGetOrgSpendRequest(server string, org OrgRef, params *GetOrgSpendParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/spend", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Window != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "window", *params.Window, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewStreamEventsRequest constructs an http.Request for the StreamEvents method
 func NewStreamEventsRequest(server string, org OrgRef, params *StreamEventsParams) (*http.Request, error) {
 	var err error
@@ -18529,6 +18781,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
 	UpdateOrgSettingsWithResponse(ctx context.Context, org OrgRef, body UpdateOrgSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateOrgSettingsResponse, error)
+
+	// GetOrgSpendWithResponse What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
+	//
+	// A run counts on the UTC day it started, with its cost so far (a running run counts). Only the factories the caller sees are shown and summed. When a factory the caller does not see spent since the start of last month or of the weekly series, complete is false and the figures the store does not split by factory (this_month_usd, last_month_usd, by_model, merged, cost_per_merged_usd, weekly, rework_usd and rework_share) are null or empty, so they never show what a hidden factory spent. A window outside the enum is a 400 problem.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/spend (the `GetOrgSpend` operationId).
+	GetOrgSpendWithResponse(ctx context.Context, org OrgRef, params *GetOrgSpendParams, reqEditors ...RequestEditorFn) (*GetOrgSpendResponse, error)
 
 	// StreamEventsWithResponse The organization's events as they happen (Server-Sent Events)
 	//
@@ -24635,6 +24896,54 @@ func (r UpdateOrgSettingsResponse) ContentType() string {
 	return ""
 }
 
+type GetOrgSpendResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *OrgSpend
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetOrgSpendResponse) GetJSON200() *OrgSpend {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetOrgSpendResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetOrgSpendResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetOrgSpendResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetOrgSpendResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetOrgSpendResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type StreamEventsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -27391,6 +27700,21 @@ func (c *ClientWithResponses) UpdateOrgSettingsWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseUpdateOrgSettingsResponse(rsp)
+}
+
+// GetOrgSpendWithResponse What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
+//
+// A run counts on the UTC day it started, with its cost so far (a running run counts). Only the factories the caller sees are shown and summed. When a factory the caller does not see spent since the start of last month or of the weekly series, complete is false and the figures the store does not split by factory (this_month_usd, last_month_usd, by_model, merged, cost_per_merged_usd, weekly, rework_usd and rework_share) are null or empty, so they never show what a hidden factory spent. A window outside the enum is a 400 problem.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/spend (the `GetOrgSpend` operationId).
+func (c *ClientWithResponses) GetOrgSpendWithResponse(ctx context.Context, org OrgRef, params *GetOrgSpendParams, reqEditors ...RequestEditorFn) (*GetOrgSpendResponse, error) {
+	rsp, err := c.GetOrgSpend(ctx, org, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetOrgSpendResponse(rsp)
 }
 
 // StreamEventsWithResponse The organization's events as they happen (Server-Sent Events)
@@ -31781,6 +32105,39 @@ func ParseUpdateOrgSettingsResponse(rsp *http.Response) (*UpdateOrgSettingsRespo
 	return response, nil
 }
 
+// ParseGetOrgSpendResponse parses an HTTP response from a GetOrgSpendWithResponse call
+func ParseGetOrgSpendResponse(rsp *http.Response) (*GetOrgSpendResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetOrgSpendResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OrgSpend
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseStreamEventsResponse parses an HTTP response from a StreamEventsWithResponse call
 func ParseStreamEventsResponse(rsp *http.Response) (*StreamEventsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -32411,6 +32768,9 @@ type ServerInterface interface {
 	// UpdateOrgSettings Change the organization's settings
 	// (PATCH /v1/orgs/{org}/settings)
 	UpdateOrgSettings(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// GetOrgSpend What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
+	// (GET /v1/orgs/{org}/spend)
+	GetOrgSpend(w http.ResponseWriter, r *http.Request, org OrgRef, params GetOrgSpendParams)
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	// (GET /v1/orgs/{org}/stream)
 	StreamEvents(w http.ResponseWriter, r *http.Request, org OrgRef, params StreamEventsParams)
@@ -37665,6 +38025,48 @@ func (siw *ServerInterfaceWrapper) UpdateOrgSettings(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// GetOrgSpend operation middleware
+func (siw *ServerInterfaceWrapper) GetOrgSpend(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetOrgSpendParams
+
+	// ------------- Optional query parameter "window" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "window", r.URL.Query(), &params.Window, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "window"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "window", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOrgSpend(w, r, org, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // StreamEvents operation middleware
 func (siw *ServerInterfaceWrapper) StreamEvents(w http.ResponseWriter, r *http.Request) {
 
@@ -38074,6 +38476,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/attention", wrapper.GetOrgAttention)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/search", wrapper.SearchOrg)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/overview", wrapper.GetFactoryOverview)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/spend", wrapper.GetOrgSpend)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/metrics/touches", wrapper.GetOrgTouchMetrics)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/inbox", wrapper.GetInbox)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories", wrapper.ListFactories)
@@ -43422,6 +43825,46 @@ func (response UpdateOrgSettingsdefaultApplicationProblemPlusJSONResponse) Visit
 	return err
 }
 
+type GetOrgSpendRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params GetOrgSpendParams
+}
+
+type GetOrgSpendResponseObject interface {
+	VisitGetOrgSpendResponse(w http.ResponseWriter) error
+}
+
+type GetOrgSpend200JSONResponse OrgSpend
+
+func (response GetOrgSpend200JSONResponse) VisitGetOrgSpendResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOrgSpenddefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetOrgSpenddefaultApplicationProblemPlusJSONResponse) VisitGetOrgSpendResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type StreamEventsRequestObject struct {
 	Org    OrgRef `json:"org"`
 	Params StreamEventsParams
@@ -44137,6 +44580,9 @@ type StrictServerInterface interface {
 	// UpdateOrgSettings Change the organization's settings
 	// (PATCH /v1/orgs/{org}/settings)
 	UpdateOrgSettings(ctx context.Context, request UpdateOrgSettingsRequestObject) (UpdateOrgSettingsResponseObject, error)
+	// GetOrgSpend What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
+	// (GET /v1/orgs/{org}/spend)
+	GetOrgSpend(ctx context.Context, request GetOrgSpendRequestObject) (GetOrgSpendResponseObject, error)
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	// (GET /v1/orgs/{org}/stream)
 	StreamEvents(ctx context.Context, request StreamEventsRequestObject) (StreamEventsResponseObject, error)
@@ -47860,6 +48306,33 @@ func (sh *strictHandler) UpdateOrgSettings(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateOrgSettingsResponseObject); ok {
 		if err := validResponse.VisitUpdateOrgSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetOrgSpend operation middleware
+func (sh *strictHandler) GetOrgSpend(w http.ResponseWriter, r *http.Request, org OrgRef, params GetOrgSpendParams) {
+	var request GetOrgSpendRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetOrgSpend(ctx, request.(GetOrgSpendRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetOrgSpend")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetOrgSpendResponseObject); ok {
+		if err := validResponse.VisitGetOrgSpendResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -558,6 +558,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/spend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
+         * @description A run counts on the UTC day it started, with its cost so far (a running run counts). Only the factories the caller sees are shown and summed. When a factory the caller does not see spent since the start of last month or of the weekly series, complete is false and the figures the store does not split by factory (this_month_usd, last_month_usd, by_model, merged, cost_per_merged_usd, weekly, rework_usd and rework_share) are null or empty, so they never show what a hidden factory spent. A window outside the enum is a 400 problem.
+         */
+        get: operations["getOrgSpend"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/metrics/touches": {
         parameters: {
             query?: never;
@@ -4414,6 +4437,141 @@ export interface components {
             name: string;
             kind: string;
         };
+        /**
+         * @default week
+         * @enum {string}
+         */
+        SpendWindow: "week" | "month" | "90d";
+        OrgSpend: {
+            window: components["schemas"]["SpendWindow"];
+            /**
+             * Format: date-time
+             * @description The window's start, 00:00 UTC
+             */
+            since: string;
+            /**
+             * Format: date-time
+             * @description The window's end, the time measured (now)
+             */
+            until: string;
+            /** @description False when a factory the caller does not see spent: the figures the store does not split by factory are then null or empty */
+            complete: boolean;
+            /**
+             * Format: double
+             * @description The window's spend, the sum of days[].usd
+             */
+            total_usd: number;
+            /**
+             * Format: double
+             * @description This UTC month so far; null when not complete
+             */
+            this_month_usd: number | null;
+            /**
+             * Format: double
+             * @description The UTC month before; null when not complete
+             */
+            last_month_usd: number | null;
+            /** @description Every UTC day of the window, oldest first */
+            days: components["schemas"]["SpendDay"][];
+            /** @description The window's spend by agent of a factory, most first */
+            by_agent: components["schemas"]["AgentSpend"][];
+            /** @description The window's spend by model, most first; empty when not complete */
+            by_model: components["schemas"]["ModelSpend"][];
+            /** @description The items that reached done in the window and are still done; null when not complete */
+            merged: number | null;
+            /**
+             * Format: double
+             * @description total_usd over merged, 0 when none merged; null when not complete
+             */
+            cost_per_merged_usd: number | null;
+            /** @description The cost per merged item of the last 8 UTC weeks (from Monday), this week last; empty when not complete */
+            weekly: components["schemas"]["WeekCost"][];
+            /**
+             * Format: double
+             * @description The window's spend on runs that started after their item was sent back (a rework round of 1 or more); null when not complete
+             */
+            rework_usd: number | null;
+            /**
+             * Format: double
+             * @description rework_usd over total_usd, 0 when nothing was spent; null when not complete
+             */
+            rework_share: number | null;
+            /** @description One per factory goald runs that the caller sees and that is not archived, by name */
+            budgets: components["schemas"]["SpendBudget"][];
+        };
+        SpendDay: {
+            /** Format: date */
+            day: string;
+            /** Format: double */
+            usd: number;
+            /** @description The factories that spent that day, by id */
+            by_factory: components["schemas"]["DayFactorySpend"][];
+        };
+        DayFactorySpend: {
+            factory_id: string;
+            /** Format: double */
+            usd: number;
+        };
+        AgentSpend: {
+            factory_id: string;
+            /** @description The agent's name in its factory */
+            agent: string;
+            /** Format: double */
+            usd: number;
+        };
+        ModelSpend: {
+            model: string;
+            /** Format: double */
+            usd: number;
+        };
+        WeekCost: {
+            /**
+             * Format: date
+             * @description The week's Monday
+             */
+            week_start: string;
+            /** Format: double */
+            spend_usd: number;
+            merged: number;
+            /**
+             * Format: double
+             * @description 0 when none merged
+             */
+            cost_per_merged_usd: number;
+        };
+        SpendBudget: {
+            factory: components["schemas"]["FactoryHit"];
+            /**
+             * Format: double
+             * @description runtime.budget.dailyUsd, shown and not enforced; null when unset
+             */
+            daily_usd: number | null;
+            /**
+             * Format: double
+             * @description runtime.budget.weeklyUsd, the cap the engine enforces; null when unset
+             */
+            weekly_usd: number | null;
+            /**
+             * Format: double
+             * @description The cost of the factory's runs started this UTC day
+             */
+            today_usd: number;
+            /**
+             * Format: double
+             * @description The cost of the factory's runs started in the last 7×24 hours, rolling: the window the engine enforces weekly_usd over, not the UTC week since Monday
+             */
+            week_usd: number;
+            state: components["schemas"]["SpendBudgetState"];
+            /** @description The open andon pull's reason when stopped, the spend against the cap when over_budget, else null */
+            reason: string | null;
+            /** @description The organization's connections that give the factory's runs their model (runtime.modelConnection), for "Who pays for models"; empty when it names none */
+            model_connections: components["schemas"]["ConnectionHit"][];
+        };
+        /**
+         * @description stopped while an andon pull is open, over_budget while week_usd is at or over weekly_usd (no new agent work starts), else running
+         * @enum {string}
+         */
+        SpendBudgetState: "running" | "stopped" | "over_budget";
         FactoryOverviewList: {
             /** @description The window asked for, as in 7d */
             window: string;
@@ -6404,6 +6562,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FactoryOverviewList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getOrgSpend: {
+        parameters: {
+            query?: {
+                /** @description week starts on Monday 00:00 UTC, month on the 1st 00:00 UTC, 90d at 00:00 UTC 89 days before today; each ends now */
+                window?: components["schemas"]["SpendWindow"];
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The organization's spend over the window and its factories' budgets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgSpend"];
                 };
             };
             default: components["responses"]["Problem"];

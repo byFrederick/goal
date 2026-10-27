@@ -20,6 +20,8 @@ const (
 	specFollowed = "spec-followed"
 	// writerAgent is acme's one agent.
 	writerAgent = "writer"
+	// modelConnection is acme's model connection.
+	modelConnection = "claude"
 )
 
 var _ api.JudgeTries = (*jonah.Loop)(nil)
@@ -258,7 +260,7 @@ func wantGot(t *testing.T, j gen.Judge) {
 	r := j.RunsOn
 	wantAll(t, "runs on", r,
 		check{r.Size == "medium" && r.Inherited, "medium, inherited"},
-		check{slices.Equal(r.Connections, []string{"claude"}), "claude"},
+		check{slices.Equal(r.Connections, []string{modelConnection}), modelConnection},
 		check{slices.Equal(r.Sees, []gen.JudgeRunsOnSees{gen.Events, gen.Spec, gen.PullRequest}), "events, spec and pull request"})
 }
 
