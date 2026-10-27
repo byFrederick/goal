@@ -45,35 +45,37 @@ const (
 // deliveryDays is how many UTC days, today the last, an endpoint's counts cover.
 const deliveryDays = 7
 
-// webhookProblem answers the webhook rules with their codes.
+// codeWebhookNotFound answers an endpoint the factory does not have.
+const codeWebhookNotFound = "webhook-not-found"
+
+// webhookProblem answers the webhook rules with their codes. Without a master key the detail is
+// fixed: it says what to set, never what the store said.
 func webhookProblem(err error) (gen.Problem, bool) {
-	if errors.Is(err, errWebhooksUnavailable) {
-		detail := "signing secrets are unavailable: goald has no master key (set GOAL_MASTER_KEYS; .env.example shows how)"
-
-		return gen.Problem{
-			Title: http.StatusText(http.StatusServiceUnavailable), Status: http.StatusServiceUnavailable, Detail: &detail,
-			Code: optional("webhooks-unavailable"),
-		}, true
-	}
-
 	answers := []struct {
 		err    error
 		status int
 		code   string
 	}{
-		{errWebhookNotFound, http.StatusNotFound, "webhook-not-found"},
+		{errWebhooksUnavailable, http.StatusServiceUnavailable, "webhooks-unavailable"},
+		{errWebhookNotFound, http.StatusNotFound, codeWebhookNotFound},
 		{errWebhookDeliveryNotFound, http.StatusNotFound, "webhook-delivery-not-found"},
 		{errWebhookTaken, http.StatusConflict, "webhook-name-taken"},
 		{errWebhookInvalid, http.StatusBadRequest, "webhook-invalid"},
 	}
 
 	for _, a := range answers {
-		if errors.Is(err, a.err) {
-			p := detailed(a.status, err)
-			p.Code = optional(a.code)
-
-			return p, true
+		if !errors.Is(err, a.err) {
+			continue
 		}
+
+		p := detailed(a.status, err)
+		p.Code = optional(a.code)
+
+		if a.status == http.StatusServiceUnavailable {
+			p.Detail = optional("signing secrets are unavailable: goald has no master key (set GOAL_MASTER_KEYS; .env.example shows how)")
+		}
+
+		return p, true
 	}
 
 	return gen.Problem{}, false
@@ -132,6 +134,7 @@ func (s *server) ListWebhookEndpoints(ctx context.Context, req gen.ListWebhookEn
 
 	for _, e := range endpoints {
 		o := endpointOut(e, f)
+
 		for i := range deliveryDays {
 			day := since.AddDate(0, 0, i)
 			c := counts[e.ID][day]

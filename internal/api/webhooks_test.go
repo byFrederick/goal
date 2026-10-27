@@ -22,6 +22,9 @@ const (
 	lineWebhooks = "/v1/orgs/acme/factories/line/webhooks"
 	hookName     = "ci-hooks"
 	hookBody     = `{"name":"` + hookName + `","kind":"generic"}`
+	// codeHookNotFound answers an endpoint the factory does not have.
+	codeHookNotFound = "webhook-not-found"
+	contentType      = "Content-Type"
 )
 
 var hexSecret = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -57,27 +60,40 @@ func TestWebhooks_SecretShownOnce(t *testing.T) {
 
 	h := newHarness(t)
 
-	res := h.request(t, http.MethodPost, webhooksPath, hookBody, nil)
-	created := decode[gen.CreatedWebhookEndpoint](t, res, http.StatusCreated)
-
+	created := h.createHook(t)
 	if !hexSecret.MatchString(created.Secret) || created.Name != hookName || created.Kind != gen.Generic ||
 		created.Address != "/hooks/"+created.Id || created.SecretName != hookName+"-hook-secret" || created.RotatedAt != nil {
 		t.Fatalf("created = %+v; want ci-hooks with a 64-character hex secret", created)
 	}
 
 	d := h.deliver(t, created.Id, domain.NewWebhookDelivery{
-		ReceivedAt: t0, Headers: map[string]string{"X-Goal-Signature": "sha256=" + created.Secret, "Content-Type": "application/json"},
+		ReceivedAt: t0, Headers: map[string]string{"X-Goal-Signature": "sha256=" + created.Secret, contentType: "application/json"},
 		Body: []byte(`{"event":"deploy"}`),
 	})
 
-	rotatedRes := h.request(t, http.MethodPost, webhooksPath+"/"+created.Id+"/rotate", "", nil)
-	rotated := decode[gen.CreatedWebhookEndpoint](t, rotatedRes, http.StatusOK)
+	rotated := h.rotateHook(t, created)
+
+	h.expectNoSecret(t, []string{created.Secret, rotated.Secret},
+		webhooksPath, webhooksPath+"/"+created.Id+"/deliveries", webhooksPath+"/"+created.Id+"/deliveries/"+string(d.ID), "/v1/orgs/acme/audit")
+
+	list := decode[gen.WebhookEndpointList](t, h.request(t, http.MethodGet, webhooksPath, "", nil), http.StatusOK)
+	if len(list.Endpoints) != 1 || list.Endpoints[0].Id != created.Id || list.Endpoints[0].RotatedAt == nil {
+		t.Errorf("list = %+v; want ci-hooks, rotated", list.Endpoints)
+	}
+}
+
+// rotateHook rotates created's secret and checks the answer holds a new one, the one that opens.
+func (h *harness) rotateHook(t *testing.T, created gen.CreatedWebhookEndpoint) gen.CreatedWebhookEndpoint {
+	t.Helper()
+
+	res := h.request(t, http.MethodPost, webhooksPath+"/"+created.Id+"/rotate", "", nil)
+	rotated := decode[gen.CreatedWebhookEndpoint](t, res, http.StatusOK)
 
 	if !hexSecret.MatchString(rotated.Secret) || rotated.Secret == created.Secret || rotated.RotatedAt == nil || rotated.Id != created.Id {
 		t.Fatalf("rotated = %+v; want a new 64-character hex secret", rotated)
 	}
 
-	if strings.Contains(string(rotatedRes.body), created.Secret) {
+	if strings.Contains(string(res.body), created.Secret) {
 		t.Error("the rotate answer holds the old secret")
 	}
 
@@ -86,25 +102,24 @@ func TestWebhooks_SecretShownOnce(t *testing.T) {
 		t.Errorf("OpenSecret after rotate = %x, %v; want the new secret", opened, err)
 	}
 
-	for _, path := range []string{
-		webhooksPath, webhooksPath + "/" + created.Id + "/deliveries", webhooksPath + "/" + created.Id + "/deliveries/" + string(d.ID),
-		"/v1/orgs/acme/audit",
-	} {
+	return rotated
+}
+
+// expectNoSecret checks that GET of each path answers 200 with none of secrets.
+func (h *harness) expectNoSecret(t *testing.T, secrets []string, paths ...string) {
+	t.Helper()
+
+	for _, path := range paths {
 		res := h.request(t, http.MethodGet, path, "", nil)
 		if res.status != http.StatusOK {
 			t.Fatalf("GET %s = %d %s", path, res.status, res.body)
 		}
 
-		for _, secret := range []string{created.Secret, rotated.Secret} {
+		for _, secret := range secrets {
 			if strings.Contains(string(res.body), secret) {
 				t.Errorf("GET %s holds a signing secret", path)
 			}
 		}
-	}
-
-	list := decode[gen.WebhookEndpointList](t, h.request(t, http.MethodGet, webhooksPath, "", nil), http.StatusOK)
-	if len(list.Endpoints) != 1 || list.Endpoints[0].Id != created.Id || list.Endpoints[0].RotatedAt == nil {
-		t.Errorf("list = %+v; want ci-hooks, rotated", list.Endpoints)
 	}
 }
 
@@ -120,13 +135,13 @@ func TestWebhooks_CreateRefusals(t *testing.T) {
 		status                   int
 		code                     string
 	}{
-		{"name taken", http.MethodPost, webhooksPath, `{"name":"ci-hooks","kind":"github"}`, http.StatusConflict, "webhook-name-taken"},
+		{"a taken name", http.MethodPost, webhooksPath, `{"name":"ci-hooks","kind":"github"}`, http.StatusConflict, "webhook-name-taken"},
 		{"not a slug", http.MethodPost, webhooksPath, `{"name":"CI Hooks","kind":"generic"}`, http.StatusBadRequest, "webhook-invalid"},
 		{"unknown kind", http.MethodPost, webhooksPath, `{"name":"deploys","kind":"gitlab"}`, http.StatusBadRequest, "webhook-invalid"},
-		{"rotate of no endpoint", http.MethodPost, webhooksPath + "/019a0000-0000-7000-8000-000000000000/rotate", "", http.StatusNotFound, "webhook-not-found"},
-		{"another factory's endpoint", http.MethodPost, lineWebhooks + "/" + created.Id + "/rotate", "", http.StatusNotFound, "webhook-not-found"},
-		{"delete through another factory", http.MethodDelete, lineWebhooks + "/" + created.Id, "", http.StatusNotFound, "webhook-not-found"},
-		{"deliveries of no endpoint", http.MethodGet, webhooksPath + "/nothing/deliveries", "", http.StatusNotFound, "webhook-not-found"},
+		{"rotate of no endpoint", http.MethodPost, webhooksPath + "/019a0000-0000-7000-8000-000000000000/rotate", "", http.StatusNotFound, codeHookNotFound},
+		{"another factory's endpoint", http.MethodPost, lineWebhooks + "/" + created.Id + "/rotate", "", http.StatusNotFound, codeHookNotFound},
+		{"delete through another factory", http.MethodDelete, lineWebhooks + "/" + created.Id, "", http.StatusNotFound, codeHookNotFound},
+		{"deliveries of no endpoint", http.MethodGet, webhooksPath + "/nothing/deliveries", "", http.StatusNotFound, codeHookNotFound},
 		{
 			"no such delivery", http.MethodGet, webhooksPath + "/" + created.Id + "/deliveries/019a0000-0000-7000-8000-000000000000", "",
 			http.StatusNotFound, "webhook-delivery-not-found",
@@ -147,7 +162,7 @@ func TestWebhooks_CreateRefusals(t *testing.T) {
 		t.Fatalf("delete = %d %s; want 204", r.status, r.body)
 	}
 
-	refused(t, "deliveries after delete", h.request(t, http.MethodGet, webhooksPath+"/"+created.Id+"/deliveries", "", nil), http.StatusNotFound, "webhook-not-found")
+	refused(t, "deliveries after delete", h.request(t, http.MethodGet, webhooksPath+"/"+created.Id+"/deliveries", "", nil), http.StatusNotFound, codeHookNotFound)
 }
 
 // The delivery log lists newest first a page at a time; one delivery's request has its headers
@@ -160,7 +175,7 @@ func TestWebhooks_DeliveriesPage(t *testing.T) {
 	created := h.createHook(t)
 	it := h.submit(t)
 
-	signed := map[string]string{"X-Goal-Signature": "sha256=00", "X-Hub-Signature-256": "sha256=00", "Content-Type": "application/json"}
+	signed := map[string]string{"X-Goal-Signature": "sha256=00", "X-Hub-Signature-256": "sha256=00", contentType: "application/json"}
 	first := h.deliver(t, created.Id, domain.NewWebhookDelivery{ReceivedAt: t0.Add(-3 * 24 * time.Hour), Headers: signed, Body: []byte{0xff, 0xfe}})
 	second := h.deliver(t, created.Id, domain.NewWebhookDelivery{
 		ReceivedAt: t0.Add(-time.Hour), Outcome: domain.DeliveryRefused, Reason: "signature did not match",
@@ -190,31 +205,43 @@ func TestWebhooks_DeliveriesPage(t *testing.T) {
 		t.Errorf("last page = %v, next %v; want the two oldest and no cursor", got, rest.NextAfter)
 	}
 
-	got := decode[gen.WebhookDeliveryRequest](t, h.request(t, http.MethodGet, deliveries+"/"+string(third.ID), "", nil), http.StatusOK)
-	if !maps.Equal(got.Headers, map[string]string{"content-type": "application/json"}) || got.Body != `{"event":"deploy.failed"}` ||
+	h.expectRequests(t, deliveries, first, third)
+	h.expectDays(t)
+}
+
+// expectRequests checks text's and binary's requests: headers without signatures, the body as
+// text or in base64.
+func (h *harness) expectRequests(t *testing.T, deliveries string, binary, text domain.WebhookDelivery) {
+	t.Helper()
+
+	got := decode[gen.WebhookDeliveryRequest](t, h.request(t, http.MethodGet, deliveries+"/"+string(text.ID), "", nil), http.StatusOK)
+	if !maps.Equal(got.Headers, map[string]string{"content-type": "application/json"}) || got.Body != string(text.Body) ||
 		got.BodyEncoding != gen.BodyText || got.Item == nil {
 		t.Errorf("delivery = %+v; want its headers without signatures and its body as text", got)
 	}
 
-	raw := decode[gen.WebhookDeliveryRequest](t, h.request(t, http.MethodGet, deliveries+"/"+string(first.ID), "", nil), http.StatusOK)
-	if raw.BodyEncoding != gen.BodyBase64 || raw.Body != base64.StdEncoding.EncodeToString([]byte{0xff, 0xfe}) {
+	raw := decode[gen.WebhookDeliveryRequest](t, h.request(t, http.MethodGet, deliveries+"/"+string(binary.ID), "", nil), http.StatusOK)
+	if raw.BodyEncoding != gen.BodyBase64 || raw.Body != base64.StdEncoding.EncodeToString(binary.Body) {
 		t.Errorf("non-UTF-8 delivery = %+v; want its body in base64", raw)
 	}
+}
+
+// expectDays checks ci-hooks's 7 days in the list: Oct 17 to 23, one delivered 3 days ago, one
+// delivered and one refused today, none otherwise.
+func (h *harness) expectDays(t *testing.T) {
+	t.Helper()
 
 	list := decode[gen.WebhookEndpointList](t, h.request(t, http.MethodGet, webhooksPath, "", nil), http.StatusOK)
 	if len(list.Endpoints) != 1 || len(list.Endpoints[0].Days) != 7 {
 		t.Fatalf("list = %+v; want ci-hooks with 7 days", list.Endpoints)
 	}
 
-	days := list.Endpoints[0].Days
-	if days[6].Day.Time != time.Date(2026, 10, 23, 0, 0, 0, 0, time.UTC) || days[6].Delivered != 1 || days[6].Refused != 1 ||
-		days[3].Delivered != 1 || days[0].Day.Time != time.Date(2026, 10, 17, 0, 0, 0, 0, time.UTC) {
-		t.Errorf("days = %+v; want Oct 17 to 23, 1 delivered 3 days ago, 1 delivered and 1 refused today", days)
-	}
+	want := map[int]gen.WebhookDeliveryDay{3: {Delivered: 1}, 6: {Delivered: 1, Refused: 1}}
 
-	for i, d := range days {
-		if i != 3 && i != 6 && (d.Delivered != 0 || d.Refused != 0) {
-			t.Errorf("day %s = %+v; want none", d.Day, d)
+	for i, d := range list.Endpoints[0].Days {
+		w := want[i]
+		if day := time.Date(2026, 10, 17+i, 0, 0, 0, 0, time.UTC); !d.Day.Equal(day) || d.Delivered != w.Delivered || d.Refused != w.Refused {
+			t.Errorf("day %d = %+v; want %s with %d delivered, %d refused", i, d, day.Format(time.DateOnly), w.Delivered, w.Refused)
 		}
 	}
 }
@@ -222,14 +249,14 @@ func TestWebhooks_DeliveriesPage(t *testing.T) {
 func deliveryIDs(p gen.WebhookDeliveryPage) []string {
 	out := []string{}
 	for _, d := range p.Deliveries {
-		out = append(out, string(d.Id))
+		out = append(out, d.Id)
 	}
 
 	return out
 }
 
-// Anyone who sees the factory reads its endpoints and deliveries; only its editors, signed in in
-// the last 10 minutes, create, rotate and delete them; another organization reaches none.
+// Anyone who sees the factory reads its endpoints and deliveries; only its editors, with a sign-in
+// from the last 10 minutes, create, rotate and delete them; another organization reaches none.
 func TestWebhooks_Permissions(t *testing.T) {
 	t.Parallel()
 
