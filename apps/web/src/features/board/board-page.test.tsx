@@ -249,48 +249,90 @@ describe('BoardPage', () => {
     const build = within(tabs).getByRole('tab', { name: /^Build/ });
     expect(build.getAttribute('data-state')).toBe('active');
     expect(build.classList).toContain('data-[state=active]:bg-ink');
-    expect(build.classList).toContain('shadow-[inset_0_-3px_0_var(--color-amber)]');
-    expect(build.classList).toContain('min-h-14');
-    // The name and the load are each one line, the load cut with its full text in a title.
-    const load = within(build).getByText('1 of 1');
-    expect(load.classList).toContain('truncate');
-    expect(load.getAttribute('title')).toBe('1 of 1');
+    expect(build.classList).toContain('min-h-11');
+    // The constraint's tab carries an amber dot before its name; the count is the station's load.
+    expect(build.querySelector('.bg-amber')).not.toBeNull();
+    expect(build.textContent).toBe('Build1 of 1');
 
     const investigate = within(tabs).getByRole('tab', { name: /^Investigate/ });
     expect(investigate.getAttribute('data-state')).toBe('inactive');
-    expect(investigate.classList).not.toContain('shadow-[inset_0_-3px_0_var(--color-amber)]');
+    expect(investigate.querySelector('.bg-amber')).toBeNull();
   });
 
-  it('states the constraint under the tabs only while the constraint is picked', async () => {
-    const first = renderBoardPage({ page: ShellBoard, org, factory, board: board(), station: 'build' });
-    expect(await screen.findByText('Build is the constraint: 1 of 1 busy, 0 waiting')).toBeTruthy();
-    first.unmount();
+  it('draws the picked station as the desktop column: its header with the Constraint chip, then its cards', async () => {
+    renderBoardPage({ page: ShellBoard, org, factory, board: board(), station: 'build' });
 
-    renderBoardPage({ page: ShellBoard, org, factory, board: board(), station: 'investigate' });
-    await screen.findByRole('tabpanel');
-    expect(screen.queryByText(/^Build is the constraint: /)).toBeNull();
+    const panel = await screen.findByRole('tabpanel');
+    expect(within(panel).getByRole('heading', { name: 'Build' })).toBeTruthy();
+    expect(within(panel).getByText('Constraint')).toBeTruthy();
+    expect(within(panel).getByRole('img', { name: '1 of 1 in progress' })).toBeTruthy();
+    expect(within(panel).getByRole('article')).toBeTruthy();
+    // Every card on the phone has its 44 px Move button.
+    expect(within(panel).getByRole('button', { name: /^Move / }).classList).toContain('size-11');
   });
 
-  it('keeps the phone status line to one line with the touches per item and a 44 px link to them', async () => {
+  it('says Empty in a picked station with no items', async () => {
+    const quiet: Board = {
+      ...board(),
+      stations: [station({ id: 'investigate', items: [] }), station({ id: 'build', agents: ['builder'], items: [] })],
+    };
+    renderBoardPage({ page: ShellBoard, org, factory, board: quiet, station: 'investigate' });
+
+    const panel = await screen.findByRole('tabpanel');
+    expect(within(panel).getByText('Empty')).toBeTruthy();
+  });
+
+  it('the phone top bar holds the Filter button and New item, with no page heading, Inbox or status line', async () => {
     stubPhone();
-    const touched = board({ touches: { finished: 4, per_item_mean: 1.4, per_item_median: 1, touchless_rate: 0.5 } });
-    renderBoardPage({ page: ShellBoard, org, factory, board: touched });
+    const creator = { ...factory, can: [...factory.can, 'item:create'] } as Factory;
+    renderBoardPage({ page: ShellBoard, org, factory: creator, board: board() });
 
-    const line = await screen.findByTitle('Line running, WIP 2 of 3, 1.4 touches per item');
-    expect(line.classList).toContain('truncate');
-    expect(line.textContent).toContain('1.4 touches per item');
-
-    const link = screen.getByRole('link', { name: 'By station' });
-    expect(link.classList).toContain('min-h-11');
-    expect(line.contains(link)).toBe(false);
+    const filter = await screen.findByRole('button', { name: 'Filter' });
+    expect(filter.getAttribute('aria-expanded')).toBe('false');
+    expect(filter.classList).toContain('size-11');
+    expect(screen.getByRole('button', { name: 'New item' }).classList).toContain('size-11');
+    expect(screen.queryByRole('heading', { name: 'Board' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Inbox/ })).toBeNull();
+    expect(screen.queryByText('Line running')).toBeNull();
   });
 
-  it('shows no touches link while no item finished this week', async () => {
+  it('the Filter button shows the filters row and hides it again', async () => {
     stubPhone();
     renderBoardPage({ page: ShellBoard, org, factory, board: board() });
 
-    await screen.findByTitle('Line running, WIP 2 of 3');
-    expect(screen.queryByRole('link', { name: 'By station' })).toBeNull();
+    const filter = await screen.findByRole('button', { name: 'Filter' });
+    expect(screen.queryByRole('group', { name: 'Filter and group the cards' })).toBeNull();
+    fireEvent.click(filter);
+    expect(filter.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('group', { name: 'Filter and group the cards' })).toBeTruthy();
+    fireEvent.click(filter);
+    expect(filter.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('group', { name: 'Filter and group the cards' })).toBeNull();
+  });
+
+  it('shows the stopped line as one status line above the tabs while the andon is open', async () => {
+    stubPhone();
+    const stopped = board({
+      andon: {
+        id: 1,
+        kind: 'manual',
+        station: null,
+        reason: 'Answers cite a retired runbook',
+        pulled_by: 'user:local',
+        pulled_at: '2026-10-26T09:00:00Z',
+        cleared_by: null,
+        cleared_at: null,
+        note: null,
+        data: {},
+      },
+    });
+    renderBoardPage({ page: ShellBoard, org, factory, board: stopped });
+
+    const line = await screen.findByTitle('Answers cite a retired runbook');
+    expect(line.textContent).toContain('Line stopped: Answers cite a retired runbook');
+    expect(line.compareDocumentPosition(screen.getByRole('tablist', { name: 'Stations' }))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
   });
 
   it('a done card shows its ref, age, title, PR link, touches and Move, but no summary and no state line', async () => {
@@ -695,7 +737,7 @@ describe('board filters and grouping', () => {
     expect(within(columns).queryAllByRole('link', { name: /merged/ })).toHaveLength(0);
   });
 
-  it('shows the same header over the grouped parts in the phone’s picked station', async () => {
+  it('shows no assembly header over the grouped parts in the phone’s picked station, but the part’s line', async () => {
     const part = item({
       id: 'item-52',
       ref: 'sre#52',
@@ -710,8 +752,7 @@ describe('board filters and grouping', () => {
     };
     renderBoardPage({ page: ShellBoard, org, factory, board, search: { group: 'assembly', station: 'investigate' } });
     const panel = await screen.findByRole('tabpanel');
-    const header = within(panel).getByRole('link', { name: /3 of 5 merged/ });
-    expect(header.getAttribute('href')).toBe('/o/acme/f/sre/items/50');
+    expect(within(panel).queryByRole('link', { name: /3 of 5 merged/ })).toBeNull();
     expect(shownTitles(panel)).toEqual([WIRE]);
   });
 });
