@@ -122,7 +122,7 @@ function renderSidebar({
     path: '/o/$org',
     beforeLoad: () => ({ org: summary }),
     component: () => (
-      <AccountProvider org={summary}>
+      <AccountProvider>
         <Sidebar org={summary} />
         <Outlet />
       </AccountProvider>
@@ -188,34 +188,61 @@ describe('the sidebar', () => {
     expect(links.some((text) => text?.startsWith('Knowledge'))).toBe(true);
   });
 
-  it.each([
-    ['Needs you', /^Needs you/],
-    ['Runs', /^Runs$/],
-    ['Credentials', /^Credentials$/],
-  ])('renders %s as not available: aria-disabled, focusable, and inert', async (_, name) => {
-    const { router } = renderSidebar({ can: ['connection:read', 'knowledge:read'] });
-    const control = within(await nav()).getByRole('button', { name });
+  it.each([['Credentials', /^Credentials$/]])(
+    'renders %s as not available: aria-disabled, focusable, and inert',
+    async (_, name) => {
+      const { router } = renderSidebar({ can: ['connection:read', 'knowledge:read'] });
+      const control = within(await nav()).getByRole('button', { name });
 
-    expect(control.getAttribute('aria-disabled')).toBe('true');
-    expect(control.tabIndex).not.toBe(-1);
-    fireEvent.click(control);
-    expect(router.state.location.pathname).toBe('/o/acme');
+      expect(control.getAttribute('aria-disabled')).toBe('true');
+      expect(control.tabIndex).not.toBe(-1);
+      fireEvent.click(control);
+      expect(router.state.location.pathname).toBe('/o/acme');
+    },
+  );
+
+  it('links Runs to the runs page', async () => {
+    renderSidebar();
+
+    expect(
+      within(await nav())
+        .getByRole('link', { name: 'Runs' })
+        .getAttribute('href'),
+    ).toBe('/o/acme/runs');
   });
 
   it('shows the not-available tooltip on hover', async () => {
     renderSidebar();
-    fireEvent.focus(within(await nav()).getByRole('button', { name: 'Runs' }));
+    fireEvent.focus(within(await nav()).getByRole('button', { name: /^Credentials$/ }));
 
     expect(await screen.findByText('Not available yet')).toBeTruthy();
   });
 
-  it('keeps Agents, Intake and Jonah disabled in the open factory', async () => {
+  it('keeps Intake and Jonah disabled in the open factory', async () => {
     renderSidebar({ at: '/o/acme/f/goal' });
     const sidebar = await nav();
 
-    for (const name of ['Agents', 'Intake', 'Jonah']) {
+    for (const name of ['Intake', 'Jonah']) {
       expect(within(sidebar).getByRole('button', { name }).getAttribute('aria-disabled')).toBe('true');
     }
+  });
+
+  it('lists Agents as a link in the open factory, current on its index and on each agent', async () => {
+    renderSidebar({ at: '/o/acme/f/goal/agents' });
+    const link = within(await nav()).getByRole('link', { name: 'Agents' });
+
+    expect(link.getAttribute('href')).toBe('/o/acme/f/goal/agents');
+    expect(link.getAttribute('aria-current')).toBe('page');
+  });
+
+  it('keeps Agents current on an agent page', async () => {
+    renderSidebar({ at: '/o/acme/f/goal/agents/builder' });
+
+    expect(
+      within(await nav())
+        .getByRole('link', { name: 'Agents' })
+        .getAttribute('aria-current'),
+    ).toBe('page');
   });
 
   it('shows New factory only to whoever may create one', async () => {
@@ -247,7 +274,7 @@ describe('the sidebar', () => {
     renderSidebar();
     const sidebar = await nav();
 
-    expect(within(sidebar).getByRole('button', { name: /Needs you/ }).textContent).toContain('waiting on you');
+    expect(within(sidebar).getByRole('link', { name: /Needs you/ }).textContent).toContain('waiting on you');
     expect(within(sidebar).getByRole('link', { name: /sre factory, 3 waiting on you/ })).toBeTruthy();
     expect(within(sidebar).getByRole('link', { name: /support factory.*andon pulled/ })).toBeTruthy();
   });
@@ -292,7 +319,7 @@ describe('the sidebar', () => {
     await waitFor(() => expect(sidebar.getAttribute('aria-busy')).toBe('false'));
     expect(within(sidebar).queryByText('Spend this week')).toBeNull();
     expect(within(sidebar).queryByText(/waiting on you/)).toBeNull();
-    expect(within(sidebar).getByRole('button', { name: 'Needs you' })).toBeTruthy();
+    expect(within(sidebar).getByRole('link', { name: 'Needs you' })).toBeTruthy();
     expect(within(sidebar).getByRole('link', { name: /sre factory/ })).toBeTruthy();
   });
 
@@ -415,19 +442,25 @@ describe('the collapsed rail', () => {
     expect(names.slice(11)).toEqual(['New factory', 'Spend this week, 37% of budget', 'FC, Freddy Cruz, account']);
   });
 
-  it.each(['New item', 'Needs you', 'Runs', 'Credentials'])(
-    'keeps %s disabled, and says what it is and why',
-    async (name) => {
-      renderSidebar();
-      await collapse();
-      const control = within(await nav()).getByRole('button', { name: new RegExp(`^${name}`) });
+  it('links Needs you to its page, with the count it waits on', async () => {
+    renderSidebar();
+    await collapse();
+    const link = within(await nav()).getByRole('link', { name: /^Needs you/ });
 
-      expect(control.getAttribute('aria-disabled')).toBe('true');
-      fireEvent.focus(control);
-      expect(await screen.findByText(name)).toBeTruthy();
-      expect(await screen.findByText('Not available yet')).toBeTruthy();
-    },
-  );
+    expect(link.getAttribute('href')).toMatch(/\/needs-you$/);
+    expect(link.getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it.each(['New item', 'Credentials'])('keeps %s disabled, and says what it is and why', async (name) => {
+    renderSidebar();
+    await collapse();
+    const control = within(await nav()).getByRole('button', { name: new RegExp(`^${name}`) });
+
+    expect(control.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.focus(control);
+    expect(await screen.findByText(name)).toBeTruthy();
+    expect(await screen.findByText('Not available yet')).toBeTruthy();
+  });
 
   it('gives each enabled entry a tooltip with its label', async () => {
     renderSidebar({ can: ['connection:read'] });
@@ -512,7 +545,7 @@ describe('the collapsed rail', () => {
     const rail = await nav();
 
     await waitFor(() => expect(rail.getAttribute('aria-busy')).toBe('false'));
-    expect(within(rail).getByRole('button', { name: 'Needs you' })).toBeTruthy();
+    expect(within(rail).getByRole('link', { name: 'Needs you' })).toBeTruthy();
     expect(within(rail).queryByRole('img', { name: /Spend/ })).toBeNull();
     expect(within(rail).getByRole('link', { name: /sre factory/ })).toBeTruthy();
   });

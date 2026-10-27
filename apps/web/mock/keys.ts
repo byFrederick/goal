@@ -7,7 +7,7 @@
 // Personal tokens (3-12b) too: GET, POST /v1/orgs/{org}/personal-tokens and DELETE …/{token}, the
 // signed-in person's own (another's is 404; with sign-in off there are none and creating one is
 // refused), and GET /v1/orgs/{org}/member-tokens and DELETE …/{token}, every member's. acme starts
-// with F. Cruz's laptop token, one of theirs revoked, and two other members' tokens.
+// with F. Cruz's laptop-cli token, one of theirs revoked, and two other members' tokens.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Actor, ApiKey, Factory, FactoryRole, Org, PersonalToken, User } from '@goal/api-client';
 import { directory, type MockPerson } from './people.ts';
@@ -113,7 +113,7 @@ function seedTokens(now: number): PersonalToken[] {
   return [
     {
       id: '019a1c00-0000-7000-8000-0000000000d1',
-      name: 'laptop',
+      name: 'laptop-cli',
       hint: 'goal_pat_Q7mk',
       scopes: ['factory:read', 'item:create', 'item:decide', 'org:read'],
       owner: cruzUser,

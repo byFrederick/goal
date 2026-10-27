@@ -61,8 +61,8 @@ test('signed out, the person signs in first; the code in the link is never used,
   await page.getByRole('link', { name: 'Sign in' }).click();
   await expect(page).toHaveURL(/\/sign-in\?next=%2Fdevice$/);
 
-  await page.getByLabel('Email').fill(owner);
-  await page.getByRole('button', { name: 'Email me a code' }).click();
+  await page.getByLabel('Work email').fill(owner);
+  await page.getByRole('button', { name: 'Email me a sign-in code' }).click();
   await page.getByLabel('Code').fill('000000');
 
   // Back on the page, nothing was filled in or decided from the link.
@@ -80,14 +80,13 @@ test('signed out, the person signs in first; the code in the link is never used,
   await expect(codeField(page)).toHaveValue(display(code));
   await page.getByRole('button', { name: 'Continue' }).click();
 
-  await expect(page.getByText(`Goal CLI wants to sign in as F. Cruz (${owner})`)).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Sign in the goal CLI?' })).toBeVisible();
   await expect(page.getByText(display(code), { exact: true })).toBeVisible();
+  await expect(page.getByText('Full access as F. Cruz, in Goal')).toBeVisible();
   await expect(page.getByText('Same network as this browser')).toBeVisible();
   await expect(page.getByText(cliAgent)).toBeVisible();
   await expect(page.getByText(/^just now, expires in 9 minutes$/)).toBeVisible();
-  await expect(
-    page.getByText('Only approve if you just ran goal login yourself. Never approve a code someone sent you.'),
-  ).toBeVisible();
+  await expect(page.getByText(/Deny it\. Nothing else happens\./)).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
