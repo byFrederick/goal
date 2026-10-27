@@ -190,7 +190,6 @@ describe('the sidebar', () => {
 
   it.each([
     ['Search', /^Search$/],
-    ['New item', /^New item/],
     ['Needs you', /^Needs you/],
     ['Runs', /^Runs$/],
     ['Credentials', /^Credentials$/],
@@ -305,6 +304,95 @@ describe('the sidebar', () => {
     expect(within(sidebar).getByText('Factories')).toBeTruthy();
     expect(within(sidebar).getByRole('link', { name: 'New factory' })).toBeTruthy();
     expect(sidebar.querySelectorAll('button[aria-controls]')).toHaveLength(0);
+  });
+
+  describe('New item and its shortcut C', () => {
+    const writable = [
+      factory('goal', { can: ['item:create'] }),
+      factory('sre', { can: ['item:create'] }),
+      factory('support'),
+    ];
+
+    it('enables New item with C as its shortcut, and opens the composer with the factory picker', async () => {
+      renderSidebar({ list: writable });
+      const button = within(await nav()).getByRole('button', { name: /New item/ });
+
+      expect(button.getAttribute('aria-disabled')).toBeNull();
+      expect(button.getAttribute('aria-keyshortcuts')).toBe('C');
+      fireEvent.click(button);
+      expect(await screen.findByRole('dialog', { name: 'New item' })).toBeTruthy();
+      expect(screen.getByRole('combobox', { name: 'Factory' })).toBeTruthy();
+    });
+
+    it('starts the picker on the open factory when C is pressed on its page', async () => {
+      renderSidebar({ at: '/o/acme/f/goal', list: writable });
+      await nav();
+      fireEvent.keyDown(document.body, { key: 'c' });
+
+      const picker = (await screen.findByRole('combobox', { name: 'Factory' })) as HTMLSelectElement;
+      expect(picker.value).toBe('goal-id');
+    });
+
+    it('starts the picker empty when C is pressed elsewhere', async () => {
+      renderSidebar({ list: writable });
+      await nav();
+      fireEvent.keyDown(document.body, { key: 'c' });
+
+      const picker = (await screen.findByRole('combobox', { name: 'Factory' })) as HTMLSelectElement;
+      expect(picker.value).toBe('');
+    });
+
+    it('opens the composer with C', async () => {
+      renderSidebar({ list: writable });
+      await nav();
+      fireEvent.keyDown(document.body, { key: 'C' });
+
+      expect(await screen.findByRole('dialog', { name: 'New item' })).toBeTruthy();
+    });
+
+    it('ignores C typed into a text field, a textarea and a dialog', async () => {
+      renderSidebar({ list: writable });
+      await nav();
+      const input = document.createElement('input');
+      const area = document.createElement('textarea');
+      document.body.append(input, area);
+
+      fireEvent.keyDown(input, { key: 'c' });
+      fireEvent.keyDown(area, { key: 'c' });
+      expect(screen.queryByRole('dialog')).toBeNull();
+
+      input.remove();
+      area.remove();
+    });
+
+    it('ignores C with a modifier or as a key repeat', async () => {
+      renderSidebar({ list: writable });
+      await nav();
+
+      fireEvent.keyDown(document.body, { key: 'c', metaKey: true });
+      fireEvent.keyDown(document.body, { key: 'c', ctrlKey: true });
+      fireEvent.keyDown(document.body, { key: 'c', repeat: true });
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    it('does not open a second composer while one is open', async () => {
+      renderSidebar({ list: writable });
+      await nav();
+      fireEvent.keyDown(document.body, { key: 'c' });
+      await screen.findByRole('dialog', { name: 'New item' });
+
+      fireEvent.keyDown(document.body, { key: 'c' });
+      expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    });
+
+    it('hides New item once the factories load with none the person may add items to', async () => {
+      renderSidebar({ list: factories });
+      await nav();
+
+      expect(screen.queryByRole('button', { name: /New item/ })).toBeNull();
+      fireEvent.keyDown(document.body, { key: 'c' });
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
   });
 });
 
