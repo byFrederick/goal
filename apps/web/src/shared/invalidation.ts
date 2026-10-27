@@ -17,6 +17,7 @@ const workKeys = [
   'weekly',
   'lead-time',
   'constraint',
+  'activity',
   'touches',
   'andon',
   'agent',
