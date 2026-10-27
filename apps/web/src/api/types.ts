@@ -3,6 +3,8 @@
 import type { ItemPage, MergeRequest } from '@goal/api-client';
 
 export type {
+  Activity,
+  ActivityEvent,
   Actor,
   AgentStats,
   AndonPull,

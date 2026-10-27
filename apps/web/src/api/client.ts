@@ -14,6 +14,7 @@ import {
 } from '@goal/api-client';
 import { sessionHandlers, withSession } from './session';
 import type {
+  Activity,
   AgentStats,
   AndonPull,
   AssemblyParts,
@@ -279,6 +280,21 @@ export function getLeadTime(
 }
 
 /** Items finished in each of the `weeks` weeks ending on `to` (today when absent). */
+/** The factory's latest milestone events, newest first (listFactoryActivity). */
+export function getFactoryActivity(
+  org: string,
+  factory: string,
+  { limit }: { limit?: number },
+  signal?: AbortSignal,
+): Promise<Activity> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/activity'), {
+      params: { path: { org, factory }, query: limit !== undefined ? { limit } : {} },
+      ...cancel(signal),
+    }),
+  );
+}
+
 export function getWeekly(
   org: string,
   factory: string,
