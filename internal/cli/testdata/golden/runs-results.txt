@@ -1,0 +1,6 @@
+FACTORY     ITEM                                                     STATION  AGENT     MODEL              STARTED               DURATION  TURNS  COST     STATUS
+web         web#2 Fix the login page                                 code     coder     claude-opus-5-5    2026-10-27 09:10 UTC  running   3      $0.0007  running
+operations  operations#14 Rotate the backup keys of every region b…  check    reviewer  claude-sonnet-5-5  2026-10-27 09:00 UTC  4m12s     14     $0.42    succeeded
+web         web#2 Fix the login page                                 code     coder     claude-opus-5-5    2026-10-27 07:00 UTC  1h5m0s    40     $2.50    failed
+7 runs: 1 running, 5 finished, 1 failed, $3.20 spent
+next: goal runs --cursor eyJ0IjoxfQ

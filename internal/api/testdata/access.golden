@@ -234,6 +234,32 @@ createConnection     pat-demoted      403 forbidden            404 org-not-found
 createConnection     pat-removed      401 unauthenticated      401 unauthenticated
 createConnection     pat-platform     403 forbidden            404 org-not-found
 createConnection     pat-deleted-org  401 unauthenticated      401 unauthenticated
+createCredential     anonymous        401 unauthenticated      401 unauthenticated
+createCredential     owner            200                      404 org-not-found
+createCredential     admin            200                      404 org-not-found
+createCredential     viewer           403 forbidden            404 org-not-found
+createCredential     approver         403 forbidden            404 org-not-found
+createCredential     editor           403 forbidden            404 org-not-found
+createCredential     member-no-roles  403 forbidden            404 org-not-found
+createCredential     other-org-owner  404 org-not-found        200
+createCredential     platform-admin   404 org-not-found        404 org-not-found
+createCredential     stale-owner      403 reauth-required      404 org-not-found
+createCredential     key-scoped       403 forbidden            404 org-not-found
+createCredential     key-restricted   403 forbidden            404 org-not-found
+createCredential     key-other-org    404 org-not-found        403 forbidden
+createCredential     key-expired      401 unauthenticated      401 unauthenticated
+createCredential     key-revoked      401 unauthenticated      401 unauthenticated
+createCredential     bearer-owner     200                      404 org-not-found
+createCredential     pat-approver     403 forbidden            404 org-not-found
+createCredential     pat-owner        403 forbidden            404 org-not-found
+createCredential     pat-viewer       403 forbidden            404 org-not-found
+createCredential     pat-other-org    404 org-not-found        403 forbidden
+createCredential     pat-expired      401 unauthenticated      401 unauthenticated
+createCredential     pat-revoked      401 unauthenticated      401 unauthenticated
+createCredential     pat-demoted      403 forbidden            404 org-not-found
+createCredential     pat-removed      401 unauthenticated      401 unauthenticated
+createCredential     pat-platform     403 forbidden            404 org-not-found
+createCredential     pat-deleted-org  401 unauthenticated      401 unauthenticated
 createFactory        anonymous        401 unauthenticated      401 unauthenticated
 createFactory        owner            200                      404 org-not-found
 createFactory        admin            200                      404 org-not-found
@@ -390,6 +416,32 @@ deleteConnectionKind pat-demoted      403 forbidden            404 org-not-found
 deleteConnectionKind pat-removed      401 unauthenticated      401 unauthenticated
 deleteConnectionKind pat-platform     403 forbidden            404 org-not-found
 deleteConnectionKind pat-deleted-org  401 unauthenticated      401 unauthenticated
+deleteCredential     anonymous        401 unauthenticated      401 unauthenticated
+deleteCredential     owner            200                      404 org-not-found
+deleteCredential     admin            200                      404 org-not-found
+deleteCredential     viewer           403 forbidden            404 org-not-found
+deleteCredential     approver         403 forbidden            404 org-not-found
+deleteCredential     editor           403 forbidden            404 org-not-found
+deleteCredential     member-no-roles  403 forbidden            404 org-not-found
+deleteCredential     other-org-owner  404 org-not-found        200
+deleteCredential     platform-admin   404 org-not-found        404 org-not-found
+deleteCredential     stale-owner      403 reauth-required      404 org-not-found
+deleteCredential     key-scoped       403 forbidden            404 org-not-found
+deleteCredential     key-restricted   403 forbidden            404 org-not-found
+deleteCredential     key-other-org    404 org-not-found        403 forbidden
+deleteCredential     key-expired      401 unauthenticated      401 unauthenticated
+deleteCredential     key-revoked      401 unauthenticated      401 unauthenticated
+deleteCredential     bearer-owner     200                      404 org-not-found
+deleteCredential     pat-approver     403 forbidden            404 org-not-found
+deleteCredential     pat-owner        403 forbidden            404 org-not-found
+deleteCredential     pat-viewer       403 forbidden            404 org-not-found
+deleteCredential     pat-other-org    404 org-not-found        403 forbidden
+deleteCredential     pat-expired      401 unauthenticated      401 unauthenticated
+deleteCredential     pat-revoked      401 unauthenticated      401 unauthenticated
+deleteCredential     pat-demoted      403 forbidden            404 org-not-found
+deleteCredential     pat-removed      401 unauthenticated      401 unauthenticated
+deleteCredential     pat-platform     403 forbidden            404 org-not-found
+deleteCredential     pat-deleted-org  401 unauthenticated      401 unauthenticated
 deleteDraftFile      anonymous        401 unauthenticated      401 unauthenticated
 deleteDraftFile      owner            200                      404 org-not-found
 deleteDraftFile      admin            200                      404 org-not-found
@@ -754,6 +806,32 @@ getConstraintReport  pat-demoted      404 factory-not-found    404 org-not-found
 getConstraintReport  pat-removed      401 unauthenticated      401 unauthenticated
 getConstraintReport  pat-platform     200                      404 org-not-found
 getConstraintReport  pat-deleted-org  401 unauthenticated      401 unauthenticated
+getCredential        anonymous        401 unauthenticated      401 unauthenticated
+getCredential        owner            200                      404 org-not-found
+getCredential        admin            200                      404 org-not-found
+getCredential        viewer           200                      404 org-not-found
+getCredential        approver         200                      404 org-not-found
+getCredential        editor           200                      404 org-not-found
+getCredential        member-no-roles  200                      404 org-not-found
+getCredential        other-org-owner  404 org-not-found        200
+getCredential        platform-admin   404 org-not-found        404 org-not-found
+getCredential        stale-owner      200                      404 org-not-found
+getCredential        key-scoped       403 forbidden            404 org-not-found
+getCredential        key-restricted   200                      404 org-not-found
+getCredential        key-other-org    404 org-not-found        200
+getCredential        key-expired      401 unauthenticated      401 unauthenticated
+getCredential        key-revoked      401 unauthenticated      401 unauthenticated
+getCredential        bearer-owner     200                      404 org-not-found
+getCredential        pat-approver     403 forbidden            404 org-not-found
+getCredential        pat-owner        200                      404 org-not-found
+getCredential        pat-viewer       200                      404 org-not-found
+getCredential        pat-other-org    404 org-not-found        200
+getCredential        pat-expired      401 unauthenticated      401 unauthenticated
+getCredential        pat-revoked      401 unauthenticated      401 unauthenticated
+getCredential        pat-demoted      200                      404 org-not-found
+getCredential        pat-removed      401 unauthenticated      401 unauthenticated
+getCredential        pat-platform     200                      404 org-not-found
+getCredential        pat-deleted-org  401 unauthenticated      401 unauthenticated
 getDeviceRequest     anonymous        install: 401 unauthenticated
 getDeviceRequest     owner            install: 200
 getDeviceRequest     admin            install: 200
@@ -1456,6 +1534,32 @@ getWeeklyThroughput  pat-demoted      404 factory-not-found    404 org-not-found
 getWeeklyThroughput  pat-removed      401 unauthenticated      401 unauthenticated
 getWeeklyThroughput  pat-platform     200                      404 org-not-found
 getWeeklyThroughput  pat-deleted-org  401 unauthenticated      401 unauthenticated
+importCredentials    anonymous        401 unauthenticated      401 unauthenticated
+importCredentials    owner            200                      404 org-not-found
+importCredentials    admin            200                      404 org-not-found
+importCredentials    viewer           403 forbidden            404 org-not-found
+importCredentials    approver         403 forbidden            404 org-not-found
+importCredentials    editor           403 forbidden            404 org-not-found
+importCredentials    member-no-roles  403 forbidden            404 org-not-found
+importCredentials    other-org-owner  404 org-not-found        200
+importCredentials    platform-admin   404 org-not-found        404 org-not-found
+importCredentials    stale-owner      403 reauth-required      404 org-not-found
+importCredentials    key-scoped       403 forbidden            404 org-not-found
+importCredentials    key-restricted   403 forbidden            404 org-not-found
+importCredentials    key-other-org    404 org-not-found        403 forbidden
+importCredentials    key-expired      401 unauthenticated      401 unauthenticated
+importCredentials    key-revoked      401 unauthenticated      401 unauthenticated
+importCredentials    bearer-owner     200                      404 org-not-found
+importCredentials    pat-approver     403 forbidden            404 org-not-found
+importCredentials    pat-owner        403 forbidden            404 org-not-found
+importCredentials    pat-viewer       403 forbidden            404 org-not-found
+importCredentials    pat-other-org    404 org-not-found        403 forbidden
+importCredentials    pat-expired      401 unauthenticated      401 unauthenticated
+importCredentials    pat-revoked      401 unauthenticated      401 unauthenticated
+importCredentials    pat-demoted      403 forbidden            404 org-not-found
+importCredentials    pat-removed      401 unauthenticated      401 unauthenticated
+importCredentials    pat-platform     403 forbidden            404 org-not-found
+importCredentials    pat-deleted-org  401 unauthenticated      401 unauthenticated
 linkItem             anonymous        401 unauthenticated      401 unauthenticated
 linkItem             owner            200                      404 org-not-found
 linkItem             admin            200                      404 org-not-found
@@ -1638,6 +1742,32 @@ listConnections      pat-demoted      404 factory-not-found    404 org-not-found
 listConnections      pat-removed      401 unauthenticated      401 unauthenticated
 listConnections      pat-platform     200                      404 org-not-found
 listConnections      pat-deleted-org  401 unauthenticated      401 unauthenticated
+listCredentials      anonymous        401 unauthenticated      401 unauthenticated
+listCredentials      owner            200                      404 org-not-found
+listCredentials      admin            200                      404 org-not-found
+listCredentials      viewer           200                      404 org-not-found
+listCredentials      approver         200                      404 org-not-found
+listCredentials      editor           200                      404 org-not-found
+listCredentials      member-no-roles  200                      404 org-not-found
+listCredentials      other-org-owner  404 org-not-found        200
+listCredentials      platform-admin   404 org-not-found        404 org-not-found
+listCredentials      stale-owner      200                      404 org-not-found
+listCredentials      key-scoped       403 forbidden            404 org-not-found
+listCredentials      key-restricted   200                      404 org-not-found
+listCredentials      key-other-org    404 org-not-found        200
+listCredentials      key-expired      401 unauthenticated      401 unauthenticated
+listCredentials      key-revoked      401 unauthenticated      401 unauthenticated
+listCredentials      bearer-owner     200                      404 org-not-found
+listCredentials      pat-approver     403 forbidden            404 org-not-found
+listCredentials      pat-owner        200                      404 org-not-found
+listCredentials      pat-viewer       200                      404 org-not-found
+listCredentials      pat-other-org    404 org-not-found        200
+listCredentials      pat-expired      401 unauthenticated      401 unauthenticated
+listCredentials      pat-revoked      401 unauthenticated      401 unauthenticated
+listCredentials      pat-demoted      200                      404 org-not-found
+listCredentials      pat-removed      401 unauthenticated      401 unauthenticated
+listCredentials      pat-platform     200                      404 org-not-found
+listCredentials      pat-deleted-org  401 unauthenticated      401 unauthenticated
 listDraftFiles       anonymous        401 unauthenticated      401 unauthenticated
 listDraftFiles       owner            200                      404 org-not-found
 listDraftFiles       admin            200                      404 org-not-found
@@ -2210,6 +2340,32 @@ openDraft            pat-demoted      404 factory-not-found    404 org-not-found
 openDraft            pat-removed      401 unauthenticated      401 unauthenticated
 openDraft            pat-platform     200                      404 org-not-found
 openDraft            pat-deleted-org  401 unauthenticated      401 unauthenticated
+patchCredential      anonymous        401 unauthenticated      401 unauthenticated
+patchCredential      owner            200                      404 org-not-found
+patchCredential      admin            200                      404 org-not-found
+patchCredential      viewer           403 forbidden            404 org-not-found
+patchCredential      approver         403 forbidden            404 org-not-found
+patchCredential      editor           403 forbidden            404 org-not-found
+patchCredential      member-no-roles  403 forbidden            404 org-not-found
+patchCredential      other-org-owner  404 org-not-found        200
+patchCredential      platform-admin   404 org-not-found        404 org-not-found
+patchCredential      stale-owner      403 reauth-required      404 org-not-found
+patchCredential      key-scoped       403 forbidden            404 org-not-found
+patchCredential      key-restricted   403 forbidden            404 org-not-found
+patchCredential      key-other-org    404 org-not-found        403 forbidden
+patchCredential      key-expired      401 unauthenticated      401 unauthenticated
+patchCredential      key-revoked      401 unauthenticated      401 unauthenticated
+patchCredential      bearer-owner     200                      404 org-not-found
+patchCredential      pat-approver     403 forbidden            404 org-not-found
+patchCredential      pat-owner        403 forbidden            404 org-not-found
+patchCredential      pat-viewer       403 forbidden            404 org-not-found
+patchCredential      pat-other-org    404 org-not-found        403 forbidden
+patchCredential      pat-expired      401 unauthenticated      401 unauthenticated
+patchCredential      pat-revoked      401 unauthenticated      401 unauthenticated
+patchCredential      pat-demoted      403 forbidden            404 org-not-found
+patchCredential      pat-removed      401 unauthenticated      401 unauthenticated
+patchCredential      pat-platform     403 forbidden            404 org-not-found
+patchCredential      pat-deleted-org  401 unauthenticated      401 unauthenticated
 pauseFactory         anonymous        401 unauthenticated      401 unauthenticated
 pauseFactory         owner            200                      404 org-not-found
 pauseFactory         admin            200                      404 org-not-found
