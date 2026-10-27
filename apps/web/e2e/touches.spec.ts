@@ -1,5 +1,4 @@
-// Human touches per item (spec 4 §4.9, §4.10, §10): the Floor's headline and panel, the factory
-// tiles, the Board's figures and card counts, and the Item's touches with their reason select.
+// Human touches per item (spec 4 §4.9, §4.10, §10): the factory tiles, the Board's figures and card counts, and the Item's touches with their reason select.
 import { expect, type Page, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll, isPhone } from './support';
 
@@ -15,51 +14,10 @@ async function touchSre8(page: Page) {
   expect(res.ok()).toBe(true);
 }
 
-test('the floor says touches per finished item and where they happen', async ({ page }) => {
+test('the floor shows no touches panel: the picture has none, and the item page keeps its own', async ({ page }) => {
   await page.goto('/o/acme/f/sre');
-  const card = page.getByRole('region', { name: 'Human touches' });
-  await expect(card).toBeVisible();
-
-  if (isPhone(page)) {
-    await expect(card.getByText(/^\d+\.\d per item$/)).toBeVisible();
-    await expect(card.getByText(/vs last week, fewer is better$/)).toBeVisible();
-    await expect(card.getByText('Touchless items')).toBeVisible();
-    await expect(card.getByText(/^Most touches: /)).toBeVisible();
-  } else {
-    await expect(card.getByText(/^\d+\.\d touches per item$/)).toBeVisible();
-    await expect(card.getByText(/^vs last week\. \d+ touches on \d+ finished items$/)).toBeVisible();
-    await expect(card.getByText(/^Touchless: \d+ of \d+ items finished with no human touch$/)).toBeVisible();
-    // Each figure is a term (what it counts) with its value as the definition.
-    await expect(card.getByRole('term').filter({ hasText: /^Touchless: / })).toBeVisible();
-    await expect(card.getByRole('definition').filter({ hasText: /^\d+%$/ })).toBeVisible();
-    await expect(card.getByText(/^per item, plus \d+\.\d planned/)).toBeVisible();
-
-    const where = card.getByRole('region', { name: 'Where touches happen' });
-    await expect(where.getByRole('img', { name: /^Approve: \d+ touches, \d\.\d\d per item$/ })).toBeVisible();
-    await where.getByText('Kind', { exact: true }).click();
-    await expect(page).toHaveURL(/\?touches=kind$/);
-    await expect(where.getByRole('img', { name: /^Approved: \d+ touch(es)?, / })).toBeVisible();
-    await where.getByText('Version', { exact: true }).click();
-    await expect(where.getByRole('img', { name: /^v\d+: / }).first()).toBeVisible();
-    await expect(where.getByText(/^\d+ items, \d\.\d per item, \d+% touchless$/).first()).toBeVisible();
-    await expect(where.getByRole('link', { name: 'See the finished items' })).toHaveAttribute(
-      'href',
-      '/o/acme/f/sre/items?state=done',
-    );
-  }
-  await expectAccessible(page);
-  await expectNoHorizontalScroll(page);
-});
-
-test('each factory tile says its touches per item this week against last week', async ({ page }) => {
-  await page.goto('/o/acme');
-  const sre = page.getByRole('article', { name: 'sre' });
-  // From 768 px a tile above the stats, on a phone a line under them: one of them shows.
-  await expect(sre.getByText(/human touches per item/).filter({ visible: true })).toBeVisible();
-  await expect(sre.getByText(/\d+% touchless/).filter({ visible: true })).toBeVisible();
-  // The support line finished nothing this week: no per item to say.
-  const support = page.getByRole('article', { name: 'support' });
-  await expect(support.getByText(/^No items finished this week/).filter({ visible: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Human touches' })).toHaveCount(0);
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
@@ -77,12 +35,8 @@ test("the board says the week's touches per item, by station and on each touched
       '/o/acme/f/sre#touches-summary',
     );
   } else {
-    await expect(page.getByRole('link', { name: /^\d+\.\d touches per item ?, \d+% touchless$/ })).toHaveAttribute(
-      'href',
-      '/o/acme/f/sre#touches',
-    );
-    const stations = page.getByRole('region', { name: 'Stations in line order' });
-    await expect(stations.getByText(/^\d\.\d\d touches per item$/)).toHaveCount(5);
+    // The desktop board shows no touches (the canvas picture has none), and the Floor shows none either.
+    await expect(page.getByRole('link', { name: /touches per item/ })).toHaveCount(0);
   }
   const card = page.locator('[data-card]').filter({ hasText: 'sre#8' }).filter({ visible: true });
   await expect(card.getByText('1 touch', { exact: true })).toBeVisible();
@@ -154,10 +108,7 @@ test('a refused reason says why and goes back to what goald has', async ({ page,
   await expect(reason).toHaveValue('');
 });
 
-test('the board and the floor work while the touch metrics fail, and the floor offers to try again', async ({
-  page,
-  request,
-}) => {
+test('the board and the floor work while the touch metrics fail', async ({ page, request }) => {
   // Every try fails (times 0) until the faults are cleared: the app retries a 500 twice first.
   await request.post('/__mock/fail', { data: { path: '/metrics/touches', method: 'GET', status: 500, times: 0 } });
   await page.goto('/o/acme/f/sre/board');
@@ -165,10 +116,7 @@ test('the board and the floor work while the touch metrics fail, and the floor o
 
   await page.goto('/o/acme/f/sre');
   await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
-  const card = page.getByRole('region', { name: 'Human touches' });
-  await expect(card.getByText('Couldn’t load the human touches.')).toBeVisible({ timeout: 15_000 });
-  await expectAccessible(page);
+  await expect(page.getByRole('region', { name: 'Needs you' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Activity' })).toBeVisible();
   await request.delete('/__mock/fail');
-  await card.getByRole('button', { name: 'Try again' }).click();
-  await expect(card.getByText(isPhone(page) ? /^\d+\.\d per item$/ : /^\d+\.\d touches per item$/)).toBeVisible();
 });

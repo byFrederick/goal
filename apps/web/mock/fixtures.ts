@@ -58,6 +58,8 @@ export interface MockItem {
   paths?: string[];
   /** The open need it waits for while queued or ready (Item.waiting). Not on Item. */
   waitsOn?: MockWaitsOn;
+  /** The assembly it is a part of (the assembly's item id) and its place among the parts, 1-based. */
+  partOf?: { id: string; part: number };
 }
 
 /** The need a queued item waits for: an item of the factory by number, by its order (after) or its files (files). */
@@ -198,10 +200,11 @@ type Step =
       model?: string;
       cost: number;
       turns: number;
-      status?: 'succeeded' | 'failed' | 'running';
+      status?: 'succeeded' | 'failed' | 'running' | 'cancelled';
       error?: string;
     }
   | { check: string; exit: number; ms: number }
+  | { note: string; by: string }
   | { gate: 'approve' | 'reject'; agent: string; reason?: string }
   | { human: 'approved' | 'rejected'; by: string; reason?: string }
   | { waiting: true; reason?: string }
@@ -227,10 +230,142 @@ interface Seed {
   outputs?: Record<string, unknown>;
   paths?: string[];
   waitsOn?: MockWaitsOn;
+  /** The assembly the item is a part of (its seed number) and its place among the parts. */
+  assembly?: number;
+  part?: number;
   steps: Step[];
 }
 
 const model = 'claude-sonnet-5-5';
+
+/**
+ * The rows of the Runs page's picture (runs.jpg), one run each. Their numbers and titles follow the
+ * picture except where another seed already holds the number (see the pull request).
+ */
+const runsPage: Record<'software' | 'sre' | 'support', Seed[]> = {
+  software: [
+    {
+      number: 150,
+      title: 'Fix flaky TestLeaseExpiry',
+      type: 'fix',
+      body: 'The lease expiry test fails about one run in five.',
+      station: 'build',
+      state: 'in_progress',
+      createdMin: 30,
+      updatedMin: 0,
+      steps: [
+        { move: 'build' },
+        { run: 'backend-engineer', model: 'claude-opus-5-5', cost: 0.7, turns: 12, tools: [], status: 'running' },
+      ],
+    },
+    {
+      number: 156,
+      title: 'Split the store package by port',
+      type: 'refactor',
+      body: 'Each port gets its own package, so adapters import ports and not the store.',
+      station: 'spec',
+      state: 'in_progress',
+      createdMin: 50,
+      updatedMin: 0,
+      steps: [
+        { move: 'spec' },
+        { run: 'architect', model: 'claude-opus-5-5', cost: 0.9, turns: 22, tools: [], status: 'running' },
+      ],
+    },
+    {
+      number: 146,
+      title: 'Usage table and API',
+      type: 'feature',
+      body: 'A table of spend by agent and model, with the API that serves it.',
+      station: 'review',
+      state: 'in_progress',
+      createdMin: 70,
+      updatedMin: 20,
+      steps: [{ move: 'review' }, { run: 'reviewer', model: 'claude-opus-5-5', cost: 0.95, turns: 18, tools: [] }],
+    },
+    {
+      number: 149,
+      title: 'Empty state for Intake',
+      type: 'feature',
+      body: 'Intake says what to do when nothing has arrived yet.',
+      station: 'review',
+      state: 'in_progress',
+      createdMin: 60,
+      updatedMin: 10,
+      steps: [{ move: 'review' }, { run: 'reviewer', model: 'claude-opus-5-5', cost: 0.34, turns: 7, tools: [] }],
+    },
+    {
+      number: 140,
+      title: 'Usage and budgets',
+      type: 'feature',
+      body: 'Budgets per factory, with the spend they are set against.',
+      station: 'spec',
+      state: 'in_progress',
+      createdMin: 110,
+      updatedMin: 60,
+      steps: [{ move: 'spec' }, { run: 'architect', model: 'claude-opus-5-5', cost: 0.74, turns: 19, tools: [] }],
+    },
+    {
+      number: 160,
+      title: 'Check the budget before each run',
+      type: 'feature',
+      body: 'Each run checks the factory budget before it starts.',
+      station: 'build',
+      state: 'in_progress',
+      createdMin: 330,
+      updatedMin: 200,
+      steps: [
+        { move: 'build' },
+        {
+          run: 'backend-engineer',
+          model: 'claude-opus-5-5',
+          cost: 6.1,
+          turns: 250,
+          tools: [],
+          status: 'failed',
+          error: 'Hit the 250-turn cap while rerunning task check:changed after each edit.',
+        },
+      ],
+    },
+  ],
+  sre: [
+    {
+      number: 311,
+      title: 'Checkout API p95 over 900 ms',
+      type: 'incident',
+      body: 'The checkout API p95 went over 900 ms after the 13:00 deploy.',
+      station: 'investigate',
+      state: 'in_progress',
+      createdMin: 75,
+      updatedMin: 40,
+      steps: [
+        { move: 'investigate' },
+        {
+          run: 'investigator',
+          model: 'claude-opus-5-5',
+          cost: 1.4,
+          turns: 27,
+          tools: [],
+          status: 'cancelled',
+          error: 'Stopped by andon',
+        },
+      ],
+    },
+  ],
+  support: [
+    {
+      number: 88,
+      title: 'Refund for a double charge',
+      type: 'question',
+      body: 'A customer was charged twice for one order.',
+      station: 'answer',
+      state: 'in_progress',
+      createdMin: 45,
+      updatedMin: 6,
+      steps: [{ move: 'answer' }, { run: 'responder', model: 'claude-sonnet-5-5', cost: 0.12, turns: 9, tools: [] }],
+    },
+  ],
+};
 
 /** The published definition version each factory's runs ran on, by name. */
 const versions: Record<string, { id: string; number: number }> = {
@@ -299,7 +434,7 @@ const goalFactory: Factory = {
   org_id: acmeOrg,
   can: factoryCan,
   name: 'goal',
-  title: 'Goal',
+  title: 'Software',
   description: 'Builds the Goal platform from this repository: engine, UI, infrastructure and its own factories.',
   work_types: ['feature', 'fix', 'refactor', 'infra', 'design'],
   stations: [
@@ -421,23 +556,131 @@ const specRun = (tools: Tool[], cost: number, turns: number): Step => ({
 });
 
 const goalSeeds: Seed[] = [
-  // The sidebar search's "spend" (shell.jpg s2): items whose titles match it at the Build station.
-  // The item page's side cards (daily-work/item): a spec of $0.62 and a build of $2.38 against a $12 cap, its
-  // pull request, and an overlap with #145 on features/usage/, which it waits for.
+  // The assembly "Usage and budgets": its part 4 of 4 is goal#147 (the item page's chip links here).
+  {
+    number: 144,
+    title: 'Usage and budgets',
+    type: 'feature',
+    body: 'Show the week’s spend against the budgets, in the sidebar and on the factories.',
+    station: 'build',
+    state: 'assembly',
+    createdMin: 600,
+    updatedMin: 60,
+    steps: [],
+  },
+  // Parts 1 to 3 of "Usage and budgets", merged, so the assembly counts 4 parts in all.
+  {
+    number: 141,
+    title: 'Add the usage meter',
+    type: 'feature',
+    body: 'Count the usage each run spends, per factory.',
+    station: 'done',
+    state: 'done',
+    pr: 310,
+    assembly: 144,
+    part: 1,
+    createdMin: 580,
+    updatedMin: 500,
+    steps: [{ move: 'spec' }, { move: 'build' }, { move: 'review' }, { move: 'merge' }, { move: 'done' }],
+  },
+  {
+    number: 142,
+    title: 'Add the budget per factory',
+    type: 'feature',
+    body: 'Each factory gets a weekly budget, set by its owner.',
+    station: 'done',
+    state: 'done',
+    pr: 312,
+    assembly: 144,
+    part: 2,
+    createdMin: 400,
+    updatedMin: 380,
+    steps: [{ move: 'spec' }, { move: 'build' }, { move: 'review' }, { move: 'merge' }, { move: 'done' }],
+  },
+  {
+    number: 143,
+    title: 'Warn when a factory nears its budget',
+    type: 'feature',
+    body: 'Show a warning on the factory when the week’s spend passes 80 % of the budget.',
+    station: 'done',
+    state: 'done',
+    pr: 314,
+    assembly: 144,
+    part: 3,
+    createdMin: 260,
+    updatedMin: 240,
+    steps: [{ move: 'spec' }, { move: 'build' }, { move: 'review' }, { move: 'merge' }, { move: 'done' }],
+  },
+  // An assembly of three parts across three columns: one merged, one in review, one in spec.
+  {
+    number: 17,
+    title: 'Canvas screens for the UI revamp',
+    type: 'feature',
+    body: 'Restyle the screens the revamp covers to the canvas pictures, one part at a time.',
+    station: 'inbox',
+    state: 'assembly',
+    createdMin: 4320,
+    updatedMin: 240,
+    steps: [],
+  },
+  {
+    number: 18,
+    title: 'Restyle the Floor header and andon panel',
+    type: 'feature',
+    body: 'The Floor page, as the canvas picture draws it.',
+    station: 'done',
+    state: 'done',
+    pr: 42,
+    assembly: 17,
+    part: 1,
+    createdMin: 4300,
+    updatedMin: 300,
+    steps: [{ move: 'spec' }, { move: 'build' }, { move: 'review' }, { move: 'merge' }, { move: 'done' }],
+  },
+  {
+    number: 19,
+    title: 'Restyle the Board columns and cards',
+    type: 'feature',
+    body: 'The Board page at 768 px and up, as the canvas picture draws it.',
+    station: 'review',
+    state: 'queued',
+    assembly: 17,
+    part: 2,
+    createdMin: 200,
+    updatedMin: 20,
+    steps: [{ move: 'spec' }, { move: 'build' }, { move: 'review' }],
+  },
+  {
+    number: 20,
+    title: 'Restyle the Items list to the canvas screen',
+    type: 'feature',
+    body: 'The Items list, as the canvas picture draws it.',
+    station: 'spec',
+    state: 'queued',
+    assembly: 17,
+    part: 3,
+    createdMin: 120,
+    updatedMin: 15,
+    steps: [{ move: 'spec' }],
+  },
+  // The sidebar search's "spend" (shell.jpg s2): items whose titles match it. At Build, waiting on you
+  // (the item page's picture, item.jpg): spec accepted at Approve spec, part 4 of 4 of an assembly. Its spec and
+  // build costs against a $12 cap and its pull request feed the item page's side cards (daily-work/item).
   {
     number: 147,
-    title: "Show this week's spend",
+    title: "Show this week's spend in the sidebar",
     type: 'feature',
     lane: 'frontend',
     body: 'The sidebar shows the spend of the week against the budget, with the factories it is spent on.',
     station: 'build',
-    state: 'queued',
+    state: 'waiting_human',
     owner: 'owner',
     pr: 318,
     paths: ['features/usage/'],
-    waitsOn: { kind: 'files', number: 145 },
-    createdMin: 95,
-    updatedMin: 12,
+    createdMin: 190,
+    updatedMin: 8,
+    assembly: 144,
+    part: 4,
     outputs: {
       spec: specOutput('Show this week’s spend in the sidebar.', ['The sidebar shows the week’s spend'], 'frontend'),
       build: {
@@ -448,7 +691,9 @@ const goalSeeds: Seed[] = [
     },
     steps: [
       { move: 'spec' },
-      specRun([['Read', 'apps/web/src/features/usage', 'Read 6 files']], 0.62, 14),
+      specRun([['Read', 'web/src/features/usage/usage.tsx', 'Read 120 lines']], 0.62, 14),
+      { move: 'approve-spec' },
+      { human: 'approved', by: 'fcruz' },
       { move: 'build' },
       {
         run: 'frontend-engineer',
@@ -461,6 +706,7 @@ const goalSeeds: Seed[] = [
         cost: 2.38,
         turns: 41,
       },
+      { waiting: true },
     ],
   },
   {
@@ -468,7 +714,7 @@ const goalSeeds: Seed[] = [
     title: 'Check the spend against the budget',
     type: 'refactor',
     body: 'Compare the week’s spend with each factory’s budget and say which ones are close.',
-    station: 'build',
+    station: 'inbox',
     state: 'queued',
     paths: ['features/usage/'],
     createdMin: 120,
@@ -1304,15 +1550,72 @@ const softwareSeeds: Seed[] = [
   })),
   {
     number: 14,
-    title: 'Rework the export schema',
-    type: 'refactor',
-    body: 'The engineer needs a decision on the export schema.',
+    title: 'Show the sidebar spend for the organization',
+    type: 'feature',
+    body: 'The sidebar shows the spend of the week. The frontend engineer needs a decision on its scope.',
     station: 'build',
     state: 'waiting_human',
-    agent: 'engineer',
+    agent: 'frontend-engineer',
     createdMin: 210,
     updatedMin: 35,
-    steps: [],
+    // The pictured item (daily-work/item): an architect spec with four criteria, a frontend build with
+    // its events, and the open decision whose summary is the question the card asks.
+    outputs: {
+      spec: specOutput(
+        'Show the spend of this week in the sidebar, with the weekly budget.',
+        [
+          'The sidebar shows "Spend this week" with the amount and the weekly budget.',
+          'The bar fills to spend divided by budget and turns amber at 80%.',
+          'Choosing it opens the usage page.',
+          'It reads correctly in light and dark themes.',
+        ],
+        'web',
+      ),
+      build: {
+        summary:
+          'Should the sidebar show this week’s spend for the whole organization, or only for the factory you are in?',
+      },
+    },
+    steps: [
+      { move: 'spec' },
+      {
+        run: 'architect',
+        tools: [
+          ['Read', 'docs/design/MASTER.md', 'Read 230 lines'],
+          ['Read', 'apps/web/src/features/usage/sidebar.tsx', 'Read 88 lines'],
+        ],
+        // The reply is the spec's output: the run card lists its acceptance criteria from it.
+        message: JSON.stringify(
+          specOutput(
+            'Show the spend of this week in the sidebar, with the weekly budget.',
+            [
+              'The sidebar shows "Spend this week" with the amount and the weekly budget.',
+              'The bar fills to spend divided by budget and turns amber at 80%.',
+              'Choosing it opens the usage page.',
+              'It reads correctly in light and dark themes.',
+            ],
+            'web',
+          ),
+        ),
+        cost: 0.62,
+        turns: 14,
+      },
+      { move: 'build' },
+      {
+        run: 'frontend-engineer',
+        tools: [
+          ['Read', 'apps/web/src', 'Read 18 files'],
+          ['Edit', 'apps/web/src/features/usage/sidebar-usage.tsx', 'Edited 1 file, +48 −12'],
+          ['Write', 'apps/web/src/features/usage/sidebar-usage.test.tsx', 'Wrote 1 file'],
+        ],
+        cost: 2.38,
+        turns: 41,
+      },
+      { check: 'task check:changed', exit: 1, ms: 190_000 },
+      { note: 'Use the weekly budget, not the daily one.', by: 'Freddy Cruz' },
+      { check: 'task check:changed', exit: 0, ms: 220_000 },
+      { waiting: true },
+    ],
   },
   {
     number: 15,
@@ -1384,6 +1687,7 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
       pr_url: seed.pr ? `${repo}/pull/${seed.pr}` : null,
       ...(seed.paths ? { paths: seed.paths } : {}),
       ...(seed.waitsOn ? { waitsOn: seed.waitsOn } : {}),
+      ...(seed.assembly ? { partOf: { id: uuid(factoryIndex + 1, seed.assembly), part: seed.part ?? 1 } } : {}),
       spans: [],
     };
 
@@ -1471,6 +1775,8 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
           exit_code: step.exit,
           duration_ms: step.ms,
         });
+      } else if ('note' in step) {
+        push('note', step.by, { text: step.note });
       } else if ('gate' in step) {
         push(
           step.gate === 'approve' ? 'gate_approved' : 'gate_rejected',
@@ -1543,6 +1849,7 @@ export function seed(now = Date.now()): MockState {
           agents: ['builder-1', 'builder-2'],
           wip_limit: 2,
           copies: 2,
+          buffer: 2,
           output: 'change',
           checks: ['schema', 'task check'],
         },
@@ -1604,7 +1911,7 @@ export function seed(now = Date.now()): MockState {
     },
     history: {},
     andon: {
-      support: [
+      sre: [
         {
           id: 1,
           kind: 'manual',
@@ -1687,6 +1994,39 @@ export function seed(now = Date.now()): MockState {
         },
       },
       goal: {
+        'spec-writer': {
+          model: 'claude-opus-5-5',
+          tasks_finished: 24,
+          sent_back: { count: 1, ratio: 0.04 },
+          median_turns: 22,
+          spend_per_task_usd: 1.1,
+          task_time_p85_minutes: 40,
+          spend_usd: 26.4,
+          reasons: [],
+          denied_tool_calls: { count: 0, tools: [] },
+        },
+        'backend-engineer': {
+          model: 'claude-opus-5-5',
+          tasks_finished: 19,
+          sent_back: { count: 2, ratio: 0.12 },
+          median_turns: 22,
+          spend_per_task_usd: 1.1,
+          task_time_p85_minutes: 40,
+          spend_usd: 20.9,
+          reasons: [],
+          denied_tool_calls: { count: 0, tools: [] },
+        },
+        reviewer: {
+          model: 'claude-opus-5-5',
+          tasks_finished: 28,
+          sent_back: { count: 0, ratio: 0 },
+          median_turns: 22,
+          spend_per_task_usd: 1.1,
+          task_time_p85_minutes: 40,
+          spend_usd: 30.8,
+          reasons: [],
+          denied_tool_calls: { count: 0, tools: [] },
+        },
         builder: {
           model,
           tasks_finished: 12,
@@ -1759,8 +2099,9 @@ export function seed(now = Date.now()): MockState {
     },
   });
 
-  build(goalFactory, 0, goalSeeds, now, state);
-  build(sreFactory, 1, sreSeeds, now, state);
+  build(goalFactory, 0, [...goalSeeds, ...runsPage.software], now, state);
+  build(sreFactory, 1, [...sreSeeds, ...runsPage.sre], now, state);
+  build(supportFactory, 2, runsPage.support, now, state);
   build(softwareFactory, 4, softwareSeeds, now, state);
 
   for (const f of state.factories) state.history[f.name] = seedHistory(f, now, state.constraint[f.name] ?? null);

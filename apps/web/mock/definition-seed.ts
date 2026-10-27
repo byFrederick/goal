@@ -112,12 +112,12 @@ metadata:
   purpose: "Builds the Goal platform from this repository: engine, UI, infrastructure and its own factories."
 spec:
   runtime:
-    model: claude-sonnet-5-5
+    model: claude-opus-5-5
     modelConnection: claude
     size: large
     tools: [golangci-lint@2.1, sqlc@1.27]
     repository: { url: "https://github.com/acme/goal", connection: github }
-    budget: { weeklyUsd: 1000, perItemUsd: 12, onExhausted: drain }
+    budget: { weeklyUsd: 1000, perItemUsd: 12, maxTurnsPerTask: 150, onExhausted: drain }
   connections:
     # pull requests and issues of the repository
     - github
@@ -130,7 +130,6 @@ ${goalRules.map(([name]) => `    - { name: ${name}, source: ./rules/${name}.md }
     - name: spec-writer
       description: Turns an item into a spec with acceptance criteria.
       prompt: ./agents/spec-writer.md
-      model: claude-opus-5-5
       skills: [acme-conventions]
     - name: backend-engineer
       description: Builds Go changes from the spec.
@@ -242,7 +241,7 @@ metadata:
   purpose: Triage, investigate and document production issues and SRE toil.
 spec:
   runtime:
-    model: claude-sonnet-5-5
+    model: claude-opus-5-5
     modelConnection: claude
     budget: { weeklyUsd: 400, onExhausted: stop }
   connections: [aws-prod, datadog, pagerduty]
