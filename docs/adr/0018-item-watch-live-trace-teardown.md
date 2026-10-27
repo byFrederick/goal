@@ -1,4 +1,4 @@
-# ADR 0017 — Watch live, Trace and Teardown on an item, and OAuth consent with phase 6
+# ADR 0018 — Watch live, Trace and Teardown on an item, and OAuth consent with phase 6
 
 Status: proposed · 2026-10-27 · Builds on [ADR 0016](0016-ui-revamp.md) (the screens are the contract, design changes go canvas-first, controls for features not built yet) and [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (runs, their boxes and what they report)
 
