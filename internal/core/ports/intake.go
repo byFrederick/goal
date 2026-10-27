@@ -47,6 +47,17 @@ type Intake interface {
 	// decision 4); the firing returned is then the one recorded first. f must pass Check
 	// (domain.ErrInvalid).
 	RecordFiring(ctx context.Context, f domain.TriggerFiring) (domain.TriggerFiring, bool, error)
+	// Firing is the factory's trigger's firing with idempotency key key; false when there is none.
+	Firing(ctx context.Context, factory domain.FactoryID, trigger, key string) (domain.TriggerFiring, bool, error)
+	// FailureStreak counts the trigger's firings whose dedupe value is dedupe ("" for those
+	// without one) recorded after its newest firing with that value that created an item, or all
+	// of them when none did (only.failuresInARow).
+	FailureStreak(ctx context.Context, factory domain.FactoryID, trigger, dedupe string) (int, error)
+	// WithScheduleLock runs fn and reports true when it takes the install's schedule lock, which
+	// at most one caller holds at a time across every goald (ADR 0026 decision 4), and reports
+	// false without running fn while another holds it. The lock is freed when fn returns. ctx
+	// needs no organization.
+	WithScheduleLock(ctx context.Context, fn func(ctx context.Context) error) (bool, error)
 	// CreatedSince counts the trigger's firings that created an item at or after since
 	// (limits.perDay).
 	CreatedSince(ctx context.Context, factory domain.FactoryID, trigger string, since time.Time) (int, error)

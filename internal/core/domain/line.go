@@ -48,6 +48,9 @@ type Line struct {
 	Agents   []AgentSpec
 	// ExpediteTypes are the work types that enter with class of service expedite.
 	ExpediteTypes []string
+	// Triggers are board.triggers, in declaration order: the rules that turn events and schedules
+	// into items (ADR 0026).
+	Triggers []Trigger
 	// Flow is the line's flow policy and targets.
 	Flow FlowPolicy
 	// Purpose is what the factory is for; every agent task carries it.

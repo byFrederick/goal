@@ -76,6 +76,10 @@ type harness struct {
 	credentials *porttest.Credentials
 	// minter mints the credentials of connections whose kind mints with mintAWS.
 	minter *porttest.Minter
+	// policies is the organization policy (policy_test.go); nil applies none.
+	policies ports.OrgPolicies
+	// intake holds the trigger firings and the schedule lock every engine of the harness shares.
+	intake *porttest.Intake
 	line   domain.Line
 	logs   *logBuffer // what every engine of the harness logs
 
@@ -144,6 +148,7 @@ func newHarness(t *testing.T, line domain.Line, run porttest.AgentFunc) *harness
 	h.connections = conns
 	h.credentials = porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), h.tenancy, conns)
 	h.minter = porttest.NewMinter(clock.Now)
+	h.intake = porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), store)
 	h.e = h.engine(t, h.store)
 
 	return h
@@ -184,8 +189,8 @@ func (h *harness) engineWith(t *testing.T, store ports.Store, maxRuns int, lines
 		Store: store, Orgs: h.tenancy, Sandboxes: h.sandboxes, Contracts: h.contracts, Clock: h.clock,
 		Secrets:     porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y"},
 		Connections: h.connections, Credentials: h.credentials, CodeHosts: map[string]ports.CodeHost{codeHostGitHub: h.codehost, codeHostGitLab: h.gitlab},
-		Minters: map[string]ports.Minter{mintAWS: h.minter},
-		Logger:  slog.New(slog.NewJSONHandler(h.logs, nil)),
+		Minters: map[string]ports.Minter{mintAWS: h.minter}, Policies: h.policies, Intake: h.intake,
+		Logger: slog.New(slog.NewJSONHandler(h.logs, nil)),
 	}, engine.Config{
 		Lines:          lines,
 		MaxRuns:        maxRuns,

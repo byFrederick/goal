@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/byFrederick/goal/internal/adapters/store/postgres/db"
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -378,6 +380,78 @@ func (in *Intake) RecordFiring(ctx context.Context, f domain.TriggerFiring) (dom
 	}
 
 	return out, fresh, nil
+}
+
+// Firing implements ports.Intake.
+func (in *Intake) Firing(ctx context.Context, factory domain.FactoryID, trigger, key string) (domain.TriggerFiring, bool, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return domain.TriggerFiring{}, false, err
+	}
+
+	r, err := fetch(ctx, in.s.read, func(q *db.Queries) (db.TriggerFiringByKeyRow, error) {
+		return q.TriggerFiringByKey(ctx, db.TriggerFiringByKeyParams{FactoryID: fid, Trigger: trigger, IdempotencyKey: key})
+	})
+
+	switch {
+	case notFound(err):
+		return domain.TriggerFiring{}, false, nil
+	case err != nil:
+		return domain.TriggerFiring{}, false, fmt.Errorf("firing of %s: %w", trigger, err)
+	default:
+		return firingFrom(r), true, nil
+	}
+}
+
+// FailureStreak implements ports.Intake.
+func (in *Intake) FailureStreak(ctx context.Context, factory domain.FactoryID, trigger, dedupe string) (int, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return 0, err
+	}
+
+	n, err := fetch(ctx, in.s.read, func(q *db.Queries) (int64, error) {
+		return q.TriggerFailureStreak(ctx, db.TriggerFailureStreakParams{FactoryID: fid, Trigger: trigger, Dedupe: dedupe})
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failure streak of %s: %w", trigger, err)
+	}
+
+	return int(n), nil
+}
+
+// scheduleLock is the session advisory lock key of the schedules, per schema as Migrate's is.
+const scheduleLock = "SELECT pg_try_advisory_lock(hashtext('goal.intake.schedules.' || current_schema()))"
+
+// WithScheduleLock implements ports.Intake. The lock is a session advisory lock on a connection
+// of its own, opened from the pool's config and not taken from the pool, straight to PostgreSQL
+// (ADR 0026 decision 4: a pooler that drops session locks must not sit between); closing that
+// connection frees it, even if goald dies while fn runs.
+func (in *Intake) WithScheduleLock(ctx context.Context, fn func(ctx context.Context) error) (ran bool, err error) {
+	conn, err := pgx.ConnectConfig(ctx, in.s.pool.Config().ConnConfig.Copy())
+	if err != nil {
+		return false, fmt.Errorf("schedule lock: connect: %w", err)
+	}
+
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), closeTimeout)
+		defer cancel()
+
+		if cerr := conn.Close(closeCtx); cerr != nil {
+			err = errors.Join(err, fmt.Errorf("schedule lock: close: %w", cerr))
+		}
+	}()
+
+	var held bool
+	if err := conn.QueryRow(ctx, scheduleLock).Scan(&held); err != nil {
+		return false, fmt.Errorf("schedule lock: %w", err)
+	}
+
+	if !held {
+		return false, nil
+	}
+
+	return true, fn(ctx)
 }
 
 // CreatedSince implements ports.Intake.
