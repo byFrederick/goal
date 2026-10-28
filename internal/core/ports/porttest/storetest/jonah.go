@@ -17,6 +17,8 @@ var jonahTests = []struct {
 	test func(f *fixture)
 }{
 	{"Jonah_SecondReviewInFlightRefused", testJonahOneInFlight},
+	// A Jonah run without an item, beside the Runs_ cases it is named with.
+	{"Runs_JonahWithoutItem", testRunsJonahWithoutItem},
 	{"Jonah_ExpiredLeaseReclaimed", testJonahLeaseReclaimed},
 	{"Jonah_ProposalsNumberedPerFactory", testJonahNumbers},
 	{"Jonah_PathOutsideAllowlistRefused", testJonahPathRefused},

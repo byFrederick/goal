@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
@@ -55,49 +56,9 @@ func TestRunTask_Jonah(t *testing.T) {
 		t.Fatalf("%d prepares and %d agent runs; want one of each", len(prepares), len(runs))
 	}
 
-	box := prepares[0].Sandbox
-	if box.ItemID != "" || box.Station != "" || box.Agent != agJonah || box.FactoryID != factoryID || box.OrgID != testOrg {
-		t.Errorf("sandbox = %+v; want the factory's, for agent %s, without an item or a station", box, agJonah)
-	}
-
-	// The repository connection's git password is the only variable prepare ever gets from a
-	// connection; no repository, no clone.
-	for name, v := range prepares[0].Env {
-		if name == envCodeToken || strings.Contains(v, codeToken) {
-			t.Errorf("prepare got %s, the repository's git login; a Jonah run clones no repository", name)
-		}
-	}
-
-	agent := runs[0].Env
-	if agent[envModelKey] != modelKey {
-		t.Errorf("the agent's %s = %q; want the model connection's key", envModelKey, agent[envModelKey])
-	}
-
-	for name, v := range agent {
-		for _, secret := range []string{codeToken, trackerToken, otherToken, cloudKey, deployKeyValue} {
-			if strings.Contains(v, secret) {
-				t.Errorf("the agent's %s holds a secret of a connection or credential other than the model's", name)
-			}
-		}
-	}
-
-	if got := agent["GOAL_FEEDBACK"]; got != jonahRequest().Brief {
-		t.Errorf("the agent's GOAL_FEEDBACK = %q; want the request's brief and no workspace note", got)
-	}
-
-	run, err := h.store.Run(inOrg(t), box.RunID)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-
-	if run.ItemID != "" || run.Station != "" || run.Agent != agJonah || run.DefinitionVersionID != v1 ||
-		run.Result.Status != domain.RunSucceeded || run.Result.CostUSD != 0.25 {
-		t.Errorf("run = %+v; want a finished run of agent %s on %s without an item, with its cost", run, agJonah, v1)
-	}
-
-	if usd, err := h.store.JonahSpendSince(inOrg(t), factoryID, t0); err != nil || usd != 0.25 {
-		t.Errorf("JonahSpendSince = %v, %v; want 0.25: the run is of kind jonah", usd, err)
-	}
+	expectNoClone(t, prepares[0])
+	expectOnlyModelEnv(t, runs[0].Env)
+	h.expectJonahRun(t, prepares[0].Sandbox.RunID)
 
 	if events := h.store.Events(""); len(events) != 0 {
 		t.Errorf("events without an item = %+v; want none", events)
@@ -136,5 +97,64 @@ func TestRunTask_RefusesWhatAJonahRunMayNotHave(t *testing.T) {
 				t.Errorf("%d prepares; want none", n)
 			}
 		})
+	}
+}
+
+// expectNoClone fails the test unless prepare ran in the factory's sandbox for agJonah, without an
+// item or a station, and without the repository connection's git password: the only variable
+// prepare ever gets from a connection. No repository, no clone.
+func expectNoClone(t *testing.T, prepare porttest.ExecCall) {
+	t.Helper()
+
+	box := prepare.Sandbox
+	if box.ItemID != "" || box.Station != "" || box.Agent != agJonah || box.FactoryID != factoryID || box.OrgID != testOrg {
+		t.Errorf("sandbox = %+v; want the factory's, for agent %s, without an item or a station", box, agJonah)
+	}
+
+	for name, v := range prepare.Env {
+		if name == envCodeToken || strings.Contains(v, codeToken) {
+			t.Errorf("prepare got %s, the repository's git login; a Jonah run clones no repository", name)
+		}
+	}
+}
+
+// expectOnlyModelEnv fails the test unless the agent's env has the model connection's key, no
+// secret of another connection or credential, and the request's brief alone as its feedback.
+func expectOnlyModelEnv(t *testing.T, env map[string]string) {
+	t.Helper()
+
+	if env[envModelKey] != modelKey {
+		t.Errorf("the agent's %s = %q; want the model connection's key", envModelKey, env[envModelKey])
+	}
+
+	others := []string{codeToken, trackerToken, otherToken, cloudKey, deployKeyValue}
+	for name, v := range env {
+		if slices.ContainsFunc(others, func(secret string) bool { return strings.Contains(v, secret) }) {
+			t.Errorf("the agent's %s holds a secret of a connection or credential other than the model's", name)
+		}
+	}
+
+	if got := env["GOAL_FEEDBACK"]; got != jonahRequest().Brief {
+		t.Errorf("the agent's GOAL_FEEDBACK = %q; want the request's brief and no workspace note", got)
+	}
+}
+
+// expectJonahRun fails the test unless run is a finished run of kind jonah of agJonah on v1,
+// without an item or a station, that cost 0.25.
+func (h *harness) expectJonahRun(t *testing.T, id domain.RunID) {
+	t.Helper()
+
+	run, err := h.store.Run(inOrg(t), id)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if run.ItemID != "" || run.Station != "" || run.Agent != agJonah || run.DefinitionVersionID != v1 ||
+		run.Result.Status != domain.RunSucceeded || run.Result.CostUSD != 0.25 {
+		t.Errorf("run = %+v; want a finished run of agent %s on %s without an item, with its cost", run, agJonah, v1)
+	}
+
+	if usd, err := h.store.JonahSpendSince(inOrg(t), factoryID, t0); err != nil || usd != 0.25 {
+		t.Errorf("JonahSpendSince = %v, %v; want 0.25: the run is of kind jonah", usd, err)
 	}
 }

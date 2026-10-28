@@ -238,15 +238,11 @@ func (e *Engine) openCredentials(ctx context.Context, resolved []domain.Resolved
 	}
 
 	byName := make(map[string]domain.Credential, len(all))
-
-	var names []string
-
 	for _, c := range all {
 		byName[c.Name] = c
-		if listed && c.ForAgent(use.Factory, use.Agent) {
-			names = append(names, c.Name)
-		}
 	}
+
+	names := listedCredentials(all, use, listed)
 
 	for _, cred := range slices.Sorted(maps.Keys(refs)) {
 		users := strings.Join(slices.Sorted(slices.Values(refs[cred])), ", ")
@@ -277,6 +273,20 @@ func (e *Engine) openCredentials(ctx context.Context, resolved []domain.Resolved
 		slog.Any("credentials", names))
 
 	return opened, nil
+}
+
+// listedCredentials are the names of the credentials of all whose agent list names use's agent
+// for its factory; none unless listed is set.
+func listedCredentials(all []domain.Credential, use domain.CredentialUse, listed bool) []string {
+	var names []string
+
+	for _, c := range all {
+		if listed && c.ForAgent(use.Factory, use.Agent) {
+			names = append(names, c.Name)
+		}
+	}
+
+	return names
 }
 
 // mintMargin is how much longer than a run's task timeout minted credentials live (spec 4 §4.5).

@@ -204,6 +204,9 @@ func sameSummary(t *testing.T, what string, got, want domain.RunSummary) {
 	}
 }
 
+// agJonah is the agent name of the suite's Jonah runs.
+const agJonah = "jonah"
+
 // testRunsJonahWithoutItem: a Jonah run works no item. It starts and finishes with its cost, in
 // its organization only, and writes no item event, which PostgreSQL would refuse without an item
 // (item_events.item_id is NOT NULL); a station run still needs an item that exists.
@@ -212,7 +215,7 @@ func testRunsJonahWithoutItem(f *fixture) {
 	t2 := t1.Add(time.Minute)
 
 	id, err := f.Store.StartRun(f.ctx(t), ports.NewRun{
-		FactoryID: f.factory, Agent: "jonah", Model: model, StartedAt: t1, Kind: domain.RunKindJonah,
+		FactoryID: f.factory, Agent: agJonah, Model: model, StartedAt: t1, Kind: domain.RunKindJonah,
 	})
 	if err != nil {
 		t.Fatalf("StartRun of a jonah run without an item: %v", err)
@@ -224,7 +227,7 @@ func testRunsJonahWithoutItem(f *fixture) {
 	}
 
 	got, err := f.Store.Run(f.ctx(t), id)
-	want := domain.Run{ID: id, FactoryID: f.factory, Agent: "jonah", Model: model, Result: res, StartedAt: t1, EndedAt: t2}
+	want := domain.Run{ID: id, FactoryID: f.factory, Agent: agJonah, Model: model, Result: res, StartedAt: t1, EndedAt: t2}
 
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -241,7 +244,7 @@ func testRunsJonahWithoutItem(f *fixture) {
 	_, err = f.Store.Run(other.ctx(t), id)
 	expect(t, "Run of another org's jonah run", err, ports.ErrNotFound)
 
-	_, err = f.Store.StartRun(other.ctx(t), ports.NewRun{FactoryID: f.factory, Agent: "jonah", StartedAt: t1, Kind: domain.RunKindJonah})
+	_, err = f.Store.StartRun(other.ctx(t), ports.NewRun{FactoryID: f.factory, Agent: agJonah, StartedAt: t1, Kind: domain.RunKindJonah})
 	expect(t, "StartRun of a jonah run in another org's factory", err, ports.ErrNotFound)
 
 	for _, item := range []domain.ItemID{"", missingItem} {

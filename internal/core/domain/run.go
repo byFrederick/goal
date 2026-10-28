@@ -171,13 +171,20 @@ func (r RunRequest) Check() error {
 	case r.OrgID == "" || r.FactoryID == "" || r.Agent == "" || r.ModelConnection == "":
 		return fmt.Errorf("%w: it needs an organization, a factory, an agent and a model connection", ErrBadRunRequest)
 	case r.Kind == RunKindJonah:
-		if r.Item != "" || r.Station != "" || r.Lease != nil || r.Repository != (Repository{}) || len(r.Connections) > 0 {
-			return fmt.Errorf("%w: a Jonah run has no item, station, lease, repository or connection but the model's", ErrBadRunRequest)
-		}
+		return r.checkJonah()
 	case r.Kind != "" && r.Kind != RunKindStation:
 		return fmt.Errorf("%w: unknown run kind %q", ErrBadRunRequest, r.Kind)
 	case r.Item == "" || r.Station == "":
 		return fmt.Errorf("%w: a station run needs its item and station", ErrBadRunRequest)
+	}
+
+	return nil
+}
+
+// checkJonah refuses a Jonah run with what ADR 0034 decision 1 leaves out of it.
+func (r RunRequest) checkJonah() error {
+	if r.Item != "" || r.Station != "" || r.Lease != nil || r.Repository != (Repository{}) || len(r.Connections) > 0 {
+		return fmt.Errorf("%w: a Jonah run has no item, station, lease, repository or connection but the model's", ErrBadRunRequest)
 	}
 
 	return nil
