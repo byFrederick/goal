@@ -19,6 +19,8 @@ type dropped struct {
 }
 
 func TestReviews_Validate(t *testing.T) {
+	t.Parallel()
+
 	const secret = "the content never logged"
 
 	cases := []struct {
@@ -63,26 +65,28 @@ func TestReviews_Validate(t *testing.T) {
 		}},
 		{
 			name: "threshold review at proposeAfter", trigger: domain.JonahThreshold, kept: true,
-			obs: []observation{{Summary: "Tests are missing", Items: []string{"#1"}, Count: 5, Proposal: ptr(0)}},
+			obs: []observation{{Summary: testsMissing, Items: []string{"#1"}, Count: 5, Proposal: new(0)}},
 		},
 		{
 			name: "threshold review below proposeAfter", trigger: domain.JonahThreshold, drop: "threshold", watching: 1,
-			obs: []observation{{Summary: "Tests are missing", Items: []string{"#1"}, Count: 4, Proposal: ptr(0)}},
+			obs: []observation{{Summary: testsMissing, Items: []string{"#1"}, Count: 4, Proposal: new(0)}},
 		},
 		{name: "threshold review with no observation", trigger: domain.JonahThreshold, drop: "threshold"},
 		{
 			name: "manual review below proposeAfter", trigger: domain.JonahManual, kept: true,
-			obs: []observation{{Summary: "Tests are missing", Items: []string{"#1"}, Count: 1, Proposal: ptr(0)}},
+			obs: []observation{{Summary: testsMissing, Items: []string{"#1"}, Count: 1, Proposal: new(0)}},
 		},
 		{
 			name: "observation of a dropped proposal", trigger: domain.JonahManual, drop: "path", watching: 1,
 			edit: func(p *proposal, _ domain.SentBack) { p.Files[0].Path = "evals/cases/one.yaml" },
-			obs:  []observation{{Summary: "Tests are missing", Items: []string{"#1"}, Count: 5, Proposal: ptr(0)}},
+			obs:  []observation{{Summary: testsMissing, Items: []string{"#1"}, Count: 5, Proposal: new(0)}},
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			w := newReviewWorld(t)
 
 			// One event before the review's window, which it does not read, and one in it.
@@ -90,26 +94,16 @@ func TestReviews_Validate(t *testing.T) {
 			w.sentBack(stBuild, rt0.Add(-time.Hour), "missed the test")
 
 			r := w.queue(tc.trigger)
-
-			all, err := w.store.SentBackBetween(w.ctx(), reviewFactory, rt0.Add(-2*jonah30Days), rt0, 10)
-			if err != nil || len(all) != 2 {
-				t.Fatalf("SentBackBetween = %+v, %v; want 2", all, err)
-			}
-
-			foreign, inside := all[0], all[1]
+			foreign, inside := w.oldAndNew()
 
 			p := newProposal("Ask for tests", writerPath, inside, domain.MetricSentBackRate)
 			p.Files[0].Content = secret
+
 			if tc.edit != nil {
 				tc.edit(&p, foreign)
 			}
 
-			raw, err := json.Marshal(output{Observations: nonNilObs(tc.obs), Proposals: []proposal{p}})
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) { return succeeded(string(raw)), nil }
+			w.answer(output{Observations: nonNilObs(tc.obs), Proposals: []proposal{p}})
 
 			if n := w.work(); n != 1 {
 				t.Fatalf("Work finished %d, want 1", n)
@@ -119,22 +113,8 @@ func TestReviews_Validate(t *testing.T) {
 				t.Fatalf("review = %+v, want done", got)
 			}
 
-			ps, err := w.store.Proposals(w.ctx(), ports.ProposalQuery{Factory: reviewFactory, Limit: 10})
-			if err != nil {
-				t.Fatalf("Proposals: %v", err)
-			}
-
-			if kept := len(ps) == 1; kept != tc.kept {
-				t.Errorf("proposals stored = %d, want kept %v", len(ps), tc.kept)
-			}
-
-			var drops []dropped
-			for _, rec := range w.logged("jonah proposal dropped") {
-				if rec["review_id"] != string(r.ID) {
-					t.Errorf("dropped record %v names review %v, want %s", rec, rec["review_id"], r.ID)
-				}
-
-				drops = append(drops, dropped{index: int(rec["proposal"].(float64)), reason: rec["reason"].(string)})
+			if n := len(w.proposals()); (n == 1) != tc.kept {
+				t.Errorf("proposals stored = %d, want kept %v", n, tc.kept)
 			}
 
 			var want []dropped
@@ -142,30 +122,94 @@ func TestReviews_Validate(t *testing.T) {
 				want = []dropped{{0, tc.drop}}
 			}
 
-			if !slices.Equal(drops, want) {
-				t.Errorf("dropped = %+v, want %+v", drops, want)
+			if got := w.drops(r.ID); !slices.Equal(got, want) {
+				t.Errorf("dropped = %+v, want %+v", got, want)
 			}
 
 			if strings.Contains(w.log.String(), secret) {
 				t.Errorf("the log holds a proposal's content: %s", w.log)
 			}
 
-			obs, err := w.store.Observations(w.ctx(), reviewFactory, 10)
-			if err != nil || len(obs) != len(tc.obs) {
-				t.Fatalf("Observations = %+v, %v; want %d", obs, err, len(tc.obs))
-			}
-
-			watching := 0
-			for _, o := range obs {
-				if o.State == domain.ObservationWatching {
-					watching++
-				}
-			}
-
-			if watching != tc.watching {
-				t.Errorf("watching observations = %d, want %d", watching, tc.watching)
-			}
+			w.expectWatching(len(tc.obs), tc.watching)
 		})
+	}
+}
+
+// oldAndNew are the two sent-back events of TestReviews_Validate: the one before the review's
+// window and the one in it.
+func (w *reviewWorld) oldAndNew() (domain.SentBack, domain.SentBack) {
+	w.t.Helper()
+
+	all, err := w.store.SentBackBetween(w.ctx(), reviewFactory, rt0.Add(-2*jonah30Days), rt0, 10)
+	if err != nil || len(all) != 2 {
+		w.t.Fatalf("SentBackBetween = %+v, %v; want 2", all, err)
+	}
+
+	return all[0], all[1]
+}
+
+// answer makes every review run succeed with out.
+func (w *reviewWorld) answer(out output) {
+	w.t.Helper()
+
+	raw, err := json.Marshal(out)
+	if err != nil {
+		w.t.Fatal(err)
+	}
+
+	w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) { return succeeded(string(raw)), nil }
+}
+
+func (w *reviewWorld) proposals() []domain.Proposal {
+	w.t.Helper()
+
+	ps, err := w.store.Proposals(w.ctx(), ports.ProposalQuery{Factory: reviewFactory, Limit: 10})
+	if err != nil {
+		w.t.Fatalf("Proposals: %v", err)
+	}
+
+	return ps
+}
+
+// drops are the `jonah proposal dropped` records, each of which must name review.
+func (w *reviewWorld) drops(review domain.JonahReviewID) []dropped {
+	w.t.Helper()
+
+	var out []dropped
+
+	for _, rec := range w.logged("jonah proposal dropped") {
+		index, okIndex := rec["proposal"].(float64)
+		reason, okReason := rec["reason"].(string)
+
+		if rec["review_id"] != string(review) || !okIndex || !okReason {
+			w.t.Errorf("dropped record %v, want review_id %s, a proposal index and a reason", rec, review)
+		}
+
+		out = append(out, dropped{index: int(index), reason: reason})
+	}
+
+	return out
+}
+
+// expectWatching checks that n observations are stored, watching of them watching.
+func (w *reviewWorld) expectWatching(n, watching int) {
+	w.t.Helper()
+
+	obs, err := w.store.Observations(w.ctx(), reviewFactory, 10)
+	if err != nil || len(obs) != n {
+		w.t.Fatalf("Observations = %+v, %v; want %d", obs, err, n)
+	}
+
+	got := 0
+
+	for _, o := range obs {
+		if o.State == domain.ObservationWatching {
+			got++
+		}
+	}
+
+	if got != watching {
+		w.t.Errorf("watching observations = %d, want %d", got, watching)
 	}
 }
 

@@ -80,24 +80,7 @@ func NewReviews(d ReviewDeps, c ReviewConfig) *Reviews {
 // Run sweeps and works the queue at once and then each time every passes, until ctx ends;
 // failures are logged and retried on the next round.
 func (r *Reviews) Run(ctx context.Context, every time.Duration) {
-	t := r.d.Clock.NewTicker(every)
-	defer t.Stop()
-
-	for {
-		if err := r.Sweep(ctx); err != nil && ctx.Err() == nil {
-			r.log.WarnContext(ctx, "jonah review sweep", slog.Any("error", err))
-		}
-
-		if _, err := r.Work(ctx); err != nil && ctx.Err() == nil {
-			r.log.WarnContext(ctx, "jonah review work", slog.Any("error", err))
-		}
-
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C():
-		}
-	}
+	rounds(ctx, r.d.Clock, every, r.log, "jonah review", r.Sweep, r.Work)
 }
 
 // Sweep queues a threshold review of each factory of every live organization whose

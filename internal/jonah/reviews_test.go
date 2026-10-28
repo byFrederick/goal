@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -270,16 +271,16 @@ func (w *reviewWorld) logged(msg string) []map[string]any {
 }
 
 func TestReviews_Sweep(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name  string
 		setup func(w *reviewWorld)
-		// want is the trigger of the factory's newest review, "" for none.
+		// want is the trigger of the factory's only review after the sweep, "" for none.
 		want domain.JonahTrigger
-		// count is how many reviews the factory has after the sweep.
-		count int
 	}{
 		{name: "below the threshold", setup: func(w *reviewWorld) { w.sentBacks(4) }},
-		{name: "at the threshold", setup: func(w *reviewWorld) { w.sentBacks(5) }, want: domain.JonahThreshold, count: 1},
+		{name: "at the threshold", setup: func(w *reviewWorld) { w.sentBacks(5) }, want: domain.JonahThreshold},
 		{name: "budget spent", setup: func(w *reviewWorld) {
 			w.sentBacks(5)
 			w.spend(6, rt0.Add(-6*24*time.Hour))
@@ -288,23 +289,16 @@ func TestReviews_Sweep(t *testing.T) {
 		{name: "budget spent before the window", setup: func(w *reviewWorld) {
 			w.sentBacks(5)
 			w.spend(10, rt0.Add(-jonah.BudgetWindow-time.Hour))
-		}, want: domain.JonahThreshold, count: 1},
+		}, want: domain.JonahThreshold},
 		{name: "review in flight", setup: func(w *reviewWorld) {
 			w.sentBacks(5)
 			w.queue(domain.JonahManual)
-		}, want: domain.JonahManual, count: 1},
+		}, want: domain.JonahManual},
 		{name: "touches before the last review's window ended", setup: func(w *reviewWorld) {
 			w.sentBacks(5)
-			r := w.queue(domain.JonahManual)
-			claimed, err := w.store.ClaimJonahReview(w.ctx(), rt0, time.Minute)
-			if err != nil || claimed.ID != r.ID {
-				t.Fatalf("ClaimJonahReview = %+v, %v", claimed, err)
-			}
-			if _, _, err := w.store.FinishJonahReview(w.ctx(), claimed, domain.JonahReviewResult{State: domain.JonahDone, At: rt0}); err != nil {
-				t.Fatalf("FinishJonahReview: %v", err)
-			}
+			w.finishedReview()
 			w.clock.Advance(time.Hour)
-		}, want: domain.JonahManual, count: 1},
+		}, want: domain.JonahManual},
 		{name: "learning off", setup: func(w *reviewWorld) {
 			w.sentBacks(5)
 			w.defs.line.Jonah.Enabled = false
@@ -313,6 +307,8 @@ func TestReviews_Sweep(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			w := newReviewWorld(t)
 			tc.setup(w)
 
@@ -320,87 +316,58 @@ func TestReviews_Sweep(t *testing.T) {
 				t.Fatalf("Sweep: %v", err)
 			}
 
-			rs := w.reviews()
-			if len(rs) != tc.count {
-				t.Fatalf("reviews = %+v, want %d", rs, tc.count)
-			}
-
-			if tc.count == 0 {
-				return
-			}
-
-			if rs[0].Trigger != tc.want {
-				t.Errorf("trigger = %s, want %s", rs[0].Trigger, tc.want)
-			}
-
-			if tc.want == domain.JonahThreshold {
-				now := w.clock.Now()
-				if rs[0].VersionID != reviewVersion || !rs[0].WindowStart.Equal(now.Add(-jonah.FirstWindow)) || !rs[0].WindowEnd.Equal(now) ||
-					rs[0].State != domain.JonahPending || rs[0].CreatedBy == "" {
-					t.Errorf("threshold review = %+v, want a pending review of %s over the first window", rs[0], reviewVersion)
-				}
-			}
+			w.expectSwept(tc.want)
 		})
 	}
 }
 
+// finishedReview queues, claims and finishes a manual review over the first window.
+func (w *reviewWorld) finishedReview() {
+	w.t.Helper()
+
+	r := w.queue(domain.JonahManual)
+
+	claimed, err := w.store.ClaimJonahReview(w.ctx(), rt0, time.Minute)
+	if err != nil || claimed.ID != r.ID {
+		w.t.Fatalf("ClaimJonahReview = %+v, %v", claimed, err)
+	}
+
+	if _, _, err := w.store.FinishJonahReview(w.ctx(), claimed, domain.JonahReviewResult{State: domain.JonahDone, At: rt0}); err != nil {
+		w.t.Fatalf("FinishJonahReview: %v", err)
+	}
+}
+
+// expectSwept checks that the factory has one review of trigger want, none when want is "", and
+// that a threshold review is pending on the line's version over the first window.
+func (w *reviewWorld) expectSwept(want domain.JonahTrigger) {
+	w.t.Helper()
+
+	rs := w.reviews()
+
+	switch {
+	case want == "" && len(rs) == 0:
+		return
+	case want == "" || len(rs) != 1:
+		w.t.Fatalf("reviews = %+v, want one of trigger %q", rs, want)
+	case rs[0].Trigger != want:
+		w.t.Fatalf("trigger = %s, want %s", rs[0].Trigger, want)
+	case want != domain.JonahThreshold:
+		return
+	}
+
+	now := w.clock.Now()
+	if r := rs[0]; r.VersionID != reviewVersion || !r.WindowStart.Equal(now.Add(-jonah.FirstWindow)) || !r.WindowEnd.Equal(now) ||
+		r.State != domain.JonahPending || r.CreatedBy == "" {
+		w.t.Errorf("threshold review = %+v, want a pending review of %s over the first window", r, reviewVersion)
+	}
+}
+
 func TestReviews_Work(t *testing.T) {
-	t.Run("claims and runs one jonah run", func(t *testing.T) {
-		w := newReviewWorld(t)
-		queued := w.queue(domain.JonahManual)
+	t.Parallel()
 
-		var lease time.Time
-
-		w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
-			lease = w.reviews()[0].LeaseUntil
-
-			return succeeded(`{"observations": [], "proposals": []}`), nil
-		}
-
-		if n := w.work(); n != 1 {
-			t.Fatalf("Work finished %d, want 1", n)
-		}
-
-		reqs := w.runner.requests()
-		if len(reqs) != 1 {
-			t.Fatalf("runs = %d, want 1", len(reqs))
-		}
-
-		want := domain.RunRequest{
-			OrgID: w.org, FactoryID: reviewFactory, Version: reviewVersion, Kind: domain.RunKindJonah, Agent: jonah.ReviewAgent,
-			Model: reviewModel, Bundle: domain.TaskKindJonah, WindowStart: queued.WindowStart, WindowEnd: queued.WindowEnd, Manual: true,
-			ModelConnection: modelConn, Size: domain.SandboxSmall, Timeout: reviewTimeout,
-		}
-		if got := reqs[0]; !runRequestEqual(got, want) {
-			t.Errorf("run request =\n%+v\nwant\n%+v", got, want)
-		}
-
-		if err := reqs[0].Check(); err != nil {
-			t.Errorf("run request Check: %v", err)
-		}
-
-		if !lease.Equal(rt0.Add(reviewTimeout + reviewMargin)) {
-			t.Errorf("lease until %v, want %v", lease, rt0.Add(reviewTimeout+reviewMargin))
-		}
-
-		if r := w.reviews()[0]; r.State != domain.JonahDone || r.Attempts != 1 {
-			t.Errorf("review = %+v, want done after one attempt", r)
-		}
-
-		if n := w.work(); n != 0 || len(w.runner.requests()) != 1 {
-			t.Errorf("a second Work finished %d and ran %d, want nothing more", n, len(w.runner.requests()))
-		}
-	})
-
-	t.Run("threshold review is not manual", func(t *testing.T) {
-		w := newReviewWorld(t)
-		w.queue(domain.JonahThreshold)
-		w.work()
-
-		if reqs := w.runner.requests(); len(reqs) != 1 || reqs[0].Manual {
-			t.Errorf("runs = %+v, want one that is not manual", reqs)
-		}
-	})
+	t.Run("claims and runs one jonah run", testWorkRuns)
+	t.Run("threshold review is not manual", testWorkThreshold)
+	t.Run("lost lease", testWorkLeaseLost)
 
 	failures := []struct {
 		name  string
@@ -428,6 +395,8 @@ func TestReviews_Work(t *testing.T) {
 
 	for _, tc := range failures {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			w := newReviewWorld(t)
 			w.queue(domain.JonahManual)
 			tc.setup(w)
@@ -440,53 +409,114 @@ func TestReviews_Work(t *testing.T) {
 				t.Errorf("runs = %d, want %d", n, tc.runs)
 			}
 
-			r := w.reviews()[0]
-			if r.State != domain.JonahFailed || !strings.Contains(r.Error, tc.error) {
+			if r := w.reviews()[0]; r.State != domain.JonahFailed || !strings.Contains(r.Error, tc.error) {
 				t.Errorf("review = %s %q, want failed with %q", r.State, r.Error, tc.error)
 			}
 		})
 	}
-
-	t.Run("lost lease", func(t *testing.T) {
-		w := newReviewWorld(t)
-		w.queue(domain.JonahManual)
-
-		w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
-			// The run outlives its lease and another instance claims the review.
-			w.clock.Advance(reviewTimeout + reviewMargin + time.Second)
-
-			if _, err := w.store.ClaimJonahReview(w.ctx(), w.clock.Now(), time.Hour); err != nil {
-				t.Fatalf("second claim: %v", err)
-			}
-
-			return succeeded(`{"observations": [], "proposals": []}`), nil
-		}
-
-		n, err := w.loop.Work(t.Context())
-		if err != nil || n != 0 {
-			t.Fatalf("Work = %d, %v; want 0 and no error", n, err)
-		}
-
-		if len(w.logged("jonah review lease lost")) != 1 {
-			t.Errorf("log = %s, want one jonah review lease lost", w.log)
-		}
-
-		if r := w.reviews()[0]; r.State != domain.JonahRunning || r.Attempts != 2 {
-			t.Errorf("review = %+v, want running under the second claim", r)
-		}
-	})
 }
 
-// runRequestEqual compares the fields a review run sets.
-func runRequestEqual(a, b domain.RunRequest) bool {
-	return a.OrgID == b.OrgID && a.FactoryID == b.FactoryID && a.Version == b.Version && a.Kind == b.Kind && a.Agent == b.Agent &&
-		a.Model == b.Model && a.Bundle == b.Bundle && a.WindowStart.Equal(b.WindowStart) && a.WindowEnd.Equal(b.WindowEnd) &&
-		a.Manual == b.Manual && a.ModelConnection == b.ModelConnection && a.Size == b.Size && a.Timeout == b.Timeout &&
-		a.Item == "" && a.Station == "" && a.Lease == nil && a.Repository == (domain.Repository{}) && len(a.Connections) == 0 &&
-		a.Brief == "" && a.Branch == "" && a.Base == ""
+func testWorkRuns(t *testing.T) {
+	t.Parallel()
+
+	w := newReviewWorld(t)
+	queued := w.queue(domain.JonahManual)
+
+	var lease time.Time
+
+	w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
+		lease = w.reviews()[0].LeaseUntil
+
+		return succeeded(`{"observations": [], "proposals": []}`), nil
+	}
+
+	if n := w.work(); n != 1 {
+		t.Fatalf("Work finished %d, want 1", n)
+	}
+
+	reqs := w.runner.requests()
+	if len(reqs) != 1 {
+		t.Fatalf("runs = %d, want 1", len(reqs))
+	}
+
+	// No item, station, lease, repository or connection but the model's.
+	want := domain.RunRequest{
+		OrgID: w.org, FactoryID: reviewFactory, Version: reviewVersion, Kind: domain.RunKindJonah, Agent: jonah.ReviewAgent,
+		Model: reviewModel, Bundle: domain.TaskKindJonah, WindowStart: queued.WindowStart, WindowEnd: queued.WindowEnd, Manual: true,
+		ModelConnection: modelConn, Size: domain.SandboxSmall, Timeout: reviewTimeout,
+	}
+	if !reflect.DeepEqual(reqs[0], want) {
+		t.Errorf("run request =\n%+v\nwant\n%+v", reqs[0], want)
+	}
+
+	if err := reqs[0].Check(); err != nil {
+		t.Errorf("run request Check: %v", err)
+	}
+
+	if !lease.Equal(rt0.Add(reviewTimeout + reviewMargin)) {
+		t.Errorf("lease until %v, want %v", lease, rt0.Add(reviewTimeout+reviewMargin))
+	}
+
+	if r := w.reviews()[0]; r.State != domain.JonahDone || r.Attempts != 1 {
+		t.Errorf("review = %+v, want done after one attempt", r)
+	}
+
+	if n := w.work(); n != 0 || len(w.runner.requests()) != 1 {
+		t.Errorf("a second Work finished %d and ran %d, want nothing more", n, len(w.runner.requests()))
+	}
 }
+
+func testWorkThreshold(t *testing.T) {
+	t.Parallel()
+
+	w := newReviewWorld(t)
+	w.queue(domain.JonahThreshold)
+	w.work()
+
+	if reqs := w.runner.requests(); len(reqs) != 1 || reqs[0].Manual {
+		t.Errorf("runs = %+v, want one that is not manual", reqs)
+	}
+}
+
+func testWorkLeaseLost(t *testing.T) {
+	t.Parallel()
+
+	w := newReviewWorld(t)
+	w.queue(domain.JonahManual)
+
+	w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
+		// The run outlives its lease and another instance claims the review.
+		w.clock.Advance(reviewTimeout + reviewMargin + time.Second)
+
+		if _, err := w.store.ClaimJonahReview(w.ctx(), w.clock.Now(), time.Hour); err != nil {
+			t.Errorf("second claim: %v", err)
+		}
+
+		return succeeded(`{"observations": [], "proposals": []}`), nil
+	}
+
+	n, err := w.loop.Work(t.Context())
+	if err != nil || n != 0 {
+		t.Fatalf("Work = %d, %v; want 0 and no error", n, err)
+	}
+
+	if len(w.logged("jonah review lease lost")) != 1 {
+		t.Errorf("log = %s, want one jonah review lease lost", w.log)
+	}
+
+	if r := w.reviews()[0]; r.State != domain.JonahRunning || r.Attempts != 2 {
+		t.Errorf("review = %+v, want running under the second claim", r)
+	}
+}
+
+const (
+	testsMissing       = "Tests are missing"
+	screenshotsMissing = "Screenshots are missing"
+)
 
 func TestReviews_Finish(t *testing.T) {
+	t.Parallel()
+
 	w := newReviewWorld(t)
 
 	w.sentBack(stBuild, rt0.Add(-2*time.Hour), "missed the test")
@@ -507,8 +537,8 @@ func TestReviews_Finish(t *testing.T) {
 
 	out := output{
 		Observations: []observation{
-			{Summary: "Tests are missing", Detail: "two items", Items: []string{"#1", "#2", "#99"}, Count: 2, Proposal: ptr(1)},
-			{Summary: "Screenshots are missing", Detail: "", Items: []string{"#2"}, Count: 1},
+			{Summary: testsMissing, Detail: "two items", Items: []string{"#1", "#2", "#99"}, Count: 2, Proposal: new(1)},
+			{Summary: screenshotsMissing, Items: []string{"#2"}, Count: 1},
 		},
 		Proposals: []proposal{
 			newProposal("Ask for tests", writerPath, ev[0], domain.MetricSentBackRate),
@@ -530,43 +560,61 @@ func TestReviews_Finish(t *testing.T) {
 		t.Fatalf("Work finished %d, want 1", n)
 	}
 
+	if got := w.reviews()[0]; got.State != domain.JonahDone {
+		t.Errorf("review = %+v, want done", got)
+	}
+
 	ps, err := w.store.Proposals(w.ctx(), ports.ProposalQuery{Factory: reviewFactory, Limit: 10})
 	if err != nil || len(ps) != 2 {
 		t.Fatalf("Proposals = %+v, %v; want 2", ps, err)
 	}
 
 	// Newest first: the second proposal is number 2.
-	tests, shorter := ps[1], ps[0]
+	expectTestsProposal(t, ps[1], r, ev)
 
-	if tests.Number != 1 || tests.Title != "Ask for tests" || tests.ReviewID != r.ID || tests.VersionID != reviewVersion ||
-		tests.State != domain.ProposalProposed {
-		t.Errorf("proposal 1 = %+v", tests)
+	if want := flow.LeadTimeP85.Hours(); ps[0].Estimate.Before != want || ps[0].Estimate.Metric != domain.MetricLeadTimeP85 {
+		t.Errorf("proposal 2 estimate = %+v, want before %v hours", ps[0].Estimate, want)
+	}
+
+	w.expectFinishedObservations(ps[0].ID)
+}
+
+// expectTestsProposal checks proposal 1 of TestReviews_Finish: its review and version, the before
+// StationFlow gives (2 sent back of 4 passed), its evidence from the sent-back events and its file.
+func expectTestsProposal(t *testing.T, p domain.Proposal, r domain.JonahReview, ev []domain.SentBack) {
+	t.Helper()
+
+	if p.Number != 1 || p.Title != "Ask for tests" || p.ReviewID != r.ID || p.VersionID != reviewVersion || p.State != domain.ProposalProposed {
+		t.Errorf("proposal 1 = %+v", p)
 	}
 
 	wantEstimate := domain.ProposalEstimate{Metric: domain.MetricSentBackRate, Station: stBuild, Before: 0.5, After: 0.1, CostPerItemUSD: 0.02}
-	if tests.Estimate != wantEstimate {
-		t.Errorf("proposal 1 estimate = %+v, want %+v", tests.Estimate, wantEstimate)
-	}
-
-	if want := flow.LeadTimeP85.Hours(); shorter.Estimate.Before != want || shorter.Estimate.Metric != domain.MetricLeadTimeP85 {
-		t.Errorf("proposal 2 estimate = %+v, want before %v hours", shorter.Estimate, want)
+	if p.Estimate != wantEstimate {
+		t.Errorf("proposal 1 estimate = %+v, want %+v", p.Estimate, wantEstimate)
 	}
 
 	wantEvidence := []domain.ProposalEvidence{
 		{ItemID: ev[0].ItemID, EventID: ev[0].EventID, Station: stBuild, Quote: ev[0].Reason},
 		{ItemID: ev[1].ItemID, EventID: ev[1].EventID, Station: stBuild, Quote: "no screenshot"},
 	}
-	if len(tests.Evidence) != 2 || tests.Evidence[0] != wantEvidence[0] || tests.Evidence[1] != wantEvidence[1] {
-		t.Errorf("proposal 1 evidence = %+v, want %+v", tests.Evidence, wantEvidence)
+	if !reflect.DeepEqual(p.Evidence, wantEvidence) {
+		t.Errorf("proposal 1 evidence = %+v, want %+v", p.Evidence, wantEvidence)
 	}
 
-	if len(tests.Files) != 1 || tests.Files[0].Path != writerPath || tests.Files[0].BaseSHA256 != string(domain.HashBlob([]byte(writerText))) {
-		t.Errorf("proposal 1 files = %+v", tests.Files)
+	wantFiles := []domain.ProposalFile{{Path: writerPath, BaseSHA256: string(domain.HashBlob([]byte(writerText))), Content: newWriterText}}
+	if !reflect.DeepEqual(p.Files, wantFiles) {
+		t.Errorf("proposal 1 files = %+v, want %+v", p.Files, wantFiles)
 	}
+}
+
+// expectFinishedObservations checks TestReviews_Finish's observations: the one naming index 1
+// became proposal 2 (shorter) with the two known items, the other is watching.
+func (w *reviewWorld) expectFinishedObservations(shorter domain.ProposalID) {
+	w.t.Helper()
 
 	obs, err := w.store.Observations(w.ctx(), reviewFactory, 10)
 	if err != nil || len(obs) != 2 {
-		t.Fatalf("Observations = %+v, %v; want 2", obs, err)
+		w.t.Fatalf("Observations = %+v, %v; want 2", obs, err)
 	}
 
 	byName := map[string]domain.Observation{}
@@ -574,17 +622,12 @@ func TestReviews_Finish(t *testing.T) {
 		byName[o.Summary] = o
 	}
 
-	missing := byName["Tests are missing"]
-	if missing.State != domain.ObservationProposed || missing.ProposalID != shorter.ID || len(missing.ItemIDs) != 2 || missing.Count != 2 {
-		t.Errorf("observation of proposal index 1 = %+v, want proposed as %s with the two known items", missing, shorter.ID)
+	if m := byName[testsMissing]; m.State != domain.ObservationProposed || m.ProposalID != shorter || len(m.ItemIDs) != 2 || m.Count != 2 {
+		w.t.Errorf("observation of proposal index 1 = %+v, want proposed as %s with the two known items", m, shorter)
 	}
 
-	if s := byName["Screenshots are missing"]; s.State != domain.ObservationWatching || s.ProposalID != "" {
-		t.Errorf("observation without a proposal = %+v, want watching", s)
-	}
-
-	if r := w.reviews()[0]; r.State != domain.JonahDone {
-		t.Errorf("review = %+v, want done", r)
+	if s := byName[screenshotsMissing]; s.State != domain.ObservationWatching || s.ProposalID != "" {
+		w.t.Errorf("observation without a proposal = %+v, want watching", s)
 	}
 }
 
@@ -622,7 +665,7 @@ type estimate struct {
 	CostDelta float64               `json:"cost_per_item_usd_delta"`
 }
 
-func ptr(n int) *int { return &n }
+const newWriterText = "Write the change and its tests.\n"
 
 func idOf(s domain.SentBack) string { return strconv.FormatInt(s.EventID, 10) }
 
@@ -630,7 +673,7 @@ func idOf(s domain.SentBack) string { return strconv.FormatInt(s.EventID, 10) }
 func newProposal(title, path string, e domain.SentBack, metric domain.ProposalMetric) proposal {
 	return proposal{
 		Title: title, Summary: "Say it in the prompt.",
-		Files:    []domain.ProposalFile{{Path: path, BaseSHA256: string(domain.HashBlob([]byte(writerText))), Content: "Write the change and its tests.\n"}},
+		Files:    []domain.ProposalFile{{Path: path, BaseSHA256: string(domain.HashBlob([]byte(writerText))), Content: newWriterText}},
 		Evidence: []evidence{{Event: idOf(e), Reason: e.Reason}},
 		Estimate: estimate{Metric: metric, Station: stBuild, After: 0.1, CostDelta: 0.02},
 	}
