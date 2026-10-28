@@ -5638,9 +5638,9 @@ export interface components {
             starter?: {
                 item: {
                     title: string;
-                    /** @description One of board.workTypes; absent, submitItem gives the first */
+                    /** @description One of board.workTypes; when absent, submitItem gives the first */
                     type?: string;
-                    /** @description The item's brief */
+                    /** @description The item's brief, in markdown */
                     body?: string;
                 };
             };

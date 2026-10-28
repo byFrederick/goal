@@ -6916,8 +6916,8 @@ components:
               required: [title]
               properties:
                 title: { type: string }
-                type: { type: string, description: "One of board.workTypes; absent, submitItem gives the first" }
-                body: { type: string, description: The item's brief, in markdown }
+                type: { type: string, description: "One of board.workTypes; when absent, submitItem gives the first" }
+                body: { type: string, description: "The item's brief, in markdown" }
     DefinitionEvent:
       type: object
       description: "The data of one `event: definition` on /v1/orgs/{org}/stream; it carries no content"
