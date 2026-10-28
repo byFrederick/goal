@@ -196,7 +196,7 @@ func TestJonah_DecisionsAndLook(t *testing.T) {
 		t.Errorf("goald was sent\n%s\nwant\n%s", strings.Join(s, "\n"), strings.Join(wantSent, "\n"))
 	}
 
-	for _, args := range [][]string{{subShow}, {verbApprove}, {verbApprove, "seven"}, {jonahEditCmd, "0"}, {jonahLookCmd, argExtra}, {"frobnicate"}} {
+	for _, args := range [][]string{{subShow}, {verbApprove}, {verbApprove, "seven"}, {jonahEditCmd, "0"}, {jonahLookCmd, argExtra}, {cmdUnknownName}} {
 		if _, err := goalJonah(t, srv.URL, args...); !errors.Is(err, errUsage) {
 			t.Errorf("goal jonah %q = %v, want the usage", args, err)
 		}

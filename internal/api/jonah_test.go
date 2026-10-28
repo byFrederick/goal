@@ -18,6 +18,9 @@ import (
 	"github.com/byFrederick/goal/internal/jonah"
 )
 
+// roleOwner is the owner role's name, as the policy and the views name it.
+const roleOwner = "owner"
+
 const (
 	permFactoryRead    = domain.Permission("factory:read")
 	permDefinitionEdit = domain.Permission("definition:edit")
@@ -416,7 +419,7 @@ func (h *harness) wantOverview(t *testing.T, proposal int64, ref string) {
 		t.Fatalf("overview = %d, want 200", code)
 	}
 
-	wantPolicy := gen.JonahPolicy{Enabled: true, ProposeAfter: 5, WeeklyUsd: 10, ApproverRoles: []string{"owner", "admin", "editor"}}
+	wantPolicy := gen.JonahPolicy{Enabled: true, ProposeAfter: 5, WeeklyUsd: 10, ApproverRoles: []string{roleOwner, "admin", "editor"}}
 	if !reflect.DeepEqual(ov.Policy, wantPolicy) {
 		t.Errorf("policy = %+v, want %+v", ov.Policy, wantPolicy)
 	}
