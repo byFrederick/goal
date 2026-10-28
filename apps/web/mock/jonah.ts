@@ -1,8 +1,8 @@
 // Jonah in the mock API (contracts/api/openapi.yaml, tag jonah): a factory's overview (its policy, the proposals
 // waiting, the month's cost and the week's observations), its proposals by state, and a manual review. A seeded
 // factory (the Software factory, by name) starts with the picture's two waiting proposals, an applied one, four
-// observations and $6.40 this month; every other factory has no version yet, so a review answers 404
-// version-not-found. A review is queued and stays in flight: a second one answers 409 review-in-flight.
+// observations and $6.40 this month. A review answers 409 review-loop-not-running while no review loop runs
+// (software#344 ships it): nothing is queued.
 // A proposal's page reads its files and evidence, and its approve, edit and reject record the decision. Proposal 8
 // is the flagged case: approving it answers 409 draft-open, as a factory with an open draft does.
 import type { ServerResponse } from 'node:http';
@@ -10,7 +10,6 @@ import type {
   JonahObservation,
   JonahOverview,
   JonahPolicy,
-  JonahReview,
   Proposal,
   ProposalEntry,
   ProposalFile,
@@ -38,8 +37,6 @@ export interface MockJonah {
 }
 
 interface FactoryJonah {
-  /** The review queued by a person and still in flight; a second one answers 409 until a reset. */
-  review?: JonahReview;
   /** The decisions made on proposals, by number: what a person approved, edited or rejected. */
   decisions: Map<number, Decision>;
 }
@@ -361,7 +358,6 @@ export function createJonah({ factory, clock }: JonahDeps): MockJonah {
           waiting: waiting.length,
           month_cost_usd: seeded(f.name) ? 6.4 : 0,
           observations: seeded(f.name) ? softwareObservations(now) : [],
-          ...(j.review ? { last_review: j.review } : {}),
         };
         json(res, 200, body);
         return true;
@@ -376,21 +372,13 @@ export function createJonah({ factory, clock }: JonahDeps): MockJonah {
       }
 
       if (route === 'reviews' && method === 'POST') {
-        if (!seeded(f.name)) {
-          problem(res, 404, 'Version not found', 'version-not-found', f.name);
-          return true;
-        }
-        if (j.review && (j.review.state === 'pending' || j.review.state === 'running')) {
-          problem(res, 409, 'Review in flight', 'review-in-flight', f.name);
-          return true;
-        }
-        j.review = {
-          id: `review-${now}`,
-          state: 'pending',
-          trigger: 'manual',
-          created_at: new Date(now).toISOString(),
-        };
-        json(res, 202, j.review);
+        problem(
+          res,
+          409,
+          'Review loop not running',
+          'review-loop-not-running',
+          "Reviews start when Jonah's review loop ships",
+        );
         return true;
       }
 

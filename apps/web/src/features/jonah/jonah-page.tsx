@@ -1,21 +1,20 @@
 // Jonah's overview and its Proposals tab (ADR 0034, the Jonah screens in ADR 0016). Overview shows what waits
 // for a person, how Jonah works in this factory, the pass rate by judge (not built yet) and what Jonah noticed
 // this week. Proposals lists the factory's proposals in the state the URL names. Both read the Jonah queries
-// and show loading, error, empty and ready. Nothing polls: a `learning` or `definition` event, a resync, or
-// a review this page queued refreshes them.
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+// and show loading, error, empty and ready. Nothing polls: a `learning` or `definition` event or a resync
+// refreshes them.
+import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Play, Settings } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { ApiError, queueJonahReview } from '../../api/client';
-import { jonahOverviewQuery, keys, proposalsQuery } from '../../api/queries';
+import { ApiError } from '../../api/client';
+import { jonahOverviewQuery, proposalsQuery } from '../../api/queries';
 import type { JonahOverview, ProposalState } from '../../api/types';
 import { TopBarSlot } from '../../app/top-bar';
 import { useFactory, useFactoryParams } from '../../shared/factory';
 import { formatUsd } from '../../shared/format';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
-import { Callout } from '../../ui/callout';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { Count } from '../../ui/count';
@@ -36,22 +35,6 @@ export function Loading() {
   );
 }
 
-/** The sentence a failed review shows: the API's 409s and its 404, each said in plain words. */
-export function reviewFailure(err: unknown): string {
-  if (err instanceof ApiError) {
-    if (err.code === 'review-in-flight') {
-      return 'A review is already running. Its proposals appear here when it finishes.';
-    }
-    if (err.code === 'learning-budget-exhausted') {
-      return "This factory has used its weekly budget for Jonah's runs. A review runs again once the budget allows it.";
-    }
-    if (err.code === 'version-not-found') {
-      return 'Publish a version first. Jonah reviews the sent-back runs of the current version.';
-    }
-  }
-  return 'goald is not answering. Try again in a moment.';
-}
-
 /** The page's error state: a plain sentence and Try again. A goald without Jonah says so. */
 export function JonahError({ error, retry }: { error: unknown; retry: () => void }) {
   const unavailable = error instanceof ApiError && error.code === 'jonah-unavailable';
@@ -70,43 +53,10 @@ export function JonahError({ error, retry }: { error: unknown; retry: () => void
 }
 
 /**
- * The header's "Look for improvements now": queues a manual review and reads the Jonah keys again. It needs
- * definition:edit, as the API does; without it the button is disabled and never calls the API.
+ * The header's "Look for improvements now" stays disabled until Jonah's review loop ships: a review queued
+ * now would wait for a loop that never claims it, so this page never calls the review API.
  */
-function useLookForImprovements() {
-  const factory = useFactory();
-  const org = useOrg();
-  const queryClient = useQueryClient();
-  const review = useMutation({
-    mutationFn: () => queueJonahReview(org.id, factory.id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.jonah(org.id, factory.id) }),
-  });
-  return { review, canReview: factory.can.includes('definition:edit') };
-}
-
-type ReviewState = ReturnType<typeof useLookForImprovements>['review'];
-
-/** The review's outcome in a live region, so a screen reader hears a 409 or the queued review. */
-function ReviewNotice({ review }: { review: ReviewState }) {
-  if (review.isError) {
-    return (
-      <div aria-live="polite">
-        <Callout tone="rework">{reviewFailure(review.error)}</Callout>
-      </div>
-    );
-  }
-  if (review.isSuccess) {
-    return (
-      <div aria-live="polite">
-        <Callout tone="ok">Review queued. Its proposals appear here when it finishes.</Callout>
-      </div>
-    );
-  }
-  return null;
-}
-
-/** The top bar's actions: Settings goes to the factory's settings, the review button starts a review. */
-function topBarActions(params: { org: string; factory: string }, review: ReviewState, canReview: boolean) {
+function topBarActions(params: { org: string; factory: string }) {
   const settings = (
     <Button key="settings" asChild variant="secondary">
       <Link to="/o/$org/f/$factory/settings" params={params}>
@@ -116,12 +66,17 @@ function topBarActions(params: { org: string; factory: string }, review: ReviewS
     </Button>
   );
   const look = (
-    <Button key="look" variant="primary" disabled={!canReview || review.isPending} onClick={() => review.mutate()}>
+    <Button key="look" variant="primary" disabled aria-describedby="look-meta">
       <Play aria-hidden="true" />
       Look for improvements now
     </Button>
   );
-  return [settings, look];
+  const meta = (
+    <span key="look-meta" id="look-meta" className="text-meta text-muted">
+      Reviews start when Jonah's review loop ships
+    </span>
+  );
+  return [settings, look, meta];
 }
 
 /** One row of the policy card: a label and its value. */
@@ -228,8 +183,7 @@ export function JonahOverviewPage() {
   const factory = useFactory();
   const org = useOrg();
   const params = useFactoryParams();
-  const { review, canReview } = useLookForImprovements();
-  const actions = topBarActions(params, review, canReview);
+  const actions = topBarActions(params);
   const overview = useQuery(jonahOverviewQuery(org.id, factory.id));
   const waiting = useQuery({ ...proposalsQuery(org.id, factory.id, 'proposed'), enabled: overview.isSuccess });
 
@@ -253,8 +207,6 @@ export function JonahOverviewPage() {
     <div className="@container flex min-w-0 flex-col gap-5">
       <TopBarSlot crumb="Jonah" actions={actions} />
       <JonahHeader tab="overview" counts={{ proposals: data.waiting }} />
-      <ReviewNotice review={review} />
-
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         {empty ? (
           <EmptyState title="Jonah has nothing to review yet">
@@ -306,8 +258,7 @@ export function JonahProposalsPage({ state }: { state?: ProposalState | undefine
   const org = useOrg();
   const params = useFactoryParams();
   const navigate = useNavigate();
-  const { review, canReview } = useLookForImprovements();
-  const actions = topBarActions(params, review, canReview);
+  const actions = topBarActions(params);
   const overview = useQuery(jonahOverviewQuery(org.id, factory.id));
   const list = useQuery(proposalsQuery(org.id, factory.id, state));
 
@@ -335,8 +286,6 @@ export function JonahProposalsPage({ state }: { state?: ProposalState | undefine
     <div className="@container flex min-w-0 flex-col gap-5">
       <TopBarSlot crumb="Jonah" actions={actions} />
       <JonahHeader tab="proposals" counts={counts} />
-      <ReviewNotice review={review} />
-
       <SegmentedControl
         label="Proposal state"
         options={filters}

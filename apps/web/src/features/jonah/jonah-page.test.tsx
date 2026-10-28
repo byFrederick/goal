@@ -40,7 +40,6 @@ const editor: Factory = {
   role: 'editor',
   can: ['definition:edit', 'definition:publish', 'factory:read'],
 };
-const viewer: Factory = { ...editor, role: 'viewer', can: ['factory:read'] };
 
 const proposal7: ProposalEntry = {
   number: 7,
@@ -257,65 +256,15 @@ describe('the Jonah overview, its four states', () => {
 });
 
 describe('Look for improvements now', () => {
-  it('queues a review and reads the Jonah keys again', async () => {
+  it('is disabled until the review loop ships, with the meta line, and sends no request', async () => {
     vi.mocked(getJonahOverview).mockResolvedValue(overview);
     vi.mocked(listProposals).mockResolvedValue(listOf([proposal8, proposal7]));
-    vi.mocked(queueJonahReview).mockResolvedValue({
-      id: 'review-1',
-      state: 'pending',
-      trigger: 'manual',
-      created_at: '2026-10-28T12:00:00Z',
-    });
-    const { queryClient } = renderOverview();
-
-    await screen.findByRole('heading', { name: 'Waiting for your review' });
-    fireEvent.click(screen.getByRole('button', { name: 'Look for improvements now' }));
-
-    expect(await screen.findByText('Review queued. Its proposals appear here when it finishes.')).toBeTruthy();
-    expect(queueJonahReview).toHaveBeenCalledWith('org-1', 'factory-1');
-    // The review's success invalidates the Jonah keys, so the mounted overview is read again.
-    await waitFor(() => expect(getJonahOverview).toHaveBeenCalledWith('org-1', 'factory-1', expect.anything()));
-    expect(queryClient.getQueryData(jonahOverviewQuery(org.id, editor.id).queryKey)).toEqual(overview);
-  });
-
-  it('shows a 409 review-in-flight as a plain sentence', async () => {
-    vi.mocked(getJonahOverview).mockResolvedValue(overview);
-    vi.mocked(listProposals).mockResolvedValue(listOf([proposal8, proposal7]));
-    vi.mocked(queueJonahReview).mockRejectedValue(
-      new ApiError({ title: 'Review in flight', status: 409, code: 'review-in-flight' } as never),
-    );
     renderOverview();
-
-    await screen.findByRole('heading', { name: 'Waiting for your review' });
-    fireEvent.click(screen.getByRole('button', { name: 'Look for improvements now' }));
-
-    expect(
-      await screen.findByText('A review is already running. Its proposals appear here when it finishes.'),
-    ).toBeTruthy();
-  });
-
-  it('shows a 409 learning-budget-exhausted as a plain sentence', async () => {
-    vi.mocked(getJonahOverview).mockResolvedValue(overview);
-    vi.mocked(listProposals).mockResolvedValue(listOf([]));
-    vi.mocked(queueJonahReview).mockRejectedValue(
-      new ApiError({ title: 'Budget used', status: 409, code: 'learning-budget-exhausted' } as never),
-    );
-    renderOverview();
-
-    await screen.findByRole('heading', { name: 'Waiting for your review' });
-    fireEvent.click(screen.getByRole('button', { name: 'Look for improvements now' }));
-
-    expect(await screen.findByText(/has used its weekly budget for Jonah/)).toBeTruthy();
-  });
-
-  it('is disabled without definition:edit and never calls the API', async () => {
-    vi.mocked(getJonahOverview).mockResolvedValue(overview);
-    vi.mocked(listProposals).mockResolvedValue(listOf([]));
-    renderOverview(viewer, seeds(overview, viewer));
 
     await screen.findByRole('heading', { name: 'Waiting for your review' });
     const look = screen.getByRole('button', { name: 'Look for improvements now' });
     expect((look as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Reviews start when Jonah's review loop ships")).toBeTruthy();
     fireEvent.click(look);
     await waitFor(() => expect(queueJonahReview).not.toHaveBeenCalled());
   });
