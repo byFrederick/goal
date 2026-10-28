@@ -695,6 +695,48 @@ export function createConnections({
         if (!stale(req, res)) create(org, req, res, await body());
         return true;
       }
+      const repos = rest.match(/^\/connections\/([^/]+)\/repositories$/);
+      if (repos && method === 'GET') {
+        // goald's repositories of a code host connection (listConnectionRepositories): the account's, or an
+        // owner's. The mock signs in as acme; acme-labs is an organization with no repositories.
+        const name = decodeURIComponent(repos[1] ?? '');
+        const c = named(org.id, name);
+        if (!c) {
+          refuse(res, 404, `connection "${name}" not found`, 'connection-not-found');
+          return true;
+        }
+        if (!kindNamed(org.id, c.connection.kind)?.kind.code_host) {
+          refuse(res, 422, `connection "${name}" is not a code host`, 'connection-not-code-host');
+          return true;
+        }
+        const owner = new URL(req.url ?? '/', 'http://mock').searchParams.get('owner') ?? 'acme';
+        const owners = [
+          { login: 'acme', kind: 'user' },
+          { login: 'acme-labs', kind: 'organization' },
+        ];
+        if (!owners.some((o) => o.login === owner)) {
+          refuse(res, 404, `owner "${owner}" not found`, 'owner-not-found');
+          return true;
+        }
+        const ago = (ms: number) => new Date(clock() - ms).toISOString();
+        const repositories = (
+          owner === 'acme'
+            ? [
+                { name: 'goal', languages: ['Go', 'TypeScript'], updated_at: ago(2 * hourMs) },
+                { name: 'goal-factories', languages: ['YAML'], updated_at: ago(5 * hourMs) },
+                { name: 'site', languages: ['Astro'], updated_at: ago(21 * dayMs) },
+                { name: 'dotfiles', languages: ['Shell'], updated_at: ago(60 * dayMs) },
+              ]
+            : []
+        ).map((r) => ({
+          full_name: `${owner}/${r.name}`,
+          clone_url: `https://github.com/${owner}/${r.name}.git`,
+          languages: r.languages,
+          updated_at: r.updated_at,
+        }));
+        send(res, 200, { login: 'acme', owner, owners, repositories, truncated: false });
+        return true;
+      }
       const m = rest.match(/^\/connections\/([^/]+)(\/test)?$/);
       if (!m) return false;
       const c = named(org.id, decodeURIComponent(m[1] ?? ''));

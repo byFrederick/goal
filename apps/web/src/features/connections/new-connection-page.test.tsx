@@ -57,12 +57,12 @@ const kinds: ConnectionKind[] = [
 ];
 
 /** Renders the add page at /o/acme/connections/new, with `kind` in the URL when given. */
-function renderAdd({ kind, can = manage }: { kind?: string; can?: string[] } = {}) {
+function renderAdd({ kind, next, can = manage }: { kind?: string; next?: string; can?: string[] } = {}) {
   return renderConnectionsRoute({
     page: 'new',
     org,
     can,
-    search: kind ? { kind } : undefined,
+    search: kind || next ? { ...(kind ? { kind } : {}), ...(next ? { next } : {}) } : undefined,
     components: { list: () => null, add: NewConnectionPage, connection: () => <p>Connection page</p> },
     seed: [[connectionKindsQuery(org.id).queryKey, kinds]],
   });
@@ -109,6 +109,25 @@ describe('the Add a connection page', () => {
       expect.objectContaining({ name: 'datadog', kind: 'datadog', secrets: { api_key: 'test-api-key' } }),
     );
     expect(await screen.findByText('Connection page')).toBeTruthy();
+  });
+
+  it('goes back to the next path given in the URL once the connection is added', async () => {
+    const { router } = renderAdd({ kind: 'datadog', next: '/o/acme/connections' });
+    const form = await screen.findByRole('form', { name: 'Datadog details' });
+    fireEvent.change(within(form).getByLabelText('API key'), { target: { value: 'test-api-key' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Add Datadog' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/connections'));
+    expect(createConnection).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores a next path that leaves the app, and opens the connection as usual', async () => {
+    const { router } = renderAdd({ kind: 'datadog', next: 'https://example.com/steal' });
+    const form = await screen.findByRole('form', { name: 'Datadog details' });
+    fireEvent.change(within(form).getByLabelText('API key'), { target: { value: 'test-api-key' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Add Datadog' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/connections/datadog'));
   });
 
   it('shows the tool setting for an MCP server disabled, saying it is not available yet', async () => {

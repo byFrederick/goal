@@ -159,11 +159,14 @@ export function PreviewCard({
   label,
   value,
   detail,
+  icon,
   active = false,
 }: {
   label: string;
   value: string;
   detail?: string;
+  /** Drawn before the value, e.g. the GitHub mark on the Code card. */
+  icon?: ReactNode;
   active?: boolean;
 }) {
   return (
@@ -174,7 +177,10 @@ export function PreviewCard({
       )}
     >
       <span className="text-meta text-andon-text">{label}</span>
-      <span className="font-control text-heading break-words text-white">{value}</span>
+      <span className="flex min-w-0 items-center gap-2 font-control text-heading break-words text-white">
+        {icon}
+        {value}
+      </span>
       {detail ? <span className="text-secondary break-all text-andon-text">{detail}</span> : null}
     </div>
   );

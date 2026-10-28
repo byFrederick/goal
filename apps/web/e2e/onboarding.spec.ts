@@ -69,3 +69,25 @@ test('Save and finish later signs out when there is no organization yet', async 
   await page.getByRole('button', { name: 'Save and finish later' }).click();
   await expect(page).toHaveURL(/\/sign-in$/);
 });
+
+test('step 2 lists the repositories, keeps the choice in the URL and continues to step 3', async ({ page }) => {
+  await signIn(page.request);
+  await page.goto('/o/goal/get-started/code');
+
+  await expect(page.getByRole('heading', { level: 1, name: 'Connect your code' })).toBeVisible();
+  await expect(page.getByText('Connected as acme')).toBeVisible();
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+
+  await page.locator('label', { hasText: 'acme/goal' }).first().getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Continue with 1 repository' }).click();
+
+  await expect(page).toHaveURL(/\/o\/goal\/get-started\/factory\?/);
+});
+
+test('step 2 says GitLab is not available yet', async ({ page }) => {
+  await signIn(page.request);
+  await page.goto('/o/goal/get-started/code');
+
+  await expect(page.getByRole('button', { name: 'GitLab is coming.' })).toHaveAttribute('aria-disabled', 'true');
+});

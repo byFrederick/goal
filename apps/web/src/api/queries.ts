@@ -48,6 +48,7 @@ import {
   getConnection,
   listConnectionAudit,
   listConnectionKinds,
+  listConnectionRepositories,
   listConnections,
 } from './connections';
 import { listCredentials } from './credentials';
@@ -155,6 +156,9 @@ export const keys = {
   /** Audit entries about connections: every one's (`all`) or one's, by its id. */
   connectionActivity: (org: string, id?: string) => ['org', org, 'connections', 'activity', id ?? 'all'] as const,
   connectionKinds: (org: string) => ['org', org, 'connection-kinds'] as const,
+  /** The owners and repositories a code host connection reaches; `owner` absent is its own account. */
+  connectionRepositories: (org: string, connection: string, owner?: string) =>
+    ['org', org, 'connections', 'repositories', connection, owner ?? 'account'] as const,
   /** The organization's credentials (ADR 0017): the list, which a connection's change also moves. */
   credentials: (org: string) => ['org', org, 'credentials'] as const,
   /**
@@ -312,6 +316,16 @@ export const connectionQuery = (org: string, name: string) =>
     queryFn: ({ signal }) => getConnection(org, name, signal),
     staleTime: 30_000,
     retry: retryUnlessRefused,
+  });
+
+/** The repositories of one owner a GitHub connection reaches (connection:browse); a step's list, not cached for long. */
+export const connectionRepositoriesQuery = (org: string, connection: string, owner?: string) =>
+  queryOptions({
+    queryKey: keys.connectionRepositories(org, connection, owner),
+    queryFn: ({ signal }) => listConnectionRepositories(org, connection, owner, signal),
+    staleTime: 30_000,
+    // A failed list shows its problem with Retry; an automatic retry would only delay that.
+    retry: false,
   });
 
 /** A kind changes with a goald release or an admin's edit: minutes are fresh enough. */
