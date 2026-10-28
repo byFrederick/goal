@@ -1,8 +1,8 @@
 // The YAML view (D10) against the mock: goal has a draft of v9 at revision 42 based on v8 (3
 // changes in 2 sections, 1 warning). Flows 2 and 3 of D §13, their YAML parts: Form edits show
 // in factory.yaml with its comments, switching keeps the place, an unknown agent is a problem
-// with its quick fix shown but not built yet, and a factory.yaml that stops parsing holds Form
-// until it parses again. Monaco on desktop and tablet, the textarea on phones.
+// with its quick fix, a runtime size of xlarge is applied by its fix ("Use large"), and a
+// factory.yaml that stops parsing holds Form until it parses again. Monaco on desktop and tablet, the textarea on phones.
 import { expect, test } from '@playwright/test';
 import { definition, editorReady, expectShown, monacoTimeout, openYaml, problems, replaceLine, status } from './editor';
 import { expectAccessible, expectNoHorizontalScroll, isPhone } from './support';
@@ -62,7 +62,7 @@ test('Form ↔ YAML: one draft, comments kept, the place kept (flow 2)', async (
   await expect(page.getByRole('listitem', { name: /^2\. Spec/ })).toContainText('go vet');
 });
 
-test('an unknown agent is a problem in place, its quick fix not built yet (flow 3, YAML)', async ({ page }) => {
+test('an unknown agent is a problem in place, with its quick fix (flow 3, YAML)', async ({ page }) => {
   await openYaml(page);
   await replaceLine(
     page,
@@ -77,15 +77,40 @@ test('an unknown agent is a problem in place, its quick fix not built yet (flow 
   }
   await expectAccessible(page);
 
-  // The quick fix is shown in the line, disabled: it sends nothing and the line stays as typed.
-  // The line block shows it on the desktop and tablet editor (the phone's textarea has no blocks).
+  // The quick fix is offered under the line (the phone's Problems panel has it instead).
+  await expect(page.getByRole('button', { name: 'Set agent to spec-writer' }).first()).toBeVisible();
+});
+
+test('a quick fix applies to the draft: xlarge is set to large (flow 3, YAML)', async ({ page }) => {
+  await openYaml(page, 'basics');
+  await replaceLine(page, 'size: large', 'size: xlarge');
+
+  await expect(problems(page)).toContainText('spec.runtime.size: must be small, medium or large');
+  await expect(problems(page)).toContainText(/factory\.yaml, line \d+/);
   if (!isPhone(page)) {
-    const fix = page.getByRole('button', { name: 'Set agent to spec-writer' }).first();
-    await expect(fix).toHaveAttribute('aria-disabled', 'true');
-    await fix.click();
+    await expect(page.locator('.monaco-editor .goal-glyph-problem').first()).toBeVisible({ timeout: monacoTimeout });
   }
-  await expect(problems(page)).toContainText('ghost');
-  await expectShown(page, 'agent: ghost, wip: 2 }');
+  await expectAccessible(page);
+
+  await page.getByRole('button', { name: 'Use large' }).first().click();
+  await expectShown(page, 'size: large');
+  await expect(problems(page)).not.toContainText('must be small, medium or large');
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+});
+
+test('a quick fix applies in dark mode too (flow 3, YAML)', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await openYaml(page, 'basics');
+  await replaceLine(page, 'size: large', 'size: xlarge');
+  await expect(problems(page)).toContainText('spec.runtime.size: must be small, medium or large');
+  await expectAccessible(page);
+
+  await page.getByRole('button', { name: 'Use large' }).first().click();
+  await expectShown(page, 'size: large');
+  await expect(problems(page)).not.toContainText('must be small, medium or large');
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
 });
 
 test('a factory.yaml that stops parsing holds Form until it parses again', async ({ page }) => {
