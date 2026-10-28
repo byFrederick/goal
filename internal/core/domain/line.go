@@ -262,6 +262,28 @@ func (l Line) ReworkTarget(id string) (Station, error) {
 	return Station{}, fmt.Errorf("station %q: no agent station upstream to send work back to", id)
 }
 
+// LandingStation is where an assembly planned at station planStation lands its integration
+// branch (ADR 0033): flow.assemblies.integration.landAt when set, else the first station with
+// action merge after planStation; false when there is none.
+func (l Line) LandingStation(planStation string) (Station, bool) {
+	if at := l.Flow.Assemblies.Integration.LandAt; at != "" {
+		return l.Station(at)
+	}
+
+	i := slices.IndexFunc(l.Stations, func(s Station) bool { return s.ID == planStation })
+	if i < 0 {
+		return Station{}, false
+	}
+
+	for _, s := range l.Stations[i+1:] {
+		if s.Action == ActionMerge {
+			return s, true
+		}
+	}
+
+	return Station{}, false
+}
+
 // Agent returns the agent with the given name.
 func (l Line) Agent(name string) (AgentSpec, bool) {
 	i := slices.IndexFunc(l.Agents, func(a AgentSpec) bool { return a.Name == name })

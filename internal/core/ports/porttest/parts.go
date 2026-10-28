@@ -285,7 +285,9 @@ func (s *Store) partsOf(parent domain.ItemID) domain.Parts {
 // cancelled when cancel is set (a person cancelled the assembly), else done when any part is
 // done, cancelled otherwise. Done, it moves to the station of its most recently done part, the
 // line's done station, where a finished single item lands; cancelled, it keeps its own, as a
-// cancelled single item does. Callers hold s.mu.
+// cancelled single item does. An assembly with an integration branch that would close done
+// lands instead: it moves to its landing station, queued, with an assembly_landing event, for
+// that station to merge the branch. Callers hold s.mu.
 func (s *Store) closeAssembly(part *domain.Item, at time.Time, cancel bool) {
 	if part.PartKey == "" || !closed(part.State) {
 		return
@@ -303,6 +305,18 @@ func (s *Store) closeAssembly(part *domain.Item, at time.Time, cancel bool) {
 
 	before := *parent
 	parent.State, parent.UpdatedAt = domain.StateCancelled, at
+
+	if parts.Done > 0 && !cancel && parent.IntegrationBranch != "" {
+		parent.State, parent.Station = domain.StateQueued, parent.IntegrationLandAt
+
+		s.trackSpan(parent, &before, at)
+		s.append(domain.Event{
+			FactoryID: parent.FactoryID, ItemID: parent.ID, At: at, Kind: domain.EventAssemblyLanding, Station: parent.Station,
+			Actor: domain.ActorEngine, Data: map[string]any{"parts_done": parts.Done, "parts": parts.Total, "branch": parent.IntegrationBranch},
+		})
+
+		return
+	}
 
 	if parts.Done > 0 && !cancel {
 		parent.State, parent.DoneAt, parent.Station = domain.StateDone, at, lastDone(parts).Station
@@ -427,4 +441,33 @@ func (s *Store) cascadeParts(org domain.OrgID, c ports.Cascade) ([]*domain.Item,
 	}
 
 	return parts, nil
+}
+
+// SetIntegrationBranch implements ports.Store.
+func (s *Store) SetIntegrationBranch(ctx context.Context, root domain.ItemID, branch, landAt string, at time.Time) (bool, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	if branch == "" || landAt == "" {
+		return false, fmt.Errorf("integration branch of %s: a branch and a landing station are required: %w", root, domain.ErrInvalid)
+	}
+
+	s.mu.Lock()
+	defer s.changes.signal()
+	defer s.mu.Unlock()
+
+	it, ok := s.visible(root, org)
+	if !ok {
+		return false, fmt.Errorf("integration branch of %s: %w", root, ports.ErrNotFound)
+	}
+
+	if it.IntegrationBranch != "" {
+		return false, nil
+	}
+
+	it.IntegrationBranch, it.IntegrationLandAt, it.UpdatedAt = branch, landAt, at
+
+	return true, nil
 }

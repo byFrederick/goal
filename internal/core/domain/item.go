@@ -71,7 +71,13 @@ type Item struct {
 	// finished the item, or its assembly's for a part; empty when none was recorded (ADR 0015
 	// decision 5).
 	BaseCommit string
-	Type       string
+	// IntegrationBranch is an assembly's integration branch, the branch its parts build on, and
+	// IntegrationLandAt the station where the finished assembly lands to merge it; both empty
+	// unless set, once, by ports.Store SetIntegrationBranch (flow.assemblies.integration.mode
+	// branch).
+	IntegrationBranch string
+	IntegrationLandAt string
+	Type              string
 	// Lane picks the agent at stations that route by lane. Empty until intake or an output sets it.
 	Lane     string
 	Title    string
@@ -114,6 +120,19 @@ const maxSlug = 40
 // only on the item's number and title, so every run of the item, rework included, works on
 // the same branch.
 func (it Item) Branch() string {
+	return branchName("goal/", it)
+}
+
+// IntegrationBranch is the git branch an assembly's parts merge into in integration mode branch:
+// goal/a<root number>-<root title slug>, with the slug of Item.Branch (ADR 0033).
+func IntegrationBranch(root Item) string {
+	return branchName("goal/a", root)
+}
+
+// branchName is prefix, the item's number and, when its title has one, a dash and the title's
+// slug: lowercase ASCII letters and digits, each other run of characters one dash, cut near
+// maxSlug.
+func branchName(prefix string, it Item) string {
 	var b strings.Builder
 
 	dash := false
@@ -139,10 +158,10 @@ func (it Item) Branch() string {
 
 	slug := strings.TrimRight(b.String(), "-")
 	if slug == "" {
-		return fmt.Sprintf("goal/%d", it.Number)
+		return fmt.Sprintf("%s%d", prefix, it.Number)
 	}
 
-	return fmt.Sprintf("goal/%d-%s", it.Number, slug)
+	return fmt.Sprintf("%s%d-%s", prefix, it.Number, slug)
 }
 
 // NewItem is what intake supplies to create an item. The engine fills Station, State and Class.
