@@ -4979,6 +4979,47 @@ type NoteReceipt struct {
 // NoteReceiptDelivery next_run, the next run's brief carries it (live, to a running agent, comes later)
 type NoteReceiptDelivery string
 
+// NotificationChannels defines model for NotificationChannels.
+type NotificationChannels struct {
+	Email bool `json:"email"`
+
+	// InGoal The app's own badge and toast
+	InGoal bool `json:"in_goal"`
+
+	// Slack A direct message from the organization's Slack connection
+	Slack bool `json:"slack"`
+}
+
+// NotificationEvents The channels of each event
+type NotificationEvents struct {
+	// Andon A factory pulls the andon
+	Andon NotificationChannels `json:"andon"`
+
+	// Approval An agent needs the person's OK for a write
+	Approval NotificationChannels `json:"approval"`
+
+	// Budget A budget passes 80%
+	Budget NotificationChannels `json:"budget"`
+
+	// Digest The daily digest at 08:00; in_goal is always false
+	Digest NotificationChannels `json:"digest"`
+
+	// Question An agent asks the person a question
+	Question NotificationChannels `json:"question"`
+}
+
+// NotificationPreferences One person's notification preferences (ADR 0023, decision 1), in every organization they belong to
+type NotificationPreferences struct {
+	// Email Where email notifications go; blank is the sign-in email
+	Email string `json:"email"`
+
+	// Events The channels of each event
+	Events NotificationEvents `json:"events"`
+
+	// TimeZone The IANA time zone the daily digest goes out at 08:00 in, such as Europe/Berlin
+	TimeZone string `json:"time_zone"`
+}
+
 // OpenDraftRequest defines model for OpenDraftRequest.
 type OpenDraftRequest struct {
 	// Base A published version (a number or current); current when absent
@@ -6964,6 +7005,9 @@ type ListAuthEventsParams struct {
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty"`
 }
 
+// PutNotificationPreferencesJSONRequestBody defines body for PutNotificationPreferences for application/json ContentType.
+type PutNotificationPreferencesJSONRequestBody = NotificationPreferences
+
 // CreateOrgJSONRequestBody defines body for CreateOrg for application/json ContentType.
 type CreateOrgJSONRequestBody = NewOrg
 
@@ -7460,6 +7504,31 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/me (the `GetMe` operationId).
 	GetMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetNotificationPreferences The caller's own notification preferences
+	//
+	// Which events the signed-in person is told about on which channel, the email notifications go to and the time zone of the daily digest (ADR 0023, decision 1). They hold in every organization the person belongs to. A person who never saved any reads the defaults. Only a signed-in person has them: an API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+	//
+	// Corresponds with GET /v1/me/notifications (the `GetNotificationPreferences` operationId).
+	GetNotificationPreferences(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutNotificationPreferencesWithBody Replace the caller's own notification preferences
+	//
+	// Replaces every field. An email that is not a plain address (blank is the sign-in email) is 400 invalid-notification-email; a time zone that is not an IANA name, or Local, is 400 invalid-time-zone; the digest In Goal is 400 invalid-notification-preferences. Nothing is changed then. An API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/me/notifications (the `PutNotificationPreferences` operationId).
+	PutNotificationPreferencesWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutNotificationPreferences Replace the caller's own notification preferences
+	//
+	// Replaces every field. An email that is not a plain address (blank is the sign-in email) is 400 invalid-notification-email; a time zone that is not an IANA name, or Local, is 400 invalid-time-zone; the digest In Goal is 400 invalid-notification-preferences. Nothing is changed then. An API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/me/notifications (the `PutNotificationPreferences` operationId).
+	PutNotificationPreferences(ctx context.Context, body PutNotificationPreferencesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListOrgs The caller's organizations, by name
 	//
@@ -9236,6 +9305,61 @@ func (c *Client) GetHealth(ctx context.Context, reqEditors ...RequestEditorFn) (
 // Corresponds with GET /v1/me (the `GetMe` operationId).
 func (c *Client) GetMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetMeRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetNotificationPreferences The caller's own notification preferences
+//
+// Which events the signed-in person is told about on which channel, the email notifications go to and the time zone of the daily digest (ADR 0023, decision 1). They hold in every organization the person belongs to. A person who never saved any reads the defaults. Only a signed-in person has them: an API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+//
+// Corresponds with GET /v1/me/notifications (the `GetNotificationPreferences` operationId).
+func (c *Client) GetNotificationPreferences(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetNotificationPreferencesRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PutNotificationPreferencesWithBody Replace the caller's own notification preferences
+//
+// Replaces every field. An email that is not a plain address (blank is the sign-in email) is 400 invalid-notification-email; a time zone that is not an IANA name, or Local, is 400 invalid-time-zone; the digest In Goal is 400 invalid-notification-preferences. Nothing is changed then. An API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/me/notifications (the `PutNotificationPreferences` operationId).
+func (c *Client) PutNotificationPreferencesWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutNotificationPreferencesRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PutNotificationPreferences Replace the caller's own notification preferences
+//
+// Replaces every field. An email that is not a plain address (blank is the sign-in email) is 400 invalid-notification-email; a time zone that is not an IANA name, or Local, is 400 invalid-time-zone; the digest In Goal is 400 invalid-notification-preferences. Nothing is changed then. An API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/me/notifications (the `PutNotificationPreferences` operationId).
+func (c *Client) PutNotificationPreferences(ctx context.Context, body PutNotificationPreferencesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutNotificationPreferencesRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -13275,6 +13399,73 @@ func NewGetMeRequest(server string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewGetNotificationPreferencesRequest constructs an http.Request for the GetNotificationPreferences method
+func NewGetNotificationPreferencesRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/me/notifications")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutNotificationPreferencesRequest calls the generic PutNotificationPreferences builder with application/json body
+func NewPutNotificationPreferencesRequest(server string, body PutNotificationPreferencesJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutNotificationPreferencesRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPutNotificationPreferencesRequestWithBody constructs an http.Request for the PutNotificationPreferences method, with any body, and a specified content type
+func NewPutNotificationPreferencesRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/me/notifications")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -22435,6 +22626,33 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/me (the `GetMe` operationId).
 	GetMeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMeResponse, error)
 
+	// GetNotificationPreferencesWithResponse The caller's own notification preferences
+	//
+	// Which events the signed-in person is told about on which channel, the email notifications go to and the time zone of the daily digest (ADR 0023, decision 1). They hold in every organization the person belongs to. A person who never saved any reads the defaults. Only a signed-in person has them: an API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/me/notifications (the `GetNotificationPreferences` operationId).
+	GetNotificationPreferencesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetNotificationPreferencesResponse, error)
+
+	// PutNotificationPreferencesWithBodyWithResponse Replace the caller's own notification preferences
+	//
+	// Replaces every field. An email that is not a plain address (blank is the sign-in email) is 400 invalid-notification-email; a time zone that is not an IANA name, or Local, is 400 invalid-time-zone; the digest In Goal is 400 invalid-notification-preferences. Nothing is changed then. An API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/me/notifications (the `PutNotificationPreferences` operationId).
+	PutNotificationPreferencesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutNotificationPreferencesResponse, error)
+
+	// PutNotificationPreferencesWithResponse Replace the caller's own notification preferences
+	//
+	// Replaces every field. An email that is not a plain address (blank is the sign-in email) is 400 invalid-notification-email; a time zone that is not an IANA name, or Local, is 400 invalid-time-zone; the digest In Goal is 400 invalid-notification-preferences. Nothing is changed then. An API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/me/notifications (the `PutNotificationPreferences` operationId).
+	PutNotificationPreferencesWithResponse(ctx context.Context, body PutNotificationPreferencesJSONRequestBody, reqEditors ...RequestEditorFn) (*PutNotificationPreferencesResponse, error)
+
 	// ListOrgsWithResponse The caller's organizations, by name
 	//
 	// A person's organizations with their role in each; an API key's own organization. Under GOAL_AUTH=none, every organization of the install.
@@ -24548,6 +24766,102 @@ func (r GetMeResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetMeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetNotificationPreferencesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *NotificationPreferences
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetNotificationPreferencesResponse) GetJSON200() *NotificationPreferences {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetNotificationPreferencesResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetNotificationPreferencesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetNotificationPreferencesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetNotificationPreferencesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetNotificationPreferencesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PutNotificationPreferencesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *NotificationPreferences
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PutNotificationPreferencesResponse) GetJSON200() *NotificationPreferences {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PutNotificationPreferencesResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PutNotificationPreferencesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PutNotificationPreferencesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutNotificationPreferencesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PutNotificationPreferencesResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -32686,6 +33000,51 @@ func (c *ClientWithResponses) GetMeWithResponse(ctx context.Context, reqEditors 
 	return ParseGetMeResponse(rsp)
 }
 
+// GetNotificationPreferencesWithResponse The caller's own notification preferences
+//
+// Which events the signed-in person is told about on which channel, the email notifications go to and the time zone of the daily digest (ADR 0023, decision 1). They hold in every organization the person belongs to. A person who never saved any reads the defaults. Only a signed-in person has them: an API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/me/notifications (the `GetNotificationPreferences` operationId).
+func (c *ClientWithResponses) GetNotificationPreferencesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetNotificationPreferencesResponse, error) {
+	rsp, err := c.GetNotificationPreferences(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetNotificationPreferencesResponse(rsp)
+}
+
+// PutNotificationPreferencesWithBodyWithResponse Replace the caller's own notification preferences
+//
+// Replaces every field. An email that is not a plain address (blank is the sign-in email) is 400 invalid-notification-email; a time zone that is not an IANA name, or Local, is 400 invalid-time-zone; the digest In Goal is 400 invalid-notification-preferences. Nothing is changed then. An API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/me/notifications (the `PutNotificationPreferences` operationId).
+func (c *ClientWithResponses) PutNotificationPreferencesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutNotificationPreferencesResponse, error) {
+	rsp, err := c.PutNotificationPreferencesWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutNotificationPreferencesResponse(rsp)
+}
+
+// PutNotificationPreferencesWithResponse Replace the caller's own notification preferences
+//
+// Replaces every field. An email that is not a plain address (blank is the sign-in email) is 400 invalid-notification-email; a time zone that is not an IANA name, or Local, is 400 invalid-time-zone; the digest In Goal is 400 invalid-notification-preferences. Nothing is changed then. An API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/me/notifications (the `PutNotificationPreferences` operationId).
+func (c *ClientWithResponses) PutNotificationPreferencesWithResponse(ctx context.Context, body PutNotificationPreferencesJSONRequestBody, reqEditors ...RequestEditorFn) (*PutNotificationPreferencesResponse, error) {
+	rsp, err := c.PutNotificationPreferences(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutNotificationPreferencesResponse(rsp)
+}
+
 // ListOrgsWithResponse The caller's organizations, by name
 //
 // A person's organizations with their role in each; an API key's own organization. Under GOAL_AUTH=none, every organization of the install.
@@ -36047,6 +36406,72 @@ func ParseGetMeResponse(rsp *http.Response) (*GetMeResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Me
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetNotificationPreferencesResponse parses an HTTP response from a GetNotificationPreferencesWithResponse call
+func ParseGetNotificationPreferencesResponse(rsp *http.Response) (*GetNotificationPreferencesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetNotificationPreferencesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest NotificationPreferences
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutNotificationPreferencesResponse parses an HTTP response from a PutNotificationPreferencesWithResponse call
+func ParsePutNotificationPreferencesResponse(rsp *http.Response) (*PutNotificationPreferencesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutNotificationPreferencesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest NotificationPreferences
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -41779,6 +42204,12 @@ type ServerInterface interface {
 	// GetMe Who the request acts for
 	// (GET /v1/me)
 	GetMe(w http.ResponseWriter, r *http.Request)
+	// GetNotificationPreferences The caller's own notification preferences
+	// (GET /v1/me/notifications)
+	GetNotificationPreferences(w http.ResponseWriter, r *http.Request)
+	// PutNotificationPreferences Replace the caller's own notification preferences
+	// (PUT /v1/me/notifications)
+	PutNotificationPreferences(w http.ResponseWriter, r *http.Request)
 	// ListOrgs The caller's organizations, by name
 	// (GET /v1/orgs)
 	ListOrgs(w http.ResponseWriter, r *http.Request)
@@ -42350,6 +42781,34 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNotificationPreferences operation middleware
+func (siw *ServerInterfaceWrapper) GetNotificationPreferences(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNotificationPreferences(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutNotificationPreferences operation middleware
+func (siw *ServerInterfaceWrapper) PutNotificationPreferences(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutNotificationPreferences(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -49528,6 +49987,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/auth/config", wrapper.GetAuthConfig)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/auth/device/{user_code}", wrapper.GetDeviceRequest)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/me", wrapper.GetMe)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/me/notifications", wrapper.GetNotificationPreferences)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/me/notifications", wrapper.PutNotificationPreferences)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/platform/admins", wrapper.ListPlatformAdmins)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/platform/admins", wrapper.AddPlatformAdmin)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/platform/admins/{user}", wrapper.RemovePlatformAdmin)
@@ -49811,6 +50272,83 @@ type GetMedefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetMedefaultApplicationProblemPlusJSONResponse) VisitGetMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotificationPreferencesRequestObject struct {
+}
+
+type GetNotificationPreferencesResponseObject interface {
+	VisitGetNotificationPreferencesResponse(w http.ResponseWriter) error
+}
+
+type GetNotificationPreferences200JSONResponse NotificationPreferences
+
+func (response GetNotificationPreferences200JSONResponse) VisitGetNotificationPreferencesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotificationPreferencesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetNotificationPreferencesdefaultApplicationProblemPlusJSONResponse) VisitGetNotificationPreferencesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutNotificationPreferencesRequestObject struct {
+	Body *PutNotificationPreferencesJSONRequestBody
+}
+
+type PutNotificationPreferencesResponseObject interface {
+	VisitPutNotificationPreferencesResponse(w http.ResponseWriter) error
+}
+
+type PutNotificationPreferences200JSONResponse NotificationPreferences
+
+func (response PutNotificationPreferences200JSONResponse) VisitPutNotificationPreferencesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutNotificationPreferencesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response PutNotificationPreferencesdefaultApplicationProblemPlusJSONResponse) VisitPutNotificationPreferencesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -56967,6 +57505,12 @@ type StrictServerInterface interface {
 	// GetMe Who the request acts for
 	// (GET /v1/me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
+	// GetNotificationPreferences The caller's own notification preferences
+	// (GET /v1/me/notifications)
+	GetNotificationPreferences(ctx context.Context, request GetNotificationPreferencesRequestObject) (GetNotificationPreferencesResponseObject, error)
+	// PutNotificationPreferences Replace the caller's own notification preferences
+	// (PUT /v1/me/notifications)
+	PutNotificationPreferences(ctx context.Context, request PutNotificationPreferencesRequestObject) (PutNotificationPreferencesResponseObject, error)
 	// ListOrgs The caller's organizations, by name
 	// (GET /v1/orgs)
 	ListOrgs(ctx context.Context, request ListOrgsRequestObject) (ListOrgsResponseObject, error)
@@ -57600,6 +58144,61 @@ func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetMeResponseObject); ok {
 		if err := validResponse.VisitGetMeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNotificationPreferences operation middleware
+func (sh *strictHandler) GetNotificationPreferences(w http.ResponseWriter, r *http.Request) {
+	var request GetNotificationPreferencesRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNotificationPreferences(ctx, request.(GetNotificationPreferencesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNotificationPreferences")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNotificationPreferencesResponseObject); ok {
+		if err := validResponse.VisitGetNotificationPreferencesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutNotificationPreferences operation middleware
+func (sh *strictHandler) PutNotificationPreferences(w http.ResponseWriter, r *http.Request) {
+	var request PutNotificationPreferencesRequestObject
+
+	var body PutNotificationPreferencesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutNotificationPreferences(ctx, request.(PutNotificationPreferencesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutNotificationPreferences")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutNotificationPreferencesResponseObject); ok {
+		if err := validResponse.VisitPutNotificationPreferencesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

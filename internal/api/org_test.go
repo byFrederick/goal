@@ -247,6 +247,9 @@ var probes = map[string]probe{
 	"listOrgs":         {method: http.MethodGet, path: orgsPath},
 	"createOrg":        {method: http.MethodPost, path: orgsPath, body: `{"name":"Acme Two","slug":"acme-two"}`},
 
+	"getNotificationPreferences": {method: http.MethodGet, path: notificationsPath},
+	"putNotificationPreferences": {method: http.MethodPut, path: notificationsPath, body: ownNotifications},
+
 	"listPlatformAdmins":  {method: http.MethodGet, path: "/v1/platform/admins"},
 	"addPlatformAdmin":    {method: http.MethodPost, path: "/v1/platform/admins", body: `{"email":"nobody@example.com"}`},
 	"removePlatformAdmin": {method: http.MethodDelete, path: "/v1/platform/admins/019a3002-0000-7000-8000-000000000001"},

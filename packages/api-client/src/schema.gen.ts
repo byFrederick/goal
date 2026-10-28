@@ -81,6 +81,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's own notification preferences
+         * @description Which events the signed-in person is told about on which channel, the email notifications go to and the time zone of the daily digest (ADR 0023, decision 1). They hold in every organization the person belongs to. A person who never saved any reads the defaults. Only a signed-in person has them: an API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+         */
+        get: operations["getNotificationPreferences"];
+        /**
+         * Replace the caller's own notification preferences
+         * @description Replaces every field. An email that is not a plain address (blank is the sign-in email) is 400 invalid-notification-email; a time zone that is not an IANA name, or Local, is 400 invalid-time-zone; the digest In Goal is 400 invalid-notification-preferences. Nothing is changed then. An API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+         */
+        put: operations["putNotificationPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/platform/admins": {
         parameters: {
             query?: never;
@@ -3816,6 +3840,34 @@ export interface components {
             /** @description A signed-in person's session; absent for a key, a personal token and under mode none */
             session?: components["schemas"]["MeSession"];
         };
+        /** @description One person's notification preferences (ADR 0023, decision 1), in every organization they belong to */
+        NotificationPreferences: {
+            events: components["schemas"]["NotificationEvents"];
+            /** @description Where email notifications go; blank is the sign-in email */
+            email: string;
+            /** @description The IANA time zone the daily digest goes out at 08:00 in, such as Europe/Berlin */
+            time_zone: string;
+        };
+        /** @description The channels of each event */
+        NotificationEvents: {
+            /** @description An agent needs the person's OK for a write */
+            approval: components["schemas"]["NotificationChannels"];
+            /** @description An agent asks the person a question */
+            question: components["schemas"]["NotificationChannels"];
+            /** @description A factory pulls the andon */
+            andon: components["schemas"]["NotificationChannels"];
+            /** @description A budget passes 80% */
+            budget: components["schemas"]["NotificationChannels"];
+            /** @description The daily digest at 08:00; in_goal is always false */
+            digest: components["schemas"]["NotificationChannels"];
+        };
+        NotificationChannels: {
+            /** @description The app's own badge and toast */
+            in_goal: boolean;
+            email: boolean;
+            /** @description A direct message from the organization's Slack connection */
+            slack: boolean;
+        };
         PlatformAdmin: {
             user: components["schemas"]["User"];
             /** @description Who made them one: a platform admin, system bootstrap (the first sign-in) or system recovery (goal db recover-admin) */
@@ -7510,6 +7562,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Me"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The preferences */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferences"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    putNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationPreferences"];
+            };
+        };
+        responses: {
+            /** @description The preferences as saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferences"];
                 };
             };
             default: components["responses"]["Problem"];

@@ -255,6 +255,18 @@ func (mxAudit) AuditLog(context.Context, ports.AuditQuery) ([]domain.AuditEntry,
 // mxPlatform is every platform route's collaborator: reaching it is passing authorization.
 type mxPlatform struct{ Platform }
 
+// mxNotifications is the notification routes' collaborator: reaching it is passing
+// authorization. It cannot embed its port, whose method has the port's name.
+type mxNotifications struct{}
+
+func (mxNotifications) NotificationPreferences(context.Context, domain.UserID) (domain.NotificationPreferences, error) {
+	panic("reached")
+}
+
+func (mxNotifications) SetNotificationPreferences(context.Context, domain.UserID, domain.NotificationPreferences) error {
+	panic("reached")
+}
+
 type mxDefinitions struct{ Definitions }
 
 func (mxDefinitions) Factory(ctx context.Context, ref string) (ports.FactoryRecord, error) {
@@ -291,6 +303,7 @@ func mxServer(t *testing.T, identity Identity) *httptest.Server {
 		ConnectionTransport: http.DefaultTransport, Knowledge: struct{ ports.Knowledge }{}, KnowledgeUploads: struct{ KnowledgeUploads }{},
 		KnowledgeSearch: struct{ KnowledgeSearch }{}, UploadMaxBytes: 1 << 20, Clock: clock,
 		OrgPolicies: struct{ ports.OrgPolicies }{}, BoxSizes: []domain.BoxSize{{Size: domain.SandboxMedium}},
+		NotificationPreferences: mxNotifications{},
 	})
 	if err != nil {
 		t.Fatal(err)
