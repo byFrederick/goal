@@ -548,6 +548,8 @@ interface TemplateSpec {
   connections?: string[];
   agents: { name: string; description: string; prompt: string }[];
   stations: TemplateLine[];
+  /** The template's starter triggers, as the `triggers:` block of spec.board (ADR 0032 decision 5: off until turned on). */
+  triggers?: string;
 }
 
 function templateYaml(t: TemplateSpec): string {
@@ -576,7 +578,7 @@ ${t.agents.map((a) => `    - name: ${a.name}\n      description: ${a.description
     workTypes: [${t.workTypes.join(', ')}]
     stations:
 ${t.stations.map(station).join('\n')}
-`;
+${t.triggers ?? ''}`;
 }
 
 function template(t: TemplateSpec): MockTemplate {
@@ -666,6 +668,22 @@ const templateSpecs: TemplateSpec[] = [
     changed: '2026-09-20',
     workTypes: ['review'],
     agents: [{ name: 'reviewer', description: 'Reviews the change.', prompt: 'Review the pull request.' }],
+    triggers: `    triggers:
+      - name: issues-labeled-factory
+        enabled: false
+        on: github.issues.labeled
+        create: { type: review, station: inbox }
+      - name: flaky-test-on-main
+        enabled: false
+        on: github.check_run.failed
+        create: { type: review, station: inbox, expedite: true }
+      - name: weekly-dependency-audit
+        enabled: false
+        on: schedule
+        cron: "0 9 * * MON"
+        timeZone: UTC
+        create: { type: review, station: inbox }
+`,
     stations: [
       { id: 'inbox', name: 'Inbox', kind: 'queue' },
       { id: 'review', name: 'Review', kind: 'agent', agent: 'reviewer', wip: 2 },

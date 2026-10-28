@@ -120,7 +120,9 @@ test('step 4 without a factory links back to step 3', async ({ page }) => {
   await expect(page).toHaveURL(/\/o\/goal\/get-started\/factory/);
 });
 
-test('step 4 continues to step 5, which publishes the factory and reaches step 6', async ({ page }) => {
+test('step 4 continues to step 5, which publishes the factory, and step 6 turns on a trigger and reaches step 7', async ({
+  page,
+}) => {
   await signIn(page.request);
   await page.goto('/o/goal/get-started/code');
   await page.locator('label', { hasText: 'acme/goal' }).first().getByRole('checkbox').check();
@@ -139,4 +141,15 @@ test('step 4 continues to step 5, which publishes the factory and reaches step 6
 
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page).toHaveURL(/\/o\/goal\/get-started\/intake\?.*factory=/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Choose where work comes from' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Starter triggers' })).toBeVisible();
+  // The template's GitHub triggers need an endpoint the new factory does not have: they show Connect, not a switch.
+  await expect(page.getByRole('link', { name: 'Connect GitHub' }).first()).toBeVisible();
+  await expect(page.getByRole('switch', { name: 'issues-labeled-factory' })).toBeDisabled();
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+
+  await page.getByRole('switch', { name: 'weekly-dependency-audit' }).click();
+  await page.getByRole('button', { name: 'Turn on 1 trigger' }).click();
+  await expect(page).toHaveURL(/\/o\/goal\/get-started\/people\?.*factory=/);
 });
