@@ -166,6 +166,12 @@ usage:
                                                   creating items (triggers change in the definition)
   goal triggers show <factory> <trigger> [--json] a trigger, what its items did in the last 7 days
                                                   and its recent events: created, merged or skipped
+  goal triggers try <factory> <trigger> --event ID [--json]
+                                                  dry-run the trigger on one of its 20 newest events
+                                                  (ID from goal triggers show): whether it matched,
+                                                  each step and why, the item it would create; nothing
+                                                  is created, but the model check runs and its cost is
+                                                  spent
   goal webhooks list <factory> [--json]           the factory's webhook endpoints: kind, address,
                                                   the triggers they feed, deliveries in 7 days
                                                   (never a secret)
