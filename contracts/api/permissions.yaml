@@ -26,6 +26,8 @@ permissions:
   - {name: org:delete,         level: org, org_roles: [owner], fresh: true,
      better_auth: {organization: [update, delete]}}
   - {name: org:transfer,       level: org, org_roles: [owner], fresh: true}
+  # Sign-up by domain (ADR 0023, decision 7): who may join without an invitation.
+  - {name: org:signup_domain,  level: org, org_roles: [owner], fresh: true}
   - {name: audit:read,         level: org, org_roles: [owner, admin], keys: true}
   - {name: member:read,        level: org, org_roles: [owner, admin, member]}
   - {name: invitation:read,    level: org, org_roles: [owner, admin]}

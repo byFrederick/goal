@@ -15,8 +15,8 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
-// Orgs are the install's organizations as the API reads and changes them; ports.Tenancy
-// satisfies it. Org, Orgs and CreateOrg need no organization in ctx; the others act on the one
+// Orgs are the install's organizations as the API reads and changes them, with their sign-up
+// domains; ports.Tenancy and ports.SignupDomains satisfy it. Org, Orgs and CreateOrg need no organization in ctx; the others act on the one
 // in ctx.
 type Orgs interface {
 	Orgs(ctx context.Context) ([]domain.OrgSummary, error)
@@ -25,6 +25,7 @@ type Orgs interface {
 	UpdateOrg(ctx context.Context, by domain.Actor, u ports.OrgUpdate) (domain.Org, error)
 	DeleteOrg(ctx context.Context, by domain.Actor, now time.Time) error
 	FactorySlots(ctx context.Context) (map[domain.FactoryID]int, error)
+	ports.SignupDomains
 }
 
 // errOrgNotFound answers an unknown or deleted organization alike: 404 with one body.

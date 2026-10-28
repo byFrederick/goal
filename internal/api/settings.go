@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 
@@ -102,10 +103,19 @@ func (s *server) settings(ctx context.Context, o domain.Org) (gen.OrgSettings, e
 		return gen.OrgSettings{}, err
 	}
 
+	signup, set, err := s.orgs.SignupDomain(ctx)
+	if err != nil {
+		return gen.OrgSettings{}, err
+	}
+
 	factories := s.factories.Factories(ctx)
 	out := gen.OrgSettings{
 		Name: o.Name, Slug: o.Slug, Mark: o.Mark,
 		Slots: gen.OrgSlots{Max: capOut(o.MaxSlots), Factories: make([]gen.FactorySlots, 0, len(factories))},
+	}
+
+	if set {
+		out.SignupDomain = new(s.signupDomainOut(signup))
 	}
 
 	for _, f := range factories {
@@ -119,6 +129,74 @@ func (s *server) settings(ctx context.Context, o domain.Org) (gen.OrgSettings, e
 	})
 
 	return out, nil
+}
+
+// SetSignupDomain sets the organization's sign-up domain (ADR 0023, decision 7) for the caller,
+// an owner whose own sign-in email is at it.
+func (s *server) SetSignupDomain(ctx context.Context, req gen.SetSignupDomainRequestObject) (gen.SetSignupDomainResponseObject, error) {
+	actor, err := actorOf(ctx, "set sign-up domain")
+	if err != nil {
+		return nil, err
+	}
+
+	d, err := domain.CheckSignupDomain(req.Body.Domain)
+	if err != nil {
+		return nil, err
+	}
+
+	role, err := domain.CheckJoinRole(domain.FactoryRole(deref(req.Body.JoinRole)))
+	if err != nil {
+		return nil, err
+	}
+
+	out, err := s.orgs.SetSignupDomain(ctx, actor, d, role)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.SetSignupDomain200JSONResponse(s.signupDomainOut(out)), nil
+}
+
+// ClearSignupDomain stops sign-up by domain; members who joined by it stay.
+func (s *server) ClearSignupDomain(ctx context.Context, _ gen.ClearSignupDomainRequestObject) (gen.ClearSignupDomainResponseObject, error) {
+	actor, err := actorOf(ctx, "clear sign-up domain")
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.orgs.ClearSignupDomain(ctx, actor); err != nil {
+		return nil, err
+	}
+
+	return gen.ClearSignupDomain204Response{}, nil
+}
+
+func (s *server) signupDomainOut(d domain.SignupDomain) gen.SignupDomain {
+	return gen.SignupDomain{Domain: d.Domain, JoinRole: gen.FactoryRole(d.JoinRole), SetBy: s.actorOut(d.SetBy), SetAt: d.SetAt}
+}
+
+// signupDomainProblem answers the refusals of a sign-up domain: 400 for a malformed domain or role
+// (no code), another person's domain and a webmail domain, 409 for one another organization holds.
+func signupDomainProblem(err error) (gen.Problem, bool) {
+	for _, a := range []struct {
+		err    error
+		status int
+		code   string
+	}{
+		{domain.ErrSignupDomainInvalid, http.StatusBadRequest, ""},
+		{domain.ErrSignupDomainNotYours, http.StatusBadRequest, "signup-domain-not-yours"},
+		{domain.ErrSignupDomainPublic, http.StatusBadRequest, "signup-domain-public"},
+		{domain.ErrSignupDomainTaken, http.StatusConflict, "signup-domain-taken"},
+	} {
+		if errors.Is(err, a.err) {
+			p := detailed(a.status, err)
+			p.Code = optional(a.code)
+
+			return p, true
+		}
+	}
+
+	return gen.Problem{}, false
 }
 
 // capIn reads a slot cap of the contract: null clears it (0), a number must be a cap.

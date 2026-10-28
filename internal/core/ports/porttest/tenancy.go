@@ -33,12 +33,17 @@ type Tenancy struct {
 	ids   int
 	// auditIDs numbers entries like an identity column: never reused, even after a purge.
 	auditIDs int64
+	// emailOf and publicDomains are the sign-in emails and the webmail list sign-up domains are
+	// checked against (WithSignIn).
+	emailOf       func(domain.UserID) (string, bool)
+	publicDomains map[string]bool
 }
 
 type orgRow struct {
 	org     domain.Org
 	owner   domain.UserID // NewOrg.Owner
 	deleted time.Time     // zero while live
+	signup  *domain.SignupDomain
 }
 
 type auditRow struct {
