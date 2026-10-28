@@ -3,6 +3,7 @@
 // (catalog/templates/) and the skills.sh skills catalog (catalog/skills/). Illustrative content
 // only: goald reads real definitions from the bucket.
 import type { Actor, VersionSource } from '@goal/api-client';
+import { starterItem } from './starter.ts';
 
 /** A definition's files by path. */
 export type Tree = Map<string, Uint8Array>;
@@ -550,6 +551,8 @@ interface TemplateSpec {
   stations: TemplateLine[];
   /** The template's starter triggers, as the `triggers:` block of spec.board (ADR 0032 decision 5: off until turned on). */
   triggers?: string;
+  /** The template's starter item, as the top-level `starter.item` section (ADR 0032 decision 3). */
+  starter?: { title: string; type: string; body: string };
 }
 
 function templateYaml(t: TemplateSpec): string {
@@ -578,7 +581,16 @@ ${t.agents.map((a) => `    - name: ${a.name}\n      description: ${a.description
     workTypes: [${t.workTypes.join(', ')}]
     stations:
 ${t.stations.map(station).join('\n')}
-${t.triggers ?? ''}`;
+${t.triggers ?? ''}${
+  t.starter
+    ? `starter:
+  item:
+    title: ${t.starter.title}
+    type: ${t.starter.type}
+    body: ${t.starter.body}
+`
+    : ''
+}`;
 }
 
 function template(t: TemplateSpec): MockTemplate {
@@ -756,6 +768,7 @@ const templateSpecs: TemplateSpec[] = [
       { id: 'review', name: 'Review', kind: 'human' },
       { id: 'done', name: 'Done', kind: 'done' },
     ],
+    starter: starterItem,
   },
   {
     name: 'incident-response',

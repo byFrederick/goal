@@ -20,6 +20,8 @@ export interface PreviewSlots {
   line?: ReactNode;
   /** Three cards in a row under the line; the step passes three elements. */
   cards?: ReactNode;
+  /** The running item, a card under the cards (step 8); nothing is drawn until a step passes one. */
+  item?: ReactNode;
 }
 
 interface OnboardingLayoutProps {
@@ -150,6 +152,7 @@ function Panel({ preview }: { preview: PreviewSlots | undefined }) {
           </>
         )}
       </div>
+      {preview?.item}
     </aside>
   );
 }

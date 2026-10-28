@@ -373,8 +373,8 @@ function TriggerRow({
   );
 }
 
-/** The panel's Intake card: the triggers switched on, then what is always on. */
-function IntakeCard({ names }: { names: string[] }) {
+/** The panel's Intake card: the triggers switched on, then what is always on. Steps 6 to 8 draw it. */
+export function IntakeCard({ names }: { names: string[] }) {
   return (
     <section
       aria-label="Intake"

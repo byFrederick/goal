@@ -175,6 +175,12 @@ function modelOf(t: Tree): Read | ParseError | undefined {
 
 const asModel = (m: Model) => m as unknown as FactoryModel;
 
+/** The factory.yaml's `starter` section (ADR 0032): not one of the Visual sections, so readModel leaves it out. */
+function starterOf(t: Tree): Pick<FactoryModel, 'starter'> {
+  const doc = parseYaml(decode(t.get(yamlFile))) as { starter?: FactoryModel['starter'] } | null;
+  return doc?.starter === undefined ? {} : { starter: doc.starter };
+}
+
 // Validation (B §4.7, a subset): goald's codes, checks, pointers and fixes.
 
 interface Checked {
@@ -1696,7 +1702,7 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
         const read = modelOf(files);
         if (!read || read instanceof ParseError) refuse(409, 'Conflict', 'yaml-invalid');
         const { model, ranges } = read as Read;
-        send(res, 200, { model: asModel(model), ranges });
+        send(res, 200, { model: { ...asModel(model), ...starterOf(files) }, ranges });
         return true;
       }
       if (m[3] !== undefined && method === 'GET') {

@@ -1,6 +1,7 @@
 // What Members and roles says about people (canvas "Members", "Members-View", "Mobile-Members";
 // spec 3 §10.2): roles as words, a member's factories, last activity by day, why a role cannot be
 // changed, the invite dialog's addresses. Pure: the page renders what these return.
+import type { InviteRequest, OrgRoleName } from '../../api/auth';
 import type { FactoryRole, Invitation, Member, OrgRole } from '../../api/types';
 import { formatDay } from '../../shared/format';
 import { displayName } from '../../shared/names';
@@ -110,3 +111,30 @@ export function parseEmails(text: string): { emails: string[]; invalid: string[]
 
 /** At most this many addresses at once (the invite dialog). */
 export const maxInvites = 20;
+
+/** Factory grants by factory id, as the invite dialog holds them: a role, or '' for none. */
+export type FactoryGrants = Record<string, FactoryRole | ''>;
+
+/** The grants that apply, as the invitation takes them: the factories with a role. */
+export function factoryRolesOf(grants: FactoryGrants): InviteRequest['factoryRoles'] {
+  return Object.entries(grants).flatMap(([factoryId, r]) => (r ? [{ factoryId, role: r }] : []));
+}
+
+/**
+ * One invitation request per address, all with the same role. Only members get factory grants:
+ * owners and admins hold every factory role already. The invite dialog and onboarding send these.
+ */
+export function inviteRequestsOf({
+  orgId,
+  emails,
+  role,
+  grants,
+}: {
+  orgId: string;
+  emails: readonly string[];
+  role: OrgRoleName;
+  grants: FactoryGrants;
+}): InviteRequest[] {
+  const factoryRoles = role === 'member' ? factoryRolesOf(grants) : [];
+  return emails.map((email) => ({ organizationId: orgId, email, role, factoryRoles }));
+}
