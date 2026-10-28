@@ -5167,6 +5167,9 @@ type OrgSettings struct {
 	Mark string `json:"mark"`
 	Name string `json:"name"`
 
+	// SignupDomain The domain whose people may sign up without an invitation; absent when none is set
+	SignupDomain *SignupDomain `json:"signup_domain,omitempty"`
+
 	// Slots Slot caps: how many agents may run at once across the organization's factories (max) and in each factory. null is no cap.
 	Slots OrgSlots `json:"slots"`
 	Slug  string   `json:"slug"`
@@ -5766,6 +5769,28 @@ type SetLaneRequest struct {
 
 // SignInMethod defines model for SignInMethod.
 type SignInMethod string
+
+// SignupDomain Sign-up by domain (ADR 0023, decision 7): anyone whose verified email is exactly at domain may sign up, joining as a member with join_role on every factory that exists then
+type SignupDomain struct {
+	// Domain Lower case
+	Domain string `json:"domain"`
+
+	// JoinRole A ladder, each including the one before
+	JoinRole FactoryRole `json:"join_role"`
+	SetAt    time.Time   `json:"set_at"`
+
+	// SetBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	SetBy Actor `json:"set_by"`
+}
+
+// SignupDomainInput defines model for SignupDomainInput.
+type SignupDomainInput struct {
+	// Domain A domain such as example.com; case is ignored
+	Domain string `json:"domain"`
+
+	// JoinRole The factory role people who join get; viewer when absent
+	JoinRole *FactoryRole `json:"join_role,omitempty"`
+}
 
 // SizeUse defines model for SizeUse.
 type SizeUse struct {
@@ -7163,6 +7188,9 @@ type PutOrgPolicyJSONRequestBody = OrgPolicyInput
 
 // UpdateOrgSettingsJSONRequestBody defines body for UpdateOrgSettings for application/json ContentType.
 type UpdateOrgSettingsJSONRequestBody = OrgSettingsPatch
+
+// SetSignupDomainJSONRequestBody defines body for SetSignupDomain for application/json ContentType.
+type SetSignupDomainJSONRequestBody = SignupDomainInput
 
 // TransferOwnershipJSONRequestBody defines body for TransferOwnership for application/json ContentType.
 type TransferOwnershipJSONRequestBody = TransferRequest
@@ -9143,6 +9171,31 @@ type ClientInterface interface {
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
 	UpdateOrgSettings(ctx context.Context, org OrgRef, body UpdateOrgSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ClearSignupDomain Stop sign-up by domain
+	//
+	// Clears the sign-up domain: from then on only invited people sign up. Members who joined by the domain stay. Audited as org.signup_domain_cleared; nothing to clear is no change. Needs a sign-in from the last 10 minutes.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/settings/signup-domain (the `ClearSignupDomain` operationId).
+	ClearSignupDomain(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetSignupDomainWithBody Let anyone with a verified email at a domain sign up and join
+	//
+	// Sets the organization's one sign-up domain (ADR 0023, decision 7). From then on a person whose verified sign-in email is exactly at the domain (subdomains not included) may sign up without an invitation and joins as a member with join_role on every factory that exists then. Only an owner may set it, with a sign-in from the last 10 minutes, and only to the domain of their own sign-in email. Audited as org.signup_domain_set; setting what is already set changes nothing. A malformed domain or an unknown role is 400; a domain the caller's email is not at is 400 signup-domain-not-yours; a public webmail domain is 400 signup-domain-public; a domain another live organization holds is 409 signup-domain-taken.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/settings/signup-domain (the `SetSignupDomain` operationId).
+	SetSignupDomainWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetSignupDomain Let anyone with a verified email at a domain sign up and join
+	//
+	// Sets the organization's one sign-up domain (ADR 0023, decision 7). From then on a person whose verified sign-in email is exactly at the domain (subdomains not included) may sign up without an invitation and joins as a member with join_role on every factory that exists then. Only an owner may set it, with a sign-in from the last 10 minutes, and only to the domain of their own sign-in email. Audited as org.signup_domain_set; setting what is already set changes nothing. A malformed domain or an unknown role is 400; a domain the caller's email is not at is 400 signup-domain-not-yours; a public webmail domain is 400 signup-domain-public; a domain another live organization holds is 409 signup-domain-taken.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/settings/signup-domain (the `SetSignupDomain` operationId).
+	SetSignupDomain(ctx context.Context, org OrgRef, body SetSignupDomainJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetOrgSpend What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
 	//
@@ -13034,6 +13087,61 @@ func (c *Client) UpdateOrgSettingsWithBody(ctx context.Context, org OrgRef, cont
 // Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
 func (c *Client) UpdateOrgSettings(ctx context.Context, org OrgRef, body UpdateOrgSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateOrgSettingsRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ClearSignupDomain Stop sign-up by domain
+//
+// Clears the sign-up domain: from then on only invited people sign up. Members who joined by the domain stay. Audited as org.signup_domain_cleared; nothing to clear is no change. Needs a sign-in from the last 10 minutes.
+//
+// Corresponds with DELETE /v1/orgs/{org}/settings/signup-domain (the `ClearSignupDomain` operationId).
+func (c *Client) ClearSignupDomain(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewClearSignupDomainRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetSignupDomainWithBody Let anyone with a verified email at a domain sign up and join
+//
+// Sets the organization's one sign-up domain (ADR 0023, decision 7). From then on a person whose verified sign-in email is exactly at the domain (subdomains not included) may sign up without an invitation and joins as a member with join_role on every factory that exists then. Only an owner may set it, with a sign-in from the last 10 minutes, and only to the domain of their own sign-in email. Audited as org.signup_domain_set; setting what is already set changes nothing. A malformed domain or an unknown role is 400; a domain the caller's email is not at is 400 signup-domain-not-yours; a public webmail domain is 400 signup-domain-public; a domain another live organization holds is 409 signup-domain-taken.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/settings/signup-domain (the `SetSignupDomain` operationId).
+func (c *Client) SetSignupDomainWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetSignupDomainRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetSignupDomain Let anyone with a verified email at a domain sign up and join
+//
+// Sets the organization's one sign-up domain (ADR 0023, decision 7). From then on a person whose verified sign-in email is exactly at the domain (subdomains not included) may sign up without an invitation and joins as a member with join_role on every factory that exists then. Only an owner may set it, with a sign-in from the last 10 minutes, and only to the domain of their own sign-in email. Audited as org.signup_domain_set; setting what is already set changes nothing. A malformed domain or an unknown role is 400; a domain the caller's email is not at is 400 signup-domain-not-yours; a public webmail domain is 400 signup-domain-public; a domain another live organization holds is 409 signup-domain-taken.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/settings/signup-domain (the `SetSignupDomain` operationId).
+func (c *Client) SetSignupDomain(ctx context.Context, org OrgRef, body SetSignupDomainJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetSignupDomainRequest(c.Server, org, body)
 	if err != nil {
 		return nil, err
 	}
@@ -21935,6 +22043,87 @@ func NewUpdateOrgSettingsRequestWithBody(server string, org OrgRef, contentType 
 	return req, nil
 }
 
+// NewClearSignupDomainRequest constructs an http.Request for the ClearSignupDomain method
+func NewClearSignupDomainRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/settings/signup-domain", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSetSignupDomainRequest calls the generic SetSignupDomain builder with application/json body
+func NewSetSignupDomainRequest(server string, org OrgRef, body SetSignupDomainJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSetSignupDomainRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewSetSignupDomainRequestWithBody constructs an http.Request for the SetSignupDomain method, with any body, and a specified content type
+func NewSetSignupDomainRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/settings/signup-domain", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewGetOrgSpendRequest constructs an http.Request for the GetOrgSpend method
 func NewGetOrgSpendRequest(server string, org OrgRef, params *GetOrgSpendParams) (*http.Request, error) {
 	var err error
@@ -24468,6 +24657,33 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
 	UpdateOrgSettingsWithResponse(ctx context.Context, org OrgRef, body UpdateOrgSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateOrgSettingsResponse, error)
+
+	// ClearSignupDomainWithResponse Stop sign-up by domain
+	//
+	// Clears the sign-up domain: from then on only invited people sign up. Members who joined by the domain stay. Audited as org.signup_domain_cleared; nothing to clear is no change. Needs a sign-in from the last 10 minutes.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/settings/signup-domain (the `ClearSignupDomain` operationId).
+	ClearSignupDomainWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ClearSignupDomainResponse, error)
+
+	// SetSignupDomainWithBodyWithResponse Let anyone with a verified email at a domain sign up and join
+	//
+	// Sets the organization's one sign-up domain (ADR 0023, decision 7). From then on a person whose verified sign-in email is exactly at the domain (subdomains not included) may sign up without an invitation and joins as a member with join_role on every factory that exists then. Only an owner may set it, with a sign-in from the last 10 minutes, and only to the domain of their own sign-in email. Audited as org.signup_domain_set; setting what is already set changes nothing. A malformed domain or an unknown role is 400; a domain the caller's email is not at is 400 signup-domain-not-yours; a public webmail domain is 400 signup-domain-public; a domain another live organization holds is 409 signup-domain-taken.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/settings/signup-domain (the `SetSignupDomain` operationId).
+	SetSignupDomainWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetSignupDomainResponse, error)
+
+	// SetSignupDomainWithResponse Let anyone with a verified email at a domain sign up and join
+	//
+	// Sets the organization's one sign-up domain (ADR 0023, decision 7). From then on a person whose verified sign-in email is exactly at the domain (subdomains not included) may sign up without an invitation and joins as a member with join_role on every factory that exists then. Only an owner may set it, with a sign-in from the last 10 minutes, and only to the domain of their own sign-in email. Audited as org.signup_domain_set; setting what is already set changes nothing. A malformed domain or an unknown role is 400; a domain the caller's email is not at is 400 signup-domain-not-yours; a public webmail domain is 400 signup-domain-public; a domain another live organization holds is 409 signup-domain-taken.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/settings/signup-domain (the `SetSignupDomain` operationId).
+	SetSignupDomainWithResponse(ctx context.Context, org OrgRef, body SetSignupDomainJSONRequestBody, reqEditors ...RequestEditorFn) (*SetSignupDomainResponse, error)
 
 	// GetOrgSpendWithResponse What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
 	//
@@ -32366,6 +32582,95 @@ func (r UpdateOrgSettingsResponse) ContentType() string {
 	return ""
 }
 
+type ClearSignupDomainResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ClearSignupDomainResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ClearSignupDomainResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ClearSignupDomainResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ClearSignupDomainResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ClearSignupDomainResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SetSignupDomainResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SignupDomain
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SetSignupDomainResponse) GetJSON200() *SignupDomain {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SetSignupDomainResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SetSignupDomainResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SetSignupDomainResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SetSignupDomainResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SetSignupDomainResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetOrgSpendResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -36095,6 +36400,51 @@ func (c *ClientWithResponses) UpdateOrgSettingsWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseUpdateOrgSettingsResponse(rsp)
+}
+
+// ClearSignupDomainWithResponse Stop sign-up by domain
+//
+// Clears the sign-up domain: from then on only invited people sign up. Members who joined by the domain stay. Audited as org.signup_domain_cleared; nothing to clear is no change. Needs a sign-in from the last 10 minutes.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/settings/signup-domain (the `ClearSignupDomain` operationId).
+func (c *ClientWithResponses) ClearSignupDomainWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ClearSignupDomainResponse, error) {
+	rsp, err := c.ClearSignupDomain(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseClearSignupDomainResponse(rsp)
+}
+
+// SetSignupDomainWithBodyWithResponse Let anyone with a verified email at a domain sign up and join
+//
+// Sets the organization's one sign-up domain (ADR 0023, decision 7). From then on a person whose verified sign-in email is exactly at the domain (subdomains not included) may sign up without an invitation and joins as a member with join_role on every factory that exists then. Only an owner may set it, with a sign-in from the last 10 minutes, and only to the domain of their own sign-in email. Audited as org.signup_domain_set; setting what is already set changes nothing. A malformed domain or an unknown role is 400; a domain the caller's email is not at is 400 signup-domain-not-yours; a public webmail domain is 400 signup-domain-public; a domain another live organization holds is 409 signup-domain-taken.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/settings/signup-domain (the `SetSignupDomain` operationId).
+func (c *ClientWithResponses) SetSignupDomainWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetSignupDomainResponse, error) {
+	rsp, err := c.SetSignupDomainWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetSignupDomainResponse(rsp)
+}
+
+// SetSignupDomainWithResponse Let anyone with a verified email at a domain sign up and join
+//
+// Sets the organization's one sign-up domain (ADR 0023, decision 7). From then on a person whose verified sign-in email is exactly at the domain (subdomains not included) may sign up without an invitation and joins as a member with join_role on every factory that exists then. Only an owner may set it, with a sign-in from the last 10 minutes, and only to the domain of their own sign-in email. Audited as org.signup_domain_set; setting what is already set changes nothing. A malformed domain or an unknown role is 400; a domain the caller's email is not at is 400 signup-domain-not-yours; a public webmail domain is 400 signup-domain-public; a domain another live organization holds is 409 signup-domain-taken.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/settings/signup-domain (the `SetSignupDomain` operationId).
+func (c *ClientWithResponses) SetSignupDomainWithResponse(ctx context.Context, org OrgRef, body SetSignupDomainJSONRequestBody, reqEditors ...RequestEditorFn) (*SetSignupDomainResponse, error) {
+	rsp, err := c.SetSignupDomain(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetSignupDomainResponse(rsp)
 }
 
 // GetOrgSpendWithResponse What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
@@ -41785,6 +42135,68 @@ func ParseUpdateOrgSettingsResponse(rsp *http.Response) (*UpdateOrgSettingsRespo
 	return response, nil
 }
 
+// ParseClearSignupDomainResponse parses an HTTP response from a ClearSignupDomainWithResponse call
+func ParseClearSignupDomainResponse(rsp *http.Response) (*ClearSignupDomainResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ClearSignupDomainResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSetSignupDomainResponse parses an HTTP response from a SetSignupDomainWithResponse call
+func ParseSetSignupDomainResponse(rsp *http.Response) (*SetSignupDomainResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SetSignupDomainResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SignupDomain
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetOrgSpendResponse parses an HTTP response from a GetOrgSpendWithResponse call
 func ParseGetOrgSpendResponse(rsp *http.Response) (*GetOrgSpendResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -42675,6 +43087,12 @@ type ServerInterface interface {
 	// UpdateOrgSettings Change the organization's settings
 	// (PATCH /v1/orgs/{org}/settings)
 	UpdateOrgSettings(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// ClearSignupDomain Stop sign-up by domain
+	// (DELETE /v1/orgs/{org}/settings/signup-domain)
+	ClearSignupDomain(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// SetSignupDomain Let anyone with a verified email at a domain sign up and join
+	// (PUT /v1/orgs/{org}/settings/signup-domain)
+	SetSignupDomain(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// GetOrgSpend What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
 	// (GET /v1/orgs/{org}/spend)
 	GetOrgSpend(w http.ResponseWriter, r *http.Request, org OrgRef, params GetOrgSpendParams)
@@ -49444,6 +49862,58 @@ func (siw *ServerInterfaceWrapper) UpdateOrgSettings(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// ClearSignupDomain operation middleware
+func (siw *ServerInterfaceWrapper) ClearSignupDomain(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ClearSignupDomain(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetSignupDomain operation middleware
+func (siw *ServerInterfaceWrapper) SetSignupDomain(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetSignupDomain(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetOrgSpend operation middleware
 func (siw *ServerInterfaceWrapper) GetOrgSpend(w http.ResponseWriter, r *http.Request) {
 
@@ -49999,6 +50469,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}", wrapper.GetOrg)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/settings", wrapper.GetOrgSettings)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/settings", wrapper.UpdateOrgSettings)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/settings/signup-domain", wrapper.ClearSignupDomain)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/settings/signup-domain", wrapper.SetSignupDomain)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/policy", wrapper.GetOrgPolicy)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/policy", wrapper.PutOrgPolicy)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/audit", wrapper.ListAudit)
@@ -56949,6 +57421,79 @@ func (response UpdateOrgSettingsdefaultApplicationProblemPlusJSONResponse) Visit
 	return err
 }
 
+type ClearSignupDomainRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type ClearSignupDomainResponseObject interface {
+	VisitClearSignupDomainResponse(w http.ResponseWriter) error
+}
+
+type ClearSignupDomain204Response struct {
+}
+
+func (response ClearSignupDomain204Response) VisitClearSignupDomainResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ClearSignupDomaindefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ClearSignupDomaindefaultApplicationProblemPlusJSONResponse) VisitClearSignupDomainResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetSignupDomainRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *SetSignupDomainJSONRequestBody
+}
+
+type SetSignupDomainResponseObject interface {
+	VisitSetSignupDomainResponse(w http.ResponseWriter) error
+}
+
+type SetSignupDomain200JSONResponse SignupDomain
+
+func (response SetSignupDomain200JSONResponse) VisitSetSignupDomainResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetSignupDomaindefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response SetSignupDomaindefaultApplicationProblemPlusJSONResponse) VisitSetSignupDomainResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetOrgSpendRequestObject struct {
 	Org    OrgRef `json:"org"`
 	Params GetOrgSpendParams
@@ -57976,6 +58521,12 @@ type StrictServerInterface interface {
 	// UpdateOrgSettings Change the organization's settings
 	// (PATCH /v1/orgs/{org}/settings)
 	UpdateOrgSettings(ctx context.Context, request UpdateOrgSettingsRequestObject) (UpdateOrgSettingsResponseObject, error)
+	// ClearSignupDomain Stop sign-up by domain
+	// (DELETE /v1/orgs/{org}/settings/signup-domain)
+	ClearSignupDomain(ctx context.Context, request ClearSignupDomainRequestObject) (ClearSignupDomainResponseObject, error)
+	// SetSignupDomain Let anyone with a verified email at a domain sign up and join
+	// (PUT /v1/orgs/{org}/settings/signup-domain)
+	SetSignupDomain(ctx context.Context, request SetSignupDomainRequestObject) (SetSignupDomainResponseObject, error)
 	// GetOrgSpend What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
 	// (GET /v1/orgs/{org}/spend)
 	GetOrgSpend(ctx context.Context, request GetOrgSpendRequestObject) (GetOrgSpendResponseObject, error)
@@ -62798,6 +63349,65 @@ func (sh *strictHandler) UpdateOrgSettings(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateOrgSettingsResponseObject); ok {
 		if err := validResponse.VisitUpdateOrgSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ClearSignupDomain operation middleware
+func (sh *strictHandler) ClearSignupDomain(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request ClearSignupDomainRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ClearSignupDomain(ctx, request.(ClearSignupDomainRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ClearSignupDomain")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ClearSignupDomainResponseObject); ok {
+		if err := validResponse.VisitClearSignupDomainResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetSignupDomain operation middleware
+func (sh *strictHandler) SetSignupDomain(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request SetSignupDomainRequestObject
+
+	request.Org = org
+
+	var body SetSignupDomainJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetSignupDomain(ctx, request.(SetSignupDomainRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetSignupDomain")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetSignupDomainResponseObject); ok {
+		if err := validResponse.VisitSetSignupDomainResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

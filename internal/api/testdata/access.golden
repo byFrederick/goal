@@ -260,6 +260,32 @@ clearAndon           pat-demoted      404 factory-not-found    404 org-not-found
 clearAndon           pat-removed      401 unauthenticated      401 unauthenticated
 clearAndon           pat-platform     200                      404 org-not-found
 clearAndon           pat-deleted-org  401 unauthenticated      401 unauthenticated
+clearSignupDomain    anonymous        401 unauthenticated      401 unauthenticated
+clearSignupDomain    owner            200                      404 org-not-found
+clearSignupDomain    admin            403 forbidden            404 org-not-found
+clearSignupDomain    viewer           403 forbidden            404 org-not-found
+clearSignupDomain    approver         403 forbidden            404 org-not-found
+clearSignupDomain    editor           403 forbidden            404 org-not-found
+clearSignupDomain    member-no-roles  403 forbidden            404 org-not-found
+clearSignupDomain    other-org-owner  404 org-not-found        200
+clearSignupDomain    platform-admin   404 org-not-found        404 org-not-found
+clearSignupDomain    stale-owner      403 reauth-required      404 org-not-found
+clearSignupDomain    key-scoped       403 forbidden            404 org-not-found
+clearSignupDomain    key-restricted   403 forbidden            404 org-not-found
+clearSignupDomain    key-other-org    404 org-not-found        403 forbidden
+clearSignupDomain    key-expired      401 unauthenticated      401 unauthenticated
+clearSignupDomain    key-revoked      401 unauthenticated      401 unauthenticated
+clearSignupDomain    bearer-owner     200                      404 org-not-found
+clearSignupDomain    pat-approver     403 forbidden            404 org-not-found
+clearSignupDomain    pat-owner        403 forbidden            404 org-not-found
+clearSignupDomain    pat-viewer       403 forbidden            404 org-not-found
+clearSignupDomain    pat-other-org    404 org-not-found        403 forbidden
+clearSignupDomain    pat-expired      401 unauthenticated      401 unauthenticated
+clearSignupDomain    pat-revoked      401 unauthenticated      401 unauthenticated
+clearSignupDomain    pat-demoted      403 forbidden            404 org-not-found
+clearSignupDomain    pat-removed      401 unauthenticated      401 unauthenticated
+clearSignupDomain    pat-platform     403 forbidden            404 org-not-found
+clearSignupDomain    pat-deleted-org  401 unauthenticated      401 unauthenticated
 compareVersions      anonymous        401 unauthenticated      401 unauthenticated
 compareVersions      owner            200                      404 org-not-found
 compareVersions      admin            200                      404 org-not-found
@@ -4004,6 +4030,32 @@ setItemLane          pat-demoted      404 item-not-found       404 org-not-found
 setItemLane          pat-removed      401 unauthenticated      401 unauthenticated
 setItemLane          pat-platform     200                      404 org-not-found
 setItemLane          pat-deleted-org  401 unauthenticated      401 unauthenticated
+setSignupDomain      anonymous        401 unauthenticated      401 unauthenticated
+setSignupDomain      owner            200                      404 org-not-found
+setSignupDomain      admin            403 forbidden            404 org-not-found
+setSignupDomain      viewer           403 forbidden            404 org-not-found
+setSignupDomain      approver         403 forbidden            404 org-not-found
+setSignupDomain      editor           403 forbidden            404 org-not-found
+setSignupDomain      member-no-roles  403 forbidden            404 org-not-found
+setSignupDomain      other-org-owner  404 org-not-found        200
+setSignupDomain      platform-admin   404 org-not-found        404 org-not-found
+setSignupDomain      stale-owner      403 reauth-required      404 org-not-found
+setSignupDomain      key-scoped       403 forbidden            404 org-not-found
+setSignupDomain      key-restricted   403 forbidden            404 org-not-found
+setSignupDomain      key-other-org    404 org-not-found        403 forbidden
+setSignupDomain      key-expired      401 unauthenticated      401 unauthenticated
+setSignupDomain      key-revoked      401 unauthenticated      401 unauthenticated
+setSignupDomain      bearer-owner     200                      404 org-not-found
+setSignupDomain      pat-approver     403 forbidden            404 org-not-found
+setSignupDomain      pat-owner        403 forbidden            404 org-not-found
+setSignupDomain      pat-viewer       403 forbidden            404 org-not-found
+setSignupDomain      pat-other-org    404 org-not-found        403 forbidden
+setSignupDomain      pat-expired      401 unauthenticated      401 unauthenticated
+setSignupDomain      pat-revoked      401 unauthenticated      401 unauthenticated
+setSignupDomain      pat-demoted      403 forbidden            404 org-not-found
+setSignupDomain      pat-removed      401 unauthenticated      401 unauthenticated
+setSignupDomain      pat-platform     403 forbidden            404 org-not-found
+setSignupDomain      pat-deleted-org  401 unauthenticated      401 unauthenticated
 setTouchReason       anonymous        401 unauthenticated      401 unauthenticated
 setTouchReason       owner            200                      404 org-not-found
 setTouchReason       admin            200                      404 org-not-found

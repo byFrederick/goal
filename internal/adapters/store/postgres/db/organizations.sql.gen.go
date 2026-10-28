@@ -256,6 +256,56 @@ func (q *Queries) SetOrg(ctx context.Context, orgID string) error {
 	return err
 }
 
+const setSignupDomain = `-- name: SetSignupDomain :exec
+SELECT goal_set_signup_domain($1::uuid, $2::text, $3::text,
+                              $4::text, $5::text)
+`
+
+type SetSignupDomainParams struct {
+	ActingUser uuid.UUID
+	Domain     *string
+	JoinRole   string
+	ByRef      string
+	RequestID  *string
+}
+
+// Sets (a domain) or clears (null) the transaction's organization's sign-up domain for the owner
+// acting_user, audited (goal_set_signup_domain, 00078).
+func (q *Queries) SetSignupDomain(ctx context.Context, arg SetSignupDomainParams) error {
+	_, err := q.db.Exec(ctx, setSignupDomain,
+		arg.ActingUser,
+		arg.Domain,
+		arg.JoinRole,
+		arg.ByRef,
+		arg.RequestID,
+	)
+	return err
+}
+
+const signupDomain = `-- name: SignupDomain :one
+SELECT domain, join_role, set_by, set_at FROM org_signup_domains WHERE org_id = goal_org()
+`
+
+type SignupDomainRow struct {
+	Domain   string
+	JoinRole string
+	SetBy    string
+	SetAt    time.Time
+}
+
+// The transaction's organization's sign-up domain (ADR 0023, decision 7).
+func (q *Queries) SignupDomain(ctx context.Context) (SignupDomainRow, error) {
+	row := q.db.QueryRow(ctx, signupDomain)
+	var i SignupDomainRow
+	err := row.Scan(
+		&i.Domain,
+		&i.JoinRole,
+		&i.SetBy,
+		&i.SetAt,
+	)
+	return i, err
+}
+
 const softDeleteOrg = `-- name: SoftDeleteOrg :exec
 UPDATE organizations SET deleted_at = $1, updated_at = now() WHERE id = goal_org()
 `

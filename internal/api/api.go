@@ -657,7 +657,7 @@ func problemOf(err error) gen.Problem {
 	// wrap ports.ErrNameTaken); the credentials' before the connections' (both wrap
 	// ports.ErrNoMasterKey).
 	for _, answer := range []func(error) (gen.Problem, bool){
-		fixedProblem, exportProblem, policyProblem, notificationProblem, edgeProblem, partProblem, credentialProblem, webhookProblem, viewProblem, connectionProblem, knowledgeProblem, judgeProblem, evalProblem, definitionProblem,
+		fixedProblem, exportProblem, policyProblem, notificationProblem, signupDomainProblem, edgeProblem, partProblem, credentialProblem, webhookProblem, viewProblem, connectionProblem, knowledgeProblem, judgeProblem, evalProblem, definitionProblem,
 		controlProblem, questionProblem, toolApprovalProblem, agentProblem, triggerProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {

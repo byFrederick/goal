@@ -10,6 +10,7 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
+	"github.com/byFrederick/goal/internal/core/ports/porttest"
 )
 
 const (
@@ -284,4 +285,140 @@ func TestAudit_FiltersAndOrgs(t *testing.T) {
 			t.Errorf("GET audit%s = %d; want refused", q, code)
 		}
 	}
+}
+
+// signupPath is acme's sign-up domain; ownDomain sets it to its owner's email's domain.
+const (
+	signupPath = acmeSettings + "/signup-domain"
+	ownDomain  = `{"domain":"example.com"}`
+)
+
+// withSignupDomains is the signed-in harness with acme's people and the webmail list, the fake
+// checking sign-up domains against the people's sign-in emails (the owner's is at example.com).
+func withSignupDomains(t *testing.T) signedIn {
+	t.Helper()
+
+	h := newSignedIn(t)
+	withPeople(t, h)
+	h.tenancy.WithSignIn(h.identity.Email, "gmail.com")
+
+	return h
+}
+
+// ownerSettings reads acme's settings as its owner.
+func ownerSettings(t *testing.T, h signedIn) gen.OrgSettings {
+	t.Helper()
+
+	return decode[gen.OrgSettings](t, h.as(t, ownerToken, http.MethodGet, acmeSettings, ""), http.StatusOK)
+}
+
+// An owner sets acme's sign-up domain, case ignored and viewer by default, changes its role and
+// clears it; GET settings shows each state and the audit log each change.
+func TestSignupDomain_OwnerSetsReadsAndClears(t *testing.T) {
+	t.Parallel()
+
+	h := withSignupDomains(t)
+
+	if s := ownerSettings(t, h); s.SignupDomain != nil {
+		t.Fatalf("signup_domain before = %+v; want null", s.SignupDomain)
+	}
+
+	set := decode[gen.SignupDomain](t, h.as(t, freshOwnerToken, http.MethodPut, signupPath, `{"domain":" Example.COM "}`), http.StatusOK)
+	if set.Domain != "example.com" || set.JoinRole != gen.Viewer || set.SetBy.Id != string(ownerID) || set.SetAt.IsZero() {
+		t.Errorf("set = %+v; want example.com, viewer, by the owner, stamped", set)
+	}
+
+	if s := ownerSettings(t, h); s.SignupDomain == nil || *s.SignupDomain != set {
+		t.Errorf("settings' signup_domain = %+v; want %+v", s.SignupDomain, set)
+	}
+
+	edit := decode[gen.SignupDomain](t, h.as(t, freshOwnerToken, http.MethodPut, signupPath, `{"domain":"example.com","join_role":"editor"}`), http.StatusOK)
+	if edit.JoinRole != gen.Editor {
+		t.Errorf("join role after the change = %q; want editor", edit.JoinRole)
+	}
+
+	if res := h.as(t, freshOwnerToken, http.MethodDelete, signupPath, ""); res.status != http.StatusNoContent {
+		t.Fatalf("DELETE = %d; want 204", res.status)
+	}
+
+	if s := ownerSettings(t, h); s.SignupDomain != nil {
+		t.Errorf("signup_domain after clearing = %+v; want null", s.SignupDomain)
+	}
+
+	var actions []string
+
+	page := decode[gen.AuditPage](t, h.as(t, ownerToken, http.MethodGet, acmePath+"/audit?target_kind=org", ""), http.StatusOK)
+	for _, e := range page.Entries {
+		actions = append(actions, e.Action)
+	}
+
+	want := []string{domain.AuditOrgSignupDomainCleared, domain.AuditOrgSignupDomainSet, domain.AuditOrgSignupDomainSet, domain.AuditOrgCreated}
+	if !reflect.DeepEqual(actions, want) {
+		t.Errorf("audit = %v; want %v, newest first", actions, want)
+	}
+}
+
+// Only an owner with a recent sign-in sets or clears it, and only to their own email's domain,
+// never a webmail domain or one another live organization holds; a refusal changes nothing.
+func TestSignupDomain_Refusals(t *testing.T) {
+	t.Parallel()
+
+	h := withSignupDomains(t)
+
+	fresh := domain.Session{ID: "fresh-stranger", CreatedAt: t0, ExpiresAt: t0.Add(time.Hour), Browser: true}
+	h.identity.AddSession("FreshStrangerFreshStrangerFresh6", strangerID, fresh)
+	decode[gen.SignupDomain](t, h.as(t, "FreshStrangerFreshStrangerFresh6", http.MethodPut, "/v1/orgs/"+labsSlug+"/settings/signup-domain",
+		ownDomain), http.StatusOK)
+
+	for _, c := range []struct {
+		name, token, method, body string
+		status                    int
+		code                      string
+	}{
+		{"a stale session", ownerToken, http.MethodPut, ownDomain, http.StatusForbidden, codeReauth},
+		{"an admin", freshAdminToken, http.MethodPut, ownDomain, http.StatusForbidden, wantForbidden},
+		{"an admin clearing", freshAdminToken, http.MethodDelete, "", http.StatusForbidden, wantForbidden},
+		{"a viewer", viewerToken, http.MethodPut, ownDomain, http.StatusForbidden, wantForbidden},
+		{"another domain", freshOwnerToken, http.MethodPut, `{"domain":"example.org"}`, http.StatusBadRequest, "signup-domain-not-yours"},
+		{"a subdomain", freshOwnerToken, http.MethodPut, `{"domain":"eu.example.com"}`, http.StatusBadRequest, "signup-domain-not-yours"},
+		{"no domain", freshOwnerToken, http.MethodPut, `{"domain":"not a domain"}`, http.StatusBadRequest, ""},
+		{"an unknown role", freshOwnerToken, http.MethodPut, `{"domain":"example.com","join_role":"owner"}`, http.StatusBadRequest, ""},
+		{"another org's", freshOwnerToken, http.MethodPut, ownDomain, http.StatusConflict, "signup-domain-taken"},
+	} {
+		if p := problem(t, h.as(t, c.token, c.method, signupPath, c.body)); p.Status != c.status || deref(p.Code) != c.code {
+			t.Errorf("%s: %+v; want %d %q", c.name, p, c.status, c.code)
+		}
+	}
+
+	if err := h.identity.AddUser(porttest.IdentityUser{ID: ownerID, Name: ownerName, Email: "f.cruz@GMAIL.com", PlatformAdmin: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	if p := problem(t, h.as(t, freshOwnerToken, http.MethodPut, signupPath, `{"domain":"gmail.com"}`)); p.Status != http.StatusBadRequest ||
+		deref(p.Code) != "signup-domain-public" {
+		t.Errorf("a webmail domain: %+v; want 400 signup-domain-public", p)
+	}
+
+	if s := ownerSettings(t, h); s.SignupDomain != nil {
+		t.Errorf("signup_domain after the refusals = %+v; want null", s.SignupDomain)
+	}
+}
+
+// A deleted organization's domain no longer blocks a live one's claim.
+func TestSignupDomain_ADeletedOrgsDomainIsTakenOver(t *testing.T) {
+	t.Parallel()
+
+	h := withSignupDomains(t)
+
+	fresh := domain.Session{ID: "fresh-stranger", CreatedAt: t0, ExpiresAt: t0.Add(time.Hour), Browser: true}
+	h.identity.AddSession("FreshStrangerFreshStrangerFresh6", strangerID, fresh)
+
+	labs := "/v1/orgs/" + labsSlug
+	decode[gen.SignupDomain](t, h.as(t, "FreshStrangerFreshStrangerFresh6", http.MethodPut, labs+"/settings/signup-domain", ownDomain), http.StatusOK)
+
+	if res := h.as(t, "FreshStrangerFreshStrangerFresh6", http.MethodDelete, labs, `{"confirm":"Example Labs"}`); res.status != http.StatusAccepted {
+		t.Fatalf("deleting example-labs = %d", res.status)
+	}
+
+	decode[gen.SignupDomain](t, h.as(t, freshOwnerToken, http.MethodPut, signupPath, ownDomain), http.StatusOK)
 }
