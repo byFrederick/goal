@@ -9,7 +9,9 @@ import { KpiRow } from './kpi-row';
 import { LinePanel } from './line-panel';
 import { NeedsYouCard } from './needs-you-card';
 import { rangeOf } from './range';
+import { SetupCard } from './setup-card';
 import { WaitsCard } from './waits-card';
+import { WaysInCard } from './ways-in-card';
 import { WeeklyCard } from './weekly-card';
 
 // The cards below the KPI tiles, as the screens draw them (ADR 0016): two columns from 768 px, Needs you
@@ -37,14 +39,25 @@ export function FloorPage() {
   return (
     <div className="flex flex-col gap-4 md:gap-5">
       <FloorHeader factory={factory} board={board} metrics={metrics} />
-      <LinePanel board={board} constraint={constraint.constraint ?? board.constraint} doneThisWeek={doneThisWeek} />
-      <KpiRow factory={factory} metrics={metrics} range={range} />
 
-      <div className={grid}>
-        <NeedsYouCard />
-        <WaitsCard range={range} leadTimeP85={leadTimeP85} />
-        <WeeklyCard range={range} />
-        <ActivityCard />
+      <div className="grid gap-4 md:gap-5 xl:grid-cols-3">
+        <div className="flex min-w-0 flex-col gap-4 md:gap-5 xl:col-span-2">
+          <LinePanel board={board} constraint={constraint.constraint ?? board.constraint} doneThisWeek={doneThisWeek} />
+          <KpiRow factory={factory} metrics={metrics} range={range} />
+
+          <div className={grid}>
+            <NeedsYouCard />
+            <WaitsCard range={range} leadTimeP85={leadTimeP85} />
+            <WeeklyCard range={range} />
+            <ActivityCard />
+          </div>
+        </div>
+
+        {/* The setup checklist and how work gets in: beside the figures from xl, below them under it (ready.jpg). */}
+        <aside className="flex min-w-0 flex-col gap-4 md:gap-5">
+          <SetupCard />
+          <WaysInCard />
+        </aside>
       </div>
     </div>
   );

@@ -1,28 +1,31 @@
-// A step under an organization (/o/$org/get-started/<key>). Steps 2 to 8 are built by later parts and
-// fill the layout's form and panel; until then the step shows the layout with an empty form.
-import { Link } from '@tanstack/react-router';
+// A step under an organization (/o/$org/get-started/<key>): steps 2 to 8, each in its own file (code-step.tsx,
+// factory-step.tsx, line-step.tsx, budget-step.tsx, intake-step.tsx, people-step.tsx, first-item-step.tsx). Each
+// fills the layout's form and panel.
 import type { OrgSummary } from '../../api/types';
-import { Button } from '../../ui/button';
-import { OnboardingLayout } from './onboarding-layout';
-import { type OrgOnboardingStepKey, previousStep } from './steps';
+import { BudgetStep } from './budget-step';
+import type { OnboardingSearch } from './code-search';
+import { CodeStep } from './code-step';
+import { FactoryStep } from './factory-step';
+import { FirstItemStep } from './first-item-step';
+import { IntakeStep } from './intake-step';
+import { LineStep } from './line-step';
+import { PeopleStep } from './people-step';
+import type { OrgOnboardingStepKey } from './steps';
 
-export function OnboardingStepPage({ step, org }: { step: OrgOnboardingStepKey; org: OrgSummary }) {
-  const previous = previousStep(step);
-  return (
-    <OnboardingLayout
-      step={step}
-      org={org}
-      back={
-        <Button asChild size="lg" variant="secondary">
-          {previous === 'organization' ? (
-            <Link to="/get-started">Back</Link>
-          ) : (
-            <Link to="/o/$org/get-started/$step" params={{ org: org.slug, step: previous }}>
-              Back
-            </Link>
-          )}
-        </Button>
-      }
-    />
-  );
+export function OnboardingStepPage({
+  step,
+  org,
+  search,
+}: {
+  step: OrgOnboardingStepKey;
+  org: OrgSummary;
+  search: OnboardingSearch;
+}) {
+  if (step === 'code') return <CodeStep org={org} search={search} />;
+  if (step === 'factory') return <FactoryStep org={org} search={search} />;
+  if (step === 'line') return <LineStep org={org} search={search} />;
+  if (step === 'budget') return <BudgetStep org={org} search={search} />;
+  if (step === 'intake') return <IntakeStep org={org} search={search} />;
+  if (step === 'people') return <PeopleStep org={org} search={search} />;
+  return <FirstItemStep org={org} search={search} />;
 }

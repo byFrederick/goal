@@ -13,6 +13,7 @@ import type {
   ConnectionPatch,
   ConnectionTestResult,
   NewConnection,
+  RepositoryList,
 } from './types';
 
 /** The platform's kinds and the organization's own, by name. */
@@ -50,6 +51,21 @@ export async function listConnections(
 export function getConnection(org: string, connection: string, signal?: AbortSignal): Promise<Connection> {
   return unwrap(
     goal.GET(orgPath('/connections/{connection}'), { params: { path: { org, connection } }, ...cancel(signal) }),
+  );
+}
+
+/** The owners a code host connection reaches and the repositories of one (connection:browse); `owner` absent is the connection's own account. */
+export function listConnectionRepositories(
+  org: string,
+  connection: string,
+  owner: string | undefined,
+  signal?: AbortSignal,
+): Promise<RepositoryList> {
+  return unwrap(
+    goal.GET(orgPath('/connections/{connection}/repositories'), {
+      params: { path: { org, connection }, query: owner ? { owner } : {} },
+      ...cancel(signal),
+    }),
   );
 }
 

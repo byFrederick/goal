@@ -420,6 +420,7 @@ export const orgCan = [
   'api_key:manage',
   'api_key:read',
   'audit:read',
+  'connection:browse',
   'connection:manage',
   'connection:read',
   'factory:create',

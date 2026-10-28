@@ -1,3 +1,5 @@
+import { safeNext } from '../../api/session';
+
 // The Connections pages' URL state (frontend.md: every filter lives in the URL): the list's
 // factory, kind and text filters, New connection's chosen kind, and the detail's note after a
 // create. Unknown or malformed values are dropped, never thrown on.
@@ -23,12 +25,16 @@ export function connectionsSearch(search: Record<string, unknown>): ConnectionsS
 
 export interface NewConnectionSearch {
   /** The kind chosen. */
-  kind?: string;
+  kind?: string | undefined;
+  /** Where to go once the connection is created, instead of its page: an internal path only (safeNext). */
+  next?: string | undefined;
 }
 
 export function newConnectionSearch(search: Record<string, unknown>): NewConnectionSearch {
   const kind = text(search.kind, 40);
-  return kind ? { kind } : {};
+  const next = safeNext(search.next);
+  // Both keys are always set, undefined when refused: the router would otherwise show the raw URL value through.
+  return { kind, next };
 }
 
 export interface ConnectionSearch {

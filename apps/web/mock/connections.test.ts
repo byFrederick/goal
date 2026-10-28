@@ -10,6 +10,7 @@ import type {
   Validation,
 } from '@goal/api-client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { RepositoryList } from '../src/api/types.ts';
 import { createMockApi, type MockApi } from './api.ts';
 
 let api: MockApi;
@@ -54,6 +55,40 @@ async function call<T>(
 }
 
 describe('the mock connections', () => {
+  it('lists the repositories of a code host connection, newest first, and refuses as goald does', async () => {
+    const { status, body } = await call<RepositoryList>(`${connections}/github/repositories`);
+    expect(status).toBe(200);
+    expect(body.login).toBe('acme');
+    expect(body.owners.map((o) => [o.login, o.kind])).toEqual([
+      ['acme', 'user'],
+      ['acme-labs', 'organization'],
+    ]);
+    expect(body.repositories.map((r) => r.full_name)).toEqual([
+      'acme/goal',
+      'acme/goal-factories',
+      'acme/site',
+      'acme/dotfiles',
+    ]);
+    expect(body.repositories[0]).toMatchObject({ languages: ['Go', 'TypeScript'] });
+    expect(body.truncated).toBe(false);
+
+    const labs = await call<RepositoryList>(`${connections}/github/repositories?owner=acme-labs`);
+    expect(labs).toMatchObject({ status: 200, body: { owner: 'acme-labs', repositories: [] } });
+
+    expect((await call<Problem>(`${connections}/github/repositories?owner=ghost`)).body).toMatchObject({
+      status: 404,
+      code: 'owner-not-found',
+    });
+    expect((await call<Problem>(`${connections}/claude/repositories`)).body).toMatchObject({
+      status: 422,
+      code: 'connection-not-code-host',
+    });
+    expect((await call<Problem>(`${connections}/nope/repositories`)).body).toMatchObject({
+      status: 404,
+      code: 'connection-not-found',
+    });
+  });
+
   it("serves goald's own platform kinds", async () => {
     const files = readdirSync(new URL('../../../internal/connkind/kinds/', import.meta.url)).filter((f) =>
       f.endsWith('.yaml'),

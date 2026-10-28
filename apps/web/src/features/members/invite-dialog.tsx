@@ -11,7 +11,7 @@ import { Button } from '../../ui/button';
 import { Dialog, DialogClose, DialogContent } from '../../ui/dialog';
 import { Field, NativeSelect, Textarea } from '../../ui/field';
 import { RadioList } from '../../ui/radio-cards';
-import { factoryRoleNames, factoryRoles, maxInvites, parseEmails } from './people';
+import { factoryRoleNames, factoryRoles, inviteRequestsOf, maxInvites, parseEmails } from './people';
 import { refusal } from './use-people';
 
 type Refused = { email: string; err: unknown }[];
@@ -76,13 +76,7 @@ export function InviteDialog({ open, onOpenChange, org, role, factories, invite 
       emailsRef.current?.focus();
       return;
     }
-    const factoryRolesOf = Object.entries(grants).flatMap(([factoryId, r]) => (r ? [{ factoryId, role: r }] : []));
-    const requests: InviteRequest[] = emails.map((email) => ({
-      organizationId: org.id,
-      email,
-      role: inviteAs,
-      factoryRoles: inviteAs === 'member' ? factoryRolesOf : [],
-    }));
+    const requests = inviteRequestsOf({ orgId: org.id, emails, role: inviteAs, grants });
     invite.mutate(requests, {
       onSuccess: (failed) => {
         const sent = emails.length - failed.length;

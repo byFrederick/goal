@@ -88,6 +88,7 @@ import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } fr
 import { orgRunsOf, runsCsvOf } from './runs.ts';
 import { type SearchSource, search } from './search.ts';
 import { createSpend } from './spend.ts';
+import { starterItem } from './starter.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
 import { createViews } from './views.ts';
 import { createWebhooks } from './webhooks.ts';
@@ -1876,7 +1877,10 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       const key = decodeURIComponent(rest.split('/')[2] ?? '');
       const factory = findFactory(key, org.id);
       if (!factory) return problem(res, 404, 'Factory not found', key);
-      return json(res, 200, intakeOf(factory.name));
+      const def = state.definitions[factory.id];
+      const current = def?.versions.find((v) => v.id === def.current);
+      const bytes = current?.files.get('factory.yaml');
+      return json(res, 200, intakeOf(factory.name, bytes ? new TextDecoder().decode(bytes) : ''));
     }
 
     let m = rest.match(/^\/factories\/([^/]+)\/agents\/([^/]+)\/stats$/);
@@ -2020,7 +2024,25 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
           spans: [],
         };
         state.items.push(it);
-        emit(it, 'created', 'engine');
+        if (title === starterItem.title) {
+          // The mock runs no agent, so the starter item runs its whole course at once: created nine minutes ago,
+          // its spec accepted, moved to Build and merged at Done, with $0.84 spent. Seconds from its creation. The
+          // Floor's checklist then counts "First item merged" (the setup flow ends at 6 of 9, frontend.md).
+          const at = (s: number) => new Date(clock() - (540 - s) * 1000).toISOString();
+          it.created_at = at(0);
+          emit(it, 'created', 'engine', {}, at(0));
+          it.station = 'spec';
+          emit(it, 'moved', 'engine', { from: 'inbox', to: 'spec' }, at(12));
+          emit(it, 'approved', 'user:local', {}, at(270));
+          it.station = 'build';
+          emit(it, 'moved', 'engine', { from: 'spec', to: 'build' }, at(302));
+          it.station = 'done';
+          emit(it, 'moved', 'engine', { from: 'build', to: 'done' }, at(540));
+          it.state = 'done';
+          it.cost_usd = 0.84;
+        } else {
+          emit(it, 'created', 'engine');
+        }
         return json(res, 201, full(it));
       }
       return problem(res, 405, 'Method not allowed');
