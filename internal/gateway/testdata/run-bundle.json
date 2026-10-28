@@ -44,7 +44,14 @@
             "Authorization": "Bearer ${ISSUES_TOKEN}"
           }
         },
-        "docs": "File and read issues with the issues CLI or its MCP tools."
+        "docs": "File and read issues with the issues CLI or its MCP tools.",
+        "tool_modes": {
+          "create_comment": "ask",
+          "delete_issue": "off"
+        },
+        "always_allow_offered": [
+          "create_comment"
+        ]
       },
       {
         "name": "docs",
@@ -57,7 +64,9 @@
             "-c",
             "npx -y @acme/docs-mcp@1.0.0"
           ]
-        }
+        },
+        "tool_modes": {},
+        "always_allow_offered": []
       }
     ],
     "rules": [
@@ -69,7 +78,8 @@
         ],
         "content": "Wrap with %w.\n"
       }
-    ]
+    ],
+    "granted_calls": []
   },
   "files": {
     "agent/output.schema.json": "eyJ0eXBlIjoib2JqZWN0In0=",

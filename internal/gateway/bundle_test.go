@@ -207,6 +207,8 @@ func TestServeRun_ServesTheRunsBundle(t *testing.T) {
 
 	h := newHarnessWith(t, Config{}, harnessDeps{yaml: bundleYAML, files: bundleFiles})
 	it := h.submit(t, factoryID, "Add a health endpoint", "For the load balancer.")
+	h.setToolModes(t, connTracker, map[string]domain.ConnectionToolMode{"create_comment": domain.ToolModeAsk, "delete_issue": domain.ToolModeOff})
+
 	c := h.claims()
 	c.ItemID, c.Connections = it.ID, []string{connTracker, connDocs}
 
@@ -244,15 +246,19 @@ func TestServeRun_ServesTheRunsBundle(t *testing.T) {
 			Connections: []bundleConnection{
 				{
 					Name: connTracker, Kind: "issue-tracker", Title: trackerTitle, Env: []string{"ISSUES_SITE", "ISSUES_TOKEN"},
-					MCP:  &domain.KindMCP{URL: "https://issues.example.com/mcp", Headers: map[string]string{"Authorization": "Bearer ${ISSUES_TOKEN}"}},
-					Docs: "File and read issues with the issues CLI or its MCP tools.",
+					MCP:                &domain.KindMCP{URL: "https://issues.example.com/mcp", Headers: map[string]string{"Authorization": "Bearer ${ISSUES_TOKEN}"}},
+					Docs:               "File and read issues with the issues CLI or its MCP tools.",
+					ToolModes:          map[string]domain.ConnectionToolMode{"create_comment": domain.ToolModeAsk, "delete_issue": domain.ToolModeOff},
+					AlwaysAllowOffered: []string{"create_comment"},
 				},
 				{
 					Name: connDocs, Kind: kindStdio, Title: "MCP server", Env: []string{},
-					MCP: &domain.KindMCP{Command: []string{"sh", "-c", "npx -y @acme/docs-mcp@1.0.0"}},
+					MCP:       &domain.KindMCP{Command: []string{"sh", "-c", "npx -y @acme/docs-mcp@1.0.0"}},
+					ToolModes: map[string]domain.ConnectionToolMode{}, AlwaysAllowOffered: []string{},
 				},
 			},
-			Rules: []bundleRule{{Name: "go-errors", SHA256: domain.HashBlob([]byte("Wrap with %w.\n")), Paths: []string{"**/*.go"}, Content: "Wrap with %w.\n"}},
+			Rules:        []bundleRule{{Name: "go-errors", SHA256: domain.HashBlob([]byte("Wrap with %w.\n")), Paths: []string{"**/*.go"}, Content: "Wrap with %w.\n"}},
+			GrantedCalls: []grantedCall{},
 		},
 		Files:      map[string][]byte{"agent/prompt.md": []byte("# engineer\n"), "agent/output.schema.json": []byte(`{"type":"object"}`)},
 		Repository: &bundleRepository{URL: "https://github.com/acme/api.git", Branch: it.Branch(), FreshBase: domain.FreshBaseMerge},
@@ -730,5 +736,128 @@ func TestBundle_ModelAndDeniedCommandsFromTheTaskToken(t *testing.T) {
 	want := []string{"Bash(git push --force*)", "issues__get_secret", "Bash(terraform apply:*)"}
 	if !slices.Equal(got.Spec.ToolsDeny, want) {
 		t.Errorf("tools_deny %q, want %q", got.Spec.ToolsDeny, want)
+	}
+}
+
+// setToolModes sets modes on the harness organization's connection name.
+func (h *harness) setToolModes(t *testing.T, name string, modes map[string]domain.ConnectionToolMode) domain.Connection {
+	t.Helper()
+
+	conn, err := h.connections.Update(domain.WithOrg(t.Context(), h.org), name, domain.ConnectionPatch{ToolModes: modes}, domain.LocalUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return conn
+}
+
+// ADR 0031 decision 3: each connection of the bundle carries its tools that ask first or are off
+// and the asks that offer Always allow. An active standing rule for the run's agent turns an ask
+// into allow; one for another agent, or a revoked one, does not; nothing turns off into anything.
+// A connection with no modes has an empty map and list.
+func TestBundle_ToolModesAndAlwaysAllowOffered(t *testing.T) {
+	t.Parallel()
+
+	h := newHarnessWith(t, Config{}, harnessDeps{yaml: bundleYAML, files: bundleFiles})
+	it := h.submit(t, factoryID, "Add a health endpoint", "For the load balancer.")
+	ctx := domain.WithOrg(t.Context(), h.org)
+
+	h.setToolModes(t, connTracker, map[string]domain.ConnectionToolMode{
+		"create_comment": domain.ToolModeAsk, "close_issue": domain.ToolModeAsk, "edit_issue": domain.ToolModeAsk,
+		"delete_issue": domain.ToolModeOff, "get_issue": domain.ToolModeAllow,
+	})
+
+	for _, rule := range []domain.NewStandingRule{
+		{Connection: connTracker, Tool: "close_issue", Agent: agentEngineer, Item: it.ID},
+		{Connection: connTracker, Tool: "delete_issue", Agent: agentEngineer, Item: it.ID},
+		{Connection: connTracker, Tool: "create_comment", Agent: "reviewer", Item: it.ID},
+		{Connection: connTracker, Tool: "edit_issue", Agent: agentEngineer, Item: it.ID},
+	} {
+		r, err := h.connections.CreateStandingRule(ctx, rule, domain.LocalUser)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if rule.Tool == "edit_issue" {
+			if _, err := h.connections.RevokeStandingRule(ctx, r.ID, domain.LocalUser); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	c := h.claims()
+	c.ItemID, c.Connections = it.ID, []string{connTracker, connDocs}
+	b := h.fetchBundle(t, h.runServer(t), c)
+
+	if len(b.Spec.Connections) != 2 {
+		t.Fatalf("connections = %+v, want issues and docs", b.Spec.Connections)
+	}
+
+	issues, docs := b.Spec.Connections[0], b.Spec.Connections[1]
+
+	wantModes := map[string]domain.ConnectionToolMode{
+		"create_comment": domain.ToolModeAsk, "edit_issue": domain.ToolModeAsk, "delete_issue": domain.ToolModeOff,
+	}
+	if !reflect.DeepEqual(issues.ToolModes, wantModes) {
+		t.Errorf("issues tool_modes = %v, want %v", issues.ToolModes, wantModes)
+	}
+
+	if want := []string{"create_comment", "edit_issue"}; !slices.Equal(issues.AlwaysAllowOffered, want) {
+		t.Errorf("issues always_allow_offered = %v, want %v", issues.AlwaysAllowOffered, want)
+	}
+
+	if docs.ToolModes == nil || len(docs.ToolModes) != 0 || docs.AlwaysAllowOffered == nil || len(docs.AlwaysAllowOffered) != 0 {
+		t.Errorf("docs tool_modes %v, always_allow_offered %v; want an empty map and list", docs.ToolModes, docs.AlwaysAllowOffered)
+	}
+}
+
+// ADR 0031 decision 5: the bundle carries the calls approved for its run, those decided after the
+// run before it, as {connection, tool, input} with the input as canonical JSON; a denied call, a
+// withdrawn one and one granted to an earlier run are not among them, and a run with none gets [].
+func TestBundle_GrantedCallsOfTheRun(t *testing.T) {
+	t.Parallel()
+
+	h := newHarnessWith(t, Config{}, harnessDeps{yaml: bundleYAML, files: bundleFiles})
+	it := h.submit(t, factoryID, "Add a health endpoint", "For the load balancer.")
+	ctx := domain.WithOrg(t.Context(), h.org)
+
+	ev := func(kind domain.EventKind, run domain.RunID, data map[string]any) domain.Event {
+		return domain.Event{FactoryID: factoryID, ItemID: it.ID, RunID: run, At: h.clock.Now(), Kind: kind, Station: "build", Actor: agentEngineer, Data: data}
+	}
+	asked := func(run domain.RunID, tool, input string) domain.Event {
+		return ev(domain.EventToolApprovalRequested, run, map[string]any{
+			domain.KeyConnection: connTracker, domain.KeyTool: tool, domain.KeyInput: json.RawMessage(input),
+			domain.KeyAgent: agentEngineer, domain.KeyRunID: string(run), domain.KeyAlwaysAllowOffered: true,
+		})
+	}
+
+	if err := h.store.AppendEvents(ctx,
+		ev(domain.EventRunStarted, "run-0", nil),
+		asked("run-0", "create_comment", `{"body":"early"}`),
+		ev(domain.EventToolApprovalGranted, "", map[string]any{domain.KeyAlwaysAllow: false}),
+		ev(domain.EventRunStarted, "run-1", nil),
+		asked("run-1", "create_comment", `{ "issue": 7, "body": "Done" }`),
+		ev(domain.EventToolApprovalGranted, "", map[string]any{domain.KeyAlwaysAllow: false}),
+		asked("run-1", "close_issue", `{"issue":7}`),
+		ev(domain.EventToolApprovalDenied, "", map[string]any{domain.KeyNote: "not yet"}),
+		ev(domain.EventRunStarted, "run-2", nil),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	url := h.runServer(t)
+	c := h.claims()
+	c.ItemID, c.Connections = it.ID, []string{connTracker}
+
+	c.RunID = "run-2"
+	want := []grantedCall{{Connection: connTracker, Tool: "create_comment", Input: json.RawMessage(`{"body":"Done","issue":7}`)}}
+
+	if got := h.fetchBundle(t, url, c).Spec.GrantedCalls; mustJSON(t, got) != mustJSON(t, want) {
+		t.Errorf("granted_calls of run-2 = %s, want %s", mustJSON(t, got), mustJSON(t, want))
+	}
+
+	c.RunID = "run-3" // a run with no run_started yet, so no grants
+	if got := h.fetchBundle(t, url, c).Spec.GrantedCalls; got == nil || len(got) != 0 {
+		t.Errorf("granted_calls of a run without grants = %v, want []", got)
 	}
 }

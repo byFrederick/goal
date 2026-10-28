@@ -111,11 +111,13 @@ type Events interface {
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
 }
 
-// Connections reads an organization's connections and kinds without their secret values, for the
-// run bundle; ports.Connections satisfies it.
+// Connections reads an organization's connections and kinds without their secret values, and its
+// standing rules, for the run bundle; ports.Connections satisfies it.
 type Connections interface {
 	Get(ctx context.Context, name string) (domain.Connection, error)
 	Kind(ctx context.Context, name string) (domain.ConnectionKind, error)
+	// StandingRules are the organization's standing rules, the revoked ones with includeRevoked.
+	StandingRules(ctx context.Context, includeRevoked bool) ([]domain.StandingRule, error)
 }
 
 // Deps are the gateway's collaborators. Logger may be nil (logs discarded).
