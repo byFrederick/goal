@@ -14,6 +14,7 @@ import {
 import { getBuilderMeta, getSkillFiles, type SkillKey, searchSkills } from './builder';
 import {
   ApiError,
+  estimateEvalRun,
   type FlowRange,
   getAgentStats,
   getAttention,
@@ -33,6 +34,7 @@ import {
   getTouchMetrics,
   getWeekly,
   type ItemFilter,
+  listEvals,
   listFactories,
   listInvitations,
   listItemEvents,
@@ -212,6 +214,8 @@ export const keys = {
   runs: (org: string, filter?: RunsFilter) =>
     filter ? (['org', org, 'runs', filter] as const) : (['org', org, 'runs'] as const),
   parts: (org: string, item: string) => ['org', org, 'item', item, 'parts'] as const,
+  /** The prefix of a factory's eval cases and their estimate (Jonah's Evals). A `definition` event refreshes it. */
+  evals: (org: string, factory: string) => ['org', org, 'factory', factory, 'evals'] as const,
   /** The factory's intake (sources and triggers); item and definition events refresh it. */
   intake: (org: string, factory: string) => ['org', org, 'factory', factory, 'intake'] as const,
 };
@@ -528,6 +532,20 @@ export const itemQuery = (org: string, item: string) =>
   queryOptions({ queryKey: keys.item(org, item), queryFn: ({ signal }) => getItem(org, item, signal) });
 
 /** An assembly's parts: under the item's key, so the stream's item events refresh them. */
+/** The factory's eval cases of the current version and their summary (listEvals). */
+export const evalsQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: [...keys.evals(org, factory), 'cases'] as const,
+    queryFn: ({ signal }) => listEvals(org, factory, signal),
+  });
+
+/** What a run of every case would cost about (estimateEvalRun): a read, so it is asked again on each refresh. */
+export const evalEstimateQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: [...keys.evals(org, factory), 'estimate'] as const,
+    queryFn: ({ signal }) => estimateEvalRun(org, factory, {}, signal),
+  });
+
 export const partsQuery = (org: string, item: string) =>
   queryOptions({ queryKey: keys.parts(org, item), queryFn: ({ signal }) => getItemParts(org, item, signal) });
 
