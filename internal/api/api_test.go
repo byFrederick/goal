@@ -196,6 +196,8 @@ type harness struct {
 	// queued by a jonah loop over them and the store's finished runs.
 	judges      *porttest.Judges
 	judgeScores *porttest.JudgeScores
+	// drafts are the factories' draft requests; nothing runs them, so tests finish them.
+	drafts *porttest.DraftRequests
 }
 
 // acme's one prompt and its path.
@@ -431,6 +433,10 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 
 	h.intake = porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), h.store)
 
+	h.drafts = porttest.NewDraftRequests(tenancy, h.clock.Now)
+	h.drafts.AddFactory(testOrg, acmeID)
+	h.drafts.AddFactory(testOrg, lineID)
+
 	e, err := engine.New(engine.Deps{
 		Store: h.store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
 		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock, Intake: h.intake, Audit: tenancy,
@@ -486,6 +492,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()},
 		Knowledge: h.kb, KnowledgeUploads: h.uploads, KnowledgeSearch: knowledge.NewSearcher(h.kb, nil, nil), UploadMaxBytes: testUploadMax, Clock: h.clock,
 		OrgPolicies: porttest.NewOrgPolicies([]string{modelOpus, modelHaiku}, tenancy, h.clock.Now), BoxSizes: testBoxSizes, EgressAddresses: testEgressAddresses,
+		DraftRequests: h.drafts,
 	}
 	if in != nil {
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity

@@ -546,6 +546,30 @@ func (e DefinitionProblemSeverity) Valid() bool {
 	}
 }
 
+// Defines values for DraftRequestStatus.
+const (
+	DraftRequestStatusDone    DraftRequestStatus = "done"
+	DraftRequestStatusFailed  DraftRequestStatus = "failed"
+	DraftRequestStatusQueued  DraftRequestStatus = "queued"
+	DraftRequestStatusRunning DraftRequestStatus = "running"
+)
+
+// Valid indicates whether the value is a known member of the DraftRequestStatus enum.
+func (e DraftRequestStatus) Valid() bool {
+	switch e {
+	case DraftRequestStatusDone:
+		return true
+	case DraftRequestStatusFailed:
+		return true
+	case DraftRequestStatusQueued:
+		return true
+	case DraftRequestStatusRunning:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for EvalCheckedByKind.
 const (
 	EvalCheckedByKindContract       EvalCheckedByKind = "contract"
@@ -3181,6 +3205,40 @@ type DraftRef struct {
 	UpdatedBy Actor `json:"updated_by"`
 }
 
+// DraftRequest An asked change to a factory's definition (ADR 0021): queued until a goald claims it, running in a box, then done or failed with what it changed in the draft
+type DraftRequest struct {
+	// Agent The agent the request is about, "" for the Ask bar
+	Agent string `json:"agent"`
+
+	// ChangedPaths The definition paths the request wrote or deleted in the draft
+	ChangedPaths []string  `json:"changed_paths"`
+	CostUsd      float64   `json:"cost_usd"`
+	CreatedAt    time.Time `json:"created_at"`
+
+	// Error What went wrong when the request failed, "" otherwise
+	Error      string     `json:"error"`
+	FinishedAt *time.Time `json:"finished_at,omitempty"`
+	Id         string     `json:"id"`
+
+	// Requester Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	Requester Actor              `json:"requester"`
+	StartedAt *time.Time         `json:"started_at,omitempty"`
+	Status    DraftRequestStatus `json:"status"`
+
+	// Summary What the agent changed, or why the request failed; "" until it ends
+	Summary string `json:"summary"`
+	Text    string `json:"text"`
+	Turns   int    `json:"turns"`
+}
+
+// DraftRequestStatus defines model for DraftRequest.Status.
+type DraftRequestStatus string
+
+// DraftRequestList defines model for DraftRequestList.
+type DraftRequestList struct {
+	Requests []DraftRequest `json:"requests"`
+}
+
 // DraftTree defines model for DraftTree.
 type DraftTree struct {
 	// ExpectedRevision Refuse (412) when the draft is at another revision
@@ -4860,6 +4918,15 @@ type NewCredential struct {
 	Value *string `json:"value,omitempty"`
 }
 
+// NewDraftRequest defines model for NewDraftRequest.
+type NewDraftRequest struct {
+	// Agent The agent of the definition the request is about (Ask Jonah for a fix)
+	Agent *string `json:"agent,omitempty"`
+
+	// Text What to change, 1 to 2000 characters once trimmed
+	Text string `json:"text"`
+}
+
 // NewFactoryRequest defines model for NewFactoryRequest.
 type NewFactoryRequest struct {
 	// Name Required except for an import, where factory.yaml's metadata.name is used when it is absent
@@ -6530,6 +6597,9 @@ type CredentialRef = string
 // DocumentRef defines model for DocumentRef.
 type DocumentRef = string
 
+// DraftRequestRef defines model for DraftRequestRef.
+type DraftRequestRef = string
+
 // EvalRunRef defines model for EvalRunRef.
 type EvalRunRef = string
 
@@ -6704,6 +6774,11 @@ type SaveDraftSectionParams struct {
 type RevertDraftSectionParams struct {
 	// IfMatch The entity tag the write is based on, quoted ("<etag>"); writes without it are 428
 	IfMatch *IfMatch `json:"If-Match,omitempty"`
+}
+
+// ListDraftRequestsParams defines parameters for ListDraftRequests.
+type ListDraftRequestsParams struct {
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // GetIntakeParams defines parameters for GetIntake.
@@ -7014,6 +7089,9 @@ type RevertDraftSectionJSONRequestBody = RevertRequest
 
 // PublishDraftJSONRequestBody defines body for PublishDraft for application/json ContentType.
 type PublishDraftJSONRequestBody = PublishRequest
+
+// CreateDraftRequestJSONRequestBody defines body for CreateDraftRequest for application/json ContentType.
+type CreateDraftRequestJSONRequestBody = NewDraftRequest
 
 // ReplaceDraftTreeJSONRequestBody defines body for ReplaceDraftTree for application/json ContentType.
 type ReplaceDraftTreeJSONRequestBody = DraftTree
@@ -8015,6 +8093,38 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/publish (the `PublishDraft` operationId).
 	PublishDraft(ctx context.Context, org OrgRef, factory FactoryRef, body PublishDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListDraftRequests The factory's draft requests, newest first
+	//
+	// The asked definition changes of the factory (ADR 0021), newest first, at most limit of them.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/requests (the `ListDraftRequests` operationId).
+	ListDraftRequests(ctx context.Context, org OrgRef, factory FactoryRef, params *ListDraftRequestsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateDraftRequestWithBody Ask for a change to the factory's definition (a draft request)
+	//
+	// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/requests (the `CreateDraftRequest` operationId).
+	CreateDraftRequestWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateDraftRequest Ask for a change to the factory's definition (a draft request)
+	//
+	// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/requests (the `CreateDraftRequest` operationId).
+	CreateDraftRequest(ctx context.Context, org OrgRef, factory FactoryRef, body CreateDraftRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetDraftRequest One draft request, with its result once it ended
+	//
+	// 404 draft-request-not-found for a request that is not the factory's.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/requests/{draft_request} (the `GetDraftRequest` operationId).
+	GetDraftRequest(ctx context.Context, org OrgRef, factory FactoryRef, draftRequest DraftRequestRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ReplaceDraftTreeWithBody Make files the draft's whole tree (goal factory push)
 	//
@@ -10501,6 +10611,78 @@ func (c *Client) PublishDraftWithBody(ctx context.Context, org OrgRef, factory F
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/publish (the `PublishDraft` operationId).
 func (c *Client) PublishDraft(ctx context.Context, org OrgRef, factory FactoryRef, body PublishDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPublishDraftRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListDraftRequests The factory's draft requests, newest first
+//
+// The asked definition changes of the factory (ADR 0021), newest first, at most limit of them.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/requests (the `ListDraftRequests` operationId).
+func (c *Client) ListDraftRequests(ctx context.Context, org OrgRef, factory FactoryRef, params *ListDraftRequestsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListDraftRequestsRequest(c.Server, org, factory, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateDraftRequestWithBody Ask for a change to the factory's definition (a draft request)
+//
+// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/requests (the `CreateDraftRequest` operationId).
+func (c *Client) CreateDraftRequestWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateDraftRequestRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateDraftRequest Ask for a change to the factory's definition (a draft request)
+//
+// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/requests (the `CreateDraftRequest` operationId).
+func (c *Client) CreateDraftRequest(ctx context.Context, org OrgRef, factory FactoryRef, body CreateDraftRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateDraftRequestRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetDraftRequest One draft request, with its result once it ended
+//
+// 404 draft-request-not-found for a request that is not the factory's.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/requests/{draft_request} (the `GetDraftRequest` operationId).
+func (c *Client) GetDraftRequest(ctx context.Context, org OrgRef, factory FactoryRef, draftRequest DraftRequestRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDraftRequestRequest(c.Server, org, factory, draftRequest)
 	if err != nil {
 		return nil, err
 	}
@@ -16131,6 +16313,176 @@ func NewPublishDraftRequestWithBody(server string, org OrgRef, factory FactoryRe
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListDraftRequestsRequest constructs an http.Request for the ListDraftRequests method
+func NewListDraftRequestsRequest(server string, org OrgRef, factory FactoryRef, params *ListDraftRequestsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/requests", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateDraftRequestRequest calls the generic CreateDraftRequest builder with application/json body
+func NewCreateDraftRequestRequest(server string, org OrgRef, factory FactoryRef, body CreateDraftRequestJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateDraftRequestRequestWithBody(server, org, factory, "application/json", bodyReader)
+}
+
+// NewCreateDraftRequestRequestWithBody constructs an http.Request for the CreateDraftRequest method, with any body, and a specified content type
+func NewCreateDraftRequestRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/requests", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetDraftRequestRequest constructs an http.Request for the GetDraftRequest method
+func NewGetDraftRequestRequest(server string, org OrgRef, factory FactoryRef, draftRequest DraftRequestRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "draft_request", draftRequest, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/requests/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -23060,6 +23412,42 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/publish (the `PublishDraft` operationId).
 	PublishDraftWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body PublishDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*PublishDraftResponse, error)
 
+	// ListDraftRequestsWithResponse The factory's draft requests, newest first
+	//
+	// The asked definition changes of the factory (ADR 0021), newest first, at most limit of them.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/requests (the `ListDraftRequests` operationId).
+	ListDraftRequestsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *ListDraftRequestsParams, reqEditors ...RequestEditorFn) (*ListDraftRequestsResponse, error)
+
+	// CreateDraftRequestWithBodyWithResponse Ask for a change to the factory's definition (a draft request)
+	//
+	// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/requests (the `CreateDraftRequest` operationId).
+	CreateDraftRequestWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateDraftRequestResponse, error)
+
+	// CreateDraftRequestWithResponse Ask for a change to the factory's definition (a draft request)
+	//
+	// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/requests (the `CreateDraftRequest` operationId).
+	CreateDraftRequestWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body CreateDraftRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateDraftRequestResponse, error)
+
+	// GetDraftRequestWithResponse One draft request, with its result once it ended
+	//
+	// 404 draft-request-not-found for a request that is not the factory's.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/requests/{draft_request} (the `GetDraftRequest` operationId).
+	GetDraftRequestWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, draftRequest DraftRequestRef, reqEditors ...RequestEditorFn) (*GetDraftRequestResponse, error)
+
 	// ReplaceDraftTreeWithBodyWithResponse Make files the draft's whole tree (goal factory push)
 	//
 	// With expected_revision, a draft at another revision is 412 draft-conflict; without it the latest draft is replaced. 422 bad-path; 413 too-large (over 1,000 files or 16 MiB).
@@ -27140,6 +27528,150 @@ func (r PublishDraftResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PublishDraftResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListDraftRequestsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *DraftRequestList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListDraftRequestsResponse) GetJSON200() *DraftRequestList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListDraftRequestsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListDraftRequestsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListDraftRequestsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListDraftRequestsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListDraftRequestsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateDraftRequestResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *DraftRequest
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateDraftRequestResponse) GetJSON201() *DraftRequest {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateDraftRequestResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateDraftRequestResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateDraftRequestResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateDraftRequestResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateDraftRequestResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetDraftRequestResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *DraftRequest
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetDraftRequestResponse) GetJSON200() *DraftRequest {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetDraftRequestResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetDraftRequestResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDraftRequestResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDraftRequestResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetDraftRequestResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -33737,6 +34269,66 @@ func (c *ClientWithResponses) PublishDraftWithResponse(ctx context.Context, org 
 	return ParsePublishDraftResponse(rsp)
 }
 
+// ListDraftRequestsWithResponse The factory's draft requests, newest first
+//
+// The asked definition changes of the factory (ADR 0021), newest first, at most limit of them.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/requests (the `ListDraftRequests` operationId).
+func (c *ClientWithResponses) ListDraftRequestsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *ListDraftRequestsParams, reqEditors ...RequestEditorFn) (*ListDraftRequestsResponse, error) {
+	rsp, err := c.ListDraftRequests(ctx, org, factory, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListDraftRequestsResponse(rsp)
+}
+
+// CreateDraftRequestWithBodyWithResponse Ask for a change to the factory's definition (a draft request)
+//
+// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/requests (the `CreateDraftRequest` operationId).
+func (c *ClientWithResponses) CreateDraftRequestWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateDraftRequestResponse, error) {
+	rsp, err := c.CreateDraftRequestWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateDraftRequestResponse(rsp)
+}
+
+// CreateDraftRequestWithResponse Ask for a change to the factory's definition (a draft request)
+//
+// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/requests (the `CreateDraftRequest` operationId).
+func (c *ClientWithResponses) CreateDraftRequestWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body CreateDraftRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateDraftRequestResponse, error) {
+	rsp, err := c.CreateDraftRequest(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateDraftRequestResponse(rsp)
+}
+
+// GetDraftRequestWithResponse One draft request, with its result once it ended
+//
+// 404 draft-request-not-found for a request that is not the factory's.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/requests/{draft_request} (the `GetDraftRequest` operationId).
+func (c *ClientWithResponses) GetDraftRequestWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, draftRequest DraftRequestRef, reqEditors ...RequestEditorFn) (*GetDraftRequestResponse, error) {
+	rsp, err := c.GetDraftRequest(ctx, org, factory, draftRequest, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDraftRequestResponse(rsp)
+}
+
 // ReplaceDraftTreeWithBodyWithResponse Make files the draft's whole tree (goal factory push)
 //
 // With expected_revision, a draft at another revision is 412 draft-conflict; without it the latest draft is replaced. 422 bad-path; 413 too-large (over 1,000 files or 16 MiB).
@@ -37888,6 +38480,105 @@ func ParsePublishDraftResponse(rsp *http.Response) (*PublishDraftResponse, error
 	return response, nil
 }
 
+// ParseListDraftRequestsResponse parses an HTTP response from a ListDraftRequestsWithResponse call
+func ParseListDraftRequestsResponse(rsp *http.Response) (*ListDraftRequestsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListDraftRequestsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DraftRequestList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateDraftRequestResponse parses an HTTP response from a CreateDraftRequestWithResponse call
+func ParseCreateDraftRequestResponse(rsp *http.Response) (*CreateDraftRequestResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateDraftRequestResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest DraftRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetDraftRequestResponse parses an HTTP response from a GetDraftRequestWithResponse call
+func ParseGetDraftRequestResponse(rsp *http.Response) (*GetDraftRequestResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDraftRequestResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DraftRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseReplaceDraftTreeResponse parses an HTTP response from a ReplaceDraftTreeWithResponse call
 func ParseReplaceDraftTreeResponse(rsp *http.Response) (*ReplaceDraftTreeResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -41941,6 +42632,15 @@ type ServerInterface interface {
 	// PublishDraft Publish the open draft as the factory's next version
 	// (POST /v1/orgs/{org}/factories/{factory}/draft/publish)
 	PublishDraft(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// ListDraftRequests The factory's draft requests, newest first
+	// (GET /v1/orgs/{org}/factories/{factory}/draft/requests)
+	ListDraftRequests(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params ListDraftRequestsParams)
+	// CreateDraftRequest Ask for a change to the factory's definition (a draft request)
+	// (POST /v1/orgs/{org}/factories/{factory}/draft/requests)
+	CreateDraftRequest(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// GetDraftRequest One draft request, with its result once it ended
+	// (GET /v1/orgs/{org}/factories/{factory}/draft/requests/{draft_request})
+	GetDraftRequest(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, draftRequest DraftRequestRef)
 	// ReplaceDraftTree Make files the draft's whole tree (goal factory push)
 	// (PUT /v1/orgs/{org}/factories/{factory}/draft/tree)
 	ReplaceDraftTree(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
@@ -44566,6 +45266,136 @@ func (siw *ServerInterfaceWrapper) PublishDraft(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PublishDraft(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListDraftRequests operation middleware
+func (siw *ServerInterfaceWrapper) ListDraftRequests(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListDraftRequestsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListDraftRequests(w, r, org, factory, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateDraftRequest operation middleware
+func (siw *ServerInterfaceWrapper) CreateDraftRequest(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateDraftRequest(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDraftRequest operation middleware
+func (siw *ServerInterfaceWrapper) GetDraftRequest(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "draft_request" -------------
+	var draftRequest DraftRequestRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "draft_request", r.PathValue("draft_request"), &draftRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "draft_request", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDraftRequest(w, r, org, factory, draftRequest)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -49583,6 +50413,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/tree", wrapper.ReplaceDraftTree)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/validate", wrapper.ValidateDraft)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/publish", wrapper.PublishDraft)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/requests", wrapper.ListDraftRequests)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/requests", wrapper.CreateDraftRequest)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/requests/{draft_request}", wrapper.GetDraftRequest)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/versions", wrapper.ListVersions)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/versions/{version}", wrapper.GetVersion)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/versions/{version}/model", wrapper.GetVersionModel)
@@ -52044,6 +52877,129 @@ type PublishDraftdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PublishDraftdefaultApplicationProblemPlusJSONResponse) VisitPublishDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListDraftRequestsRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Params  ListDraftRequestsParams
+}
+
+type ListDraftRequestsResponseObject interface {
+	VisitListDraftRequestsResponse(w http.ResponseWriter) error
+}
+
+type ListDraftRequests200JSONResponse DraftRequestList
+
+func (response ListDraftRequests200JSONResponse) VisitListDraftRequestsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListDraftRequestsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListDraftRequestsdefaultApplicationProblemPlusJSONResponse) VisitListDraftRequestsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateDraftRequestRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Body    *CreateDraftRequestJSONRequestBody
+}
+
+type CreateDraftRequestResponseObject interface {
+	VisitCreateDraftRequestResponse(w http.ResponseWriter) error
+}
+
+type CreateDraftRequest201JSONResponse DraftRequest
+
+func (response CreateDraftRequest201JSONResponse) VisitCreateDraftRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateDraftRequestdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateDraftRequestdefaultApplicationProblemPlusJSONResponse) VisitCreateDraftRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDraftRequestRequestObject struct {
+	Org          OrgRef          `json:"org"`
+	Factory      FactoryRef      `json:"factory"`
+	DraftRequest DraftRequestRef `json:"draft_request"`
+}
+
+type GetDraftRequestResponseObject interface {
+	VisitGetDraftRequestResponse(w http.ResponseWriter) error
+}
+
+type GetDraftRequest200JSONResponse DraftRequest
+
+func (response GetDraftRequest200JSONResponse) VisitGetDraftRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDraftRequestdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetDraftRequestdefaultApplicationProblemPlusJSONResponse) VisitGetDraftRequestResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -57129,6 +58085,15 @@ type StrictServerInterface interface {
 	// PublishDraft Publish the open draft as the factory's next version
 	// (POST /v1/orgs/{org}/factories/{factory}/draft/publish)
 	PublishDraft(ctx context.Context, request PublishDraftRequestObject) (PublishDraftResponseObject, error)
+	// ListDraftRequests The factory's draft requests, newest first
+	// (GET /v1/orgs/{org}/factories/{factory}/draft/requests)
+	ListDraftRequests(ctx context.Context, request ListDraftRequestsRequestObject) (ListDraftRequestsResponseObject, error)
+	// CreateDraftRequest Ask for a change to the factory's definition (a draft request)
+	// (POST /v1/orgs/{org}/factories/{factory}/draft/requests)
+	CreateDraftRequest(ctx context.Context, request CreateDraftRequestRequestObject) (CreateDraftRequestResponseObject, error)
+	// GetDraftRequest One draft request, with its result once it ended
+	// (GET /v1/orgs/{org}/factories/{factory}/draft/requests/{draft_request})
+	GetDraftRequest(ctx context.Context, request GetDraftRequestRequestObject) (GetDraftRequestResponseObject, error)
 	// ReplaceDraftTree Make files the draft's whole tree (goal factory push)
 	// (PUT /v1/orgs/{org}/factories/{factory}/draft/tree)
 	ReplaceDraftTree(ctx context.Context, request ReplaceDraftTreeRequestObject) (ReplaceDraftTreeResponseObject, error)
@@ -59187,6 +60152,96 @@ func (sh *strictHandler) PublishDraft(w http.ResponseWriter, r *http.Request, or
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PublishDraftResponseObject); ok {
 		if err := validResponse.VisitPublishDraftResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListDraftRequests operation middleware
+func (sh *strictHandler) ListDraftRequests(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params ListDraftRequestsParams) {
+	var request ListDraftRequestsRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListDraftRequests(ctx, request.(ListDraftRequestsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListDraftRequests")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListDraftRequestsResponseObject); ok {
+		if err := validResponse.VisitListDraftRequestsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateDraftRequest operation middleware
+func (sh *strictHandler) CreateDraftRequest(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request CreateDraftRequestRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	var body CreateDraftRequestJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateDraftRequest(ctx, request.(CreateDraftRequestRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateDraftRequest")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateDraftRequestResponseObject); ok {
+		if err := validResponse.VisitCreateDraftRequestResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetDraftRequest operation middleware
+func (sh *strictHandler) GetDraftRequest(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, draftRequest DraftRequestRef) {
+	var request GetDraftRequestRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.DraftRequest = draftRequest
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetDraftRequest(ctx, request.(GetDraftRequestRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetDraftRequest")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetDraftRequestResponseObject); ok {
+		if err := validResponse.VisitGetDraftRequestResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
