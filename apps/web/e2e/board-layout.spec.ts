@@ -15,7 +15,7 @@ test.beforeEach(async ({ request }) => {
 async function columnEdges(page: import('@playwright/test').Page) {
   return page.evaluate(() => {
     const columns = Array.from(
-      document.querySelectorAll<HTMLElement>('[role="region"][aria-label="Stations"] > div > section'),
+      document.querySelectorAll<HTMLElement>('section[aria-label="Stations"] > div > section'),
     );
     const tops: { name: string; top: number }[] = [];
     const heights: { name: string; height: number }[] = [];
