@@ -195,25 +195,38 @@ func (s ArmSummary) Check() error {
 		bad("a negative mean: cost %v, time %v, turns %v", s.CostPerItemUSD, s.TimePerItem, s.MeanTurns)
 	}
 
-	if (s.Judge == "") != (s.JudgedShare == nil) {
-		bad("judge %q and its share go together", s.Judge)
-	}
+	return errors.Join(append(errs, s.checkJudged(), s.checkPerCase())...)
+}
 
-	if s.Judge != "" && !judgeSlug.MatchString(s.Judge) {
-		bad("judge %q is not a judge's slug", s.Judge)
+// checkJudged reports a judge without its share, a share without its judge, a judge that is not
+// a slug and a share outside 0 to 1, wrapping ErrInvalid.
+func (s ArmSummary) checkJudged() error {
+	switch {
+	case (s.Judge == "") != (s.JudgedShare == nil):
+		return fmt.Errorf("arm summary: judge %q and its share go together: %w", s.Judge, ErrInvalid)
+	case s.Judge == "":
+		return nil
+	case !judgeSlug.MatchString(s.Judge):
+		return fmt.Errorf("arm summary: judge %q is not a judge's slug: %w", s.Judge, ErrInvalid)
+	case *s.JudgedShare < 0 || *s.JudgedShare > 1:
+		return fmt.Errorf("arm summary: judged share %v is not between 0 and 1: %w", *s.JudgedShare, ErrInvalid)
+	default:
+		return nil
 	}
+}
 
-	if s.JudgedShare != nil && (*s.JudgedShare < 0 || *s.JudgedShare > 1) {
-		bad("judged share %v is not between 0 and 1", *s.JudgedShare)
-	}
+// checkPerCase reports a name that is not a case file's and a count outside 0 to Tries, wrapping
+// ErrInvalid.
+func (s ArmSummary) checkPerCase() error {
+	var errs []error
 
 	for name, passed := range s.PerCase {
 		if !evalCaseName.MatchString(name) {
-			bad("case name %q is not a case file's name", name)
+			errs = append(errs, fmt.Errorf("arm summary: case name %q is not a case file's name: %w", name, ErrInvalid))
 		}
 
 		if passed < 0 || passed > s.Tries {
-			bad("case %q: %d tries passed out of %d", name, passed, s.Tries)
+			errs = append(errs, fmt.Errorf("arm summary: case %q: %d tries passed out of %d: %w", name, passed, s.Tries, ErrInvalid))
 		}
 	}
 

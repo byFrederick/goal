@@ -67,7 +67,7 @@ func (e *Evals) CreateBakeOff(ctx context.Context, n domain.NewBakeOff, by domai
 		}
 
 		for arm := range len(n.Arms) {
-			cases.Arm = int16(arm + 1) //nolint:gosec // Check keeps it 1 to 4
+			cases.Arm = int16(arm + 1)
 			if err := q.InsertEvalResults(ctx, cases); err != nil {
 				return err
 			}
@@ -190,8 +190,8 @@ func (e *Evals) RecordArmSummary(ctx context.Context, id domain.EvalRunID, arm i
 
 	//nolint:gosec // Check keeps the counts non-negative; a bake-off's tries are at most 4 × cases × 10
 	p := db.RecordEvalRunArmSummaryParams{
-		Tries: ptr(int32(s.Tries)), Passed: ptr(int32(s.Passed)), Errors: ptr(int32(s.Errors)),
-		CostPerItemUsd: &s.CostPerItemUSD, MsPerItem: ptr(s.TimePerItem.Milliseconds()), MeanTurns: &s.MeanTurns,
+		Tries: new(int32(s.Tries)), Passed: new(int32(s.Passed)), Errors: new(int32(s.Errors)),
+		CostPerItemUsd: &s.CostPerItemUSD, MsPerItem: new(s.TimePerItem.Milliseconds()), MeanTurns: &s.MeanTurns,
 		Judge: optional(s.Judge), JudgedShare: s.JudgedShare, PerCase: cases, EvalRunID: run, Arm: int16(arm),
 	}
 
@@ -282,9 +282,6 @@ func bakeOffArmFrom(a db.EvalRunArm) (domain.BakeOffArm, error) {
 
 	return out, nil
 }
-
-// ptr is a pointer to a copy of v.
-func ptr[T any](v T) *T { return &v }
 
 // orZero is *p, or T's zero value when p is nil.
 func orZero[T any](p *T) T {

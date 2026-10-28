@@ -23,6 +23,8 @@ const (
 	bakeNow     = "claude-test-now-1"
 	bakeOther   = "claude-test-other-1"
 	bakeThird   = "claude-test-third-1"
+	// bakeOffAgentCheck is the CHECK that a bake-off, and only a bake-off, names its agent.
+	bakeOffAgentCheck = "eval_runs_bake_off_agent"
 )
 
 func (d evalsDB) newBakeOffOf(models ...string) domain.NewBakeOff {
@@ -75,6 +77,30 @@ func armResultLine(r domain.EvalResult) string {
 	return fmt.Sprintf("arm %d %s %v", r.Arm, resultLine(r), r.Duration)
 }
 
+// pendingTries are a new bake-off's tries as armResultLine shows them: by arm, case and try.
+func pendingTries(arms int, cases []string, tries int) string {
+	var out []string
+
+	for arm := 1; arm <= arms; arm++ {
+		for _, c := range cases {
+			for try := 1; try <= tries; try++ {
+				out = append(out, armResultLine(domain.EvalResult{Arm: arm, Case: c, Try: try, State: domain.EvalPending}))
+			}
+		}
+	}
+
+	return strings.Join(out, "\n")
+}
+
+func armResultLines(rs []domain.EvalResult) string {
+	out := make([]string, 0, len(rs))
+	for _, r := range rs {
+		out = append(out, armResultLine(r))
+	}
+
+	return strings.Join(out, "\n")
+}
+
 func TestEvals_CreateBakeOff(t *testing.T) {
 	t.Parallel()
 
@@ -95,29 +121,19 @@ func TestEvals_CreateBakeOff(t *testing.T) {
 		t.Errorf("arms:\n%s\nwant:\n%s", got, wantArms)
 	}
 
-	var want []string
-
-	for arm := 1; arm <= 3; arm++ {
-		for _, c := range []string{evalMerge, evalReview} {
-			for try := 1; try <= 2; try++ {
-				want = append(want, armResultLine(domain.EvalResult{Arm: arm, Case: c, Try: try, State: domain.EvalPending}))
-			}
-		}
+	if got, want := armResultLines(b.Results), pendingTries(3, []string{evalMerge, evalReview}, 2); got != want {
+		t.Errorf("results:\n%s\nwant one pending try per arm, case and try:\n%s", got, want)
 	}
+}
 
-	got := make([]string, 0, len(b.Results))
-	for _, r := range b.Results {
-		got = append(got, armResultLine(r))
-	}
+// The arms take turns on each case and try, and a claimed try records its arm and duration.
+func TestEvals_BakeOffClaimsArmsInTurn(t *testing.T) {
+	t.Parallel()
 
-	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Errorf("results:\n%s\nwant one pending try per arm, case and try:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
-	}
-
-	// The arms take turns on each case and try, and a claimed try records its arm and duration.
+	d := newEvalsDB(t)
+	b := d.newBakeOff(t)
 	now := time.Now()
-
-	var claimed []string
+	claimed := make([]string, 0, 4)
 
 	for range 4 {
 		r := d.claim(t, now)
@@ -143,6 +159,12 @@ func TestEvals_CreateBakeOff(t *testing.T) {
 	if after.CostUSD != 2 {
 		t.Errorf("cost = %v, want 2", after.CostUSD)
 	}
+}
+
+func TestEvals_CreateBakeOffRefuses(t *testing.T) {
+	t.Parallel()
+
+	d := newEvalsDB(t)
 
 	_, err := d.evals.CreateBakeOff(d.in(t), d.newBakeOffOf(bakeNow), domain.LocalUser)
 	wantErr(t, "CreateBakeOff of one arm", err, domain.ErrInvalid)
@@ -151,6 +173,10 @@ func TestEvals_CreateBakeOff(t *testing.T) {
 	unknown.FactoryID = domain.FactoryID(newUUID(t))
 	_, err = d.evals.CreateBakeOff(d.in(t), unknown, domain.LocalUser)
 	wantErr(t, "CreateBakeOff of an unknown factory", err, ports.ErrNotFound)
+
+	labs := domain.WithOrg(t.Context(), newOrgID(t, d.store))
+	_, err = d.evals.CreateBakeOff(labs, d.newBakeOffOf(bakeNow, bakeOther), domain.LocalUser)
+	wantErr(t, "labs CreateBakeOff on acme's factory and version", err, ports.ErrNotFound)
 }
 
 func TestEvals_ListBakeOffsNewestFirst(t *testing.T) {
@@ -174,21 +200,28 @@ func TestEvals_ListBakeOffsNewestFirst(t *testing.T) {
 		t.Fatalf("ListBakeOffs = %+v, want %s then %s", got, newer.ID, older.ID)
 	}
 
-	if got[0].Results != nil || len(got[0].Arms) != 2 || len(got[1].Arms) != 3 || got[0].Agent != bakeAgent || got[0].Arms[0].Model != bakeOther ||
-		!got[0].Arms[0].Current {
+	wantArms := "1 " + bakeOther + " current=true summary=false\n2 " + bakeNow + " current=false summary=false"
+	if got[0].Results != nil || armLines(got[0].Arms) != wantArms || len(got[1].Arms) != 3 {
 		t.Errorf("ListBakeOffs = %+v, want arms without results", got)
 	}
 
 	if first, err := d.evals.ListBakeOffs(d.in(t), d.factory, 1); err != nil || len(first) != 1 || first[0].ID != newer.ID {
 		t.Errorf("ListBakeOffs of 1 = %+v, %v; want the newest", first, err)
 	}
+}
+
+func TestEvals_ListBakeOffsOfOtherOrgOrNoLimit(t *testing.T) {
+	t.Parallel()
+
+	d := newEvalsDB(t)
+	d.newBakeOff(t)
 
 	labs := domain.WithOrg(t.Context(), newOrgID(t, d.store))
 	if none, err := d.evals.ListBakeOffs(labs, d.factory, 10); err != nil || len(none) != 0 {
 		t.Errorf("labs ListBakeOffs = %+v, %v; want none", none, err)
 	}
 
-	_, err = d.evals.ListBakeOffs(d.in(t), d.factory, 0)
+	_, err := d.evals.ListBakeOffs(d.in(t), d.factory, 0)
 	wantErr(t, "ListBakeOffs of 0", err, domain.ErrInvalid)
 }
 
@@ -240,10 +273,7 @@ func TestEvals_RecordArmSummary(t *testing.T) {
 		t.Errorf("arms 1 and 3 have summaries: %+v", got.Arms)
 	}
 
-	if g := got.Arms[1].Summary; g == nil || fmt.Sprint(*g.JudgedShare) != fmt.Sprint(share) ||
-		fmt.Sprintf("%+v", withoutShare(*g)) != fmt.Sprintf("%+v", withoutShare(s)) {
-		t.Fatalf("arm 2 summary = %+v, want %+v", g, s)
-	}
+	wantSummary(t, got.Arms[1].Summary, s)
 
 	// A later summary replaces it; one without a judge has no share.
 	s2 := domain.ArmSummary{Tries: 4, Passed: 4, CostPerItemUSD: 0.25, TimePerItem: time.Minute, MeanTurns: 9}
@@ -251,32 +281,53 @@ func TestEvals_RecordArmSummary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if g := d.getBakeOff(t, b.ID).Arms[1].Summary; g == nil || g.Passed != 4 || g.Judge != "" || g.JudgedShare != nil || len(g.PerCase) != 0 {
-		t.Errorf("arm 2 summary after the second = %+v, want 4 passed, no judge", g)
-	}
+	s2.PerCase = map[string]int{}
+	wantSummary(t, d.getBakeOff(t, b.ID).Arms[1].Summary, s2)
 
 	if listed, err := d.evals.ListBakeOffs(d.in(t), d.factory, 1); err != nil || listed[0].Arms[1].Summary == nil {
 		t.Errorf("ListBakeOffs = %+v, %v; want arm 2's summary", listed, err)
 	}
+}
 
-	err := d.evals.RecordArmSummary(d.in(t), b.ID, 4, s2)
+func TestEvals_RecordArmSummaryRefuses(t *testing.T) {
+	t.Parallel()
+
+	d := newEvalsDB(t)
+	b := d.newBakeOff(t)
+	s := domain.ArmSummary{Tries: 4, Passed: 4}
+
+	err := d.evals.RecordArmSummary(d.in(t), b.ID, 4, s)
 	wantErr(t, "RecordArmSummary of arm 4 of 3", err, ports.ErrNotFound)
 
-	err = d.evals.RecordArmSummary(d.in(t), domain.EvalRunID(newUUID(t)), 1, s2)
+	err = d.evals.RecordArmSummary(d.in(t), domain.EvalRunID(newUUID(t)), 1, s)
 	wantErr(t, "RecordArmSummary of an unknown run", err, ports.ErrNotFound)
 
 	err = d.evals.RecordArmSummary(d.in(t), b.ID, 1, domain.ArmSummary{Tries: 1, Passed: 2})
 	wantErr(t, "RecordArmSummary of more passed than tries", err, domain.ErrInvalid)
 
 	labs := domain.WithOrg(t.Context(), newOrgID(t, d.store))
-	err = d.evals.RecordArmSummary(labs, b.ID, 1, s2)
+	err = d.evals.RecordArmSummary(labs, b.ID, 1, s)
 	wantErr(t, "labs RecordArmSummary", err, ports.ErrNotFound)
 }
 
-func withoutShare(s domain.ArmSummary) domain.ArmSummary {
-	s.JudgedShare = nil
+// wantSummary fails t unless got is want, its judged share compared by value.
+func wantSummary(t *testing.T, got *domain.ArmSummary, want domain.ArmSummary) {
+	t.Helper()
 
-	return s
+	line := func(s domain.ArmSummary) string {
+		share := "none"
+		if s.JudgedShare != nil {
+			share = fmt.Sprint(*s.JudgedShare)
+		}
+
+		s.JudgedShare = nil
+
+		return fmt.Sprintf("%+v share=%s", s, share)
+	}
+
+	if got == nil || line(*got) != line(want) {
+		t.Errorf("summary = %+v, want %s", got, line(want))
+	}
 }
 
 // A bake-off runs other models than the definition's, so it is neither the publish gate's run nor
@@ -324,13 +375,13 @@ VALUES ($1, $2, '` + string(d.factory) + `', repeat('c', 64), 'manual', 'user:lo
 		refused             bool
 		constraintOrNothing string
 	}{
-		{"a bake-off without an agent", "bake-off", ptr(bakeStation), nil, ptr[int16](3), true, "eval_runs_bake_off_agent"},
-		{"a bake-off without a station", "bake-off", nil, ptr(bakeAgent), ptr[int16](3), true, "eval_runs_bake_off_agent"},
-		{"a bake-off without tries per case", "bake-off", ptr(bakeStation), ptr(bakeAgent), nil, true, "eval_runs_bake_off_agent"},
-		{"an eval run naming an agent", "eval", ptr(bakeStation), ptr(bakeAgent), nil, true, "eval_runs_bake_off_agent"},
+		{"a bake-off without an agent", string(domain.EvalKindBakeOff), new(bakeStation), nil, new(int16(3)), true, bakeOffAgentCheck},
+		{"a bake-off without a station", string(domain.EvalKindBakeOff), nil, new(bakeAgent), new(int16(3)), true, bakeOffAgentCheck},
+		{"a bake-off without tries per case", string(domain.EvalKindBakeOff), new(bakeStation), new(bakeAgent), nil, true, bakeOffAgentCheck},
+		{"an eval run naming an agent", string(domain.EvalKindEval), new(bakeStation), new(bakeAgent), nil, true, bakeOffAgentCheck},
 		{"an unknown kind", "compare", nil, nil, nil, true, "eval_runs_kind_check"},
-		{"a bake-off of an agent", "bake-off", ptr(bakeStation), ptr(bakeAgent), ptr[int16](3), false, ""},
-		{"an eval run", "eval", nil, nil, nil, false, ""},
+		{"a bake-off of an agent", string(domain.EvalKindBakeOff), new(bakeStation), new(bakeAgent), new(int16(3)), false, ""},
+		{"an eval run", string(domain.EvalKindEval), nil, nil, nil, false, ""},
 	} {
 		err := inOrgTx(t, d.store.pool, d.org, func(tx pgx.Tx) error {
 			_, err := tx.Exec(t.Context(), insert, newUUID(t), tt.kind, tt.station, tt.agent, tt.tries)

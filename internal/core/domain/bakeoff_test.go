@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ const (
 	testModelNow   = "claude-test-now-1"
 	testModelOther = "claude-test-other-1"
 	testModelThird = "claude-test-third-1"
+	testBakeAgent  = "web-engineer"
 )
 
 func TestNewBakeOff_Check(t *testing.T) {
@@ -21,7 +23,7 @@ func TestNewBakeOff_Check(t *testing.T) {
 	valid := func() NewBakeOff {
 		return NewBakeOff{
 			FactoryID: "00000000-0000-7000-8000-0000000000f1", VersionID: "00000000-0000-7000-8000-0000000000a1", ContentSHA256: hash,
-			Station: "build", Agent: "frontend-engineer", TriesPerCase: 3, EstimateUSD: 2,
+			Station: stationBuild, Agent: testBakeAgent, TriesPerCase: 3, EstimateUSD: 2,
 			Cases: []EvalCase{{Name: testEvalCase, SHA256: hash}, {Name: "spec-review", SHA256: hash}},
 			Arms:  []NewBakeOffArm{{Model: testModelNow, Current: true}, {Model: testModelOther}, {Model: testModelThird}},
 		}
@@ -51,7 +53,7 @@ func TestNewBakeOff_Check(t *testing.T) {
 		{"a bad agent slug", func(n *NewBakeOff) { n.Agent = "Frontend Engineer" }, false},
 		{"no version", func(n *NewBakeOff) { n.VersionID = "" }, false},
 		{"no factory", func(n *NewBakeOff) { n.FactoryID = "" }, false},
-		{"bad content hash", func(n *NewBakeOff) { n.ContentSHA256 = "abc" }, false},
+		{"bad content hash", func(n *NewBakeOff) { n.ContentSHA256 = "not-hex" }, false},
 		{"zero tries per case", func(n *NewBakeOff) { n.TriesPerCase = 0 }, false},
 		{"eleven tries per case", func(n *NewBakeOff) { n.TriesPerCase = 11 }, false},
 		{"no cases", func(n *NewBakeOff) { n.Cases = nil }, false},
@@ -125,7 +127,7 @@ func TestRecommendBakeOffArm(t *testing.T) {
 	// arm is a summarized arm with passed and errors out of 6 tries at cost per item.
 	arm := func(n int, current bool, passed, errs int, cost float64) BakeOffArm {
 		return BakeOffArm{
-			Arm: n, Model: "claude-test-" + string(rune('a'+n)), Current: current,
+			Arm: n, Model: fmt.Sprintf("claude-test-%d", n), Current: current,
 			Summary: &ArmSummary{Tries: 6, Passed: passed, Errors: errs, CostPerItemUSD: cost},
 		}
 	}
@@ -153,7 +155,7 @@ func TestRecommendBakeOffArm(t *testing.T) {
 		{"an arm with no tries", done(arm(1, true, 5, 0, 0.2), BakeOffArm{Arm: 2, Model: "claude-test-c", Summary: &ArmSummary{}}), 0, false},
 		{"no arms", done(), 0, false},
 		{"still running", BakeOff{EvalRun: EvalRun{Kind: EvalKindBakeOff, State: EvalRunRunning}, Arms: []BakeOffArm{arm(1, true, 5, 0, 0.2), arm(2, false, 6, 0, 0.1)}}, 0, false},
-		{"failed", BakeOff{EvalRun: EvalRun{Kind: EvalKindBakeOff, State: EvalRunFailed}, Arms: []BakeOffArm{arm(1, true, 5, 0, 0.2), arm(2, false, 6, 0, 0.1)}}, 0, false},
+		{"a failed run", BakeOff{EvalRun: EvalRun{Kind: EvalKindBakeOff, State: EvalRunFailed}, Arms: []BakeOffArm{arm(1, true, 5, 0, 0.2), arm(2, false, 6, 0, 0.1)}}, 0, false},
 	}
 
 	for _, tt := range tests {
