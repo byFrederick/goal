@@ -51,6 +51,8 @@ interface MockSource {
 interface MockDocument {
   document: KnowledgeDocument;
   text: string;
+  /** The runs that used it over the last 7 days, and the agents' verdicts on them (the usage card's counts). */
+  use?: { runs: number; helped: number; misled: number };
 }
 
 export interface MockKnowledge {
@@ -110,6 +112,15 @@ const refuse = (res: ServerResponse, status: number, detail: string, code?: stri
 
 const strings = (v: unknown): Record<string, string> =>
   v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, String(x)])) : {};
+
+/** Sample items' titles for the mock's runs, in the order the card's uses list them. */
+const sampleTitles = [
+  'Fix the palette drift on the item page',
+  'Add the usage card to Knowledge',
+  'Check the spend window at 375 px',
+  'Write the verdict copy',
+  'Document the knowledge event',
+];
 
 const words = (text: string) => text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
 
@@ -186,17 +197,47 @@ function seed(now: number, by: Actor): MockSource[] {
         embed_model: '@cf/baai/bge-m3',
       }),
       docs: [
+        {
+          ...doc(
+            'goal-docs',
+            'AGENTS.md',
+            '# Goal\n\nThe index for every agent and human working in this repo. Each rule lives in one place.',
+            { url: blob('goal', 'AGENTS.md'), indexed_at: at(-45 * 60_000) },
+          ),
+          use: { runs: 212, helped: 61, misled: 0 },
+        },
+        {
+          ...doc(
+            'goal-docs',
+            'factory-definition.md',
+            '# Factory definition\n\nA factory is one YAML file: its stations, agents, work types and the knowledge its agents may search.',
+            { url: blob('goal', 'docs/engineering/factory-definition.md'), indexed_at: at(-45 * 60_000) },
+          ),
+          use: { runs: 64, helped: 22, misled: 1 },
+        },
+        {
+          ...doc(
+            'goal-docs',
+            'MASTER.md',
+            '# Design system\n\nThe palette, the type scale and the components. Use the token names, never a hex value.',
+            { url: blob('goal', 'docs/design/MASTER.md'), indexed_at: at(-45 * 60_000) },
+          ),
+          use: { runs: 41, helped: 9, misled: 6 },
+        },
+        {
+          ...doc(
+            'goal-docs',
+            'testing.md',
+            '# Testing\n\nTest the engine with in-memory port fakes; test adapters against real PostgreSQL.',
+            { url: blob('goal', 'docs/engineering/testing.md'), indexed_at: at(-45 * 60_000) },
+          ),
+          use: { runs: 33, helped: 14, misled: 0 },
+        },
         doc(
           'goal-docs',
-          'docs/engineering/frontend.md',
+          'frontend.md',
           '# Frontend and monorepo\n\n## Live updates\n\nThe stream invalidates the queries an event can change, so screens update without polling.',
           { url: blob('goal', 'docs/engineering/frontend.md'), indexed_at: at(-45 * 60_000) },
-        ),
-        doc(
-          'goal-docs',
-          'docs/engineering/testing.md',
-          '# Testing\n\nTest the engine with in-memory port fakes; test adapters against real PostgreSQL.',
-          { url: blob('goal', 'docs/engineering/testing.md'), indexed_at: at(-45 * 60_000) },
         ),
       ],
     },
@@ -488,6 +529,43 @@ export function createKnowledge({
     send(res, 200, { hits });
   }
 
+  /** The uses of a document: the runs that used it, newest first, one a run; the factories of the org take turns. */
+  const usesOf = (org: string, id: string, d: MockDocument) => {
+    const runs = d.use?.runs ?? 0;
+    const pool = factories(org);
+    if (runs === 0 || pool.length === 0) return [];
+    return Array.from({ length: Math.min(runs, 50) }, (_, i) => {
+      const factory = pool[(i + id.length) % pool.length] as Factory;
+      return {
+        run_id: `run-${d.document.id.slice(-3)}-${String(i).padStart(3, '0')}`,
+        item: {
+          id: `item-${factory.name}-${i + 1}`,
+          ref: `${factory.name}#${i + 101}`,
+          title: sampleTitles[i % sampleTitles.length] ?? 'Build the card',
+        },
+        factory: { id: factory.id, name: factory.name, title: factory.name },
+        kinds: i % 3 === 0 ? ['read'] : ['search'],
+        at: new Date(clock() - (i + 1) * 3_600_000).toISOString(),
+      };
+    });
+  };
+
+  /** The usage of a source's documents over `days` days: each with a use or a verdict, the most used first. */
+  const usageOf = (s: MockSource) =>
+    s.docs
+      .filter((d) => (d.use?.runs ?? 0) > 0)
+      .map((d) => ({
+        id: d.document.id,
+        title: d.document.title,
+        source: s.source.name,
+        runs: d.use?.runs ?? 0,
+        agents_helped: d.use?.helped ?? 0,
+        agents_misled: d.use?.misled ?? 0,
+        people_helped: 0,
+        people_misled: 0,
+      }))
+      .sort((a, b) => b.runs - a.runs || a.id.localeCompare(b.id));
+
   return {
     reset,
     names: (org) => list(org).map((s) => s.source.name),
@@ -549,7 +627,14 @@ export function createKnowledge({
         else remove(org, s, req, res);
         return true;
       }
-      const doc = rest.match(/^\/knowledge\/documents\/([^/]+)(\/content)?$/);
+      if (rest === '/knowledge/usage' && method === 'GET') {
+        const name = url.searchParams.get('source') ?? '';
+        const s = named(org.id, name);
+        if (!s) refuse(res, 404, `knowledge source "${name}" not found`, 'knowledge-source-not-found');
+        else send(res, 200, { source: name, days: 7, documents: usageOf(s) });
+        return true;
+      }
+      const doc = rest.match(/^\/knowledge\/documents\/([^/]+)(\/content|\/uses)?$/);
       if (!doc) return false;
       const id = decodeURIComponent(doc[1] ?? '');
       const known = doc[2] ? method === 'GET' : ['GET', 'DELETE'].includes(method);
@@ -560,11 +645,13 @@ export function createKnowledge({
         return true;
       }
       const { s, d } = found;
-      if (method === 'GET' && !doc[2]) {
+      if (doc[2] === '/uses') {
+        send(res, 200, { uses: usesOf(org.id, id, d) });
+      } else if (method === 'GET' && !doc[2]) {
         send(res, 200, { document: d.document, text: d.document.status === 'indexed' ? d.text : '' });
       } else if (s.source.kind !== 'upload') {
         refuse(res, 409, `knowledge document ${id} is not an upload`, 'not-an-upload-source');
-      } else if (doc[2]) {
+      } else if (doc[2] === '/content') {
         res.statusCode = 200;
         res.setHeader('Content-Type', 'application/octet-stream');
         res.setHeader('Content-Disposition', `attachment; filename="${d.document.title.replace(/["\\]/g, '_')}"`);

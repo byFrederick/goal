@@ -1,6 +1,6 @@
 import { QueryClient, QueryObserver, queryOptions } from '@tanstack/react-query';
 import { describe, expect, test, vi } from 'vitest';
-import { defKeys, ensureFound, validationQuery } from './queries';
+import { defKeys, ensureFound, knowledgeDocumentUsesQuery, knowledgeUsageQuery, validationQuery } from './queries';
 import type { Validation } from './types';
 
 // goald validates the draft as it is when the request arrives, which may be a later revision than
@@ -72,5 +72,26 @@ describe('validationQuery', () => {
     expect(client.getQueryData<Validation>(defKeys.validation(org, f, 43))?.revision).toBe(43);
     // Read again when the editor next asks about revision 42 (it has moved on by then).
     expect(new QueryObserver(client, validationQuery(org, f, 42)).getCurrentResult().isStale).toBe(true);
+  });
+});
+
+describe('knowledge usage keys', () => {
+  test('the usage of a source and the uses of a document sit under the knowledge prefix the stream refreshes', () => {
+    expect(knowledgeUsageQuery('org-1', 'goal-docs').queryKey).toEqual([
+      'org',
+      'org-1',
+      'knowledge',
+      'usage',
+      'goal-docs',
+      7,
+    ]);
+    expect(knowledgeDocumentUsesQuery('org-1', 'd1').queryKey).toEqual([
+      'org',
+      'org-1',
+      'knowledge',
+      'document',
+      'd1',
+      'uses',
+    ]);
   });
 });

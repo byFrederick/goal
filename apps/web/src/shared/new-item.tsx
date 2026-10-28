@@ -20,6 +20,10 @@ const field =
 interface NewItemProps {
   factory: Factory;
   compact?: boolean;
+  /** Replaces the default button that opens the composer (the knowledge card's "Make an item to fix it"). */
+  trigger?: ReactNode;
+  /** The title the composer starts with each time it opens. */
+  title?: string;
 }
 
 /**
@@ -30,15 +34,17 @@ export function NewItemButton(props: NewItemProps) {
   return holds(props.factory, 'item:create') ? <NewItem {...props} /> : null;
 }
 
-function NewItem({ factory, compact }: NewItemProps) {
+function NewItem({ factory, compact, trigger, title }: NewItemProps) {
   const [open, setOpen] = useState(false);
   return (
     <Composer
       open={open}
       onOpenChange={setOpen}
       factory={factory}
+      initialTitle={title}
       trigger={
-        compact ? (
+        trigger ??
+        (compact ? (
           <Button variant="primary" size="icon" className="size-11" aria-label="New item">
             <Plus size={18} strokeWidth={1.75} aria-hidden="true" />
           </Button>
@@ -47,7 +53,7 @@ function NewItem({ factory, compact }: NewItemProps) {
             <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
             New item
           </Button>
-        )
+        ))
       }
     />
   );
@@ -152,15 +158,20 @@ interface ComposerProps {
   picker?: Picker;
   /** Opens the dialog; without one the dialog opens only by the shortcut, or stays open to show its state. */
   trigger?: ReactNode;
+  /** The title each opening starts with, when it is not empty. */
+  initialTitle?: string | undefined;
 }
 
 /** The "New item" dialog: the title, the factory (with a picker), the work type and the details. */
-function Composer({ open, onOpenChange, factory, picker, trigger }: ComposerProps) {
+function Composer({ open, onOpenChange, factory, picker, trigger, initialTitle }: ComposerProps) {
   const id = useId();
   const client = useQueryClient();
   const org = useOrg();
   const navigate = useNavigate();
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState(initialTitle ?? '');
+  useEffect(() => {
+    if (open && initialTitle) setTitle(initialTitle);
+  }, [open, initialTitle]);
   const [type, setType] = useState('');
   const [body, setBody] = useState('');
   const [touched, setTouched] = useState(false);
