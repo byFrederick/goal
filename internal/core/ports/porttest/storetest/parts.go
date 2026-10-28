@@ -19,6 +19,9 @@ const (
 	keyWeb    = "web"
 	titleBig  = "big request"
 	dataParts = "parts"
+	// dataPartsDone and dataState are keys of an assembly_done event's data.
+	dataPartsDone = "parts_done"
+	dataState     = "state"
 )
 
 // plan is three parts: api first, then store and web, web also needing store.
@@ -341,7 +344,7 @@ func testAssemblyClosesWithItsLastPart(f *fixture) {
 	events := f.Events(t, it.ID)
 	sameEvents(t, events[len(events)-1:], []domain.Event{{
 		FactoryID: f.factory, ItemID: it.ID, At: t3, Kind: domain.EventAssemblyDone, Station: stNext, Actor: domain.ActorEngine,
-		Data: map[string]any{"state": string(domain.StateDone), "parts_done": 2, dataParts: 3},
+		Data: map[string]any{dataState: string(domain.StateDone), dataPartsDone: 2, dataParts: 3},
 	}})
 }
 
@@ -364,7 +367,7 @@ func testAssemblyCancelledWithItsParts(f *fixture) {
 	events := f.Events(t, other.ID)
 	sameEvents(t, events[len(events)-1:], []domain.Event{{
 		FactoryID: f.factory, ItemID: other.ID, At: t1, Kind: domain.EventAssemblyDone, Station: stWork, Actor: domain.ActorEngine,
-		Data: map[string]any{"state": string(domain.StateCancelled), "parts_done": 0, dataParts: 1},
+		Data: map[string]any{dataState: string(domain.StateCancelled), dataPartsDone: 0, dataParts: 1},
 	}})
 }
 
@@ -597,7 +600,7 @@ func testCancelCascadeClosesTheAssemblyCancelled(f *fixture) {
 	events := f.Events(t, it.ID)
 	sameEvents(t, events[len(events)-1:], []domain.Event{{
 		FactoryID: f.factory, ItemID: it.ID, At: t2, Kind: domain.EventAssemblyDone, Station: stWork, Actor: domain.ActorEngine,
-		Data: map[string]any{"state": string(domain.StateCancelled), "parts_done": 1, dataParts: 3},
+		Data: map[string]any{dataState: string(domain.StateCancelled), dataPartsDone: 1, dataParts: 3},
 	}})
 }
 
