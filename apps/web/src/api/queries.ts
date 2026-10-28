@@ -26,6 +26,7 @@ import {
   getInbox,
   getItem,
   getItemParts,
+  getJudge,
   getLeadTime,
   getMe,
   getMetrics,
@@ -40,6 +41,7 @@ import {
   listItemEvents,
   listItemRuns,
   listItems,
+  listJudges,
   listMembers,
   listOrgRuns,
   listOrgs,
@@ -80,6 +82,7 @@ import {
   searchKnowledge,
 } from './knowledge';
 import { getOrgPolicy } from './policy';
+import { type SearchQuery, searchOrg } from './search';
 import { getOrgSpend } from './spend';
 import type { Factory, ItemEvent, SpendWindow } from './types';
 import { getWebhookDelivery, listWebhookDeliveries, listWebhookEndpoints } from './webhooks';
@@ -174,6 +177,8 @@ export const keys = {
   knowledgeDocuments: (org: string, name: string) => ['org', org, 'knowledge', 'source', name, 'documents'] as const,
   knowledgeDocument: (org: string, id: string) => ['org', org, 'knowledge', 'document', id] as const,
   knowledgeSearch: (org: string, query: KnowledgeQuery) => ['org', org, 'knowledge', 'search', query] as const,
+  /** The shell's search box (sidebar-search.tsx): one entry per debounced query and limit. */
+  search: (org: string, query: SearchQuery) => ['org', org, 'search', query] as const,
   /** The prefix of every factory overview window. */
   overviews: (org: string) => ['org', org, 'overview'] as const,
   overview: (org: string, window: string) => ['org', org, 'overview', window] as const,
@@ -217,6 +222,8 @@ export const keys = {
   parts: (org: string, item: string) => ['org', org, 'item', item, 'parts'] as const,
   /** The prefix of a factory's eval cases and their estimate (Jonah's Evals). A `definition` event refreshes it. */
   evals: (org: string, factory: string) => ['org', org, 'factory', factory, 'evals'] as const,
+  /** The prefix of a factory's judges (Jonah's Judges). A `definition` event refreshes it. */
+  judges: (org: string, factory: string) => ['org', org, 'factory', factory, 'judges'] as const,
   /** The factory's intake (sources and triggers); item and definition events refresh it. */
   intake: (org: string, factory: string) => ['org', org, 'factory', factory, 'intake'] as const,
   /** The factory's saved views (ADR 0020): the Items page's nav. Its mutations invalidate it. */
@@ -396,6 +403,16 @@ export const knowledgeSearchQuery = (org: string, query: KnowledgeQuery) =>
     retry: retryUnlessRefused,
   });
 
+/** The shell's search results; the previous answer stays shown while the next one loads. */
+export const searchQuery = (org: string, query: SearchQuery) =>
+  queryOptions({
+    queryKey: keys.search(org, query),
+    queryFn: ({ signal }) => searchOrg(org, query, signal),
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+    retry: retryUnlessRefused,
+  });
+
 export const settingsQuery = (org: string) =>
   queryOptions({
     queryKey: keys.settings(org),
@@ -547,6 +564,20 @@ export const evalsQuery = (org: string, factory: string) =>
   queryOptions({
     queryKey: [...keys.evals(org, factory), 'cases'] as const,
     queryFn: ({ signal }) => listEvals(org, factory, signal),
+  });
+
+/** The factory's judges of the current version, each with its 30 days (listJudges). */
+export const judgesQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: [...keys.judges(org, factory), 'list'] as const,
+    queryFn: ({ signal }) => listJudges(org, factory, signal),
+  });
+
+/** One judge of the current version with its file, its scores and where it runs (getJudge). */
+export const judgeQuery = (org: string, factory: string, judge: string) =>
+  queryOptions({
+    queryKey: [...keys.judges(org, factory), 'judge', judge] as const,
+    queryFn: ({ signal }) => getJudge(org, factory, judge, signal),
   });
 
 /** What a run of every case would cost about (estimateEvalRun): a read, so it is asked again on each refresh. */

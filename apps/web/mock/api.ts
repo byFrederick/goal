@@ -77,12 +77,14 @@ import {
 } from './fixtures.ts';
 import { constraintOf, type DayRange, type FlowInput, leadTimeOf, metricsOf, rangeOf, weeklyOf } from './flow.ts';
 import { intakeOf } from './intake.ts';
+import { createJudges } from './judges.ts';
 import { createKeys } from './keys.ts';
 import { createKnowledge } from './knowledge.ts';
 import { directory, membersFor, orgCanOf } from './people.ts';
 import { createPolicy } from './policy.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
 import { orgRunsOf } from './runs.ts';
+import { type SearchSource, search } from './search.ts';
 import { createSpend } from './spend.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
 import { createViews } from './views.ts';
@@ -241,6 +243,9 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   const views = createViews({
     clock,
     caller: (req) => auth.who(req)?.person.id ?? directory.owner.id,
+    factory: (org, key) => findFactory(key, org),
+  });
+  const judges = createJudges({
     factory: (org, key) => findFactory(key, org),
   });
   const webhooks = createWebhooks({
@@ -731,6 +736,53 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   };
 
   const stationsOf = (it: MockItem) => findFactory(it.factory)?.stations ?? [];
+
+  /** GET …/search (openapi.yaml searchOrg): the organization's items, agents, factories and connections. */
+  function searchOf(org: Org, url: URL, caller: Org, res: ServerResponse) {
+    const q = (url.searchParams.get('q') ?? '').trim();
+    if (q.length < 1 || q.length > 200)
+      return problem(res, 400, 'Bad Request', 'q is 1 to 200 characters once trimmed');
+    const limit = Number(url.searchParams.get('limit') ?? 5);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20)
+      return problem(res, 400, 'Bad Request', 'limit is 1 to 20');
+    const factories = factoriesOf(org.id).filter((f) => !f.archived_at);
+    const source: SearchSource = {
+      items: state.items.flatMap((it) => {
+        const f = factories.find((x) => x.name === it.factory);
+        if (!f) return [];
+        return [
+          {
+            id: it.id,
+            number: it.number,
+            factory_id: f.id,
+            factory_name: f.name,
+            title: it.title,
+            state: it.state,
+            station: it.station,
+          },
+        ];
+      }),
+      // An agent is named by its role: its copies (builder-1, builder-2) are one agent, at each station it works at.
+      agents: factories.flatMap((f) => {
+        const config = state.stations[f.name] ?? {};
+        const at = new Map<string, string[]>();
+        for (const s of f.stations) {
+          for (const copy of config[s.id]?.agents ?? []) {
+            const name = copy.replace(/-\d+$/, '');
+            const stations = at.get(name) ?? [];
+            if (!stations.includes(s.id)) stations.push(s.id);
+            at.set(name, stations);
+          }
+        }
+        return [...at].map(([name, stations]) => ({ name, stations, factory_id: f.id, factory_name: f.name }));
+      }),
+      factories: factories.map((f) => ({ id: f.id, name: f.name, title: f.title || f.name })),
+      connections: caller.can?.includes('connection:read')
+        ? connections.outlines(org.id).map((c) => ({ name: c.name, kind: c.kind }))
+        : [],
+    };
+    return json(res, 200, search(source, q, limit));
+  }
 
   /** The organization's factories by name, as goald lists them. */
   const factoriesOf = (org: string) =>
@@ -1352,6 +1404,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       knowledge.reset(clock());
       evals.reset();
       views.reset();
+      judges.reset();
       webhooks.reset();
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
       const cookie = auth.reset(authSettings(body.auth));
@@ -1444,8 +1497,10 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await credentials.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
+    if (rest === '/search' && method === 'GET') return searchOf(org, url, forCaller(req, org), res);
     if (await evals.handle(org, rest, method, res, () => readBody(req))) return;
     if (await views.handle(org, rest, method, req, res, () => readBody(req))) return;
+    if (await judges.handle(org, rest, method, res, () => readBody(req))) return;
     if (await spend.handle(org, rest, method, url, res)) return;
     if (await policy.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await webhooks.handle(org.id, rest, method, req, res, () => readBody(req))) return;
@@ -1853,7 +1908,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     }
 
     m = rest.match(
-      /^\/items\/([^/]+)(?:\/(events|runs|parts|notes|approve|reject|merge|retry|move|pause|cancel|answer))?$/,
+      /^\/items\/([^/]+)(?:\/(events|runs|parts|notes|approve|reject|merge|retry|move|pause|lane|cancel|answer))?$/,
     );
     if (!m) return problem(res, 404, 'Not found', path);
 
@@ -1985,6 +2040,30 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       it.state = 'blocked';
       it.question = null;
       emit(it, 'paused', by, { actor: 'user:local', ...(reason ? { reason } : {}) });
+      return json(res, 200, full(it));
+    }
+
+    if (action === 'lane') {
+      const lane = typeof body.lane === 'string' ? body.lane.trim() : '';
+      if (!lane) return problem(res, 400, 'Bad Request', 'a lane is required', 'lane-required');
+      if (closed) return problem(res, 409, 'Conflict', `${ref(it)} is ${it.state}`, 'item-closed');
+      if (it.state === 'assembly')
+        return problem(
+          res,
+          409,
+          'Conflict',
+          `${ref(it)} is an assembly; its parts carry their own lanes`,
+          'item-is-assembly',
+        );
+      if (it.state === 'in_progress')
+        return problem(res, 409, 'Conflict', `${ref(it)} is in progress; pause or move it first`, 'item-in-progress');
+      const factory = findFactory(it.factory);
+      const lanes = factory ? definitions.laneNames(factory) : [];
+      if (lanes.length > 0 && !lanes.includes(lane))
+        return problem(res, 400, 'Bad Request', `lane "${lane}" is not routed by any station`, 'unknown-lane');
+      if (it.lane === lane) return problem(res, 409, 'Conflict', `${ref(it)} is already in ${lane}`, 'same-lane');
+      emit(it, 'lane_set', by, { from: it.lane, to: lane, actor: 'user:local' });
+      it.lane = lane;
       return json(res, 200, full(it));
     }
 

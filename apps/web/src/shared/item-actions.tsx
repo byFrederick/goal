@@ -86,6 +86,28 @@ export function useDecision(item: DecidableItem, factory: string) {
 }
 
 /**
+ * Approves an item from outside its page (the sidebar's search): the same approve as useDecision, with
+ * its toasts and invalidations, for a row that names the item rather than holding it.
+ */
+export function useApprove() {
+  const client = useQueryClient();
+  const org = useOrg();
+  return useMutation({
+    mutationFn: ({ key }: { key: string; ref: string; factory: string }): Promise<Item> => approveItem(org.id, key),
+    onSuccess: (updated, { key, ref }) => {
+      client.setQueryData(keys.item(org.id, key), updated);
+      const where = updated.state === 'done' ? 'It is done.' : `It is now at ${humanize(updated.station)}.`;
+      toast.success(`Approved ${ref}. ${where}`);
+    },
+    onError: (err, { ref }) => toast.error(`Could not approve ${ref}`, { description: err.message }),
+    onSettled: (_updated, _err, { key, factory }) =>
+      Promise.all(
+        itemChangeInvalidations(org.id, factory, key).map((queryKey) => client.invalidateQueries({ queryKey })),
+      ),
+  });
+}
+
+/**
  * The queries a change to one item moves: its factory's work (the board), the organization's
  * attention and inboxes, and the item with its parts (an assembly's pause, retry or cancel changes them).
  */

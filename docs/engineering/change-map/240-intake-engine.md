@@ -4,7 +4,7 @@ How triggers turn events and schedules into items: `domain.Trigger`, `domain.Int
 
 ## Also change
 
-`config.Trigger` and the trigger checks in `internal/config/triggers.go` (its `cronProblem` must accept exactly what `domain.ParseCron` does), the `Intake` port with its fake, adapter and `porttest/intaketest` when a check needs a new read, goald's `fireSchedules` job in `cmd/goald/main.go`, and the "Intake triggers in the engine" paragraph of `docs/engineering/architecture.md`
+`config.Trigger` and the trigger checks in `internal/config/triggers.go` (its `cronProblem` must accept exactly what `domain.ParseCron` does), the `Intake` port with its fake, adapter and `porttest/intaketest` when a check needs a new read, `ports.ModelCheck` (`internal/core/ports/modelcheck.go`) with its fake `porttest.ModelCheck` and `Engine.modelAgrees` (`internal/core/engine/modelcheck.go`) when the model check changes, goald's `fireSchedules` job in `cmd/goald/main.go`, and the "Intake triggers in the engine" paragraph of `docs/engineering/architecture.md`
 
 ## Run
 

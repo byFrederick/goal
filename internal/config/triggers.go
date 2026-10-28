@@ -7,6 +7,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
+
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // onSchedule is the event key of a trigger that fires on its cron, not on an event.
@@ -44,6 +47,26 @@ func (c *checker) triggers() {
 					t.Name, tpl.key, bad)
 			}
 		}
+
+		if t.Only != nil && t.Only.ModelAgrees != nil {
+			c.modelQuestion(t, base)
+		}
+	}
+}
+
+// modelQuestion checks the model check's question: not empty once trimmed and at most
+// domain.MaxModelQuestion characters.
+func (c *checker) modelQuestion(t Trigger, base []string) {
+	path := append(slices.Clone(base), "only", "modelAgrees", "question")
+	q := strings.TrimSpace(t.Only.ModelAgrees.Question)
+
+	switch n := utf8.RuneCountInString(q); {
+	case n == 0:
+		c.errorf(checkTriggers, codeModelQuestionInvalid, path,
+			"trigger %s: only.modelAgrees.question is empty; write the yes or no question the model answers", t.Name)
+	case n > domain.MaxModelQuestion:
+		c.errorf(checkTriggers, codeModelQuestionInvalid, path,
+			"trigger %s: only.modelAgrees.question has %d characters; it may have at most %d", t.Name, n, domain.MaxModelQuestion)
 	}
 }
 
