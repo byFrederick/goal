@@ -314,6 +314,27 @@ Each problem is located at its key under `starter.item` in `factory.yaml`. The e
 | The section fails the schema: no `item`, no `title`, an empty or too long `title`, a too long `body`, an unknown key | `schema-required`, `schema-invalid`, `schema-unknown-key` |
 | `type` is not in `board.workTypes`; with no `board.workTypes`, every `type` is unknown | `unknown-work-type` |
 
+## Jonah: `learning.jonah`
+
+Jonah reviews a factory's sent-back runs and turns what it sees there into proposals for the definition ([ADR 0034](../adr/0034-jonah-proposals.md)). `learning.jonah` sets when the reviews run and what they may cost. Every key is optional, and a factory without `learning`, or without `jonah` in it, gets the defaults.
+
+```yaml
+spec:
+  learning:
+    jonah:
+      enabled: true
+      proposeAfter: 5
+      weeklyUsd: 10
+      model: claude-sonnet-5-5
+```
+
+- `enabled` (boolean, default `true`): whether sent-back runs queue reviews at all.
+- `proposeAfter` (integer, 1 to 50, default `5`): the number of new sent-back touches that queue a threshold review, and the number of times a threshold review must see an observation before it becomes a proposal (ADR 0034, decisions 2 and 5).
+- `weeklyUsd` (number, at least 0, default `10`): the cap, in US dollars, on what the factory's review runs cost over the last 7 days. While the cost is at or above it, no review is queued. `0` queues none.
+- `model` (a `claude-` model id, optional): the review run's model. When absent, it is `runtime.model`; when both are absent, the run takes the organization's default model, as an agent without a model does. The organization policy still checks the model when the run starts.
+
+`config.Factory.Line()` carries the keys, with the defaults applied, as `domain.Line.Jonah`, a `domain.JonahPolicy`; `domain.DefaultJonahPolicy()` holds the defaults. Like the rest of `learning`, the section is not part of the Visual editor: YAML mode edits it. A value out of range or an unknown key is a schema problem (`schema-invalid`, `schema-unknown-key`) at its line in `factory.yaml`, in section `files`.
+
 ## Organization policy
 
 The organization policy ([ADR 0024](../adr/0024-organization-policy.md)) is a ceiling over every factory definition. A definition or an agent can choose less, never more. Goal applies it in two places.
