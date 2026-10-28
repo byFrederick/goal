@@ -140,6 +140,10 @@ type RunRequest struct {
 	// Bundle is the kind of task token the gateway serves the run's bundle by: empty for the
 	// version's agent at the station, as for every line's run.
 	Bundle TaskKind
+	// WindowStart and WindowEnd are a Jonah review's window and Manual whether a person asked for
+	// it: a TaskKindJonah bundle's token carries them (TaskClaims), and no other bundle has them.
+	WindowStart, WindowEnd time.Time
+	Manual                 bool
 	// Repository is what the sandbox's prepare clones on Branch; zero clones nothing.
 	Repository Repository
 	// Branch and Base are the run's branch and the branch it is cut from (TaskClaims).
@@ -164,12 +168,17 @@ type RunRequest struct {
 var ErrBadRunRequest = fmt.Errorf("bad run request: %w", ErrInvalid)
 
 // Check reports why r cannot run: a request without its organization, factory, agent or model
-// connection, a station run without its item and station, or a Jonah run with an item, a station,
-// a lease, a repository or a connection besides the model's.
+// connection, a station run without its item and station, a Jonah run with an item, a station,
+// a lease, a repository or a connection besides the model's, a jonah bundle without a window that
+// ends after it starts, or a window on another bundle.
 func (r RunRequest) Check() error {
 	switch {
 	case r.OrgID == "" || r.FactoryID == "" || r.Agent == "" || r.ModelConnection == "":
 		return fmt.Errorf("%w: it needs an organization, a factory, an agent and a model connection", ErrBadRunRequest)
+	case r.Bundle == TaskKindJonah && (r.WindowStart.IsZero() || !r.WindowEnd.After(r.WindowStart)):
+		return fmt.Errorf("%w: a jonah bundle needs a window that ends after it starts", ErrBadRunRequest)
+	case r.Bundle != TaskKindJonah && (!r.WindowStart.IsZero() || !r.WindowEnd.IsZero() || r.Manual):
+		return fmt.Errorf("%w: only a jonah bundle has a window", ErrBadRunRequest)
 	case r.Kind == RunKindJonah:
 		return r.checkJonah()
 	case r.Kind != "" && r.Kind != RunKindStation:
