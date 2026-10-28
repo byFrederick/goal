@@ -252,7 +252,7 @@ func TestBakeOff_Refusals(t *testing.T) {
 		t.Errorf("another refusal printed\n%s\nwant goald's problem", got)
 	}
 
-	for _, args := range [][]string{{}, {"frobnicate"}, {subRun}, {subRun, "a", "b"}, {subRun, "a", "--trials", "x"}, {subShow}, {subShow, "a", "b"}, {"apply"}} {
+	for _, args := range [][]string{{}, {cmdUnknownName}, {subRun}, {subRun, "a", "b"}, {subRun, "a", "--trials", "x"}, {subShow}, {subShow, "a", "b"}, {"apply"}} {
 		var buf bytes.Buffer
 		if err := run(t.Context(), append([]string{"bake-off"}, args...), &printer{w: &buf}, testEnv(t, srv.URL, nil), nil); !errors.Is(err, errUsage) {
 			t.Errorf("goal bake-off %q = %v, want the usage", args, err)

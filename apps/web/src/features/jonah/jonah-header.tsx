@@ -4,7 +4,7 @@
 // order and says "Not available yet". A page that sets its own title uses JonahTabs, the tab bar alone.
 import { Link } from '@tanstack/react-router';
 import { SearchCheck } from 'lucide-react';
-import { useFactoryParams } from '../../shared/factory';
+import { useFactory, useFactoryParams } from '../../shared/factory';
 import { cn } from '../../ui/cn';
 import { NotAvailable } from '../../ui/not-available';
 
@@ -24,10 +24,12 @@ const tabOrder: readonly JonahTab[] = ['overview', 'proposals', 'judges', 'evals
 const evalsIntro =
   'Eval cases replay a task an agent must get right, before any change to the definition is published.';
 
+/** The intro line of Overview and Proposals, in the factory's own name (the picture's words). */
+const overviewIntro = (factory: string) =>
+  `Learns from ${factory}'s runs and proposes changes to its definition. Nothing changes until you approve.`;
+
 /** The intro line under the name, per tab. The tabs without a page keep the evals line, the first Jonah had. */
-const introOf: Record<JonahTab, string> = {
-  overview: evalsIntro,
-  proposals: evalsIntro,
+const introOf: Record<Exclude<JonahTab, 'overview' | 'proposals'>, string> = {
   judges: 'Judges read a sample of runs and score them against a rubric you write.',
   evals: evalsIntro,
   'bake-offs': evalsIntro,
@@ -43,6 +45,8 @@ export function JonahHeader({
   tab: JonahTab;
   counts?: Partial<Record<JonahTab, number>> | undefined;
 }) {
+  const factory = useFactory();
+  const intro = tab === 'overview' || tab === 'proposals' ? overviewIntro(factory.title ?? factory.name) : introOf[tab];
   return (
     <div className="flex flex-col gap-4">
       <header className="flex flex-wrap items-center gap-3">
@@ -51,7 +55,7 @@ export function JonahHeader({
         </span>
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="m-0 text-page-title tracking-display">Jonah</h1>
-          <p className="m-0 text-body text-ink-soft">{introOf[tab]}</p>
+          <p className="m-0 text-body text-ink-soft">{intro}</p>
         </div>
       </header>
       <JonahTabs tab={tab} counts={counts} />
@@ -59,7 +63,7 @@ export function JonahHeader({
   );
 }
 
-/** The tab bar: Jonah's five tabs, the one the page is on current, each with an optional count. */
+/** The Jonah tab bar: Overview, Proposals, Judges, Evals and Bake-offs, with the tab the page is on current. */
 export function JonahTabs({
   tab,
   counts = {},
@@ -85,6 +89,21 @@ export function JonahTabs({
             )}
           </>
         );
+        if (t === 'overview' || t === 'proposals') {
+          // Overview is the factory's Jonah page itself; Proposals is its tab (?tab=proposals).
+          return (
+            <Link
+              key={t}
+              to="/o/$org/f/$factory/jonah"
+              params={params}
+              search={t === 'proposals' ? { tab: 'proposals' } : {}}
+              aria-current={current ? 'page' : undefined}
+              className={classes}
+            >
+              {label}
+            </Link>
+          );
+        }
         if (t === 'judges') {
           return (
             <Link

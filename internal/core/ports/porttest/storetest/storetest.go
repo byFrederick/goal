@@ -25,6 +25,8 @@ type Harness struct {
 	Flow ports.FlowStats
 	// Spend reads the same store's organization spend.
 	Spend ports.Spend
+	// Jonah keeps the same store's Jonah reviews, proposals and observations.
+	Jonah ports.JonahStore
 	// NewOrg returns a new organization.
 	NewOrg func(t *testing.T) domain.OrgID
 	// NewFactory returns a factory of org the store accepts items for.
@@ -155,6 +157,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"SavedViews_OtherOrgSeesNothing", testSavedViewsOtherOrgSeesNothing},
 		{"OpenToolApprovals_ByConnection", testOpenToolApprovals},
 	}
+	tests = append(tests, jonahTests...)
 
 	for _, tc := range tests {
 		runCase(t, newHarness, tc.name, tc.test)

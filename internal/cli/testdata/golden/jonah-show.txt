@@ -1,0 +1,21 @@
+proposal #7: Ask the reviewer to check the lease (proposed), made against v4, publishes as v5
+
+Two items came back because the lease was not checked.
+
+evidence:
+  web#12 at review: "the lease is never renewed"
+  web#15: "same lease bug"
+
+--- a/agents/reviewer.md
++++ b/agents/reviewer.md
+@@ -1,4 +1,5 @@
+ # Reviewer
+ 
+ Read the diff.
++Check that every lease is renewed.
+ Run the tests.
+
+--- /dev/null
++++ b/evals/cases/lease.yaml
+@@ -0,0 +1 @@
++name: lease

@@ -217,7 +217,7 @@ func (q *Queries) AgentSentBack(ctx context.Context, arg AgentSentBackParams) ([
 }
 
 const currentRun = `-- name: CurrentRun :one
-SELECT r.id, r.factory_id, r.item_id, r.station, r.agent, r.model, r.session_id, r.status, r.turns, r.input_tokens, r.output_tokens, r.cost_usd, r.error, r.started_at, r.ended_at, r.org_id, r.definition_version_id, l.slot AS lease_slot,
+SELECT r.id, r.factory_id, r.item_id, r.station, r.agent, r.model, r.session_id, r.status, r.turns, r.input_tokens, r.output_tokens, r.cost_usd, r.error, r.started_at, r.ended_at, r.org_id, r.definition_version_id, r.kind, l.slot AS lease_slot,
        (SELECT count(*) FROM item_events e WHERE e.run_id = r.id AND e.kind = $1::text) AS usage_turns
 FROM agent_runs r
 JOIN leases l ON l.item_id = r.item_id
@@ -228,13 +228,13 @@ LIMIT 1
 
 type CurrentRunParams struct {
 	UsageKind string
-	ItemID    uuid.UUID
+	ItemID    *uuid.UUID
 }
 
 type CurrentRunRow struct {
 	ID                  uuid.UUID
 	FactoryID           uuid.UUID
-	ItemID              uuid.UUID
+	ItemID              *uuid.UUID
 	Station             string
 	Agent               string
 	Model               string
@@ -249,6 +249,7 @@ type CurrentRunRow struct {
 	EndedAt             *time.Time
 	OrgID               uuid.UUID
 	DefinitionVersionID *uuid.UUID
+	Kind                string
 	LeaseSlot           int32
 	UsageTurns          int64
 }
@@ -276,6 +277,7 @@ func (q *Queries) CurrentRun(ctx context.Context, arg CurrentRunParams) (Current
 		&i.EndedAt,
 		&i.OrgID,
 		&i.DefinitionVersionID,
+		&i.Kind,
 		&i.LeaseSlot,
 		&i.UsageTurns,
 	)
@@ -636,7 +638,7 @@ type LiveRunsParams struct {
 }
 
 type LiveRunsRow struct {
-	ItemID       uuid.UUID
+	ItemID       *uuid.UUID
 	UsageTurns   int64
 	LastToolCall []byte
 	LastPlan     []byte

@@ -18,6 +18,9 @@ var update = flag.Bool("update", false, "rewrite the golden files in testdata/go
 // TestRun_Golden pins what the CLI prints, and its exit code, for command lines that need no
 // goald, database or bucket: the usage, each command group's usage, goal version and an offline
 // validate. Other tests pin their output through checkGolden too. go test -run TestRun_Golden -update rewrites testdata/golden.
+// cmdUnknownName is a command goal does not have, for the unknown-command cases.
+const cmdUnknownName = "frobnicate"
+
 func TestRun_Golden(t *testing.T) {
 	cases := []struct {
 		name string
@@ -25,7 +28,7 @@ func TestRun_Golden(t *testing.T) {
 	}{
 		{"no-arguments", ""},
 		{"help", "help"},
-		{"unknown-command", "frobnicate"},
+		{"unknown-command", cmdUnknownName},
 		{"version-extra-argument", "version now"},
 		{"validate-fixture", "validate ../../internal/config/testdata/line"},
 		{"validate-no-factory", "validate ../../internal/config/testdata"},
@@ -34,6 +37,7 @@ func TestRun_Golden(t *testing.T) {
 		{"status-help", "status -h"},
 		{"up-help", "up -h"},
 		{"login-help", "login -h"},
+		{"jonah-help", "jonah -h"},
 		{"spend-bad-window", "spend --window year"},
 	}
 

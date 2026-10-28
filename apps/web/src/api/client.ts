@@ -44,6 +44,8 @@ import type {
   ItemAnswer,
   ItemList,
   ItemState,
+  JonahOverview,
+  JonahReview,
   Judge,
   JudgeList,
   JudgeTries,
@@ -65,6 +67,10 @@ import type {
   OrgSettings,
   OrgSettingsPatch,
   OrgSummary,
+  Proposal,
+  ProposalDecided,
+  ProposalPage,
+  ProposalState,
   RunList,
   RunStatus,
   SavedView,
@@ -557,6 +563,77 @@ export function tryJudge(org: string, factory: string, judge: string): Promise<J
   return unwrap(
     goal.POST(orgPath('/factories/{factory}/judges/{judge}/try'), { params: { path: { org, factory, judge } } }),
   );
+}
+
+/** Jonah's overview: the policy, what waits for a person, this month's cost and what it noticed this week (getJonahOverview). 503 jonah-unavailable while goald runs no Jonah. */
+export function getJonahOverview(org: string, factory: string, signal?: AbortSignal): Promise<JonahOverview> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/jonah'), { params: { path: { org, factory } }, ...cancel(signal) }),
+  );
+}
+
+/** One page of the factory's proposals, newest first, only those in `state` when it is given (listProposals). */
+export function listProposals(
+  org: string,
+  factory: string,
+  filter: { state?: ProposalState | undefined } = {},
+  signal?: AbortSignal,
+): Promise<ProposalPage> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/jonah/proposals'), {
+      params: { path: { org, factory }, query: filter.state === undefined ? {} : { state: filter.state } },
+      ...cancel(signal),
+    }),
+  );
+}
+
+/** One proposal with its files, its evidence and the versions it moves between (getProposal). 404 proposal-not-found. */
+export function getProposal(org: string, factory: string, number: number, signal?: AbortSignal): Promise<Proposal> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/jonah/proposals/{number}'), {
+      params: { path: { org, factory, number } },
+      ...cancel(signal),
+    }),
+  );
+}
+
+/**
+ * Publishes the proposal as a new version (approveProposal). 409 draft-open, proposal-stale and
+ * proposal-decided, and the publish's own refusals, are the page's to show.
+ */
+export function approveProposal(org: string, factory: string, number: number): Promise<ProposalDecided> {
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/jonah/proposals/{number}/approve'), {
+      params: { path: { org, factory, number } },
+    }),
+  );
+}
+
+/** Writes the proposal's files into the draft and sets it applied (editProposal). 409 draft-conflict is the page's to show. */
+export function editProposal(org: string, factory: string, number: number): Promise<ProposalDecided> {
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/jonah/proposals/{number}/edit'), {
+      params: { path: { org, factory, number } },
+    }),
+  );
+}
+
+/** Rejects the proposal with the reason later reviews read (rejectProposal). */
+export function rejectProposal(org: string, factory: string, number: number, reason: string): Promise<ProposalDecided> {
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/jonah/proposals/{number}/reject'), {
+      params: { path: { org, factory, number } },
+      body: { reason },
+    }),
+  );
+}
+
+/**
+ * Queues a manual review of the sent-back runs (queueJonahReview). 409 review-in-flight and
+ * learning-budget-exhausted, and 404 version-not-found before the first publish, are the page's to show.
+ */
+export function queueJonahReview(org: string, factory: string): Promise<JonahReview> {
+  return unwrap(goal.POST(orgPath('/factories/{factory}/jonah/reviews'), { params: { path: { org, factory } } }));
 }
 
 export interface ItemFilter {
