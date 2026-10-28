@@ -1,0 +1,244 @@
+exit 2
+--- stdout
+--- stderr
+usage:
+  goal up [--compose]                             start PostgreSQL and RustFS, prepare the database roles,
+                                                  migrate the database, prepare the bucket, start the egress
+                                                  proxy, run goald (and, with sign-in, Mailpit and the auth
+                                                  service); --compose runs goald and the auth service as
+                                                  compose services too, and returns once they are healthy
+  goal run <factory> "<brief>" [--type T] [--body B] [--priority N] [--detach]
+                                                  submit a work item and follow it until a human or done
+                                                  (--type: one of the factory's work types; default its
+                                                  first, none when it declares none)
+  goal follow <item>                              follow an item's events again
+  goal item <item>                                show an item with its outputs as JSON, and its human
+                                                  touches (who acted, where, planned or not, why) on stderr
+  goal approve <item> [--always-allow]            approve an item waiting at a human station, or the
+                                                  tool call its agent waits on; --always-allow also lets
+                                                  that agent role call that tool without asking from now
+                                                  on (a standing rule; needs connection:manage)
+  goal deny <item> [--note "..."]                 deny the tool call the item's agent waits on; its next
+                                                  run's brief carries the denial and the note
+  goal reject <item> --reason "..."               send it back for rework
+  goal retry <item>                               send a blocked item back to its station's queue
+  goal merge <item>                               merge the item's pull request, then approve it
+                                                  (at a station with action: merge)
+  goal note <item> "<text>"                       leave a note for the agents: the item's next run
+                                                  reads it
+  goal answer <item> "<text>" | --choice <n>      answer the question the item's agent asked, in
+                                                  your words or by its choice's number (from 1)
+  goal move <item> <station> [--reason "..."]     put the item at another station (a reason is needed
+                                                  upstream, where it counts as rework); a run in
+                                                  progress is stopped
+  goal pause <item> [--reason "..."]              stop the item where it is (goal retry resumes it);
+                                                  a run in progress is stopped
+  goal status [--factory F] [--window 7d]         per factory over the last days (1d to 90d): work in
+                                                  progress, items done, lead time p85, human touches per
+                                                  finished item, the touchless share and the station with
+                                                  the most unplanned touches; without --factory, every
+                                                  factory and the organization's total
+  goal andon <factory>                            whether the line runs, its gates' rework tallies and
+                                                  the recent andon pulls
+  goal andon pull <factory> --reason "..."        pull the andon cord: the line releases and claims
+                                                  nothing until it is cleared
+  goal andon clear <factory> [--note "..."]       clear it: the line runs again
+  goal factory pull <factory> <dir> [--version N|current|draft]
+                                                  write a version's files (default: the current one)
+                                                  into a new folder, with .goal/pulled.json
+  goal factory validate <dir>... [--offline]      validate folders through goald (--offline: schema and
+                                                  references only, without goald; goal validate is
+                                                  goal factory validate --offline, same flags)
+  goal factory push <dir> [--publish [--message M]] [--replace-draft] [--force] [--move S=T]...
+                                                  make the folder the factory's draft (creating the
+                                                  factory if its metadata.id is new); --publish then
+                                                  publishes it. Refused when an open draft has changes
+                                                  the folder was not pulled from (--replace-draft
+                                                  archives it) or a version was published after the
+                                                  pull (--force pushes over it)
+  goal factory publish <factory> [--message M] [--move S=T]...
+                                                  validate and publish the open draft
+  goal factory list [--validate] [--archived]     the factories: current version, open draft, paused
+                                                  (--archived: only the archived ones)
+  goal factory versions <factory>                 the published versions (* the one that runs)
+  goal factory restore <factory> <N> [--move S=T]...
+                                                  run version N again
+  goal factory archive <factory>                  retire a paused factory none of whose items is being
+                                                  worked; it keeps its history and leaves the list
+  goal factory restore <factory>                  list an archived factory again; it stays paused
+  goal factory delete <factory> [--yes]           delete an archived factory for good, with its items,
+                                                  runs and versions, after typing its name (--yes: no
+                                                  prompt); a factory never published needs no archive
+  goal org list                                   the organizations (* the one commands act in)
+  goal org use <slug>                             act in this organization from now on (config file)
+  goal org create <slug> --name N [--mark M]      create an organization (platform admins only)
+  goal org update <slug> [--name N] [--slug S] [--mark M] [--max-slots N]
+                                                  rename it, or cap the agents running at once
+                                                  across its factories (--max-slots 0: no cap)
+  goal org delete <slug> [--yes]                  delete it after typing its name (--yes: no prompt);
+                                                  it is purged after GOAL_ORG_RETENTION
+  goal policy get                                 the organization's policy: allowed models and the default,
+                                                  denied commands, tool defaults, box time limit; who uses
+                                                  each model and box size, and the egress addresses
+  goal policy set [--models M,M] [--default M] [--deny-command P]... [--box-limit 3h]
+                                                  change what the flags name (owners and admins), keeping
+                                                  the rest as read; refused when the policy changed since
+                                                  it was read (--deny-command replaces the list)
+  goal standing-rules list [--revoked] [--json]   the organization's standing rules: which agent role may
+                                                  call which connection tool without asking, who made it
+                                                  and when (--revoked: the revoked ones too)
+  goal standing-rules revoke <rule>               revoke one: the agent asks first again for that tool
+  goal key list                                   the organization's API keys: hint, scopes, factories,
+                                                  ceiling, expiry, last use
+  goal key create <name> --scope S [--scope S]... [--factory F]... [--role viewer|approver|editor] [--expires 90d]
+                                                  create an API key for scripts and CI (scopes: permissions
+                                                  such as org:read, factory:read, item:create; --role is
+                                                  the most it acts as on a factory, default viewer;
+                                                  --expires 1d to 90d, default 90d). The secret is printed
+                                                  once, alone on stdout: store it as GOAL_API_KEY
+  goal key revoke <name|id>                       revoke a key: anything using it stops working at once
+  goal connection list [--kind K] [--factory F]   the organization's connections: kind, status, which
+                                                  secrets are set (never a value), what uses them
+  goal connection show <name>                     one connection: its fields, last test, the env names a
+                                                  run gets and its kind's docs
+  goal connection create <name> --kind K [--field k=v]... [--secret k=-] [--secret-file k=<path>]... [--description D]
+                                                  create a connection (owners and admins); a secret comes
+                                                  from stdin (k=-, one value) or a file, never argv
+  goal connection update <name> [--name N] [--description D] [--field k=v]... [--secret k=-] [--secret-file k=<path>]...
+                                                  rename it, change its fields (merged; k= clears one) or
+                                                  replace the named secrets
+  goal connection delete <name>                   delete it (refused while a factory's current version
+                                                  names it)
+  goal connection test <name>                     run its kind's test from goald (exit 1 when it fails)
+  goal connection kinds                           the kinds connections are made of, the platform's and
+                                                  the organization's
+  goal connection kind push <file.yaml>           create or replace an organization kind from its file
+  goal connection kind delete <name>              delete an organization kind no connection is of
+  goal credential list                            the organization's credentials: type, factories, what uses
+                                                  them, last use and expiry (never a value)
+  goal credential create <name> --type T [--description D] [--factory <id>]... [--all-factories] [--expires YYYY-MM-DD] [--remind-days N]
+                                                  create a credential (owners and admins; types api_key,
+                                                  oauth_token, ssh_key, cloud_role, app_key); its value
+                                                  comes from stdin, never argv: ... < value-file
+  goal credential replace <name>                  replace its value with the one on stdin
+  goal credential rm <name>                       delete it (refused while a connection refers to it as
+                                                  {{name}}; the error names them)
+  goal credential import <file> [--format env|yaml] [--on-conflict replace|skip] [--dry-run]
+                                                  import a .env or YAML file's credentials (format from
+                                                  the extension by default; a name that exists is skipped
+                                                  unless --on-conflict replace); prints each name as new
+                                                  or exists (--dry-run) or what was done with it
+  goal knowledge sources [--factory F]            the knowledge base's sources: kind, status, documents,
+                                                  last and next sync, the factories that search them
+  goal knowledge add <name> --kind upload|synced|live [--connection C] [--config k=v]... [--title T] [--every 1h]
+                                                  add a source (owners and admins); a synced or live one
+                                                  reads a connection, --config says what (space=ENG)
+  goal knowledge sync <source>                    sync it now
+  goal knowledge upload <source> <file>...        upload text, Markdown, HTML, JSON or YAML files to an
+                                                  upload source; indexed at its next sync
+  goal knowledge documents <source>               its documents: id, title, status, size
+  goal knowledge rm <document>                    delete an uploaded document
+  goal knowledge search "<query>" [--source S]... [--limit N]
+                                                  search as agents do: the best passages first, with
+                                                  their document ids or links
+  goal search "<query>" [--limit N] [--json]      search the organization's items, agents, factories
+                                                  and connections, by group, best first (--limit: per
+                                                  group, 1 to 20, default 5; --json: goald's answer as
+                                                  it came)
+  goal runs [--factory F] [--status S] [--since T] [--until T] [--search Q] [--limit N] [--cursor C] [--json]
+                                                  the organization's agent runs, newest first: factory,
+                                                  item, station, agent, model, start, duration, turns,
+                                                  cost and status, then the window's totals and spend
+                                                  (--since/--until: RFC 3339, default the current UTC
+                                                  day; --status: running, succeeded, failed or
+                                                  cancelled; --search: item title, agent, model or
+                                                  #147; another page prints its --cursor)
+  goal eval run [--case C] [--draft] [--factory F] [--json]
+                                                  start an eval run of the factory's eval cases (every
+                                                  one, or --case), on the current version or --draft,
+                                                  and print what it is about to cost
+  goal eval show <run> [--factory F] [--json]     an eval run's state and cost, and each case's tries:
+                                                  pass, fail or error
+  goal spend [--window week|month|90d] [--json]   what the organization's agent runs cost (default this
+                                                  week), per merged item and on rework, and each
+                                                  factory's budget: running, stopped or over_budget,
+                                                  its spend today and in the last 7 days
+  goal judge list [--factory F] [--json]          the factory's judges (default: the organization's only
+                                                  factory): enabled, sample, pass mark, and over the last
+                                                  30 days the pass rate, runs scored and cost; then what
+                                                  its judge runs cost (--json: goald's answer as it came)
+  goal judge try <slug> [--factory F] [--json]    queue the judge on the 10 newest finished runs of its
+                                                  agents; the tries never count in its 30-day figures
+  goal triggers list <factory> [--json]           the factory's triggers in definition order: on or off,
+                                                  when they fire, what they create, the items they
+                                                  created in the last 7 days, and why one may not be
+                                                  creating items (triggers change in the definition)
+  goal triggers show <factory> <trigger> [--json] a trigger, what its items did in the last 7 days
+                                                  and its recent events: created, merged or skipped
+  goal webhooks list <factory> [--json]           the factory's webhook endpoints: kind, address,
+                                                  the triggers they feed, deliveries in 7 days
+                                                  (never a secret)
+  goal webhooks create <factory> <name> [--kind generic|github] [--json]
+                                                  add an endpoint (default kind generic); its signing
+                                                  secret is printed once, alone on stdout: store it in
+                                                  the sender now
+  goal webhooks rotate <factory> <name> [--json]  replace its signing secret, printed once the same
+                                                  way; the old one stops working at once
+  goal webhooks deliveries <factory> <name> [--limit N] [--after C] [--json]
+                                                  what it received, newest first: refused (and why),
+                                                  accepted or created an item
+  goal connection import-env                      once, after the cutover to connections: GOAL_GITHUB_TOKEN
+                                                  becomes github, CLAUDE_CODE_OAUTH_TOKEN (or ANTHROPIC_API_KEY)
+                                                  claude; names that exist are left as they are
+  goal storage init                               create the bucket if missing
+  goal catalog skills sync --file <sources.yaml> [--search <q>]... [--top <n>]
+                                                  fetch skills.sh skills (a YAML list of
+                                                  owner/repo@skill[#commit], plus the top n of each
+                                                  search) into the bucket's skills catalog
+  goal catalog skills list [q]                    the catalog's skills: key, commit, installs
+  goal catalog templates push <dir> --version N [--name NAME]
+                                                  add a template version (<dir>/template.yaml and the
+                                                  definition in <dir>/factory/; NAME defaults to the
+                                                  folder's name) to the bucket's template catalog
+  goal catalog templates list                     the catalog's templates, latest version of each
+  goal db init                                    create the database roles goald runs as (goal_owner,
+                                                  goal_app) and hand the schema to goal_owner
+  goal db migrate                                 apply the pending migrations as goal_owner
+                                                  (GOAL_MIGRATE_DATABASE_URL), as goald does at its start
+  goal db recover-admin <email>                   make the person a platform admin with database access
+                                                  alone (GOAL_DATABASE_ADMIN_URL), creating them if no
+                                                  one has the email; goald may be stopped
+  goal db recover-owner <org> <email>             make the person an owner of the organization, the same way
+  goal db rekey                                   reseal every connection under the active master key (the
+                                                  first of GOAL_MASTER_KEYS) as goal_owner; then drop old keys
+  goal admin list                                 the platform admins (platform admins only)
+  goal admin add <email>                          make a person who has signed in a platform admin
+  goal admin remove <email>                       stop them being one (the last one stays)
+  goal admin events [--kind K] [--before N]       the security log, newest first
+  goal login [--store keychain|file]              sign the CLI in: approve the code it shows at
+                                                  <goald>/device in a browser; the session goes to the
+                                                  OS keychain, or with --store file (remembered) to
+                                                  credentials.json beside the config file (mode 0600)
+  goal login --token [--store keychain|file]      store a personal token (or API key) read from stdin
+                                                  instead: goal login --token < token-file
+  goal logout [--all]                             end the CLI's session (--all: every session of yours)
+                                                  and forget it here
+  goal whoami                                     who the CLI acts as, and in which organizations
+  goal version                                    print the module version and build info
+
+<item> is goal#2 (factory and number), the item's id, or a bare number such as 2 when one
+factory has that item (--factory F picks the factory of a bare number). <factory> is a name or an id.
+--move S=T sends the open items of station S, which the new version drops, to station T.
+
+Factory definitions live in goald (drafts and published versions), not in files: goal factory
+push is how a folder changes one, and goald ignores factory files written to the bucket.
+
+Every command that talks to goald (run, follow, item, note, answer, move, pause, the decisions, deny, status, andon, factory, policy, standing-rules, connection, credential, knowledge, search, runs, eval, spend, judge, triggers, webhooks) acts in one
+organization: --org <slug|id>, else GOAL_ORG, else org in the config file
+($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
+else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or
+personal token stored by goal login --token, commands act in its own organization
+
+With sign-in on (GOAL_AUTH=session), commands send GOAL_API_KEY (an API key goal_sk_… or a
+personal token goal_pat_…) when it is set, else what goal login stored for goald's origin, and
+only over https or to this machine; a refused credential or permission exits 77
