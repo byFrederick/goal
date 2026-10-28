@@ -13,7 +13,7 @@
 import createClient, { type ClientOptions } from "openapi-fetch";
 import type { components, paths } from "./schema.gen";
 
-export { ApiError, type Problem, type Result, unwrap } from "./problem";
+export { ApiError, problemOf, type Problem, type Result, unwrap } from "./problem";
 export { type OrgPath, orgPath } from "./routes";
 export type { components, operations, paths } from "./schema.gen";
 export {
@@ -44,6 +44,8 @@ export type ItemSpan = Schemas["ItemSpan"];
 export type ItemWaiting = Schemas["ItemWaiting"];
 export type ItemQuestion = Schemas["ItemQuestion"];
 export type ItemAnswer = Schemas["ItemAnswer"];
+export type ToolApproval = Schemas["ToolApproval"];
+export type ToolDecision = Schemas["ToolDecision"];
 export type ItemBudget = Schemas["ItemBudget"];
 export type CurrentRun = Schemas["CurrentRun"];
 export type ItemPage = Schemas["ItemPage"];
@@ -199,6 +201,15 @@ export type EvalRunRequest = Schemas["EvalRunRequest"];
 export type EvalRunStarted = Schemas["EvalRunStarted"];
 export type EvalEstimate = Schemas["EvalEstimate"];
 export type EvalCaseFromRun = Schemas["EvalCaseFromRun"];
+export type BakeOff = Schemas["BakeOff"];
+export type BakeOffArm = Schemas["BakeOffArm"];
+export type BakeOffArmSummary = Schemas["BakeOffArmSummary"];
+export type BakeOffCase = Schemas["BakeOffCase"];
+export type BakeOffCaseArm = Schemas["BakeOffCaseArm"];
+export type BakeOffJudged = Schemas["BakeOffJudged"];
+export type BakeOffList = Schemas["BakeOffList"];
+export type BakeOffStarted = Schemas["BakeOffStarted"];
+export type BakeOffApply = Schemas["BakeOffApply"];
 export type Intake = Schemas["Intake"];
 export type IntakeTrigger = Schemas["IntakeTrigger"];
 export type ItemEvent = Schemas["Event"];

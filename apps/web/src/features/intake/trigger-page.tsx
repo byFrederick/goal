@@ -5,7 +5,7 @@
 // when the URL carries the event the New trigger picker chose (?on=<event key>).
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useSearch } from '@tanstack/react-router';
-import { MoreHorizontal, Play } from 'lucide-react';
+import { MoreHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { ApiError } from '../../api/client';
 import { definitionFile } from '../../api/intake';
@@ -31,6 +31,7 @@ import { Switch } from '../../ui/switch';
 import { RecentEvents, weekLine } from './trigger-events';
 import { type BlockProblems, TriggerForm } from './trigger-form';
 import { saveTrigger } from './trigger-save';
+import { notStoredReason, TryWithPastEvent } from './trigger-try';
 import {
   type BoardChoices,
   type KeyLines,
@@ -177,7 +178,23 @@ function TriggerEditor({ org, factory, text, saved, blank, board, detail }: Edit
   // A draft with edits of its own (not this page's) blocks the save: publishing it here would publish them too.
   const blocked = factory.draft !== null && (draft.data?.change_count ?? 0) > 0 && !draftIsOurs;
   const hasErrors = problems.some((p) => p.severity === 'error');
-  const valid = value.on !== '' && value.create.type !== '' && value.create.station !== '';
+  const question = value.only?.modelAgrees?.question ?? '';
+  const valid =
+    value.on !== '' &&
+    value.create.type !== '' &&
+    value.create.station !== '' &&
+    (value.only?.modelAgrees === undefined || question.trim() !== '');
+  // Why Try is unavailable, shown under the title: a new trigger is not saved, unsaved edits are not the saved
+  // trigger, and only a schedule keeps its events to try.
+  const tryReason = !saved
+    ? 'Save the trigger to try it'
+    : dirty
+      ? 'Save to try your changes'
+      : detail?.trigger.source !== 'schedule'
+        ? notStoredReason
+        : (detail?.events.length ?? 0) === 0
+          ? 'No past events to try yet'
+          : undefined;
   const failed = notice?.tone === 'rework';
 
   const set = <K extends keyof Trigger>(key: K, v: Trigger[K]) => {
@@ -239,12 +256,14 @@ function TriggerEditor({ org, factory, text, saved, blank, board, detail }: Edit
   const startLine = keyLines(text, value.name).name?.from;
   const actions = (
     <>
-      <NotAvailable label="Try with a past event">
-        <Button variant="white" size="md">
-          <Play size={15} strokeWidth={1.5} aria-hidden="true" />
-          Try with a past event
-        </Button>
-      </NotAvailable>
+      <TryWithPastEvent
+        org={org.id}
+        factory={factory.id}
+        trigger={value.name}
+        events={detail?.events ?? []}
+        modelCheck={saved?.only?.modelAgrees !== undefined}
+        disabled={tryReason !== undefined}
+      />
       <NotAvailable label="More actions">
         <Button variant="white" size="icon" aria-label="More actions">
           <MoreHorizontal size={16} strokeWidth={1.5} aria-hidden="true" />
@@ -272,6 +291,7 @@ function TriggerEditor({ org, factory, text, saved, blank, board, detail }: Edit
           </div>
           {detail ? <p className="m-0 ml-auto text-secondary text-muted">{weekLine(detail.week)}</p> : null}
         </div>
+        {tryReason ? <p className="m-0 -mt-2 text-meta text-muted">{tryReason}</p> : null}
 
         {blocked ? (
           <Callout tone="note">

@@ -39,6 +39,9 @@ export type FactoryPath =
   | '/o/$org/f/$factory/definition'
   | '/o/$org/f/$factory/settings'
   | '/o/$org/f/$factory/jonah'
+  | '/o/$org/f/$factory/jonah/proposals/$number'
+  | '/o/$org/f/$factory/jonah/bake-offs'
+  | '/o/$org/f/$factory/jonah/bake-offs/$bakeOff'
   | '/o/$org/f/$factory/jonah/evals'
   | '/o/$org/f/$factory/jonah/judges'
   | '/o/$org/f/$factory/jonah/judges/$judge';
@@ -120,7 +123,7 @@ export const factoryScreens: readonly FactoryScreen[] = [
     available: true,
     filters: '/o/$org/knowledge',
   },
-  // Jonah's overview (ADR 0034); its tabs reach Proposals, Judges and Evals, and Bake-offs is not built yet.
+  // Jonah's overview, Proposals and Bake-offs are built (ADR 0034, ADR 0029); its Judges and Evals are reached from its tabs.
   {
     id: 'jonah',
     label: 'Jonah',

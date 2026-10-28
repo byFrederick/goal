@@ -7,6 +7,7 @@ import {
   infiniteQueryOptions,
   isCancelledError,
   keepPreviousData,
+  mutationOptions,
   type QueryClient,
   type QueryKey,
   queryOptions,
@@ -19,6 +20,7 @@ import {
   getAgentStats,
   getAttention,
   getAuthConfig,
+  getBakeOff,
   getBoard,
   getConstraint,
   getFactoryActivity,
@@ -37,6 +39,7 @@ import {
   getTouchMetrics,
   getWeekly,
   type ItemFilter,
+  listBakeOffs,
   listEvals,
   listFactories,
   listInvitations,
@@ -48,6 +51,7 @@ import {
   listOrgRuns,
   listOrgs,
   listProposals,
+  listSavedViews,
   type RunsFilter,
 } from './client';
 import {
@@ -55,6 +59,7 @@ import {
   getConnection,
   listConnectionAudit,
   listConnectionKinds,
+  listConnectionRepositories,
   listConnections,
 } from './connections';
 import { listCredentials } from './credentials';
@@ -72,14 +77,16 @@ import {
   listVersions,
   validateDraft,
 } from './definitions';
-import { definitionFile, getIntake, getIntakeTrigger } from './intake';
+import { definitionFile, getIntake, getIntakeTrigger, tryIntakeTrigger } from './intake';
 import { listApiKeys, listMemberTokens, listPersonalTokens } from './keys';
 import {
   getKnowledgeDocument,
   getKnowledgeSource,
+  getKnowledgeUsage,
   type KnowledgeQuery,
   type KnowledgeSourceFilter,
   listKnowledgeDocuments,
+  listKnowledgeDocumentUses,
   listKnowledgeSources,
   searchKnowledge,
 } from './knowledge';
@@ -163,6 +170,9 @@ export const keys = {
   /** Audit entries about connections: every one's (`all`) or one's, by its id. */
   connectionActivity: (org: string, id?: string) => ['org', org, 'connections', 'activity', id ?? 'all'] as const,
   connectionKinds: (org: string) => ['org', org, 'connection-kinds'] as const,
+  /** The owners and repositories a code host connection reaches; `owner` absent is its own account. */
+  connectionRepositories: (org: string, connection: string, owner?: string) =>
+    ['org', org, 'connections', 'repositories', connection, owner ?? 'account'] as const,
   /** The organization's credentials (ADR 0017): the list, which a connection's change also moves. */
   credentials: (org: string) => ['org', org, 'credentials'] as const,
   /**
@@ -179,6 +189,10 @@ export const keys = {
   knowledgeDocuments: (org: string, name: string) => ['org', org, 'knowledge', 'source', name, 'documents'] as const,
   knowledgeDocument: (org: string, id: string) => ['org', org, 'knowledge', 'document', id] as const,
   knowledgeSearch: (org: string, query: KnowledgeQuery) => ['org', org, 'knowledge', 'search', query] as const,
+  /** Where one source's documents were used over `days` days (ADR 0027, decision 3). */
+  knowledgeUsage: (org: string, source: string, days: number) =>
+    ['org', org, 'knowledge', 'usage', source, days] as const,
+  knowledgeDocumentUses: (org: string, id: string) => ['org', org, 'knowledge', 'document', id, 'uses'] as const,
   /** The shell's search box (sidebar-search.tsx): one entry per debounced query and limit. */
   search: (org: string, query: SearchQuery) => ['org', org, 'search', query] as const,
   /** The prefix of every factory overview window. */
@@ -222,15 +236,30 @@ export const keys = {
   runs: (org: string, filter?: RunsFilter) =>
     filter ? (['org', org, 'runs', filter] as const) : (['org', org, 'runs'] as const),
   parts: (org: string, item: string) => ['org', org, 'item', item, 'parts'] as const,
-  /** The prefix of a factory's eval cases and their estimate (Jonah's Evals). A `definition` event refreshes it. */
+  /**
+   * The prefix of a factory's eval cases, their estimate (Jonah's Evals) and its bake-offs. A `definition`
+   * event refreshes all of it; no stream event reports a bake-off's progress, so a bake-off is read again on
+   * focus and on its own actions.
+   */
   evals: (org: string, factory: string) => ['org', org, 'factory', factory, 'evals'] as const,
+  /** The factory's bake-offs (under keys.evals): the list, and each bake-off by its id. */
+  bakeOffs: (org: string, factory: string) => [...keys.evals(org, factory), 'bake-offs'] as const,
   /** The prefix of a factory's judges (Jonah's Judges). A `definition` event refreshes it. */
   judges: (org: string, factory: string) => ['org', org, 'factory', factory, 'judges'] as const,
   /** The prefix of a factory's Jonah reads: the overview and the proposals. A `learning` or `definition` event refreshes it. */
   jonah: (org: string, factory: string) => ['org', org, 'factory', factory, 'jonah'] as const,
   /** The factory's intake (sources and triggers); item and definition events refresh it. */
   intake: (org: string, factory: string) => ['org', org, 'factory', factory, 'intake'] as const,
+  /** The factory's saved views (ADR 0020): the Items page's nav. Its mutations invalidate it. */
+  views: (org: string, factory: string) => ['org', org, 'factory', factory, 'views'] as const,
 };
+
+/** The factory's saved views, shared ones first (listSavedViews). */
+export const viewsQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: keys.views(org, factory),
+    queryFn: ({ signal }) => listSavedViews(org, factory, signal),
+  });
 
 export const intakeQuery = (org: string, factory: string) =>
   queryOptions({
@@ -330,6 +359,16 @@ export const connectionQuery = (org: string, name: string) =>
     retry: retryUnlessRefused,
   });
 
+/** The repositories of one owner a GitHub connection reaches (connection:browse); a step's list, not cached for long. */
+export const connectionRepositoriesQuery = (org: string, connection: string, owner?: string) =>
+  queryOptions({
+    queryKey: keys.connectionRepositories(org, connection, owner),
+    queryFn: ({ signal }) => listConnectionRepositories(org, connection, owner, signal),
+    staleTime: 30_000,
+    // A failed list shows its problem with Retry; an automatic retry would only delay that.
+    retry: false,
+  });
+
 /** A kind changes with a goald release or an admin's edit: minutes are fresh enough. */
 export const connectionKindsQuery = (org: string) =>
   queryOptions({
@@ -384,6 +423,23 @@ export const knowledgeDocumentQuery = (org: string, id: string) =>
   queryOptions({
     queryKey: keys.knowledgeDocument(org, id),
     queryFn: ({ signal }) => getKnowledgeDocument(org, id, signal),
+    staleTime: 30_000,
+    retry: retryUnlessRefused,
+  });
+
+/** Where a source's documents were used over the last `days` days (7 by default), the most used first. */
+export const knowledgeUsageQuery = (org: string, source: string, days = 7) =>
+  queryOptions({
+    queryKey: keys.knowledgeUsage(org, source, days),
+    queryFn: ({ signal }) => getKnowledgeUsage(org, source, days, signal),
+    staleTime: 30_000,
+  });
+
+/** The first page of the runs that used a document, newest first (the card's uses under a document). */
+export const knowledgeDocumentUsesQuery = (org: string, id: string, limit = 50) =>
+  queryOptions({
+    queryKey: keys.knowledgeDocumentUses(org, id),
+    queryFn: ({ signal }) => listKnowledgeDocumentUses(org, id, { limit }, signal),
     staleTime: 30_000,
     retry: retryUnlessRefused,
   });
@@ -561,6 +617,20 @@ export const evalsQuery = (org: string, factory: string) =>
     queryFn: ({ signal }) => listEvals(org, factory, signal),
   });
 
+/** The factory's bake-offs, newest first (listBakeOffs). */
+export const bakeOffsQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: [...keys.bakeOffs(org, factory), 'list'] as const,
+    queryFn: ({ signal }) => listBakeOffs(org, factory, signal),
+  });
+
+/** One bake-off with its arms and per-case tries (getBakeOff). */
+export const bakeOffQuery = (org: string, factory: string, bakeOff: string) =>
+  queryOptions({
+    queryKey: [...keys.bakeOffs(org, factory), bakeOff] as const,
+    queryFn: ({ signal }) => getBakeOff(org, factory, bakeOff, signal),
+  });
+
 /** The factory's judges of the current version, each with its 30 days (listJudges). */
 export const judgesQuery = (org: string, factory: string) =>
   queryOptions({
@@ -650,6 +720,16 @@ export const intakeTriggerQuery = (org: string, factory: string, trigger: string
   queryOptions({
     queryKey: intakeKeys.trigger(org, factory, trigger),
     queryFn: ({ signal }) => getIntakeTrigger(org, factory, trigger, signal),
+  });
+
+/**
+ * A dry run of the saved trigger against one of its events (ADR 0028). A mutation, not a cached read: each
+ * try is a new answer, so its key sits under the trigger's and the result is never reused.
+ */
+export const intakeTryMutation = (org: string, factory: string, trigger: string) =>
+  mutationOptions({
+    mutationKey: [...intakeKeys.trigger(org, factory, trigger), 'try'],
+    mutationFn: (firing: string) => tryIntakeTrigger(org, factory, trigger, firing),
   });
 
 /**

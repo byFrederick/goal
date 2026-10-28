@@ -40,7 +40,7 @@ type settings struct {
 	// be any, with GOAL_PUBLIC_URL and a gateway listener of its own off loopback.
 	Listen string
 	// GatewayListen is the MCP gateway's own address (GOAL_GATEWAY_LISTEN, optional). When set,
-	// that listener serves only /mcp and /run and the main one answers them with 404; it is required, and
+	// that listener serves only the gateway's paths (/mcp, /run, /run/tool-approval) and the main one answers them with 404; it is required, and
 	// different, when Listen is not loopback (phase 3, §5.5). It may be off loopback, such as the
 	// Docker bridge's address on Linux: every request there needs a task token.
 	GatewayListen string
@@ -96,6 +96,10 @@ type settings struct {
 	// Models are the models the factory editor offers (GOAL_MODELS: comma-separated model ids,
 	// each optionally id=Label; the first is the default; default defaultModels).
 	Models []builder.Model
+	// BakeOffModels are the models a bake-off that names no arms tries beside the agent's own
+	// (GOAL_BAKEOFF_MODELS: comma-separated model ids, default none; ADR 0029 decision 6). Read and
+	// checked here; Jonah's eval loop takes them once goald builds it.
+	BakeOffModels []string
 	// LogLevel (GOAL_LOG_LEVEL: debug, info, warn, error) and LogFormat (GOAL_LOG_FORMAT: json or
 	// text) shape the structured log on stdout.
 	LogLevel  slog.Level
@@ -265,6 +269,10 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 
 	if s.LogFormat != "json" && s.LogFormat != "text" {
 		errs = append(errs, fmt.Errorf("GOAL_LOG_FORMAT %q is not json or text", s.LogFormat))
+	}
+
+	if s.BakeOffModels, err = bakeOffModels(getenv("GOAL_BAKEOFF_MODELS")); err != nil {
+		errs = append(errs, err)
 	}
 
 	// errors.Join drops a nil error.
@@ -802,6 +810,31 @@ func models(raw string) ([]builder.Model, error) {
 		}
 
 		out = append(out, builder.Model{ID: id, Label: cmp.Or(label, modelLabel(id))})
+	}
+
+	return out, nil
+}
+
+// bakeOffModels parses GOAL_BAKEOFF_MODELS: comma-separated model ids, none when empty.
+func bakeOffModels(raw string) ([]string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+
+	var out []string
+
+	for item := range strings.SplitSeq(raw, ",") {
+		id := strings.TrimSpace(item)
+
+		if !modelID.MatchString(id) {
+			return nil, fmt.Errorf("GOAL_BAKEOFF_MODELS: %q is not a model id (claude-...)", id)
+		}
+
+		if slices.Contains(out, id) {
+			return nil, fmt.Errorf("GOAL_BAKEOFF_MODELS: %s is listed twice", id)
+		}
+
+		out = append(out, id)
 	}
 
 	return out, nil

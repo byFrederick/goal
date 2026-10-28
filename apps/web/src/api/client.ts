@@ -12,6 +12,7 @@ import {
   subscribe,
   unwrap,
 } from '@goal/api-client';
+import { type CsvFile, csvFileOf } from './download';
 import { sessionHandlers, withSession } from './session';
 import type {
   Activity,
@@ -19,10 +20,15 @@ import type {
   AndonPull,
   AssemblyParts,
   AuthConfig,
+  BakeOff,
+  BakeOffApply,
+  BakeOffList,
+  BakeOffStarted,
   Board,
   ConstraintReport,
   CreateJudgeRequest,
   DeviceRequest,
+  Draft,
   EvalCaseFromRun,
   EvalEstimate,
   EvalList,
@@ -52,6 +58,7 @@ import type {
   NewItem,
   NewOrg,
   NewPartRequest,
+  NewSavedView,
   NoteReceipt,
   Org,
   OrgAttention,
@@ -66,6 +73,10 @@ import type {
   ProposalState,
   RunList,
   RunStatus,
+  SavedView,
+  SavedViewChange,
+  SavedViewList,
+  ToolDecision,
   TouchMetrics,
   TouchReason,
   Version,
@@ -424,6 +435,89 @@ export function addEvalCase(org: string, factory: string, from: EvalCaseFromRun)
   );
 }
 
+/** The factory's bake-offs, newest first: at most 20 (ADR 0029). 503 evals-unavailable. */
+export function listBakeOffs(org: string, factory: string, signal?: AbortSignal): Promise<BakeOffList> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/evals/bake-offs'), {
+      params: { path: { org, factory } },
+      ...cancel(signal),
+    }),
+  );
+}
+
+/** One bake-off with its arms, its tries passed per case and its recommendation. 404 eval-run-not-found. */
+export function getBakeOff(org: string, factory: string, bakeOff: string, signal?: AbortSignal): Promise<BakeOff> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/evals/bake-offs/{bake_off}'), {
+      params: { path: { org, factory, bake_off: bakeOff } },
+      ...cancel(signal),
+    }),
+  );
+}
+
+/**
+ * Queues a bake-off of one agent's eval cases on the current version, with goald's default arms. 404
+ * version-not-found; 409 learning-budget-exhausted, with the estimate; 422 invalid-bake-off; 503 evals-unavailable.
+ */
+export function startBakeOff(org: string, factory: string, agent: string): Promise<BakeOffStarted> {
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/evals/bake-offs'), {
+      params: { path: { org, factory } },
+      body: { agent },
+    }),
+  );
+}
+
+/** Queues a new bake-off of the same agent on the current version. 404 eval-run-not-found, then the refusals of a start. */
+export function rerunBakeOff(org: string, factory: string, bakeOff: string): Promise<BakeOffStarted> {
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/evals/bake-offs/{bake_off}/rerun'), {
+      params: { path: { org, factory, bake_off: bakeOff } },
+    }),
+  );
+}
+
+/**
+ * Writes an arm's model as the agent's model into the factory's draft; it never publishes. 412
+ * draft-conflict when the agent changed since the bake-off's version: the builder shows it.
+ */
+export function applyBakeOff(org: string, factory: string, bakeOff: string, arm: number): Promise<Draft> {
+  const body: BakeOffApply = { arm };
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/evals/bake-offs/{bake_off}/apply'), {
+      params: { path: { org, factory, bake_off: bakeOff } },
+      body,
+    }),
+  );
+}
+
+/** The factory's shared views, then the caller's personal ones, each by name (ADR 0020). */
+export function listSavedViews(org: string, factory: string, signal?: AbortSignal): Promise<SavedViewList> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/views'), { params: { path: { org, factory } }, ...cancel(signal) }),
+  );
+}
+
+/** 400 invalid-view; 403 forbidden for a shared view without factory:manage; 409 view-name-taken. */
+export function createSavedView(org: string, factory: string, view: NewSavedView): Promise<SavedView> {
+  return unwrap(goal.POST(orgPath('/factories/{factory}/views'), { params: { path: { org, factory } }, body: view }));
+}
+
+/** Renames a view and replaces its filters. 404 view-not-found, 403 forbidden, 400 invalid-view, 409 view-name-taken. */
+export function updateSavedView(
+  org: string,
+  factory: string,
+  view: string,
+  change: SavedViewChange,
+): Promise<SavedView> {
+  return unwrap(
+    goal.PATCH(orgPath('/factories/{factory}/views/{view}'), {
+      params: { path: { org, factory, view } },
+      body: change,
+    }),
+  );
+}
+
 /** The factory's judges of the current version, each with its last 30 days (ADR 0025). 503 judges-unavailable while goald serves none. */
 export function listJudges(org: string, factory: string, signal?: AbortSignal): Promise<JudgeList> {
   return unwrap(
@@ -439,6 +533,11 @@ export function getJudge(org: string, factory: string, judge: string, signal?: A
       ...cancel(signal),
     }),
   );
+}
+
+/** 404 view-not-found; 403 forbidden for a shared view without factory:manage. */
+export async function deleteSavedView(org: string, factory: string, view: string): Promise<void> {
+  await unwrap(goal.DELETE(orgPath('/factories/{factory}/views/{view}'), { params: { path: { org, factory, view } } }));
 }
 
 /**
@@ -634,6 +733,20 @@ export function listOrgRuns(org: string, filter: RunsFilter, signal?: AbortSigna
   );
 }
 
+/** The Runs filter without its page: the export takes every run the list would list (no limit, no cursor). */
+export type RunsExportFilter = Omit<RunsFilter, 'limit' | 'cursor'>;
+
+/** The organization's runs as CSV (GET /v1/orgs/{org}/runs/export), with the list's filters and no paging. */
+export async function exportOrgRuns(org: string, filter: RunsExportFilter, signal?: AbortSignal): Promise<CsvFile> {
+  const result = await goal.GET(orgPath('/runs/export'), {
+    params: { path: { org }, query: runsQuery(filter) },
+    parseAs: 'blob',
+    headers: { Accept: 'text/csv' },
+    ...cancel(signal),
+  });
+  return csvFileOf(result, 'runs.csv');
+}
+
 /** Leaves the local user's note for the agents working an item; the receipt says when one reads it. */
 export function noteItem(org: string, item: string, text: string): Promise<NoteReceipt> {
   return unwrap(goal.POST(orgPath('/items/{item}/notes'), { params: { path: { org, item } }, body: { text } }));
@@ -649,6 +762,11 @@ export function approveItem(org: string, item: string): Promise<Item> {
 
 export function rejectItem(org: string, item: string, reason: string): Promise<Item> {
   return unwrap(goal.POST(orgPath('/items/{item}/reject'), { params: { path: { org, item } }, body: { reason } }));
+}
+
+/** Decides the item's open tool approval: approve, with always_allow for a standing rule, or deny with a note (ADR 0031). */
+export function decideToolApproval(org: string, item: string, body: ToolDecision): Promise<Item> {
+  return unwrap(goal.POST(orgPath('/items/{item}/tool-approval'), { params: { path: { org, item } }, body }));
 }
 
 /** Answers the item's open question: a choice by its index in Item.question.choices, or the person's own words. */
@@ -681,6 +799,11 @@ export function pauseItem(org: string, item: string, reason?: string): Promise<I
   return unwrap(
     goal.POST(orgPath('/items/{item}/pause'), { params: { path: { org, item } }, body: reason ? { reason } : {} }),
   );
+}
+
+/** Sets an open item's lane. 400 lane-required or unknown-lane; 409 item-closed, item-in-progress, item-is-assembly or same-lane. */
+export function setItemLane(org: string, item: string, lane: string): Promise<Item> {
+  return unwrap(goal.POST(orgPath('/items/{item}/lane'), { params: { path: { org, item } }, body: { lane } }));
 }
 
 /** Closes an open item as cancelled; an assembly cancels its open parts too. 409 item-closed when it is done or cancelled. */

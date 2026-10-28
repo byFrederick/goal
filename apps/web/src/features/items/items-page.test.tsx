@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
+
+import { ApiError } from '@goal/api-client';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { moveItem, pauseItem } from '../../api/client';
-import { boardQuery } from '../../api/queries';
+import { listItems, moveItem, pauseItem, setItemLane } from '../../api/client';
+import { boardQuery, versionModelQuery } from '../../api/queries';
 import type { Board, Factory, Item, ItemCard, OrgSummary, Station } from '../../api/types';
 import { renderFactoryPage } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
@@ -17,6 +19,8 @@ const list = vi.hoisted(() => ({
   /** While set, the list never answers: the page stays in its loading state. */
   hold: false,
   refuse: {} as Record<string, string>,
+  /** The problem type goald gives each item that the lane request refuses. */
+  laneRefusal: {} as Record<string, string>,
 }));
 
 vi.mock(import('../../api/client'), async (original) => ({
@@ -37,6 +41,11 @@ vi.mock(import('../../api/client'), async (original) => ({
     async (_org: string, key: string) =>
       ({ ...list.items.find((it) => it.ref === key), state: 'queued' }) as unknown as Item,
   ),
+  setItemLane: vi.fn(async (_org: string, key: string, lane: string) => {
+    const refusal = list.laneRefusal[key];
+    if (refusal) throw new ApiError({ type: 'about:blank', title: 'Conflict', status: 409, code: refusal } as never);
+    return { ...list.items.find((it) => it.ref === key), lane } as unknown as Item;
+  }),
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -46,6 +55,7 @@ afterEach(() => {
   list.fail = false;
   list.hold = false;
   list.refuse = {};
+  list.laneRefusal = {};
 });
 
 const org: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'A', factory_count: 1, role: null };
@@ -136,9 +146,22 @@ function renderItems(items: ItemCard[], search: Record<string, string> = {}, per
     org,
     factory: { ...factory, can: permissions },
     search,
-    seed: [[boardQuery(org.id, factory.id).queryKey, board]],
+    seed: [
+      [boardQuery(org.id, factory.id).queryKey, board],
+      [versionModelQuery(org.id, factory.id, 'current').queryKey, { model: runningLine }],
+    ],
   });
 }
+
+/** The running version's line: its build station routes two lanes, so Set lane has choices. */
+const runningLine = {
+  line: {
+    stations: [
+      { id: 'investigate', kind: 'agent', agent: 'investigator' },
+      { id: 'build', kind: 'agent', route: { frontend: 'frontend-engineer', backend: 'backend-engineer' } },
+    ],
+  },
+};
 
 describe('Items page header and views', () => {
   it('shows the heading, the open and done counts, and the saved views with their counts', async () => {
@@ -206,12 +229,12 @@ describe('Items page header and views', () => {
     expect(screen.queryByText('Shipped long ago')).toBeNull();
   });
 
-  it('renders Save view, Set lane and Source as not available, and does nothing when pressed', async () => {
+  it('renders Source as not available, and opens the save dialog from Save view', async () => {
     renderItems([item({ id: 'a', ref: 'sre#1', title: 'Some work' })]);
 
-    const save = await screen.findByRole('button', { name: '+ Save view' });
-    expect(save.getAttribute('aria-disabled')).toBe('true');
-    fireEvent.click(save);
+    fireEvent.click(await screen.findByRole('button', { name: '+ Save view' }));
+    expect(await screen.findByRole('dialog', { name: 'Save view' })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Cancel' }), { key: 'Escape' });
     const source = screen.getByRole('button', { name: /^Source/ });
     expect(source.getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(source);
@@ -444,7 +467,7 @@ describe('Items list bulk actions', () => {
     expect(within(bar).getByText('2 selected')).toBeTruthy();
     expect(within(bar).getByRole('button', { name: 'Move' })).toBeTruthy();
     expect(within(bar).getByRole('button', { name: 'Pause' })).toBeTruthy();
-    expect(within(bar).getByRole('button', { name: 'Set lane' }).getAttribute('aria-disabled')).toBe('true');
+    expect(within(bar).getByRole('button', { name: 'Set lane' }).getAttribute('aria-disabled')).toBeNull();
 
     fireEvent.click(within(bar).getByRole('button', { name: 'Clear' }));
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Bulk actions' })).toBeNull());
@@ -505,7 +528,35 @@ describe('Items list bulk actions', () => {
     const bar = await screen.findByRole('region', { name: 'Bulk actions' });
     expect(within(bar).queryByRole('button', { name: 'Move' })).toBeNull();
     expect(within(bar).queryByRole('button', { name: 'Pause' })).toBeNull();
+    expect(within(bar).queryByRole('button', { name: 'Set lane' })).toBeNull();
     expect(within(bar).getByRole('button', { name: 'Clear' })).toBeTruthy();
+  });
+
+  it('sets the lane of each checked item and reports a refusal in progress, the others still set', async () => {
+    list.laneRefusal = { 'sre#2': 'item-in-progress' };
+    renderItems(twoItems());
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select sre#1' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select sre#2' }));
+    fireEvent.click(
+      within(await screen.findByRole('region', { name: 'Bulk actions' })).getByRole('button', { name: 'Set lane' }),
+    );
+    fireEvent.click(await screen.findByRole('radio', { name: 'Frontend' }));
+    const listsBefore = vi.mocked(listItems).mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: 'Set lane to Frontend' }));
+
+    await waitFor(() => expect(setItemLane).toHaveBeenCalledTimes(2));
+    expect(setItemLane).toHaveBeenCalledWith('org-1', 'sre#1', 'frontend');
+    expect(setItemLane).toHaveBeenCalledWith('org-1', 'sre#2', 'frontend');
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('Could not set the lane of sre#2', {
+        description: 'It is in progress. Pause it or move it first.',
+      }),
+    );
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(toast.success).toHaveBeenCalledWith('Set the lane of sre#1 to Frontend.');
+    // The items query refetches once the requests settle.
+    await waitFor(() => expect(vi.mocked(listItems).mock.calls.length).toBeGreaterThan(listsBefore));
   });
 
   it('checks every part of an assembly from its group row', async () => {

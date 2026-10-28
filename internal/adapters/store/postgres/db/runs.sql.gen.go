@@ -63,6 +63,53 @@ func (q *Queries) CancelLostRuns(ctx context.Context, arg CancelLostRunsParams) 
 	return items, nil
 }
 
+const countOrgRuns = `-- name: CountOrgRuns :one
+SELECT count(*) FROM (
+  SELECT 1
+  FROM agent_runs r
+  JOIN work_items w ON w.id = r.item_id
+  WHERE r.factory_id = ANY ($1::uuid[])
+    AND r.started_at >= $2 AND r.started_at < $3
+    AND ($4::text = '' OR r.status = $4::text)
+    AND ($5::text = ''
+         OR w.title ILIKE '%' || $5::text || '%' ESCAPE '\'
+         OR r.agent ILIKE '%' || $5::text || '%' ESCAPE '\'
+         OR r.model ILIKE '%' || $5::text || '%' ESCAPE '\'
+         OR ($6::bigint > 0 AND w.number = $6::bigint
+             AND ($7::uuid IS NULL OR r.factory_id = $7::uuid)))
+  LIMIT $8::bigint
+) matching
+`
+
+type CountOrgRunsParams struct {
+	Factories []uuid.UUID
+	Since     time.Time
+	Until     time.Time
+	Status    string
+	Pattern   string
+	Number    int64
+	NumberOf  *uuid.UUID
+	MaxRuns   int64
+}
+
+// How many runs ListOrgRuns would list over all its pages, counted up to max_runs: the export's
+// cap (ports.Store.EachOrgRun) needs only to know whether there are more.
+func (q *Queries) CountOrgRuns(ctx context.Context, arg CountOrgRunsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countOrgRuns,
+		arg.Factories,
+		arg.Since,
+		arg.Until,
+		arg.Status,
+		arg.Pattern,
+		arg.Number,
+		arg.NumberOf,
+		arg.MaxRuns,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const factorySpendSince = `-- name: FactorySpendSince :one
 SELECT coalesce(sum(cost_usd), 0)::float8 AS spend_usd
 FROM agent_runs

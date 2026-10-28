@@ -1,6 +1,6 @@
 // The New factory wizard (D13) against the mock: Start (blank, a template, a clone, Import YAML),
 // the steps over the new factory's draft, Save and exit, resuming from the Factories home and
-// deleting a draft factory. The mock's catalog has five templates and no blank one, so a blank
+// deleting a draft factory. The mock's catalog has eight templates and no blank one, so a blank
 // start is goald's skeleton.
 import { expect, type Page, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll, isPhone } from './support';
@@ -49,7 +49,7 @@ test('a factory from a template, step by step (flow 1)', async ({ page }) => {
 
   // From a template is chosen; Cost review's detail shows its line, agents and connectors.
   await expect(page.getByRole('radio', { name: /^From a template/ })).toBeChecked();
-  await expect(page.getByText('5 in the bucket')).toBeVisible();
+  await expect(page.getByText('8 in the bucket')).toBeVisible();
   await page.getByRole('radio', { name: /^Cost review/ }).check();
   const detail = page.getByRole('region', { name: 'Cost review' });
   await expect(detail).toContainText('Template v2, last changed Oct 9');

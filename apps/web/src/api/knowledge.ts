@@ -8,9 +8,11 @@ import type {
   KnowledgeDocument,
   KnowledgeDocumentPage,
   KnowledgeDocumentText,
+  KnowledgeDocumentUsePage,
   KnowledgeHit,
   KnowledgeSource,
   KnowledgeSourcePatch,
+  KnowledgeUsage,
   NewKnowledgeSource,
 } from './types';
 
@@ -146,4 +148,34 @@ export async function searchKnowledge(
     }),
   );
   return body.hits;
+}
+
+/** Where a source's documents were used over the last `days` days (7 when absent); 404 knowledge-source-not-found. */
+export function getKnowledgeUsage(
+  org: string,
+  source: string,
+  days?: number,
+  signal?: AbortSignal,
+): Promise<KnowledgeUsage> {
+  return unwrap(
+    goal.GET(orgPath('/knowledge/usage'), {
+      params: { path: { org }, query: { source, ...(days ? { days } : {}) } },
+      ...cancel(signal),
+    }),
+  );
+}
+
+/** One page of the runs that used a document, newest first; 404 knowledge-document-not-found. */
+export function listKnowledgeDocumentUses(
+  org: string,
+  document: string,
+  page: { after?: string | undefined; limit: number },
+  signal?: AbortSignal,
+): Promise<KnowledgeDocumentUsePage> {
+  return unwrap(
+    goal.GET(orgPath('/knowledge/documents/{document}/uses'), {
+      params: { path: { org, document }, query: { limit: page.limit, ...(page.after ? { after: page.after } : {}) } },
+      ...cancel(signal),
+    }),
+  );
 }

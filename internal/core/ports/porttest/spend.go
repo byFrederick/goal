@@ -1,7 +1,10 @@
 package porttest
 
 import (
+	"cmp"
 	"context"
+	"fmt"
+	"slices"
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -108,4 +111,89 @@ func utcDay(t time.Time) time.Time {
 	t = t.UTC()
 
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+// EachAgentModelSpend implements ports.Spend. As the postgres store pages, it finds each next
+// factory, agent and model after the one before and sums its runs under the lock, and calls
+// each without it; it never holds the rows at once.
+func (s *Store) EachAgentModelSpend(ctx context.Context, w domain.SpendWindow, factories []domain.FactoryID, maxRows int,
+	each func(domain.AgentModelSpend) error,
+) error {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return err
+	}
+
+	if err := w.Check(); err != nil {
+		return err
+	}
+
+	since, until := w.Bounds()
+	runs := func(r *domain.Run) bool {
+		_, ok := s.visible(r.ItemID, org)
+
+		return ok && slices.Contains(factories, r.FactoryID) && inWindow(r.StartedAt, since, until)
+	}
+
+	var last *spendKey
+
+	for {
+		row, n, ok := s.nextSpendRow(runs, last)
+		if last == nil && n > maxRows {
+			return fmt.Errorf("%d spend rows, more than %d: %w", n, maxRows, ports.ErrTooMany)
+		}
+
+		if !ok {
+			return nil
+		}
+
+		if err := each(row); err != nil {
+			return err
+		}
+
+		last = &spendKey{string(row.FactoryID), row.Agent, row.Model}
+	}
+}
+
+// spendKey orders the spend export's rows: factory id, agent and model.
+type spendKey [3]string
+
+func (k spendKey) compare(o spendKey) int {
+	return cmp.Or(cmp.Compare(k[0], o[0]), cmp.Compare(k[1], o[1]), cmp.Compare(k[2], o[2]))
+}
+
+// nextSpendRow sums the runs keep keeps of the first key after last (the first key when last is
+// nil) and, when last is nil, counts the keys.
+func (s *Store) nextSpendRow(keep func(*domain.Run) bool, last *spendKey) (domain.AgentModelSpend, int, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var (
+		row   domain.AgentModelSpend
+		best  spendKey
+		found bool
+		keys  = map[spendKey]bool{}
+	)
+
+	for _, r := range s.runs {
+		if !keep(r) {
+			continue
+		}
+
+		k := spendKey{string(r.FactoryID), r.Agent, r.Model}
+		if last == nil {
+			keys[k] = true
+		} else if k.compare(*last) <= 0 {
+			continue
+		}
+
+		switch {
+		case found && k == best:
+			row.USD += r.Result.CostUSD
+		case !found || k.compare(best) < 0:
+			row, best, found = domain.AgentModelSpend{FactoryID: r.FactoryID, Agent: r.Agent, Model: r.Model, USD: r.Result.CostUSD}, k, true
+		}
+	}
+
+	return row, len(keys), found
 }

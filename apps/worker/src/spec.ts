@@ -37,6 +37,10 @@ export const Connection = z.object({
     })
     .optional(),
   docs: z.string().optional(),
+  /** The tools that ask first or are off for this run's agent (ADR 0031); a tool not listed is allowed. Absent from a goald before tool modes. */
+  tool_modes: z.record(z.string(), z.enum(['ask', 'off'])).optional(),
+  /** The asking tools, sorted, a person may answer with Always allow. */
+  always_allow_offered: z.array(z.string()).optional(),
 });
 export type Connection = z.infer<typeof Connection>;
 
@@ -163,6 +167,11 @@ const taskFields = z.object({
   knowledge_sources: z.array(z.string()).optional(),
   /** The factory rules that apply to the run; absent from a goald before factory rules. */
   rules: z.array(Rule).optional(),
+  /**
+   * The Ask-first calls a person approved for this run (ADR 0031 decision 5), each allowed once
+   * when its connection, tool and input as canonical JSON match; absent from a goald before them.
+   */
+  granted_calls: z.array(z.object({ connection: z.string(), tool: z.string(), input: z.unknown() })).optional(),
   /**
    * Files that conflicted when prepare brought the item's branch up to date with the default
    * branch; it aborted, so the branch is as pushed and the agent resolves them first.

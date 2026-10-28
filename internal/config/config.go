@@ -273,8 +273,17 @@ type TriggerFilter struct {
 
 // TriggerOnly holds the checks made before an item is created.
 type TriggerOnly struct {
-	FailuresInARow int    `json:"failuresInARow,omitempty"`
-	Dedupe         string `json:"dedupe,omitempty"`
+	FailuresInARow int                 `json:"failuresInARow,omitempty"`
+	Dedupe         string              `json:"dedupe,omitempty"`
+	ModelAgrees    *TriggerModelAgrees `json:"modelAgrees,omitempty"`
+}
+
+// TriggerModelAgrees is the model check (ADR 0028 decision 3): the operator's question and,
+// optionally, the connection that pays for it and the model asked.
+type TriggerModelAgrees struct {
+	Question   string `json:"question"`
+	Connection string `json:"connection,omitempty"`
+	Model      string `json:"model,omitempty"`
 }
 
 // TriggerCreate is the item a trigger creates. Title and Brief are templates whose {{field}}

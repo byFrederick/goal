@@ -140,7 +140,7 @@ func newKBHarnessWith(t *testing.T, wrap func(*knowledge.Searcher) Knowledge) *k
 	h.gw, err = New(Deps{
 		Definitions: definitions{version: loadYAML(t, knowledgeYAML), otherVersion: loadYAML(t, plainYAML)},
 		Items:       h.store, Connections: conns, Events: h.store, Clock: h.clock,
-		Questions: &fakeQuestions{}, Knowledge: wrap(knowledge.NewSearcher(kb, nil, nil)), Logger: slog.New(slog.NewTextHandler(&lockedWriter{mu: &h.logMu, w: &h.log}, nil)),
+		Questions: &fakeQuestions{}, ToolApprovals: &fakeToolApprovals{}, Knowledge: wrap(knowledge.NewSearcher(kb, nil, nil)), Logger: slog.New(slog.NewTextHandler(&lockedWriter{mu: &h.logMu, w: &h.log}, nil)),
 	}, Config{Key: h.key})
 	if err != nil {
 		t.Fatal(err)

@@ -95,7 +95,8 @@ type EvalRunner interface {
 
 // EvalTask is one try to run: try Try (from 1) of Case in Run, with the judge or reference patch
 // its check names. Kind is always domain.TaskKindEval, and the runner signs the try's task token
-// with it and no connections.
+// with it and no connections. Model, when set, replaces the agent's model for the try: a bake-off
+// arm's (ADR 0029 decision 2); empty runs the agent on its own model.
 type EvalTask struct {
 	Run   domain.EvalRun
 	Case  domain.EvalCaseSpec
@@ -103,6 +104,7 @@ type EvalTask struct {
 	Judge domain.Judge
 	Patch []byte
 	Kind  domain.TaskKind
+	Model string
 }
 
 // EvalTry is how one try's run ended.

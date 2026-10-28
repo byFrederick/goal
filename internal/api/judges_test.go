@@ -438,7 +438,7 @@ func TestJudges_Update(t *testing.T) {
 		t.Fatalf("update = %d, want 200", code)
 	}
 
-	if j.Slug != specFollowed || j.Version != 2 || j.Enabled || deref(j.Model) != "claude-haiku-5-5" || j.Title != "Tests added" {
+	if j.Slug != specFollowed || j.Version != 2 || j.Enabled || deref(j.Model) != modelHaiku || j.Title != "Tests added" {
 		t.Errorf("update = %+v, want spec-followed of v2, disabled, on haiku", j)
 	}
 

@@ -5,7 +5,8 @@
 import type { OrgRun, OrgRunList, RunStatus, RunSummary } from '@goal/api-client';
 import type { MockState } from './fixtures.ts';
 
-export type OrgRunsResult = { body: OrgRunList } | { status: number; title: string; detail: string };
+export type OrgRunsError = { status: number; title: string; detail: string };
+export type OrgRunsResult = { body: OrgRunList } | OrgRunsError;
 
 const statuses: readonly RunStatus[] = ['running', 'succeeded', 'failed', 'cancelled'];
 const dayMs = 86_400_000;
@@ -27,6 +28,45 @@ function itemNamed(q: string): { factory?: string | undefined; number: number } 
   if (bare) return { number: Number(bare[1]) };
   const named = /^([a-z][a-z0-9-]*)#(\d+)$/i.exec(q);
   return named ? { factory: named[1]?.toLowerCase(), number: Number(named[2]) } : null;
+}
+
+/** The CSV export of the list (ADR 0020, decision 3): every run the list would list, over its pages, one row each. */
+export function runsCsvOf(state: MockState, org: string, params: URLSearchParams): { csv: string } | OrgRunsError {
+  const next = new URLSearchParams(params);
+  next.delete('cursor');
+  next.set('limit', '200');
+  const runs: OrgRun[] = [];
+  for (;;) {
+    const result = orgRunsOf(state, org, next);
+    if (!('body' in result)) return result;
+    runs.push(...result.body.runs);
+    if (result.body.next_cursor === null) break;
+    next.set('cursor', result.body.next_cursor);
+  }
+  const cell = (value: string | number | null) => {
+    const text = value === null ? '' : String(value);
+    return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+  };
+  const header = 'id,factory,item_ref,item_title,station,agent,model,status,started_at,ended_at,turns,cost_usd';
+  const lines = runs.map((run) =>
+    [
+      run.id,
+      run.factory.name,
+      run.item.ref,
+      run.item.title,
+      run.station,
+      run.agent,
+      run.model,
+      run.status,
+      run.started_at,
+      run.ended_at,
+      run.turns,
+      run.cost_usd.toFixed(2),
+    ]
+      .map(cell)
+      .join(','),
+  );
+  return { csv: `${[header, ...lines].join('\n')}\n` };
 }
 
 export function orgRunsOf(state: MockState, org: string, params: URLSearchParams): OrgRunsResult {

@@ -17,4 +17,12 @@ type Spend interface {
 	// while it is in state done. A run counts as rework once its item entered a rework round of 1
 	// or more at or before the run started, which an item reopened after done keeps.
 	OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgSpend, error)
+
+	// EachAgentModelSpend calls each with the cost of the runs of factories that started in w's
+	// bounds (w.Check must pass; domain.ErrInvalid otherwise), one row per factory, agent and
+	// model, ordered by factory id, agent and model (by bytes), without holding them all at once.
+	// When there are more than max rows it returns ErrTooMany before it calls each; an error from
+	// each stops it and is returned. No factory finds nothing.
+	EachAgentModelSpend(ctx context.Context, w domain.SpendWindow, factories []domain.FactoryID, maxRows int,
+		each func(domain.AgentModelSpend) error) error
 }

@@ -30,6 +30,28 @@ const hourMs = 3_600_000;
 const dayMs = 86_400_000;
 
 const namePattern = /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/;
+const toolNamePattern = /^[A-Za-z0-9_.-]{1,128}$/;
+
+/**
+ * The tools a PATCH sets, as the contract says: each named once, with a mode allow, ask or off. Sorted
+ * by name, as goald answers them. A string is the refusal's detail.
+ */
+function toolsOf(value: unknown): Connection['tools'] | string {
+  if (!Array.isArray(value)) return 'tools must be a list of tool modes';
+  const seen = new Set<string>();
+  const tools: Connection['tools'] = [];
+  for (const entry of value) {
+    const { name, mode } = (entry ?? {}) as Record<string, unknown>;
+    if (typeof name !== 'string' || !toolNamePattern.test(name)) {
+      return `tool name "${String(name)}" must be 1 to 128 letters, digits, underscores, dots or dashes`;
+    }
+    if (seen.has(name)) return `tool "${name}" is named twice`;
+    if (mode !== 'allow' && mode !== 'ask' && mode !== 'off') return `tool "${name}" mode must be allow, ask or off`;
+    seen.add(name);
+    tools.push({ name, mode });
+  }
+  return tools.sort((a, b) => a.name.localeCompare(b.name));
+}
 
 /** A kind as the mock keeps it: its contract shape and what the rules need of its file. */
 interface MockKind {
@@ -248,6 +270,8 @@ function seedConnections(now: number, by: Actor): { conns: MockConnection[]; his
       used_by: { factories: [], knowledge_sources: [] },
       last_used_at: null,
       last_test: null,
+      tools: [],
+      waiting_approvals: 0,
       created_by: by,
       created_at: at(-30 * dayMs),
       updated_by: by,
@@ -283,6 +307,14 @@ function seedConnections(now: number, by: Actor): { conns: MockConnection[]; his
       description: 'npx @playwright/mcp, no secret',
       fields: { command: 'npx -y @playwright/mcp@0.0.41' },
       last_used_at: at(-40 * minuteMs),
+      tools: [
+        { name: 'create_comment', mode: 'ask' },
+        { name: 'update_issue_status', mode: 'allow' },
+        { name: 'create_issue', mode: 'off' },
+        { name: 'list_issues', mode: 'allow' },
+        { name: 'get_issue', mode: 'allow' },
+      ],
+      waiting_approvals: 2,
     }),
     made(5, 'aws-prod', 'aws', {
       description: 'Production, read-only role',
@@ -495,6 +527,8 @@ export function createConnections({
         used_by: { factories: [], knowledge_sources: [] },
         last_used_at: null,
         last_test: null,
+        tools: [],
+        waiting_approvals: 0,
         created_by: by,
         created_at: now,
         updated_by: by,
@@ -534,6 +568,11 @@ export function createConnections({
     }
     const broken = fieldRefusal(kind, fields, [...secrets].sort());
     if (broken) return refuse(res, 400, ...broken);
+    if (b.tools !== undefined && !kind.kind.modes.includes('mcp')) {
+      return refuse(res, 400, `kind "${kind.kind.name}" has no MCP server, so its tools have no mode`);
+    }
+    const tools = b.tools === undefined ? c.connection.tools : toolsOf(b.tools);
+    if (typeof tools === 'string') return refuse(res, 400, tools);
     const by = actor(req);
     const from = c.connection.name;
     Object.assign(c.connection, {
@@ -541,6 +580,7 @@ export function createConnections({
       description: typeof b.description === 'string' ? b.description : c.connection.description,
       fields,
       secrets_set: [...secrets].sort(),
+      tools,
       updated_by: by,
       updated_at: new Date(clock()).toISOString(),
     });
@@ -693,6 +733,48 @@ export function createConnections({
       }
       if (rest === '/connections' && method === 'POST') {
         if (!stale(req, res)) create(org, req, res, await body());
+        return true;
+      }
+      const repos = rest.match(/^\/connections\/([^/]+)\/repositories$/);
+      if (repos && method === 'GET') {
+        // goald's repositories of a code host connection (listConnectionRepositories): the account's, or an
+        // owner's. The mock signs in as acme; acme-labs is an organization with no repositories.
+        const name = decodeURIComponent(repos[1] ?? '');
+        const c = named(org.id, name);
+        if (!c) {
+          refuse(res, 404, `connection "${name}" not found`, 'connection-not-found');
+          return true;
+        }
+        if (!kindNamed(org.id, c.connection.kind)?.kind.code_host) {
+          refuse(res, 422, `connection "${name}" is not a code host`, 'connection-not-code-host');
+          return true;
+        }
+        const owner = new URL(req.url ?? '/', 'http://mock').searchParams.get('owner') ?? 'acme';
+        const owners = [
+          { login: 'acme', kind: 'user' },
+          { login: 'acme-labs', kind: 'organization' },
+        ];
+        if (!owners.some((o) => o.login === owner)) {
+          refuse(res, 404, `owner "${owner}" not found`, 'owner-not-found');
+          return true;
+        }
+        const ago = (ms: number) => new Date(clock() - ms).toISOString();
+        const repositories = (
+          owner === 'acme'
+            ? [
+                { name: 'goal', languages: ['Go', 'TypeScript'], updated_at: ago(2 * hourMs) },
+                { name: 'goal-factories', languages: ['YAML'], updated_at: ago(5 * hourMs) },
+                { name: 'site', languages: ['Astro'], updated_at: ago(21 * dayMs) },
+                { name: 'dotfiles', languages: ['Shell'], updated_at: ago(60 * dayMs) },
+              ]
+            : []
+        ).map((r) => ({
+          full_name: `${owner}/${r.name}`,
+          clone_url: `https://github.com/${owner}/${r.name}.git`,
+          languages: r.languages,
+          updated_at: r.updated_at,
+        }));
+        send(res, 200, { login: 'acme', owner, owners, repositories, truncated: false });
         return true;
       }
       const m = rest.match(/^\/connections\/([^/]+)(\/test)?$/);

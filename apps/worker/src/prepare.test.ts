@@ -169,7 +169,7 @@ describe('prepare', () => {
     expect(calls.map((c) => `${c.command} ${c.args.join(' ')}`)).toEqual([
       `git config --global --add credential.https://github.com.helper ${credentialHelper(served.git_credentials[0])}`,
       'git check-ref-format --branch goal/1-add-a-health-endpoint',
-      `git clone --quiet -- https://github.com/acme/api.git ${dirs.workspace}`,
+      `git clone --quiet --filter=blob:none -- https://github.com/acme/api.git ${dirs.workspace}`,
       'git rev-parse --verify --quiet refs/remotes/origin/goal/1-add-a-health-endpoint',
       'git checkout --quiet -b goal/1-add-a-health-endpoint',
       'mise install --yes',

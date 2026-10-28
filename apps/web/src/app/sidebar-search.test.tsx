@@ -12,11 +12,13 @@ import {
 } from '@tanstack/react-router';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { approveItem, pauseFactory } from '../api/client';
 import { attentionQuery, factoriesQuery, meQuery, orgQuery, orgsQuery, overviewQuery } from '../api/queries';
 import { searchOrg } from '../api/search';
 import type {
   Factory,
   FactoryOverviewList,
+  Item,
   Me,
   Org,
   OrgAttention,
@@ -32,6 +34,14 @@ import { Sidebar } from './sidebar';
 vi.mock('../api/search', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/search')>()),
   searchOrg: vi.fn(),
+}));
+
+// The actions the search runs: the tests check which one is called, with what.
+vi.mock('../api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/client')>()),
+  approveItem: vi.fn(),
+  pauseFactory: vi.fn(),
+  resumeFactory: vi.fn(),
 }));
 
 const summary: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'Ac', factory_count: 3, role: 'owner' };
@@ -103,14 +113,16 @@ const empty: OrgSearch = { items: [], agents: [], factories: [], connections: []
 
 interface Setup {
   path?: string;
+  /** The organization's factories, with the permissions a test grants (the default: `factories`). */
+  list?: Factory[];
 }
 
 /** The sidebar under the organization's route; the item, the Floor and the other pages are plain placeholders. */
-function renderSidebar({ path = '/o/acme' }: Setup = {}) {
+function renderSidebar({ path = '/o/acme', list = factories }: Setup = {}) {
   const org: Org = { ...summary, created_at: '2026-09-01T00:00:00Z', can: [] } as Org;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   client.setQueryData(orgQuery(org.id).queryKey, org);
-  client.setQueryData(factoriesQuery(org.id).queryKey, factories);
+  client.setQueryData(factoriesQuery(org.id).queryKey, list);
   client.setQueryData(meQuery.queryKey, me);
   client.setQueryData(orgsQuery.queryKey, [org]);
   client.setQueryData(attentionQuery(org.id).queryKey, attention);
@@ -410,5 +422,101 @@ describe('search from the sidebar', () => {
     expect(
       screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === '↑ ↓ to move, ↵ to open'),
     ).toBeTruthy();
+  });
+});
+
+/** The organization's factories with the permissions a test grants; `goal` takes the stations, the others none. */
+const granting = (can: string[], stations: Factory['stations'] = []): Factory[] =>
+  factories.map((f) => ({ ...f, can, stations: f.name === 'goal' ? stations : [] }));
+
+/** Presses ArrowDown until the named row is the highlighted one, as a person reaches a row with the keys. */
+function highlight(name: string) {
+  const input = screen.getByRole('combobox', { name: 'Search' });
+  for (let i = 0; i < 20; i++) {
+    if (screen.queryByRole('option', { name })?.getAttribute('aria-selected') === 'true') return;
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+  }
+  throw new Error(`"${name}" is never the highlighted row`);
+}
+
+describe('the Actions group of search', () => {
+  it('New item opens the composer with the query as its title, when Enter runs it', async () => {
+    vi.mocked(searchOrg).mockResolvedValue(spend);
+    renderSidebar({ path: '/o/acme/f/goal', list: granting(['item:create']) });
+    const sidebar = await nav();
+    fireEvent.click(within(sidebar).getByRole('button', { name: 'Search' }));
+
+    await type('spend');
+    highlight('New item about "spend"');
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search' }), { key: 'Enter' });
+
+    const dialog = await screen.findByRole('dialog', { name: 'New item' });
+    expect(within(dialog).getByLabelText('Title')).toHaveProperty('value', 'spend');
+    expect(screen.queryByRole('combobox', { name: 'Search' })).toBeNull();
+  });
+
+  it('New item is hidden without item:create', async () => {
+    vi.mocked(searchOrg).mockResolvedValue(spend);
+    renderSidebar({ path: '/o/acme/f/goal', list: granting(['item:decide']) });
+    await nav();
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    await type('spend');
+    expect(screen.getByRole('option', { name: "goal #147, Show this week's spend" })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: 'New item about "spend"' })).toBeNull();
+  });
+
+  it('Pause the line calls pauseFactory for the open factory', async () => {
+    vi.mocked(searchOrg).mockResolvedValue(empty);
+    vi.mocked(pauseFactory).mockResolvedValue({ ...factories[0], paused: true } as Factory);
+    renderSidebar({ path: '/o/acme/f/goal', list: granting(['factory:manage']) });
+    const sidebar = await nav();
+    fireEvent.click(within(sidebar).getByRole('button', { name: 'Search' }));
+
+    await type('pause');
+    highlight('Pause the line');
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search' }), { key: 'Enter' });
+
+    await waitFor(() => expect(pauseFactory).toHaveBeenCalledWith('org-1', 'goal-id'));
+  });
+
+  it('Pause the line is hidden without factory:manage', async () => {
+    vi.mocked(searchOrg).mockResolvedValue(empty);
+    renderSidebar({ path: '/o/acme/f/goal', list: granting(['item:create']) });
+    await nav();
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    await type('pause');
+    expect(screen.queryByRole('option', { name: 'Pause the line' })).toBeNull();
+  });
+
+  it('Approve calls approveItem for an item waiting on the caller', async () => {
+    const waiting = { ...item(12, 'Ship the report', 'review'), state: 'waiting_human' as const };
+    vi.mocked(searchOrg).mockResolvedValue({ ...empty, items: [waiting] });
+    vi.mocked(approveItem).mockResolvedValue({ state: 'done' } as Item);
+    renderSidebar({
+      path: '/o/acme',
+      list: granting(['item:decide'], [{ id: 'review', kind: 'human' }]),
+    });
+    const sidebar = await nav();
+    fireEvent.click(within(sidebar).getByRole('button', { name: 'Search' }));
+
+    await type('ship');
+    highlight('Approve #12');
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search' }), { key: 'Enter' });
+
+    await waitFor(() => expect(approveItem).toHaveBeenCalledWith('org-1', 'item-goal-12'));
+  });
+
+  it('Approve is hidden without item:decide', async () => {
+    const waiting = { ...item(12, 'Ship the report', 'review'), state: 'waiting_human' as const };
+    vi.mocked(searchOrg).mockResolvedValue({ ...empty, items: [waiting] });
+    renderSidebar({ path: '/o/acme', list: granting(['item:create'], [{ id: 'review', kind: 'human' }]) });
+    await nav();
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    await type('ship');
+    expect(screen.getByRole('option', { name: 'goal #12, Ship the report' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: 'Approve #12' })).toBeNull();
   });
 });

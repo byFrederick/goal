@@ -14,7 +14,7 @@ import (
 
 const connection = `-- name: Connection :one
 SELECT c.id, c.name, k.name AS kind, c.description, c.fields, c.secret_fields, c.secret_refs, c.created_by, c.created_at, c.updated_by,
-       c.updated_at, c.last_used_at, c.last_test_at, c.last_test_ok, c.last_test_error
+       c.updated_at, c.last_used_at, c.last_test_at, c.last_test_ok, c.last_test_error, c.last_test_tools, c.tool_modes
 FROM connections c JOIN connection_kinds k ON k.id = c.kind_id
 WHERE c.name = $1
 `
@@ -35,6 +35,8 @@ type ConnectionRow struct {
 	LastTestAt    *time.Time
 	LastTestOk    *bool
 	LastTestError *string
+	LastTestTools []string
+	ToolModes     []byte
 }
 
 func (q *Queries) Connection(ctx context.Context, name string) (ConnectionRow, error) {
@@ -56,8 +58,22 @@ func (q *Queries) Connection(ctx context.Context, name string) (ConnectionRow, e
 		&i.LastTestAt,
 		&i.LastTestOk,
 		&i.LastTestError,
+		&i.LastTestTools,
+		&i.ToolModes,
 	)
 	return i, err
+}
+
+const connectionForRule = `-- name: ConnectionForRule :one
+SELECT id FROM connections WHERE name = $1 FOR KEY SHARE
+`
+
+// The connection name's id, locked against its deletion until a standing rule for it is written.
+func (q *Queries) ConnectionForRule(ctx context.Context, name string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, connectionForRule, name)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const connectionKeyIDs = `-- name: ConnectionKeyIDs :one
@@ -139,7 +155,7 @@ func (q *Queries) ConnectionKinds(ctx context.Context) ([]ConnectionKindsRow, er
 
 const connections = `-- name: Connections :many
 SELECT c.id, c.name, k.name AS kind, c.description, c.fields, c.secret_fields, c.secret_refs, c.created_by, c.created_at, c.updated_by,
-       c.updated_at, c.last_used_at, c.last_test_at, c.last_test_ok, c.last_test_error
+       c.updated_at, c.last_used_at, c.last_test_at, c.last_test_ok, c.last_test_error, c.last_test_tools, c.tool_modes
 FROM connections c JOIN connection_kinds k ON k.id = c.kind_id
 ORDER BY c.name
 `
@@ -160,6 +176,8 @@ type ConnectionsRow struct {
 	LastTestAt    *time.Time
 	LastTestOk    *bool
 	LastTestError *string
+	LastTestTools []string
+	ToolModes     []byte
 }
 
 func (q *Queries) Connections(ctx context.Context) ([]ConnectionsRow, error) {
@@ -187,6 +205,8 @@ func (q *Queries) Connections(ctx context.Context) ([]ConnectionsRow, error) {
 			&i.LastTestAt,
 			&i.LastTestOk,
 			&i.LastTestError,
+			&i.LastTestTools,
+			&i.ToolModes,
 		); err != nil {
 			return nil, err
 		}
@@ -352,8 +372,8 @@ func (q *Queries) PlatformKindNamed(ctx context.Context, name string) (bool, err
 const recordConnectionTest = `-- name: RecordConnectionTest :one
 UPDATE connections
 SET last_test_at = coalesce($1::timestamptz, now()), last_test_ok = $2::boolean,
-    last_test_error = $3
-WHERE name = $4
+    last_test_error = $3, last_test_tools = $4::text[]
+WHERE name = $5
 RETURNING id
 `
 
@@ -361,6 +381,7 @@ type RecordConnectionTestParams struct {
 	At    *time.Time
 	Ok    bool
 	Error *string
+	Tools []string
 	Name  string
 }
 
@@ -369,6 +390,7 @@ func (q *Queries) RecordConnectionTest(ctx context.Context, arg RecordConnection
 		arg.At,
 		arg.Ok,
 		arg.Error,
+		arg.Tools,
 		arg.Name,
 	)
 	var id uuid.UUID
@@ -401,7 +423,7 @@ func (q *Queries) ResealConnection(ctx context.Context, arg ResealConnectionPara
 const sealedConnections = `-- name: SealedConnections :many
 SELECT c.id, c.name, k.name AS kind, k.org_id AS kind_org_id, k.spec AS kind_spec, c.description, c.fields, c.secret_fields,
        c.secret_refs, c.key_id, c.nonce, c.ciphertext, c.created_by, c.created_at, c.updated_by, c.updated_at, c.last_used_at,
-       c.last_test_at, c.last_test_ok, c.last_test_error
+       c.last_test_at, c.last_test_ok, c.last_test_error, c.last_test_tools, c.tool_modes
 FROM connections c JOIN connection_kinds k ON k.id = c.kind_id
 WHERE c.name = ANY ($1::text[])
 ORDER BY c.id
@@ -429,6 +451,8 @@ type SealedConnectionsRow struct {
 	LastTestAt    *time.Time
 	LastTestOk    *bool
 	LastTestError *string
+	LastTestTools []string
+	ToolModes     []byte
 }
 
 // The named connections with their kinds and sealed values, locked: an update, or a run's use.
@@ -463,6 +487,8 @@ func (q *Queries) SealedConnections(ctx context.Context, names []string) ([]Seal
 			&i.LastTestAt,
 			&i.LastTestOk,
 			&i.LastTestError,
+			&i.LastTestTools,
+			&i.ToolModes,
 		); err != nil {
 			return nil, err
 		}
@@ -548,8 +574,8 @@ const updateConnection = `-- name: UpdateConnection :one
 UPDATE connections
 SET name = $1, description = $2, fields = $3, secret_fields = $4::text[],
     secret_refs = $5, key_id = $6, nonce = $7, ciphertext = $8,
-    updated_by = $9, updated_at = now()
-WHERE id = $10
+    tool_modes = $9, updated_by = $10, updated_at = now()
+WHERE id = $11
 RETURNING updated_at
 `
 
@@ -562,6 +588,7 @@ type UpdateConnectionParams struct {
 	KeyID        *string
 	Nonce        []byte
 	Ciphertext   []byte
+	ToolModes    []byte
 	UpdatedBy    string
 	ID           uuid.UUID
 }
@@ -576,6 +603,7 @@ func (q *Queries) UpdateConnection(ctx context.Context, arg UpdateConnectionPara
 		arg.KeyID,
 		arg.Nonce,
 		arg.Ciphertext,
+		arg.ToolModes,
 		arg.UpdatedBy,
 		arg.ID,
 	)

@@ -19,8 +19,8 @@ import (
 // orgTables are the tables 00006 gave org_id, then those later phases added with theirs.
 var orgTables = []string{
 	"factories", "work_items", "leases", "agent_runs", "item_events", "andon_pulls", "audit_log", "item_spans", "lease_spans",
-	"factory_roles", "connection_kinds", "connections", "item_touch_labels", "credentials", "judge_scores", "eval_runs", "eval_results", "org_policies",
-	"webhook_endpoints", "webhook_deliveries", "trigger_firings", "knowledge_uses", "knowledge_verdicts",
+	"factory_roles", "connection_kinds", "connections", "item_touch_labels", "credentials", "judge_scores", "eval_runs", "eval_results", "eval_run_arms", "org_policies",
+	"webhook_endpoints", "webhook_deliveries", "trigger_firings", "knowledge_uses", "knowledge_verdicts", "standing_rules",
 	"jonah_reviews", "jonah_proposals", "jonah_observations",
 }
 

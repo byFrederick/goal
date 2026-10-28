@@ -658,7 +658,9 @@ func TestLine_Triggers(t *testing.T) {
 		{
 			Name: "shop-incident", Enabled: true, On: "webhook.shop-alerts.failed",
 			Filter: domain.TriggerFilter{Repo: "acme/shop", SkipBots: true},
-			Only:   domain.TriggerOnly{FailuresInARow: 2, Dedupe: "service"},
+			Only: domain.TriggerOnly{
+				FailuresInARow: 2, Dedupe: "service", ModelAgrees: &domain.ModelAgrees{Question: "Is this a real outage rather than a blip?"},
+			},
 			Create: domain.TriggerCreate{
 				Type: workIncident, Station: "triage", Expedite: true, Title: "{{service}} is failing", Brief: "Alert: {{alert.summary}}",
 			},

@@ -32,8 +32,10 @@ import (
 )
 
 const (
-	acmeID    = "8d4f2b1a-3c5e-4f60-9a7b-1c2d3e4f5a6b"
-	acmeItems = "/v1/orgs/acme/factories/acme/items"
+	acmeID      = "8d4f2b1a-3c5e-4f60-9a7b-1c2d3e4f5a6b"
+	acmeItems   = "/v1/orgs/acme/factories/acme/items"
+	acmeItemRef = "acme#1"
+	lineItemRef = "line#1"
 )
 
 // acme is inbox → approve (human) → done: enough to submit, read and decide on items, with an
@@ -53,6 +55,7 @@ spec:
         cron: "0 6 * * MON-FRI"
         timeZone: Europe/Berlin
         create: { type: feature, station: inbox, title: "Nightly audit" }
+        limits: { perDay: 1 }
       - name: flaky-test-on-main
         on: github.check_run.failed
         only: { dedupe: check }
@@ -187,6 +190,8 @@ type harness struct {
 	evals      *porttest.Evals
 	evalJudges *porttest.Judges
 	evalLoop   *jonah.Evals
+	// versions is the definitions cache, which reads the line of a version a bake-off runs.
+	versions *definitions.Cache
 	// judges are the versions' judges as tests set them, judgeScores their scores; tries are
 	// queued by a jonah loop over them and the store's finished runs.
 	judges      *porttest.Judges
@@ -424,11 +429,13 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		h.publishImport(t, authors, files)
 	}
 
+	h.intake = porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), h.store)
+
 	e, err := engine.New(engine.Deps{
 		Store: h.store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
-		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock,
+		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock, Intake: h.intake, Audit: tenancy,
 		CodeHosts:   map[string]ports.CodeHost{"github": h.codehost},
-		Connections: engineConnections(t, newTenancy(t)),
+		Connections: sharedRules{Connections: engineConnections(t, newTenancy(t)), h: h},
 		Credentials: porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), tenancy, nil),
 	}, engine.Config{Image: "ghcr.io/acme/goal-agent:1", GatewayURL: "http://gateway.example.com/mcp", GatewayKeyRef: "env:GOAL_GATEWAY_KEY"})
 	if err != nil {
@@ -449,10 +456,10 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 
 	feed, stopFeed := h.startFeed(t, in)
 
-	h.seam, h.tenancy = &seam{}, tenancy
+	h.seam, h.tenancy, h.versions = &seam{}, tenancy, defs
 	h.skills, h.skillSource = &flakyObjects{ObjectStore: porttest.NewObjectStore()}, porttest.NewSkillSource()
 	h.builder = builder.New(h.skills, h.clock, builder.Config{
-		Models: []builder.Model{{ID: "claude-opus-5-5", Label: "Claude Opus 5.5"}, {ID: "claude-haiku-5-5", Label: "Claude Haiku 5.5"}},
+		Models: []builder.Model{{ID: "claude-opus-5-5", Label: "Claude Opus 5.5"}, {ID: modelHaiku, Label: "Claude Haiku 5.5"}},
 	})
 
 	// One identity keeps the people and the organizations' API keys: the sign-in's under
@@ -470,7 +477,6 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.platform = porttest.NewPlatform(h.keys)
 
 	connections := h.connections(t, tenancy)
-	h.intake = porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), h.store)
 
 	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
@@ -557,6 +563,25 @@ func (h *harness) judgeDeps(tenancy *porttest.Tenancy) *api.JudgeDeps {
 			Runner: porttest.NewJudgeRunner(nil), Clock: h.clock,
 		}, jonah.Config{}),
 	}
+}
+
+// sharedRules are the engine's connections with the standing rules kept in the API's (h.conns),
+// as goald's one store keeps both: a rule Always allow creates is one the API lists and revokes.
+type sharedRules struct {
+	*porttest.Connections
+	h *harness
+}
+
+func (c sharedRules) StandingRules(ctx context.Context, includeRevoked bool) ([]domain.StandingRule, error) {
+	return c.h.conns.StandingRules(ctx, includeRevoked)
+}
+
+func (c sharedRules) CreateStandingRule(ctx context.Context, n domain.NewStandingRule, by domain.Actor) (domain.StandingRule, error) {
+	return c.h.conns.CreateStandingRule(ctx, n, by)
+}
+
+func (c sharedRules) RevokeStandingRule(ctx context.Context, id domain.StandingRuleID, by domain.Actor) (domain.StandingRule, error) {
+	return c.h.conns.RevokeStandingRule(ctx, id, by)
 }
 
 // engineConnections are the connections the engine's runs and merges get: acme's model connection

@@ -83,6 +83,32 @@ describe('writing a trigger', () => {
     );
   });
 
+  it('writes the model check question into only, keeping a connection and model the file has', () => {
+    const asked = {
+      ...flaky,
+      only: { failuresInARow: 2, dedupe: 'check.name', modelAgrees: { question: 'Is this a flake?', model: 'small' } },
+    } as Trigger;
+    const next = writeTrigger(file, asked);
+    expect(readTrigger(next, 'flaky-test-on-main')?.only?.modelAgrees).toEqual({
+      question: 'Is this a flake?',
+      model: 'small',
+    });
+    expect(triggerYaml(asked)).toContain('question: Is this a flake?');
+  });
+
+  it('removes the model check from only when the form unchecks it, and keeps the other conditions', () => {
+    const asked = { ...flaky, only: { failuresInARow: 2, modelAgrees: { question: 'Is this a flake?' } } } as Trigger;
+    const next = writeTrigger(
+      file.replace(
+        'only: { failuresInARow: 2, dedupe: check.name }',
+        'only: { failuresInARow: 2, dedupe: check.name, modelAgrees: { question: "Is this a flake?" } }',
+      ),
+      { ...asked, only: { failuresInARow: 2, dedupe: 'check.name' } } as Trigger,
+    );
+    expect(next).not.toContain('modelAgrees');
+    expect(readTrigger(next, 'flaky-test-on-main')?.only).toEqual({ failuresInARow: 2, dedupe: 'check.name' });
+  });
+
   it('keeps the file byte for byte when nothing changed', () => {
     expect(writeTrigger(file, flaky)).toBe(file);
   });

@@ -608,6 +608,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/spend/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's spend over a window as CSV, one row per factory, agent and model
+         * @description The CSV export of getOrgSpend (ADR 0020, decision 3): the runs that started in the window's [since, until) in the factories the caller sees, summed by factory, agent and model and ordered by factory id, agent and model. The header row is factory, agent, model, cost_usd; factory is the factory's metadata.name and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early. A window outside the enum is a 400 problem.
+         */
+        get: operations["exportSpend"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/metrics/touches": {
         parameters: {
             query?: never;
@@ -1472,6 +1495,116 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/evals/bake-offs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The factory's bake-offs, newest first
+         * @description At most the 20 newest bake-offs (ADR 0029): eval runs of kind bake-off, each of one agent on two to four models. 503 evals-unavailable.
+         */
+        get: operations["listBakeOffs"];
+        put?: never;
+        /**
+         * Start a bake-off of one agent across models on the current version
+         * @description Queues a bake-off of the agent's eval cases in the current version, each run trials times (default 3) on every arm, and answers at once; goald's eval loop works the tries. Without models, the arms are the agent's model and goald's default models (GOAL_BAKEOFF_MODELS). The estimate is cases × trials × arms × the price of a try, as estimateEvalRun prices it. 404 version-not-found for a factory never published; 409 learning-budget-exhausted, with the estimate, when it exceeds what is left of the learning budget; 422 invalid-bake-off for an agent the version does not have or that works at no station, arms that are not 2 to 4 distinct model ids with the agent's model among them, trials outside 1 to 10 and an agent with no eval cases; 503 evals-unavailable.
+         */
+        post: operations["startBakeOff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The bake-off's id, the id of its eval run */
+                bake_off: components["parameters"]["BakeOffRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One bake-off with its arms, its tries passed per case and its recommendation
+         * @description 404 eval-run-not-found for a bake-off that is not the factory's and for an eval run that is not a bake-off; 503 evals-unavailable.
+         */
+        get: operations["getBakeOff"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/rerun": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The bake-off's id, the id of its eval run */
+                bake_off: components["parameters"]["BakeOffRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run a bake-off again on the current version
+         * @description Queues a new bake-off of the same agent with the same arms and trials, on the factory's current version, which may be newer than the original's (ADR 0029 decision 7). 404 eval-run-not-found; then the refusals of startBakeOff.
+         */
+        post: operations["rerunBakeOff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The bake-off's id, the id of its eval run */
+                bake_off: components["parameters"]["BakeOffRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Write an arm's model as the agent's model into the factory's draft
+         * @description Sets agents[].model of the bake-off's agent in the draft to the arm's model, opening a draft from the current version when none is open. It never publishes: the draft publishes as any other, through the eval gate (ADR 0029 decision 7). 404 eval-run-not-found; 412 draft-conflict when the agent changed since the bake-off's version; 422 invalid-bake-off for an arm the bake-off does not have; 503 evals-unavailable.
+         */
+        post: operations["applyBakeOff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/items": {
         parameters: {
             query?: never;
@@ -1666,6 +1799,33 @@ export interface paths {
         get: operations["getIntakeTrigger"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Try the trigger with one of its past events, creating nothing
+         * @description A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+         */
+        post: operations["tryIntakeTrigger"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2206,6 +2366,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The factory's shared views and the caller's own
+         * @description The shared views first, then the caller's personal views, each by name (case ignored). Never another person's personal view; an API key or a personal token sees only the shared views.
+         */
+        get: operations["listSavedViews"];
+        put?: never;
+        /**
+         * Save a view
+         * @description A personal view of the caller, or a shared view of the factory, which also needs factory:manage (403 forbidden without it). 403 person-required for an API key, a personal token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60 characters, over 20 filters, over 20 values in one or a value over 200 characters; 409 view-name-taken for a name the caller's personal views (personal) or the factory's shared views (shared) already use, case ignored.
+         */
+        post: operations["createSavedView"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/views/{view}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The saved view's id */
+                view: components["parameters"]["SavedViewRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a view
+         * @description A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included).
+         */
+        delete: operations["deleteSavedView"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename a view and replace its filters
+         * @description Whether a view is shared is fixed when it is created. A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included); 400 invalid-view and 409 view-name-taken as createSavedView.
+         */
+        patch: operations["updateSavedView"];
+        trace?: never;
+    };
     "/v1/orgs/{org}/stream": {
         parameters: {
             query?: never;
@@ -2451,6 +2671,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/runs/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's agent runs as CSV, with the filters of listRuns
+         * @description The CSV export of listRuns (ADR 0020, decision 3): every run listRuns would list over its pages, with the same filters and the same order (newest first), one row per run and no paging. The header row is id, factory, item_ref, item_title, station, agent, model, status, started_at, ended_at, turns, cost_usd: factory is the factory's metadata.name, agent the agent's name in its factory, times are RFC 3339 in UTC (ended_at empty while the run runs) and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early.
+         */
+        get: operations["exportRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/runs/{run}": {
         parameters: {
             query?: never;
@@ -2512,7 +2755,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Approve an item waiting for a human; it moves to the next station */
+        /**
+         * Approve an item waiting for a human; it moves to the next station
+         * @description 409 tool-approval-open while the item has an open tool approval (Item.tool_approval): the item waits for a decision on the call, decided with decideToolApproval, not on the item (ADR 0031 decision 9).
+         */
         post: operations["approveItem"];
         delete?: never;
         options?: never;
@@ -2539,6 +2785,31 @@ export interface paths {
          * @description Answers the item's open question (Item.question) with one of its choices or in the caller's own words, as ADR 0018 decides. The engine records question_answered and puts the item back in its station's arrival state, rework_count unchanged; its next run's brief carries the question and the answer. Audited as item.answered with the answer's length and the choice index, never its text. 400 when the body has both answer and choice or neither, or the answer is not 1 to 2000 characters; 400 bad-choice for a choice outside the question's choices; 409 no-open-question when the item has none (none was asked, it was answered, or a move, pause or rejection withdrew it), item-closed for a done or cancelled item, item-changed when it moved meanwhile.
          */
         post: operations["answerItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/items/{item}/tool-approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or deny the tool call an item's agent asked to make
+         * @description Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs connection:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without connection:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+         */
+        post: operations["decideToolApproval"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2589,6 +2860,31 @@ export interface paths {
          * @description From any open state the item arrives at the station in that station's arrival state (an agent or queue station queues it, a human station waits for a decision). In progress, its lease is taken and its run stopped (lease_taken). Moving upstream counts as rework and needs a reason. 400 unknown-station or reason-required; 409 item-closed (done or cancelled), same-station, done-station (finish work by approving or merging it) or item-changed.
          */
         post: operations["moveItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/items/{item}/lane": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set an open item's lane
+         * @description The lane picks the agent at the stations that route by lane; the item stays at its station and in its state, and a lane_set event (from, to) records the change. The lane is trimmed; when any station of the item's line routes by lane, it must be one of the lanes routed. 400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts carry their own lanes), same-lane or item-changed.
+         */
+        post: operations["setItemLane"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2870,8 +3166,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Rename a connection, or change its description, fields or secrets
-         * @description fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+         * Rename a connection, or change its description, fields, secrets or tool modes
+         * @description fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
          */
         patch: operations["updateConnection"];
         trace?: never;
@@ -2896,6 +3192,54 @@ export interface paths {
          */
         post: operations["testConnection"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/standing-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's standing rules
+         * @description The rules Always allow created (ADR 0031 decision 7), oldest first: each lets one agent role call one tool of one organization connection without asking, in every factory of the organization. The active ones, and the revoked ones too with revoked=true.
+         */
+        get: operations["listStandingRules"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/standing-rules/{rule}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The standing rule's id */
+                rule: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a standing rule
+         * @description The rule's agent role asks first again from its next run. A rule is never deleted: revoking sets revoked_at and revoked_by, audited as standing_rule.revoked. 404 for a rule that does not exist, 409 standing-rule-revoked for one revoked already. Needs a sign-in from the last 10 minutes.
+         */
+        delete: operations["revokeStandingRule"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3282,7 +3626,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run has no use of the document). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run has no use of the document). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422). */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -3302,6 +3646,8 @@ export interface components {
             eval_run_id?: string;
             /** @description evals-failing only, the cases of that run with a try that did not pass */
             failing_cases?: string[];
+            /** @description learning-budget-exhausted only, the estimate of the bake-off it refused */
+            estimate?: components["schemas"]["EvalEstimate"];
         };
         EvalList: {
             summary: components["schemas"]["EvalSummary"];
@@ -3436,6 +3782,119 @@ export interface components {
             detail?: {
                 [key: string]: unknown;
             };
+        };
+        BakeOffRequest: {
+            /** @description The agent to bake off */
+            agent: string;
+            /** @description The arms' models, 2 to 4 distinct ids, the agent's model among them; absent, the agent's model and goald's default models */
+            models?: string[];
+            /**
+             * @description Tries per case on every arm
+             * @default 3
+             */
+            trials?: number;
+        };
+        BakeOffApply: {
+            /** @description The arm whose model to write */
+            arm: number;
+        };
+        BakeOffStarted: {
+            bake_off: components["schemas"]["BakeOff"];
+            estimate: components["schemas"]["EvalEstimate"];
+        };
+        BakeOffList: {
+            /** @description Newest first */
+            bake_offs: components["schemas"]["BakeOff"][];
+        };
+        BakeOff: {
+            /** @description The id of its eval run */
+            id: string;
+            /** @enum {string} */
+            state: "queued" | "running" | "done" | "failed" | "cancelled";
+            agent: string;
+            /** @description The first station the agent works at */
+            station: string;
+            /** @description The published version it runs */
+            version: number;
+            /** @description Tries per case on every arm */
+            trials: number;
+            /** @description How many of the agent's eval cases it runs */
+            cases: number;
+            /** Format: double */
+            estimate_usd: number;
+            /**
+             * Format: double
+             * @description What its recorded tries cost
+             */
+            cost_usd: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            finished_at?: string;
+            /** @description By arm number */
+            arms: components["schemas"]["BakeOffArm"][];
+            /** @description By case name, the tries passed of each arm so far, out of trials */
+            per_case: components["schemas"]["BakeOffCase"][];
+            /** @description The arm with the highest pass rate, then the lowest cost per item; null while the bake-off is not done or when an arm errored on every try (ADR 0029 decision 4) */
+            recommended_arm: number | null;
+        };
+        BakeOffArm: {
+            /** @description Its number */
+            arm: number;
+            model: string;
+            /** @description The agent's model in the bake-off's version */
+            is_current: boolean;
+            /** @description Its row of the report, null until the bake-off is done */
+            summary: components["schemas"]["BakeOffArmSummary"] | null;
+        };
+        BakeOffArmSummary: {
+            tries: number;
+            passed: number;
+            /** @description Tries that failed for an infrastructure reason; they count as not passed */
+            errors: number;
+            /**
+             * Format: double
+             * @description passed of tries
+             */
+            pass_rate: number;
+            /**
+             * Format: double
+             * @description The mean cost of a try
+             */
+            cost_per_item_usd: number;
+            /**
+             * Format: double
+             * @description The mean duration of a try
+             */
+            time_per_item_seconds: number;
+            /**
+             * Format: double
+             * @description The mean turns of a try
+             */
+            turns: number;
+            /** @description The advisory judge's share; null when no judge scores the agent */
+            judged: components["schemas"]["BakeOffJudged"] | null;
+        };
+        BakeOffJudged: {
+            /** @description The judge's slug */
+            judge: string;
+            /** @description The judge's title when the version has it */
+            title?: string;
+            /**
+             * Format: double
+             * @description The share of the arm's tries the judge passed
+             */
+            share: number;
+        };
+        BakeOffCase: {
+            case: string;
+            /** @description By arm number */
+            arms: components["schemas"]["BakeOffCaseArm"][];
+        };
+        BakeOffCaseArm: {
+            arm: number;
+            /** @description The case's tries on the arm that passed */
+            passed: number;
         };
         EvalCaseFromRun: {
             /** @description The past agent run whose agent and item the case replays */
@@ -3997,6 +4456,10 @@ export interface components {
             /** @description Why; required when the station is upstream of the item's (the agent reads it) */
             reason?: string;
         };
+        SetLaneRequest: {
+            /** @description The lane to set */
+            lane: string;
+        };
         PauseRequest: {
             /** @description Why the item is paused */
             reason?: string;
@@ -4058,6 +4521,63 @@ export interface components {
             waiting?: components["schemas"]["ItemWaiting"];
             /** @description The question the item's agent asked a person and nobody has answered yet (ADR 0018); getItem and answerItem only, absent or null when there is none */
             question?: components["schemas"]["ItemQuestion"] | null;
+            /** @description The tool call the item's agent asked to make that waits for a person's decision (ADR 0031); getItem and decideToolApproval only, absent or null when there is none */
+            tool_approval?: components["schemas"]["ToolApproval"] | null;
+        };
+        /** @description A run's call of an Ask-first connection tool that waits for a person, read from its tool_approval_requested event */
+        ToolApproval: {
+            /**
+             * Format: int64
+             * @description The approval's id
+             */
+            id: number;
+            /** @description The organization connection's name */
+            connection: string;
+            /** @description The tool's name as the connection's MCP server lists it, as in create_comment */
+            tool: string;
+            /** @description The call's input, any JSON value, as canonical JSON (keys sorted); at most 16 KiB */
+            input: unknown;
+            /** @description The calling agent's role name, as in architect; never its copy number */
+            agent: string;
+            /** @description The run that asked; it ended when it asked */
+            run_id: string;
+            /** Format: date-time */
+            asked_at: string;
+            /** @description Whether a person may approve the call with always_allow: its ask comes from the organization connection's mode alone */
+            always_allow_offered: boolean;
+        };
+        /** @description A person's decision on an item's open tool approval */
+        ToolDecision: {
+            /** @enum {string} */
+            decision: "approve" | "deny";
+            /**
+             * @description With approve only: also let the agent role call this tool of this connection without asking from now on (a standing rule); needs connection:manage
+             * @default false
+             */
+            always_allow?: boolean;
+            /** @description With deny only, the person's reason, 1 to 2000 characters (surrounding space is trimmed) */
+            note?: string;
+        };
+        StandingRuleList: {
+            rules: components["schemas"]["StandingRule"][];
+        };
+        /** @description Lets one agent role call one tool of one organization connection without asking, in every factory of the organization (ADR 0031 decision 7) */
+        StandingRule: {
+            id: string;
+            connection_id: string;
+            /** @description The connection's name; null once the connection is deleted */
+            connection: string | null;
+            tool: string;
+            /** @description The agent's role, its name in the definition, as in architect */
+            agent: string;
+            created_by: components["schemas"]["Actor"];
+            /** Format: date-time */
+            created_at: string;
+            /** @description The item it was approved on */
+            item_id: string;
+            revoked_by: components["schemas"]["Actor"] | null;
+            /** Format: date-time */
+            revoked_at: string | null;
         };
         /** @description An agent's open question about an item, read from its question_asked event */
         ItemQuestion: {
@@ -4196,7 +4716,7 @@ export interface components {
              * @description The naming event; its reason is set by setTouchReason
              */
             event_id: number;
-            /** @description The naming event's kind: merged, rejected, approved, moved, paused, cancelled, retried, note, ... */
+            /** @description The naming event's kind: merged, rejected, approved, moved, paused, cancelled, retried, lane_set, note, ... */
             kind: string;
             station: string | null;
             /** Format: date-time */
@@ -5185,6 +5705,8 @@ export interface components {
             events: components["schemas"]["IntakeEvent"][];
         };
         IntakeEvent: {
+            /** @description The firing's id */
+            id: string;
             /** @description The event's value of the trigger's only.dedupe field, or its event key without one */
             title: string;
             /** @description The event key it matched */
@@ -5202,6 +5724,60 @@ export interface components {
              */
             item_number: number | null;
             /** @description Why it was skipped; null otherwise */
+            reason: string | null;
+        };
+        TriggerTryRequest: {
+            /** @description The id of one of the trigger's 20 newest events */
+            firing: string;
+        };
+        /** @description What the trigger would do with the event now. Every string shaped by the event (the item's title and brief, the model's reason, a step's reason) is text to show as text, never markup. */
+        TriggerTry: {
+            /** @description The firing tried */
+            firing: string;
+            /** @description The event reached the trigger (its when step passed) */
+            matched: boolean;
+            /**
+             * @description would_create when no step skips the event; skipped otherwise
+             * @enum {string}
+             */
+            outcome: "would_create" | "skipped";
+            /** @description The reason a skipped firing would record (the step, a colon and why); null for would_create */
+            reason: string | null;
+            /** @description In the order they run: when, each configured only condition (failuresInARow, dedupe, then modelAgrees), create, then each configured limit (perDay, pauseOnBudget). Steps after the one that skipped are not_reached. */
+            steps: components["schemas"]["TriggerTryStep"][];
+            /** @description The item it would create; null when the create step was not reached */
+            item: {
+                type: string;
+                station: string;
+                lane: string | null;
+                expedite: boolean;
+                /** @description create.title rendered with the event's fields */
+                title: string;
+                /** @description The item's body, create.brief rendered, then the event's fields marked as untrusted data */
+                brief: string;
+            } | null;
+            /** @description The model check's answer; null when it did not run or gave no answer */
+            model_check: {
+                /** @description The model answered yes */
+                worth: boolean;
+                /** @description The model's one-line reason */
+                reason: string;
+                model: string;
+                input_tokens: number;
+                output_tokens: number;
+                /**
+                 * Format: double
+                 * @description What the check cost
+                 */
+                cost_usd: number;
+            } | null;
+        };
+        TriggerTryStep: {
+            /** @enum {string} */
+            step: "when" | "only.failuresInARow" | "only.dedupe" | "only.modelAgrees" | "create" | "limits.perDay" | "limits.pauseOnBudget";
+            /** @enum {string} */
+            outcome: "passed" | "skipped" | "not_reached";
+            /** @description Why it passed or skipped; null when not reached or with nothing to say */
             reason: string | null;
         };
         LeadTimeBridge: {
@@ -5365,7 +5941,7 @@ export interface components {
             run_id?: string;
             /** Format: date-time */
             at: string;
-            /** @description What happened, as in submitted, moved, note or lease_taken. question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue */
+            /** @description What happened, as in submitted, moved, note or lease_taken. question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue. tool_approval_requested: the item's agent asked to make a call of an Ask-first connection tool (data connection, tool, input, agent as the role name, run_id, always_allow_offered); the run ends and the item waits at its station. tool_approval_granted: a person approved it (data approval_id, always_allow; actor); tool_approval_denied: a person denied it (data approval_id, note when given; actor); either way the item goes back to its station's queue */
             kind: string;
             station?: string;
             actor: string;
@@ -5832,12 +6408,12 @@ export interface components {
             truncated: boolean;
         };
         /**
-         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row
+         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny
          * @enum {string}
          */
-        InboxEntryKind: "decision" | "question" | "andon" | "rework_warning" | "blocked" | "expedite";
+        InboxEntryKind: "decision" | "question" | "tool_approval" | "andon" | "rework_warning" | "blocked" | "expedite";
         InboxEntry: {
-            /** @description "<kind>:<id of what waits>": decision:, question:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station> */
+            /** @description "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station> */
             id: string;
             kind: components["schemas"]["InboxEntryKind"];
             factory: {
@@ -5847,7 +6423,7 @@ export interface components {
             };
             /**
              * Format: date-time
-             * @description Since when it waits: the item's last change (decision, question, blocked), its creation (expedite), the pull (andon), now (rework_warning)
+             * @description Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning)
              */
             since: string;
             /** @description The item it is about, or null for an entry that is about no item */
@@ -5862,6 +6438,8 @@ export interface components {
             blocked: components["schemas"]["InboxBlocked"] | null;
             /** @description A question entry's open question; absent or null for other kinds */
             question?: components["schemas"]["ItemQuestion"] | null;
+            /** @description A tool_approval entry's open tool approval; absent or null for other kinds */
+            tool_approval?: components["schemas"]["ToolApproval"] | null;
             /** @description The open pull of an andon entry; null for other kinds */
             andon: components["schemas"]["AndonPull"] | null;
             /** @description The gate tally of a rework warning; null for other kinds */
@@ -6559,12 +7137,26 @@ export interface components {
             env?: string[];
             /** @description getConnection only, its kind's docs for agents */
             docs?: string;
+            /** @description Its tools and their modes (ADR 0031 decisions 1 and 2), sorted by name: one entry for each tool the last test listed and each tool with a mode set, a tool without a mode being allow; empty for a connection never tested and without modes */
+            tools: components["schemas"]["ConnectionTool"][];
+            /** @description The open tool approvals on this connection in the organization, by its current name; the connections list's "Writes waiting for your OK" is their sum */
+            waiting_approvals: number;
             created_by: components["schemas"]["Actor"];
             /** Format: date-time */
             created_at: string;
             updated_by: components["schemas"]["Actor"];
             /** Format: date-time */
             updated_at: string;
+        };
+        /**
+         * @description What a run may do with one tool of the connection (ADR 0031 decision 1): allow runs the call, ask pauses it for a person, off refuses it
+         * @enum {string}
+         */
+        ConnectionToolMode: "allow" | "ask" | "off";
+        ConnectionTool: {
+            /** @description The tool's name as the MCP server lists it, without the connection prefix: 1 to 128 letters, digits, underscores, dots or dashes */
+            name: string;
+            mode: components["schemas"]["ConnectionToolMode"];
         };
         /** @description What uses a connection, so it cannot be deleted or renamed meanwhile */
         ConnectionUsers: {
@@ -6601,6 +7193,8 @@ export interface components {
             secrets?: {
                 [key: string]: string;
             };
+            /** @description Every tool's mode: replaces them all, so send the full list (a tool left out goes back to allow). Only for a connection whose kind has an MCP server; a tool named twice is refused. */
+            tools?: components["schemas"]["ConnectionTool"][];
         };
         /** @description 3 to 40 lowercase letters, digits and inner dashes, starting with a letter; an agent gets it as the env variable of the name upper-cased with each - turned into _, which must not be one reserved for the platform */
         CredentialName: string;
@@ -7059,6 +7653,37 @@ export interface components {
             /** @enum {string} */
             status: "idle" | "syncing" | "failed";
         };
+        /** @description The Items page's URL search params, each key with its values in order: at most 20 keys, 20 values per key and 200 characters per value */
+        SavedViewFilters: {
+            [key: string]: string[];
+        };
+        NewSavedView: {
+            /** @description 1 to 60 characters, trimmed */
+            name: string;
+            /** @description Every reader of the factory sees it; false: only its owner */
+            shared: boolean;
+            filters: components["schemas"]["SavedViewFilters"];
+        };
+        SavedViewChange: {
+            /** @description 1 to 60 characters, trimmed */
+            name: string;
+            filters: components["schemas"]["SavedViewFilters"];
+        };
+        SavedView: {
+            id: string;
+            name: string;
+            shared: boolean;
+            filters: components["schemas"]["SavedViewFilters"];
+            /** @description The caller made it */
+            mine: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        SavedViewList: {
+            views: components["schemas"]["SavedView"][];
+        };
     };
     responses: {
         /** @description An error (RFC 9457 problem details) */
@@ -7081,6 +7706,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description The saved view's id */
+        SavedViewRef: string;
         /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
         WebhookEndpointRef: string;
         /** @description A person's user id */
@@ -7105,6 +7732,8 @@ export interface components {
         ProposalNumber: number;
         /** @description The eval run's id */
         EvalRunRef: string;
+        /** @description The bake-off's id, the id of its eval run */
+        BakeOffRef: string;
         /** @description The first UTC day of the range; 6 days before `to` when absent */
         RangeFrom: string;
         /** @description The last UTC day of the range, included; today when absent */
@@ -7995,6 +8624,36 @@ export interface operations {
                     "application/json": components["schemas"]["OrgSpend"];
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    exportSpend: {
+        parameters: {
+            query?: {
+                /** @description As for getOrgSpend */
+                window?: components["schemas"]["SpendWindow"];
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The spend rows as CSV */
+            200: {
+                headers: {
+                    /** @description attachment; filename="spend-<yyyy-mm-dd>.csv", the UTC day of the export */
+                    "Content-Disposition": string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            413: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -9155,6 +9814,150 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    listBakeOffs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The bake-offs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BakeOffList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    startBakeOff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BakeOffRequest"];
+            };
+        };
+        responses: {
+            /** @description The queued bake-off and its estimate */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BakeOffStarted"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getBakeOff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The bake-off's id, the id of its eval run */
+                bake_off: components["parameters"]["BakeOffRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The bake-off */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BakeOff"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    rerunBakeOff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The bake-off's id, the id of its eval run */
+                bake_off: components["parameters"]["BakeOffRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The new bake-off and its estimate */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BakeOffStarted"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    applyBakeOff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The bake-off's id, the id of its eval run */
+                bake_off: components["parameters"]["BakeOffRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BakeOffApply"];
+            };
+        };
+        responses: {
+            /** @description The draft with the model written */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Draft"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     listItems: {
         parameters: {
             query?: {
@@ -9429,6 +10232,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IntakeTriggerDetail"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    tryIntakeTrigger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TriggerTryRequest"];
+            };
+        };
+        responses: {
+            /** @description What the trigger would do with the event */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TriggerTry"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -10142,6 +10977,120 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    listSavedViews: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The views */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedViewList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createSavedView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewSavedView"];
+            };
+        };
+        responses: {
+            /** @description The view */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteSavedView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The saved view's id */
+                view: components["parameters"]["SavedViewRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateSavedView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The saved view's id */
+                view: components["parameters"]["SavedViewRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedViewChange"];
+            };
+        };
+        responses: {
+            /** @description The view */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     streamEvents: {
         parameters: {
             query?: {
@@ -10466,6 +11415,44 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    exportRuns: {
+        parameters: {
+            query?: {
+                /** @description As for listRuns */
+                factory?: string;
+                /** @description As for listRuns */
+                status?: components["schemas"]["RunStatus"];
+                /** @description As for listRuns */
+                since?: string;
+                /** @description As for listRuns */
+                until?: string;
+                /** @description As for listRuns */
+                q?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The runs as CSV */
+            200: {
+                headers: {
+                    /** @description attachment; filename="runs-<yyyy-mm-dd>.csv", the UTC day of the export */
+                    "Content-Disposition": string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            413: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
     getRun: {
         parameters: {
             query?: never;
@@ -10576,6 +11563,37 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    decideToolApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolDecision"];
+            };
+        };
+        responses: {
+            /** @description The item after the decision */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Problem"];
+        };
+    };
     rejectItem: {
         parameters: {
             query?: never;
@@ -10626,6 +11644,37 @@ export interface operations {
         };
         responses: {
             /** @description The item at its new station */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    setItemLane: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetLaneRequest"];
+            };
+        };
+        responses: {
+            /** @description The item with its new lane */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -11076,6 +12125,60 @@ export interface operations {
                     "application/json": components["schemas"]["ConnectionTestResult"];
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listStandingRules: {
+        parameters: {
+            query?: {
+                /** @description Also list the revoked rules */
+                revoked?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The rules */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandingRuleList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    revokeStandingRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The standing rule's id */
+                rule: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The revoked rule */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandingRule"];
+                };
+            };
+            409: components["responses"]["Conflict"];
             default: components["responses"]["Problem"];
         };
     };

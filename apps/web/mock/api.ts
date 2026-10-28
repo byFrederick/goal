@@ -58,7 +58,9 @@ import type {
   TouchMetrics,
 } from '@goal/api-client';
 import { parse } from 'yaml';
+import type { IntakeEvent, TriggerTry, TriggerTryStep } from '../src/api/types.ts';
 import { authSettings, createMockAuth } from './auth.ts';
+import { createBakeOffs } from './bake-offs.ts';
 import { createConnections } from './connections.ts';
 import { createCredentials } from './credentials.ts';
 import { createDefinitions } from './definitions.ts';
@@ -81,13 +83,15 @@ import { createJonah } from './jonah.ts';
 import { createJudges } from './judges.ts';
 import { createKeys } from './keys.ts';
 import { createKnowledge } from './knowledge.ts';
-import { membersFor, orgCanOf } from './people.ts';
+import { directory, membersFor, orgCanOf } from './people.ts';
 import { createPolicy } from './policy.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
-import { orgRunsOf } from './runs.ts';
+import { orgRunsOf, runsCsvOf } from './runs.ts';
 import { type SearchSource, search } from './search.ts';
 import { createSpend } from './spend.ts';
+import { starterItem } from './starter.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
+import { createViews } from './views.ts';
 import { createWebhooks } from './webhooks.ts';
 
 type Next = (err?: unknown) => void;
@@ -132,6 +136,95 @@ const json = (res: ServerResponse, status: number, body: unknown) => {
 
 const problem = (res: ServerResponse, status: number, title: string, detail?: string, code?: string) =>
   json(res, status, { title, status, ...(detail ? { detail } : {}), ...(code ? { code } : {}) });
+
+/** A trigger as factory.yaml holds it: what the try reads of it. */
+interface TriggerShape {
+  name: string;
+  on: string;
+  only?: Record<string, unknown>;
+  limits?: Record<string, unknown>;
+  create: { type: string; station: string; expedite?: boolean; title?: string; brief?: string };
+}
+
+/** The source a trigger's `on` event comes from: only a schedule keeps its events, so only those can be tried. */
+const sourceOf = (on: string) => (on === 'schedule' ? 'schedule' : on.startsWith('webhook.') ? 'webhook' : 'github');
+
+/**
+ * A trigger's 20 newest events in the mock: the flaky-test trigger's (trigger.jpg, a GitHub trigger, so none can
+ * be tried) and the dependency audit's, a schedule with past events to try.
+ */
+function eventsOf(name: string, on: string): IntakeEvent[] {
+  if (name === 'dependency-audit') {
+    return [
+      {
+        id: 'firing-s1',
+        title: '2026-10-26 09:00 UTC',
+        event: on,
+        at: '2026-10-26T09:00:00Z',
+        outcome: 'created',
+        item_number: 151,
+        reason: null,
+      },
+      {
+        id: 'firing-s2',
+        title: '2026-10-19 09:00 UTC',
+        event: on,
+        at: '2026-10-19T09:00:00Z',
+        outcome: 'skipped',
+        item_number: null,
+        reason: 'once',
+      },
+    ];
+  }
+  if (name !== 'flaky-test-on-main') return [];
+  return [
+    {
+      id: 'firing-1',
+      title: 'TestLeaseExpiry',
+      event: on,
+      at: '2026-10-27T14:05:00Z',
+      outcome: 'created',
+      item_number: 150,
+      reason: null,
+    },
+    {
+      id: 'firing-2',
+      title: 'TestBoardStream',
+      event: on,
+      at: '2026-10-26T18:20:00Z',
+      outcome: 'merged',
+      item_number: 133,
+      reason: null,
+    },
+    {
+      id: 'firing-3',
+      title: 'TestLeaseExpiry',
+      event: on,
+      at: '2026-10-23T09:00:00Z',
+      outcome: 'skipped',
+      item_number: null,
+      reason: 'once',
+    },
+    {
+      id: 'firing-4',
+      title: 'lint',
+      event: on,
+      at: '2026-10-22T11:00:00Z',
+      outcome: 'skipped',
+      item_number: 120,
+      reason: '#120 covers it',
+    },
+    {
+      id: 'firing-5',
+      title: 'TestOrgRLS',
+      event: on,
+      at: '2026-10-21T08:40:00Z',
+      outcome: 'merged',
+      item_number: 118,
+      reason: null,
+    },
+  ];
+}
 
 /** A slot cap of a request: null clears it; otherwise 1 to 1000. */
 const isCap = (v: unknown): v is number | null =>
@@ -239,12 +332,22 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     clock,
     factory: (org, key) => findFactory(key, org),
   });
+  const bakeOffs = createBakeOffs({
+    clock,
+    factory: (org, key) => findFactory(key, org),
+  });
   const judges = createJudges({
     factory: (org, key) => findFactory(key, org),
   });
   const jonah = createJonah({
     factory: (org, key) => findFactory(key, org),
     clock,
+  });
+  // The views are the caller's: the signed-in person's, else the local user's (directory.owner).
+  const views = createViews({
+    clock,
+    caller: (req) => auth.who(req)?.person.id ?? directory.owner.id,
+    factory: (org, key) => findFactory(key, org),
   });
   const webhooks = createWebhooks({
     clock,
@@ -1026,6 +1129,20 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
             },
           ];
         }
+        if (it.tool_approval) {
+          if (!decides) return [];
+          return [
+            {
+              ...base,
+              id: `tool_approval:${it.id}`,
+              kind: 'tool_approval',
+              since: it.tool_approval.asked_at,
+              action: null,
+              approval: null,
+              tool_approval: it.tool_approval,
+            },
+          ];
+        }
         if (it.state === 'waiting_human') {
           if (!decides) return [];
           return [
@@ -1071,7 +1188,15 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     return [...items, ...warnings];
   };
 
-  const kindOrder: InboxEntry['kind'][] = ['decision', 'question', 'andon', 'rework_warning', 'blocked', 'expedite'];
+  const kindOrder: InboxEntry['kind'][] = [
+    'decision',
+    'question',
+    'tool_approval',
+    'andon',
+    'rework_warning',
+    'blocked',
+    'expedite',
+  ];
 
   /**
    * A board station's statistics: the seeded busy and send-back shares and queue trend, how long
@@ -1401,8 +1526,10 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       credentials.reset(clock());
       knowledge.reset(clock());
       evals.reset();
+      bakeOffs.reset();
       judges.reset();
       jonah.reset();
+      views.reset();
       webhooks.reset();
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
       const cookie = auth.reset(authSettings(body.auth));
@@ -1496,9 +1623,13 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await credentials.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (rest === '/search' && method === 'GET') return searchOf(org, url, forCaller(req, org), res);
+    // Bake-offs sit under /evals, and the evals handler answers every sub-path it does not know,
+    // so bake-offs must be tried first.
+    if (await bakeOffs.handle(org, rest, method, res, () => readBody(req))) return;
     if (await evals.handle(org, rest, method, res, () => readBody(req))) return;
     if (await judges.handle(org, rest, method, res, () => readBody(req))) return;
     if (await jonah.handle(org, rest, method, url, res, () => readBody(req))) return;
+    if (await views.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await spend.handle(org, rest, method, url, res)) return;
     if (await policy.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await webhooks.handle(org.id, rest, method, req, res, () => readBody(req))) return;
@@ -1562,6 +1693,19 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (rest === '/runs' && method === 'GET') {
       const result = orgRunsOf(state, org.id, url.searchParams);
       return 'body' in result ? json(res, 200, result.body) : problem(res, result.status, result.title, result.detail);
+    }
+
+    // GET …/runs/export: the list's filters as CSV (ADR 0020, decision 3), with the file's name in Content-Disposition.
+    if (rest === '/runs/export' && method === 'GET') {
+      const result = runsCsvOf(state, org.id, url.searchParams);
+      if (!('csv' in result)) return problem(res, result.status, result.title, result.detail);
+      const day = new Date().toISOString().slice(0, 10);
+      res.writeHead(200, {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="runs-${day}.csv"`,
+      });
+      res.end(result.csv);
+      return;
     }
 
     if (rest === '/attention' && method === 'GET') {
@@ -1654,7 +1798,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         trigger: {
           name,
           enabled: true,
-          source: 'github',
+          source: sourceOf(trigger.on),
           on: trigger.on,
           when: trigger.on,
           create: {
@@ -1667,57 +1811,83 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
           problem: null,
         },
         week: flaky ? { created: 3, merged: 2, spend_usd: 7.8 } : { created: 0, merged: 0, spend_usd: 0 },
-        events: flaky
-          ? [
-              {
-                title: 'TestLeaseExpiry',
-                event: trigger.on,
-                at: '2026-10-27T14:05:00Z',
-                outcome: 'created',
-                item_number: 150,
-                reason: null,
-              },
-              {
-                title: 'TestBoardStream',
-                event: trigger.on,
-                at: '2026-10-26T18:20:00Z',
-                outcome: 'merged',
-                item_number: 133,
-                reason: null,
-              },
-              {
-                title: 'TestLeaseExpiry',
-                event: trigger.on,
-                at: '2026-10-23T09:00:00Z',
-                outcome: 'skipped',
-                item_number: null,
-                reason: 'once',
-              },
-              {
-                title: 'lint',
-                event: trigger.on,
-                at: '2026-10-22T11:00:00Z',
-                outcome: 'skipped',
-                item_number: 120,
-                reason: '#120 covers it',
-              },
-              {
-                title: 'TestOrgRLS',
-                event: trigger.on,
-                at: '2026-10-21T08:40:00Z',
-                outcome: 'merged',
-                item_number: 118,
-                reason: null,
-              },
-            ]
-          : [],
+        events: eventsOf(name, trigger.on),
       });
+    }
+    // POST …/intake/triggers/{trigger}/try: a dry run of the saved trigger against one of its events (ADR 0028).
+    // Creates nothing. Only a schedule's events are stored; another source answers 422 event-not-stored.
+    const tryTrig = rest.match(/^\/factories\/([^/]+)\/intake\/triggers\/([^/]+)\/try$/);
+    if (tryTrig && method === 'POST') {
+      const key = decodeURIComponent(tryTrig[1] ?? '');
+      const factory = findFactory(key, org.id);
+      if (!factory) return problem(res, 404, 'Factory not found', key);
+      const name = decodeURIComponent(tryTrig[2] ?? '');
+      const def = state.definitions[factory.id];
+      const current = def?.versions.find((v) => v.id === def.current);
+      const bytes = current?.files.get('factory.yaml');
+      const yamlText = bytes ? new TextDecoder().decode(bytes) : '';
+      const found = (
+        parse(yamlText) as {
+          spec?: { board?: { triggers?: TriggerShape[] } };
+        } | null
+      )?.spec?.board?.triggers?.find((t) => t.name === name);
+      if (!found) return problem(res, 404, 'Not Found', `trigger ${name}`, 'trigger-not-found');
+      const on = String(found.on);
+      if (sourceOf(on) !== 'schedule') {
+        return problem(res, 422, 'Unprocessable Entity', "Only a schedule's events are stored", 'event-not-stored');
+      }
+      const firing = String((await readBody(req)).firing ?? '');
+      const event = eventsOf(name, on).find((e) => e.id === firing);
+      if (!event) return problem(res, 404, 'Not Found', `firing ${firing}`, 'firing-not-found');
+      const only = found.only ?? {};
+      const limits = found.limits ?? {};
+      const step = (name: TriggerTryStep['step'], configured: boolean): TriggerTryStep[] =>
+        configured ? [{ step: name, outcome: 'passed', reason: null }] : [];
+      const steps: TriggerTryStep[] = [
+        ...step('when', true),
+        ...step('only.failuresInARow', 'failuresInARow' in only),
+        ...step('only.dedupe', 'dedupe' in only),
+        ...step('only.modelAgrees', 'modelAgrees' in only),
+        ...step('create', true),
+        ...step('limits.perDay', 'perDay' in limits),
+        ...step('limits.pauseOnBudget', 'pauseOnBudget' in limits),
+      ];
+      const result: TriggerTry = {
+        firing,
+        matched: true,
+        outcome: 'would_create',
+        reason: null,
+        steps,
+        item: {
+          type: found.create.type,
+          station: found.create.station,
+          lane: null,
+          expedite: found.create.expedite ?? false,
+          title: found.create.title ?? event.title,
+          brief: found.create.brief ?? '',
+        },
+        model_check:
+          'modelAgrees' in only
+            ? {
+                worth: true,
+                reason: 'The audit names a fix for a direct dependency.',
+                model: 'claude-haiku-5-5',
+                input_tokens: 412,
+                output_tokens: 18,
+                cost_usd: 0.01,
+              }
+            : null,
+      };
+      return json(res, 200, result);
     }
     if (rest.match(/^\/factories\/[^/]+\/intake$/) && method === 'GET') {
       const key = decodeURIComponent(rest.split('/')[2] ?? '');
       const factory = findFactory(key, org.id);
       if (!factory) return problem(res, 404, 'Factory not found', key);
-      return json(res, 200, intakeOf(factory.name));
+      const def = state.definitions[factory.id];
+      const current = def?.versions.find((v) => v.id === def.current);
+      const bytes = current?.files.get('factory.yaml');
+      return json(res, 200, intakeOf(factory.name, bytes ? new TextDecoder().decode(bytes) : ''));
     }
 
     let m = rest.match(/^\/factories\/([^/]+)\/agents\/([^/]+)\/stats$/);
@@ -1861,7 +2031,25 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
           spans: [],
         };
         state.items.push(it);
-        emit(it, 'created', 'engine');
+        if (title === starterItem.title) {
+          // The mock runs no agent, so the starter item runs its whole course at once: created nine minutes ago,
+          // its spec accepted, moved to Build and merged at Done, with $0.84 spent. Seconds from its creation. The
+          // Floor's checklist then counts "First item merged" (the setup flow ends at 6 of 9, frontend.md).
+          const at = (s: number) => new Date(clock() - (540 - s) * 1000).toISOString();
+          it.created_at = at(0);
+          emit(it, 'created', 'engine', {}, at(0));
+          it.station = 'spec';
+          emit(it, 'moved', 'engine', { from: 'inbox', to: 'spec' }, at(12));
+          emit(it, 'approved', 'user:local', {}, at(270));
+          it.station = 'build';
+          emit(it, 'moved', 'engine', { from: 'spec', to: 'build' }, at(302));
+          it.station = 'done';
+          emit(it, 'moved', 'engine', { from: 'build', to: 'done' }, at(540));
+          it.state = 'done';
+          it.cost_usd = 0.84;
+        } else {
+          emit(it, 'created', 'engine');
+        }
         return json(res, 201, full(it));
       }
       return problem(res, 405, 'Method not allowed');
@@ -1906,7 +2094,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     }
 
     m = rest.match(
-      /^\/items\/([^/]+)(?:\/(events|runs|parts|notes|approve|reject|merge|retry|move|pause|cancel|answer))?$/,
+      /^\/items\/([^/]+)(?:\/(events|runs|parts|notes|approve|reject|merge|retry|move|pause|lane|cancel|answer|tool-approval))?$/,
     );
     if (!m) return problem(res, 404, 'Not found', path);
 
@@ -2012,6 +2200,44 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       it.agent = null;
     };
 
+    if (action === 'tool-approval') {
+      // goald checks the body first, then whether the item is still open, then the open approval (ADR 0031).
+      const decision = body.decision;
+      const alwaysAllow = body.always_allow === true;
+      const hasNote = body.note !== undefined;
+      const note = typeof body.note === 'string' ? body.note.trim() : '';
+      if (decision !== 'approve' && decision !== 'deny') {
+        return problem(res, 400, 'Bad Request', 'decision is approve or deny');
+      }
+      if (alwaysAllow && decision === 'deny') {
+        return problem(res, 400, 'Bad Request', 'always_allow goes with approve, not deny');
+      }
+      if (decision === 'approve' && hasNote) {
+        return problem(res, 400, 'Bad Request', 'an approval takes no note');
+      }
+      if (decision === 'deny' && (!note || [...note].length > 2000)) {
+        return problem(res, 400, 'Bad Request', 'a note is 1 to 2000 characters');
+      }
+      if (closed) return problem(res, 409, 'Conflict', `${ref(it)} is ${it.state}`, 'item-closed');
+      const call = it.tool_approval;
+      if (!call) {
+        return problem(res, 409, 'Conflict', `${ref(it)} has no open tool approval`, 'no-open-tool-approval');
+      }
+      if (alwaysAllow && !call.always_allow_offered) {
+        return problem(res, 409, 'Conflict', 'the approval does not offer always allow', 'always-allow-not-offered');
+      }
+      emit(it, decision === 'approve' ? 'tool_approval_granted' : 'tool_approval_denied', by, {
+        approval_id: call.id,
+        actor: 'user:local',
+        ...(decision === 'approve' ? { always_allow: alwaysAllow } : { note }),
+      });
+      // The run's next one carries the decision; the item goes back to its station's arrival state.
+      it.tool_approval = null;
+      it.state = 'queued';
+      it.agent = null;
+      return json(res, 200, full(it));
+    }
+
     if (action === 'move') {
       const to = typeof body.to === 'string' ? body.to.trim() : '';
       const target = stations.findIndex((s) => s.id === to);
@@ -2038,6 +2264,30 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       it.state = 'blocked';
       it.question = null;
       emit(it, 'paused', by, { actor: 'user:local', ...(reason ? { reason } : {}) });
+      return json(res, 200, full(it));
+    }
+
+    if (action === 'lane') {
+      const lane = typeof body.lane === 'string' ? body.lane.trim() : '';
+      if (!lane) return problem(res, 400, 'Bad Request', 'a lane is required', 'lane-required');
+      if (closed) return problem(res, 409, 'Conflict', `${ref(it)} is ${it.state}`, 'item-closed');
+      if (it.state === 'assembly')
+        return problem(
+          res,
+          409,
+          'Conflict',
+          `${ref(it)} is an assembly; its parts carry their own lanes`,
+          'item-is-assembly',
+        );
+      if (it.state === 'in_progress')
+        return problem(res, 409, 'Conflict', `${ref(it)} is in progress; pause or move it first`, 'item-in-progress');
+      const factory = findFactory(it.factory);
+      const lanes = factory ? definitions.laneNames(factory) : [];
+      if (lanes.length > 0 && !lanes.includes(lane))
+        return problem(res, 400, 'Bad Request', `lane "${lane}" is not routed by any station`, 'unknown-lane');
+      if (it.lane === lane) return problem(res, 409, 'Conflict', `${ref(it)} is already in ${lane}`, 'same-lane');
+      emit(it, 'lane_set', by, { from: it.lane, to: lane, actor: 'user:local' });
+      it.lane = lane;
       return json(res, 200, full(it));
     }
 

@@ -82,6 +82,14 @@ const decode = (b: Uint8Array | undefined) => (b ? new TextDecoder().decode(b) :
 const encode = (s: string) => new TextEncoder().encode(s);
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
 const list = (v: unknown): Json[] => (Array.isArray(v) ? v.filter(isObject) : []);
+/** Every lane a station routes by, sorted and without repeats (the Set lane menu lists them). */
+const routedLanes = (model: Json): string[] => {
+  const lanes = new Set<string>();
+  for (const station of list((model.line as Json | undefined)?.stations)) {
+    for (const lane of Object.keys(isObject(station.route) ? station.route : {})) lanes.add(lane);
+  }
+  return [...lanes].sort();
+};
 const now = () => new Date().toISOString();
 
 const send = (res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) => {
@@ -174,6 +182,12 @@ function modelOf(t: Tree): Read | ParseError | undefined {
 }
 
 const asModel = (m: Model) => m as unknown as FactoryModel;
+
+/** The factory.yaml's `starter` section (ADR 0032): not one of the Visual sections, so readModel leaves it out. */
+function starterOf(t: Tree): Pick<FactoryModel, 'starter'> {
+  const doc = parseYaml(decode(t.get(yamlFile))) as { starter?: FactoryModel['starter'] } | null;
+  return doc?.starter === undefined ? {} : { starter: doc.starter };
+}
 
 // Validation (B §4.7, a subset): goald's codes, checks, pointers and fixes.
 
@@ -773,6 +787,8 @@ export interface Definitions {
   connectionNames: (factory: Factory) => string[];
   /** The knowledge sources the factory's current version may search. */
   knowledgeSourceNames: (factory: Factory) => string[];
+  /** The lanes the current version's stations route by, sorted: the lanes an item may be set to. */
+  laneNames: (factory: Factory) => string[];
 }
 
 export function createDefinitions(deps: DefinitionsDeps): Definitions {
@@ -1696,7 +1712,7 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
         const read = modelOf(files);
         if (!read || read instanceof ParseError) refuse(409, 'Conflict', 'yaml-invalid');
         const { model, ranges } = read as Read;
-        send(res, 200, { model: asModel(model), ranges });
+        send(res, 200, { model: { ...asModel(model), ...starterOf(files) }, ranges });
         return true;
       }
       if (m[3] !== undefined && method === 'GET') {
@@ -1767,6 +1783,10 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
     knowledgeSourceNames: (f) => {
       const read = currentModel(f);
       return read ? knowledgeSourceNames(read) : [];
+    },
+    laneNames: (f) => {
+      const read = currentModel(f);
+      return read ? routedLanes(read) : [];
     },
     faultBody: (path, fault) => {
       const status = fault.status ?? 500;

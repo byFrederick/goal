@@ -84,6 +84,33 @@ func (e AuthMode) Valid() bool {
 	}
 }
 
+// Defines values for BakeOffState.
+const (
+	BakeOffStateCancelled BakeOffState = "cancelled"
+	BakeOffStateDone      BakeOffState = "done"
+	BakeOffStateFailed    BakeOffState = "failed"
+	BakeOffStateQueued    BakeOffState = "queued"
+	BakeOffStateRunning   BakeOffState = "running"
+)
+
+// Valid indicates whether the value is a known member of the BakeOffState enum.
+func (e BakeOffState) Valid() bool {
+	switch e {
+	case BakeOffStateCancelled:
+		return true
+	case BakeOffStateDone:
+		return true
+	case BakeOffStateFailed:
+		return true
+	case BakeOffStateQueued:
+		return true
+	case BakeOffStateRunning:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for BlankStartKind.
 const (
 	BlankStartKindBlank BlankStartKind = "blank"
@@ -345,6 +372,27 @@ func (e ConnectionKindModes) Valid() bool {
 	case ConnectionKindModesGit:
 		return true
 	case ConnectionKindModesMcp:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectionToolMode.
+const (
+	ConnectionToolModeAllow ConnectionToolMode = "allow"
+	ConnectionToolModeAsk   ConnectionToolMode = "ask"
+	ConnectionToolModeOff   ConnectionToolMode = "off"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionToolMode enum.
+func (e ConnectionToolMode) Valid() bool {
+	switch e {
+	case ConnectionToolModeAllow:
+		return true
+	case ConnectionToolModeAsk:
+		return true
+	case ConnectionToolModeOff:
 		return true
 	default:
 		return false
@@ -713,6 +761,7 @@ const (
 	InboxEntryKindExpedite      InboxEntryKind = "expedite"
 	InboxEntryKindQuestion      InboxEntryKind = "question"
 	InboxEntryKindReworkWarning InboxEntryKind = "rework_warning"
+	InboxEntryKindToolApproval  InboxEntryKind = "tool_approval"
 )
 
 // Valid indicates whether the value is a known member of the InboxEntryKind enum.
@@ -729,6 +778,8 @@ func (e InboxEntryKind) Valid() bool {
 	case InboxEntryKindQuestion:
 		return true
 	case InboxEntryKindReworkWarning:
+		return true
+	case InboxEntryKindToolApproval:
 		return true
 	default:
 		return false
@@ -1521,6 +1572,24 @@ func (e TemplateStartKind) Valid() bool {
 	}
 }
 
+// Defines values for ToolDecisionDecision.
+const (
+	Approve ToolDecisionDecision = "approve"
+	Deny    ToolDecisionDecision = "deny"
+)
+
+// Valid indicates whether the value is a known member of the ToolDecisionDecision enum.
+func (e ToolDecisionDecision) Valid() bool {
+	switch e {
+	case Approve:
+		return true
+	case Deny:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ToolPolicyMergePullRequest.
 const (
 	ToolPolicyMergePullRequestOff            ToolPolicyMergePullRequest = "off"
@@ -1617,6 +1686,78 @@ func (e TouchReason) Valid() bool {
 	case TouchReasonRequiredGate:
 		return true
 	case TouchReasonWrongDecision:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TriggerTryOutcome.
+const (
+	TriggerTryOutcomeSkipped     TriggerTryOutcome = "skipped"
+	TriggerTryOutcomeWouldCreate TriggerTryOutcome = "would_create"
+)
+
+// Valid indicates whether the value is a known member of the TriggerTryOutcome enum.
+func (e TriggerTryOutcome) Valid() bool {
+	switch e {
+	case TriggerTryOutcomeSkipped:
+		return true
+	case TriggerTryOutcomeWouldCreate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TriggerTryStepOutcome.
+const (
+	TriggerTryStepOutcomeNotReached TriggerTryStepOutcome = "not_reached"
+	TriggerTryStepOutcomePassed     TriggerTryStepOutcome = "passed"
+	TriggerTryStepOutcomeSkipped    TriggerTryStepOutcome = "skipped"
+)
+
+// Valid indicates whether the value is a known member of the TriggerTryStepOutcome enum.
+func (e TriggerTryStepOutcome) Valid() bool {
+	switch e {
+	case TriggerTryStepOutcomeNotReached:
+		return true
+	case TriggerTryStepOutcomePassed:
+		return true
+	case TriggerTryStepOutcomeSkipped:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TriggerTryStepStep.
+const (
+	Create              TriggerTryStepStep = "create"
+	LimitsPauseOnBudget TriggerTryStepStep = "limits.pauseOnBudget"
+	LimitsPerDay        TriggerTryStepStep = "limits.perDay"
+	OnlyDedupe          TriggerTryStepStep = "only.dedupe"
+	OnlyFailuresInARow  TriggerTryStepStep = "only.failuresInARow"
+	OnlyModelAgrees     TriggerTryStepStep = "only.modelAgrees"
+	When                TriggerTryStepStep = "when"
+)
+
+// Valid indicates whether the value is a known member of the TriggerTryStepStep enum.
+func (e TriggerTryStepStep) Valid() bool {
+	switch e {
+	case Create:
+		return true
+	case LimitsPauseOnBudget:
+		return true
+	case LimitsPerDay:
+		return true
+	case OnlyDedupe:
+		return true
+	case OnlyFailuresInARow:
+		return true
+	case OnlyModelAgrees:
+		return true
+	case When:
 		return true
 	default:
 		return false
@@ -2074,6 +2215,138 @@ type AuthEventPage struct {
 // AuthMode session: people sign in and every request carries a session or an API key. none: sign-in is off (GOAL_AUTH=none, a loopback install), every request acts as the local user.
 type AuthMode string
 
+// BakeOff defines model for BakeOff.
+type BakeOff struct {
+	Agent string `json:"agent"`
+
+	// Arms By arm number
+	Arms []BakeOffArm `json:"arms"`
+
+	// Cases How many of the agent's eval cases it runs
+	Cases int `json:"cases"`
+
+	// CostUsd What its recorded tries cost
+	CostUsd     float64    `json:"cost_usd"`
+	CreatedAt   time.Time  `json:"created_at"`
+	EstimateUsd float64    `json:"estimate_usd"`
+	FinishedAt  *time.Time `json:"finished_at,omitempty"`
+
+	// Id The id of its eval run
+	Id string `json:"id"`
+
+	// PerCase By case name, the tries passed of each arm so far, out of trials
+	PerCase []BakeOffCase `json:"per_case"`
+
+	// RecommendedArm The arm with the highest pass rate, then the lowest cost per item; null while the bake-off is not done or when an arm errored on every try (ADR 0029 decision 4)
+	RecommendedArm *int         `json:"recommended_arm"`
+	State          BakeOffState `json:"state"`
+
+	// Station The first station the agent works at
+	Station string `json:"station"`
+
+	// Trials Tries per case on every arm
+	Trials int `json:"trials"`
+
+	// Version The published version it runs
+	Version int `json:"version"`
+}
+
+// BakeOffState defines model for BakeOff.State.
+type BakeOffState string
+
+// BakeOffApply defines model for BakeOffApply.
+type BakeOffApply struct {
+	// Arm The arm whose model to write
+	Arm int `json:"arm"`
+}
+
+// BakeOffArm defines model for BakeOffArm.
+type BakeOffArm struct {
+	// Arm Its number
+	Arm int `json:"arm"`
+
+	// IsCurrent The agent's model in the bake-off's version
+	IsCurrent bool   `json:"is_current"`
+	Model     string `json:"model"`
+
+	// Summary Its row of the report, null until the bake-off is done
+	Summary *BakeOffArmSummary `json:"summary"`
+}
+
+// BakeOffArmSummary defines model for BakeOffArmSummary.
+type BakeOffArmSummary struct {
+	// CostPerItemUsd The mean cost of a try
+	CostPerItemUsd float64 `json:"cost_per_item_usd"`
+
+	// Errors Tries that failed for an infrastructure reason; they count as not passed
+	Errors int `json:"errors"`
+
+	// Judged The advisory judge's share; null when no judge scores the agent
+	Judged *BakeOffJudged `json:"judged"`
+
+	// PassRate passed of tries
+	PassRate float64 `json:"pass_rate"`
+	Passed   int     `json:"passed"`
+
+	// TimePerItemSeconds The mean duration of a try
+	TimePerItemSeconds float64 `json:"time_per_item_seconds"`
+	Tries              int     `json:"tries"`
+
+	// Turns The mean turns of a try
+	Turns float64 `json:"turns"`
+}
+
+// BakeOffCase defines model for BakeOffCase.
+type BakeOffCase struct {
+	// Arms By arm number
+	Arms []BakeOffCaseArm `json:"arms"`
+	Case string           `json:"case"`
+}
+
+// BakeOffCaseArm defines model for BakeOffCaseArm.
+type BakeOffCaseArm struct {
+	Arm int `json:"arm"`
+
+	// Passed The case's tries on the arm that passed
+	Passed int `json:"passed"`
+}
+
+// BakeOffJudged defines model for BakeOffJudged.
+type BakeOffJudged struct {
+	// Judge The judge's slug
+	Judge string `json:"judge"`
+
+	// Share The share of the arm's tries the judge passed
+	Share float64 `json:"share"`
+
+	// Title The judge's title when the version has it
+	Title *string `json:"title,omitempty"`
+}
+
+// BakeOffList defines model for BakeOffList.
+type BakeOffList struct {
+	// BakeOffs Newest first
+	BakeOffs []BakeOff `json:"bake_offs"`
+}
+
+// BakeOffRequest defines model for BakeOffRequest.
+type BakeOffRequest struct {
+	// Agent The agent to bake off
+	Agent string `json:"agent"`
+
+	// Models The arms' models, 2 to 4 distinct ids, the agent's model among them; absent, the agent's model and goald's default models
+	Models *[]string `json:"models,omitempty"`
+
+	// Trials Tries per case on every arm
+	Trials *int `json:"trials,omitempty"`
+}
+
+// BakeOffStarted defines model for BakeOffStarted.
+type BakeOffStarted struct {
+	BakeOff  BakeOff      `json:"bake_off"`
+	Estimate EvalEstimate `json:"estimate"`
+}
+
 // Base64File defines model for Base64File.
 type Base64File struct {
 	Base64 []byte `json:"base64"`
@@ -2377,7 +2650,10 @@ type Connection struct {
 	SecretsSet []string `json:"secrets_set"`
 
 	// Status missing-secret: a required secret field is not set (its kind gained one); else the last test's outcome, untested before any
-	Status    ConnectionStatus `json:"status"`
+	Status ConnectionStatus `json:"status"`
+
+	// Tools Its tools and their modes (ADR 0031 decisions 1 and 2), sorted by name: one entry for each tool the last test listed and each tool with a mode set, a tool without a mode being allow; empty for a connection never tested and without modes
+	Tools     []ConnectionTool `json:"tools"`
 	UpdatedAt time.Time        `json:"updated_at"`
 
 	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
@@ -2385,6 +2661,9 @@ type Connection struct {
 
 	// UsedBy What uses a connection, so it cannot be deleted or renamed meanwhile
 	UsedBy ConnectionUsers `json:"used_by"`
+
+	// WaitingApprovals The open tool approvals on this connection in the organization, by its current name; the connections list's "Writes waiting for your OK" is their sum
+	WaitingApprovals int `json:"waiting_approvals"`
 }
 
 // ConnectionStatus missing-secret: a required secret field is not set (its kind gained one); else the last test's outcome, untested before any
@@ -2494,6 +2773,9 @@ type ConnectionPatch struct {
 
 	// Secrets The secret fields to replace, by name; an empty value clears an optional one
 	Secrets *map[string]string `json:"secrets,omitempty"`
+
+	// Tools Every tool's mode: replaces them all, so send the full list (a tool left out goes back to allow). Only for a connection whose kind has an MCP server; a tool named twice is refused.
+	Tools *[]ConnectionTool `json:"tools,omitempty"`
 }
 
 // ConnectionTestResult defines model for ConnectionTestResult.
@@ -2507,6 +2789,18 @@ type ConnectionTestResult struct {
 	// Status The test request's HTTP status, when it got one
 	Status *int `json:"status,omitempty"`
 }
+
+// ConnectionTool defines model for ConnectionTool.
+type ConnectionTool struct {
+	// Mode What a run may do with one tool of the connection (ADR 0031 decision 1): allow runs the call, ask pauses it for a person, off refuses it
+	Mode ConnectionToolMode `json:"mode"`
+
+	// Name The tool's name as the MCP server lists it, without the connection prefix: 1 to 128 letters, digits, underscores, dots or dashes
+	Name string `json:"name"`
+}
+
+// ConnectionToolMode What a run may do with one tool of the connection (ADR 0031 decision 1): allow runs the call, ask pauses it for a person, off refuses it
+type ConnectionToolMode string
 
 // ConnectionUsers What uses a connection, so it cannot be deleted or renamed meanwhile
 type ConnectionUsers struct {
@@ -3190,7 +3484,7 @@ type Event struct {
 	Id     int64                  `json:"id"`
 	ItemId string                 `json:"item_id"`
 
-	// Kind What happened, as in submitted, moved, note or lease_taken. question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue
+	// Kind What happened, as in submitted, moved, note or lease_taken. question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue. tool_approval_requested: the item's agent asked to make a call of an Ask-first connection tool (data connection, tool, input, agent as the role name, run_id, always_allow_offered); the run ends and the item waits at its station. tool_approval_granted: a person approved it (data approval_id, always_allow; actor); tool_approval_denied: a person denied it (data approval_id, note when given; actor); either way the item goes back to its station's queue
 	Kind    string  `json:"kind"`
 	RunId   *string `json:"run_id,omitempty"`
 	Station *string `json:"station,omitempty"`
@@ -3494,13 +3788,13 @@ type InboxEntry struct {
 		Title *string `json:"title"`
 	} `json:"factory"`
 
-	// Id "<kind>:<id of what waits>": decision:, question:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>
+	// Id "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>
 	Id string `json:"id"`
 
 	// Item The item it is about, or null for an entry that is about no item
 	Item *ItemCard `json:"item"`
 
-	// Kind What waits; later phases add kinds, which clients that do not know them show as a generic row
+	// Kind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny
 	Kind InboxEntryKind `json:"kind"`
 
 	// Question A question entry's open question; absent or null for other kinds
@@ -3509,14 +3803,17 @@ type InboxEntry struct {
 	// Rework The gate tally of a rework warning; null for other kinds
 	Rework *ReworkWarning `json:"rework"`
 
-	// Since Since when it waits: the item's last change (decision, question, blocked), its creation (expedite), the pull (andon), now (rework_warning)
+	// Since Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning)
 	Since time.Time `json:"since"`
 
 	// Station The station where it waits
 	Station *string `json:"station"`
+
+	// ToolApproval A tool_approval entry's open tool approval; absent or null for other kinds
+	ToolApproval *ToolApproval `json:"tool_approval,omitempty"`
 }
 
-// InboxEntryKind What waits; later phases add kinds, which clients that do not know them show as a generic row
+// InboxEntryKind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny
 type InboxEntryKind string
 
 // Intake defines model for Intake.
@@ -3550,6 +3847,9 @@ type IntakeEvent struct {
 
 	// Event The event key it matched
 	Event string `json:"event"`
+
+	// Id The firing's id
+	Id string `json:"id"`
 
 	// ItemNumber The item it created; null when it created none or that item is gone
 	ItemNumber *int64 `json:"item_number"`
@@ -3688,6 +3988,9 @@ type Item struct {
 	State   ItemState `json:"state"`
 	Station string    `json:"station"`
 	Title   string    `json:"title"`
+
+	// ToolApproval The tool call the item's agent asked to make that waits for a person's decision (ADR 0031); getItem and decideToolApproval only, absent or null when there is none
+	ToolApproval *ToolApproval `json:"tool_approval,omitempty"`
 
 	// Touches The item's human touches; getItem only
 	Touches   *ItemTouches `json:"touches,omitempty"`
@@ -4822,6 +5125,18 @@ type NewPlatformAdmin struct {
 	Email string `json:"email"`
 }
 
+// NewSavedView defines model for NewSavedView.
+type NewSavedView struct {
+	// Filters The Items page's URL search params, each key with its values in order: at most 20 keys, 20 values per key and 200 characters per value
+	Filters SavedViewFilters `json:"filters"`
+
+	// Name 1 to 60 characters, trimmed
+	Name string `json:"name"`
+
+	// Shared Every reader of the factory sees it; false: only its owner
+	Shared bool `json:"shared"`
+}
+
 // NewWebhookEndpoint defines model for NewWebhookEndpoint.
 type NewWebhookEndpoint struct {
 	// Kind How requests are signed and name their event. generic: X-Goal-Signature: sha256=<hex HMAC-SHA256 of the body> and the event in the body's event field; github: GitHub's X-Hub-Signature-256 and X-GitHub-Event.
@@ -5229,9 +5544,12 @@ type PolicyModel struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run has no use of the document). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open.
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run has no use of the document). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422).
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
+
+	// Estimate learning-budget-exhausted only, the estimate of the bake-off it refused
+	Estimate *EvalEstimate `json:"estimate,omitempty"`
 
 	// Etag draft-conflict on a section save only, the section's etag now (resend with it to overwrite)
 	Etag *string `json:"etag,omitempty"`
@@ -5591,6 +5909,38 @@ type SaveResult struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// SavedView defines model for SavedView.
+type SavedView struct {
+	CreatedAt time.Time `json:"created_at"`
+
+	// Filters The Items page's URL search params, each key with its values in order: at most 20 keys, 20 values per key and 200 characters per value
+	Filters SavedViewFilters `json:"filters"`
+	Id      string           `json:"id"`
+
+	// Mine The caller made it
+	Mine      bool      `json:"mine"`
+	Name      string    `json:"name"`
+	Shared    bool      `json:"shared"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// SavedViewChange defines model for SavedViewChange.
+type SavedViewChange struct {
+	// Filters The Items page's URL search params, each key with its values in order: at most 20 keys, 20 values per key and 200 characters per value
+	Filters SavedViewFilters `json:"filters"`
+
+	// Name 1 to 60 characters, trimmed
+	Name string `json:"name"`
+}
+
+// SavedViewFilters The Items page's URL search params, each key with its values in order: at most 20 keys, 20 values per key and 200 characters per value
+type SavedViewFilters map[string][]string
+
+// SavedViewList defines model for SavedViewList.
+type SavedViewList struct {
+	Views []SavedView `json:"views"`
+}
+
 // SearchItem defines model for SearchItem.
 type SearchItem struct {
 	// FactoryId The factory's metadata.id
@@ -5655,6 +6005,12 @@ type SentBack struct {
 
 	// Ratio Of the advanced tasks; null when none advanced
 	Ratio *float64 `json:"ratio"`
+}
+
+// SetLaneRequest defines model for SetLaneRequest.
+type SetLaneRequest struct {
+	// Lane The lane to set
+	Lane string `json:"lane"`
 }
 
 // SignInMethod defines model for SignInMethod.
@@ -5742,6 +6098,32 @@ type SpendDay struct {
 
 // SpendWindow defines model for SpendWindow.
 type SpendWindow string
+
+// StandingRule Lets one agent role call one tool of one organization connection without asking, in every factory of the organization (ADR 0031 decision 7)
+type StandingRule struct {
+	// Agent The agent's role, its name in the definition, as in architect
+	Agent string `json:"agent"`
+
+	// Connection The connection's name; null once the connection is deleted
+	Connection   *string   `json:"connection"`
+	ConnectionId string    `json:"connection_id"`
+	CreatedAt    time.Time `json:"created_at"`
+
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	CreatedBy Actor  `json:"created_by"`
+	Id        string `json:"id"`
+
+	// ItemId The item it was approved on
+	ItemId    string     `json:"item_id"`
+	RevokedAt *time.Time `json:"revoked_at"`
+	RevokedBy *Actor     `json:"revoked_by"`
+	Tool      string     `json:"tool"`
+}
+
+// StandingRuleList defines model for StandingRuleList.
+type StandingRuleList struct {
+	Rules []StandingRule `json:"rules"`
+}
 
 // Station defines model for Station.
 type Station struct {
@@ -5862,6 +6244,44 @@ type Throughput struct {
 	PreviousPerDay float64 `json:"previous_per_day"`
 }
 
+// ToolApproval A run's call of an Ask-first connection tool that waits for a person, read from its tool_approval_requested event
+type ToolApproval struct {
+	// Agent The calling agent's role name, as in architect; never its copy number
+	Agent string `json:"agent"`
+
+	// AlwaysAllowOffered Whether a person may approve the call with always_allow: its ask comes from the organization connection's mode alone
+	AlwaysAllowOffered bool      `json:"always_allow_offered"`
+	AskedAt            time.Time `json:"asked_at"`
+
+	// Connection The organization connection's name
+	Connection string `json:"connection"`
+
+	// Id The approval's id
+	Id int64 `json:"id"`
+
+	// Input The call's input, any JSON value, as canonical JSON (keys sorted); at most 16 KiB
+	Input interface{} `json:"input"`
+
+	// RunId The run that asked; it ended when it asked
+	RunId string `json:"run_id"`
+
+	// Tool The tool's name as the connection's MCP server lists it, as in create_comment
+	Tool string `json:"tool"`
+}
+
+// ToolDecision A person's decision on an item's open tool approval
+type ToolDecision struct {
+	// AlwaysAllow With approve only: also let the agent role call this tool of this connection without asking from now on (a standing rule); needs connection:manage
+	AlwaysAllow *bool                `json:"always_allow,omitempty"`
+	Decision    ToolDecisionDecision `json:"decision"`
+
+	// Note With deny only, the person's reason, 1 to 2000 characters (surrounding space is trimmed)
+	Note *string `json:"note,omitempty"`
+}
+
+// ToolDecisionDecision defines model for ToolDecision.Decision.
+type ToolDecisionDecision string
+
 // ToolPolicy The tool policy defaults (ADR 0024 decision 2)
 type ToolPolicy struct {
 	MergePullRequest ToolPolicyMergePullRequest `json:"merge_pull_request"`
@@ -5895,7 +6315,7 @@ type Touch struct {
 	// EventId The naming event; its reason is set by setTouchReason
 	EventId int64 `json:"event_id"`
 
-	// Kind The naming event's kind: merged, rejected, approved, moved, paused, cancelled, retried, note, ...
+	// Kind The naming event's kind: merged, rejected, approved, moved, paused, cancelled, retried, lane_set, note, ...
 	Kind    string `json:"kind"`
 	Planned bool   `json:"planned"`
 
@@ -6035,6 +6455,76 @@ type TransferRequest struct {
 	// To The user id of the admin who becomes an owner
 	To string `json:"to"`
 }
+
+// TriggerTry What the trigger would do with the event now. Every string shaped by the event (the item's title and brief, the model's reason, a step's reason) is text to show as text, never markup.
+type TriggerTry struct {
+	// Firing The firing tried
+	Firing string `json:"firing"`
+
+	// Item The item it would create; null when the create step was not reached
+	Item *struct {
+		// Brief The item's body, create.brief rendered, then the event's fields marked as untrusted data
+		Brief    string  `json:"brief"`
+		Expedite bool    `json:"expedite"`
+		Lane     *string `json:"lane"`
+		Station  string  `json:"station"`
+
+		// Title create.title rendered with the event's fields
+		Title string `json:"title"`
+		Type  string `json:"type"`
+	} `json:"item"`
+
+	// Matched The event reached the trigger (its when step passed)
+	Matched bool `json:"matched"`
+
+	// ModelCheck The model check's answer; null when it did not run or gave no answer
+	ModelCheck *struct {
+		// CostUsd What the check cost
+		CostUsd      float64 `json:"cost_usd"`
+		InputTokens  int     `json:"input_tokens"`
+		Model        string  `json:"model"`
+		OutputTokens int     `json:"output_tokens"`
+
+		// Reason The model's one-line reason
+		Reason string `json:"reason"`
+
+		// Worth The model answered yes
+		Worth bool `json:"worth"`
+	} `json:"model_check"`
+
+	// Outcome would_create when no step skips the event; skipped otherwise
+	Outcome TriggerTryOutcome `json:"outcome"`
+
+	// Reason The reason a skipped firing would record (the step, a colon and why); null for would_create
+	Reason *string `json:"reason"`
+
+	// Steps In the order they run: when, each configured only condition (failuresInARow, dedupe, then modelAgrees), create, then each configured limit (perDay, pauseOnBudget). Steps after the one that skipped are not_reached.
+	Steps []TriggerTryStep `json:"steps"`
+}
+
+// TriggerTryOutcome would_create when no step skips the event; skipped otherwise
+type TriggerTryOutcome string
+
+// TriggerTryRequest defines model for TriggerTryRequest.
+type TriggerTryRequest struct {
+	// Firing The id of one of the trigger's 20 newest events
+	Firing string `json:"firing"`
+}
+
+// TriggerTryStep defines model for TriggerTryStep.
+type TriggerTryStep struct {
+	Outcome TriggerTryStepOutcome `json:"outcome"`
+
+	// Reason Why it passed or skipped; null when not reached or with nothing to say
+	Reason *string            `json:"reason"`
+	Step   TriggerTryStepStep `json:"step"`
+}
+
+// TriggerTryStepOutcome defines model for TriggerTryStep.Outcome.
+type TriggerTryStepOutcome string
+
+// TriggerTryStepStep defines model for TriggerTryStep.Step.
+type TriggerTryStepStep string
 
 // User defines model for User.
 type User struct {
@@ -6318,6 +6808,9 @@ type WeeklyThroughput struct {
 	} `json:"weeks"`
 }
 
+// BakeOffRef defines model for BakeOffRef.
+type BakeOffRef = string
+
 // ConnectionRef defines model for ConnectionRef.
 type ConnectionRef = string
 
@@ -6362,6 +6855,9 @@ type RangeFrom = openapi_types.Date
 
 // RangeTo defines model for RangeTo.
 type RangeTo = openapi_types.Date
+
+// SavedViewRef defines model for SavedViewRef.
+type SavedViewRef = string
 
 // SectionRef defines model for SectionRef.
 type SectionRef = Section
@@ -6704,6 +7200,24 @@ type ListRunsParams struct {
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// ExportRunsParams defines parameters for ExportRuns.
+type ExportRunsParams struct {
+	// Factory As for listRuns
+	Factory *string `form:"factory,omitempty" json:"factory,omitempty"`
+
+	// Status As for listRuns
+	Status *RunStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// Since As for listRuns
+	Since *time.Time `form:"since,omitempty" json:"since,omitempty"`
+
+	// Until As for listRuns
+	Until *time.Time `form:"until,omitempty" json:"until,omitempty"`
+
+	// Q As for listRuns
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+}
+
 // SearchOrgParams defines parameters for SearchOrg.
 type SearchOrgParams struct {
 	// Q What to find, 1 to 200 characters once trimmed; anything else is a 400 problem
@@ -6717,6 +7231,18 @@ type SearchOrgParams struct {
 type GetOrgSpendParams struct {
 	// Window week starts on Monday 00:00 UTC, month on the 1st 00:00 UTC, 90d at 00:00 UTC 89 days before today; each ends now
 	Window *SpendWindow `form:"window,omitempty" json:"window,omitempty"`
+}
+
+// ExportSpendParams defines parameters for ExportSpend.
+type ExportSpendParams struct {
+	// Window As for getOrgSpend
+	Window *SpendWindow `form:"window,omitempty" json:"window,omitempty"`
+}
+
+// ListStandingRulesParams defines parameters for ListStandingRules.
+type ListStandingRulesParams struct {
+	// Revoked Also list the revoked rules
+	Revoked *bool `form:"revoked,omitempty" json:"revoked,omitempty"`
 }
 
 // StreamEventsParams defines parameters for StreamEvents.
@@ -6798,6 +7324,12 @@ type ReplaceDraftTreeJSONRequestBody = DraftTree
 // ValidateDraftJSONRequestBody defines body for ValidateDraft for application/json ContentType.
 type ValidateDraftJSONRequestBody = ValidateDraftRequest
 
+// StartBakeOffJSONRequestBody defines body for StartBakeOff for application/json ContentType.
+type StartBakeOffJSONRequestBody = BakeOffRequest
+
+// ApplyBakeOffJSONRequestBody defines body for ApplyBakeOff for application/json ContentType.
+type ApplyBakeOffJSONRequestBody = BakeOffApply
+
 // AddEvalCaseJSONRequestBody defines body for AddEvalCase for application/json ContentType.
 type AddEvalCaseJSONRequestBody = EvalCaseFromRun
 
@@ -6806,6 +7338,9 @@ type EstimateEvalRunJSONRequestBody = EvalRunRequest
 
 // StartEvalRunJSONRequestBody defines body for StartEvalRun for application/json ContentType.
 type StartEvalRunJSONRequestBody = EvalRunRequest
+
+// TryIntakeTriggerJSONRequestBody defines body for TryIntakeTrigger for application/json ContentType.
+type TryIntakeTriggerJSONRequestBody = TriggerTryRequest
 
 // SubmitItemJSONRequestBody defines body for SubmitItem for application/json ContentType.
 type SubmitItemJSONRequestBody = NewItem
@@ -6822,6 +7357,12 @@ type UpdateJudgeJSONRequestBody = JudgeWrite
 // RestoreVersionJSONRequestBody defines body for RestoreVersion for application/json ContentType.
 type RestoreVersionJSONRequestBody = RestoreRequest
 
+// CreateSavedViewJSONRequestBody defines body for CreateSavedView for application/json ContentType.
+type CreateSavedViewJSONRequestBody = NewSavedView
+
+// UpdateSavedViewJSONRequestBody defines body for UpdateSavedView for application/json ContentType.
+type UpdateSavedViewJSONRequestBody = SavedViewChange
+
 // CreateWebhookEndpointJSONRequestBody defines body for CreateWebhookEndpoint for application/json ContentType.
 type CreateWebhookEndpointJSONRequestBody = NewWebhookEndpoint
 
@@ -6830,6 +7371,9 @@ type AnswerItemJSONRequestBody = ItemAnswer
 
 // CancelItemJSONRequestBody defines body for CancelItem for application/json ContentType.
 type CancelItemJSONRequestBody = CancelRequest
+
+// SetItemLaneJSONRequestBody defines body for SetItemLane for application/json ContentType.
+type SetItemLaneJSONRequestBody = SetLaneRequest
 
 // MergeItemJSONRequestBody defines body for MergeItem for application/json ContentType.
 type MergeItemJSONRequestBody = MergeRequest
@@ -6851,6 +7395,9 @@ type PauseItemJSONRequestBody = PauseRequest
 
 // RejectItemJSONRequestBody defines body for RejectItem for application/json ContentType.
 type RejectItemJSONRequestBody = Rejection
+
+// DecideToolApprovalJSONRequestBody defines body for DecideToolApproval for application/json ContentType.
+type DecideToolApprovalJSONRequestBody = ToolDecision
 
 // SetTouchReasonJSONRequestBody defines body for SetTouchReason for application/json ContentType.
 type SetTouchReasonJSONRequestBody = TouchReasonChange
@@ -7402,18 +7949,18 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/connections/{connection} (the `GetConnection` operationId).
 	GetConnection(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// UpdateConnectionWithBody Rename a connection, or change its description, fields or secrets
+	// UpdateConnectionWithBody Rename a connection, or change its description, fields, secrets or tool modes
 	//
-	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
 	UpdateConnectionWithBody(ctx context.Context, org OrgRef, connection ConnectionRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// UpdateConnection Rename a connection, or change its description, fields or secrets
+	// UpdateConnection Rename a connection, or change its description, fields, secrets or tool modes
 	//
-	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -7818,6 +8365,63 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals (the `ListEvals` operationId).
 	ListEvals(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListBakeOffs The factory's bake-offs, newest first
+	//
+	// At most the 20 newest bake-offs (ADR 0029): eval runs of kind bake-off, each of one agent on two to four models. 503 evals-unavailable.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `ListBakeOffs` operationId).
+	ListBakeOffs(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// StartBakeOffWithBody Start a bake-off of one agent across models on the current version
+	//
+	// Queues a bake-off of the agent's eval cases in the current version, each run trials times (default 3) on every arm, and answers at once; goald's eval loop works the tries. Without models, the arms are the agent's model and goald's default models (GOAL_BAKEOFF_MODELS). The estimate is cases × trials × arms × the price of a try, as estimateEvalRun prices it. 404 version-not-found for a factory never published; 409 learning-budget-exhausted, with the estimate, when it exceeds what is left of the learning budget; 422 invalid-bake-off for an agent the version does not have or that works at no station, arms that are not 2 to 4 distinct model ids with the agent's model among them, trials outside 1 to 10 and an agent with no eval cases; 503 evals-unavailable.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `StartBakeOff` operationId).
+	StartBakeOffWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// StartBakeOff Start a bake-off of one agent across models on the current version
+	//
+	// Queues a bake-off of the agent's eval cases in the current version, each run trials times (default 3) on every arm, and answers at once; goald's eval loop works the tries. Without models, the arms are the agent's model and goald's default models (GOAL_BAKEOFF_MODELS). The estimate is cases × trials × arms × the price of a try, as estimateEvalRun prices it. 404 version-not-found for a factory never published; 409 learning-budget-exhausted, with the estimate, when it exceeds what is left of the learning budget; 422 invalid-bake-off for an agent the version does not have or that works at no station, arms that are not 2 to 4 distinct model ids with the agent's model among them, trials outside 1 to 10 and an agent with no eval cases; 503 evals-unavailable.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `StartBakeOff` operationId).
+	StartBakeOff(ctx context.Context, org OrgRef, factory FactoryRef, body StartBakeOffJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetBakeOff One bake-off with its arms, its tries passed per case and its recommendation
+	//
+	// 404 eval-run-not-found for a bake-off that is not the factory's and for an eval run that is not a bake-off; 503 evals-unavailable.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off} (the `GetBakeOff` operationId).
+	GetBakeOff(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ApplyBakeOffWithBody Write an arm's model as the agent's model into the factory's draft
+	//
+	// Sets agents[].model of the bake-off's agent in the draft to the arm's model, opening a draft from the current version when none is open. It never publishes: the draft publishes as any other, through the eval gate (ADR 0029 decision 7). 404 eval-run-not-found; 412 draft-conflict when the agent changed since the bake-off's version; 422 invalid-bake-off for an arm the bake-off does not have; 503 evals-unavailable.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply (the `ApplyBakeOff` operationId).
+	ApplyBakeOffWithBody(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ApplyBakeOff Write an arm's model as the agent's model into the factory's draft
+	//
+	// Sets agents[].model of the bake-off's agent in the draft to the arm's model, opening a draft from the current version when none is open. It never publishes: the draft publishes as any other, through the eval gate (ADR 0029 decision 7). 404 eval-run-not-found; 412 draft-conflict when the agent changed since the bake-off's version; 422 invalid-bake-off for an arm the bake-off does not have; 503 evals-unavailable.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply (the `ApplyBakeOff` operationId).
+	ApplyBakeOff(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, body ApplyBakeOffJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RerunBakeOff Run a bake-off again on the current version
+	//
+	// Queues a new bake-off of the same agent with the same arms and trials, on the factory's current version, which may be newer than the original's (ADR 0029 decision 7). 404 eval-run-not-found; then the refusals of startBakeOff.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/rerun (the `RerunBakeOff` operationId).
+	RerunBakeOff(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AddEvalCaseWithBody Add an eval case from a past run and publish it
 	//
 	// Writes evals/cases/{name}.yaml from the past agent run: its agent, and its item's title, body, type and lane as the input, checked by the agent's contract or by judge, with tries tries (default 1). The file goes into a new draft of the current version, which publishes as the next version through the same checks and eval gate as publishDraft (ADR 0025 decision 5). 400 invalid-request for a name that is not a slug; 404 run-not-found for a run that is not the factory's; 409 eval-case-exists when the current version has the case, draft-open when the factory already has a draft (the draft this call opened is discarded), and the publish's own conflicts. When the eval gate refuses (evals-pending, evals-failing) the draft stays open, so it publishes once its run passes. 503 evals-unavailable.
@@ -7899,6 +8503,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger} (the `GetIntakeTrigger` operationId).
 	GetIntakeTrigger(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TryIntakeTriggerWithBody Try the trigger with one of its past events, creating nothing
+	//
+	// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try (the `TryIntakeTrigger` operationId).
+	TryIntakeTriggerWithBody(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TryIntakeTrigger Try the trigger with one of its past events, creating nothing
+	//
+	// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try (the `TryIntakeTrigger` operationId).
+	TryIntakeTrigger(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, body TryIntakeTriggerJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListItems One page of a factory's items, newest first
 	//
@@ -8130,6 +8752,56 @@ type ClientInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/versions/{version}/restore (the `RestoreVersion` operationId).
 	RestoreVersion(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, body RestoreVersionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListSavedViews The factory's shared views and the caller's own
+	//
+	// The shared views first, then the caller's personal views, each by name (case ignored). Never another person's personal view; an API key or a personal token sees only the shared views.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/views (the `ListSavedViews` operationId).
+	ListSavedViews(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateSavedViewWithBody Save a view
+	//
+	// A personal view of the caller, or a shared view of the factory, which also needs factory:manage (403 forbidden without it). 403 person-required for an API key, a personal token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60 characters, over 20 filters, over 20 values in one or a value over 200 characters; 409 view-name-taken for a name the caller's personal views (personal) or the factory's shared views (shared) already use, case ignored.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/views (the `CreateSavedView` operationId).
+	CreateSavedViewWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateSavedView Save a view
+	//
+	// A personal view of the caller, or a shared view of the factory, which also needs factory:manage (403 forbidden without it). 403 person-required for an API key, a personal token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60 characters, over 20 filters, over 20 values in one or a value over 200 characters; 409 view-name-taken for a name the caller's personal views (personal) or the factory's shared views (shared) already use, case ignored.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/views (the `CreateSavedView` operationId).
+	CreateSavedView(ctx context.Context, org OrgRef, factory FactoryRef, body CreateSavedViewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteSavedView Delete a view
+	//
+	// A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/views/{view} (the `DeleteSavedView` operationId).
+	DeleteSavedView(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateSavedViewWithBody Rename a view and replace its filters
+	//
+	// Whether a view is shared is fixed when it is created. A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included); 400 invalid-view and 409 view-name-taken as createSavedView.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/factories/{factory}/views/{view} (the `UpdateSavedView` operationId).
+	UpdateSavedViewWithBody(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateSavedView Rename a view and replace its filters
+	//
+	// Whether a view is shared is fixed when it is created. A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included); 400 invalid-view and 409 view-name-taken as createSavedView.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/factories/{factory}/views/{view} (the `UpdateSavedView` operationId).
+	UpdateSavedView(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, body UpdateSavedViewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListWebhookEndpoints The factory's webhook endpoints
 	//
 	// By name, each with its address, kind, the label of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret.
@@ -8222,6 +8894,8 @@ type ClientInterface interface {
 
 	// ApproveItem Approve an item waiting for a human; it moves to the next station
 	//
+	// 409 tool-approval-open while the item has an open tool approval (Item.tool_approval): the item waits for a decision on the call, decided with decideToolApproval, not on the item (ADR 0031 decision 9).
+	//
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/approve (the `ApproveItem` operationId).
 	ApproveItem(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -8247,6 +8921,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/events (the `ListItemEvents` operationId).
 	ListItemEvents(ctx context.Context, org OrgRef, item ItemRef, params *ListItemEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetItemLaneWithBody Set an open item's lane
+	//
+	// The lane picks the agent at the stations that route by lane; the item stays at its station and in its state, and a lane_set event (from, to) records the change. The lane is trimmed; when any station of the item's line routes by lane, it must be one of the lanes routed. 400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts carry their own lanes), same-lane or item-changed.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/lane (the `SetItemLane` operationId).
+	SetItemLaneWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetItemLane Set an open item's lane
+	//
+	// The lane picks the agent at the stations that route by lane; the item stays at its station and in its state, and a lane_set event (from, to) records the change. The lane is trimmed; when any station of the item's line routes by lane, it must be one of the lanes routed. 400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts carry their own lanes), same-lane or item-changed.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/lane (the `SetItemLane` operationId).
+	SetItemLane(ctx context.Context, org OrgRef, item ItemRef, body SetItemLaneJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// MergeItemWithBody Merge the item's pull requests, then approve it
 	//
@@ -8399,6 +9091,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
 	ListItemRuns(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DecideToolApprovalWithBody Approve or deny the tool call an item's agent asked to make
+	//
+	// Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs connection:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without connection:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/tool-approval (the `DecideToolApproval` operationId).
+	DecideToolApprovalWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DecideToolApproval Approve or deny the tool call an item's agent asked to make
+	//
+	// Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs connection:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without connection:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/tool-approval (the `DecideToolApproval` operationId).
+	DecideToolApproval(ctx context.Context, org OrgRef, item ItemRef, body DecideToolApprovalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SetTouchReasonWithBody Say why a person had to act on an item
 	//
@@ -8680,6 +9390,13 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/runs (the `ListRuns` operationId).
 	ListRuns(ctx context.Context, org OrgRef, params *ListRunsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ExportRuns The organization's agent runs as CSV, with the filters of listRuns
+	//
+	// The CSV export of listRuns (ADR 0020, decision 3): every run listRuns would list over its pages, with the same filters and the same order (newest first), one row per run and no paging. The header row is id, factory, item_ref, item_title, station, agent, model, status, started_at, ended_at, turns, cost_usd: factory is the factory's metadata.name, agent the agent's name in its factory, times are RFC 3339 in UTC (ended_at empty while the run runs) and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early.
+	//
+	// Corresponds with GET /v1/orgs/{org}/runs/export (the `ExportRuns` operationId).
+	ExportRuns(ctx context.Context, org OrgRef, params *ExportRunsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetRun One agent run (404 for a run of another organization)
 	//
 	// Corresponds with GET /v1/orgs/{org}/runs/{run} (the `GetRun` operationId).
@@ -8728,6 +9445,27 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/spend (the `GetOrgSpend` operationId).
 	GetOrgSpend(ctx context.Context, org OrgRef, params *GetOrgSpendParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ExportSpend The organization's spend over a window as CSV, one row per factory, agent and model
+	//
+	// The CSV export of getOrgSpend (ADR 0020, decision 3): the runs that started in the window's [since, until) in the factories the caller sees, summed by factory, agent and model and ordered by factory id, agent and model. The header row is factory, agent, model, cost_usd; factory is the factory's metadata.name and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early. A window outside the enum is a 400 problem.
+	//
+	// Corresponds with GET /v1/orgs/{org}/spend/export (the `ExportSpend` operationId).
+	ExportSpend(ctx context.Context, org OrgRef, params *ExportSpendParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListStandingRules The organization's standing rules
+	//
+	// The rules Always allow created (ADR 0031 decision 7), oldest first: each lets one agent role call one tool of one organization connection without asking, in every factory of the organization. The active ones, and the revoked ones too with revoked=true.
+	//
+	// Corresponds with GET /v1/orgs/{org}/standing-rules (the `ListStandingRules` operationId).
+	ListStandingRules(ctx context.Context, org OrgRef, params *ListStandingRulesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RevokeStandingRule Revoke a standing rule
+	//
+	// The rule's agent role asks first again from its next run. A rule is never deleted: revoking sets revoked_at and revoked_by, audited as standing_rule.revoked. 404 for a rule that does not exist, 409 standing-rule-revoked for one revoked already. Needs a sign-in from the last 10 minutes.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/standing-rules/{rule} (the `RevokeStandingRule` operationId).
+	RevokeStandingRule(ctx context.Context, org OrgRef, rule string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	//
@@ -9294,9 +10032,9 @@ func (c *Client) GetConnection(ctx context.Context, org OrgRef, connection Conne
 	return c.Client.Do(req)
 }
 
-// UpdateConnectionWithBody Rename a connection, or change its description, fields or secrets
+// UpdateConnectionWithBody Rename a connection, or change its description, fields, secrets or tool modes
 //
-// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 //
 // Takes any type of body and a specified content type.
 //
@@ -9313,9 +10051,9 @@ func (c *Client) UpdateConnectionWithBody(ctx context.Context, org OrgRef, conne
 	return c.Client.Do(req)
 }
 
-// UpdateConnection Rename a connection, or change its description, fields or secrets
+// UpdateConnection Rename a connection, or change its description, fields, secrets or tool modes
 //
-// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -10230,6 +10968,133 @@ func (c *Client) ListEvals(ctx context.Context, org OrgRef, factory FactoryRef, 
 	return c.Client.Do(req)
 }
 
+// ListBakeOffs The factory's bake-offs, newest first
+//
+// At most the 20 newest bake-offs (ADR 0029): eval runs of kind bake-off, each of one agent on two to four models. 503 evals-unavailable.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `ListBakeOffs` operationId).
+func (c *Client) ListBakeOffs(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListBakeOffsRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// StartBakeOffWithBody Start a bake-off of one agent across models on the current version
+//
+// Queues a bake-off of the agent's eval cases in the current version, each run trials times (default 3) on every arm, and answers at once; goald's eval loop works the tries. Without models, the arms are the agent's model and goald's default models (GOAL_BAKEOFF_MODELS). The estimate is cases × trials × arms × the price of a try, as estimateEvalRun prices it. 404 version-not-found for a factory never published; 409 learning-budget-exhausted, with the estimate, when it exceeds what is left of the learning budget; 422 invalid-bake-off for an agent the version does not have or that works at no station, arms that are not 2 to 4 distinct model ids with the agent's model among them, trials outside 1 to 10 and an agent with no eval cases; 503 evals-unavailable.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `StartBakeOff` operationId).
+func (c *Client) StartBakeOffWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStartBakeOffRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// StartBakeOff Start a bake-off of one agent across models on the current version
+//
+// Queues a bake-off of the agent's eval cases in the current version, each run trials times (default 3) on every arm, and answers at once; goald's eval loop works the tries. Without models, the arms are the agent's model and goald's default models (GOAL_BAKEOFF_MODELS). The estimate is cases × trials × arms × the price of a try, as estimateEvalRun prices it. 404 version-not-found for a factory never published; 409 learning-budget-exhausted, with the estimate, when it exceeds what is left of the learning budget; 422 invalid-bake-off for an agent the version does not have or that works at no station, arms that are not 2 to 4 distinct model ids with the agent's model among them, trials outside 1 to 10 and an agent with no eval cases; 503 evals-unavailable.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `StartBakeOff` operationId).
+func (c *Client) StartBakeOff(ctx context.Context, org OrgRef, factory FactoryRef, body StartBakeOffJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStartBakeOffRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetBakeOff One bake-off with its arms, its tries passed per case and its recommendation
+//
+// 404 eval-run-not-found for a bake-off that is not the factory's and for an eval run that is not a bake-off; 503 evals-unavailable.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off} (the `GetBakeOff` operationId).
+func (c *Client) GetBakeOff(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetBakeOffRequest(c.Server, org, factory, bakeOff)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ApplyBakeOffWithBody Write an arm's model as the agent's model into the factory's draft
+//
+// Sets agents[].model of the bake-off's agent in the draft to the arm's model, opening a draft from the current version when none is open. It never publishes: the draft publishes as any other, through the eval gate (ADR 0029 decision 7). 404 eval-run-not-found; 412 draft-conflict when the agent changed since the bake-off's version; 422 invalid-bake-off for an arm the bake-off does not have; 503 evals-unavailable.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply (the `ApplyBakeOff` operationId).
+func (c *Client) ApplyBakeOffWithBody(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewApplyBakeOffRequestWithBody(c.Server, org, factory, bakeOff, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ApplyBakeOff Write an arm's model as the agent's model into the factory's draft
+//
+// Sets agents[].model of the bake-off's agent in the draft to the arm's model, opening a draft from the current version when none is open. It never publishes: the draft publishes as any other, through the eval gate (ADR 0029 decision 7). 404 eval-run-not-found; 412 draft-conflict when the agent changed since the bake-off's version; 422 invalid-bake-off for an arm the bake-off does not have; 503 evals-unavailable.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply (the `ApplyBakeOff` operationId).
+func (c *Client) ApplyBakeOff(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, body ApplyBakeOffJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewApplyBakeOffRequest(c.Server, org, factory, bakeOff, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RerunBakeOff Run a bake-off again on the current version
+//
+// Queues a new bake-off of the same agent with the same arms and trials, on the factory's current version, which may be newer than the original's (ADR 0029 decision 7). 404 eval-run-not-found; then the refusals of startBakeOff.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/rerun (the `RerunBakeOff` operationId).
+func (c *Client) RerunBakeOff(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRerunBakeOffRequest(c.Server, org, factory, bakeOff)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // AddEvalCaseWithBody Add an eval case from a past run and publish it
 //
 // Writes evals/cases/{name}.yaml from the past agent run: its agent, and its item's title, body, type and lane as the input, checked by the agent's contract or by judge, with tries tries (default 1). The file goes into a new draft of the current version, which publishes as the next version through the same checks and eval gate as publishDraft (ADR 0025 decision 5). 400 invalid-request for a name that is not a slug; 404 run-not-found for a run that is not the factory's; 409 eval-case-exists when the current version has the case, draft-open when the factory already has a draft (the draft this call opened is discarded), and the publish's own conflicts. When the eval gate refuses (evals-pending, evals-failing) the draft stays open, so it publishes once its run passes. 503 evals-unavailable.
@@ -10402,6 +11267,44 @@ func (c *Client) GetIntake(ctx context.Context, org OrgRef, factory FactoryRef, 
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger} (the `GetIntakeTrigger` operationId).
 func (c *Client) GetIntakeTrigger(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetIntakeTriggerRequest(c.Server, org, factory, trigger)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TryIntakeTriggerWithBody Try the trigger with one of its past events, creating nothing
+//
+// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try (the `TryIntakeTrigger` operationId).
+func (c *Client) TryIntakeTriggerWithBody(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTryIntakeTriggerRequestWithBody(c.Server, org, factory, trigger, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TryIntakeTrigger Try the trigger with one of its past events, creating nothing
+//
+// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try (the `TryIntakeTrigger` operationId).
+func (c *Client) TryIntakeTrigger(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, body TryIntakeTriggerJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTryIntakeTriggerRequest(c.Server, org, factory, trigger, body)
 	if err != nil {
 		return nil, err
 	}
@@ -10962,6 +11865,116 @@ func (c *Client) RestoreVersion(ctx context.Context, org OrgRef, factory Factory
 	return c.Client.Do(req)
 }
 
+// ListSavedViews The factory's shared views and the caller's own
+//
+// The shared views first, then the caller's personal views, each by name (case ignored). Never another person's personal view; an API key or a personal token sees only the shared views.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/views (the `ListSavedViews` operationId).
+func (c *Client) ListSavedViews(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListSavedViewsRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateSavedViewWithBody Save a view
+//
+// A personal view of the caller, or a shared view of the factory, which also needs factory:manage (403 forbidden without it). 403 person-required for an API key, a personal token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60 characters, over 20 filters, over 20 values in one or a value over 200 characters; 409 view-name-taken for a name the caller's personal views (personal) or the factory's shared views (shared) already use, case ignored.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/views (the `CreateSavedView` operationId).
+func (c *Client) CreateSavedViewWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateSavedViewRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateSavedView Save a view
+//
+// A personal view of the caller, or a shared view of the factory, which also needs factory:manage (403 forbidden without it). 403 person-required for an API key, a personal token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60 characters, over 20 filters, over 20 values in one or a value over 200 characters; 409 view-name-taken for a name the caller's personal views (personal) or the factory's shared views (shared) already use, case ignored.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/views (the `CreateSavedView` operationId).
+func (c *Client) CreateSavedView(ctx context.Context, org OrgRef, factory FactoryRef, body CreateSavedViewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateSavedViewRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteSavedView Delete a view
+//
+// A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included).
+//
+// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/views/{view} (the `DeleteSavedView` operationId).
+func (c *Client) DeleteSavedView(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteSavedViewRequest(c.Server, org, factory, view)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateSavedViewWithBody Rename a view and replace its filters
+//
+// Whether a view is shared is fixed when it is created. A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included); 400 invalid-view and 409 view-name-taken as createSavedView.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /v1/orgs/{org}/factories/{factory}/views/{view} (the `UpdateSavedView` operationId).
+func (c *Client) UpdateSavedViewWithBody(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateSavedViewRequestWithBody(c.Server, org, factory, view, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateSavedView Rename a view and replace its filters
+//
+// Whether a view is shared is fixed when it is created. A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included); 400 invalid-view and 409 view-name-taken as createSavedView.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /v1/orgs/{org}/factories/{factory}/views/{view} (the `UpdateSavedView` operationId).
+func (c *Client) UpdateSavedView(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, body UpdateSavedViewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateSavedViewRequest(c.Server, org, factory, view, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // ListWebhookEndpoints The factory's webhook endpoints
 //
 // By name, each with its address, kind, the label of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret.
@@ -11174,6 +12187,8 @@ func (c *Client) AnswerItem(ctx context.Context, org OrgRef, item ItemRef, body 
 
 // ApproveItem Approve an item waiting for a human; it moves to the next station
 //
+// 409 tool-approval-open while the item has an open tool approval (Item.tool_approval): the item waits for a decision on the call, decided with decideToolApproval, not on the item (ADR 0031 decision 9).
+//
 // Corresponds with POST /v1/orgs/{org}/items/{item}/approve (the `ApproveItem` operationId).
 func (c *Client) ApproveItem(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewApproveItemRequest(c.Server, org, item)
@@ -11230,6 +12245,44 @@ func (c *Client) CancelItem(ctx context.Context, org OrgRef, item ItemRef, body 
 // Corresponds with GET /v1/orgs/{org}/items/{item}/events (the `ListItemEvents` operationId).
 func (c *Client) ListItemEvents(ctx context.Context, org OrgRef, item ItemRef, params *ListItemEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListItemEventsRequest(c.Server, org, item, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetItemLaneWithBody Set an open item's lane
+//
+// The lane picks the agent at the stations that route by lane; the item stays at its station and in its state, and a lane_set event (from, to) records the change. The lane is trimmed; when any station of the item's line routes by lane, it must be one of the lanes routed. 400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts carry their own lanes), same-lane or item-changed.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/lane (the `SetItemLane` operationId).
+func (c *Client) SetItemLaneWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetItemLaneRequestWithBody(c.Server, org, item, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetItemLane Set an open item's lane
+//
+// The lane picks the agent at the stations that route by lane; the item stays at its station and in its state, and a lane_set event (from, to) records the change. The lane is trimmed; when any station of the item's line routes by lane, it must be one of the lanes routed. 400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts carry their own lanes), same-lane or item-changed.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/lane (the `SetItemLane` operationId).
+func (c *Client) SetItemLane(ctx context.Context, org OrgRef, item ItemRef, body SetItemLaneJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetItemLaneRequest(c.Server, org, item, body)
 	if err != nil {
 		return nil, err
 	}
@@ -11562,6 +12615,44 @@ func (c *Client) RetryItem(ctx context.Context, org OrgRef, item ItemRef, reqEdi
 // Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
 func (c *Client) ListItemRuns(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListItemRunsRequest(c.Server, org, item)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DecideToolApprovalWithBody Approve or deny the tool call an item's agent asked to make
+//
+// Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs connection:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without connection:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/tool-approval (the `DecideToolApproval` operationId).
+func (c *Client) DecideToolApprovalWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDecideToolApprovalRequestWithBody(c.Server, org, item, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DecideToolApproval Approve or deny the tool call an item's agent asked to make
+//
+// Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs connection:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without connection:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/tool-approval (the `DecideToolApproval` operationId).
+func (c *Client) DecideToolApproval(ctx context.Context, org OrgRef, item ItemRef, body DecideToolApprovalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDecideToolApprovalRequest(c.Server, org, item, body)
 	if err != nil {
 		return nil, err
 	}
@@ -12212,6 +13303,23 @@ func (c *Client) ListRuns(ctx context.Context, org OrgRef, params *ListRunsParam
 	return c.Client.Do(req)
 }
 
+// ExportRuns The organization's agent runs as CSV, with the filters of listRuns
+//
+// The CSV export of listRuns (ADR 0020, decision 3): every run listRuns would list over its pages, with the same filters and the same order (newest first), one row per run and no paging. The header row is id, factory, item_ref, item_title, station, agent, model, status, started_at, ended_at, turns, cost_usd: factory is the factory's metadata.name, agent the agent's name in its factory, times are RFC 3339 in UTC (ended_at empty while the run runs) and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early.
+//
+// Corresponds with GET /v1/orgs/{org}/runs/export (the `ExportRuns` operationId).
+func (c *Client) ExportRuns(ctx context.Context, org OrgRef, params *ExportRunsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewExportRunsRequest(c.Server, org, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetRun One agent run (404 for a run of another organization)
 //
 // Corresponds with GET /v1/orgs/{org}/runs/{run} (the `GetRun` operationId).
@@ -12321,6 +13429,57 @@ func (c *Client) UpdateOrgSettings(ctx context.Context, org OrgRef, body UpdateO
 // Corresponds with GET /v1/orgs/{org}/spend (the `GetOrgSpend` operationId).
 func (c *Client) GetOrgSpend(ctx context.Context, org OrgRef, params *GetOrgSpendParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetOrgSpendRequest(c.Server, org, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ExportSpend The organization's spend over a window as CSV, one row per factory, agent and model
+//
+// The CSV export of getOrgSpend (ADR 0020, decision 3): the runs that started in the window's [since, until) in the factories the caller sees, summed by factory, agent and model and ordered by factory id, agent and model. The header row is factory, agent, model, cost_usd; factory is the factory's metadata.name and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early. A window outside the enum is a 400 problem.
+//
+// Corresponds with GET /v1/orgs/{org}/spend/export (the `ExportSpend` operationId).
+func (c *Client) ExportSpend(ctx context.Context, org OrgRef, params *ExportSpendParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewExportSpendRequest(c.Server, org, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListStandingRules The organization's standing rules
+//
+// The rules Always allow created (ADR 0031 decision 7), oldest first: each lets one agent role call one tool of one organization connection without asking, in every factory of the organization. The active ones, and the revoked ones too with revoked=true.
+//
+// Corresponds with GET /v1/orgs/{org}/standing-rules (the `ListStandingRules` operationId).
+func (c *Client) ListStandingRules(ctx context.Context, org OrgRef, params *ListStandingRulesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListStandingRulesRequest(c.Server, org, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RevokeStandingRule Revoke a standing rule
+//
+// The rule's agent role asks first again from its next run. A rule is never deleted: revoking sets revoked_at and revoked_by, audited as standing_rule.revoked. 404 for a rule that does not exist, 409 standing-rule-revoked for one revoked already. Needs a sign-in from the last 10 minutes.
+//
+// Corresponds with DELETE /v1/orgs/{org}/standing-rules/{rule} (the `RevokeStandingRule` operationId).
+func (c *Client) RevokeStandingRule(ctx context.Context, org OrgRef, rule string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRevokeStandingRuleRequest(c.Server, org, rule)
 	if err != nil {
 		return nil, err
 	}
@@ -15627,6 +16786,258 @@ func NewListEvalsRequest(server string, org OrgRef, factory FactoryRef) (*http.R
 	return req, nil
 }
 
+// NewListBakeOffsRequest constructs an http.Request for the ListBakeOffs method
+func NewListBakeOffsRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/evals/bake-offs", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewStartBakeOffRequest calls the generic StartBakeOff builder with application/json body
+func NewStartBakeOffRequest(server string, org OrgRef, factory FactoryRef, body StartBakeOffJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewStartBakeOffRequestWithBody(server, org, factory, "application/json", bodyReader)
+}
+
+// NewStartBakeOffRequestWithBody constructs an http.Request for the StartBakeOff method, with any body, and a specified content type
+func NewStartBakeOffRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/evals/bake-offs", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetBakeOffRequest constructs an http.Request for the GetBakeOff method
+func NewGetBakeOffRequest(server string, org OrgRef, factory FactoryRef, bakeOff BakeOffRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "bake_off", bakeOff, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/evals/bake-offs/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewApplyBakeOffRequest calls the generic ApplyBakeOff builder with application/json body
+func NewApplyBakeOffRequest(server string, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, body ApplyBakeOffJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewApplyBakeOffRequestWithBody(server, org, factory, bakeOff, "application/json", bodyReader)
+}
+
+// NewApplyBakeOffRequestWithBody constructs an http.Request for the ApplyBakeOff method, with any body, and a specified content type
+func NewApplyBakeOffRequestWithBody(server string, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "bake_off", bakeOff, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/evals/bake-offs/%s/apply", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewRerunBakeOffRequest constructs an http.Request for the RerunBakeOff method
+func NewRerunBakeOffRequest(server string, org OrgRef, factory FactoryRef, bakeOff BakeOffRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "bake_off", bakeOff, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/evals/bake-offs/%s/rerun", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewAddEvalCaseRequest calls the generic AddEvalCase builder with application/json body
 func NewAddEvalCaseRequest(server string, org OrgRef, factory FactoryRef, body AddEvalCaseJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -15997,6 +17408,67 @@ func NewGetIntakeTriggerRequest(server string, org OrgRef, factory FactoryRef, t
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewTryIntakeTriggerRequest calls the generic TryIntakeTrigger builder with application/json body
+func NewTryIntakeTriggerRequest(server string, org OrgRef, factory FactoryRef, trigger string, body TryIntakeTriggerJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTryIntakeTriggerRequestWithBody(server, org, factory, trigger, "application/json", bodyReader)
+}
+
+// NewTryIntakeTriggerRequestWithBody constructs an http.Request for the TryIntakeTrigger method, with any body, and a specified content type
+func NewTryIntakeTriggerRequestWithBody(server string, org OrgRef, factory FactoryRef, trigger string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "trigger", trigger, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/intake/triggers/%s/try", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -17662,6 +19134,210 @@ func NewRestoreVersionRequestWithBody(server string, org OrgRef, factory Factory
 	return req, nil
 }
 
+// NewListSavedViewsRequest constructs an http.Request for the ListSavedViews method
+func NewListSavedViewsRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/views", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateSavedViewRequest calls the generic CreateSavedView builder with application/json body
+func NewCreateSavedViewRequest(server string, org OrgRef, factory FactoryRef, body CreateSavedViewJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateSavedViewRequestWithBody(server, org, factory, "application/json", bodyReader)
+}
+
+// NewCreateSavedViewRequestWithBody constructs an http.Request for the CreateSavedView method, with any body, and a specified content type
+func NewCreateSavedViewRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/views", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteSavedViewRequest constructs an http.Request for the DeleteSavedView method
+func NewDeleteSavedViewRequest(server string, org OrgRef, factory FactoryRef, view SavedViewRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "view", view, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/views/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateSavedViewRequest calls the generic UpdateSavedView builder with application/json body
+func NewUpdateSavedViewRequest(server string, org OrgRef, factory FactoryRef, view SavedViewRef, body UpdateSavedViewJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateSavedViewRequestWithBody(server, org, factory, view, "application/json", bodyReader)
+}
+
+// NewUpdateSavedViewRequestWithBody constructs an http.Request for the UpdateSavedView method, with any body, and a specified content type
+func NewUpdateSavedViewRequestWithBody(server string, org OrgRef, factory FactoryRef, view SavedViewRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "view", view, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/views/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewListWebhookEndpointsRequest constructs an http.Request for the ListWebhookEndpoints method
 func NewListWebhookEndpointsRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
 	var err error
@@ -18372,6 +20048,60 @@ func NewListItemEventsRequest(server string, org OrgRef, item ItemRef, params *L
 	return req, nil
 }
 
+// NewSetItemLaneRequest calls the generic SetItemLane builder with application/json body
+func NewSetItemLaneRequest(server string, org OrgRef, item ItemRef, body SetItemLaneJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSetItemLaneRequestWithBody(server, org, item, "application/json", bodyReader)
+}
+
+// NewSetItemLaneRequestWithBody constructs an http.Request for the SetItemLane method, with any body, and a specified content type
+func NewSetItemLaneRequestWithBody(server string, org OrgRef, item ItemRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/lane", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewMergeItemRequest calls the generic MergeItem builder with application/json body
 func NewMergeItemRequest(server string, org OrgRef, item ItemRef, body MergeItemJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -18917,6 +20647,60 @@ func NewListItemRunsRequest(server string, org OrgRef, item ItemRef) (*http.Requ
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewDecideToolApprovalRequest calls the generic DecideToolApproval builder with application/json body
+func NewDecideToolApprovalRequest(server string, org OrgRef, item ItemRef, body DecideToolApprovalJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDecideToolApprovalRequestWithBody(server, org, item, "application/json", bodyReader)
+}
+
+// NewDecideToolApprovalRequestWithBody constructs an http.Request for the DecideToolApproval method, with any body, and a specified content type
+func NewDecideToolApprovalRequestWithBody(server string, org OrgRef, item ItemRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/tool-approval", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -20500,6 +22284,115 @@ func NewListRunsRequest(server string, org OrgRef, params *ListRunsParams) (*htt
 	return req, nil
 }
 
+// NewExportRunsRequest constructs an http.Request for the ExportRuns method
+func NewExportRunsRequest(server string, org OrgRef, params *ExportRunsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/runs/export", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Factory != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "factory", *params.Factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Status != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "status", *params.Status, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Since != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "since", *params.Since, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Until != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "until", *params.Until, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Q != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "q", *params.Q, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetRunRequest constructs an http.Request for the GetRun method
 func NewGetRunRequest(server string, org OrgRef, run string) (*http.Request, error) {
 	var err error
@@ -20786,6 +22679,169 @@ func NewGetOrgSpendRequest(server string, org OrgRef, params *GetOrgSpendParams)
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewExportSpendRequest constructs an http.Request for the ExportSpend method
+func NewExportSpendRequest(server string, org OrgRef, params *ExportSpendParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/spend/export", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Window != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "window", *params.Window, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListStandingRulesRequest constructs an http.Request for the ListStandingRules method
+func NewListStandingRulesRequest(server string, org OrgRef, params *ListStandingRulesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/standing-rules", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Revoked != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "revoked", *params.Revoked, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRevokeStandingRuleRequest constructs an http.Request for the RevokeStandingRule method
+func NewRevokeStandingRuleRequest(server string, org OrgRef, rule string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "rule", rule, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/standing-rules/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -21470,18 +23526,18 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/connections/{connection} (the `GetConnection` operationId).
 	GetConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*GetConnectionResponse, error)
 
-	// UpdateConnectionWithBodyWithResponse Rename a connection, or change its description, fields or secrets
+	// UpdateConnectionWithBodyWithResponse Rename a connection, or change its description, fields, secrets or tool modes
 	//
-	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
 	UpdateConnectionWithBodyWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateConnectionResponse, error)
 
-	// UpdateConnectionWithResponse Rename a connection, or change its description, fields or secrets
+	// UpdateConnectionWithResponse Rename a connection, or change its description, fields, secrets or tool modes
 	//
-	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -21930,6 +23986,69 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals (the `ListEvals` operationId).
 	ListEvalsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListEvalsResponse, error)
 
+	// ListBakeOffsWithResponse The factory's bake-offs, newest first
+	//
+	// At most the 20 newest bake-offs (ADR 0029): eval runs of kind bake-off, each of one agent on two to four models. 503 evals-unavailable.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `ListBakeOffs` operationId).
+	ListBakeOffsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListBakeOffsResponse, error)
+
+	// StartBakeOffWithBodyWithResponse Start a bake-off of one agent across models on the current version
+	//
+	// Queues a bake-off of the agent's eval cases in the current version, each run trials times (default 3) on every arm, and answers at once; goald's eval loop works the tries. Without models, the arms are the agent's model and goald's default models (GOAL_BAKEOFF_MODELS). The estimate is cases × trials × arms × the price of a try, as estimateEvalRun prices it. 404 version-not-found for a factory never published; 409 learning-budget-exhausted, with the estimate, when it exceeds what is left of the learning budget; 422 invalid-bake-off for an agent the version does not have or that works at no station, arms that are not 2 to 4 distinct model ids with the agent's model among them, trials outside 1 to 10 and an agent with no eval cases; 503 evals-unavailable.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `StartBakeOff` operationId).
+	StartBakeOffWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StartBakeOffResponse, error)
+
+	// StartBakeOffWithResponse Start a bake-off of one agent across models on the current version
+	//
+	// Queues a bake-off of the agent's eval cases in the current version, each run trials times (default 3) on every arm, and answers at once; goald's eval loop works the tries. Without models, the arms are the agent's model and goald's default models (GOAL_BAKEOFF_MODELS). The estimate is cases × trials × arms × the price of a try, as estimateEvalRun prices it. 404 version-not-found for a factory never published; 409 learning-budget-exhausted, with the estimate, when it exceeds what is left of the learning budget; 422 invalid-bake-off for an agent the version does not have or that works at no station, arms that are not 2 to 4 distinct model ids with the agent's model among them, trials outside 1 to 10 and an agent with no eval cases; 503 evals-unavailable.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `StartBakeOff` operationId).
+	StartBakeOffWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body StartBakeOffJSONRequestBody, reqEditors ...RequestEditorFn) (*StartBakeOffResponse, error)
+
+	// GetBakeOffWithResponse One bake-off with its arms, its tries passed per case and its recommendation
+	//
+	// 404 eval-run-not-found for a bake-off that is not the factory's and for an eval run that is not a bake-off; 503 evals-unavailable.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off} (the `GetBakeOff` operationId).
+	GetBakeOffWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, reqEditors ...RequestEditorFn) (*GetBakeOffResponse, error)
+
+	// ApplyBakeOffWithBodyWithResponse Write an arm's model as the agent's model into the factory's draft
+	//
+	// Sets agents[].model of the bake-off's agent in the draft to the arm's model, opening a draft from the current version when none is open. It never publishes: the draft publishes as any other, through the eval gate (ADR 0029 decision 7). 404 eval-run-not-found; 412 draft-conflict when the agent changed since the bake-off's version; 422 invalid-bake-off for an arm the bake-off does not have; 503 evals-unavailable.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply (the `ApplyBakeOff` operationId).
+	ApplyBakeOffWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ApplyBakeOffResponse, error)
+
+	// ApplyBakeOffWithResponse Write an arm's model as the agent's model into the factory's draft
+	//
+	// Sets agents[].model of the bake-off's agent in the draft to the arm's model, opening a draft from the current version when none is open. It never publishes: the draft publishes as any other, through the eval gate (ADR 0029 decision 7). 404 eval-run-not-found; 412 draft-conflict when the agent changed since the bake-off's version; 422 invalid-bake-off for an arm the bake-off does not have; 503 evals-unavailable.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply (the `ApplyBakeOff` operationId).
+	ApplyBakeOffWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, body ApplyBakeOffJSONRequestBody, reqEditors ...RequestEditorFn) (*ApplyBakeOffResponse, error)
+
+	// RerunBakeOffWithResponse Run a bake-off again on the current version
+	//
+	// Queues a new bake-off of the same agent with the same arms and trials, on the factory's current version, which may be newer than the original's (ADR 0029 decision 7). 404 eval-run-not-found; then the refusals of startBakeOff.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/rerun (the `RerunBakeOff` operationId).
+	RerunBakeOffWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, reqEditors ...RequestEditorFn) (*RerunBakeOffResponse, error)
+
 	// AddEvalCaseWithBodyWithResponse Add an eval case from a past run and publish it
 	//
 	// Writes evals/cases/{name}.yaml from the past agent run: its agent, and its item's title, body, type and lane as the input, checked by the agent's contract or by judge, with tries tries (default 1). The file goes into a new draft of the current version, which publishes as the next version through the same checks and eval gate as publishDraft (ADR 0025 decision 5). 400 invalid-request for a name that is not a slug; 404 run-not-found for a run that is not the factory's; 409 eval-case-exists when the current version has the case, draft-open when the factory already has a draft (the draft this call opened is discarded), and the publish's own conflicts. When the eval gate refuses (evals-pending, evals-failing) the draft stays open, so it publishes once its run passes. 503 evals-unavailable.
@@ -22019,6 +24138,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger} (the `GetIntakeTrigger` operationId).
 	GetIntakeTriggerWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, reqEditors ...RequestEditorFn) (*GetIntakeTriggerResponse, error)
+
+	// TryIntakeTriggerWithBodyWithResponse Try the trigger with one of its past events, creating nothing
+	//
+	// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try (the `TryIntakeTrigger` operationId).
+	TryIntakeTriggerWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TryIntakeTriggerResponse, error)
+
+	// TryIntakeTriggerWithResponse Try the trigger with one of its past events, creating nothing
+	//
+	// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try (the `TryIntakeTrigger` operationId).
+	TryIntakeTriggerWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, body TryIntakeTriggerJSONRequestBody, reqEditors ...RequestEditorFn) (*TryIntakeTriggerResponse, error)
 
 	// ListItemsWithResponse One page of a factory's items, newest first
 	//
@@ -22294,6 +24431,60 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/versions/{version}/restore (the `RestoreVersion` operationId).
 	RestoreVersionWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, body RestoreVersionJSONRequestBody, reqEditors ...RequestEditorFn) (*RestoreVersionResponse, error)
 
+	// ListSavedViewsWithResponse The factory's shared views and the caller's own
+	//
+	// The shared views first, then the caller's personal views, each by name (case ignored). Never another person's personal view; an API key or a personal token sees only the shared views.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/views (the `ListSavedViews` operationId).
+	ListSavedViewsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListSavedViewsResponse, error)
+
+	// CreateSavedViewWithBodyWithResponse Save a view
+	//
+	// A personal view of the caller, or a shared view of the factory, which also needs factory:manage (403 forbidden without it). 403 person-required for an API key, a personal token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60 characters, over 20 filters, over 20 values in one or a value over 200 characters; 409 view-name-taken for a name the caller's personal views (personal) or the factory's shared views (shared) already use, case ignored.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/views (the `CreateSavedView` operationId).
+	CreateSavedViewWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSavedViewResponse, error)
+
+	// CreateSavedViewWithResponse Save a view
+	//
+	// A personal view of the caller, or a shared view of the factory, which also needs factory:manage (403 forbidden without it). 403 person-required for an API key, a personal token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60 characters, over 20 filters, over 20 values in one or a value over 200 characters; 409 view-name-taken for a name the caller's personal views (personal) or the factory's shared views (shared) already use, case ignored.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/views (the `CreateSavedView` operationId).
+	CreateSavedViewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body CreateSavedViewJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSavedViewResponse, error)
+
+	// DeleteSavedViewWithResponse Delete a view
+	//
+	// A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included).
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/views/{view} (the `DeleteSavedView` operationId).
+	DeleteSavedViewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, reqEditors ...RequestEditorFn) (*DeleteSavedViewResponse, error)
+
+	// UpdateSavedViewWithBodyWithResponse Rename a view and replace its filters
+	//
+	// Whether a view is shared is fixed when it is created. A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included); 400 invalid-view and 409 view-name-taken as createSavedView.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/factories/{factory}/views/{view} (the `UpdateSavedView` operationId).
+	UpdateSavedViewWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateSavedViewResponse, error)
+
+	// UpdateSavedViewWithResponse Rename a view and replace its filters
+	//
+	// Whether a view is shared is fixed when it is created. A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included); 400 invalid-view and 409 view-name-taken as createSavedView.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/factories/{factory}/views/{view} (the `UpdateSavedView` operationId).
+	UpdateSavedViewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, body UpdateSavedViewJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateSavedViewResponse, error)
+
 	// ListWebhookEndpointsWithResponse The factory's webhook endpoints
 	//
 	// By name, each with its address, kind, the label of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret.
@@ -22402,6 +24593,8 @@ type ClientWithResponsesInterface interface {
 
 	// ApproveItemWithResponse Approve an item waiting for a human; it moves to the next station
 	//
+	// 409 tool-approval-open while the item has an open tool approval (Item.tool_approval): the item waits for a decision on the call, decided with decideToolApproval, not on the item (ADR 0031 decision 9).
+	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/approve (the `ApproveItem` operationId).
@@ -22431,6 +24624,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/events (the `ListItemEvents` operationId).
 	ListItemEventsWithResponse(ctx context.Context, org OrgRef, item ItemRef, params *ListItemEventsParams, reqEditors ...RequestEditorFn) (*ListItemEventsResponse, error)
+
+	// SetItemLaneWithBodyWithResponse Set an open item's lane
+	//
+	// The lane picks the agent at the stations that route by lane; the item stays at its station and in its state, and a lane_set event (from, to) records the change. The lane is trimmed; when any station of the item's line routes by lane, it must be one of the lanes routed. 400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts carry their own lanes), same-lane or item-changed.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/lane (the `SetItemLane` operationId).
+	SetItemLaneWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetItemLaneResponse, error)
+
+	// SetItemLaneWithResponse Set an open item's lane
+	//
+	// The lane picks the agent at the stations that route by lane; the item stays at its station and in its state, and a lane_set event (from, to) records the change. The lane is trimmed; when any station of the item's line routes by lane, it must be one of the lanes routed. 400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts carry their own lanes), same-lane or item-changed.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/lane (the `SetItemLane` operationId).
+	SetItemLaneWithResponse(ctx context.Context, org OrgRef, item ItemRef, body SetItemLaneJSONRequestBody, reqEditors ...RequestEditorFn) (*SetItemLaneResponse, error)
 
 	// MergeItemWithBodyWithResponse Merge the item's pull requests, then approve it
 	//
@@ -22591,6 +24802,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
 	ListItemRunsWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*ListItemRunsResponse, error)
+
+	// DecideToolApprovalWithBodyWithResponse Approve or deny the tool call an item's agent asked to make
+	//
+	// Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs connection:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without connection:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/tool-approval (the `DecideToolApproval` operationId).
+	DecideToolApprovalWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DecideToolApprovalResponse, error)
+
+	// DecideToolApprovalWithResponse Approve or deny the tool call an item's agent asked to make
+	//
+	// Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs connection:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without connection:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/tool-approval (the `DecideToolApproval` operationId).
+	DecideToolApprovalWithResponse(ctx context.Context, org OrgRef, item ItemRef, body DecideToolApprovalJSONRequestBody, reqEditors ...RequestEditorFn) (*DecideToolApprovalResponse, error)
 
 	// SetTouchReasonWithBodyWithResponse Say why a person had to act on an item
 	//
@@ -22914,6 +25143,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/runs (the `ListRuns` operationId).
 	ListRunsWithResponse(ctx context.Context, org OrgRef, params *ListRunsParams, reqEditors ...RequestEditorFn) (*ListRunsResponse, error)
 
+	// ExportRunsWithResponse The organization's agent runs as CSV, with the filters of listRuns
+	//
+	// The CSV export of listRuns (ADR 0020, decision 3): every run listRuns would list over its pages, with the same filters and the same order (newest first), one row per run and no paging. The header row is id, factory, item_ref, item_title, station, agent, model, status, started_at, ended_at, turns, cost_usd: factory is the factory's metadata.name, agent the agent's name in its factory, times are RFC 3339 in UTC (ended_at empty while the run runs) and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/runs/export (the `ExportRuns` operationId).
+	ExportRunsWithResponse(ctx context.Context, org OrgRef, params *ExportRunsParams, reqEditors ...RequestEditorFn) (*ExportRunsResponse, error)
+
 	// GetRunWithResponse One agent run (404 for a run of another organization)
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -22972,6 +25210,33 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/spend (the `GetOrgSpend` operationId).
 	GetOrgSpendWithResponse(ctx context.Context, org OrgRef, params *GetOrgSpendParams, reqEditors ...RequestEditorFn) (*GetOrgSpendResponse, error)
+
+	// ExportSpendWithResponse The organization's spend over a window as CSV, one row per factory, agent and model
+	//
+	// The CSV export of getOrgSpend (ADR 0020, decision 3): the runs that started in the window's [since, until) in the factories the caller sees, summed by factory, agent and model and ordered by factory id, agent and model. The header row is factory, agent, model, cost_usd; factory is the factory's metadata.name and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early. A window outside the enum is a 400 problem.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/spend/export (the `ExportSpend` operationId).
+	ExportSpendWithResponse(ctx context.Context, org OrgRef, params *ExportSpendParams, reqEditors ...RequestEditorFn) (*ExportSpendResponse, error)
+
+	// ListStandingRulesWithResponse The organization's standing rules
+	//
+	// The rules Always allow created (ADR 0031 decision 7), oldest first: each lets one agent role call one tool of one organization connection without asking, in every factory of the organization. The active ones, and the revoked ones too with revoked=true.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/standing-rules (the `ListStandingRules` operationId).
+	ListStandingRulesWithResponse(ctx context.Context, org OrgRef, params *ListStandingRulesParams, reqEditors ...RequestEditorFn) (*ListStandingRulesResponse, error)
+
+	// RevokeStandingRuleWithResponse Revoke a standing rule
+	//
+	// The rule's agent role asks first again from its next run. A rule is never deleted: revoking sets revoked_at and revoked_by, audited as standing_rule.revoked. 404 for a rule that does not exist, 409 standing-rule-revoked for one revoked already. Needs a sign-in from the last 10 minutes.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/standing-rules/{rule} (the `RevokeStandingRule` operationId).
+	RevokeStandingRuleWithResponse(ctx context.Context, org OrgRef, rule string, reqEditors ...RequestEditorFn) (*RevokeStandingRuleResponse, error)
 
 	// StreamEventsWithResponse The organization's events as they happen (Server-Sent Events)
 	//
@@ -25976,6 +28241,246 @@ func (r ListEvalsResponse) ContentType() string {
 	return ""
 }
 
+type ListBakeOffsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *BakeOffList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListBakeOffsResponse) GetJSON200() *BakeOffList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListBakeOffsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListBakeOffsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListBakeOffsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListBakeOffsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListBakeOffsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type StartBakeOffResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *BakeOffStarted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r StartBakeOffResponse) GetJSON202() *BakeOffStarted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r StartBakeOffResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r StartBakeOffResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r StartBakeOffResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r StartBakeOffResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r StartBakeOffResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetBakeOffResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *BakeOff
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetBakeOffResponse) GetJSON200() *BakeOff {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetBakeOffResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetBakeOffResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetBakeOffResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetBakeOffResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetBakeOffResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ApplyBakeOffResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Draft
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ApplyBakeOffResponse) GetJSON200() *Draft {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ApplyBakeOffResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ApplyBakeOffResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ApplyBakeOffResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ApplyBakeOffResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ApplyBakeOffResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RerunBakeOffResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *BakeOffStarted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r RerunBakeOffResponse) GetJSON202() *BakeOffStarted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RerunBakeOffResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RerunBakeOffResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RerunBakeOffResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RerunBakeOffResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RerunBakeOffResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type AddEvalCaseResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -26306,6 +28811,54 @@ func (r GetIntakeTriggerResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetIntakeTriggerResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type TryIntakeTriggerResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *TriggerTry
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TryIntakeTriggerResponse) GetJSON200() *TriggerTry {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TryIntakeTriggerResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TryIntakeTriggerResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TryIntakeTriggerResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TryIntakeTriggerResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TryIntakeTriggerResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -27602,6 +30155,191 @@ func (r RestoreVersionResponse) ContentType() string {
 	return ""
 }
 
+type ListSavedViewsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SavedViewList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListSavedViewsResponse) GetJSON200() *SavedViewList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListSavedViewsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListSavedViewsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListSavedViewsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListSavedViewsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListSavedViewsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateSavedViewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *SavedView
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateSavedViewResponse) GetJSON201() *SavedView {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateSavedViewResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateSavedViewResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateSavedViewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateSavedViewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateSavedViewResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DeleteSavedViewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r DeleteSavedViewResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteSavedViewResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteSavedViewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteSavedViewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteSavedViewResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateSavedViewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SavedView
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UpdateSavedViewResponse) GetJSON200() *SavedView {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r UpdateSavedViewResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateSavedViewResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateSavedViewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateSavedViewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateSavedViewResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListWebhookEndpointsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -28240,6 +30978,61 @@ func (r ListItemEventsResponse) ContentType() string {
 	return ""
 }
 
+type SetItemLaneResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Item
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Conflict
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SetItemLaneResponse) GetJSON200() *Item {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r SetItemLaneResponse) GetApplicationproblemJSON409() *Conflict {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SetItemLaneResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SetItemLaneResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SetItemLaneResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SetItemLaneResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SetItemLaneResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type MergeItemResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -28818,6 +31611,61 @@ func (r ListItemRunsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ListItemRunsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DecideToolApprovalResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Item
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Conflict
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r DecideToolApprovalResponse) GetJSON200() *Item {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r DecideToolApprovalResponse) GetApplicationproblemJSON409() *Conflict {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r DecideToolApprovalResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r DecideToolApprovalResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DecideToolApprovalResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DecideToolApprovalResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DecideToolApprovalResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -30196,6 +33044,61 @@ func (r ListRunsResponse) ContentType() string {
 	return ""
 }
 
+// ExportRunsResponse200Headers the declared response headers of an HTTP 200 response for ExportRuns
+type ExportRunsResponse200Headers struct {
+	ContentDisposition string
+}
+
+type ExportRunsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSON413 the response for an HTTP 413 `application/problem+json` response
+	ApplicationproblemJSON413 *Problem
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *ExportRunsResponse200Headers
+}
+
+// GetApplicationproblemJSON413 returns the response for an HTTP 413 `application/problem+json` response
+func (r ExportRunsResponse) GetApplicationproblemJSON413() *Problem {
+	return r.ApplicationproblemJSON413
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ExportRunsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ExportRunsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ExportRunsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ExportRunsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ExportRunsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetRunResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -30478,6 +33381,164 @@ func (r GetOrgSpendResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetOrgSpendResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ExportSpendResponse200Headers the declared response headers of an HTTP 200 response for ExportSpend
+type ExportSpendResponse200Headers struct {
+	ContentDisposition string
+}
+
+type ExportSpendResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSON413 the response for an HTTP 413 `application/problem+json` response
+	ApplicationproblemJSON413 *Problem
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *ExportSpendResponse200Headers
+}
+
+// GetApplicationproblemJSON413 returns the response for an HTTP 413 `application/problem+json` response
+func (r ExportSpendResponse) GetApplicationproblemJSON413() *Problem {
+	return r.ApplicationproblemJSON413
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ExportSpendResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ExportSpendResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ExportSpendResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ExportSpendResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ExportSpendResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListStandingRulesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *StandingRuleList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListStandingRulesResponse) GetJSON200() *StandingRuleList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListStandingRulesResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListStandingRulesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListStandingRulesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListStandingRulesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListStandingRulesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RevokeStandingRuleResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *StandingRule
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Conflict
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RevokeStandingRuleResponse) GetJSON200() *StandingRule {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r RevokeStandingRuleResponse) GetApplicationproblemJSON409() *Conflict {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RevokeStandingRuleResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RevokeStandingRuleResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RevokeStandingRuleResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RevokeStandingRuleResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RevokeStandingRuleResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -31266,9 +34327,9 @@ func (c *ClientWithResponses) GetConnectionWithResponse(ctx context.Context, org
 	return ParseGetConnectionResponse(rsp)
 }
 
-// UpdateConnectionWithBodyWithResponse Rename a connection, or change its description, fields or secrets
+// UpdateConnectionWithBodyWithResponse Rename a connection, or change its description, fields, secrets or tool modes
 //
-// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -31281,9 +34342,9 @@ func (c *ClientWithResponses) UpdateConnectionWithBodyWithResponse(ctx context.C
 	return ParseUpdateConnectionResponse(rsp)
 }
 
-// UpdateConnectionWithResponse Rename a connection, or change its description, fields or secrets
+// UpdateConnectionWithResponse Rename a connection, or change its description, fields, secrets or tool modes
 //
-// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -32038,6 +35099,111 @@ func (c *ClientWithResponses) ListEvalsWithResponse(ctx context.Context, org Org
 	return ParseListEvalsResponse(rsp)
 }
 
+// ListBakeOffsWithResponse The factory's bake-offs, newest first
+//
+// At most the 20 newest bake-offs (ADR 0029): eval runs of kind bake-off, each of one agent on two to four models. 503 evals-unavailable.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `ListBakeOffs` operationId).
+func (c *ClientWithResponses) ListBakeOffsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListBakeOffsResponse, error) {
+	rsp, err := c.ListBakeOffs(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListBakeOffsResponse(rsp)
+}
+
+// StartBakeOffWithBodyWithResponse Start a bake-off of one agent across models on the current version
+//
+// Queues a bake-off of the agent's eval cases in the current version, each run trials times (default 3) on every arm, and answers at once; goald's eval loop works the tries. Without models, the arms are the agent's model and goald's default models (GOAL_BAKEOFF_MODELS). The estimate is cases × trials × arms × the price of a try, as estimateEvalRun prices it. 404 version-not-found for a factory never published; 409 learning-budget-exhausted, with the estimate, when it exceeds what is left of the learning budget; 422 invalid-bake-off for an agent the version does not have or that works at no station, arms that are not 2 to 4 distinct model ids with the agent's model among them, trials outside 1 to 10 and an agent with no eval cases; 503 evals-unavailable.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `StartBakeOff` operationId).
+func (c *ClientWithResponses) StartBakeOffWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StartBakeOffResponse, error) {
+	rsp, err := c.StartBakeOffWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStartBakeOffResponse(rsp)
+}
+
+// StartBakeOffWithResponse Start a bake-off of one agent across models on the current version
+//
+// Queues a bake-off of the agent's eval cases in the current version, each run trials times (default 3) on every arm, and answers at once; goald's eval loop works the tries. Without models, the arms are the agent's model and goald's default models (GOAL_BAKEOFF_MODELS). The estimate is cases × trials × arms × the price of a try, as estimateEvalRun prices it. 404 version-not-found for a factory never published; 409 learning-budget-exhausted, with the estimate, when it exceeds what is left of the learning budget; 422 invalid-bake-off for an agent the version does not have or that works at no station, arms that are not 2 to 4 distinct model ids with the agent's model among them, trials outside 1 to 10 and an agent with no eval cases; 503 evals-unavailable.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `StartBakeOff` operationId).
+func (c *ClientWithResponses) StartBakeOffWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body StartBakeOffJSONRequestBody, reqEditors ...RequestEditorFn) (*StartBakeOffResponse, error) {
+	rsp, err := c.StartBakeOff(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStartBakeOffResponse(rsp)
+}
+
+// GetBakeOffWithResponse One bake-off with its arms, its tries passed per case and its recommendation
+//
+// 404 eval-run-not-found for a bake-off that is not the factory's and for an eval run that is not a bake-off; 503 evals-unavailable.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off} (the `GetBakeOff` operationId).
+func (c *ClientWithResponses) GetBakeOffWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, reqEditors ...RequestEditorFn) (*GetBakeOffResponse, error) {
+	rsp, err := c.GetBakeOff(ctx, org, factory, bakeOff, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetBakeOffResponse(rsp)
+}
+
+// ApplyBakeOffWithBodyWithResponse Write an arm's model as the agent's model into the factory's draft
+//
+// Sets agents[].model of the bake-off's agent in the draft to the arm's model, opening a draft from the current version when none is open. It never publishes: the draft publishes as any other, through the eval gate (ADR 0029 decision 7). 404 eval-run-not-found; 412 draft-conflict when the agent changed since the bake-off's version; 422 invalid-bake-off for an arm the bake-off does not have; 503 evals-unavailable.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply (the `ApplyBakeOff` operationId).
+func (c *ClientWithResponses) ApplyBakeOffWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ApplyBakeOffResponse, error) {
+	rsp, err := c.ApplyBakeOffWithBody(ctx, org, factory, bakeOff, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseApplyBakeOffResponse(rsp)
+}
+
+// ApplyBakeOffWithResponse Write an arm's model as the agent's model into the factory's draft
+//
+// Sets agents[].model of the bake-off's agent in the draft to the arm's model, opening a draft from the current version when none is open. It never publishes: the draft publishes as any other, through the eval gate (ADR 0029 decision 7). 404 eval-run-not-found; 412 draft-conflict when the agent changed since the bake-off's version; 422 invalid-bake-off for an arm the bake-off does not have; 503 evals-unavailable.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply (the `ApplyBakeOff` operationId).
+func (c *ClientWithResponses) ApplyBakeOffWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, body ApplyBakeOffJSONRequestBody, reqEditors ...RequestEditorFn) (*ApplyBakeOffResponse, error) {
+	rsp, err := c.ApplyBakeOff(ctx, org, factory, bakeOff, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseApplyBakeOffResponse(rsp)
+}
+
+// RerunBakeOffWithResponse Run a bake-off again on the current version
+//
+// Queues a new bake-off of the same agent with the same arms and trials, on the factory's current version, which may be newer than the original's (ADR 0029 decision 7). 404 eval-run-not-found; then the refusals of startBakeOff.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/rerun (the `RerunBakeOff` operationId).
+func (c *ClientWithResponses) RerunBakeOffWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, reqEditors ...RequestEditorFn) (*RerunBakeOffResponse, error) {
+	rsp, err := c.RerunBakeOff(ctx, org, factory, bakeOff, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRerunBakeOffResponse(rsp)
+}
+
 // AddEvalCaseWithBodyWithResponse Add an eval case from a past run and publish it
 //
 // Writes evals/cases/{name}.yaml from the past agent run: its agent, and its item's title, body, type and lane as the input, checked by the agent's contract or by judge, with tries tries (default 1). The file goes into a new draft of the current version, which publishes as the next version through the same checks and eval gate as publishDraft (ADR 0025 decision 5). 400 invalid-request for a name that is not a slug; 404 run-not-found for a run that is not the factory's; 409 eval-case-exists when the current version has the case, draft-open when the factory already has a draft (the draft this call opened is discarded), and the publish's own conflicts. When the eval gate refuses (evals-pending, evals-failing) the draft stays open, so it publishes once its run passes. 503 evals-unavailable.
@@ -32186,6 +35352,36 @@ func (c *ClientWithResponses) GetIntakeTriggerWithResponse(ctx context.Context, 
 		return nil, err
 	}
 	return ParseGetIntakeTriggerResponse(rsp)
+}
+
+// TryIntakeTriggerWithBodyWithResponse Try the trigger with one of its past events, creating nothing
+//
+// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try (the `TryIntakeTrigger` operationId).
+func (c *ClientWithResponses) TryIntakeTriggerWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TryIntakeTriggerResponse, error) {
+	rsp, err := c.TryIntakeTriggerWithBody(ctx, org, factory, trigger, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTryIntakeTriggerResponse(rsp)
+}
+
+// TryIntakeTriggerWithResponse Try the trigger with one of its past events, creating nothing
+//
+// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try (the `TryIntakeTrigger` operationId).
+func (c *ClientWithResponses) TryIntakeTriggerWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, body TryIntakeTriggerJSONRequestBody, reqEditors ...RequestEditorFn) (*TryIntakeTriggerResponse, error) {
+	rsp, err := c.TryIntakeTrigger(ctx, org, factory, trigger, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTryIntakeTriggerResponse(rsp)
 }
 
 // ListItemsWithResponse One page of a factory's items, newest first
@@ -32654,6 +35850,96 @@ func (c *ClientWithResponses) RestoreVersionWithResponse(ctx context.Context, or
 	return ParseRestoreVersionResponse(rsp)
 }
 
+// ListSavedViewsWithResponse The factory's shared views and the caller's own
+//
+// The shared views first, then the caller's personal views, each by name (case ignored). Never another person's personal view; an API key or a personal token sees only the shared views.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/views (the `ListSavedViews` operationId).
+func (c *ClientWithResponses) ListSavedViewsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListSavedViewsResponse, error) {
+	rsp, err := c.ListSavedViews(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListSavedViewsResponse(rsp)
+}
+
+// CreateSavedViewWithBodyWithResponse Save a view
+//
+// A personal view of the caller, or a shared view of the factory, which also needs factory:manage (403 forbidden without it). 403 person-required for an API key, a personal token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60 characters, over 20 filters, over 20 values in one or a value over 200 characters; 409 view-name-taken for a name the caller's personal views (personal) or the factory's shared views (shared) already use, case ignored.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/views (the `CreateSavedView` operationId).
+func (c *ClientWithResponses) CreateSavedViewWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSavedViewResponse, error) {
+	rsp, err := c.CreateSavedViewWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateSavedViewResponse(rsp)
+}
+
+// CreateSavedViewWithResponse Save a view
+//
+// A personal view of the caller, or a shared view of the factory, which also needs factory:manage (403 forbidden without it). 403 person-required for an API key, a personal token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60 characters, over 20 filters, over 20 values in one or a value over 200 characters; 409 view-name-taken for a name the caller's personal views (personal) or the factory's shared views (shared) already use, case ignored.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/views (the `CreateSavedView` operationId).
+func (c *ClientWithResponses) CreateSavedViewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body CreateSavedViewJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSavedViewResponse, error) {
+	rsp, err := c.CreateSavedView(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateSavedViewResponse(rsp)
+}
+
+// DeleteSavedViewWithResponse Delete a view
+//
+// A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included).
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/views/{view} (the `DeleteSavedView` operationId).
+func (c *ClientWithResponses) DeleteSavedViewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, reqEditors ...RequestEditorFn) (*DeleteSavedViewResponse, error) {
+	rsp, err := c.DeleteSavedView(ctx, org, factory, view, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteSavedViewResponse(rsp)
+}
+
+// UpdateSavedViewWithBodyWithResponse Rename a view and replace its filters
+//
+// Whether a view is shared is fixed when it is created. A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included); 400 invalid-view and 409 view-name-taken as createSavedView.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /v1/orgs/{org}/factories/{factory}/views/{view} (the `UpdateSavedView` operationId).
+func (c *ClientWithResponses) UpdateSavedViewWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateSavedViewResponse, error) {
+	rsp, err := c.UpdateSavedViewWithBody(ctx, org, factory, view, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateSavedViewResponse(rsp)
+}
+
+// UpdateSavedViewWithResponse Rename a view and replace its filters
+//
+// Whether a view is shared is fixed when it is created. A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included); 400 invalid-view and 409 view-name-taken as createSavedView.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /v1/orgs/{org}/factories/{factory}/views/{view} (the `UpdateSavedView` operationId).
+func (c *ClientWithResponses) UpdateSavedViewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, body UpdateSavedViewJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateSavedViewResponse, error) {
+	rsp, err := c.UpdateSavedView(ctx, org, factory, view, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateSavedViewResponse(rsp)
+}
+
 // ListWebhookEndpointsWithResponse The factory's webhook endpoints
 //
 // By name, each with its address, kind, the label of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret.
@@ -32834,6 +36120,8 @@ func (c *ClientWithResponses) AnswerItemWithResponse(ctx context.Context, org Or
 
 // ApproveItemWithResponse Approve an item waiting for a human; it moves to the next station
 //
+// 409 tool-approval-open while the item has an open tool approval (Item.tool_approval): the item waits for a decision on the call, decided with decideToolApproval, not on the item (ADR 0031 decision 9).
+//
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/orgs/{org}/items/{item}/approve (the `ApproveItem` operationId).
@@ -32886,6 +36174,36 @@ func (c *ClientWithResponses) ListItemEventsWithResponse(ctx context.Context, or
 		return nil, err
 	}
 	return ParseListItemEventsResponse(rsp)
+}
+
+// SetItemLaneWithBodyWithResponse Set an open item's lane
+//
+// The lane picks the agent at the stations that route by lane; the item stays at its station and in its state, and a lane_set event (from, to) records the change. The lane is trimmed; when any station of the item's line routes by lane, it must be one of the lanes routed. 400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts carry their own lanes), same-lane or item-changed.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/lane (the `SetItemLane` operationId).
+func (c *ClientWithResponses) SetItemLaneWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetItemLaneResponse, error) {
+	rsp, err := c.SetItemLaneWithBody(ctx, org, item, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetItemLaneResponse(rsp)
+}
+
+// SetItemLaneWithResponse Set an open item's lane
+//
+// The lane picks the agent at the stations that route by lane; the item stays at its station and in its state, and a lane_set event (from, to) records the change. The lane is trimmed; when any station of the item's line routes by lane, it must be one of the lanes routed. 400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts carry their own lanes), same-lane or item-changed.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/lane (the `SetItemLane` operationId).
+func (c *ClientWithResponses) SetItemLaneWithResponse(ctx context.Context, org OrgRef, item ItemRef, body SetItemLaneJSONRequestBody, reqEditors ...RequestEditorFn) (*SetItemLaneResponse, error) {
+	rsp, err := c.SetItemLane(ctx, org, item, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetItemLaneResponse(rsp)
 }
 
 // MergeItemWithBodyWithResponse Merge the item's pull requests, then approve it
@@ -33154,6 +36472,36 @@ func (c *ClientWithResponses) ListItemRunsWithResponse(ctx context.Context, org 
 		return nil, err
 	}
 	return ParseListItemRunsResponse(rsp)
+}
+
+// DecideToolApprovalWithBodyWithResponse Approve or deny the tool call an item's agent asked to make
+//
+// Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs connection:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without connection:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/tool-approval (the `DecideToolApproval` operationId).
+func (c *ClientWithResponses) DecideToolApprovalWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DecideToolApprovalResponse, error) {
+	rsp, err := c.DecideToolApprovalWithBody(ctx, org, item, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDecideToolApprovalResponse(rsp)
+}
+
+// DecideToolApprovalWithResponse Approve or deny the tool call an item's agent asked to make
+//
+// Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs connection:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without connection:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/tool-approval (the `DecideToolApproval` operationId).
+func (c *ClientWithResponses) DecideToolApprovalWithResponse(ctx context.Context, org OrgRef, item ItemRef, body DecideToolApprovalJSONRequestBody, reqEditors ...RequestEditorFn) (*DecideToolApprovalResponse, error) {
+	rsp, err := c.DecideToolApproval(ctx, org, item, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDecideToolApprovalResponse(rsp)
 }
 
 // SetTouchReasonWithBodyWithResponse Say why a person had to act on an item
@@ -33694,6 +37042,21 @@ func (c *ClientWithResponses) ListRunsWithResponse(ctx context.Context, org OrgR
 	return ParseListRunsResponse(rsp)
 }
 
+// ExportRunsWithResponse The organization's agent runs as CSV, with the filters of listRuns
+//
+// The CSV export of listRuns (ADR 0020, decision 3): every run listRuns would list over its pages, with the same filters and the same order (newest first), one row per run and no paging. The header row is id, factory, item_ref, item_title, station, agent, model, status, started_at, ended_at, turns, cost_usd: factory is the factory's metadata.name, agent the agent's name in its factory, times are RFC 3339 in UTC (ended_at empty while the run runs) and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/runs/export (the `ExportRuns` operationId).
+func (c *ClientWithResponses) ExportRunsWithResponse(ctx context.Context, org OrgRef, params *ExportRunsParams, reqEditors ...RequestEditorFn) (*ExportRunsResponse, error) {
+	rsp, err := c.ExportRuns(ctx, org, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseExportRunsResponse(rsp)
+}
+
 // GetRunWithResponse One agent run (404 for a run of another organization)
 //
 // Returns a wrapper object for the known response body format(s).
@@ -33793,6 +37156,51 @@ func (c *ClientWithResponses) GetOrgSpendWithResponse(ctx context.Context, org O
 		return nil, err
 	}
 	return ParseGetOrgSpendResponse(rsp)
+}
+
+// ExportSpendWithResponse The organization's spend over a window as CSV, one row per factory, agent and model
+//
+// The CSV export of getOrgSpend (ADR 0020, decision 3): the runs that started in the window's [since, until) in the factories the caller sees, summed by factory, agent and model and ordered by factory id, agent and model. The header row is factory, agent, model, cost_usd; factory is the factory's metadata.name and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early. A window outside the enum is a 400 problem.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/spend/export (the `ExportSpend` operationId).
+func (c *ClientWithResponses) ExportSpendWithResponse(ctx context.Context, org OrgRef, params *ExportSpendParams, reqEditors ...RequestEditorFn) (*ExportSpendResponse, error) {
+	rsp, err := c.ExportSpend(ctx, org, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseExportSpendResponse(rsp)
+}
+
+// ListStandingRulesWithResponse The organization's standing rules
+//
+// The rules Always allow created (ADR 0031 decision 7), oldest first: each lets one agent role call one tool of one organization connection without asking, in every factory of the organization. The active ones, and the revoked ones too with revoked=true.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/standing-rules (the `ListStandingRules` operationId).
+func (c *ClientWithResponses) ListStandingRulesWithResponse(ctx context.Context, org OrgRef, params *ListStandingRulesParams, reqEditors ...RequestEditorFn) (*ListStandingRulesResponse, error) {
+	rsp, err := c.ListStandingRules(ctx, org, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListStandingRulesResponse(rsp)
+}
+
+// RevokeStandingRuleWithResponse Revoke a standing rule
+//
+// The rule's agent role asks first again from its next run. A rule is never deleted: revoking sets revoked_at and revoked_by, audited as standing_rule.revoked. 404 for a rule that does not exist, 409 standing-rule-revoked for one revoked already. Needs a sign-in from the last 10 minutes.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/standing-rules/{rule} (the `RevokeStandingRule` operationId).
+func (c *ClientWithResponses) RevokeStandingRuleWithResponse(ctx context.Context, org OrgRef, rule string, reqEditors ...RequestEditorFn) (*RevokeStandingRuleResponse, error) {
+	rsp, err := c.RevokeStandingRule(ctx, org, rule, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRevokeStandingRuleResponse(rsp)
 }
 
 // StreamEventsWithResponse The organization's events as they happen (Server-Sent Events)
@@ -35984,6 +39392,171 @@ func ParseListEvalsResponse(rsp *http.Response) (*ListEvalsResponse, error) {
 	return response, nil
 }
 
+// ParseListBakeOffsResponse parses an HTTP response from a ListBakeOffsWithResponse call
+func ParseListBakeOffsResponse(rsp *http.Response) (*ListBakeOffsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListBakeOffsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest BakeOffList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseStartBakeOffResponse parses an HTTP response from a StartBakeOffWithResponse call
+func ParseStartBakeOffResponse(rsp *http.Response) (*StartBakeOffResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &StartBakeOffResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest BakeOffStarted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetBakeOffResponse parses an HTTP response from a GetBakeOffWithResponse call
+func ParseGetBakeOffResponse(rsp *http.Response) (*GetBakeOffResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetBakeOffResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest BakeOff
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseApplyBakeOffResponse parses an HTTP response from a ApplyBakeOffWithResponse call
+func ParseApplyBakeOffResponse(rsp *http.Response) (*ApplyBakeOffResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ApplyBakeOffResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Draft
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRerunBakeOffResponse parses an HTTP response from a RerunBakeOffWithResponse call
+func ParseRerunBakeOffResponse(rsp *http.Response) (*RerunBakeOffResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RerunBakeOffResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest BakeOffStarted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseAddEvalCaseResponse parses an HTTP response from a AddEvalCaseWithResponse call
 func ParseAddEvalCaseResponse(rsp *http.Response) (*AddEvalCaseResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -36198,6 +39771,39 @@ func ParseGetIntakeTriggerResponse(rsp *http.Response) (*GetIntakeTriggerRespons
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest IntakeTriggerDetail
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTryIntakeTriggerResponse parses an HTTP response from a TryIntakeTriggerWithResponse call
+func ParseTryIntakeTriggerResponse(rsp *http.Response) (*TryIntakeTriggerResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TryIntakeTriggerResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TriggerTry
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -37115,6 +40721,134 @@ func ParseRestoreVersionResponse(rsp *http.Response) (*RestoreVersionResponse, e
 	return response, nil
 }
 
+// ParseListSavedViewsResponse parses an HTTP response from a ListSavedViewsWithResponse call
+func ParseListSavedViewsResponse(rsp *http.Response) (*ListSavedViewsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListSavedViewsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SavedViewList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateSavedViewResponse parses an HTTP response from a CreateSavedViewWithResponse call
+func ParseCreateSavedViewResponse(rsp *http.Response) (*CreateSavedViewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateSavedViewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest SavedView
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteSavedViewResponse parses an HTTP response from a DeleteSavedViewWithResponse call
+func ParseDeleteSavedViewResponse(rsp *http.Response) (*DeleteSavedViewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteSavedViewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateSavedViewResponse parses an HTTP response from a UpdateSavedViewWithResponse call
+func ParseUpdateSavedViewResponse(rsp *http.Response) (*UpdateSavedViewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateSavedViewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SavedView
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListWebhookEndpointsResponse parses an HTTP response from a ListWebhookEndpointsWithResponse call
 func ParseListWebhookEndpointsResponse(rsp *http.Response) (*ListWebhookEndpointsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -37561,6 +41295,46 @@ func ParseListItemEventsResponse(rsp *http.Response) (*ListItemEventsResponse, e
 	return response, nil
 }
 
+// ParseSetItemLaneResponse parses an HTTP response from a SetItemLaneWithResponse call
+func ParseSetItemLaneResponse(rsp *http.Response) (*SetItemLaneResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SetItemLaneResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Item
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseMergeItemResponse parses an HTTP response from a MergeItemWithResponse call
 func ParseMergeItemResponse(rsp *http.Response) (*MergeItemResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -37970,6 +41744,46 @@ func ParseListItemRunsResponse(rsp *http.Response) (*ListItemRunsResponse, error
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDecideToolApprovalResponse parses an HTTP response from a DecideToolApprovalWithResponse call
+func ParseDecideToolApprovalResponse(rsp *http.Response) (*DecideToolApprovalResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DecideToolApprovalResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Item
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Problem
@@ -38971,6 +42785,52 @@ func ParseListRunsResponse(rsp *http.Response) (*ListRunsResponse, error) {
 	return response, nil
 }
 
+// ParseExportRunsResponse parses an HTTP response from a ExportRunsWithResponse call
+func ParseExportRunsResponse(rsp *http.Response) (*ExportRunsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ExportRunsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers ExportRunsResponse200Headers
+		if values := rsp.Header.Values("Content-Disposition"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Disposition", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentDisposition = value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseGetRunResponse parses an HTTP response from a GetRunWithResponse call
 func ParseGetRunResponse(rsp *http.Response) (*GetRunResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -39156,6 +43016,125 @@ func ParseGetOrgSpendResponse(rsp *http.Response) (*GetOrgSpendResponse, error) 
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseExportSpendResponse parses an HTTP response from a ExportSpendWithResponse call
+func ParseExportSpendResponse(rsp *http.Response) (*ExportSpendResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ExportSpendResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers ExportSpendResponse200Headers
+		if values := rsp.Header.Values("Content-Disposition"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Disposition", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentDisposition = value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseListStandingRulesResponse parses an HTTP response from a ListStandingRulesWithResponse call
+func ParseListStandingRulesResponse(rsp *http.Response) (*ListStandingRulesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListStandingRulesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest StandingRuleList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRevokeStandingRuleResponse parses an HTTP response from a RevokeStandingRuleWithResponse call
+func ParseRevokeStandingRuleResponse(rsp *http.Response) (*RevokeStandingRuleResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RevokeStandingRuleResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest StandingRule
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Problem
@@ -39493,7 +43472,7 @@ type ServerInterface interface {
 	// GetConnection One connection, with the env names a run gets from it and its kind's docs
 	// (GET /v1/orgs/{org}/connections/{connection})
 	GetConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef)
-	// UpdateConnection Rename a connection, or change its description, fields or secrets
+	// UpdateConnection Rename a connection, or change its description, fields, secrets or tool modes
 	// (PATCH /v1/orgs/{org}/connections/{connection})
 	UpdateConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef)
 	// ListConnectionRepositories The owners and repositories a code host connection reaches
@@ -39607,6 +43586,21 @@ type ServerInterface interface {
 	// ListEvals The eval cases of the current version, with their last tries and a summary
 	// (GET /v1/orgs/{org}/factories/{factory}/evals)
 	ListEvals(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// ListBakeOffs The factory's bake-offs, newest first
+	// (GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs)
+	ListBakeOffs(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// StartBakeOff Start a bake-off of one agent across models on the current version
+	// (POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs)
+	StartBakeOff(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// GetBakeOff One bake-off with its arms, its tries passed per case and its recommendation
+	// (GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off})
+	GetBakeOff(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, bakeOff BakeOffRef)
+	// ApplyBakeOff Write an arm's model as the agent's model into the factory's draft
+	// (POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply)
+	ApplyBakeOff(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, bakeOff BakeOffRef)
+	// RerunBakeOff Run a bake-off again on the current version
+	// (POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/rerun)
+	RerunBakeOff(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, bakeOff BakeOffRef)
 	// AddEvalCase Add an eval case from a past run and publish it
 	// (POST /v1/orgs/{org}/factories/{factory}/evals/cases)
 	AddEvalCase(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
@@ -39628,6 +43622,9 @@ type ServerInterface interface {
 	// GetIntakeTrigger One trigger with this week's results and its recent events
 	// (GET /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger})
 	GetIntakeTrigger(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, trigger string)
+	// TryIntakeTrigger Try the trigger with one of its past events, creating nothing
+	// (POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try)
+	TryIntakeTrigger(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, trigger string)
 	// ListItems One page of a factory's items, newest first
 	// (GET /v1/orgs/{org}/factories/{factory}/items)
 	ListItems(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params ListItemsParams)
@@ -39709,6 +43706,18 @@ type ServerInterface interface {
 	// RestoreVersion Run an older published version again (rollback)
 	// (POST /v1/orgs/{org}/factories/{factory}/versions/{version}/restore)
 	RestoreVersion(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, version VersionSelector)
+	// ListSavedViews The factory's shared views and the caller's own
+	// (GET /v1/orgs/{org}/factories/{factory}/views)
+	ListSavedViews(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// CreateSavedView Save a view
+	// (POST /v1/orgs/{org}/factories/{factory}/views)
+	CreateSavedView(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// DeleteSavedView Delete a view
+	// (DELETE /v1/orgs/{org}/factories/{factory}/views/{view})
+	DeleteSavedView(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, view SavedViewRef)
+	// UpdateSavedView Rename a view and replace its filters
+	// (PATCH /v1/orgs/{org}/factories/{factory}/views/{view})
+	UpdateSavedView(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, view SavedViewRef)
 	// ListWebhookEndpoints The factory's webhook endpoints
 	// (GET /v1/orgs/{org}/factories/{factory}/webhooks)
 	ListWebhookEndpoints(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
@@ -39748,6 +43757,9 @@ type ServerInterface interface {
 	// ListItemEvents One page of an item's history, oldest first
 	// (GET /v1/orgs/{org}/items/{item}/events)
 	ListItemEvents(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef, params ListItemEventsParams)
+	// SetItemLane Set an open item's lane
+	// (POST /v1/orgs/{org}/items/{item}/lane)
+	SetItemLane(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
 	// MergeItem Merge the item's pull requests, then approve it
 	// (POST /v1/orgs/{org}/items/{item}/merge)
 	MergeItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
@@ -39781,6 +43793,9 @@ type ServerInterface interface {
 	// ListItemRuns An item's agent runs, oldest first (at most 200)
 	// (GET /v1/orgs/{org}/items/{item}/runs)
 	ListItemRuns(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
+	// DecideToolApproval Approve or deny the tool call an item's agent asked to make
+	// (POST /v1/orgs/{org}/items/{item}/tool-approval)
+	DecideToolApproval(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
 	// SetTouchReason Say why a person had to act on an item
 	// (PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason)
 	SetTouchReason(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef, event int64)
@@ -39868,6 +43883,9 @@ type ServerInterface interface {
 	// ListRuns The organization's agent runs across the factories the caller sees, newest first
 	// (GET /v1/orgs/{org}/runs)
 	ListRuns(w http.ResponseWriter, r *http.Request, org OrgRef, params ListRunsParams)
+	// ExportRuns The organization's agent runs as CSV, with the filters of listRuns
+	// (GET /v1/orgs/{org}/runs/export)
+	ExportRuns(w http.ResponseWriter, r *http.Request, org OrgRef, params ExportRunsParams)
 	// GetRun One agent run (404 for a run of another organization)
 	// (GET /v1/orgs/{org}/runs/{run})
 	GetRun(w http.ResponseWriter, r *http.Request, org OrgRef, run string)
@@ -39886,6 +43904,15 @@ type ServerInterface interface {
 	// GetOrgSpend What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
 	// (GET /v1/orgs/{org}/spend)
 	GetOrgSpend(w http.ResponseWriter, r *http.Request, org OrgRef, params GetOrgSpendParams)
+	// ExportSpend The organization's spend over a window as CSV, one row per factory, agent and model
+	// (GET /v1/orgs/{org}/spend/export)
+	ExportSpend(w http.ResponseWriter, r *http.Request, org OrgRef, params ExportSpendParams)
+	// ListStandingRules The organization's standing rules
+	// (GET /v1/orgs/{org}/standing-rules)
+	ListStandingRules(w http.ResponseWriter, r *http.Request, org OrgRef, params ListStandingRulesParams)
+	// RevokeStandingRule Revoke a standing rule
+	// (DELETE /v1/orgs/{org}/standing-rules/{rule})
+	RevokeStandingRule(w http.ResponseWriter, r *http.Request, org OrgRef, rule string)
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	// (GET /v1/orgs/{org}/stream)
 	StreamEvents(w http.ResponseWriter, r *http.Request, org OrgRef, params StreamEventsParams)
@@ -42310,6 +46337,208 @@ func (siw *ServerInterfaceWrapper) ListEvals(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// ListBakeOffs operation middleware
+func (siw *ServerInterfaceWrapper) ListBakeOffs(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListBakeOffs(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StartBakeOff operation middleware
+func (siw *ServerInterfaceWrapper) StartBakeOff(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StartBakeOff(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetBakeOff operation middleware
+func (siw *ServerInterfaceWrapper) GetBakeOff(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "bake_off" -------------
+	var bakeOff BakeOffRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "bake_off", r.PathValue("bake_off"), &bakeOff, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "bake_off", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetBakeOff(w, r, org, factory, bakeOff)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApplyBakeOff operation middleware
+func (siw *ServerInterfaceWrapper) ApplyBakeOff(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "bake_off" -------------
+	var bakeOff BakeOffRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "bake_off", r.PathValue("bake_off"), &bakeOff, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "bake_off", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApplyBakeOff(w, r, org, factory, bakeOff)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RerunBakeOff operation middleware
+func (siw *ServerInterfaceWrapper) RerunBakeOff(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "bake_off" -------------
+	var bakeOff BakeOffRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "bake_off", r.PathValue("bake_off"), &bakeOff, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "bake_off", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RerunBakeOff(w, r, org, factory, bakeOff)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // AddEvalCase operation middleware
 func (siw *ServerInterfaceWrapper) AddEvalCase(w http.ResponseWriter, r *http.Request) {
 
@@ -42589,6 +46818,50 @@ func (siw *ServerInterfaceWrapper) GetIntakeTrigger(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetIntakeTrigger(w, r, org, factory, trigger)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TryIntakeTrigger operation middleware
+func (siw *ServerInterfaceWrapper) TryIntakeTrigger(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "trigger" -------------
+	var trigger string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "trigger", r.PathValue("trigger"), &trigger, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "trigger", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TryIntakeTrigger(w, r, org, factory, trigger)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -43997,6 +48270,164 @@ func (siw *ServerInterfaceWrapper) RestoreVersion(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// ListSavedViews operation middleware
+func (siw *ServerInterfaceWrapper) ListSavedViews(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSavedViews(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateSavedView operation middleware
+func (siw *ServerInterfaceWrapper) CreateSavedView(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateSavedView(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteSavedView operation middleware
+func (siw *ServerInterfaceWrapper) DeleteSavedView(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "view" -------------
+	var view SavedViewRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "view", r.PathValue("view"), &view, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "view", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteSavedView(w, r, org, factory, view)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateSavedView operation middleware
+func (siw *ServerInterfaceWrapper) UpdateSavedView(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "view" -------------
+	var view SavedViewRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "view", r.PathValue("view"), &view, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "view", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateSavedView(w, r, org, factory, view)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListWebhookEndpoints operation middleware
 func (siw *ServerInterfaceWrapper) ListWebhookEndpoints(w http.ResponseWriter, r *http.Request) {
 
@@ -44566,6 +48997,41 @@ func (siw *ServerInterfaceWrapper) ListItemEvents(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// SetItemLane operation middleware
+func (siw *ServerInterfaceWrapper) SetItemLane(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item" -------------
+	var item ItemRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item", r.PathValue("item"), &item, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetItemLane(w, r, org, item)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // MergeItem operation middleware
 func (siw *ServerInterfaceWrapper) MergeItem(w http.ResponseWriter, r *http.Request) {
 
@@ -44951,6 +49417,41 @@ func (siw *ServerInterfaceWrapper) ListItemRuns(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListItemRuns(w, r, org, item)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DecideToolApproval operation middleware
+func (siw *ServerInterfaceWrapper) DecideToolApproval(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item" -------------
+	var item ItemRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item", r.PathValue("item"), &item, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DecideToolApproval(w, r, org, item)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -46193,6 +50694,100 @@ func (siw *ServerInterfaceWrapper) ListRuns(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// ExportRuns operation middleware
+func (siw *ServerInterfaceWrapper) ExportRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ExportRunsParams
+
+	// ------------- Optional query parameter "factory" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "factory", r.URL.Query(), &params.Factory, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "factory"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "since" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "since", r.URL.Query(), &params.Since, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "since"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "since", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "until" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "until", r.URL.Query(), &params.Until, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "until"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "until", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExportRuns(w, r, org, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetRun operation middleware
 func (siw *ServerInterfaceWrapper) GetRun(w http.ResponseWriter, r *http.Request) {
 
@@ -46403,6 +50998,125 @@ func (siw *ServerInterfaceWrapper) GetOrgSpend(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetOrgSpend(w, r, org, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ExportSpend operation middleware
+func (siw *ServerInterfaceWrapper) ExportSpend(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ExportSpendParams
+
+	// ------------- Optional query parameter "window" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "window", r.URL.Query(), &params.Window, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "window"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "window", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExportSpend(w, r, org, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListStandingRules operation middleware
+func (siw *ServerInterfaceWrapper) ListStandingRules(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListStandingRulesParams
+
+	// ------------- Optional query parameter "revoked" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "revoked", r.URL.Query(), &params.Revoked, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "revoked"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "revoked", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListStandingRules(w, r, org, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeStandingRule operation middleware
+func (siw *ServerInterfaceWrapper) RevokeStandingRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "rule" -------------
+	var rule string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "rule", r.PathValue("rule"), &rule, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "rule", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeStandingRule(w, r, org, rule)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -46824,6 +51538,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/search", wrapper.SearchOrg)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/overview", wrapper.GetFactoryOverview)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/spend", wrapper.GetOrgSpend)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/spend/export", wrapper.ExportSpend)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/metrics/touches", wrapper.GetOrgTouchMetrics)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/inbox", wrapper.GetInbox)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories", wrapper.ListFactories)
@@ -46864,6 +51579,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run}", wrapper.GetEvalRun)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run}/cancel", wrapper.CancelEvalRun)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/cases", wrapper.AddEvalCase)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/bake-offs", wrapper.ListBakeOffs)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/bake-offs", wrapper.StartBakeOff)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}", wrapper.GetBakeOff)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/rerun", wrapper.RerunBakeOff)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply", wrapper.ApplyBakeOff)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/items", wrapper.ListItems)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/items", wrapper.SubmitItem)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/board", wrapper.GetBoard)
@@ -46873,6 +51593,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/constraint", wrapper.GetConstraintReport)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/intake", wrapper.GetIntake)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}", wrapper.GetIntakeTrigger)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try", wrapper.TryIntakeTrigger)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/lead-time", wrapper.GetLeadTimeBridge)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/touches", wrapper.GetTouchMetrics)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/agents/{agent}/stats", wrapper.GetAgentStats)
@@ -46897,6 +51618,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/rotate", wrapper.RotateWebhookSecret)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries", wrapper.ListWebhookDeliveries)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries/{delivery}", wrapper.GetWebhookDelivery)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/views", wrapper.ListSavedViews)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/views", wrapper.CreateSavedView)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/views/{view}", wrapper.DeleteSavedView)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/views/{view}", wrapper.UpdateSavedView)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/stream", wrapper.StreamEvents)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}", wrapper.GetItem)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/events", wrapper.ListItemEvents)
@@ -46908,12 +51633,15 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/needs/{need}", wrapper.UnlinkItem)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/touches/{event}/reason", wrapper.SetTouchReason)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs", wrapper.ListRuns)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs/export", wrapper.ExportRuns)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs/{run}", wrapper.GetRun)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs/{run}/knowledge", wrapper.ListRunKnowledge)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/approve", wrapper.ApproveItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/answer", wrapper.AnswerItem)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/tool-approval", wrapper.DecideToolApproval)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/reject", wrapper.RejectItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/move", wrapper.MoveItem)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/lane", wrapper.SetItemLane)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/pause", wrapper.PauseItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/cancel", wrapper.CancelItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/retry", wrapper.RetryItem)
@@ -46930,6 +51658,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}", wrapper.GetConnection)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}", wrapper.UpdateConnection)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}/test", wrapper.TestConnection)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/standing-rules", wrapper.ListStandingRules)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/standing-rules/{rule}", wrapper.RevokeStandingRule)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}/repositories", wrapper.ListConnectionRepositories)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/credentials", wrapper.ListCredentials)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/credentials", wrapper.CreateCredential)
@@ -49434,6 +54164,211 @@ func (response ListEvalsdefaultApplicationProblemPlusJSONResponse) VisitListEval
 	return err
 }
 
+type ListBakeOffsRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type ListBakeOffsResponseObject interface {
+	VisitListBakeOffsResponse(w http.ResponseWriter) error
+}
+
+type ListBakeOffs200JSONResponse BakeOffList
+
+func (response ListBakeOffs200JSONResponse) VisitListBakeOffsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListBakeOffsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListBakeOffsdefaultApplicationProblemPlusJSONResponse) VisitListBakeOffsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartBakeOffRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Body    *StartBakeOffJSONRequestBody
+}
+
+type StartBakeOffResponseObject interface {
+	VisitStartBakeOffResponse(w http.ResponseWriter) error
+}
+
+type StartBakeOff202JSONResponse BakeOffStarted
+
+func (response StartBakeOff202JSONResponse) VisitStartBakeOffResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartBakeOffdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response StartBakeOffdefaultApplicationProblemPlusJSONResponse) VisitStartBakeOffResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBakeOffRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	BakeOff BakeOffRef `json:"bake_off"`
+}
+
+type GetBakeOffResponseObject interface {
+	VisitGetBakeOffResponse(w http.ResponseWriter) error
+}
+
+type GetBakeOff200JSONResponse BakeOff
+
+func (response GetBakeOff200JSONResponse) VisitGetBakeOffResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBakeOffdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetBakeOffdefaultApplicationProblemPlusJSONResponse) VisitGetBakeOffResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApplyBakeOffRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	BakeOff BakeOffRef `json:"bake_off"`
+	Body    *ApplyBakeOffJSONRequestBody
+}
+
+type ApplyBakeOffResponseObject interface {
+	VisitApplyBakeOffResponse(w http.ResponseWriter) error
+}
+
+type ApplyBakeOff200JSONResponse Draft
+
+func (response ApplyBakeOff200JSONResponse) VisitApplyBakeOffResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApplyBakeOffdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ApplyBakeOffdefaultApplicationProblemPlusJSONResponse) VisitApplyBakeOffResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RerunBakeOffRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	BakeOff BakeOffRef `json:"bake_off"`
+}
+
+type RerunBakeOffResponseObject interface {
+	VisitRerunBakeOffResponse(w http.ResponseWriter) error
+}
+
+type RerunBakeOff202JSONResponse BakeOffStarted
+
+func (response RerunBakeOff202JSONResponse) VisitRerunBakeOffResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RerunBakeOffdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RerunBakeOffdefaultApplicationProblemPlusJSONResponse) VisitRerunBakeOffResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type AddEvalCaseRequestObject struct {
 	Org     OrgRef     `json:"org"`
 	Factory FactoryRef `json:"factory"`
@@ -49710,6 +54645,48 @@ type GetIntakeTriggerdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetIntakeTriggerdefaultApplicationProblemPlusJSONResponse) VisitGetIntakeTriggerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TryIntakeTriggerRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Trigger string     `json:"trigger"`
+	Body    *TryIntakeTriggerJSONRequestBody
+}
+
+type TryIntakeTriggerResponseObject interface {
+	VisitTryIntakeTriggerResponse(w http.ResponseWriter) error
+}
+
+type TryIntakeTrigger200JSONResponse TriggerTry
+
+func (response TryIntakeTrigger200JSONResponse) VisitTryIntakeTriggerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TryIntakeTriggerdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response TryIntakeTriggerdefaultApplicationProblemPlusJSONResponse) VisitTryIntakeTriggerResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -50832,6 +55809,164 @@ func (response RestoreVersiondefaultApplicationProblemPlusJSONResponse) VisitRes
 	return err
 }
 
+type ListSavedViewsRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type ListSavedViewsResponseObject interface {
+	VisitListSavedViewsResponse(w http.ResponseWriter) error
+}
+
+type ListSavedViews200JSONResponse SavedViewList
+
+func (response ListSavedViews200JSONResponse) VisitListSavedViewsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSavedViewsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListSavedViewsdefaultApplicationProblemPlusJSONResponse) VisitListSavedViewsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSavedViewRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Body    *CreateSavedViewJSONRequestBody
+}
+
+type CreateSavedViewResponseObject interface {
+	VisitCreateSavedViewResponse(w http.ResponseWriter) error
+}
+
+type CreateSavedView201JSONResponse SavedView
+
+func (response CreateSavedView201JSONResponse) VisitCreateSavedViewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSavedViewdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateSavedViewdefaultApplicationProblemPlusJSONResponse) VisitCreateSavedViewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteSavedViewRequestObject struct {
+	Org     OrgRef       `json:"org"`
+	Factory FactoryRef   `json:"factory"`
+	View    SavedViewRef `json:"view"`
+}
+
+type DeleteSavedViewResponseObject interface {
+	VisitDeleteSavedViewResponse(w http.ResponseWriter) error
+}
+
+type DeleteSavedView204Response struct {
+}
+
+func (response DeleteSavedView204Response) VisitDeleteSavedViewResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteSavedViewdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteSavedViewdefaultApplicationProblemPlusJSONResponse) VisitDeleteSavedViewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSavedViewRequestObject struct {
+	Org     OrgRef       `json:"org"`
+	Factory FactoryRef   `json:"factory"`
+	View    SavedViewRef `json:"view"`
+	Body    *UpdateSavedViewJSONRequestBody
+}
+
+type UpdateSavedViewResponseObject interface {
+	VisitUpdateSavedViewResponse(w http.ResponseWriter) error
+}
+
+type UpdateSavedView200JSONResponse SavedView
+
+func (response UpdateSavedView200JSONResponse) VisitUpdateSavedViewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSavedViewdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UpdateSavedViewdefaultApplicationProblemPlusJSONResponse) VisitUpdateSavedViewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListWebhookEndpointsRequestObject struct {
 	Org     OrgRef     `json:"org"`
 	Factory FactoryRef `json:"factory"`
@@ -51392,6 +56527,63 @@ type ListItemEventsdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ListItemEventsdefaultApplicationProblemPlusJSONResponse) VisitListItemEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetItemLaneRequestObject struct {
+	Org  OrgRef  `json:"org"`
+	Item ItemRef `json:"item"`
+	Body *SetItemLaneJSONRequestBody
+}
+
+type SetItemLaneResponseObject interface {
+	VisitSetItemLaneResponse(w http.ResponseWriter) error
+}
+
+type SetItemLane200JSONResponse Item
+
+func (response SetItemLane200JSONResponse) VisitSetItemLaneResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetItemLane409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response SetItemLane409ApplicationProblemPlusJSONResponse) VisitSetItemLaneResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetItemLanedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response SetItemLanedefaultApplicationProblemPlusJSONResponse) VisitSetItemLaneResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -51978,6 +57170,63 @@ type ListItemRunsdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ListItemRunsdefaultApplicationProblemPlusJSONResponse) VisitListItemRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DecideToolApprovalRequestObject struct {
+	Org  OrgRef  `json:"org"`
+	Item ItemRef `json:"item"`
+	Body *DecideToolApprovalJSONRequestBody
+}
+
+type DecideToolApprovalResponseObject interface {
+	VisitDecideToolApprovalResponse(w http.ResponseWriter) error
+}
+
+type DecideToolApproval200JSONResponse Item
+
+func (response DecideToolApproval200JSONResponse) VisitDecideToolApprovalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DecideToolApproval409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response DecideToolApproval409ApplicationProblemPlusJSONResponse) VisitDecideToolApprovalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DecideToolApprovaldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DecideToolApprovaldefaultApplicationProblemPlusJSONResponse) VisitDecideToolApprovalResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -53168,6 +58417,74 @@ func (response ListRunsdefaultApplicationProblemPlusJSONResponse) VisitListRunsR
 	return err
 }
 
+type ExportRunsRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params ExportRunsParams
+}
+
+type ExportRunsResponseObject interface {
+	VisitExportRunsResponse(w http.ResponseWriter) error
+}
+
+type ExportRuns200ResponseHeaders struct {
+	ContentDisposition string
+}
+
+type ExportRuns200TextcsvResponse struct {
+	Body          io.Reader
+	Headers       ExportRuns200ResponseHeaders
+	ContentLength int64
+}
+
+func (response ExportRuns200TextcsvResponse) VisitExportRunsResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "text/csv")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.Header().Set("Content-Disposition", fmt.Sprint(response.Headers.ContentDisposition))
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type ExportRuns413ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ExportRuns413ApplicationProblemPlusJSONResponse) VisitExportRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExportRunsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ExportRunsdefaultApplicationProblemPlusJSONResponse) VisitExportRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetRunRequestObject struct {
 	Org OrgRef `json:"org"`
 	Run string `json:"run"`
@@ -53396,6 +58713,170 @@ type GetOrgSpenddefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetOrgSpenddefaultApplicationProblemPlusJSONResponse) VisitGetOrgSpendResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExportSpendRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params ExportSpendParams
+}
+
+type ExportSpendResponseObject interface {
+	VisitExportSpendResponse(w http.ResponseWriter) error
+}
+
+type ExportSpend200ResponseHeaders struct {
+	ContentDisposition string
+}
+
+type ExportSpend200TextcsvResponse struct {
+	Body          io.Reader
+	Headers       ExportSpend200ResponseHeaders
+	ContentLength int64
+}
+
+func (response ExportSpend200TextcsvResponse) VisitExportSpendResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "text/csv")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.Header().Set("Content-Disposition", fmt.Sprint(response.Headers.ContentDisposition))
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type ExportSpend413ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ExportSpend413ApplicationProblemPlusJSONResponse) VisitExportSpendResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExportSpenddefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ExportSpenddefaultApplicationProblemPlusJSONResponse) VisitExportSpendResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListStandingRulesRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params ListStandingRulesParams
+}
+
+type ListStandingRulesResponseObject interface {
+	VisitListStandingRulesResponse(w http.ResponseWriter) error
+}
+
+type ListStandingRules200JSONResponse StandingRuleList
+
+func (response ListStandingRules200JSONResponse) VisitListStandingRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListStandingRulesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListStandingRulesdefaultApplicationProblemPlusJSONResponse) VisitListStandingRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeStandingRuleRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Rule string `json:"rule"`
+}
+
+type RevokeStandingRuleResponseObject interface {
+	VisitRevokeStandingRuleResponse(w http.ResponseWriter) error
+}
+
+type RevokeStandingRule200JSONResponse StandingRule
+
+func (response RevokeStandingRule200JSONResponse) VisitRevokeStandingRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeStandingRule409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response RevokeStandingRule409ApplicationProblemPlusJSONResponse) VisitRevokeStandingRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeStandingRuledefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RevokeStandingRuledefaultApplicationProblemPlusJSONResponse) VisitRevokeStandingRuleResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -53816,7 +59297,7 @@ type StrictServerInterface interface {
 	// GetConnection One connection, with the env names a run gets from it and its kind's docs
 	// (GET /v1/orgs/{org}/connections/{connection})
 	GetConnection(ctx context.Context, request GetConnectionRequestObject) (GetConnectionResponseObject, error)
-	// UpdateConnection Rename a connection, or change its description, fields or secrets
+	// UpdateConnection Rename a connection, or change its description, fields, secrets or tool modes
 	// (PATCH /v1/orgs/{org}/connections/{connection})
 	UpdateConnection(ctx context.Context, request UpdateConnectionRequestObject) (UpdateConnectionResponseObject, error)
 	// ListConnectionRepositories The owners and repositories a code host connection reaches
@@ -53930,6 +59411,21 @@ type StrictServerInterface interface {
 	// ListEvals The eval cases of the current version, with their last tries and a summary
 	// (GET /v1/orgs/{org}/factories/{factory}/evals)
 	ListEvals(ctx context.Context, request ListEvalsRequestObject) (ListEvalsResponseObject, error)
+	// ListBakeOffs The factory's bake-offs, newest first
+	// (GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs)
+	ListBakeOffs(ctx context.Context, request ListBakeOffsRequestObject) (ListBakeOffsResponseObject, error)
+	// StartBakeOff Start a bake-off of one agent across models on the current version
+	// (POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs)
+	StartBakeOff(ctx context.Context, request StartBakeOffRequestObject) (StartBakeOffResponseObject, error)
+	// GetBakeOff One bake-off with its arms, its tries passed per case and its recommendation
+	// (GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off})
+	GetBakeOff(ctx context.Context, request GetBakeOffRequestObject) (GetBakeOffResponseObject, error)
+	// ApplyBakeOff Write an arm's model as the agent's model into the factory's draft
+	// (POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply)
+	ApplyBakeOff(ctx context.Context, request ApplyBakeOffRequestObject) (ApplyBakeOffResponseObject, error)
+	// RerunBakeOff Run a bake-off again on the current version
+	// (POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/rerun)
+	RerunBakeOff(ctx context.Context, request RerunBakeOffRequestObject) (RerunBakeOffResponseObject, error)
 	// AddEvalCase Add an eval case from a past run and publish it
 	// (POST /v1/orgs/{org}/factories/{factory}/evals/cases)
 	AddEvalCase(ctx context.Context, request AddEvalCaseRequestObject) (AddEvalCaseResponseObject, error)
@@ -53951,6 +59447,9 @@ type StrictServerInterface interface {
 	// GetIntakeTrigger One trigger with this week's results and its recent events
 	// (GET /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger})
 	GetIntakeTrigger(ctx context.Context, request GetIntakeTriggerRequestObject) (GetIntakeTriggerResponseObject, error)
+	// TryIntakeTrigger Try the trigger with one of its past events, creating nothing
+	// (POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try)
+	TryIntakeTrigger(ctx context.Context, request TryIntakeTriggerRequestObject) (TryIntakeTriggerResponseObject, error)
 	// ListItems One page of a factory's items, newest first
 	// (GET /v1/orgs/{org}/factories/{factory}/items)
 	ListItems(ctx context.Context, request ListItemsRequestObject) (ListItemsResponseObject, error)
@@ -54032,6 +59531,18 @@ type StrictServerInterface interface {
 	// RestoreVersion Run an older published version again (rollback)
 	// (POST /v1/orgs/{org}/factories/{factory}/versions/{version}/restore)
 	RestoreVersion(ctx context.Context, request RestoreVersionRequestObject) (RestoreVersionResponseObject, error)
+	// ListSavedViews The factory's shared views and the caller's own
+	// (GET /v1/orgs/{org}/factories/{factory}/views)
+	ListSavedViews(ctx context.Context, request ListSavedViewsRequestObject) (ListSavedViewsResponseObject, error)
+	// CreateSavedView Save a view
+	// (POST /v1/orgs/{org}/factories/{factory}/views)
+	CreateSavedView(ctx context.Context, request CreateSavedViewRequestObject) (CreateSavedViewResponseObject, error)
+	// DeleteSavedView Delete a view
+	// (DELETE /v1/orgs/{org}/factories/{factory}/views/{view})
+	DeleteSavedView(ctx context.Context, request DeleteSavedViewRequestObject) (DeleteSavedViewResponseObject, error)
+	// UpdateSavedView Rename a view and replace its filters
+	// (PATCH /v1/orgs/{org}/factories/{factory}/views/{view})
+	UpdateSavedView(ctx context.Context, request UpdateSavedViewRequestObject) (UpdateSavedViewResponseObject, error)
 	// ListWebhookEndpoints The factory's webhook endpoints
 	// (GET /v1/orgs/{org}/factories/{factory}/webhooks)
 	ListWebhookEndpoints(ctx context.Context, request ListWebhookEndpointsRequestObject) (ListWebhookEndpointsResponseObject, error)
@@ -54071,6 +59582,9 @@ type StrictServerInterface interface {
 	// ListItemEvents One page of an item's history, oldest first
 	// (GET /v1/orgs/{org}/items/{item}/events)
 	ListItemEvents(ctx context.Context, request ListItemEventsRequestObject) (ListItemEventsResponseObject, error)
+	// SetItemLane Set an open item's lane
+	// (POST /v1/orgs/{org}/items/{item}/lane)
+	SetItemLane(ctx context.Context, request SetItemLaneRequestObject) (SetItemLaneResponseObject, error)
 	// MergeItem Merge the item's pull requests, then approve it
 	// (POST /v1/orgs/{org}/items/{item}/merge)
 	MergeItem(ctx context.Context, request MergeItemRequestObject) (MergeItemResponseObject, error)
@@ -54104,6 +59618,9 @@ type StrictServerInterface interface {
 	// ListItemRuns An item's agent runs, oldest first (at most 200)
 	// (GET /v1/orgs/{org}/items/{item}/runs)
 	ListItemRuns(ctx context.Context, request ListItemRunsRequestObject) (ListItemRunsResponseObject, error)
+	// DecideToolApproval Approve or deny the tool call an item's agent asked to make
+	// (POST /v1/orgs/{org}/items/{item}/tool-approval)
+	DecideToolApproval(ctx context.Context, request DecideToolApprovalRequestObject) (DecideToolApprovalResponseObject, error)
 	// SetTouchReason Say why a person had to act on an item
 	// (PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason)
 	SetTouchReason(ctx context.Context, request SetTouchReasonRequestObject) (SetTouchReasonResponseObject, error)
@@ -54191,6 +59708,9 @@ type StrictServerInterface interface {
 	// ListRuns The organization's agent runs across the factories the caller sees, newest first
 	// (GET /v1/orgs/{org}/runs)
 	ListRuns(ctx context.Context, request ListRunsRequestObject) (ListRunsResponseObject, error)
+	// ExportRuns The organization's agent runs as CSV, with the filters of listRuns
+	// (GET /v1/orgs/{org}/runs/export)
+	ExportRuns(ctx context.Context, request ExportRunsRequestObject) (ExportRunsResponseObject, error)
 	// GetRun One agent run (404 for a run of another organization)
 	// (GET /v1/orgs/{org}/runs/{run})
 	GetRun(ctx context.Context, request GetRunRequestObject) (GetRunResponseObject, error)
@@ -54209,6 +59729,15 @@ type StrictServerInterface interface {
 	// GetOrgSpend What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
 	// (GET /v1/orgs/{org}/spend)
 	GetOrgSpend(ctx context.Context, request GetOrgSpendRequestObject) (GetOrgSpendResponseObject, error)
+	// ExportSpend The organization's spend over a window as CSV, one row per factory, agent and model
+	// (GET /v1/orgs/{org}/spend/export)
+	ExportSpend(ctx context.Context, request ExportSpendRequestObject) (ExportSpendResponseObject, error)
+	// ListStandingRules The organization's standing rules
+	// (GET /v1/orgs/{org}/standing-rules)
+	ListStandingRules(ctx context.Context, request ListStandingRulesRequestObject) (ListStandingRulesResponseObject, error)
+	// RevokeStandingRule Revoke a standing rule
+	// (DELETE /v1/orgs/{org}/standing-rules/{rule})
+	RevokeStandingRule(ctx context.Context, request RevokeStandingRuleRequestObject) (RevokeStandingRuleResponseObject, error)
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	// (GET /v1/orgs/{org}/stream)
 	StreamEvents(ctx context.Context, request StreamEventsRequestObject) (StreamEventsResponseObject, error)
@@ -56057,6 +61586,158 @@ func (sh *strictHandler) ListEvals(w http.ResponseWriter, r *http.Request, org O
 	}
 }
 
+// ListBakeOffs operation middleware
+func (sh *strictHandler) ListBakeOffs(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request ListBakeOffsRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListBakeOffs(ctx, request.(ListBakeOffsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListBakeOffs")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListBakeOffsResponseObject); ok {
+		if err := validResponse.VisitListBakeOffsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// StartBakeOff operation middleware
+func (sh *strictHandler) StartBakeOff(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request StartBakeOffRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	var body StartBakeOffJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.StartBakeOff(ctx, request.(StartBakeOffRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "StartBakeOff")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(StartBakeOffResponseObject); ok {
+		if err := validResponse.VisitStartBakeOffResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetBakeOff operation middleware
+func (sh *strictHandler) GetBakeOff(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, bakeOff BakeOffRef) {
+	var request GetBakeOffRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.BakeOff = bakeOff
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetBakeOff(ctx, request.(GetBakeOffRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetBakeOff")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetBakeOffResponseObject); ok {
+		if err := validResponse.VisitGetBakeOffResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ApplyBakeOff operation middleware
+func (sh *strictHandler) ApplyBakeOff(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, bakeOff BakeOffRef) {
+	var request ApplyBakeOffRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.BakeOff = bakeOff
+
+	var body ApplyBakeOffJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ApplyBakeOff(ctx, request.(ApplyBakeOffRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ApplyBakeOff")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ApplyBakeOffResponseObject); ok {
+		if err := validResponse.VisitApplyBakeOffResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RerunBakeOff operation middleware
+func (sh *strictHandler) RerunBakeOff(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, bakeOff BakeOffRef) {
+	var request RerunBakeOffRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.BakeOff = bakeOff
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RerunBakeOff(ctx, request.(RerunBakeOffRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RerunBakeOff")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RerunBakeOffResponseObject); ok {
+		if err := validResponse.VisitRerunBakeOffResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // AddEvalCase operation middleware
 func (sh *strictHandler) AddEvalCase(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
 	var request AddEvalCaseRequestObject
@@ -56264,6 +61945,41 @@ func (sh *strictHandler) GetIntakeTrigger(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetIntakeTriggerResponseObject); ok {
 		if err := validResponse.VisitGetIntakeTriggerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TryIntakeTrigger operation middleware
+func (sh *strictHandler) TryIntakeTrigger(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, trigger string) {
+	var request TryIntakeTriggerRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Trigger = trigger
+
+	var body TryIntakeTriggerJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TryIntakeTrigger(ctx, request.(TryIntakeTriggerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TryIntakeTrigger")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TryIntakeTriggerResponseObject); ok {
+		if err := validResponse.VisitTryIntakeTriggerResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -57054,6 +62770,130 @@ func (sh *strictHandler) RestoreVersion(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
+// ListSavedViews operation middleware
+func (sh *strictHandler) ListSavedViews(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request ListSavedViewsRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListSavedViews(ctx, request.(ListSavedViewsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListSavedViews")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListSavedViewsResponseObject); ok {
+		if err := validResponse.VisitListSavedViewsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateSavedView operation middleware
+func (sh *strictHandler) CreateSavedView(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request CreateSavedViewRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	var body CreateSavedViewJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateSavedView(ctx, request.(CreateSavedViewRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateSavedView")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateSavedViewResponseObject); ok {
+		if err := validResponse.VisitCreateSavedViewResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteSavedView operation middleware
+func (sh *strictHandler) DeleteSavedView(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, view SavedViewRef) {
+	var request DeleteSavedViewRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.View = view
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteSavedView(ctx, request.(DeleteSavedViewRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteSavedView")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteSavedViewResponseObject); ok {
+		if err := validResponse.VisitDeleteSavedViewResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateSavedView operation middleware
+func (sh *strictHandler) UpdateSavedView(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, view SavedViewRef) {
+	var request UpdateSavedViewRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.View = view
+
+	var body UpdateSavedViewJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateSavedView(ctx, request.(UpdateSavedViewRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateSavedView")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateSavedViewResponseObject); ok {
+		if err := validResponse.VisitUpdateSavedViewResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListWebhookEndpoints operation middleware
 func (sh *strictHandler) ListWebhookEndpoints(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
 	var request ListWebhookEndpointsRequestObject
@@ -57435,6 +63275,40 @@ func (sh *strictHandler) ListItemEvents(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
+// SetItemLane operation middleware
+func (sh *strictHandler) SetItemLane(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
+	var request SetItemLaneRequestObject
+
+	request.Org = org
+	request.Item = item
+
+	var body SetItemLaneJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetItemLane(ctx, request.(SetItemLaneRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetItemLane")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetItemLaneResponseObject); ok {
+		if err := validResponse.VisitSetItemLaneResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // MergeItem operation middleware
 func (sh *strictHandler) MergeItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
 	var request MergeItemRequestObject
@@ -57781,6 +63655,40 @@ func (sh *strictHandler) ListItemRuns(w http.ResponseWriter, r *http.Request, or
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListItemRunsResponseObject); ok {
 		if err := validResponse.VisitListItemRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DecideToolApproval operation middleware
+func (sh *strictHandler) DecideToolApproval(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
+	var request DecideToolApprovalRequestObject
+
+	request.Org = org
+	request.Item = item
+
+	var body DecideToolApprovalJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DecideToolApproval(ctx, request.(DecideToolApprovalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DecideToolApproval")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DecideToolApprovalResponseObject); ok {
+		if err := validResponse.VisitDecideToolApprovalResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -58626,6 +64534,33 @@ func (sh *strictHandler) ListRuns(w http.ResponseWriter, r *http.Request, org Or
 	}
 }
 
+// ExportRuns operation middleware
+func (sh *strictHandler) ExportRuns(w http.ResponseWriter, r *http.Request, org OrgRef, params ExportRunsParams) {
+	var request ExportRunsRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ExportRuns(ctx, request.(ExportRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ExportRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ExportRunsResponseObject); ok {
+		if err := validResponse.VisitExportRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetRun operation middleware
 func (sh *strictHandler) GetRun(w http.ResponseWriter, r *http.Request, org OrgRef, run string) {
 	var request GetRunRequestObject
@@ -58786,6 +64721,87 @@ func (sh *strictHandler) GetOrgSpend(w http.ResponseWriter, r *http.Request, org
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetOrgSpendResponseObject); ok {
 		if err := validResponse.VisitGetOrgSpendResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ExportSpend operation middleware
+func (sh *strictHandler) ExportSpend(w http.ResponseWriter, r *http.Request, org OrgRef, params ExportSpendParams) {
+	var request ExportSpendRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ExportSpend(ctx, request.(ExportSpendRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ExportSpend")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ExportSpendResponseObject); ok {
+		if err := validResponse.VisitExportSpendResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListStandingRules operation middleware
+func (sh *strictHandler) ListStandingRules(w http.ResponseWriter, r *http.Request, org OrgRef, params ListStandingRulesParams) {
+	var request ListStandingRulesRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListStandingRules(ctx, request.(ListStandingRulesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListStandingRules")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListStandingRulesResponseObject); ok {
+		if err := validResponse.VisitListStandingRulesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeStandingRule operation middleware
+func (sh *strictHandler) RevokeStandingRule(w http.ResponseWriter, r *http.Request, org OrgRef, rule string) {
+	var request RevokeStandingRuleRequestObject
+
+	request.Org = org
+	request.Rule = rule
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeStandingRule(ctx, request.(RevokeStandingRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeStandingRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeStandingRuleResponseObject); ok {
+		if err := validResponse.VisitRevokeStandingRuleResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

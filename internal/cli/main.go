@@ -2,7 +2,7 @@
 // goald's HTTP API, always within one organization (org.go resolves which), it changes factory definitions (factory.go: goald keeps them as
 // drafts and published versions; a folder pulled with goal factory pull is edited and sent back
 // with goal factory push, which is the one way a definition changes outside the builder),
-// manages organizations, searches one (search.go), lists its agent runs (runs.go), runs its eval cases (eval.go), lists, shows and decides Jonah's proposals (jonah.go), reads its spend (spend.go), lists and tries Jonah's judges (judge.go), reads a factory's triggers and manages its webhook endpoints (intake.go), and submits, follows and decides on work items. It also starts the
+// manages organizations, searches one (search.go), lists and revokes its standing rules (standingrules.go), lists its agent runs (runs.go), runs its eval cases (eval.go) and its bake-offs (bakeoff.go), lists, shows and decides Jonah's proposals (jonah.go), reads its spend (spend.go), lists and tries Jonah's judges (judge.go), reads and tries a factory's triggers and manages its webhook endpoints (intake.go), and submits, follows and decides on work items. It also starts the
 // local platform (goal up), validates folders offline (goal validate), and keeps the install's
 // skills and template catalogs in the bucket (catalog.go).
 //
@@ -36,7 +36,12 @@ const usage = `usage:
   goal follow <item>                              follow an item's events again
   goal item <item>                                show an item with its outputs as JSON, and its human
                                                   touches (who acted, where, planned or not, why) on stderr
-  goal approve <item>                             approve an item waiting at a human station
+  goal approve <item> [--always-allow]            approve an item waiting at a human station, or the
+                                                  tool call its agent waits on; --always-allow also lets
+                                                  that agent role call that tool without asking from now
+                                                  on (a standing rule; needs connection:manage)
+  goal deny <item> [--note "..."]                 deny the tool call the item's agent waits on; its next
+                                                  run's brief carries the denial and the note
   goal reject <item> --reason "..."               send it back for rework
   goal retry <item>                               send a blocked item back to its station's queue
   goal merge <item>                               merge the item's pull request, then approve it
@@ -48,6 +53,9 @@ const usage = `usage:
   goal move <item> <station> [--reason "..."]     put the item at another station (a reason is needed
                                                   upstream, where it counts as rework); a run in
                                                   progress is stopped
+  goal lane <item> <lane>                         set the lane of an open item that is not in
+                                                  progress: it picks the agent where a station
+                                                  routes by lane
   goal pause <item> [--reason "..."]              stop the item where it is (goal retry resumes it);
                                                   a run in progress is stopped
   goal status [--factory F] [--window 7d]         per factory over the last days (1d to 90d): work in
@@ -101,6 +109,10 @@ const usage = `usage:
                                                   change what the flags name (owners and admins), keeping
                                                   the rest as read; refused when the policy changed since
                                                   it was read (--deny-command replaces the list)
+  goal standing-rules list [--revoked] [--json]   the organization's standing rules: which agent role may
+                                                  call which connection tool without asking, who made it
+                                                  and when (--revoked: the revoked ones too)
+  goal standing-rules revoke <rule>               revoke one: the agent asks first again for that tool
   goal key list                                   the organization's API keys: hint, scopes, factories,
                                                   ceiling, expiry, last use
   goal key create <name> --scope S [--scope S]... [--factory F]... [--role viewer|approver|editor] [--expires 90d]
@@ -154,6 +166,15 @@ const usage = `usage:
   goal knowledge search "<query>" [--source S]... [--limit N]
                                                   search as agents do: the best passages first, with
                                                   their document ids or links
+  goal knowledge usage [--source S] [--days N] [--json]
+                                                  each document's use over the window (default 7
+                                                  days, at most 90), of S or every source: runs,
+                                                  helped and misled, the people's share in brackets
+  goal knowledge uses <document> [--json]         the runs that used it, newest first: item, factory,
+                                                  search or read, first use
+  goal knowledge verdict <document> helped|misled [--run R] [--note TEXT] [--json]
+                                                  give your verdict on it, of a run that used it
+                                                  with --run
   goal search "<query>" [--limit N] [--json]      search the organization's items, agents, factories
                                                   and connections, by group, best first (--limit: per
                                                   group, 1 to 20, default 5; --json: goald's answer as
@@ -182,6 +203,18 @@ const usage = `usage:
   goal jonah reject <number> --reason "..." [--factory F]
                                                   reject it; later reviews read the reason
   goal jonah look [--factory F]                   queue a review of the factory's sent-back runs now
+  goal bake-off run <agent> [--model M]... [--trials N] [--follow] [--factory F] [--json]
+                                                  print the estimate and the models, then start a bake-off
+                                                  of the agent's eval cases on 2 to 4 models (default its
+                                                  model and goald's default ones; --trials: tries per case,
+                                                  default 3); --follow waits for the result
+  goal bake-off show <id> [--factory F] [--json]  the recommended model against the current one, then per
+                                                  model the pass rate, cost and time per item, turns and
+                                                  judged share (Recommended, Now), and per case the tries
+                                                  passed per model
+  goal bake-off apply <id> [--model M] [--factory F] [--json]
+                                                  write the recommended model (or M) as the agent's model
+                                                  into the factory's draft; nothing is published
   goal spend [--window week|month|90d] [--json]   what the organization's agent runs cost (default this
                                                   week), per merged item and on rework, and each
                                                   factory's budget: running, stopped or over_budget,
@@ -198,6 +231,12 @@ const usage = `usage:
                                                   creating items (triggers change in the definition)
   goal triggers show <factory> <trigger> [--json] a trigger, what its items did in the last 7 days
                                                   and its recent events: created, merged or skipped
+  goal triggers try <factory> <trigger> --event ID [--json]
+                                                  dry-run the trigger on one of its 20 newest events
+                                                  (ID from goal triggers show): whether it matched,
+                                                  each step and why, the item it would create; nothing
+                                                  is created, but the model check runs and its cost is
+                                                  spent
   goal webhooks list <factory> [--json]           the factory's webhook endpoints: kind, address,
                                                   the triggers they feed, deliveries in 7 days
                                                   (never a secret)
@@ -256,7 +295,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, the decisions, status, andon, factory, policy, connection, credential, knowledge, search, runs, eval, jonah, spend, judge, triggers, webhooks) acts in one
+Every command that talks to goald (run, follow, item, note, answer, move, pause, the decisions, deny, status, andon, factory, policy, standing-rules, connection, credential, knowledge, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or
@@ -323,10 +362,10 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 
 	// The commands on one item, and the command groups, by name.
 	if handler, ok := map[string]command{
-		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbAnswer: answerItem, verbMove: moveItem, verbPause: pauseItem,
+		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbAnswer: answerItem, verbMove: moveItem, verbLane: laneItem, verbPause: pauseItem, verbDeny: denyItem,
 		"status": status, "factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
-		"connection": connectionCommand, "credential": credentialCommand, "policy": policyCommand, "knowledge": knowledgeCommand, "search": search, "runs": runs, "eval": evalCommand, "spend": spend,
-		"judge": judgeCommand, "jonah": jonahCommand, "triggers": triggersCommand, "webhooks": webhooksCommand,
+		"connection": connectionCommand, "credential": credentialCommand, "policy": policyCommand, "knowledge": knowledgeCommand, "search": search, "runs": runs, "eval": evalCommand, "bake-off": bakeOffCommand, "spend": spend,
+		"judge": judgeCommand, "jonah": jonahCommand, "triggers": triggersCommand, "webhooks": webhooksCommand, cmdStandingRules: standingRulesCommand,
 	}[cmd]; ok {
 		return handler(ctx, out, getenv, rest)
 	}

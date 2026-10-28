@@ -20,6 +20,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_AUTH_GOOGLE` | config | no | on also offers sign-in with Google, with GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. |
 | `GOAL_AUTH_PROXY_SECRET` | secret | yes | The secret goald sends with every request it forwards to the auth service, which refuses any other; goal up generates one per start. |
 | `GOAL_AUTH_UPSTREAM` | config | no | Where goald's /api/auth proxy reaches the auth service. |
+| `GOAL_BAKEOFF_MODELS` | public | no | The models a bake-off that names no arms tries beside the agent's current model, comma-separated model ids; cut at four arms. |
 | `GOAL_DATABASE_URL` | secret | no | goald's PostgreSQL URL, as goal_app under row-level security; by default compose's database with GOAL_PG_APP_PASSWORD. |
 | `GOAL_DEFAULT_AGENT_IMAGE` | config | no | Retired: GOAL_AGENT_IMAGE replaced it; goald ignores it and warns while it is set. |
 | `GOAL_DEFINITION_CACHE_BYTES` | config | no | How many bytes of no-longer-current factory definition files goald keeps for the runs pinned to them. |
@@ -147,6 +148,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_FEEDBACK` | config | no | The reviewer's feedback on an earlier attempt, which the agent's task prompt includes. |
 | `GOAL_GATEWAY_TOKEN` | secret | yes | The run's gateway token, which the worker fetches its bundle and reaches the MCP gateway with. |
 | `GOAL_GATEWAY_URL` | config | yes | The MCP gateway's URL: for goald it defaults from the listeners; the worker needs it to fetch its run's bundle. |
+| `GOAL_GIT_ATTEMPT_TIMEOUT` | config | no | The time limit in seconds of each attempt of a network git step in goal-agent prepare (the clone, the base branch's push and fetch); a cut-off attempt is retried. 300 when unset. |
 
 ## The control Worker (`apps/control-worker`, its vars and Secrets Store bindings in `deploy/cloudflare/wrangler.jsonc`)
 

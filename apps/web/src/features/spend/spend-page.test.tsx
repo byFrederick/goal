@@ -2,14 +2,20 @@
 // The spend screen as a person sees it: the window in the URL, the figures, and each of its states
 // (loading, error with retry, empty, and an incomplete answer that shows dashes, never $0). The API
 // call is replaced, so the tests read the answer the screen was given.
+import { ApiError } from '@goal/api-client';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as download from '../../api/download';
 import type { OrgSpend, SpendWindow } from '../../api/types';
 import { answerFor, spendFixture } from './fixture';
 import { renderSpend } from './harness';
 
-const { getOrgSpend } = vi.hoisted(() => ({ getOrgSpend: vi.fn() }));
-vi.mock('../../api/spend', () => ({ getOrgSpend }));
+const { getOrgSpend, exportOrgSpend } = vi.hoisted(() => ({
+  getOrgSpend: vi.fn(),
+  exportOrgSpend: vi.fn(),
+}));
+vi.mock('../../api/spend', () => ({ getOrgSpend, exportOrgSpend }));
+vi.mock(import('../../api/download'), async (original) => ({ ...(await original()), saveCsv: vi.fn() }));
 
 /** Answers each window from `answer`. */
 const answerWith = (answer: (window: SpendWindow) => OrgSpend) =>
@@ -17,11 +23,17 @@ const answerWith = (answer: (window: SpendWindow) => OrgSpend) =>
 
 beforeEach(() => {
   answerWith(answerFor);
+  exportOrgSpend.mockResolvedValue({
+    blob: new Blob(['factory,agent,model,cost_usd\n']),
+    filename: 'spend-2026-10-27.csv',
+  });
 });
 
 afterEach(() => {
   cleanup();
   getOrgSpend.mockReset();
+  exportOrgSpend.mockReset();
+  vi.mocked(download.saveCsv).mockClear();
 });
 
 describe('the spend screen, ready', () => {
@@ -64,11 +76,39 @@ describe('the spend screen, ready', () => {
     expect(within(section).getByRole('button', { name: 'Set up' }).getAttribute('aria-disabled')).toBe('true');
   });
 
-  it('draws Export CSV as not available yet, with aria-disabled', async () => {
-    renderSpend();
+  it('downloads the CSV of the window in the URL, and saves the file goald named', async () => {
+    renderSpend('/o/acme/spend?window=month');
+    await screen.findByRole('heading', { name: 'Spend and billing' });
 
-    const exportButton = await screen.findByRole('button', { name: 'Export CSV' });
-    expect(exportButton.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+
+    await waitFor(() => expect(download.saveCsv).toHaveBeenCalledOnce());
+    expect(exportOrgSpend).toHaveBeenCalledWith('org-1', 'month');
+    expect(vi.mocked(download.saveCsv).mock.calls[0]?.[0].filename).toBe('spend-2026-10-27.csv');
+  });
+
+  it('asks for the week when the URL has no window', async () => {
+    renderSpend();
+    await screen.findByRole('heading', { name: 'Spend and billing' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+
+    await waitFor(() => expect(exportOrgSpend).toHaveBeenCalledWith('org-1', 'week'));
+  });
+
+  it('shows a 413 export-too-large in the error callout and keeps the figures on screen', async () => {
+    exportOrgSpend.mockRejectedValueOnce(
+      new ApiError({ title: 'Export too large', status: 413, detail: 'More than 100000 rows; pick a shorter window.' }),
+    );
+    renderSpend();
+    await screen.findByText('Spend this week');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(within(alert).getByText('Export too large: More than 100000 rows; pick a shorter window.')).toBeTruthy();
+    expect(download.saveCsv).not.toHaveBeenCalled();
+    expect(screen.getByText('$1,940')).toBeTruthy();
   });
 
   it('never shows an agent copy number', async () => {

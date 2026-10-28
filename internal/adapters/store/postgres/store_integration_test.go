@@ -33,6 +33,7 @@ func TestStore_Conformance(t *testing.T) {
 		t.Helper()
 
 		s := New(newTestPool(t))
+		s.exportPage = 2 // so the exports' conformance cases read several pages
 
 		return storetest.Harness{
 			Store: s,

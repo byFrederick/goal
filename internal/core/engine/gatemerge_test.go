@@ -78,12 +78,9 @@ func TestGateMerge_RefusedBlocksAndRetrySkipsMerged(t *testing.T) {
 		output string   // the build's output; empty: names app#7
 		conns  []string // nil: github and gitlab
 		pr     func(*ports.PullRequest)
-		moved  bool // a push moves the head between the read and the merge
 		reason string
 	}{
 		{name: "closed", pr: func(pr *ports.PullRequest) { pr.Open = false }, reason: "is closed"},
-		{name: "not mergeable", pr: func(pr *ports.PullRequest) { pr.Mergeable = false }, reason: "has conflicts"},
-		{name: "head moved", moved: true, reason: "head moved"},
 		{name: "no pull request in the outputs", output: `{"summary":"done"}`, reason: "no output names a pull_request"},
 		{name: "no connection serves the host", conns: []string{}, reason: "no connection of the factory"},
 	}
@@ -111,10 +108,6 @@ func TestGateMerge_RefusedBlocksAndRetrySkipsMerged(t *testing.T) {
 
 			h.codehost.Add(pr)
 
-			if tt.moved {
-				h.codehost.MoveHeadAfterRead(prURL, "f00d")
-			}
-
 			it := h.submit(t, domain.NewItem{})
 			h.step(t)
 			h.step(t)
@@ -131,9 +124,9 @@ func TestGateMerge_RefusedBlocksAndRetrySkipsMerged(t *testing.T) {
 		h.codehost.Add(openPR(prURL))
 		h.codehost.Add(openPR(docsURL))
 
-		conflicted := openPR(mrURL)
-		conflicted.Mergeable = false
-		h.gitlab.Add(conflicted)
+		closed := openPR(mrURL)
+		closed.Open = false
+		h.gitlab.Add(closed)
 
 		it := h.submit(t, domain.NewItem{})
 		h.step(t)
@@ -145,7 +138,7 @@ func TestGateMerge_RefusedBlocksAndRetrySkipsMerged(t *testing.T) {
 			t.Errorf("github merges %+v, want only app#7, before the refusal", merges)
 		}
 
-		// The conflict is resolved; the gate runs again and its merge skips app#7.
+		// web!3 is reopened; the gate runs again and its merge skips app#7.
 		h.gitlab.Add(openPR(mrURL))
 
 		if _, err := h.e.Retry(inOrg(t), it.ID, human); err != nil {
@@ -477,5 +470,173 @@ func TestGateMerge_EmptyPullRequestsFailsWithoutIntegrationBranch(t *testing.T) 
 
 			h.expectBlockedAtGate(t, it.ID, "no output names a pull_request")
 		})
+	}
+}
+
+// A pull request whose mergeability the host is still computing after its branch update is read
+// again until it is known; one that turns mergeable within the wait merges and the item moves on.
+func TestGateMerge_PendingBecomesMergeableWithinTheWait(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, gateMergeLine(), byAgent(map[string]string{
+		agWorker: `{"pull_request":"` + prURL + `"}`, agReviewer: approve,
+	}))
+	h.codehost.Add(openPR(prURL))
+	h.codehost.PendingReads(prURL, 4) // the read before the update, the one after and two more
+
+	it := h.submit(t, domain.NewItem{})
+	h.step(t)
+	h.stepThroughBackoff(t)
+
+	if got := h.item(t, it.ID); got.Position() != (domain.Position{Station: stDone, State: domain.StateDone}) {
+		t.Fatalf("item at %+v, want done (events %v)", got.Position(), h.kinds(it.ID))
+	}
+
+	if n := h.codehost.Reads(prURL); n != 6 {
+		t.Errorf("%d reads, want 6: four pending, the mergeable one and the merge's check", n)
+	}
+
+	if n := len(h.eventsOf(it.ID, domain.EventMergeDeferred)); n != 0 {
+		t.Errorf("events %v, want no merge_deferred", h.kinds(it.ID))
+	}
+
+	h.expectEngineMerged(t, it.ID, 1)
+	h.expectOutcomes(t, it.ID, domain.LeaseAdvanced, domain.LeaseAdvanced)
+}
+
+// A pull request that is not mergeable yet, but has no conflict, sends the item back to the
+// gate's queue instead of blocking it: its agent runs again, approves again, and the merge goes
+// through once the pull request is ready.
+func TestGateMerge_NotMergeableYetIsDeferredAtTheGate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		host   func(*porttest.CodeHost)
+		wait   bool // the item waits out MergeWait first
+		reason string
+	}{
+		{
+			name: "still pending after the wait", host: func(c *porttest.CodeHost) { c.PendingReads(prURL, 1000) }, wait: true,
+			reason: "still computing",
+		},
+		{name: "not mergeable after the update", host: func(c *porttest.CodeHost) {
+			pr := openPR(prURL)
+			pr.Mergeable = false
+			c.Add(pr)
+		}, reason: "not mergeable yet"},
+		{name: "head moved", host: func(c *porttest.CodeHost) { c.MoveHeadAfterRead(prURL, "f00d") }, reason: "head moved"},
+		{name: "merge refused", host: func(c *porttest.CodeHost) { c.RefuseMerges(prURL, 1) }, reason: "required checks"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarness(t, gateMergeLine(), byAgent(map[string]string{
+				agWorker: `{"pull_request":"` + prURL + `"}`, agReviewer: approve,
+			}))
+			h.codehost.Add(openPR(prURL))
+			tt.host(h.codehost)
+
+			it := h.submit(t, domain.NewItem{})
+			h.step(t)
+
+			if tt.wait {
+				h.stepThroughBackoff(t)
+			} else {
+				h.step(t)
+			}
+
+			h.expectDeferredAtGate(t, it.ID, 1, tt.reason)
+			h.expectOutcomes(t, it.ID, domain.LeaseAdvanced, domain.LeaseReleased)
+
+			// The pull request is ready now; the gate's agent runs again and its merge goes through.
+			h.codehost.PendingReads(prURL, 0)
+			h.codehost.RefuseMerges(prURL, 0)
+			h.codehost.Add(openPR(prURL))
+
+			h.step(t)
+
+			if got := h.item(t, it.ID); got.Position() != (domain.Position{Station: stDone, State: domain.StateDone}) {
+				t.Fatalf("item at %+v, want done (events %v)", got.Position(), h.kinds(it.ID))
+			}
+
+			if approved := h.eventsOf(it.ID, domain.EventGateApproved); len(approved) != 2 {
+				t.Errorf("gate_approved events %+v, want two: the deferred one and the one that merged", approved)
+			}
+
+			h.expectOutcomes(t, it.ID, domain.LeaseAdvanced, domain.LeaseReleased, domain.LeaseAdvanced)
+		})
+	}
+}
+
+// Deferrals in a row are capped: the refusal after MergeDeferrals of them blocks the item at the
+// gate, naming the count and the last refusal. A person's retry starts the count again.
+func TestGateMerge_BlocksAfterTheDeferralLimit(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, gateMergeLine(), byAgent(map[string]string{
+		agWorker: `{"pull_request":"` + prURL + `"}`, agReviewer: approve,
+	}))
+
+	pr := openPR(prURL)
+	pr.Mergeable = false
+	h.codehost.Add(pr)
+
+	it := h.submit(t, domain.NewItem{})
+	h.step(t)
+
+	const limit = 5 // engine.Config.MergeDeferrals' default
+
+	for n := 1; n <= limit; n++ {
+		h.step(t)
+		h.expectDeferredAtGate(t, it.ID, n, "not mergeable yet")
+	}
+
+	h.step(t)
+
+	h.expectBlockedAtGate(t, it.ID, "after 5 deferrals in a row")
+	h.expectBlockedAtGate(t, it.ID, "not mergeable yet")
+
+	if n := len(h.eventsOf(it.ID, domain.EventMergeDeferred)); n != limit {
+		t.Errorf("%d merge_deferred events, want %d", n, limit)
+	}
+
+	if _, err := h.e.Retry(inOrg(t), it.ID, human); err != nil {
+		t.Fatal(err)
+	}
+
+	h.step(t)
+
+	h.expectDeferredAtGate(t, it.ID, 1, "not mergeable yet")
+}
+
+// expectDeferredAtGate fails unless item is queued at the review gate, its latest events are
+// gate_approved then a merge_deferred by the engine counting deferrals in a row, whose reason
+// says reason, and it has no merged event.
+func (h *harness) expectDeferredAtGate(t *testing.T, item domain.ItemID, deferrals int, reason string) {
+	t.Helper()
+
+	if got := h.item(t, item); got.Position() != (domain.Position{Station: stReview, State: domain.StateQueued}) {
+		t.Fatalf("item at %+v, want queued at the gate (events %v)", got.Position(), h.kinds(item))
+	}
+
+	kinds := h.kinds(item)
+	if n := len(kinds); n < 2 || kinds[n-2] != domain.EventGateApproved || kinds[n-1] != domain.EventMergeDeferred {
+		t.Fatalf("events %v, want gate_approved then merge_deferred last", kinds)
+	}
+
+	deferred := h.eventsOf(item, domain.EventMergeDeferred)
+	last := deferred[len(deferred)-1]
+
+	if r, _ := last.Data["reason"].(string); !strings.Contains(r, reason) || last.Actor != domain.ActorEngine ||
+		last.Station != stReview || last.Data["pull_request"] != prURL || last.Data["deferrals"] != deferrals {
+		t.Errorf("merge_deferred %+v by %s at %s; want by the engine at the gate, for %s, deferral %d, its reason saying %q",
+			last.Data, last.Actor, last.Station, prURL, deferrals, reason)
+	}
+
+	if merged := h.eventsOf(item, domain.EventMerged); len(merged) != 0 {
+		t.Errorf("merged events %+v, want none on a deferred item", merged)
 	}
 }

@@ -34,12 +34,27 @@ async function installSkills(): Promise<void> {
   );
 }
 
-/** Runs a command with its output on stderr, so prepare's stdout stays the protocol. */
+/**
+ * Runs a command with its output on stderr, so prepare's stdout stays the protocol. With opts.stderr,
+ * the command's stderr still goes to stderr and is also passed there; opts.signal kills the command.
+ */
 const exec: Exec = (command, args, opts = {}) =>
   new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: opts.cwd, stdio: ['ignore', 2, 2] });
+    const child = spawn(command, args, { cwd: opts.cwd, stdio: ['ignore', 2, opts.stderr ? 'pipe' : 2] });
+    const { stderr } = opts;
+    if (stderr) {
+      child.stderr?.on('data', (c: Buffer) => {
+        process.stderr.write(c);
+        stderr(c.toString('utf8'));
+      });
+    }
+    const kill = () => child.kill('SIGTERM');
+    opts.signal?.addEventListener('abort', kill, { once: true });
     child.once('error', reject);
-    child.once('close', (code, signal) => resolve(code ?? (signal ? 128 : 1)));
+    child.once('close', (code, signal) => {
+      opts.signal?.removeEventListener('abort', kill);
+      resolve(code ?? (signal ? 128 : 1));
+    });
   });
 
 /** Runs a command and returns its stdout; its stderr goes to stderr. A failure rejects. */
