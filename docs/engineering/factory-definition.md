@@ -130,6 +130,25 @@ With `board.flow.assemblies.changedSince: true` (default false), plans bind late
 - It states what it lists and nothing else: telling agents to re-derive the brief's paths against current main belongs in the factory's prompts and rules.
 - A code-host error is logged: the item finishes without a base commit, or runs without the section.
 
+## Assembly integration branches
+
+`board.flow.assemblies.integration` makes an assembly's parts merge into one integration branch, `goal/a<root number>-<root title slug>`, that lands on the default branch at a gate ([ADR 0033](../adr/0033-assembly-integration-branches.md)). Every key is optional:
+
+| Key | Values | Default | Meaning |
+| --- | --- | --- | --- |
+| `mode` | `trunk`, `branch` | `trunk` | `trunk`: each part merges into the default branch. `branch`: the parts merge into the assembly's integration branch. |
+| `refresh` | `onLand`, `eachPart` | `onLand` | When the integration branch takes in the default branch: when it lands, or before each part. |
+| `minParts` | integer, 0 or more | `0` | An assembly with fewer parts stays on trunk. |
+| `landAt` | a station id | the first station with `action: merge` after the station whose plan made the assembly | Where the integration branch lands. |
+
+A definition without the block is trunk, `onLand`, 0 and no `landAt`. The checks report:
+
+- `unknown-station` when `landAt` names no station;
+- `integration-land-at-not-merge` when `landAt` names a station that is not an agent station with a `gate` and `action: merge`;
+- `integration-without-merge-station` when `mode` is `branch` and no station has `action: merge`.
+
+Nothing reads the settings yet: the store, the engine and the worker follow in the parts of the assembly ADR 0033 describes.
+
 ## Judges and eval cases
 
 Jonah's two file kinds live under `evals/` ([ADR 0025](../adr/0025-judges-and-evals-as-the-screens-show-them.md)). `contracts/definitions/evals.schema.json` defines both, and `config.Check` validates them with the factory (`internal/config/evals.go`). Judge runs and eval runs are built in `internal/jonah` but goald does not run them yet; the publish eval gate is described under [Publishing with eval cases](#publishing-with-eval-cases).

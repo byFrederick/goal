@@ -65,7 +65,7 @@ import {
   listVersions,
   validateDraft,
 } from './definitions';
-import { getIntake } from './intake';
+import { definitionFile, getIntake, getIntakeTrigger } from './intake';
 import { listApiKeys, listMemberTokens, listPersonalTokens } from './keys';
 import {
   getKnowledgeDocument,
@@ -76,8 +76,9 @@ import {
   listKnowledgeSources,
   searchKnowledge,
 } from './knowledge';
+import { getOrgPolicy } from './policy';
 import { getOrgSpend } from './spend';
-import type { ItemEvent, SpendWindow } from './types';
+import type { Factory, ItemEvent, SpendWindow } from './types';
 import { getWebhookDelivery, listWebhookDeliveries, listWebhookEndpoints } from './webhooks';
 
 /**
@@ -133,6 +134,8 @@ export const keys = {
   /** What each factory needs from people now (the rail's badges). */
   attention: (org: string) => ['org', org, 'attention'] as const,
   settings: (org: string) => ['org', org, 'settings'] as const,
+  /** The organization's model and tool policy (ADR 0024), the Models and policies screen. */
+  policy: (org: string) => ['org', org, 'policy'] as const,
   apiKeys: (org: string) => ['org', org, 'api-keys'] as const,
   /** Its members (spec 3 §10.1); identity service changes invalidate members and invitations. */
   members: (org: string) => ['org', org, 'members'] as const,
@@ -386,6 +389,13 @@ export const settingsQuery = (org: string) =>
     staleTime: 30_000,
   });
 
+export const policyQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.policy(org),
+    queryFn: ({ signal }) => getOrgPolicy(org, signal),
+    staleTime: 30_000,
+  });
+
 export const membersQuery = (org: string) =>
   queryOptions({
     queryKey: keys.members(org),
@@ -550,6 +560,41 @@ export const defKeys = {
   template: (org: string, name: string, version?: number) =>
     ['org', org, 'template', name, version ?? 'latest'] as const,
 };
+
+/** The intake's keys: every read of a factory's triggers sits under its `intake` root, which work events invalidate. */
+export const intakeKeys = {
+  root: (org: string, f: string) => ['org', org, 'factory', f, 'intake'] as const,
+  triggers: (org: string, f: string) => [...intakeKeys.root(org, f), 'triggers'] as const,
+  trigger: (org: string, f: string, trigger: string) => [...intakeKeys.triggers(org, f), trigger] as const,
+  /** factory.yaml as the page reads it: the draft's, or the running version's (one per version id). */
+  definition: (org: string, f: string, source: string) => [...intakeKeys.root(org, f), 'definition', source] as const,
+};
+
+/** One trigger of the current definition, with this week's results and its recent events. */
+export const intakeTriggerQuery = (org: string, factory: string, trigger: string) =>
+  queryOptions({
+    queryKey: intakeKeys.trigger(org, factory, trigger),
+    queryFn: ({ signal }) => getIntakeTrigger(org, factory, trigger, signal),
+  });
+
+/**
+ * factory.yaml as a trigger page reads it: the open draft's when there is one (what a save changes),
+ * else the running version's. A factory with no version has an empty file.
+ */
+export const definitionTextQuery = (org: string, factory: Factory) =>
+  factory.draft
+    ? queryOptions({
+        queryKey: intakeKeys.definition(org, factory.id, 'draft'),
+        queryFn: ({ signal }) => getDraftFile(org, factory.id, definitionFile, signal),
+      })
+    : queryOptions({
+        queryKey: intakeKeys.definition(org, factory.id, factory.current?.id ?? 'none'),
+        queryFn: async ({ signal }) =>
+          factory.current
+            ? getVersionFile(org, factory.id, factory.current.id, definitionFile, signal)
+            : { text: '', sha256: '' },
+        staleTime: Number.POSITIVE_INFINITY,
+      });
 
 export const factoryQuery = (org: string, factory: string) =>
   queryOptions({ queryKey: defKeys.factory(org, factory), queryFn: ({ signal }) => getFactory(org, factory, signal) });

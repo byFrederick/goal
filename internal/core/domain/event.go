@@ -56,11 +56,15 @@ const (
 	// EventAssembled is an item whose plan became parts (data parts: how many); EventPartCreated
 	// a part created from it (data parent and key), its first event; EventAssemblyDone the
 	// assembly closed by its last part (data state, parts_done and parts); EventPartAdded a part
-	// added to an open assembly after it was assembled (data part: its id, key and actor: ref).
-	EventAssembled    EventKind = "assembled"
-	EventPartCreated  EventKind = "part_created"
-	EventPartAdded    EventKind = "part_added"
-	EventAssemblyDone EventKind = "assembly_done"
+	// added to an open assembly after it was assembled (data part: its id, key and actor: ref);
+	// EventAssemblyLanding an assembly with an integration branch whose last part closed with a
+	// part done, moved queued to its landing station instead of closing (data parts_done, parts
+	// and branch).
+	EventAssembled       EventKind = "assembled"
+	EventPartCreated     EventKind = "part_created"
+	EventPartAdded       EventKind = "part_added"
+	EventAssemblyDone    EventKind = "assembly_done"
+	EventAssemblyLanding EventKind = "assembly_landing"
 	// EventUsage is a running agent's report of one turn's token usage; a run's usage events
 	// count its turns so far.
 	EventUsage EventKind = "usage"

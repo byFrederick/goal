@@ -260,6 +260,8 @@ var probes = map[string]probe{
 	"removeFactoryRole":   {method: http.MethodDelete, path: "/v1/orgs/acme/members/x/factory-roles/acme", org: testOrg, factory: acmeID},
 	"transferOwnership":   {method: http.MethodPost, path: "/v1/orgs/acme/transfer", body: `{"to":"x","confirm":"nope"}`, org: testOrg},
 	"updateOrgSettings":   {method: http.MethodPatch, path: "/v1/orgs/acme/settings", body: `{"mark":"AC"}`, org: testOrg},
+	"getOrgPolicy":        {method: http.MethodGet, path: "/v1/orgs/acme/policy", org: testOrg},
+	"putOrgPolicy":        {method: http.MethodPut, path: "/v1/orgs/acme/policy", body: `{}`, org: testOrg, header: staleMatch},
 	"listAudit":           {method: http.MethodGet, path: "/v1/orgs/acme/audit?factory=acme", org: testOrg, factory: acmeID},
 	"listFactories":       {method: http.MethodGet, path: "/v1/orgs/acme/factories", org: testOrg},
 	"getOrgAttention":     {method: http.MethodGet, path: "/v1/orgs/acme/attention", org: testOrg},

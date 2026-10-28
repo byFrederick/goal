@@ -17,6 +17,7 @@ import {
   Plus,
   SearchCheck,
   Settings,
+  Shield,
   SquareTerminal,
   TextAlignStart,
   Users,
@@ -43,6 +44,7 @@ export type OrgPath =
   | '/o/$org/members'
   | '/o/$org/settings'
   | '/o/$org/api-keys'
+  | '/o/$org/models'
   | '/o/$org/connections'
   | '/o/$org/credentials'
   | '/o/$org/knowledge'
@@ -179,6 +181,13 @@ export const runsScreen: OrgScreen = {
   label: 'Runs',
   icon: Activity,
   to: '/o/$org/runs',
+};
+/** The organization's model and tool policy (ADR 0024): every member reads it; owners and admins change it. */
+export const modelsScreen: OrgScreen = {
+  id: 'models',
+  label: 'Models and policies',
+  icon: Shield,
+  to: '/o/$org/models',
 };
 export const settingsScreen: OrgScreen = {
   id: 'settings',

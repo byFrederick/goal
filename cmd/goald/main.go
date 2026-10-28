@@ -172,7 +172,8 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	}
 	defer boxes.close()
 
-	// The engine is built after the definitions it reads; the load hook reaches it through eng.
+	// The engine is built after the definitions it reads and the gateway; the load hook and the
+	// gateway's questions reach it through eng when they are called.
 	var eng *engine.Engine
 
 	defs := definitions.New(definitionStore, store, func(_ context.Context, lines []domain.Line) error {
@@ -181,7 +182,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Connections: connections, Events: store, Clock: clock, Logger: log,
-		Knowledge: kb.searcher,
+		Knowledge: kb.searcher, Questions: engineQuestions{eng: &eng},
 	}, gateway.Config{Key: []byte(key)})
 	if err != nil {
 		return err
@@ -230,6 +231,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
 		Connections: connections, Credentials: credentials, Intake: intake, ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes,
+		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
 		Clock: clock, Logger: log,
 	})
 	if err != nil {
@@ -463,6 +465,29 @@ func gatewayHandler(gw *gateway.Gateway) http.Handler {
 	mux.HandleFunc(api.RunPath, gw.ServeRun)
 
 	return mux
+}
+
+// engineQuestions hands the gateway's question__ask calls to the engine, read through eng when a
+// call comes in: the gateway is built before the engine. The engine's refusals become the
+// gateway's, with a reason the agent reads; its other errors stay failures.
+type engineQuestions struct{ eng **engine.Engine }
+
+func (q engineQuestions) Ask(ctx context.Context, in gateway.Question) error {
+	_, err := (*q.eng).Ask(ctx, in.Item, in.Run, in.Agent, in.Text, in.Choices)
+
+	switch {
+	case errors.Is(err, engine.ErrQuestionOpen):
+		return &gateway.QuestionRefusedError{Reason: "this item already has an open question: stop now and wait for its answer"}
+	case errors.Is(err, engine.ErrNotInProgress):
+		return &gateway.QuestionRefusedError{Reason: "this item's run has ended, so it takes no question: stop now"}
+	case errors.Is(err, engine.ErrBadQuestion):
+		return &gateway.QuestionRefusedError{Reason: fmt.Sprintf("the question takes 1 to %d characters and up to %d choices of 1 to %d characters",
+			engine.MaxQuestionRunes, engine.MaxChoices, engine.MaxChoiceRunes)}
+	case err != nil:
+		return fmt.Errorf("ask: %w", err)
+	}
+
+	return nil
 }
 
 // jobs are goald's scheduled jobs: the purge of deleted organizations, the sign-in clean-up, the

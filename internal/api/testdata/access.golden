@@ -1482,6 +1482,32 @@ getOrgAttention      pat-demoted      200                      404 org-not-found
 getOrgAttention      pat-removed      401 unauthenticated      401 unauthenticated
 getOrgAttention      pat-platform     200                      404 org-not-found
 getOrgAttention      pat-deleted-org  401 unauthenticated      401 unauthenticated
+getOrgPolicy         anonymous        401 unauthenticated      401 unauthenticated
+getOrgPolicy         owner            200                      404 org-not-found
+getOrgPolicy         admin            200                      404 org-not-found
+getOrgPolicy         viewer           200                      404 org-not-found
+getOrgPolicy         approver         200                      404 org-not-found
+getOrgPolicy         editor           200                      404 org-not-found
+getOrgPolicy         member-no-roles  200                      404 org-not-found
+getOrgPolicy         other-org-owner  404 org-not-found        200
+getOrgPolicy         platform-admin   404 org-not-found        404 org-not-found
+getOrgPolicy         stale-owner      200                      404 org-not-found
+getOrgPolicy         key-scoped       200                      404 org-not-found
+getOrgPolicy         key-restricted   200                      404 org-not-found
+getOrgPolicy         key-other-org    404 org-not-found        200
+getOrgPolicy         key-expired      401 unauthenticated      401 unauthenticated
+getOrgPolicy         key-revoked      401 unauthenticated      401 unauthenticated
+getOrgPolicy         bearer-owner     200                      404 org-not-found
+getOrgPolicy         pat-approver     403 forbidden            404 org-not-found
+getOrgPolicy         pat-owner        200                      404 org-not-found
+getOrgPolicy         pat-viewer       200                      404 org-not-found
+getOrgPolicy         pat-other-org    404 org-not-found        200
+getOrgPolicy         pat-expired      401 unauthenticated      401 unauthenticated
+getOrgPolicy         pat-revoked      401 unauthenticated      401 unauthenticated
+getOrgPolicy         pat-demoted      200                      404 org-not-found
+getOrgPolicy         pat-removed      401 unauthenticated      401 unauthenticated
+getOrgPolicy         pat-platform     200                      404 org-not-found
+getOrgPolicy         pat-deleted-org  401 unauthenticated      401 unauthenticated
 getOrgSettings       anonymous        401 unauthenticated      401 unauthenticated
 getOrgSettings       owner            200                      404 org-not-found
 getOrgSettings       admin            200                      404 org-not-found
@@ -2886,6 +2912,32 @@ putDraftFile         pat-demoted      404 factory-not-found    404 org-not-found
 putDraftFile         pat-removed      401 unauthenticated      401 unauthenticated
 putDraftFile         pat-platform     200                      404 org-not-found
 putDraftFile         pat-deleted-org  401 unauthenticated      401 unauthenticated
+putOrgPolicy         anonymous        401 unauthenticated      401 unauthenticated
+putOrgPolicy         owner            200                      404 org-not-found
+putOrgPolicy         admin            200                      404 org-not-found
+putOrgPolicy         viewer           403 forbidden            404 org-not-found
+putOrgPolicy         approver         403 forbidden            404 org-not-found
+putOrgPolicy         editor           403 forbidden            404 org-not-found
+putOrgPolicy         member-no-roles  403 forbidden            404 org-not-found
+putOrgPolicy         other-org-owner  404 org-not-found        200
+putOrgPolicy         platform-admin   404 org-not-found        404 org-not-found
+putOrgPolicy         stale-owner      200                      404 org-not-found
+putOrgPolicy         key-scoped       403 forbidden            404 org-not-found
+putOrgPolicy         key-restricted   403 forbidden            404 org-not-found
+putOrgPolicy         key-other-org    404 org-not-found        403 forbidden
+putOrgPolicy         key-expired      401 unauthenticated      401 unauthenticated
+putOrgPolicy         key-revoked      401 unauthenticated      401 unauthenticated
+putOrgPolicy         bearer-owner     200                      404 org-not-found
+putOrgPolicy         pat-approver     403 forbidden            404 org-not-found
+putOrgPolicy         pat-owner        403 forbidden            404 org-not-found
+putOrgPolicy         pat-viewer       403 forbidden            404 org-not-found
+putOrgPolicy         pat-other-org    404 org-not-found        403 forbidden
+putOrgPolicy         pat-expired      401 unauthenticated      401 unauthenticated
+putOrgPolicy         pat-revoked      401 unauthenticated      401 unauthenticated
+putOrgPolicy         pat-demoted      403 forbidden            404 org-not-found
+putOrgPolicy         pat-removed      401 unauthenticated      401 unauthenticated
+putOrgPolicy         pat-platform     403 forbidden            404 org-not-found
+putOrgPolicy         pat-deleted-org  401 unauthenticated      401 unauthenticated
 rejectItem           anonymous        401 unauthenticated      401 unauthenticated
 rejectItem           owner            200                      404 org-not-found
 rejectItem           admin            200                      404 org-not-found
