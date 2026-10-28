@@ -10,7 +10,7 @@ import {
 } from '@tanstack/react-router';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { listConnectionRepositories } from '../../api/connections';
+import { listConnectionRepositories, listConnections } from '../../api/connections';
 import type { Connection, OrgSummary, Repository } from '../../api/types';
 import { TooltipProvider } from '../../ui/tooltip';
 import { codeSearch } from './code-search';
@@ -211,6 +211,28 @@ describe('the Code step', () => {
     fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }));
 
     expect(await findRow('acme/goal')).toBeTruthy();
+  });
+
+  it('shows the problem when the connections cannot be listed, not a GitHub card to connect again', async () => {
+    const { ApiError } = await import('../../api/client');
+    vi.mocked(listConnections).mockRejectedValueOnce(
+      new ApiError({
+        title: 'Service unavailable',
+        status: 503,
+        code: 'unavailable',
+        detail: 'Connections are unavailable',
+      } as ConstructorParameters<typeof ApiError>[0]),
+    );
+    renderStep();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('Connections are unavailable');
+    expect(screen.queryByRole('link', { name: 'Connect GitHub' })).toBeNull();
+    expect(screen.queryByText('Not connected yet')).toBeNull();
+
+    api.connections = [];
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByRole('link', { name: 'Connect GitHub' })).toBeTruthy();
   });
 
   it('lists the repositories with their languages and age, and the owner with the account first', async () => {

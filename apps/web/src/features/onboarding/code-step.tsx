@@ -136,9 +136,9 @@ export function CodeStep({ org, search }: { org: OrgSummary; search: CodeSearch 
         </div>
       ) : (
         <div className="flex flex-col gap-6">
-          <GitHubCard org={org} connection={connection} login={list?.login} />
+          {connections.isError ? null : <GitHubCard org={org} connection={connection} login={list?.login} />}
 
-          {connection === undefined ? null : loadFailed ? (
+          {loadFailed ? (
             <div role="alert" className="flex flex-col items-start gap-3">
               <Callout tone="rework">
                 {`Couldn’t load the repositories. ${(connections.error ?? repos.error)?.message ?? ''}`.trim()}
@@ -156,7 +156,7 @@ export function CodeStep({ org, search }: { org: OrgSummary; search: CodeSearch 
                 </Button>
               )}
             </div>
-          ) : list ? (
+          ) : connection === undefined ? null : list ? (
             <>
               <Field label="Owner">
                 <NativeSelect value={list.owner} onChange={(e) => chooseOwner(e.target.value)}>
