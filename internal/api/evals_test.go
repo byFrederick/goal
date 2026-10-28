@@ -68,12 +68,25 @@ Read the change.
 // runs.
 func (h *harness) evalDeps(tenancy *porttest.Tenancy) *api.EvalDeps {
 	h.evals, h.evalJudges = porttest.NewEvals(h.clock.Now), porttest.NewJudges()
-	h.evalLoop = jonah.NewEvals(jonah.EvalDeps{
+	h.evalLoop = h.evalLoopWith(tenancy, nil)
+
+	return &api.EvalDeps{Runs: h.evals, Loop: h.evalLoop, Judges: h.evalJudges, Versions: h.versions}
+}
+
+// evalLoopWith is a jonah eval loop over h's eval runs and the store's finished runs, applying
+// bake-offs to drafts through an authoring service over h's definitions, with its deps changed by
+// change.
+func (h *harness) evalLoopWith(tenancy *porttest.Tenancy, change func(*jonah.EvalDeps)) *jonah.Evals {
+	d := jonah.EvalDeps{
 		Orgs: tenancy, Evals: h.evals, Suites: porttest.NewEvalSuites(), Runner: porttest.NewEvalRunner(nil),
 		Finished: porttest.NewFinishedRuns(h.store), Clock: h.clock,
-	}, jonah.Config{})
+		Drafts: authoring.New(authoring.Deps{Store: h.defs, Loads: h.store, Templates: h.objects, Clock: h.clock}),
+	}
+	if change != nil {
+		change(&d)
+	}
 
-	return &api.EvalDeps{Runs: h.evals, Loop: h.evalLoop, Judges: h.evalJudges}
+	return jonah.NewEvals(d, jonah.Config{})
 }
 
 // withoutEvals is a goald that runs no evals.
@@ -201,11 +214,14 @@ func (h *harness) workTries(t *testing.T, run string) {
 
 // evalsAs makes every authorization the real permission table's answer for a member of testOrg
 // with role on acme, signed in a minute ago.
-func (h *harness) evalsAs(role domain.FactoryRole) {
+func (h *harness) evalsAs(role domain.FactoryRole) { h.evalsAsOn(acmeID, role) }
+
+// evalsAsOn is evalsAs with role on factory.
+func (h *harness) evalsAsOn(factory domain.FactoryID, role domain.FactoryRole) {
 	perms := api.NewPermissions(h.clock)
 	p := domain.Principal{
 		Kind: domain.PrincipalUser, User: "019a0000-0000-7000-8000-0000000000ab", Name: "Ada", Org: testOrg, OrgRole: domain.OrgMember,
-		FactoryRoles: map[domain.FactoryID]domain.FactoryRole{acmeID: role},
+		FactoryRoles: map[domain.FactoryID]domain.FactoryRole{factory: role},
 		Session:      &domain.Session{ID: "s", CreatedAt: t0.Add(-time.Minute), ExpiresAt: t0.Add(time.Hour), Browser: true},
 	}
 
@@ -251,6 +267,11 @@ func TestEvals_Unavailable(t *testing.T) {
 		{http.MethodGet, acmeEvals + "/runs/r1", ""},
 		{http.MethodPost, acmeEvals + "/runs/r1/cancel", ""},
 		{http.MethodPost, acmeEvals + "/cases", `{"run":"r1","name":"a-case"}`},
+		{http.MethodGet, acmeEvals + "/bake-offs", ""},
+		{http.MethodPost, acmeEvals + "/bake-offs", `{"agent":"writer"}`},
+		{http.MethodGet, acmeEvals + "/bake-offs/b1", ""},
+		{http.MethodPost, acmeEvals + "/bake-offs/b1/rerun", ""},
+		{http.MethodPost, acmeEvals + "/bake-offs/b1/apply", `{"arm":1}`},
 	} {
 		code, p := evalCall(t, h, c.method, c.path, c.body, nil)
 		wantEvalProblem(t, c.method+" "+c.path, code, p, http.StatusServiceUnavailable, "evals-unavailable")
