@@ -204,3 +204,37 @@ test('the local user of GOAL_AUTH=none is offered everything, with no role named
   if (!isPhone(page)) await expect(page.getByRole('button', { name: /^Move / }).first()).toBeVisible();
   await expect(newFactory(page)).toBeVisible();
 });
+
+test.describe('factory roles on the settings page', () => {
+  as('owner');
+
+  test('an owner adds a person to a factory role, changes it and removes it', async ({ page }) => {
+    await page.goto('/o/acme/f/goal/settings');
+    const people = page.getByRole('region', { name: 'People with access' });
+    const row = people
+      .locator('div')
+      .filter({ has: page.getByText('A. Ortiz', { exact: true }) })
+      .last();
+
+    await people.getByRole('button', { name: 'Add people' }).click();
+    const add = page.getByRole('dialog', { name: 'Add people' });
+    await add.getByLabel('Person').selectOption({ label: 'A. Ortiz' });
+    await add.getByLabel('Role').selectOption('approver');
+    await add.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(people.getByText('Approves and decides')).toBeVisible();
+
+    await row.getByRole('button', { name: 'Change role' }).click();
+    const change = page.getByRole('dialog', { name: /^A\. Ortiz on / });
+    await change.getByLabel('Role').selectOption('editor');
+    await change.getByRole('button', { name: 'Save' }).click();
+    await expect(people.getByText('Edits the definition and creates items')).toBeVisible();
+
+    await row.getByRole('button', { name: 'Change role' }).click();
+    await page
+      .getByRole('dialog', { name: /^A\. Ortiz on / })
+      .getByRole('button', { name: 'Remove from factory' })
+      .click();
+    await expect(people.getByText('A. Ortiz', { exact: true })).toHaveCount(0);
+    await expectAccessible(page);
+  });
+});

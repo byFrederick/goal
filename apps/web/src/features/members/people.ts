@@ -19,6 +19,20 @@ export const factoryRoles: readonly FactoryRole[] = ['viewer', 'approver', 'edit
 /** Owners and admins hold every factory role by their organization role. */
 export const editorEverywhere = (role: OrgRole) => role === 'owner' || role === 'admin';
 
+/** What a role on a factory allows, in a line under the person's name (People with access). */
+export const factoryAccessLines: Record<Exclude<OrgRole, 'member'> | FactoryRole, string> = {
+  owner: 'Organization owner',
+  admin: 'Organization admin',
+  editor: 'Edits the definition and creates items',
+  approver: 'Approves and decides',
+  viewer: 'Sees the floor, creates items',
+};
+
+/** Whether a member sees the factory: owners and admins hold every role, the others hold a role on it. */
+export function seesFactory(m: Member, factory: string): boolean {
+  return editorEverywhere(m.role) || m.factory_roles.some((g) => g.factory_id === factory);
+}
+
 /**
  * A member's factories in a line: "sre approver, support viewer" (by factory name, of the
  * factories the caller sees), "Editor in every factory" for owners and admins, "No factories".

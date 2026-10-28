@@ -16,7 +16,8 @@ test('factory settings is accessible and fits the screen', async ({ page }) => {
   await expect(page.getByLabel('Name')).toHaveValue('goal');
   await expect(page.getByLabel('Purpose')).toHaveAttribute('readonly', '');
   await expect(page.getByRole('region', { name: 'People with access' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Add people' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(page.getByRole('region', { name: 'People with access' }).getByText('Organization owner')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add people' })).toBeEnabled();
   await expect(page.getByRole('heading', { name: 'Danger zone' })).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
