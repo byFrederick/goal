@@ -167,7 +167,7 @@ export function SidebarContent({
             <FactoryGroups org={org} onNavigate={onNavigate} />
           </div>
           <div className="mt-auto flex flex-col gap-2 pt-4">
-            <SpendThisWeek overview={overview.data} />
+            <SpendThisWeek org={org} overview={overview.data} />
             <AccountMenu org={org} />
           </div>
         </>
@@ -316,26 +316,34 @@ function TroubleDot({ count }: { count: number }) {
 }
 
 /**
- * Spend this week against the weekly budgets (getFactoryOverview, window 7d). Not a link: Spend and
- * billing has no page yet. Without a budget the amount shows alone. Missing while the overview is
- * loading or has failed; the rest of the sidebar still renders.
+ * Spend this week against the weekly budgets (getFactoryOverview, window 7d), a link to Spend and
+ * billing. Without a budget the amount shows alone. Missing while the overview is loading or has
+ * failed; the rest of the sidebar still renders.
  */
-function SpendThisWeek({ overview }: { overview: FactoryOverviewList | undefined }) {
+function SpendThisWeek({ org, overview }: { org: OrgSummary; overview: FactoryOverviewList | undefined }) {
   if (!overview) return null;
   const { spend_usd: spend, budget_usd: budget } = overview;
   const spent = formatUsdCompact(spend);
   if (budget === null) {
     return (
-      <div className="flex items-baseline justify-between gap-2 rounded-cell border border-line bg-card p-3 text-meta text-muted">
+      <Link
+        to="/o/$org/spend"
+        params={{ org: org.slug }}
+        className="flex items-baseline justify-between gap-2 rounded-cell border border-line bg-card p-3 text-meta text-muted"
+      >
         <span>Spend this week</span>
         <span className="text-secondary font-semibold text-ink">{spent}</span>
-      </div>
+      </Link>
     );
   }
   const of = `${spent} of ${formatUsdCompact(budget)}`;
   const pct = budget > 0 ? Math.min(100, (spend / budget) * 100) : 0;
   return (
-    <div className="flex flex-col gap-2 rounded-cell border border-line bg-card p-3">
+    <Link
+      to="/o/$org/spend"
+      params={{ org: org.slug }}
+      className="flex flex-col gap-2 rounded-cell border border-line bg-card p-3"
+    >
       <div className="flex items-baseline justify-between gap-2 text-meta text-muted">
         <span>Spend this week</span>
         <span className="text-secondary font-semibold text-ink">{of}</span>
@@ -344,6 +352,6 @@ function SpendThisWeek({ overview }: { overview: FactoryOverviewList | undefined
       <div aria-hidden="true" className="h-1.5 overflow-hidden rounded-chip bg-hover">
         <span className="block h-full rounded-chip bg-run" style={{ width: `${pct}%` }} />
       </div>
-    </div>
+    </Link>
   );
 }

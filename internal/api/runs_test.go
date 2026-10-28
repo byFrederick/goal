@@ -223,7 +223,7 @@ func TestAPI_ListRuns(t *testing.T) {
 
 	ok := h.orgRun(t, build, agBackend, t0.Add(time.Minute), domain.RunResult{Status: domain.RunSucceeded, CostUSD: 0.5, Turns: 3})
 	failed := h.orgRun(t, build, agBackend, t0.Add(2*time.Minute), domain.RunResult{Status: domain.RunFailed, CostUSD: 0.25, Error: "checks failed"})
-	running := h.orgRun(t, guide, "writer", t0.Add(3*time.Minute), domain.RunResult{Status: domain.RunRunning})
+	running := h.orgRun(t, guide, evalAgent, t0.Add(3*time.Minute), domain.RunResult{Status: domain.RunRunning})
 	// The day before the clock's day (t0 is 09:00 UTC).
 	yesterday := h.orgRun(t, rename, agBackend, t0.Add(-10*time.Hour), domain.RunResult{Status: domain.RunCancelled, CostUSD: 1})
 
@@ -360,7 +360,7 @@ func TestAPI_ListRunsHidesFactoriesTheCallerCannotRead(t *testing.T) {
 
 	h := newSignedIn(t)
 	h.orgRun(t, h.seedTitled(t, "Fix the backend build"), agBackend, t0.Add(time.Minute), domain.RunResult{Status: domain.RunSucceeded, CostUSD: 2})
-	guide := h.orgRun(t, h.seedGuide(t, "Write the user guide"), "writer", t0.Add(2*time.Minute), domain.RunResult{Status: domain.RunFailed, CostUSD: 1})
+	guide := h.orgRun(t, h.seedGuide(t, "Write the user guide"), evalAgent, t0.Add(2*time.Minute), domain.RunResult{Status: domain.RunFailed, CostUSD: 1})
 
 	viewer := decode[gen.OrgRunList](t, h.as(t, viewerToken, http.MethodGet, orgRunsPath, ""), http.StatusOK)
 	if got := runIDs(viewer); !slices.Equal(got, []domain.RunID{guide}) || viewer.Summary.Total != 1 ||

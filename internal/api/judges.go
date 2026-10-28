@@ -488,12 +488,3 @@ func judgeSummaryOut(sum domain.JudgeSummary) gen.JudgeSummary {
 
 	return out
 }
-
-// nonNil is s, or an empty slice for nil, so the answer has [] and not null.
-func nonNil(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-
-	return s
-}

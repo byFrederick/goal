@@ -56,11 +56,15 @@ const (
 	// EventAssembled is an item whose plan became parts (data parts: how many); EventPartCreated
 	// a part created from it (data parent and key), its first event; EventAssemblyDone the
 	// assembly closed by its last part (data state, parts_done and parts); EventPartAdded a part
-	// added to an open assembly after it was assembled (data part: its id, key and actor: ref).
-	EventAssembled    EventKind = "assembled"
-	EventPartCreated  EventKind = "part_created"
-	EventPartAdded    EventKind = "part_added"
-	EventAssemblyDone EventKind = "assembly_done"
+	// added to an open assembly after it was assembled (data part: its id, key and actor: ref);
+	// EventAssemblyLanding an assembly with an integration branch whose last part closed with a
+	// part done, moved queued to its landing station instead of closing (data parts_done, parts
+	// and branch).
+	EventAssembled       EventKind = "assembled"
+	EventPartCreated     EventKind = "part_created"
+	EventPartAdded       EventKind = "part_added"
+	EventAssemblyDone    EventKind = "assembly_done"
+	EventAssemblyLanding EventKind = "assembly_landing"
 	// EventUsage is a running agent's report of one turn's token usage; a run's usage events
 	// count its turns so far.
 	EventUsage EventKind = "usage"
@@ -124,6 +128,9 @@ const (
 	AuditItemCancelled = "item.cancelled"
 	// AuditItemRejected is a person sending an item back for rework (from, to, reason).
 	AuditItemRejected = "item.rejected"
+	// AuditItemAnswered is a person's answer to an item's open question: the answer's length, and
+	// choice_index when a choice was picked, never its text.
+	AuditItemAnswered = "item.answered"
 	// AuditItemPartAdded is a part added to an open assembly (part, key).
 	AuditItemPartAdded = "item.part_added"
 	// AuditTargetItem is the target kind of entries about an item.

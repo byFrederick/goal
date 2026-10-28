@@ -1,9 +1,9 @@
-// The Publish card (D §10.10, boards Define-Publish and New-Review): what the version holds
-// (Stations / Agents / Connections / Changes, or Skills in the wizard), "Describe this version"
-// (prefilled from B's first two change summaries), "Start the line right away" on a first
-// publish, "Where do these items go?" when the new version drops stations open items wait at,
-// and Publish vN, disabled with its reason while problems remain. Publishing flushes the session,
-// sends the draft's revision and the version it saw running, and on success closes the draft.
+// The Publish card (ADR 0016, build/definition-publish): "What changed, in one line" (prefilled
+// from the draft's change summaries), "Where do these items go?" when the new version removes
+// stations open items wait at, "Start the line right away" on a first publish, and Publish vN,
+// disabled with its reason while problems remain. The wizard also shows the counts it creates
+// (Stations, Agents, Connections, Skills). Publishing flushes the session, sends the draft's
+// revision and the version it saw running, and on success closes the draft.
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useId, useState } from 'react';
@@ -151,44 +151,39 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
   if (!hasDraft) {
     return (
       <SectionCard title="Publish">
-        <p className="m-0 text-[15px]">
+        <p className="m-0 text-body">
           {current ? `No draft. v${current.number} is running.` : 'Nothing to publish yet.'}
         </p>
-        <p className="m-0 text-sm text-muted">Your first change in any section opens a draft of v{next}.</p>
+        <p className="m-0 text-secondary text-muted">Your first change in any section opens a draft of v{next}.</p>
       </SectionCard>
     );
   }
 
   return (
     <SectionCard title="Publish">
-      <StatGrid>
-        <Stat label="Stations">
-          <dd className="m-0 text-2xl tabular-nums">{counts?.stations ?? '–'}</dd>
-        </Stat>
-        <Stat label="Agents">
-          <dd className="m-0 text-2xl tabular-nums">{counts?.agents ?? '–'}</dd>
-        </Stat>
-        <Stat label="Connections">
-          <dd className="m-0 text-2xl tabular-nums">{counts?.connections ?? '–'}</dd>
-        </Stat>
-        {place === 'wizard' ? (
+      {place === 'wizard' ? (
+        <StatGrid>
+          <Stat label="Stations">
+            <dd className="m-0 text-detail-title tabular-nums">{counts?.stations ?? '–'}</dd>
+          </Stat>
+          <Stat label="Agents">
+            <dd className="m-0 text-detail-title tabular-nums">{counts?.agents ?? '–'}</dd>
+          </Stat>
+          <Stat label="Connections">
+            <dd className="m-0 text-detail-title tabular-nums">{counts?.connections ?? '–'}</dd>
+          </Stat>
           <Stat label="Skills">
-            <dd className="m-0 text-2xl tabular-nums">{counts?.skills ?? '–'}</dd>
+            <dd className="m-0 text-detail-title tabular-nums">{counts?.skills ?? '–'}</dd>
           </Stat>
-        ) : (
-          <Stat label="Changes">
-            <dd className="m-0 text-2xl tabular-nums">{counts?.changes ?? '–'}</dd>
-          </Stat>
-        )}
-      </StatGrid>
-
-      <Field label="Describe this version" help="Shown in the version history">
+        </StatGrid>
+      ) : null}
+      <Field label="What changed, in one line">
         <Input value={note} maxLength={200} onChange={(e) => setMessage(e.target.value)} />
       </Field>
 
       {rows.length > 0 ? (
         <fieldset className="m-0 flex flex-col gap-3 border-0 p-0">
-          <legend className="mb-1 text-sm font-medium">Where do these items go?</legend>
+          <legend className="mb-1 text-body font-medium">Where do these items go?</legend>
           {rows.map((r) => (
             <Field key={r.station} label={`Items waiting at ${r.station}, which v${next} removes`}>
               <NativeSelect
@@ -210,12 +205,12 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
       ) : null}
 
       {first ? (
-        <label className="flex cursor-pointer items-start gap-3 text-[15px] leading-normal">
+        <label className="flex cursor-pointer items-start gap-3 text-body leading-normal">
           <input
             type="checkbox"
             checked={start}
             onChange={(e) => setStart(e.target.checked)}
-            className="mt-1 size-[18px] shrink-0 accent-ink"
+            className="mt-1 size-4 shrink-0 accent-ink"
           />
           Start the line right away. Otherwise it stays paused until you start it.
         </label>
@@ -233,12 +228,12 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
           {pending ? 'Publishing…' : `Publish v${next}`}
         </Button>
         {why ? (
-          <p id={reason} className="m-0 text-sm text-rework-ink">
+          <p id={reason} className="m-0 text-body text-rework-ink">
             {why}
           </p>
         ) : null}
         {refusal ? (
-          <div role="alert" className="flex flex-col gap-1.5 text-sm text-rework-ink">
+          <div role="alert" className="flex flex-col gap-2 text-body text-rework-ink">
             <p className="m-0">
               {refusal.message}{' '}
               {refusal.differences ? (
@@ -254,7 +249,9 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
             ))}
           </div>
         ) : null}
-        <p className="m-0 text-[13px] leading-normal text-muted">{publishExplainer(current?.number ?? null, next)}</p>
+        <p className="m-0 text-secondary leading-normal text-muted">
+          {publishExplainer(current?.number ?? null, next)}
+        </p>
       </div>
     </SectionCard>
   );

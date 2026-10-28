@@ -53,7 +53,7 @@ func (h *harness) seedSpend(t *testing.T) {
 	h.spendRun(t, lineID, agBackend, "claude-fable-5-1", at(time.October, 22), 2)
 	h.spendRun(t, lineID, agBackend, "claude-fable-5-1", at(time.October, 5), 3)
 	h.spendRun(t, lineID, "frontend", "claude-haiku-5-5", at(time.September, 15), 4)
-	h.spendRun(t, acmeID, "writer", "claude-fable-5-1", at(time.October, 23), 1)
+	h.spendRun(t, acmeID, evalAgent, "claude-fable-5-1", at(time.October, 23), 1)
 	h.finished(t, at(time.October, 21), at(time.October, 22), false)
 }
 

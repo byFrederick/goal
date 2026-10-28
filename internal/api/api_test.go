@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -35,7 +36,8 @@ const (
 	acmeItems = "/v1/orgs/acme/factories/acme/items"
 )
 
-// acme is inbox → approve (human) → done: enough to submit, read and decide on items.
+// acme is inbox → approve (human) → done: enough to submit, read and decide on items, with an
+// intake trigger of each source (a schedule, a GitHub event, a disabled webhook) for Intake.
 const acme = `apiVersion: goal/v1
 kind: Factory
 metadata: { id: ` + acmeID + `, name: acme, title: Acme }
@@ -45,6 +47,20 @@ spec:
     - { name: writer, prompt: ./agents/writer.md }
   board:
     workTypes: [feature, fix]
+    triggers:
+      - name: nightly-audit
+        on: schedule
+        cron: "0 6 * * MON-FRI"
+        timeZone: Europe/Berlin
+        create: { type: feature, station: inbox, title: "Nightly audit" }
+      - name: flaky-test-on-main
+        on: github.check_run.failed
+        only: { dedupe: check }
+        create: { type: fix, station: inbox, expedite: true, title: "{{check}} is flaky" }
+      - name: deploy-failed
+        enabled: false
+        on: webhook.ci-hooks.deploy
+        create: { type: fix, station: inbox, title: "A deploy failed" }
     stations:
       - { id: inbox, kind: queue }
       - { id: approve, kind: human }
@@ -112,6 +128,18 @@ func inOrg(t *testing.T) context.Context {
 
 var t0 = time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
 
+// testBoxSizes are the harness's sandbox sizes, as the docker backend's; testEgress its one egress
+// address (GOAL_EGRESS_ADDRESSES).
+var testBoxSizes = []domain.BoxSize{
+	{Size: domain.SandboxSmall, VCPUs: 1, MemoryBytes: 2 << 30},
+	{Size: domain.SandboxMedium, VCPUs: 2, MemoryBytes: 4 << 30},
+	{Size: domain.SandboxLarge, VCPUs: 4, MemoryBytes: 8 << 30},
+}
+
+const testEgress = "203.0.113.0/24"
+
+var testEgressAddresses = []netip.Prefix{netip.MustParsePrefix(testEgress)}
+
 type harness struct {
 	srv      *httptest.Server
 	engine   *engine.Engine
@@ -146,20 +174,23 @@ type harness struct {
 	publicOnly atomic.Bool
 	// creds keeps the organizations' credentials, sealed under key k1, referred to by conns.
 	creds *porttest.Credentials
+	// intake keeps the factories' webhook endpoints, sealed under key k1, their deliveries and
+	// trigger firings, over store.
+	intake *porttest.Intake
 	// kb is the organizations' knowledge base, its uploads in kbObjects, at most testUploadMax
 	// bytes each; searches are by keywords.
 	kb        *porttest.Knowledge
 	kbObjects *porttest.ObjectStore
 	uploads   *knowledge.Uploads
-	// judges are the versions' judges as tests set them, judgeScores their scores; tries are
-	// queued by a jonah loop over them and the store's finished runs.
-	judges      *porttest.Judges
-	judgeScores *porttest.JudgeScores
 	// evals are the factories' eval runs, evalJudges the versions' judges as tests set them, and
 	// evalLoop the jonah eval loop that starts, prices and cancels runs over them.
 	evals      *porttest.Evals
 	evalJudges *porttest.Judges
 	evalLoop   *jonah.Evals
+	// judges are the versions' judges as tests set them, judgeScores their scores; tries are
+	// queued by a jonah loop over them and the store's finished runs.
+	judges      *porttest.Judges
+	judgeScores *porttest.JudgeScores
 }
 
 // acme's one prompt and its path.
@@ -361,22 +392,6 @@ func jsonLog(w io.Writer) *slog.Logger {
 	return slog.New(slog.NewJSONHandler(w, nil))
 }
 
-// addIdentity gives the harness one identity that keeps the people and the organizations' API
-// keys: the sign-in's under GOAL_AUTH=session, so a key made through the API signs requests in.
-func (h *harness) addIdentity(in *signIn) {
-	h.keys = porttest.NewIdentity(h.clock.Now)
-	if in != nil {
-		h.keys = in.identity
-	}
-
-	h.keys.AddOrg(domain.Org{ID: testOrg, Slug: acmeSlug, Name: "Acme"})
-	h.keys.AddOrg(domain.Org{ID: otherOrg, Slug: labsSlug, Name: "Example Labs"})
-	h.keys.AddFactory(testOrg, acmeID)
-	h.keys.AddFactory(testOrg, lineID)
-
-	h.platform = porttest.NewPlatform(h.keys)
-}
-
 // newHarnessLogged is newHarnessWith with goald's log written to logs (JSON) when it is set, and
 // the API's collaborators changed by each of opts.
 func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*harness, *api.Deps)) *harness {
@@ -432,6 +447,66 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		t.Fatal(err)
 	}
 
+	feed, stopFeed := h.startFeed(t, in)
+
+	h.seam, h.tenancy = &seam{}, tenancy
+	h.skills, h.skillSource = &flakyObjects{ObjectStore: porttest.NewObjectStore()}, porttest.NewSkillSource()
+	h.builder = builder.New(h.skills, h.clock, builder.Config{
+		Models: []builder.Model{{ID: "claude-opus-5-5", Label: "Claude Opus 5.5"}, {ID: "claude-haiku-5-5", Label: "Claude Haiku 5.5"}},
+	})
+
+	// One identity keeps the people and the organizations' API keys: the sign-in's under
+	// GOAL_AUTH=session, so a key made through the API signs requests in.
+	h.keys = porttest.NewIdentity(h.clock.Now)
+	if in != nil {
+		h.keys = in.identity
+	}
+
+	h.keys.AddOrg(domain.Org{ID: testOrg, Slug: acmeSlug, Name: "Acme"})
+	h.keys.AddOrg(domain.Org{ID: otherOrg, Slug: labsSlug, Name: "Example Labs"})
+	h.keys.AddFactory(testOrg, acmeID)
+	h.keys.AddFactory(testOrg, lineID)
+
+	h.platform = porttest.NewPlatform(h.keys)
+
+	connections := h.connections(t, tenancy)
+	h.intake = porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), h.store)
+
+	deps := api.Deps{
+		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
+		Access: h.keys, OrgRetention: retention, Authorizer: h.seam, Auth: api.AuthConfig{Mode: api.AuthNone}, Platform: h.platform, Feed: feed,
+		Builder: h.builder, Connections: h.conns, Credentials: h.creds, Intake: h.intake, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
+		// GitLab's code host lists no repositories, as the gitlab adapter.
+		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()},
+		Knowledge: h.kb, KnowledgeUploads: h.uploads, KnowledgeSearch: knowledge.NewSearcher(h.kb, nil, nil), UploadMaxBytes: testUploadMax, Clock: h.clock,
+		OrgPolicies: porttest.NewOrgPolicies([]string{modelOpus, modelHaiku}, tenancy, h.clock.Now), BoxSizes: testBoxSizes, EgressAddresses: testEgressAddresses,
+	}
+	if in != nil {
+		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity
+		deps.Auth = api.AuthConfig{Mode: api.AuthSession, EmailCodes: !in.noEmailCodes, Google: in.google}
+	}
+
+	deps.Judges = h.judgeDeps(tenancy)
+
+	handler, err := api.New(h.withEvals(deps, tenancy, opts))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.srv = httptest.NewServer(handler)
+
+	t.Cleanup(func() {
+		stopFeed() // ends every stream before the server closes
+		h.srv.Close()
+	})
+
+	return h
+}
+
+// startFeed runs the harness's feed until the returned stop, which waits for it to end.
+func (h *harness) startFeed(t *testing.T, in *signIn) (*api.Feed, func()) {
+	t.Helper()
+
 	feed := api.NewFeed(h.notices, h.defNotices, nil)
 	if in != nil {
 		feed.EndOnAccessChanges(in.access)
@@ -458,49 +533,13 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		}
 	}
 
-	h.seam, h.tenancy = &seam{}, tenancy
-	h.skills, h.skillSource = &flakyObjects{ObjectStore: porttest.NewObjectStore()}, porttest.NewSkillSource()
-	h.builder = builder.New(h.skills, h.clock, builder.Config{
-		Models: []builder.Model{{ID: "claude-opus-5-5", Label: "Claude Opus 5.5"}, {ID: "claude-haiku-5-5", Label: "Claude Haiku 5.5"}},
-	})
-
-	h.addIdentity(in)
-
-	connections := h.connections(t, tenancy)
-
-	deps := api.Deps{
-		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
-		Access: h.keys, OrgRetention: retention, Authorizer: h.seam, Auth: api.AuthConfig{Mode: api.AuthNone}, Platform: h.platform, Feed: feed,
-		Builder: h.builder, Connections: h.conns, Credentials: h.creds, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
-		// GitLab's code host lists no repositories, as the gitlab adapter.
-		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()},
-		Knowledge: h.kb, KnowledgeUploads: h.uploads, KnowledgeSearch: knowledge.NewSearcher(h.kb, nil, nil), UploadMaxBytes: testUploadMax, Clock: h.clock,
-	}
-	if in != nil {
-		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity
-		deps.Auth = api.AuthConfig{Mode: api.AuthSession, EmailCodes: !in.noEmailCodes, Google: in.google}
-	}
-
-	deps.Judges = h.judgeDeps(tenancy)
-
-	handler, err := api.New(h.withEvals(deps, tenancy, opts))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	h.srv = httptest.NewServer(handler)
-
-	t.Cleanup(func() {
-		stop() // ends every stream before the server closes
+	return feed, func() {
+		stop()
 
 		if err := <-done; err != nil {
 			t.Error(err)
 		}
-
-		h.srv.Close()
-	})
-
-	return h
+	}
 }
 
 // judgeDeps are h's judges and their scores, with a jonah loop over them and the store's finished

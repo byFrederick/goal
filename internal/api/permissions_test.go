@@ -135,6 +135,8 @@ func TestPermissions_RoleGrants(t *testing.T) {
 		{name: "viewer cannot pull the andon", p: viewer, operation: "pullAndon", org: grantsOrg, factory: grantsF, want: wantForbidden},
 		{name: "viewer sees only their factory", p: viewer, operation: opGetBoard, org: grantsOrg, factory: grantsG, want: wantHidden},
 		{name: "approver decides", p: approver, operation: opApprove, org: grantsOrg, factory: grantsF, want: wantAllow},
+		{name: "viewer cannot answer a question", p: viewer, operation: "answerItem", org: grantsOrg, factory: grantsF, want: wantForbidden},
+		{name: "approver answers a question", p: approver, operation: "answerItem", org: grantsOrg, factory: grantsF, want: wantAllow},
 		{name: "approver submits work", p: approver, operation: "submitItem", org: grantsOrg, factory: grantsF, want: wantAllow},
 		{name: "approver pulls the andon", p: approver, operation: "pullAndon", org: grantsOrg, factory: grantsF, want: wantAllow},
 		{name: "approver cannot publish", p: approver, operation: opPublish, org: grantsOrg, factory: grantsF, want: wantForbidden},

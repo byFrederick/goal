@@ -145,7 +145,7 @@ func TestJudgeCommand_ListNeedsAFactory(t *testing.T) {
 
 	srv, _ := judgeGoald(t, map[string]func(http.ResponseWriter){
 		listFactoriesRoute: answerJSON(t, http.StatusOK, "application/json", gen.FactoryList{
-			Factories: []gen.Factory{{Id: "f1", Name: "web"}, {Id: "f2", Name: "api"}},
+			Factories: []gen.Factory{{Id: "f1", Name: searchFactory}, {Id: "f2", Name: "api"}},
 		}),
 	})
 
