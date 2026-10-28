@@ -88,6 +88,10 @@ export interface NoteEntry {
   text: string;
   detail?: string;
   tone: Tone;
+  /** An agent's question or a person's answer: the row gets the question mark. */
+  question?: boolean;
+  /** The question is still open: its row says Now. */
+  open?: boolean;
 }
 
 export type Entry = RunEntry | CheckEntry | NoteEntry;
@@ -163,6 +167,15 @@ function note(e: ItemEvent): Omit<NoteEntry, 'kind' | 'key' | 'at' | 'station' |
         tone: 'you',
         ...(str(e.data.text) ? { detail: str(e.data.text) as string } : {}),
       };
+    case 'question_asked':
+      return { text: 'Asked you a question', tone: 'you', question: true };
+    case 'question_answered':
+      return {
+        text: `${actor} answered`,
+        tone: 'you',
+        question: true,
+        ...(str(e.data.answer) ? { detail: str(e.data.answer) as string } : {}),
+      };
     case 'merged':
       return { text: `${actor} merged the pull request`, tone: 'ok' };
     case 'retried':
@@ -211,11 +224,20 @@ function applyRecord(run: RunEntry, record: Run) {
   if (record.definition_version !== null) run.version = record.definition_version;
 }
 
-export function buildTrace(events: readonly ItemEvent[], records: readonly Run[] = []): Trace {
+/**
+ * The item's history as people read it. `questionOpen` is whether the item still holds an open
+ * question (Item.question): only then is its latest question's row marked Now.
+ */
+export function buildTrace(
+  events: readonly ItemEvent[],
+  records: readonly Run[] = [],
+  questionOpen = false,
+): Trace {
   const entries: Entry[] = [];
   const runs = new Map<string, RunEntry>();
   // The slot of the latest claim: every run until the next claim works in it.
   let slot: number | undefined;
+  const lastAsked = events.findLast((e) => e.kind === 'question_asked');
 
   for (const e of events) {
     const station = e.station ?? '';
@@ -308,7 +330,10 @@ export function buildTrace(events: readonly ItemEvent[], records: readonly Run[]
     }
 
     const n = note(e);
-    if (n) entries.push({ kind: 'note', key: `ev-${e.id}`, at: e.at, station, actor: e.actor, ...n });
+    // Only the latest question can be open, and only while the item still holds it (the caller's word).
+    const open = questionOpen && e === lastAsked;
+    if (n)
+      entries.push({ kind: 'note', key: `ev-${e.id}`, at: e.at, station, actor: e.actor, ...n, ...(open ? { open } : {}) });
   }
 
   for (const record of records) {

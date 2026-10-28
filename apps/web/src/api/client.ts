@@ -29,6 +29,7 @@ import type {
   Inbox,
   Invitation,
   Item,
+  ItemAnswer,
   ItemList,
   ItemState,
   LeadTimeBridge,
@@ -475,6 +476,11 @@ export function approveItem(org: string, item: string): Promise<Item> {
 
 export function rejectItem(org: string, item: string, reason: string): Promise<Item> {
   return unwrap(goal.POST(orgPath('/items/{item}/reject'), { params: { path: { org, item } }, body: { reason } }));
+}
+
+/** Answers the item's open question: a choice by its index in Item.question.choices, or the person's own words. */
+export function answerItem(org: string, item: string, body: ItemAnswer): Promise<Item> {
+  return unwrap(goal.POST(orgPath('/items/{item}/answer'), { params: { path: { org, item } }, body }));
 }
 
 export function mergeItem(org: string, item: string, method?: MergeMethod): Promise<Item> {

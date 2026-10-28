@@ -2,7 +2,7 @@ import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-quer
 import { Link, useParams, useSearch } from '@tanstack/react-router';
 import { ChevronLeft, Eye, LayoutGrid } from 'lucide-react';
 import { useId, useMemo, useRef, useState } from 'react';
-import { eventsQuery, inboxQuery, itemQuery, itemRunsQuery } from '../../api/queries';
+import { eventsQuery, itemQuery, itemRunsQuery } from '../../api/queries';
 import type { Station } from '../../api/types';
 import { usePhone } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
@@ -112,17 +112,12 @@ export function ItemPage() {
   // The run records refine the trace when they arrive; the events alone already draw it.
   const runsQ = useQuery(itemRunsQuery(org.id, key));
   const runs = runsQ.data;
-  const trace = useMemo(() => buildTrace(events, runs?.runs), [events, runs]);
+  const asking = Boolean(item.question);
+  const trace = useMemo(() => buildTrace(events, runs?.runs, asking), [events, runs, asking]);
   const [fullTrace, setFullTrace] = useState(false);
   const { tab = 'timeline' } = useSearch({ from: '/o/$org/f/$factory/items/$ref' });
   const noteField = useRef<HTMLTextAreaElement>(null);
   const compactNoteField = useRef<HTMLTextAreaElement>(null);
-  // The wide field is hidden on phones and the compact one elsewhere, so the focus goes to the one shown.
-  const focusNote = () => (noteField.current?.offsetParent ? noteField.current : compactNoteField.current)?.focus();
-  // The question: this item's open decision in the inbox.
-  const { data: inbox } = useQuery(inboxQuery(org.id, factory.id));
-  const question = inbox?.entries.find((e) => e.kind === 'decision' && e.item?.id === item.id);
-  const latest = trace.entries.findLast((e) => e.kind === 'run');
   const runsStatus: TimelineStatus = runsQ.isPending ? 'loading' : runsQ.isError ? 'error' : 'ready';
   const files = editedFiles(trace).length;
   const checks = trace.entries.filter((e) => e.kind === 'check');
@@ -255,12 +250,11 @@ export function ItemPage() {
           />
         </div>
         <div className="contents @[720px]:col-span-2 @[720px]:flex @[720px]:flex-col @[720px]:gap-4">
-          {question ? (
+          {item.question ? (
             <QuestionCard
-              entry={question}
-              agent={latest ? runRole(latest) : null}
-              paused={controls.paused}
-              onWriteAnswer={focusNote}
+              itemKey={key}
+              factory={factory}
+              question={item.question}
               className="order-2 @[720px]:order-none"
             />
           ) : null}

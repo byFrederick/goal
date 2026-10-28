@@ -88,6 +88,29 @@ describe('buildTrace', () => {
     ]);
   });
 
+  it('marks the open question as asked of the person, and as Now while the item still holds it', () => {
+    const trace = buildTrace(
+      [ev('question_asked', { question: 'Whole org or this factory?', agent: 'frontend-engineer' }, { actor: 'frontend-engineer' })],
+      [],
+      true,
+    );
+    expect(trace.entries).toMatchObject([
+      { kind: 'note', text: 'Asked you a question', tone: 'you', question: true, open: true },
+    ]);
+  });
+
+  it('does not mark an asked question Now once the item no longer holds it, or once it is answered', () => {
+    const asked = ev('question_asked', { question: 'Whole org or this factory?' });
+    const answered = ev('question_answered', { answer: 'Only this factory', choice_index: 1 }, { actor: 'fcruz' });
+
+    expect(buildTrace([asked], [], false).entries).toMatchObject([{ text: 'Asked you a question' }]);
+    expect(buildTrace([asked], [], false).entries[0]).not.toHaveProperty('open');
+    expect(buildTrace([asked, answered], [], false).entries).toMatchObject([
+      { text: 'Asked you a question' },
+      { text: 'fcruz answered', tone: 'you', detail: 'Only this factory', question: true },
+    ]);
+  });
+
   it('shows event kinds it does not know instead of dropping them', () => {
     const trace = buildTrace([ev('pr_opened', {}, { actor: 'builder-1' })]);
     expect(trace.entries).toMatchObject([{ kind: 'note', text: 'Pr opened' }]);
