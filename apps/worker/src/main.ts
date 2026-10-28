@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { runDefinition } from './definition.js';
 import type { WorkerEvent } from './events.js';
+import { runJonah } from './jonah.js';
 import { runJudge } from './judge.js';
 import { type Exec, type Output, type Prepared, prepare } from './prepare.js';
 import { failed, runTask } from './run.js';
@@ -99,6 +100,8 @@ async function runAgent(): Promise<number> {
     // A judge's run (ADR 0025) reads no agent files and installs no skills either.
     if (spec.judge) return await runJudge(spec, { query, emit, now, env: process.env, abortController });
     if (spec.draft_request) return await runDefinition(spec, { query, emit, now, env: process.env, abortController });
+    // A Jonah review (ADR 0034) reads no agent files and installs no skills either.
+    if (spec.jonah) return await runJonah(spec, { query, emit, now, env: process.env, abortController });
     const files = await readAgentFiles();
     await installSkills();
     return await runTask(spec, files, { query, emit, now, env: process.env, abortController, fetch });

@@ -677,3 +677,107 @@ func TestLine_Triggers(t *testing.T) {
 		t.Error("a trigger with enabled: false maps as enabled")
 	}
 }
+
+// jonahRuntimeModel is the runtime.model of the Jonah cases.
+const jonahRuntimeModel = "claude-sonnet-5-5"
+
+// A definition without learning.jonah, or with an empty one, gets the default policy and the
+// runtime's model.
+func TestLine_JonahPolicyDefaults(t *testing.T) {
+	t.Parallel()
+
+	withModel := edited(runtimeModel, runtimeModel+"    model: "+jonahRuntimeModel+"\n")
+	want := domain.JonahPolicy{Enabled: true, ProposeAfter: 5, WeeklyUSD: 10, Model: jonahRuntimeModel}
+
+	for name, doc := range map[string]string{
+		"no learning":  withModel,
+		"empty jonah":  withModel + "  learning:\n    jonah: {}\n",
+		"no jonah key": withModel + "  learning:\n    kaizen: { schedule: weekly }\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f, err := Load(checkTree(doc, nil))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got := f.Line().Jonah; got != want {
+				t.Errorf("jonah = %+v, want %+v", got, want)
+			}
+		})
+	}
+
+	f, err := Load(checkTree(baseFactory, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := f.Line().Jonah; got != domain.DefaultJonahPolicy() {
+		t.Errorf("jonah without runtime.model = %+v, want %+v", got, domain.DefaultJonahPolicy())
+	}
+}
+
+// Set keys are carried, false and zero included.
+func TestLine_CarriesJonahPolicy(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		jonah string
+		want  domain.JonahPolicy
+	}{
+		{
+			name:  "all keys",
+			jonah: "{ enabled: true, proposeAfter: 3, weeklyUsd: 2.5, model: claude-haiku-5-5 }",
+			want:  domain.JonahPolicy{Enabled: true, ProposeAfter: 3, WeeklyUSD: 2.5, Model: "claude-haiku-5-5"},
+		},
+		{
+			name:  "off",
+			jonah: "{ enabled: false }",
+			want:  domain.JonahPolicy{ProposeAfter: 5, WeeklyUSD: 10, Model: jonahRuntimeModel},
+		},
+		{
+			name:  "no spend",
+			jonah: "{ weeklyUsd: 0, proposeAfter: 50 }",
+			want:  domain.JonahPolicy{Enabled: true, ProposeAfter: 50, Model: jonahRuntimeModel},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			doc := edited(runtimeModel, runtimeModel+"    model: "+jonahRuntimeModel+"\n") + "  learning:\n    jonah: " + tc.jonah + "\n"
+
+			f, err := Load(checkTree(doc, nil))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got := f.Line().Jonah; got != tc.want {
+				t.Errorf("jonah = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
+// A Jonah value out of range, or a key the schema does not know, is a blocking schema problem
+// in factory.yaml at its line.
+func TestLoad_RefusesBadJonahPolicy(t *testing.T) {
+	t.Parallel()
+
+	for _, jonah := range []string{
+		"proposeAfter: 0", "proposeAfter: 51", "proposeAfter: 2.5", "weeklyUsd: -1", "enabled: sometimes", "cadence: daily",
+	} {
+		doc := baseFactory + "  learning:\n    jonah:\n      " + jonah + " #here\n"
+		line := markedLine(doc)
+
+		_, problems := Check(checkTree(doc, nil))
+		if !slices.ContainsFunc(problems, func(p domain.DefinitionProblem) bool {
+			return p.Check == checkSchema && p.Blocking() && p.File == FileName && p.Line == line && p.Section == domain.SectionFiles
+		}) {
+			t.Errorf("jonah %s: problems %+v, want a blocking schema problem in section files at %s:%d", jonah, problems, FileName, line)
+		}
+	}
+}

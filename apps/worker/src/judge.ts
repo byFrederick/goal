@@ -30,12 +30,9 @@ export interface JudgeResult {
   score: number;
 }
 
-/** Cuts a material field to maxMaterial and keeps the closing tag out of it. */
-function material(name: string, text: string): string {
-  const cut =
-    text.length > maxMaterial
-      ? `${text.slice(0, maxMaterial)}\n[cut: ${text.length - maxMaterial} more characters]`
-      : text;
+/** Cuts a material field to its limit (maxMaterial by default) and keeps the closing tag out of it. */
+export function material(name: string, text: string, limit = maxMaterial): string {
+  const cut = text.length > limit ? `${text.slice(0, limit)}\n[cut: ${text.length - limit} more characters]` : text;
   return `<material name="${name}">\n${cut.replaceAll('</material', '<\\/material')}\n</material>`;
 }
 

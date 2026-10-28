@@ -1,8 +1,9 @@
 -- name: InsertRun :exec
 -- A run records the definition version it starts on; NULL only for runs from before versions.
-INSERT INTO agent_runs (id, factory_id, definition_version_id, item_id, station, agent, model, status, started_at)
-VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.narg(definition_version_id), sqlc.arg(item_id), sqlc.arg(station),
-        sqlc.arg(agent), sqlc.arg(model), 'running', sqlc.arg(started_at));
+-- kind is station for a line's run, jonah for a review's, which alone may have no item (00077).
+INSERT INTO agent_runs (id, factory_id, definition_version_id, item_id, station, agent, model, status, started_at, kind)
+VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.narg(definition_version_id), sqlc.narg(item_id), sqlc.arg(station),
+        sqlc.arg(agent), sqlc.arg(model), 'running', sqlc.arg(started_at), sqlc.arg(kind));
 
 -- name: RunItem :one
 SELECT item_id FROM agent_runs WHERE id = $1;
