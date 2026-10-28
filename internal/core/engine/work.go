@@ -81,11 +81,6 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 		return
 	}
 
-	if err := e.integrate(ctx, log, &c); err != nil {
-		e.block(ctx, log, c, err.Error())
-		return
-	}
-
 	// What people said since the item's last run: their notes (a retry adds those left
 	// meanwhile) and their answers to its agents' questions (ADR 0018).
 	notes, answers, err := e.peopleSaid(ctx, it.ID)
@@ -225,8 +220,9 @@ func (e *Engine) backoff(ctx context.Context, lease domain.Lease, d time.Duratio
 }
 
 // admitted finds the claim's agent (agentFor), applies the organization policy to it
-// (applyPolicy) and reports whether it may run; when not, the item is blocked (no agent, or the
-// policy could not be read) or waits for a person (the policy refuses its model).
+// (applyPolicy), decides its runs' branch and base (integrate) and reports whether it may run;
+// when not, the item is blocked (no agent, the policy could not be read, or the base could not
+// be decided) or waits for a person (the policy refuses its model).
 func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) bool {
 	var err error
 	if c.agent, err = agentFor(c.line, c.station, c.item.Lane); err != nil {
@@ -235,6 +231,9 @@ func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) boo
 	}
 
 	refusal, err := e.applyPolicy(ctx, c)
+	if err == nil && refusal == "" {
+		err = e.integrate(ctx, log, c)
+	}
 
 	switch {
 	case err != nil:

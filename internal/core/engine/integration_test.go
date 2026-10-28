@@ -13,9 +13,12 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
 )
 
-// integrationBranch is the integration branch of the assembly assembly builds: item 1, "big
-// request".
-const integrationBranch = "goal/a1-big-request"
+// integrationBranch is the integration branch of the assembly that the assembly helper builds:
+// item 1, "big request"; mainBranch is a repository's default branch.
+const (
+	integrationBranch = "goal/a1-big-request"
+	mainBranch        = "main"
+)
 
 // integrationLine is work (an agent) → merge (human, action merge, the landing station) → done,
 // with a repository and flow.assemblies.integration in mode, refresh eachPart, and minParts.
@@ -67,7 +70,7 @@ func (h *harness) assembly(t *testing.T, n int) (domain.Item, []domain.Item) {
 	it := h.at(t, h.submit(t, domain.NewItem{Title: "big request"}), stWork, domain.StateReady)
 
 	plan := make([]domain.NewPart, 0, n)
-	for _, key := range []string{"store", "api", "web"}[:n] {
+	for _, key := range []string{keyStore, "parts-api", "parts-web"}[:n] {
 		plan = append(plan, domain.NewPart{Key: key, Title: key})
 	}
 
@@ -195,7 +198,7 @@ func TestRun_PartHearsItsIntegrationBase(t *testing.T) {
 	}{
 		{name: "no pull request yet", wantBase: integrationBranch},
 		{name: "a pull request into the integration branch", prBase: integrationBranch, wantBase: integrationBranch},
-		{name: "a pull request opened against main", prBase: "main"},
+		{name: "a pull request opened against main", prBase: mainBranch},
 	}
 
 	for _, tt := range tests {

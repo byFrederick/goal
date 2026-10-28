@@ -176,7 +176,7 @@ func TestTaskToken_CarriesTheRunsBranchAndBase(t *testing.T) {
 	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
 	key := []byte("gateway-key")
 	claims := TaskClaims{
-		OrgID: "o1", FactoryID: "f1", VersionID: "v1", ItemID: "i1", Station: "build", Agent: "backend", RunID: "r1",
+		OrgID: "o1", FactoryID: "f1", VersionID: "v1", ItemID: "i1", Station: stationBuild, Agent: testAgent, RunID: "r1",
 		Branch: "goal/2-store", Base: "goal/a1-big-request", ExpiresAt: now.Add(time.Hour).Unix(),
 	}
 
