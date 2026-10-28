@@ -201,6 +201,16 @@ export interface TriggerOnly {
   failuresInARow?: number | undefined;
   /** A dotted event field, such as check.name. */
   dedupe?: string | undefined;
+  /** The model check, run last: a model answers the question about the event; its cost is about $0.01 each time. */
+  modelAgrees?: TriggerModelCheck | undefined;
+}
+
+export interface TriggerModelCheck {
+  /** The yes or no question the model answers about the event: not blank, at most 500 characters. */
+  question: string;
+  /** Kept as the file has them; the page does not choose them. */
+  connection?: string | undefined;
+  model?: string | undefined;
 }
 
 export interface TriggerCreate {

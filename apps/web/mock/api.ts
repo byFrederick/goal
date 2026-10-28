@@ -58,6 +58,7 @@ import type {
   TouchMetrics,
 } from '@goal/api-client';
 import { parse } from 'yaml';
+import type { IntakeEvent, TriggerTry, TriggerTryStep } from '../src/api/types.ts';
 import { authSettings, createMockAuth } from './auth.ts';
 import { createConnections } from './connections.ts';
 import { createCredentials } from './credentials.ts';
@@ -131,6 +132,95 @@ const json = (res: ServerResponse, status: number, body: unknown) => {
 
 const problem = (res: ServerResponse, status: number, title: string, detail?: string, code?: string) =>
   json(res, status, { title, status, ...(detail ? { detail } : {}), ...(code ? { code } : {}) });
+
+/** A trigger as factory.yaml holds it: what the try reads of it. */
+interface TriggerShape {
+  name: string;
+  on: string;
+  only?: Record<string, unknown>;
+  limits?: Record<string, unknown>;
+  create: { type: string; station: string; expedite?: boolean; title?: string; brief?: string };
+}
+
+/** The source a trigger's `on` event comes from: only a schedule keeps its events, so only those can be tried. */
+const sourceOf = (on: string) => (on === 'schedule' ? 'schedule' : on.startsWith('webhook.') ? 'webhook' : 'github');
+
+/**
+ * A trigger's 20 newest events in the mock: the flaky-test trigger's (trigger.jpg, a GitHub trigger, so none can
+ * be tried) and the dependency audit's, a schedule with past events to try.
+ */
+function eventsOf(name: string, on: string): IntakeEvent[] {
+  if (name === 'dependency-audit') {
+    return [
+      {
+        id: 'firing-s1',
+        title: '2026-10-26 09:00 UTC',
+        event: on,
+        at: '2026-10-26T09:00:00Z',
+        outcome: 'created',
+        item_number: 151,
+        reason: null,
+      },
+      {
+        id: 'firing-s2',
+        title: '2026-10-19 09:00 UTC',
+        event: on,
+        at: '2026-10-19T09:00:00Z',
+        outcome: 'skipped',
+        item_number: null,
+        reason: 'once',
+      },
+    ];
+  }
+  if (name !== 'flaky-test-on-main') return [];
+  return [
+    {
+      id: 'firing-1',
+      title: 'TestLeaseExpiry',
+      event: on,
+      at: '2026-10-27T14:05:00Z',
+      outcome: 'created',
+      item_number: 150,
+      reason: null,
+    },
+    {
+      id: 'firing-2',
+      title: 'TestBoardStream',
+      event: on,
+      at: '2026-10-26T18:20:00Z',
+      outcome: 'merged',
+      item_number: 133,
+      reason: null,
+    },
+    {
+      id: 'firing-3',
+      title: 'TestLeaseExpiry',
+      event: on,
+      at: '2026-10-23T09:00:00Z',
+      outcome: 'skipped',
+      item_number: null,
+      reason: 'once',
+    },
+    {
+      id: 'firing-4',
+      title: 'lint',
+      event: on,
+      at: '2026-10-22T11:00:00Z',
+      outcome: 'skipped',
+      item_number: 120,
+      reason: '#120 covers it',
+    },
+    {
+      id: 'firing-5',
+      title: 'TestOrgRLS',
+      event: on,
+      at: '2026-10-21T08:40:00Z',
+      outcome: 'merged',
+      item_number: 118,
+      reason: null,
+    },
+  ];
+}
 
 /** A slot cap of a request: null clears it; otherwise 1 to 1000. */
 const isCap = (v: unknown): v is number | null =>
@@ -1647,7 +1737,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         trigger: {
           name,
           enabled: true,
-          source: 'github',
+          source: sourceOf(trigger.on),
           on: trigger.on,
           when: trigger.on,
           create: {
@@ -1660,56 +1750,74 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
           problem: null,
         },
         week: flaky ? { created: 3, merged: 2, spend_usd: 7.8 } : { created: 0, merged: 0, spend_usd: 0 },
-        events: flaky
-          ? [
-              {
-                id: 'firing-1',
-                title: 'TestLeaseExpiry',
-                event: trigger.on,
-                at: '2026-10-27T14:05:00Z',
-                outcome: 'created',
-                item_number: 150,
-                reason: null,
-              },
-              {
-                id: 'firing-2',
-                title: 'TestBoardStream',
-                event: trigger.on,
-                at: '2026-10-26T18:20:00Z',
-                outcome: 'merged',
-                item_number: 133,
-                reason: null,
-              },
-              {
-                id: 'firing-3',
-                title: 'TestLeaseExpiry',
-                event: trigger.on,
-                at: '2026-10-23T09:00:00Z',
-                outcome: 'skipped',
-                item_number: null,
-                reason: 'once',
-              },
-              {
-                id: 'firing-4',
-                title: 'lint',
-                event: trigger.on,
-                at: '2026-10-22T11:00:00Z',
-                outcome: 'skipped',
-                item_number: 120,
-                reason: '#120 covers it',
-              },
-              {
-                id: 'firing-5',
-                title: 'TestOrgRLS',
-                event: trigger.on,
-                at: '2026-10-21T08:40:00Z',
-                outcome: 'merged',
-                item_number: 118,
-                reason: null,
-              },
-            ]
-          : [],
+        events: eventsOf(name, trigger.on),
       });
+    }
+    // POST …/intake/triggers/{trigger}/try: a dry run of the saved trigger against one of its events (ADR 0028).
+    // Creates nothing. Only a schedule's events are stored; another source answers 422 event-not-stored.
+    const tryTrig = rest.match(/^\/factories\/([^/]+)\/intake\/triggers\/([^/]+)\/try$/);
+    if (tryTrig && method === 'POST') {
+      const key = decodeURIComponent(tryTrig[1] ?? '');
+      const factory = findFactory(key, org.id);
+      if (!factory) return problem(res, 404, 'Factory not found', key);
+      const name = decodeURIComponent(tryTrig[2] ?? '');
+      const def = state.definitions[factory.id];
+      const current = def?.versions.find((v) => v.id === def.current);
+      const bytes = current?.files.get('factory.yaml');
+      const yamlText = bytes ? new TextDecoder().decode(bytes) : '';
+      const found = (
+        parse(yamlText) as {
+          spec?: { board?: { triggers?: TriggerShape[] } };
+        } | null
+      )?.spec?.board?.triggers?.find((t) => t.name === name);
+      if (!found) return problem(res, 404, 'Not Found', `trigger ${name}`, 'trigger-not-found');
+      const on = String(found.on);
+      if (sourceOf(on) !== 'schedule') {
+        return problem(res, 422, 'Unprocessable Entity', "Only a schedule's events are stored", 'event-not-stored');
+      }
+      const firing = String((await readBody(req)).firing ?? '');
+      const event = eventsOf(name, on).find((e) => e.id === firing);
+      if (!event) return problem(res, 404, 'Not Found', `firing ${firing}`, 'firing-not-found');
+      const only = found.only ?? {};
+      const limits = found.limits ?? {};
+      const step = (name: TriggerTryStep['step'], configured: boolean): TriggerTryStep[] =>
+        configured ? [{ step: name, outcome: 'passed', reason: null }] : [];
+      const steps: TriggerTryStep[] = [
+        ...step('when', true),
+        ...step('only.failuresInARow', 'failuresInARow' in only),
+        ...step('only.dedupe', 'dedupe' in only),
+        ...step('only.modelAgrees', 'modelAgrees' in only),
+        ...step('create', true),
+        ...step('limits.perDay', 'perDay' in limits),
+        ...step('limits.pauseOnBudget', 'pauseOnBudget' in limits),
+      ];
+      const result: TriggerTry = {
+        firing,
+        matched: true,
+        outcome: 'would_create',
+        reason: null,
+        steps,
+        item: {
+          type: found.create.type,
+          station: found.create.station,
+          lane: null,
+          expedite: found.create.expedite ?? false,
+          title: found.create.title ?? event.title,
+          brief: found.create.brief ?? '',
+        },
+        model_check:
+          'modelAgrees' in only
+            ? {
+                worth: true,
+                reason: 'The audit names a fix for a direct dependency.',
+                model: 'claude-haiku-5-5',
+                input_tokens: 412,
+                output_tokens: 18,
+                cost_usd: 0.01,
+              }
+            : null,
+      };
+      return json(res, 200, result);
     }
     if (rest.match(/^\/factories\/[^/]+\/intake$/) && method === 'GET') {
       const key = decodeURIComponent(rest.split('/')[2] ?? '');

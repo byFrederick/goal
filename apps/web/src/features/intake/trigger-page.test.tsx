@@ -48,6 +48,7 @@ vi.mock('../../shared/factory', async (importOriginal) => ({
 vi.mock('../../api/intake', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/intake')>()),
   getIntakeTrigger: vi.fn(),
+  tryIntakeTrigger: vi.fn(),
 }));
 
 vi.mock('../../api/definitions', async (importOriginal) => ({
@@ -249,15 +250,14 @@ describe('the ready page', () => {
     expect(definition.querySelector('pre')?.textContent).toContain('- name: flaky-test-on-main');
   });
 
-  it('disables the controls that are not built yet, with the tooltip that says so', async () => {
+  it('disables only the controls that are not built yet, with the tooltip that says so', async () => {
     renderPage();
     await screen.findByRole('heading', { level: 1 });
-    for (const name of [/Try with a past event/, /A model agrees it is worth an item/, /Add another event/]) {
-      expect(screen.getByRole('button', { name }).getAttribute('aria-disabled')).toBe('true');
-    }
-    fireEvent.focus(screen.getByRole('button', { name: /Try with a past event/ }));
+    expect(screen.getByRole('button', { name: /Add another event/ }).getAttribute('aria-disabled')).toBe('true');
+    fireEvent.focus(screen.getByRole('button', { name: /Add another event/ }));
     expect(await screen.findByText('Not available yet')).toBeTruthy();
     expect(screen.queryByText(/copy/i)).toBeNull();
+    expect(screen.getByRole('checkbox', { name: /A model agrees it is worth an item/ })).toBeTruthy();
   });
 });
 
@@ -462,3 +462,126 @@ describe('a new trigger from the New trigger picker', () => {
     expect(text).toContain('on: github.check_run.failed');
   });
 });
+
+describe('the try and the model check', () => {
+  // The flaky-test trigger is a GitHub trigger: its events are not stored, so Try says why it is unavailable.
+  // The schedule below is a trigger whose past events can be tried.
+  const scheduleFile = file.replace(
+    '      - name: flaky-test-on-main',
+    [
+      '      - name: dependency-audit',
+      '        on: schedule',
+      '        cron: "0 9 * * MON"',
+      '        timeZone: UTC',
+      '        only: { modelAgrees: { question: "Does this audit name a vulnerable direct dependency?" } }',
+      '        create: { type: fix, station: build }',
+      '      - name: flaky-test-on-main',
+    ].join('\n'),
+  );
+  const schedule = {
+    ...detail,
+    trigger: { ...detail.trigger, name: 'dependency-audit', source: 'schedule' as const, on: 'schedule' },
+  };
+
+  it('says why Try is unavailable for a GitHub trigger, and does not open a dialog', async () => {
+    renderPage();
+    await screen.findByRole('heading', { level: 1 });
+    const button = screen.getByRole('button', { name: 'Try with a past event' });
+    expect(button.hasAttribute('disabled')).toBe(true);
+    expect(
+      screen.getByText("Only a schedule's events are stored, so this trigger's events cannot be tried."),
+    ).toBeTruthy();
+  });
+
+  it('disables Try while there are unsaved edits, with the reason to save first', async () => {
+    route.params = { trigger: 'dependency-audit' };
+    stored = scheduleFile;
+    mocked.getIntakeTrigger.mockResolvedValue(schedule);
+    renderPage();
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.getByRole('button', { name: 'Try with a past event' }).hasAttribute('disabled')).toBe(false);
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /A model agrees it is worth an item/ }));
+    expect(screen.getByRole('button', { name: 'Try with a past event' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText('Save to try your changes')).toBeTruthy();
+  });
+
+  it('disables Try for a trigger with no past events, with the reason', async () => {
+    route.params = { trigger: 'dependency-audit' };
+    stored = scheduleFile;
+    mocked.getIntakeTrigger.mockResolvedValue({ ...schedule, events: [] });
+    renderPage();
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.getByRole('button', { name: 'Try with a past event' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText('No past events to try yet')).toBeTruthy();
+  });
+
+  it('runs a try of a schedule trigger against its saved definition and shows the result', async () => {
+    route.params = { trigger: 'dependency-audit' };
+    stored = scheduleFile;
+    mocked.getIntakeTrigger.mockResolvedValue(schedule);
+    vi.mocked(intake.tryIntakeTrigger).mockResolvedValue({
+      firing: 'firing-1',
+      matched: true,
+      outcome: 'would_create',
+      reason: null,
+      steps: [{ step: 'create', outcome: 'passed', reason: null }],
+      item: { type: 'fix', station: 'build', lane: null, expedite: false, title: 'Update it', brief: '' },
+      model_check: {
+        worth: true,
+        reason: 'It names a fix.',
+        model: 'claude-haiku-5-5',
+        input_tokens: 1,
+        output_tokens: 1,
+        cost_usd: 0.01,
+      },
+    });
+    renderPage();
+    await screen.findByRole('heading', { level: 1 });
+    fireEvent.click(screen.getByRole('button', { name: 'Try with a past event' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Run the try' }));
+
+    expect(await screen.findByText('The trigger would create an item.')).toBeTruthy();
+    expect(intake.tryIntakeTrigger).toHaveBeenCalledWith('org-1', 'factory-1', 'dependency-audit', expect.any(String));
+    expect(screen.getByText('Nothing was created. The try changed no item, event or limit.')).toBeTruthy();
+  });
+
+  it('shows a question field under the model check, and Save stays off while the question is blank', async () => {
+    route.params = { trigger: 'dependency-audit' };
+    stored = scheduleFile;
+    mocked.getIntakeTrigger.mockResolvedValue(schedule);
+    renderPage();
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.queryByRole('textbox', { name: 'Question for the model' })).toBeTruthy();
+
+    const question = screen.getByRole('textbox', { name: 'Question for the model' });
+    fireEvent.change(question, { target: { value: '   ' } });
+    expect(screen.getByText('Write the question the model answers. Save needs it.')).toBeTruthy();
+    expect(saveButton().hasAttribute('disabled')).toBe(true);
+
+    fireEvent.change(question, { target: { value: 'Is this worth an item?' } });
+    expect(saveButton().hasAttribute('disabled')).toBe(false);
+  });
+
+  it('writes the model check question when checked, and removes the check when unchecked', async () => {
+    renderPage();
+    await screen.findByRole('heading', { level: 1 });
+    const check = screen.getByRole('checkbox', { name: /A model agrees it is worth an item/ });
+    expect(screen.queryByRole('textbox', { name: 'Question for the model' })).toBeNull();
+
+    fireEvent.click(check);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Question for the model' }), {
+      target: { value: 'Is this a flake, not a regression?' },
+    });
+    fireEvent.click(saveButton());
+    await screen.findByText("Saved. Software's definition is version 3 now.");
+    const [, , , text] = mocked.putDraftFile.mock.calls[0] ?? [];
+    expect(text).toContain('modelAgrees');
+    expect(text).toContain('Is this a flake, not a regression?');
+    await waitFor(() =>
+      expect(yamlCard().querySelector('pre')?.textContent).toContain('Is this a flake, not a regression?'),
+    );
+  });
+});
+
+const yamlCard = () => screen.getByRole('region', { name: 'In the definition' });

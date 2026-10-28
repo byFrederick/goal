@@ -130,18 +130,6 @@ function Option({
   );
 }
 
-/** The picture's "A model agrees…" row: a check box that cannot be used yet (ADR 0028), with the tooltip. */
-function ModelCheckOption({ children }: { children: ReactNode }) {
-  return (
-    <NotAvailable label="A model agrees it is worth an item">
-      <button type="button" className="flex items-start gap-3 text-left text-body text-ink-soft">
-        <span aria-hidden="true" className="mt-1 size-4 shrink-0 rounded-chip border border-rule bg-card" />
-        <span className="flex min-w-0 flex-wrap items-center gap-2">{children}</span>
-      </button>
-    </NotAvailable>
-  );
-}
-
 export interface TriggerFormProps {
   value: Trigger;
   set: <K extends keyof Trigger>(key: K, v: Trigger[K]) => void;
@@ -166,6 +154,7 @@ export function TriggerForm({ value, set, board, factoryName, problems }: Trigge
     set('filter', Object.keys(kept).length ? kept : undefined);
   };
   const only = value.only ?? {};
+  const model = only.modelAgrees;
   const create = value.create;
   const limits = value.limits ?? {};
   const fields = value.on === 'github.check_run.failed' ? checkRunFields : [];
@@ -304,10 +293,28 @@ export function TriggerForm({ value, set, board, factoryName, problems }: Trigge
         >
           No open item already covers this check
         </Option>
-        <ModelCheckOption>
+        <Option
+          checked={only.modelAgrees !== undefined}
+          onChange={(on) => set('only', { ...only, modelAgrees: on ? { question: '' } : undefined })}
+        >
           A model agrees it is worth an item
           <span className="text-muted">, using the question you write, about $0.01 each time</span>
-        </ModelCheckOption>
+        </Option>
+        {model ? (
+          <div className="pl-7">
+            <Field
+              label="Question for the model"
+              help="The model answers yes or no about the event. It reads the event as untrusted data."
+              error={model.question.trim() === '' ? 'Write the question the model answers. Save needs it.' : undefined}
+            >
+              <Input
+                value={model.question}
+                maxLength={500}
+                onChange={(e) => set('only', { ...only, modelAgrees: { ...model, question: e.target.value } })}
+              />
+            </Field>
+          </div>
+        ) : null}
       </Block>
 
       <Block id={ids.create} title="Create" hint="Goes onto the line like any other item" problems={problems.create}>

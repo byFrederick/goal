@@ -236,3 +236,5 @@ export type JudgeDay = Schemas['JudgeDay'];
 export type JudgeScore = Schemas['JudgeScore'];
 export type JudgeRunsOn = Schemas['JudgeRunsOn'];
 export type JudgeTries = Schemas['JudgeTries'];
+export type TriggerTry = Schemas['TriggerTry'];
+export type TriggerTryStep = Schemas['TriggerTryStep'];
