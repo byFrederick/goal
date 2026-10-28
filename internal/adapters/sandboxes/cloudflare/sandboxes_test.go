@@ -6,10 +6,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
@@ -275,4 +277,21 @@ func createAndRun(t *testing.T, s *Sandboxes) error {
 	_, err = p.Wait()
 
 	return err
+}
+
+// BoxSizes are the Cloudflare instance types apps/control-worker/src/sandbox.ts gives each size
+// (standard-2, standard-3 and standard-4), with the vCPU and memory Cloudflare lists for them.
+// Change both together.
+func TestBoxSizes_SizeMatchesTheWorkersInstanceTypes(t *testing.T) {
+	t.Parallel()
+
+	want := []domain.BoxSize{
+		{Size: domain.SandboxSmall, VCPUs: 1, MemoryBytes: 6 << 30},
+		{Size: domain.SandboxMedium, VCPUs: 2, MemoryBytes: 8 << 30},
+		{Size: domain.SandboxLarge, VCPUs: 4, MemoryBytes: 12 << 30},
+	}
+
+	if got := BoxSizes(); !slices.Equal(got, want) {
+		t.Errorf("BoxSizes() = %v, want %v", got, want)
+	}
 }

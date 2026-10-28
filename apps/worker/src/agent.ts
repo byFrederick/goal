@@ -372,7 +372,8 @@ function factoryRulesSection(rules: Rule[]): string {
 }
 
 /**
- * The user prompt: a note to resolve conflicts with the default branch when prepare found some,
+ * The user prompt: a note to resolve conflicts with the base branch (base_branch, or the default
+ * branch) when prepare found some,
  * the brief, then what goald adds for this attempt (GOAL_FEEDBACK: people's
  * notes, why a previous attempt was rejected), earlier stations' outputs and how to finish.
  */
@@ -381,8 +382,11 @@ export function taskPrompt(spec: TaskSpec, feedback?: string): string {
   const conflicts = spec.base_conflicts ?? [];
   if (conflicts.length > 0) {
     const list = conflicts.map((f) => `- ${f}`).join('\n');
+    const b = spec.base_branch;
     parts.unshift(
-      `## First: conflicts with the default branch\n\nYour branch could not be brought up to date with the repository's default branch (origin/HEAD): these files conflict. It is checked out as it was pushed. Before the task below, rebase or merge the default branch, resolve the conflicts in these files, and push:\n\n${list}`,
+      b
+        ? `## First: conflicts with ${b}\n\nYour branch could not be brought up to date with its base branch ${b} (origin/${b}): these files conflict. It is checked out as it was pushed. Before the task below, rebase or merge origin/${b}, resolve the conflicts in these files, and push:\n\n${list}`
+        : `## First: conflicts with the default branch\n\nYour branch could not be brought up to date with the repository's default branch (origin/HEAD): these files conflict. It is checked out as it was pushed. Before the task below, rebase or merge the default branch, resolve the conflicts in these files, and push:\n\n${list}`,
     );
   }
   const inputs = Object.entries(spec.inputs ?? {});
