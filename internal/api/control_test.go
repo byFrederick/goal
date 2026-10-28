@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -114,6 +115,9 @@ func TestAPI_CancelItem(t *testing.T) {
 	}
 }
 
+// lineItem is the API path of the line factory's item n.
+func lineItem(n int) string { return fmt.Sprintf("/v1/orgs/acme/items/line%%23%d", n) }
+
 func TestAPI_SetLane(t *testing.T) {
 	t.Parallel()
 
@@ -123,16 +127,17 @@ func TestAPI_SetLane(t *testing.T) {
 	h.move(t, h.seed(t, stBuild, domain.StateQueued, t0), domain.Position{Station: stDone, State: domain.StateDone}, nil) // line#3
 
 	steps := []struct {
-		name, ref, body string
-		status          int
-		code            string
+		name, body string
+		n          int
+		status     int
+		code       string
 	}{
-		{name: "a blank lane", ref: "line%231", body: `{"lane":"  "}`, status: http.StatusBadRequest, code: "lane-required"},
-		{name: "a lane no station routes", ref: "line%231", body: `{"lane":"mobile"}`, status: http.StatusBadRequest, code: "unknown-lane"},
-		{name: "the same lane", ref: "line%231", body: `{"lane":"api"}`, status: http.StatusConflict, code: "same-lane"},
-		{name: "an item in progress", ref: "line%232", body: `{"lane":"web"}`, status: http.StatusConflict, code: "item-in-progress"},
-		{name: "a done item", ref: "line%233", body: `{"lane":"web"}`, status: http.StatusConflict, code: codeItemClosed},
-		{name: "a routed lane", ref: "line%231", body: `{"lane":" web "}`, status: http.StatusOK},
+		{name: "a blank lane", n: 1, body: `{"lane":"  "}`, status: http.StatusBadRequest, code: "lane-required"},
+		{name: "a lane no station routes", n: 1, body: `{"lane":"mobile"}`, status: http.StatusBadRequest, code: "unknown-lane"},
+		{name: "the same lane", n: 1, body: `{"lane":"api"}`, status: http.StatusConflict, code: "same-lane"},
+		{name: "an item in progress", n: 2, body: `{"lane":"web"}`, status: http.StatusConflict, code: "item-in-progress"},
+		{name: "a done item", n: 3, body: `{"lane":"web"}`, status: http.StatusConflict, code: codeItemClosed},
+		{name: "a routed lane", n: 1, body: `{"lane":" web "}`, status: http.StatusOK},
 	}
 
 	for _, s := range steps {
@@ -146,7 +151,7 @@ func TestAPI_SetLane(t *testing.T) {
 			out = &prob
 		}
 
-		if got := h.call(t, http.MethodPost, "/v1/orgs/acme/items/"+s.ref+"/lane", s.body, out); got != s.status {
+		if got := h.call(t, http.MethodPost, lineItem(s.n)+"/lane", s.body, out); got != s.status {
 			t.Fatalf("%s: lane = %d %+v; want %d", s.name, got, prob, s.status)
 		}
 

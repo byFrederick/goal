@@ -59,7 +59,7 @@ type mxOperation struct {
 // mxBodies are the request bodies a handler checks before it resolves its factory or item: with
 // them the request reaches the resolver, so the matrix's answer comes from authorization.
 var mxBodies = map[string]string{
-	"rejectItem": `{"reason":"not this way"}`, "moveItem": `{"to":"done","reason":"done"}`, "pauseItem": `{"reason":"wait"}`,
+	"rejectItem": `{"reason":"not this way"}`, "moveItem": `{"to":"done","reason":"done"}`, "pauseItem": `{"reason":"wait"}`, "setItemLane": `{"lane":"docs"}`,
 	"addItemNote": `{"text":"a note"}`, "pullAndon": `{"reason":"stop"}`, "clearAndon": `{"note":"fixed"}`,
 	"submitItem": `{"title":"An item"}`, "deleteOrg": `{"confirm":"Acme"}`, "saveDraftSection": `{"value":{}}`,
 	"setFactoryRole": `{"role":"viewer"}`, "transferOwnership": `{"to":"x","confirm":"Acme"}`,

@@ -634,11 +634,13 @@ func TestEngine_CancelClosedItemIsRefused(t *testing.T) {
 	}
 }
 
+const laneFront = "frontend"
+
 // routedLine is controlLine with a build station that routes by lane (backend, frontend).
 func routedLine() domain.Line {
 	return lineOf(agentStation(stSpec, "architect", 1, 1), domain.Station{
-		ID: "build", Kind: domain.KindAgent, Agents: 1, WIP: 1,
-		Route: map[string]string{"backend": agBackend, "frontend": agFrontend},
+		ID: stBuild, Kind: domain.KindAgent, Agents: 1, WIP: 1,
+		Route: map[string]string{laneBack: agBackend, laneFront: agFrontend},
 	}, domain.Station{ID: stApprove, Kind: domain.KindHuman})
 }
 
@@ -646,30 +648,38 @@ func TestSetLane_RecordsTheEventAndChangesTheLane(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t, routedLine(), porttest.Succeed(`{}`))
-	it := h.at(t, h.submit(t, domain.NewItem{Lane: "backend"}), stApprove, domain.StateWaitingHuman)
+	it := h.at(t, h.submit(t, domain.NewItem{Lane: laneBack}), stApprove, domain.StateWaitingHuman)
 
 	got, err := h.e.SetLane(inOrg(t), it.ID, " frontend ", human)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if got.Lane != "frontend" || got.Position() != it.Position() {
+	if got.Lane != laneFront || got.Position() != it.Position() {
 		t.Errorf("item lane %q at %+v; want frontend, still at %+v", got.Lane, got.Position(), it.Position())
 	}
 
-	if stored := h.item(t, it.ID); stored.Lane != "frontend" {
+	if stored := h.item(t, it.ID); stored.Lane != laneFront {
 		t.Errorf("stored lane %q; want frontend", stored.Lane)
 	}
 
-	set := h.eventsOf(it.ID, domain.EventLaneSet)
-	if len(set) != 1 || set[0].Data["from"] != "backend" || set[0].Data["to"] != "frontend" ||
-		set[0].Actor != human.Name || set[0].Data["actor"] != "user:local" {
-		t.Errorf("lane_set events %+v; want one from backend to frontend by the local user", set)
+	h.recordedLaneSet(t, it.ID, laneBack, laneFront)
+}
+
+// recordedLaneSet checks that item has one lane_set event by the local user and one
+// item.lane_set audit entry, both from → to.
+func (h *harness) recordedLaneSet(t *testing.T, item domain.ItemID, from, to string) {
+	t.Helper()
+
+	set := h.eventsOf(item, domain.EventLaneSet)
+	if len(set) != 1 || set[0].Data["from"] != from || set[0].Data["to"] != to ||
+		set[0].Actor != human.Name || set[0].Data["actor"] != human.Ref() {
+		t.Errorf("lane_set events %+v; want one from %s to %s by the local user", set, from, to)
 	}
 
-	if a := h.audited(t, domain.AuditItemLaneSet); len(a) != 1 || a[0].TargetID != string(it.ID) ||
-		a[0].Data["from"] != "backend" || a[0].Data["to"] != "frontend" {
-		t.Errorf("audit %+v; want one item.lane_set from backend to frontend", a)
+	if a := h.audited(t, domain.AuditItemLaneSet); len(a) != 1 || a[0].TargetID != string(item) ||
+		a[0].Data["from"] != from || a[0].Data["to"] != to {
+		t.Errorf("audit %+v; want one item.lane_set from %s to %s", a, from, to)
 	}
 }
 
@@ -695,11 +705,11 @@ func TestSetLane_Refusals(t *testing.T) {
 	}{
 		{name: "an empty lane", lane: "  ", want: engine.ErrLaneRequired},
 		{name: "a lane no station routes", lane: "mobile", want: engine.ErrUnknownLane},
-		{name: "a done item", lane: "frontend", state: domain.StateDone, want: engine.ErrItemClosed},
-		{name: "a cancelled item", lane: "frontend", state: domain.StateCancelled, want: engine.ErrItemClosed},
-		{name: "an item in progress", lane: "frontend", state: domain.StateInProgress, want: engine.ErrItemInProgress},
-		{name: "an assembly", lane: "frontend", state: domain.StateAssembly, want: engine.ErrItemIsAssembly},
-		{name: "the same lane", lane: "backend", want: engine.ErrSameLane},
+		{name: "a done item", lane: laneFront, state: domain.StateDone, want: engine.ErrItemClosed},
+		{name: "a cancelled item", lane: laneFront, state: domain.StateCancelled, want: engine.ErrItemClosed},
+		{name: "an item in progress", lane: laneFront, state: domain.StateInProgress, want: engine.ErrItemInProgress},
+		{name: "an assembly", lane: laneFront, state: domain.StateAssembly, want: engine.ErrItemIsAssembly},
+		{name: "the same lane", lane: laneBack, want: engine.ErrSameLane},
 	}
 
 	for _, tt := range tests {
@@ -707,14 +717,12 @@ func TestSetLane_Refusals(t *testing.T) {
 			t.Parallel()
 
 			h := newHarness(t, routedLine(), porttest.Succeed(`{}`))
-			it := h.submit(t, domain.NewItem{Lane: "backend"})
+			it := h.submit(t, domain.NewItem{Lane: laneBack})
 
-			switch tt.state {
-			case "":
-			case domain.StateAssembly:
+			if tt.state == domain.StateAssembly {
 				it = h.assembled(t, it)
-			default:
-				it = h.at(t, it, "build", tt.state)
+			} else if tt.state != "" {
+				it = h.at(t, it, stBuild, tt.state)
 			}
 
 			before := h.kinds(it.ID)
@@ -723,7 +731,7 @@ func TestSetLane_Refusals(t *testing.T) {
 				t.Errorf("SetLane %q: err = %v; want %v", tt.lane, err, tt.want)
 			}
 
-			if got := h.item(t, it.ID); got.Lane != "backend" || got.Position() != it.Position() || !slices.Equal(h.kinds(it.ID), before) {
+			if got := h.item(t, it.ID); got.Lane != laneBack || got.Position() != it.Position() || !slices.Equal(h.kinds(it.ID), before) {
 				t.Errorf("a refused SetLane changed the item: lane %q at %+v, events %v", got.Lane, got.Position(), h.kinds(it.ID))
 			}
 
@@ -738,13 +746,13 @@ func TestSetLane_Refusals(t *testing.T) {
 func (h *harness) assembled(t *testing.T, it domain.Item) domain.Item {
 	t.Helper()
 
-	it = h.at(t, it, "build", domain.StateReady)
+	it = h.at(t, it, stBuild, domain.StateReady)
 
 	parent, _, err := h.store.Assemble(inOrg(t), ports.Assembly{
 		Transition: ports.Transition{
-			ItemID: it.ID, From: it.Position(), To: domain.Position{Station: "build", State: domain.StateAssembly}, At: h.clock.Now(),
+			ItemID: it.ID, From: it.Position(), To: domain.Position{Station: stBuild, State: domain.StateAssembly}, At: h.clock.Now(),
 		},
-		Parts: []domain.NewPart{{Key: "part", Title: "part"}},
+		Parts: []domain.NewPart{{Key: "slice", Title: "slice"}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -774,7 +782,7 @@ func TestSetLane_ItemChangedMeanwhile(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t, routedLine(), porttest.Succeed(`{}`))
-	it := h.submit(t, domain.NewItem{Lane: "backend"})
+	it := h.submit(t, domain.NewItem{Lane: laneBack})
 
 	e := h.engine(t, staleStore{Store: h.store, meanwhile: func(ctx context.Context, it domain.Item) {
 		if _, err := h.store.Transition(ctx, ports.Transition{
@@ -784,11 +792,11 @@ func TestSetLane_ItemChangedMeanwhile(t *testing.T) {
 		}
 	}})
 
-	if _, err := e.SetLane(inOrg(t), it.ID, "frontend", human); !errors.Is(err, engine.ErrItemChanged) {
+	if _, err := e.SetLane(inOrg(t), it.ID, laneFront, human); !errors.Is(err, engine.ErrItemChanged) {
 		t.Errorf("SetLane of an item changed meanwhile: err = %v; want ErrItemChanged", err)
 	}
 
-	if got := h.item(t, it.ID); got.Lane != "backend" || len(h.eventsOf(it.ID, domain.EventLaneSet)) != 0 {
+	if got := h.item(t, it.ID); got.Lane != laneBack || len(h.eventsOf(it.ID, domain.EventLaneSet)) != 0 {
 		t.Errorf("lane %q, lane_set events %v; want backend and none", got.Lane, h.eventsOf(it.ID, domain.EventLaneSet))
 	}
 }
