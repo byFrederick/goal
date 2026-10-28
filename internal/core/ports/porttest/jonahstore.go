@@ -371,6 +371,118 @@ func (s *Store) SentBackSince(ctx context.Context, factory domain.FactoryID, sin
 	return n, nil
 }
 
+// sentBack reports whether t is a sent-back touch: a person's rejected or gate_rejected.
+func sentBack(t domain.Touch) bool {
+	return t.Kind == domain.EventRejected || t.Kind == domain.EventGateRejected
+}
+
+// SentBackBetween implements ports.JonahStore.
+func (s *Store) SentBackBetween(ctx context.Context, factory domain.FactoryID, since, until time.Time, limit int) ([]domain.SentBack, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := []domain.SentBack{}
+
+	for id, it := range s.items {
+		if it.OrgID != org || it.FactoryID != factory {
+			continue
+		}
+
+		for _, t := range s.itemTouches(id) {
+			if !sentBack(t) || !inWindow(t.At, since, until) {
+				continue
+			}
+
+			out = append(out, domain.SentBack{
+				EventID: t.EventID, ItemID: id, ItemNumber: it.Number, ItemTitle: it.Title, Station: t.Station,
+				Agent: s.lastLeaseAgent(id, t.At), Kind: t.Kind, Reason: s.eventReason(t.EventID), At: t.At,
+			})
+		}
+	}
+
+	slices.SortFunc(out, func(a, b domain.SentBack) int { return cmp.Or(a.At.Compare(b.At), cmp.Compare(a.EventID, b.EventID)) })
+
+	return out[:min(len(out), max(limit, 0))], nil
+}
+
+// lastLeaseAgent is the agent of item's last lease span that ended at or before at, "" when
+// none did. Callers hold s.mu.
+func (s *Store) lastLeaseAgent(item domain.ItemID, at time.Time) string {
+	agent := ""
+
+	for _, l := range s.leaseLog[item] {
+		if !l.EndedAt.After(at) {
+			agent = l.Agent
+		}
+	}
+
+	return agent
+}
+
+// eventReason is the data.reason of event id, "" when it has none. Callers hold s.mu.
+func (s *Store) eventReason(id int64) string {
+	for _, e := range s.events {
+		if e.ID == id {
+			reason, _ := e.Data["reason"].(string)
+
+			return reason
+		}
+	}
+
+	return ""
+}
+
+// StationFlow implements ports.JonahStore.
+func (s *Store) StationFlow(ctx context.Context, factory domain.FactoryID, station string, since, until time.Time) (domain.StationFlow, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.StationFlow{}, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var (
+		out   domain.StationFlow
+		times []time.Duration
+	)
+
+	for id, it := range s.items {
+		if it.OrgID != org || it.FactoryID != factory {
+			continue
+		}
+
+		passed := false
+
+		for _, sp := range s.spans[id] {
+			if sp.Station == station && inWindow(sp.LeftAt, since, until) {
+				passed = true
+
+				times = append(times, sp.LeftAt.Sub(sp.EnteredAt))
+			}
+		}
+
+		if passed {
+			out.Passed++
+		}
+
+		for _, t := range s.itemTouches(id) {
+			if sentBack(t) && t.Station == station && inWindow(t.At, since, until) {
+				out.SentBack++
+			}
+		}
+	}
+
+	out.LeadTimeP85 = domain.Percentile(times, 0.85)
+
+	return out, nil
+}
+
 func cloneProposals(ps []domain.Proposal) []domain.Proposal {
 	out := slices.Clone(ps)
 	for i := range out {

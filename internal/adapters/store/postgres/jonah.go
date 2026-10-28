@@ -480,6 +480,66 @@ func (s *Store) SentBackSince(ctx context.Context, factory domain.FactoryID, sin
 	return int(n), nil
 }
 
+// SentBackBetween implements ports.JonahStore over item_touches and lease_spans.
+func (s *Store) SentBackBetween(ctx context.Context, factory domain.FactoryID, since, until time.Time, limit int) ([]domain.SentBack, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return nil, domain.ErrNoOrg
+	}
+
+	f, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, fmt.Errorf("sent back between: %w", err)
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.SentBackBetweenRow, error) {
+		return q.SentBackBetween(ctx, db.SentBackBetweenParams{FactoryID: f, Since: since, Until: until, MaxEvents: clampLimit(limit)})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sent back in factory %s from %s to %s: %w", factory, since, until, err)
+	}
+
+	out := make([]domain.SentBack, len(rows))
+	for i, r := range rows {
+		out[i] = domain.SentBack{
+			EventID: r.EventID, ItemID: domain.ItemID(r.ItemID.String()), ItemNumber: r.ItemNumber, ItemTitle: r.ItemTitle,
+			Station: r.Station, Agent: r.Agent, Kind: domain.EventKind(r.Kind), Reason: r.Reason, At: r.At.UTC(),
+		}
+	}
+
+	return out, nil
+}
+
+// StationFlow implements ports.JonahStore over item_spans and item_touches, in one snapshot.
+func (s *Store) StationFlow(ctx context.Context, factory domain.FactoryID, station string, since, until time.Time) (domain.StationFlow, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return domain.StationFlow{}, domain.ErrNoOrg
+	}
+
+	f, err := parseID("factory", string(factory))
+	if err != nil {
+		return domain.StationFlow{}, fmt.Errorf("station flow: %w", err)
+	}
+
+	out, err := fetch(ctx, s.read, func(q *db.Queries) (domain.StationFlow, error) {
+		spans, err := q.StationFlowSpans(ctx, db.StationFlowSpansParams{FactoryID: f, Station: station, Since: since, Until: until})
+		if err != nil {
+			return domain.StationFlow{}, fmt.Errorf("spans: %w", err)
+		}
+
+		back, err := q.StationSentBack(ctx, db.StationSentBackParams{FactoryID: f, Station: station, Since: since, Until: until})
+		if err != nil {
+			return domain.StationFlow{}, fmt.Errorf("sent back: %w", err)
+		}
+
+		return domain.StationFlow{Passed: int(spans.Passed), SentBack: int(back), LeadTimeP85: seconds(spans.P85Seconds)}, nil
+	})
+	if err != nil {
+		return domain.StationFlow{}, fmt.Errorf("flow of station %s in factory %s: %w", station, factory, err)
+	}
+
+	return out, nil
+}
+
 func jonahReviewFrom(r db.JonahReview) domain.JonahReview {
 	out := domain.JonahReview{
 		ID: domain.JonahReviewID(r.ID.String()), FactoryID: domain.FactoryID(r.FactoryID.String()),
