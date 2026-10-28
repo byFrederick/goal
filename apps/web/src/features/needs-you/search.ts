@@ -33,7 +33,7 @@ export function tabCounts(entries: readonly InboxEntry[], factory?: string): Rec
   for (const e of entries) {
     if (factory && e.factory.name !== factory) continue;
     counts.all += 1;
-    for (const tab of ['decision', 'question', 'alert'] as const) if (inTab(e, tab)) counts[tab] += 1;
+    for (const tab of ['approval', 'decision', 'question', 'alert'] as const) if (inTab(e, tab)) counts[tab] += 1;
   }
   return counts;
 }

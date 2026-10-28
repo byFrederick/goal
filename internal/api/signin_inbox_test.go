@@ -15,7 +15,7 @@ func TestAPI_SignIn_InboxAndAttentionByPermission(t *testing.T) {
 	t.Parallel()
 
 	h := newSignedIn(t)
-	h.seedInboxItems(t) // line's decision, question, blocked, paused and expedite items
+	h.seedInboxItems(t) // line's decision, question, tool approval, blocked, paused and expedite items
 
 	if err := h.identity.GrantFactoryRole(testOrg, viewerID, lineID, domain.FactoryViewer); err != nil {
 		t.Fatal(err)
@@ -30,22 +30,24 @@ func TestAPI_SignIn_InboxAndAttentionByPermission(t *testing.T) {
 		return out
 	}
 
-	if got := kinds(ownerToken); !slices.Contains(got, gen.InboxEntryKindDecision) || !slices.Contains(got, gen.InboxEntryKindQuestion) {
-		t.Errorf("owner's inbox = %v, want line's decision and question", got)
+	decisions := []gen.InboxEntryKind{gen.InboxEntryKindDecision, gen.InboxEntryKindQuestion, gen.InboxEntryKindToolApproval}
+
+	if got := kinds(ownerToken); !containsAll(got, decisions...) {
+		t.Errorf("owner's inbox = %v, want line's decision, question and tool approval", got)
 	}
 
-	if got := kinds(viewerToken); slices.Contains(got, gen.InboxEntryKindDecision) || slices.Contains(got, gen.InboxEntryKindQuestion) ||
+	if got := kinds(viewerToken); slices.ContainsFunc(decisions, func(k gen.InboxEntryKind) bool { return slices.Contains(got, k) }) ||
 		!slices.Contains(got, gen.InboxEntryKindBlocked) {
-		t.Errorf("viewer's inbox = %v, want line's blocked items and no decision or question", got)
+		t.Errorf("viewer's inbox = %v, want line's blocked items and no decision, question or tool approval", got)
 	}
 
 	onYou := func(token string) int {
 		return decode[gen.OrgAttention](t, h.as(t, token, http.MethodGet, acmePath+"/attention", ""), http.StatusOK).WaitingOnYou
 	}
 
-	// The decision and the question are the owner's; the viewer may decide neither.
-	if owner, viewer := onYou(ownerToken), onYou(viewerToken); owner != 2 || viewer != 0 {
-		t.Errorf("waiting on the owner %d, on the viewer %d; want 2 and 0", owner, viewer)
+	// The decision, the question and the tool approval are the owner's; the viewer may decide none.
+	if owner, viewer := onYou(ownerToken), onYou(viewerToken); owner != 3 || viewer != 0 {
+		t.Errorf("waiting on the owner %d, on the viewer %d; want 3 and 0", owner, viewer)
 	}
 
 	if err := h.identity.GrantFactoryRole(testOrg, viewerID, lineID, ""); err != nil {
@@ -55,4 +57,9 @@ func TestAPI_SignIn_InboxAndAttentionByPermission(t *testing.T) {
 	if got := kinds(viewerToken); len(got) != 0 {
 		t.Errorf("inbox of a viewer of acme alone = %v, want nothing of line", got)
 	}
+}
+
+// containsAll reports whether got has every one of want.
+func containsAll(got []gen.InboxEntryKind, want ...gen.InboxEntryKind) bool {
+	return !slices.ContainsFunc(want, func(k gen.InboxEntryKind) bool { return !slices.Contains(got, k) })
 }

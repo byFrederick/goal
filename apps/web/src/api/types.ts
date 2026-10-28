@@ -174,6 +174,8 @@ export type {
   Targets,
   Template,
   TemplateSummary,
+  ToolApproval,
+  ToolDecision,
   Touch,
   TouchCount,
   TouchHeadline,

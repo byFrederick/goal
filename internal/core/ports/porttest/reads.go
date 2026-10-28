@@ -328,6 +328,35 @@ func (s *Store) Attention(ctx context.Context) ([]domain.Attention, error) {
 	return out, nil
 }
 
+// OpenToolApprovals implements ports.Store.
+func (s *Store) OpenToolApprovals(ctx context.Context) (map[string]int, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	byItem := map[domain.ItemID][]domain.Event{}
+
+	for _, e := range s.events {
+		if it, ok := s.visible(e.ItemID, org); ok && it.State == domain.StateWaitingHuman {
+			byItem[e.ItemID] = append(byItem[e.ItemID], e)
+		}
+	}
+
+	out := map[string]int{}
+
+	for _, events := range byItem {
+		if a, ok := domain.OpenToolApproval(events); ok {
+			out[a.Connection]++
+		}
+	}
+
+	return out, nil
+}
+
 // attention counts one factory's decisions, blocked items and open andon pull. Callers hold s.mu.
 func (s *Store) attention(org domain.OrgID, factory domain.FactoryID) domain.Attention {
 	a := domain.Attention{Factory: factory}
