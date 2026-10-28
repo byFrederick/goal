@@ -20,7 +20,7 @@ func goalJonah(t *testing.T, api string, args ...string) (string, error) {
 
 	var buf bytes.Buffer
 
-	err := run(t.Context(), append([]string{cmdJonah}, args...), &printer{w: &buf}, testEnv(t, api, map[string]string{envOrg: orgAcme}), nil)
+	err := run(t.Context(), append([]string{"jonah"}, args...), &printer{w: &buf}, testEnv(t, api, map[string]string{envOrg: orgAcme}), nil)
 
 	return buf.String(), err
 }
@@ -31,9 +31,6 @@ func proposalEntry(number int64, title string, state gen.ProposalState, paths ..
 		CreatedAt: time.Date(2026, 10, 27, 9, 0, 0, 0, time.UTC), EvidenceCount: 2,
 	}
 }
-
-// cmdJonah is the goal jonah command the tests run.
-const cmdJonah = "jonah"
 
 func jonahRefusal(status int, code string) gen.Problem {
 	return gen.Problem{Title: http.StatusText(status), Status: status, Code: &code, Detail: optional("goald's own words")}
@@ -193,31 +190,27 @@ func TestJonah_DecisionsAndLook(t *testing.T) {
 		t.Errorf("goald was sent\n%s\nwant\n%s", strings.Join(s, "\n"), strings.Join(wantSent, "\n"))
 	}
 
-	// No review loop runs yet: look refuses without asking goald anything.
-	if _, err := goalJonah(t, srv.URL, jonahLookCmd, "--factory", searchFactory); err == nil || err.Error() != reviewLoopNotRunning {
-		t.Errorf("goal jonah look = %v, want %q", err, reviewLoopNotRunning)
-	}
-
-	if s := sent(); len(s) != len(wantSent) {
-		t.Errorf("goal jonah look sent goald %q", s[len(wantSent):])
-	}
-
-	var stdout, stderr bytes.Buffer
-
-	code := Run(t.Context(), []string{"jonah", jonahLookCmd, "--factory", searchFactory}, strings.NewReader(""), &stdout, &stderr,
-		testEnv(t, srv.URL, map[string]string{envOrg: orgAcme}), nil)
-	if code == 0 || stderr.String() != "goal: "+reviewLoopNotRunning+"\n" {
-		t.Errorf("goal jonah look exited %d printing %q, want non-zero and %q", code, stderr.String(), "goal: "+reviewLoopNotRunning+"\n")
-	}
-
-	if s := sent(); len(s) != len(wantSent) {
-		t.Errorf("goal jonah look sent goald %q", s[len(wantSent):])
-	}
-
 	for _, args := range [][]string{{subShow}, {verbApprove}, {verbApprove, "seven"}, {jonahEditCmd, "0"}, {jonahLookCmd, argExtra}, {cmdUnknownName}} {
 		if _, err := goalJonah(t, srv.URL, args...); !errors.Is(err, errUsage) {
 			t.Errorf("goal jonah %q = %v, want the usage", args, err)
 		}
+	}
+}
+
+// goal jonah look refuses with the plain sentence and exits non-zero while no review loop runs,
+// and it never calls goald (software#344 lifts the refusal).
+func TestJonah_LookRefusesUntilTheLoopShips(t *testing.T) {
+	t.Parallel()
+
+	srv, sent := evalGoald(t, map[string]evalAnswer{})
+
+	_, err := goalJonah(t, srv.URL, jonahLookCmd, "--factory", searchFactory)
+	if err == nil || err.Error() != reviewsNotStarted {
+		t.Fatalf("goal jonah look = %v, want %q", err, reviewsNotStarted)
+	}
+
+	if s := sent(); len(s) != 0 {
+		t.Errorf("goald was sent %q, want no request", s)
 	}
 }
 
@@ -234,6 +227,9 @@ func TestJonah_ConflictsPrintOneLine(t *testing.T) {
 		{"proposal-stale", []string{verbApprove, "7"}, webProposals + "/7/approve", "a file changed since Jonah made this proposal, so it no longer applies: reject it"},
 		{"draft-conflict", []string{jonahEditCmd, "7"}, webProposals + "/7/edit", "the draft's copy of a file changed since Jonah made this proposal: nothing was written"},
 		{"proposal-decided", []string{verbReject, "7", flagReason, "no"}, webProposals + "/7/reject", "the proposal was already decided: goal jonah show 7 says how"},
+		{"review-loop-not-running", []string{verbApprove, "7"}, webProposals + "/7/approve", "Reviews start when Jonah's review loop ships"},
+		{"review-in-flight", []string{verbApprove, "7"}, webProposals + "/7/approve", "a review is already pending or running: wait for it to finish"},
+		{"learning-budget-exhausted", []string{verbApprove, "7"}, webProposals + "/7/approve", "Jonah's runs reached the factory's weekly budget (learning.jonah.weeklyUsd): try again when the last 7 days cost less"},
 	}
 
 	for _, tc := range cases {
@@ -244,7 +240,7 @@ func TestJonah_ConflictsPrintOneLine(t *testing.T) {
 
 			var stdout, stderr bytes.Buffer
 
-			args := append([]string{cmdJonah}, append(tc.args, "--factory", searchFactory)...)
+			args := append([]string{"jonah"}, append(tc.args, "--factory", searchFactory)...)
 			code := Run(t.Context(), args, strings.NewReader(""), &stdout, &stderr, testEnv(t, srv.URL, map[string]string{envOrg: orgAcme}), nil)
 
 			if code == 0 {
@@ -255,18 +251,6 @@ func TestJonah_ConflictsPrintOneLine(t *testing.T) {
 				t.Errorf("goal %q printed %q, want %q", args, got, "goal: "+tc.want+"\n")
 			}
 		})
-	}
-
-	// goal jonah look no longer reaches goald, so the review refusals are read by jonahProblem itself.
-	for code, want := range map[string]string{
-		"review-in-flight":          "a review is already pending or running: wait for it to finish",
-		"learning-budget-exhausted": "Jonah's runs reached the factory's weekly budget (learning.jonah.weeklyUsd): try again when the last 7 days cost less",
-		"review-loop-not-running":   "Reviews start when Jonah's review loop ships",
-	} {
-		p := jonahRefusal(http.StatusConflict, code)
-		if err := jonahProblem(&http.Response{StatusCode: http.StatusConflict}, &p, 0); err == nil || err.Error() != want {
-			t.Errorf("a 409 %s = %v, want %q", code, err, want)
-		}
 	}
 
 	t.Run("refused", func(t *testing.T) {

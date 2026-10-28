@@ -50,19 +50,25 @@ const (
 	overviewProposals    = 1000
 )
 
-// reviewLoopRunning gates manual reviews: no review loop claims a queued review yet, so
-// QueueJonahReview refuses with review-loop-not-running instead of queueing one nothing runs.
-// software#344, which builds the loop, deletes this switch.
-const reviewLoopRunning = false
-
-// reviewLoopNotRunning is the refusal's detail, the same sentence the CLI prints.
-const reviewLoopNotRunning = "Reviews start when Jonah's review loop ships"
+// reviewLoopRunning says whether goald runs Jonah's review loop (software#344). Until it does, a
+// queued review waits for a claim that never comes, so QueueJonahReview refuses with
+// review-loop-not-running. software#344 sets this to true or deletes the gate.
+var reviewLoopRunning = false
 
 var (
 	errJonahUnavailable     = errors.New("this goald serves no Jonah store")
 	errProposalNotFound     = errors.New("no such proposal")
-	errReviewLoopNotRunning = errors.New("no Jonah review loop runs yet")
+	errReviewLoopNotRunning = errors.New("review loop not running")
 )
+
+// reviewLoopNotRunning is the 409 a review gets while no loop runs. Its detail is the sentence a
+// person reads, not the sentinel's text.
+func reviewLoopNotRunning() gen.Problem {
+	code := "review-loop-not-running"
+	detail := "Reviews start when Jonah's review loop ships"
+
+	return gen.Problem{Title: http.StatusText(http.StatusConflict), Status: http.StatusConflict, Code: &code, Detail: &detail}
+}
 
 // jonahProblem answers the Jonah routes' own errors.
 func jonahProblem(err error) (gen.Problem, bool) {
@@ -71,6 +77,8 @@ func jonahProblem(err error) (gen.Problem, bool) {
 	var code string
 
 	switch {
+	case errors.Is(err, errReviewLoopNotRunning):
+		return reviewLoopNotRunning(), true
 	case errors.Is(err, errJonahUnavailable):
 		status, code = http.StatusServiceUnavailable, "jonah-unavailable"
 	case errors.Is(err, errProposalNotFound):
@@ -87,19 +95,12 @@ func jonahProblem(err error) (gen.Problem, bool) {
 		status, code = http.StatusConflict, "review-in-flight"
 	case errors.Is(err, domain.ErrLearningBudgetExhausted):
 		status, code = http.StatusConflict, "learning-budget-exhausted"
-	case errors.Is(err, errReviewLoopNotRunning):
-		status, code = http.StatusConflict, "review-loop-not-running"
 	default:
 		return gen.Problem{}, false
 	}
 
 	p := detailed(status, err)
 	p.Code = &code
-
-	if code == "review-loop-not-running" {
-		detail := reviewLoopNotRunning
-		p.Detail = &detail
-	}
 
 	return p, true
 }

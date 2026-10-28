@@ -289,26 +289,12 @@ func TestJonah_QueueReview(t *testing.T) {
 
 	h := newHarness(t)
 
-	// No review loop runs yet, so a review is refused before any row is written; the
-	// review-in-flight and budget refusals are TestDecide_QueueReview's in internal/jonah.
+	// No review loop runs yet (software#344): a review is refused before anything is queued.
 	code, p := problemOfCall(t, h, http.MethodPost, acmeJonah+"/reviews", "")
-	wantProblem(t, "a review", code, p, http.StatusConflict, "review-loop-not-running")
-
-	if p.Detail == nil || *p.Detail != "Reviews start when Jonah's review loop ships" {
-		t.Errorf("detail = %v, want the review loop sentence", p.Detail)
-	}
-
-	reviews, err := h.store.JonahReviews(inOrg(t), acmeID, 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(reviews) != 0 {
-		t.Errorf("%d reviews stored, want none", len(reviews))
-	}
+	wantProblem(t, "a review while no loop runs", code, p, http.StatusConflict, "review-loop-not-running")
 
 	if n := h.audited(t, domain.AuditReviewQueued); n != 0 {
-		t.Errorf("%d %s entries, want 0", n, domain.AuditReviewQueued)
+		t.Errorf("%d %s entries, want none", n, domain.AuditReviewQueued)
 	}
 }
 

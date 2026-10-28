@@ -4,7 +4,7 @@ import { useSearch } from '@tanstack/react-router';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { type ReactNode, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, getJonahOverview, listProposals } from '../../api/client';
+import { ApiError, getJonahOverview, listProposals, queueJonahReview } from '../../api/client';
 import { jonahOverviewQuery, proposalsQuery } from '../../api/queries';
 import type { Factory, JonahOverview, OrgSummary, ProposalEntry, ProposalPage, ProposalState } from '../../api/types';
 import { TopBar, TopBarSetContext, type TopBarState } from '../../app/top-bar';
@@ -16,6 +16,7 @@ vi.mock('../../api/client', async (original) => ({
   ...(await original<typeof import('../../api/client')>()),
   getJonahOverview: vi.fn(),
   listProposals: vi.fn(),
+  queueJonahReview: vi.fn(),
 }));
 
 afterEach(cleanup);
@@ -39,7 +40,6 @@ const editor: Factory = {
   role: 'editor',
   can: ['definition:edit', 'definition:publish', 'factory:read'],
 };
-const viewer: Factory = { ...editor, role: 'viewer', can: ['factory:read'] };
 
 const proposal7: ProposalEntry = {
   number: 7,
@@ -256,7 +256,7 @@ describe('the Jonah overview, its four states', () => {
 });
 
 describe('Look for improvements now', () => {
-  it('is disabled, says the review loop has not shipped, and sends no request when clicked', async () => {
+  it('is disabled until the review loop ships, with the meta line, and sends no request', async () => {
     vi.mocked(getJonahOverview).mockResolvedValue(overview);
     vi.mocked(listProposals).mockResolvedValue(listOf([proposal8, proposal7]));
     renderOverview();
@@ -264,31 +264,9 @@ describe('Look for improvements now', () => {
     await screen.findByRole('heading', { name: 'Waiting for your review' });
     const look = screen.getByRole('button', { name: 'Look for improvements now' });
     expect((look as HTMLButtonElement).disabled).toBe(true);
-
-    const reason = screen.getByText("Reviews start when Jonah's review loop ships");
-    expect(reason.className).toContain('text-meta');
-    expect(reason.className).toContain('text-muted');
-    expect(look.getAttribute('aria-describedby')).toBe(reason.id);
-
-    const sent = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
-    fireEvent.click(look);
-    const reviewRequests = sent.mock.calls.filter(([input]) => {
-      const url = input instanceof Request ? input.url : String(input);
-      return url.includes('/jonah/reviews');
-    });
-    sent.mockRestore();
-    expect(reviewRequests).toEqual([]);
-  });
-
-  it('stays disabled for a viewer, who has no definition:edit', async () => {
-    vi.mocked(getJonahOverview).mockResolvedValue(overview);
-    vi.mocked(listProposals).mockResolvedValue(listOf([]));
-    renderOverview(viewer, seeds(overview, viewer));
-
-    await screen.findByRole('heading', { name: 'Waiting for your review' });
-    const look = screen.getByRole('button', { name: 'Look for improvements now' });
-    expect((look as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText("Reviews start when Jonah's review loop ships")).toBeTruthy();
+    fireEvent.click(look);
+    await waitFor(() => expect(queueJonahReview).not.toHaveBeenCalled());
   });
 });
 

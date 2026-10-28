@@ -37,9 +37,10 @@ test('each proposal links to its page, the Evals control is not available, and t
   await expect(page.getByText('Not available yet').first()).toBeVisible();
 });
 
-test("Look for improvements now is disabled until Jonah's review loop ships", async ({ page }) => {
+test("Look for improvements now is disabled, with the meta line, until Jonah's review loop ships", async ({ page }) => {
   await page.goto('/o/acme/f/software/jonah');
-  await expect(page.getByRole('button', { name: 'Look for improvements now' })).toBeDisabled();
+  const look = page.getByRole('button', { name: 'Look for improvements now' });
+  await expect(look).toBeDisabled();
   await expect(page.getByText("Reviews start when Jonah's review loop ships")).toBeVisible();
 });
 
@@ -66,4 +67,9 @@ test('the overview fits 375 and 768 px and renders in dark mode', async ({ page 
   await page.goto('/o/acme/f/software/jonah');
   await expect(page.getByRole('heading', { name: 'Waiting for your review' })).toBeVisible();
   await expectAccessible(page);
+});
+
+test('a factory with no version also shows the disabled review button', async ({ page }) => {
+  await page.goto('/o/acme/f/goal/jonah');
+  await expect(page.getByRole('button', { name: 'Look for improvements now' })).toBeDisabled();
 });

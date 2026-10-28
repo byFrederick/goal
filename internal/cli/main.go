@@ -204,7 +204,7 @@ const usage = `usage:
                                                   builder
   goal jonah reject <number> --reason "..." [--factory F]
                                                   reject it; later reviews read the reason
-  goal jonah look [--factory F]                   refused until Jonah's review loop ships
+  goal jonah look [--factory F]                   queue a review of the factory's sent-back runs now
   goal bake-off run <agent> [--model M]... [--trials N] [--follow] [--factory F] [--json]
                                                   print the estimate and the models, then start a bake-off
                                                   of the agent's eval cases on 2 to 4 models (default its

@@ -2563,12 +2563,11 @@ paths:
       summary: Queue a manual review of the factory's sent-back runs (decision 2)
       description: >-
         The review reads the sent-back touches since the last review's window ended (30 days
-        back before the first) on the current version; goald's review loop runs it. Until the
-        review loop ships, every call answers 409 review-loop-not-running ("Reviews start when
-        Jonah's review loop ships") and queues nothing. 409 review-in-flight while a review is
-        pending or running; learning-budget-exhausted while the factory's jonah runs over the
-        last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the
-        first publish.
+        back before the first) on the current version; goald's review loop runs it. 409
+        review-loop-not-running while no review loop runs (none does until software#344 ships):
+        nothing is queued. 409 review-in-flight while a review is pending or running;
+        learning-budget-exhausted while the factory's jonah runs over the last 7 days cost
+        learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
       responses:
         "202":
           description: The queued review

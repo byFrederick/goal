@@ -1,9 +1,8 @@
 // Jonah in the mock API (contracts/api/openapi.yaml, tag jonah): a factory's overview (its policy, the proposals
 // waiting, the month's cost and the week's observations), its proposals by state, and a manual review. A seeded
 // factory (the Software factory, by name) starts with the picture's two waiting proposals, an applied one, four
-// observations and $6.40 this month; every other factory has no version yet. A manual review answers 409
-// review-loop-not-running for every known factory, as goald will until Jonah's review loop ships (software#344):
-// no review is stored.
+// observations and $6.40 this month. A review answers 409 review-loop-not-running while no review loop runs
+// (software#344 ships it): nothing is queued.
 // A proposal's page reads its files and evidence, and its approve, edit and reject record the decision. Proposal 8
 // is the flagged case: approving it answers 409 draft-open, as a factory with an open draft does.
 import type { ServerResponse } from 'node:http';

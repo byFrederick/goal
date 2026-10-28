@@ -562,6 +562,15 @@ func workspaceNote(c claimed, b *box, env runEnv) string {
 
 	note := fmt.Sprintf("## Workspace\n\nYour working directory is a clone of %s with branch `%s` checked out (%s). %s",
 		r.URL, cmp.Or(c.branch, c.item.Branch()), state, env.pushNote(host))
+	// A landing root lands only at its landing station; anywhere else (build, after the landing
+	// was rejected) it is reworked on the integration branch, so a landing note there would have
+	// the agent check the landing instead of fixing what the rejection asks for.
+	if c.item.Landing() && c.station.ID != c.item.IntegrationLandAt {
+		return note + fmt.Sprintf("\n\nThis is the assembly's integration branch `%s`; it lands on the default branch. "+
+			"Fix what the last rejection asks for here, push to `%s` as a plain push, and keep its pull request "+
+			"into the default branch open.", c.branch, c.branch)
+	}
+
 	if c.item.Landing() {
 		return note + fmt.Sprintf("\n\nYou are landing the whole assembly: `%s` is its integration branch, which holds "+
 			"every part's merged work, and it lands on the default branch (origin/HEAD). First merge the default branch into `%s` "+

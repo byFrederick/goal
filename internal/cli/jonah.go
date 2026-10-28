@@ -35,9 +35,9 @@ const (
 	jonahLookCmd = "look"
 )
 
-// reviewLoopNotRunning is goal jonah look's refusal until Jonah's review loop ships
-// (software#344), and the message of goald's 409 review-loop-not-running.
-const reviewLoopNotRunning = "Reviews start when Jonah's review loop ships"
+// reviewsNotStarted is what goal jonah look and a review's 409 say while no review loop runs
+// (software#344 builds it and removes this refusal).
+const reviewsNotStarted = "Reviews start when Jonah's review loop ships"
 
 // jonahConflicts are the one-line messages of the 409 codes the Jonah operations document.
 var jonahConflicts = map[string]string{
@@ -46,8 +46,8 @@ var jonahConflicts = map[string]string{
 	"draft-conflict":            "the draft's copy of a file changed since Jonah made this proposal: nothing was written",
 	"proposal-decided":          "the proposal was already decided: goal jonah show %d says how",
 	"review-in-flight":          "a review is already pending or running: wait for it to finish",
+	"review-loop-not-running":   reviewsNotStarted,
 	"learning-budget-exhausted": "Jonah's runs reached the factory's weekly budget (learning.jonah.weeklyUsd): try again when the last 7 days cost less",
-	"review-loop-not-running":   reviewLoopNotRunning,
 }
 
 // jonahProblem is goald's refusal of a Jonah operation on proposal number (0 for none): a
@@ -267,8 +267,9 @@ func jonahDecide(ctx context.Context, out *printer, getenv func(string) string, 
 	return nil
 }
 
-// jonahLook is goal jonah look [--factory F]: a manual review of the sent-back runs, which it
-// refuses without asking goald until Jonah's review loop ships (software#344 restores the call).
+// jonahLook is goal jonah look [--factory F]: it refuses until the review loop ships, since a
+// queued review would never run. It parses its flags first, so a usage error still says so, and
+// it never connects to goald.
 func jonahLook(_ context.Context, _ *printer, _ func(string) string, args []string) error {
 	fs := newFlags("jonah look")
 	addOrgFlag(fs)
@@ -278,8 +279,14 @@ func jonahLook(_ context.Context, _ *printer, _ func(string) string, args []stri
 		return errUsage
 	}
 
-	return errors.New(jonahConflicts["review-loop-not-running"])
+	return sentenceError(reviewsNotStarted)
 }
+
+// sentenceError is an error whose text is a sentence for the person who ran the command, not a
+// lowercase Go error string.
+type sentenceError string
+
+func (s sentenceError) Error() string { return string(s) }
 
 // jonahProposalArgs parses <number> [--factory F] [--org O] and the flags extra declares (its
 // check, run after parsing, says whether they are valid), then connects and resolves the

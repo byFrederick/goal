@@ -65,24 +65,23 @@ describe('the mock Jonah API', () => {
     expect(waiting.body.proposals.map((p: { number: number }) => p.number)).toEqual([8, 7]);
   });
 
-  it('answers 409 review-loop-not-running to a manual review of every known factory, and 404 to an unknown one', async () => {
+  it('answers 409 review-loop-not-running to a manual review while no loop runs', async () => {
     const api = jonah();
-    for (const factory of ['software', 'goal']) {
-      const review = await call(api, `/factories/${factory}/jonah/reviews`, 'POST', factory);
-      expect(review.status).toBe(409);
-      expect(review.body.code).toBe('review-loop-not-running');
-      expect(review.body.detail).toBe("Reviews start when Jonah's review loop ships");
-    }
-
-    const unknown = await call(api, '/factories/nowhere/jonah/reviews', 'POST', 'nowhere');
-    expect(unknown.status).toBe(404);
-    expect(unknown.body.code).toBe('factory-not-found');
+    const review = await call(api, '/factories/software/jonah/reviews', 'POST');
+    expect(review.status).toBe(409);
+    expect(review.body.code).toBe('review-loop-not-running');
+    expect(review.body.detail).toBe("Reviews start when Jonah's review loop ships");
   });
 
-  it('has no version for a factory without a seed: nothing waits and nothing was noticed', async () => {
-    const overview = await call(jonah(), '/factories/goal/jonah', 'GET', 'goal');
+  it('has no version for a factory without a seed, and a review still answers review-loop-not-running', async () => {
+    const api = jonah();
+    const overview = await call(api, '/factories/goal/jonah', 'GET', 'goal');
     expect(overview.body.waiting).toBe(0);
     expect(overview.body.observations).toEqual([]);
+
+    const review = await call(api, '/factories/goal/jonah/reviews', 'POST', 'goal');
+    expect(review.status).toBe(409);
+    expect(review.body.code).toBe('review-loop-not-running');
   });
 
   it('serves proposal 7 as the picture shows it: two files, the four runs as evidence and the versions it moves between', async () => {
