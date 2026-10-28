@@ -114,7 +114,7 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
         ...factory,
         defKeys.draft(org, f),
         ...(data.number !== undefined
-          ? [defKeys.versions(org, f), defKeys.versionsOf(org, f), keys.evals(org, f)]
+          ? [defKeys.versions(org, f), defKeys.versionsOf(org, f), keys.evals(org, f), keys.judges(org, f)]
           : []),
         ...(data.number !== undefined ? [defKeys.versions(org, f), defKeys.versionsOf(org, f)] : []),
         ...(data.number !== undefined ? [intakeKeys.triggers(org, f)] : []),
@@ -127,6 +127,7 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
         defKeys.draft(org, f),
         defKeys.compares(org, f),
         keys.board(org, f),
+        keys.judges(org, f),
         keys.overviews(org),
         // The triggers of the running definition (what the intake shows).
         keys.intake(org, f),
