@@ -437,18 +437,18 @@ func testJonahTenancy(f *fixture) {
 		t.Errorf("reviews without an org: %v, want ErrNoOrg", err)
 	}
 
-	f.expectFlowInvisible(t, other)
+	f.expectFlowInvisible(other, t)
 }
 
 // expectFlowInvisible checks that other, another organization, sees none of the factory's
 // sent-back touches or spans, and that both reads refuse a ctx without an org.
-func (f *fixture) expectFlowInvisible(t *testing.T, other context.Context) {
+func (f *fixture) expectFlowInvisible(other context.Context, t *testing.T) {
 	t.Helper()
 
 	it := f.create(t, domain.NewItem{CreatedAt: t0})
 	_, l := f.claim(t, work, 0, t0)
 	f.move(t, next(it, l, t1))
-	f.appendEvents(t, by(it, ada, domain.EventRejected, t1, map[string]any{keyReason: "wrong file"}))
+	f.appendEvents(t, by(it, ada, domain.EventRejected, t1, map[string]any{keyReason: "no screenshot"}))
 
 	until := t1.Add(time.Hour)
 
@@ -568,7 +568,7 @@ func testJonahSentBackBetween(f *fixture) {
 
 	f.appendEvents(t,
 		by(a, ada, domain.EventRejected, since.Add(-time.Second), map[string]any{keyReason: "early"}),
-		by(a, ada, domain.EventRejected, since, map[string]any{keyReason: "wrong file"}),
+		by(a, ada, domain.EventRejected, since, map[string]any{keyReason: "missed the test"}),
 		by(b, bob, domain.EventGateRejected, since.Add(time.Minute), nil),
 		by(b, bob, domain.EventNote, since.Add(2*time.Minute), map[string]any{keyText: "x"}),
 		agentEvent(b, agWorker, domain.EventGateRejected, since.Add(3*time.Minute)),
@@ -580,7 +580,7 @@ func testJonahSentBackBetween(f *fixture) {
 	want := []domain.SentBack{
 		{
 			EventID: f.eventAt(t, a.ID, domain.EventRejected, since), ItemID: a.ID, ItemNumber: a.Number, ItemTitle: a.Title,
-			Station: stWork, Agent: agWorker, Kind: domain.EventRejected, Reason: "wrong file", At: since,
+			Station: stWork, Agent: agWorker, Kind: domain.EventRejected, Reason: "missed the test", At: since,
 		},
 		{
 			EventID: f.eventAt(t, b.ID, domain.EventGateRejected, since.Add(time.Minute)), ItemID: b.ID, ItemNumber: b.Number,
