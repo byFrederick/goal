@@ -16,7 +16,7 @@ interface ConfirmDialogProps {
   /** Shown while the action runs. */
   pendingLabel?: string;
   cancelLabel?: string;
-  /** danger: an action that destroys something; its button is rust text, never a red fill. */
+  /** danger: an action that destroys something; its final button is the red-fill rework variant (MASTER.md allows it for a final confirmation). */
   tone?: 'default' | 'danger';
   /** What the person must type, exactly, before the action enables. */
   confirmText?: string;

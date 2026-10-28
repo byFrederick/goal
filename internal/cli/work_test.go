@@ -39,7 +39,7 @@ func TestDecide_RejectNeedsAReasonAndApproveNone(t *testing.T) {
 	env := testEnv(t, "http://127.0.0.1:1", nil) // never reached
 
 	for _, args := range [][]string{
-		{"reject", item1}, {"approve", item1, "--reason", "x"}, {"approve"}, {"approve", item1, "--by", "pat"},
+		{"reject", item1}, {"approve", item1, flagReason, "x"}, {"approve"}, {"approve", item1, "--by", "pat"},
 	} {
 		if err := decide(t.Context(), &printer{w: &bytes.Buffer{}}, env, args[0], args[1:]); !errors.Is(err, errUsage) {
 			t.Errorf("goal %v = %v, want a usage error", args, err)
@@ -200,7 +200,15 @@ const (
 	stationDone = "done"
 )
 
-// controlGoald records the move and pause requests it answers, refusing a move to a done station.
+// flagReason is the --reason flag of the decisions and controls.
+const flagReason = "--reason"
+
+// reasonClosed is the cancel reason the control fake refuses, as goald refuses to cancel an item
+// that is already done or cancelled.
+const reasonClosed = "already closed"
+
+// controlGoald records the move, pause, lane and cancel requests it answers, refusing a move to a
+// done station and a cancel with reasonClosed.
 type controlGoald struct {
 	mu     sync.Mutex
 	called []string
@@ -217,8 +225,11 @@ func (g *controlGoald) handler(action string) http.HandlerFunc {
 		g.called, g.bodies = append(g.called, action+" "+r.PathValue("item")), append(g.bodies, b)
 		g.mu.Unlock()
 
-		if b["to"] == stationDone {
+		if b["to"] == stationDone || b["reason"] == reasonClosed {
 			detail := "an item reaches a done station by approval or merge, not by a move"
+			if action == verbCancel {
+				detail = "item is done or cancelled"
+			}
 
 			w.Header().Set("Content-Type", "application/problem+json")
 			w.WriteHeader(http.StatusConflict)
@@ -235,6 +246,8 @@ func (g *controlGoald) handler(action string) http.HandlerFunc {
 		case verbLane:
 			lane, _ := b["lane"].(string)
 			it.Lane = &lane
+		case verbCancel:
+			it.State = gen.ItemStateCancelled
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -257,9 +270,9 @@ func TestControl_MoveAndPauseSendTheirRequests(t *testing.T) {
 
 	var out bytes.Buffer
 	for _, args := range [][]string{
-		{verbMove, notedRef, stationSpec, "--reason", "needs a spec"},
+		{verbMove, notedRef, stationSpec, flagReason, "needs a spec"},
 		{verbPause, notedRef},
-		{verbPause, notedRef, "--reason", "vendor outage"},
+		{verbPause, notedRef, flagReason, "vendor outage"},
 	} {
 		if err := run(t.Context(), args, &printer{w: &out}, env, nil); err != nil {
 			t.Fatalf("goal %v: %v", args, err)
@@ -279,6 +292,43 @@ func TestControl_MoveAndPauseSendTheirRequests(t *testing.T) {
 	if err := run(t.Context(), []string{verbMove, notedRef, stationDone}, &printer{w: &bytes.Buffer{}}, env, nil); err == nil ||
 		!strings.Contains(err.Error(), "by approval or merge") {
 		t.Errorf("a refused move = %v; want goald's refusal", err)
+	}
+}
+
+func TestControl_CancelSendsItsRequest(t *testing.T) {
+	t.Parallel()
+
+	g := &controlGoald{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/orgs/acme/items/{item}/cancel", g.handler(verbCancel))
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	env := testEnv(t, srv.URL, map[string]string{envOrg: orgAcme})
+
+	var out bytes.Buffer
+	for _, args := range [][]string{
+		{verbCancel, notedRef},
+		{verbCancel, notedRef, flagReason, "duplicate"},
+	} {
+		if err := run(t.Context(), args, &printer{w: &out}, env, nil); err != nil {
+			t.Fatalf("goal %v: %v", args, err)
+		}
+	}
+
+	if want := "✓ cancelled goal#1\n✓ cancelled goal#1\n"; out.String() != want {
+		t.Errorf("output %q; want %q", out.String(), want)
+	}
+
+	if !slices.Equal(g.called, []string{"cancel goal#1", "cancel goal#1"}) || g.bodies[0]["reason"] != nil ||
+		g.bodies[1]["reason"] != "duplicate" {
+		t.Errorf("goald got %v with %v", g.called, g.bodies)
+	}
+
+	if err := run(t.Context(), []string{verbCancel, notedRef, flagReason, reasonClosed}, &printer{w: &bytes.Buffer{}}, env, nil); err == nil ||
+		!strings.Contains(err.Error(), "item is done or cancelled") {
+		t.Errorf("a refused cancel = %v; want goald's refusal", err)
 	}
 }
 
@@ -331,6 +381,8 @@ func TestControl_UsageErrors(t *testing.T) {
 		{verbMove, notedRef, "a", "b"},
 		{verbPause},
 		{verbPause, notedRef, "x"},
+		{verbCancel},
+		{verbCancel, notedRef, "x"},
 		{verbLane},
 		{verbLane, notedRef},
 		{verbLane, notedRef, " "},

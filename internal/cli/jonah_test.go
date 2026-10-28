@@ -13,7 +13,6 @@ import (
 
 const (
 	webProposals = "/v1/orgs/acme/factories/web/jonah/proposals"
-	flagReason   = "--reason"
 )
 
 func goalJonah(t *testing.T, api string, args ...string) (string, error) {
