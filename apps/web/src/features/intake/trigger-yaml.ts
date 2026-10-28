@@ -15,14 +15,16 @@ export type TriggerBlock = 'on' | 'filter' | 'only' | 'create' | 'limits';
 /** Where a trigger's keys sit in the file: the first and last line of each, 1-based. */
 export type KeyLines = Partial<Record<TriggerKey, { from: number; to: number }>>;
 
-/** The board's work types and stations, which the Create section chooses from. */
+/** The board's work types, stations and each station's lanes, which the Create section chooses from. */
 export interface BoardChoices {
   workTypes: string[];
   stations: string[];
+  /** The keys of each station's `route`, by station id: the lanes the Create section's lane select offers. */
+  lanes: Record<string, string[]>;
 }
 
 interface Shape {
-  spec?: { board?: { workTypes?: unknown; stations?: { id?: unknown }[]; triggers?: unknown } };
+  spec?: { board?: { workTypes?: unknown; stations?: { id?: unknown; route?: unknown }[]; triggers?: unknown } };
 }
 
 /** The file's triggers as the form reads them, by name. Unparsed or missing: an empty list. */
@@ -42,9 +44,14 @@ export function readBoard(text: string): BoardChoices {
   const board = (parseDocument(text).toJS() as Shape | null)?.spec?.board;
   const strings = (list: unknown) =>
     Array.isArray(list) ? list.filter((s): s is string => typeof s === 'string') : [];
+  const lanes: Record<string, string[]> = {};
+  for (const s of Array.isArray(board?.stations) ? board.stations : []) {
+    if (typeof s.id === 'string' && s.route && typeof s.route === 'object') lanes[s.id] = Object.keys(s.route);
+  }
   return {
     workTypes: strings(board?.workTypes),
     stations: strings(board?.stations?.map((s) => s.id)),
+    lanes,
   };
 }
 

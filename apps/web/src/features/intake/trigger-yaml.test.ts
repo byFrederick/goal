@@ -50,7 +50,20 @@ describe('reading the triggers', () => {
   });
 
   it('reads the work types and station ids the Create section chooses from', () => {
-    expect(readBoard(file)).toEqual({ workTypes: ['feature', 'fix'], stations: ['intake', 'build'] });
+    expect(readBoard(file)).toEqual({ workTypes: ['feature', 'fix'], stations: ['intake', 'build'], lanes: {} });
+  });
+
+  it("reads each station's route keys as its lanes", () => {
+    const text = `spec:
+  board:
+    stations:
+      - id: build
+        kind: agent
+        route: { backend: backend-engineer, frontend: frontend-engineer }
+      - id: done
+        kind: done
+`;
+    expect(readBoard(text).lanes).toEqual({ build: ['backend', 'frontend'] });
   });
 
   it('gives the line of each key, so a problem can be placed under its field', () => {

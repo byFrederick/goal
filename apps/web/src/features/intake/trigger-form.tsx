@@ -177,6 +177,8 @@ export function TriggerForm({ value, set, board, factoryName, problems }: Trigge
     create.type && !board.workTypes.includes(create.type) ? [...board.workTypes, create.type] : board.workTypes;
   const stations =
     create.station && !board.stations.includes(create.station) ? [...board.stations, create.station] : board.stations;
+  // The lanes are the keys of the chosen station's route (factory.schema.json, station.route).
+  const lanes = board.lanes[create.station] ?? [];
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -352,7 +354,14 @@ export function TriggerForm({ value, set, board, factoryName, problems }: Trigge
           >
             <option value="">Standard lane</option>
             <option value="expedite">Expedite lane</option>
-            {create.lane ? <option value={create.lane}>{create.lane} lane</option> : null}
+            {lanes.map((lane) => (
+              <option key={lane} value={lane}>
+                {lane} lane
+              </option>
+            ))}
+            {create.lane && !lanes.includes(create.lane) ? (
+              <option value={create.lane}>{create.lane} lane</option>
+            ) : null}
           </NativeSelect>
         </div>
         <TemplateField
