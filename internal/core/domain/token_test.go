@@ -190,3 +190,72 @@ func TestTaskToken_CarriesTheRunsBranchAndBase(t *testing.T) {
 		t.Errorf("VerifyTaskToken = %+v, %v; want branch %q and base %q", got, err, claims.Branch, claims.Base)
 	}
 }
+
+func TestTaskToken_DraftRequest(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	key := []byte("gateway-key")
+	claims := TaskClaims{
+		Kind: TaskKindDraftRequest, OrgID: "o1", FactoryID: "f1", VersionID: "v1", Agent: "reviewer", RunID: "d1",
+		DraftRequest: "d1", DraftRevision: 7, ExpiresAt: now.Add(time.Hour).Unix(),
+	}
+
+	token, err := SignTaskToken(key, claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := VerifyTaskToken(key, token, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Kind != TaskKindDraftRequest || got.DraftRequest != "d1" || got.DraftRevision != 7 {
+		t.Errorf("claims = %+v, want draft request d1 at revision 7", got)
+	}
+
+	sign := func(c TaskClaims) string {
+		c.Audience = TaskAudience
+
+		payload, err := json.Marshal(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		enc := base64.RawURLEncoding
+
+		return enc.EncodeToString(payload) + "." + enc.EncodeToString(mac(key, payload))
+	}
+
+	bad := map[string]func(c *TaskClaims){
+		"an item":             func(c *TaskClaims) { c.ItemID = "i1" },
+		"a station":           func(c *TaskClaims) { c.Station = stationBuild },
+		"connections":         func(c *TaskClaims) { c.Connections = []string{"acme-host"} },
+		"no request":          func(c *TaskClaims) { c.DraftRequest = "" },
+		"a negative revision": func(c *TaskClaims) { c.DraftRevision = -1 },
+	}
+
+	for name, change := range bad {
+		c := claims
+		change(&c)
+
+		if _, err := SignTaskToken(key, c); !errors.Is(err, ErrBadTaskToken) {
+			t.Errorf("signing a draft request token with %s: err = %v, want ErrBadTaskToken", name, err)
+		}
+
+		// A token signed by another issuer is refused all the same.
+		if _, err := VerifyTaskToken(key, sign(c), now); !errors.Is(err, ErrBadTaskToken) {
+			t.Errorf("verifying a draft request token with %s: err = %v, want ErrBadTaskToken", name, err)
+		}
+	}
+
+	// Only a draft request's token names a draft request.
+	other := TaskClaims{
+		OrgID: "o1", FactoryID: "f1", VersionID: "v1", ItemID: "i1", Station: stationBuild, Agent: testAgent, RunID: "r1",
+		DraftRequest: "d1", ExpiresAt: now.Add(time.Hour).Unix(),
+	}
+	if _, err := VerifyTaskToken(key, sign(other), now); !errors.Is(err, ErrBadTaskToken) {
+		t.Errorf("verifying a production token that names a draft request: err = %v, want ErrBadTaskToken", err)
+	}
+}

@@ -26,6 +26,11 @@ type TaskKind string
 // outside API. The model connection reaches the agent's box apart from the token.
 const TaskKindEval TaskKind = "eval"
 
+// TaskKindDraftRequest is a draft request's box (ADR 0021 decision 2): it names the request and
+// the draft revision whose files it starts from, and no item, station or connection. The gateway
+// serves it only its bundle, with the draft's files and no repository.
+const TaskKindDraftRequest TaskKind = "draft_request"
+
 // TaskClaims scope one agent task's access to the MCP gateway: which organization, factory,
 // definition version, item, station, agent and run it acts for, which connections it may use,
 // what the organization policy decided at run start (the model and the denied commands) and
@@ -33,7 +38,8 @@ const TaskKindEval TaskKind = "eval"
 type TaskClaims struct {
 	// Audience is always TaskAudience: SignTaskToken sets it and VerifyTaskToken requires it.
 	Audience string `json:"aud"`
-	// Kind is empty for a production task and TaskKindEval for an eval try.
+	// Kind is empty for a production task, TaskKindEval for an eval try and TaskKindDraftRequest
+	// for a draft request's box.
 	Kind      TaskKind  `json:"k,omitempty"`
 	OrgID     OrgID     `json:"o"`
 	FactoryID FactoryID `json:"f"`
@@ -56,9 +62,13 @@ type TaskClaims struct {
 	// into, as the engine decided them at run start (RunBase). An empty Base is the default
 	// branch; tokens issued before them name neither, and the gateway then takes the item's
 	// branch and the default branch.
-	Branch    string `json:"b,omitempty"`
-	Base      string `json:"bb,omitempty"`
-	ExpiresAt int64  `json:"e"` // unix seconds
+	Branch string `json:"b,omitempty"`
+	Base   string `json:"bb,omitempty"`
+	// DraftRequest is the draft request a TaskKindDraftRequest task runs, and DraftRevision the
+	// revision of the factory's draft it read; a draft that moved past it is not served.
+	DraftRequest  DraftRequestID `json:"dr,omitempty"`
+	DraftRevision int64          `json:"dv,omitempty"`
+	ExpiresAt     int64          `json:"e"` // unix seconds
 }
 
 // SignTaskToken issues a per-task gateway token for TaskAudience, whatever c.Audience says. Any
@@ -134,10 +144,20 @@ func VerifyTaskToken(key []byte, token string, now time.Time) (TaskClaims, error
 	return c, nil
 }
 
-// checkKind refuses an eval task's claims that name a connection.
+// checkKind refuses an eval task's claims that name a connection, a draft request's that name an
+// item, a station, a connection or no request, and any other task's that name a draft request.
 func (c TaskClaims) checkKind() error {
-	if c.Kind == TaskKindEval && len(c.Connections) > 0 {
+	switch {
+	case c.Kind == TaskKindEval && len(c.Connections) > 0:
 		return fmt.Errorf("%w: an eval task names connections", ErrBadTaskToken)
+	case c.Kind != TaskKindDraftRequest && (c.DraftRequest != "" || c.DraftRevision != 0):
+		return fmt.Errorf("%w: only a draft request's task names a draft request", ErrBadTaskToken)
+	case c.Kind != TaskKindDraftRequest:
+		return nil
+	case c.DraftRequest == "" || c.DraftRevision < 0:
+		return fmt.Errorf("%w: a draft request's task names no request", ErrBadTaskToken)
+	case c.ItemID != "" || c.Station != "" || len(c.Connections) > 0:
+		return fmt.Errorf("%w: a draft request's task names an item, a station or connections", ErrBadTaskToken)
 	}
 
 	return nil
