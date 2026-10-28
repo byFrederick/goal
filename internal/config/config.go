@@ -465,7 +465,7 @@ type Targets struct {
 	ExpediteLeadTimeMinutes int     `json:"expediteLeadTimeMinutes,omitempty"`
 }
 
-// Learning configures the librarian and the kaizen report.
+// Learning configures the librarian, the kaizen report and the Jonah reviews.
 type Learning struct {
 	Librarian *struct {
 		Agent  string   `json:"agent"`
@@ -475,6 +475,16 @@ type Learning struct {
 	Kaizen *struct {
 		Schedule string `json:"schedule,omitempty"`
 	} `json:"kaizen,omitempty"`
+	Jonah *Jonah `json:"jonah,omitempty"`
+}
+
+// Jonah is learning.jonah (ADR 0034). Its keys are pointers so a key left out, which takes
+// domain.DefaultJonahPolicy's value, is told from false or zero.
+type Jonah struct {
+	Enabled      *bool    `json:"enabled,omitempty"`
+	ProposeAfter *int     `json:"proposeAfter,omitempty"`
+	WeeklyUSD    *float64 `json:"weeklyUsd,omitempty"`
+	Model        string   `json:"model,omitempty"`
 }
 
 // FileName is the factory definition at the root of a factory's file tree.

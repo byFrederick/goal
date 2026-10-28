@@ -177,3 +177,13 @@ func TestLine_LandingStation(t *testing.T) {
 		t.Errorf("LandingStation on a line with no merge station = %q, want none", s.ID)
 	}
 }
+
+// A factory that leaves learning.jonah out gets reviews on, five touches and $10 a week (ADR 0034).
+func TestDefaultJonahPolicy(t *testing.T) {
+	t.Parallel()
+
+	want := JonahPolicy{Enabled: true, ProposeAfter: 5, WeeklyUSD: 10}
+	if got := DefaultJonahPolicy(); got != want {
+		t.Errorf("DefaultJonahPolicy() = %+v, want %+v", got, want)
+	}
+}

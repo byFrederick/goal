@@ -78,7 +78,40 @@ func (f *Factory) Line() domain.Line {
 		l.ExpediteTypes = slices.Clone(fl.Expedite.Types)
 	}
 
+	l.Jonah = jonahPolicy(s.Learning, s.Runtime.Model)
+
 	return l
+}
+
+// jonahPolicy maps learning.jonah: a key left out takes domain.DefaultJonahPolicy's value, and an
+// unset model the runtime's.
+func jonahPolicy(learning *Learning, runtimeModel string) domain.JonahPolicy {
+	p := domain.DefaultJonahPolicy()
+	p.Model = runtimeModel
+
+	if learning == nil || learning.Jonah == nil {
+		return p
+	}
+
+	j := learning.Jonah
+
+	if j.Enabled != nil {
+		p.Enabled = *j.Enabled
+	}
+
+	if j.ProposeAfter != nil {
+		p.ProposeAfter = *j.ProposeAfter
+	}
+
+	if j.WeeklyUSD != nil {
+		p.WeeklyUSD = *j.WeeklyUSD
+	}
+
+	if j.Model != "" {
+		p.Model = j.Model
+	}
+
+	return p
 }
 
 // flowPolicy maps board.flow; an unset release is push, unset assembly settings rebase,
