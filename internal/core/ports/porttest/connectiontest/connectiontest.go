@@ -2,7 +2,8 @@
 // in-memory fake in porttest and the PostgreSQL adapter run it, so tests on the fake hold for the
 // database's rules: kinds of the platform and of each organization, write-only secrets sealed
 // under the master key, an audit entry in the same transaction as every change and every use,
-// organizations kept apart, and resealing under a new key.
+// organizations kept apart, resealing under a new key, and each tool's mode and the standing
+// rules (ADR 0031).
 package connectiontest
 
 import (
@@ -63,6 +64,12 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Resolve_AuditsAMergeByItsPerson", testResolveForAMerge},
 		{"RecordTest_StoredAndAudited", testRecordTest},
 		{"Delete_GoneAndAudited", testDelete},
+		{"RecordTest_ToolsStoredSorted", testRecordTestTools},
+		{"Update_ToolModesReplacedAndKept", testUpdateToolModes},
+		{"CreateStandingRule_OneActivePerKey", testCreateStandingRule},
+		{"RevokeStandingRule_OnceAndAudited", testRevokeStandingRule},
+		{"Delete_RevokesStandingRules", testDeleteRevokesStandingRules},
+		{"StandingRules_OtherOrgSeesNothing", testStandingRulesIsolation},
 		{"OtherOrg_SeesNothing", testIsolation},
 		{"NoMasterKey_SecretsUnavailable", testNoKey},
 		{"Rekey_ResealsEveryOrg", testRekey},
@@ -959,4 +966,10 @@ func testNoOrg(f *fixture) {
 	_, err = f.c.Resolve(ctx, []string{connDocs}, forRun)
 	f.refused("Resolve", err, domain.ErrNoOrg)
 	f.refused("PutKind", f.c.PutKind(ctx, ownKind(""), admin), domain.ErrNoOrg)
+	_, err = f.c.StandingRules(ctx, true)
+	f.refused("StandingRules", err, domain.ErrNoOrg)
+	_, err = f.c.CreateStandingRule(ctx, domain.NewStandingRule{Connection: connDocs, Tool: toolComment, Agent: architect, Item: approvedOn}, admin)
+	f.refused("CreateStandingRule", err, domain.ErrNoOrg)
+	_, err = f.c.RevokeStandingRule(ctx, "00000000-0000-7000-8000-0000000000cc", admin)
+	f.refused("RevokeStandingRule", err, domain.ErrNoOrg)
 }

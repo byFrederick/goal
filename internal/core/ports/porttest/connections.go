@@ -110,6 +110,8 @@ type connectionData struct {
 	platform map[string]domain.ConnectionKind
 	orgKinds map[domain.OrgID]map[string]domain.ConnectionKind
 	conns    map[domain.OrgID]map[string]*connectionRow
+	// rules are each organization's standing rules, oldest first; none is ever removed.
+	rules map[domain.OrgID][]*domain.StandingRule
 	// readBy reports whether a knowledge source reads a connection (NewKnowledge sets it), which
 	// then cannot be deleted, as the database's foreign key refuses.
 	readBy func(domain.OrgID, domain.ConnectionID) bool
@@ -130,6 +132,7 @@ func NewConnections(key ports.MasterKey, audit ports.Audit) *Connections {
 		platform: map[string]domain.ConnectionKind{},
 		orgKinds: map[domain.OrgID]map[string]domain.ConnectionKind{},
 		conns:    map[domain.OrgID]map[string]*connectionRow{},
+		rules:    map[domain.OrgID][]*domain.StandingRule{},
 	}}
 }
 
@@ -392,6 +395,7 @@ func (c *Connections) Create(ctx context.Context, n domain.NewConnection, by dom
 	r := &connectionRow{own: own, conn: domain.Connection{
 		ID: domain.ConnectionID(id.String()), Name: n.Name, Kind: n.Kind, Description: n.Description, Fields: fields,
 		SecretFields: secretNames, SecretRefs: refs, CreatedBy: by, CreatedAt: now, UpdatedBy: by, UpdatedAt: now,
+		ToolModes: map[string]domain.ConnectionToolMode{},
 	}}
 
 	if err := c.sealLocked(org, r, secrets); err != nil {
@@ -456,6 +460,10 @@ func (c *Connections) Update(ctx context.Context, name string, p domain.Connecti
 		r.conn.Fields = setOnly(p.Fields)
 	}
 
+	if p.ToolModes != nil {
+		r.conn.ToolModes = maps.Clone(p.ToolModes)
+	}
+
 	if err := c.replaceLocked(org, r, sealed, refs); err != nil {
 		return domain.Connection{}, err
 	}
@@ -489,6 +497,8 @@ func checkPatch(p domain.ConnectionPatch) (sealed, refs map[string]string, err e
 	if p.Description != nil {
 		errs = append(errs, domain.CheckConnectionDescription(*p.Description))
 	}
+
+	errs = append(errs, domain.CheckToolModes(p.ToolModes))
 
 	sealed, refs, err = domain.ConnectionSecrets(p.Fields, p.Secrets)
 	if err := errors.Join(append(errs, err)...); err != nil {
@@ -567,10 +577,14 @@ func (c *Connections) referrers(org domain.OrgID, name string) []string {
 }
 
 func (c *Connections) updateAudits(ctx context.Context, by domain.Actor, from string, conn domain.Connection, p domain.ConnectionPatch) error {
-	if p.Name != nil || p.Description != nil || p.Fields != nil {
+	if p.Name != nil || p.Description != nil || p.Fields != nil || p.ToolModes != nil {
 		data := map[string]any{auditName: conn.Name}
 		if p.Fields != nil {
 			data["fields"] = slices.Sorted(maps.Keys(setOnly(p.Fields)))
+		}
+
+		if p.ToolModes != nil {
+			data["tools"] = append([]string{}, slices.Sorted(maps.Keys(p.ToolModes))...)
 		}
 
 		if conn.Name != from {
@@ -615,6 +629,21 @@ func (c *Connections) Delete(ctx context.Context, name string, by domain.Actor) 
 		return err
 	}
 
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	for _, rule := range c.d.rules[org] {
+		if rule.ConnectionID != r.conn.ID || !rule.Active() {
+			continue
+		}
+
+		if err := c.ruleAudit(ctx, by, domain.AuditStandingRuleRevoked, *rule, name); err != nil {
+			return err
+		}
+
+		revoker := by
+		rule.RevokedBy, rule.RevokedAt = &revoker, &now
+	}
+
 	delete(c.d.conns[org], name)
 
 	return nil
@@ -636,6 +665,7 @@ func (c *Connections) RecordTest(ctx context.Context, name string, t domain.Conn
 	}
 
 	t.At = t.At.UTC().Truncate(time.Microsecond)
+	t.Tools = toolNames(t.Tools)
 
 	c.d.mu.Lock()
 	defer c.d.mu.Unlock()
@@ -840,6 +870,7 @@ func cloneConnection(c domain.Connection) domain.Connection {
 	c.Fields = maps.Clone(c.Fields)
 	c.SecretFields = slices.Clone(c.SecretFields)
 	c.SecretRefs = maps.Clone(c.SecretRefs)
+	c.ToolModes = maps.Clone(c.ToolModes)
 
 	if c.LastUsedAt != nil {
 		at := *c.LastUsedAt
@@ -848,6 +879,7 @@ func cloneConnection(c domain.Connection) domain.Connection {
 
 	if c.LastTest != nil {
 		t := *c.LastTest
+		t.Tools = slices.Clone(t.Tools)
 		c.LastTest = &t
 	}
 
