@@ -2,8 +2,8 @@
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { type ReactNode, useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { inboxQuery, keys } from '../../api/queries';
-import type { Factory, InboxEntry, Item, ItemEvent, OrgSummary } from '../../api/types';
+import { keys } from '../../api/queries';
+import type { Factory, Item, ItemEvent, OrgSummary } from '../../api/types';
 import { TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { itemKey } from '../../shared/factory';
 import { renderFactoryPage, type Seed } from '../../test/route';
@@ -291,27 +291,20 @@ describe('the stepper', () => {
   });
 });
 
-/** The open decision on the item: the question card's source. */
+/** The agent's open question, which the item carries (Item.question). */
 const question = {
-  id: 'decision:item-147',
-  kind: 'decision',
-  factory: { id: factory.id, name: factory.name, title: null },
-  since: new Date(Date.now() - 12 * 60_000).toISOString(),
-  item: { id: 'item-147' },
-  station: 'build',
-  action: null,
-  approval: { summary: 'Should the sidebar show the whole organization?', facts: [], pull_request: null, spend_usd: 2 },
-  blocked: null,
-  andon: null,
-  rework: null,
-} as unknown as InboxEntry;
+  text: 'Should the sidebar show the whole organization?',
+  choices: ['The whole organization', 'Only this factory'],
+  asked_at: new Date(Date.now() - 12 * 60_000).toISOString(),
+  agent: 'frontend-engineer',
+  run_id: 'run-147',
+};
 
-function renderTab(location: string, it: Item, inbox: InboxEntry[] = [question]) {
+function renderTab(location: string, it: Item) {
   const seed: Seed[] = [
     [keys.item(org.id, key), it],
     [keys.events(org.id, key), [approval]],
     [keys.itemRuns(org.id, key), { runs: [] }],
-    [inboxQuery(org.id, factory.id).queryKey, { entries: inbox }],
   ];
   return renderFactoryPage({
     page: () => (
@@ -328,14 +321,15 @@ function renderTab(location: string, it: Item, inbox: InboxEntry[] = [question])
 }
 
 describe('the question, the tabs and the spec', () => {
-  it('asks the question from the open decision on the Timeline tab', async () => {
-    renderTab('items/147', item());
+  it('asks the item’s open question on the Timeline tab, with its quick answers', async () => {
+    renderTab('items/147', item({ question }));
 
     expect(await screen.findByText('Should the sidebar show the whole organization?')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'The whole organization' })).toBeTruthy();
   });
 
-  it('shows no question card without an open decision', async () => {
-    renderTab('items/147', item(), []);
+  it('shows no question card when the item has no open question', async () => {
+    renderTab('items/147', item({ question: null }));
 
     expect(
       await screen.findByRole('heading', { level: 1, name: "Show this week's spend in the sidebar" }),
@@ -343,14 +337,12 @@ describe('the question, the tabs and the spec', () => {
     expect(screen.queryByText('Should the sidebar show the whole organization?')).toBeNull();
   });
 
-  it('focuses the note field from Write an answer', async () => {
-    renderTab('items/147', item());
+  it('opens the answer field from Write an answer on the card, not the note field', async () => {
+    renderTab('items/147', item({ question }));
 
     fireEvent.click(await screen.findByRole('button', { name: 'Write an answer' }));
 
-    // Both composers (the wide one and the phone one) carry the same field name; the focus lands in one of them.
-    const fields = screen.getAllByRole('textbox', { name: 'Note for the agent' });
-    expect(fields).toContain(document.activeElement);
+    expect(screen.getByRole('textbox', { name: 'Your answer' })).toBeTruthy();
   });
 
   it('lists the spec acceptance criteria on the Spec tab', async () => {

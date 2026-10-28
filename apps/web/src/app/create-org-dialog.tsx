@@ -1,13 +1,11 @@
 // Create organization (C §10.4): a name and an address that follows the name until it is edited,
 // POST /v1/orgs, then the new organization's (empty) Factories home. Opened from the
 // organization menu and from the phone's organization sheet.
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { type FormEvent, type RefObject, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { ApiError, createOrg } from '../api/client';
-import { keys } from '../api/queries';
-import { checkSlug, slugFromName } from '../shared/org-rules';
+import { isSlugTaken, useCreateOrg } from '../shared/create-org';
+import { checkSlug, orgNameMax, orgSlugMax, slugFromName } from '../shared/org-rules';
 import { Button } from '../ui/button';
 import { DialogClose, DialogContent, Dialog as DialogRoot } from '../ui/dialog';
 import { Field, Input } from '../ui/field';
@@ -19,10 +17,6 @@ interface Props {
   returnFocus: RefObject<HTMLElement | null>;
 }
 
-/** goald's limits (domain.CheckOrgName, CheckSlug). */
-const nameMax = 80;
-const slugMax = 40;
-
 export function CreateOrgDialog({ open, onOpenChange, returnFocus }: Props) {
   return (
     <DialogRoot open={open} onOpenChange={onOpenChange}>
@@ -33,7 +27,6 @@ export function CreateOrgDialog({ open, onOpenChange, returnFocus }: Props) {
 }
 
 function CreateOrgForm({ onDone, returnFocus }: { onDone: () => void; returnFocus: RefObject<HTMLElement | null> }) {
-  const client = useQueryClient();
   const navigate = useNavigate();
   const nameRef = useRef<HTMLInputElement>(null);
   const slugRef = useRef<HTMLInputElement>(null);
@@ -54,31 +47,30 @@ function CreateOrgForm({ onDone, returnFocus }: { onDone: () => void; returnFocu
     ? (slugRule ?? (takenSlug === slug ? `${slug} is taken. Choose another address.` : undefined))
     : undefined;
 
-  const create = useMutation({
-    mutationFn: () => createOrg({ name: name.trim(), slug }),
-    onSuccess: async (org) => {
-      // The /o/$org layout resolves the address from the organization list: refresh it first.
-      await client.invalidateQueries({ queryKey: keys.orgs, refetchType: 'all' });
-      created.current = true;
-      onDone();
-      toast.success(`Created ${org.name}.`);
-      navigate({ to: '/o/$org', params: { org: org.slug } });
-    },
-    onError: (err) => {
-      if (err instanceof ApiError && err.code === 'slug-taken') {
-        setTakenSlug(slug);
-        slugRef.current?.focus();
-      }
-    },
+  const create = useCreateOrg((org) => {
+    created.current = true;
+    onDone();
+    toast.success(`Created ${org.name}.`);
+    navigate({ to: '/o/$org', params: { org: org.slug } });
   });
-  const failed = create.error && !(create.error instanceof ApiError && create.error.code === 'slug-taken');
+  const failed = create.error && !isSlugTaken(create.error);
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
     if (!name.trim()) return nameRef.current?.focus();
     if (slugRule) return slugRef.current?.focus();
-    create.mutate();
+    create.mutate(
+      { name: name.trim(), slug },
+      {
+        onError: (err) => {
+          if (isSlugTaken(err)) {
+            setTakenSlug(slug);
+            slugRef.current?.focus();
+          }
+        },
+      },
+    );
   };
 
   return (
@@ -96,7 +88,7 @@ function CreateOrgForm({ onDone, returnFocus }: { onDone: () => void; returnFocu
           <Input
             ref={nameRef}
             value={name}
-            maxLength={nameMax}
+            maxLength={orgNameMax}
             autoComplete="organization"
             onChange={(e) => {
               setName(e.target.value);
@@ -116,7 +108,7 @@ function CreateOrgForm({ onDone, returnFocus }: { onDone: () => void; returnFocu
           <Input
             ref={slugRef}
             value={slug}
-            maxLength={slugMax}
+            maxLength={orgSlugMax}
             autoComplete="off"
             autoCapitalize="none"
             spellCheck={false}
