@@ -487,6 +487,9 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	}
 
 	deps.Judges = h.judgeDeps(tenancy)
+	deps.Jonah = &api.JonahDeps{Store: h.store, Decisions: jonah.NewDecider(jonah.DecideDeps{
+		Proposals: h.store, Authoring: api.NewJonahAuthoring(authors), Audit: tenancy, Clock: h.clock,
+	})}
 
 	handler, err := api.New(h.withEvals(deps, tenancy, opts))
 	if err != nil {

@@ -37,11 +37,11 @@ type definition struct {
 
 var _ jonah.Authoring = (*definition)(nil)
 
-func (d *definition) Head(context.Context, domain.FactoryID) (jonah.Head, error) {
+func (d *definition) Head(context.Context, domain.FactoryID) (domain.DefinitionVersionID, bool, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	return jonah.Head{Current: versionID(d.number), DraftOpen: d.draft != nil}, nil
+	return versionID(d.number), d.draft != nil, nil
 }
 
 func versionID(n int) domain.DefinitionVersionID {

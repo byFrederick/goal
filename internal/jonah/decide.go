@@ -17,9 +17,9 @@ import (
 // decisions 7 and 8), for the organization and as the actor of ctx. cmd/goald wires the API's
 // adapter over authoring.Service.
 type Authoring interface {
-	// Head is the factory's current version (Current empty before the first publish) and whether
-	// it has an open draft.
-	Head(ctx context.Context, f domain.FactoryID) (Head, error)
+	// Head is the factory's current version (empty before the first publish) and whether it has
+	// an open draft.
+	Head(ctx context.Context, f domain.FactoryID) (current domain.DefinitionVersionID, draftOpen bool, err error)
 	// CurrentFile is path's content in the current version; ok false when it has no such file.
 	CurrentFile(ctx context.Context, f domain.FactoryID, path string) (content []byte, ok bool, err error)
 	// DraftFile is path's content in the open draft; ok false when it has no such file.
@@ -36,12 +36,6 @@ type Authoring interface {
 	Publish(ctx context.Context, f domain.FactoryID, revision int64, expected domain.DefinitionVersionID, message string) (v domain.DefinitionVersion, kept bool, err error)
 	// DiscardDraft discards the draft at revision.
 	DiscardDraft(ctx context.Context, f domain.FactoryID, revision int64) error
-}
-
-// Head is a factory's current version and whether a draft is open.
-type Head struct {
-	Current   domain.DefinitionVersionID
-	DraftOpen bool
 }
 
 // Proposals are the reads and writes of ports.JonahStore a decision makes.
@@ -98,16 +92,16 @@ func (dc *Decider) Approve(ctx context.Context, f domain.FactoryID, number int64
 		return domain.Proposal{}, domain.DefinitionVersion{}, err
 	}
 
-	head, err := dc.d.Authoring.Head(ctx, f)
+	current, draftOpen, err := dc.d.Authoring.Head(ctx, f)
 	if err != nil {
 		return domain.Proposal{}, domain.DefinitionVersion{}, fmt.Errorf("approve proposal %d: %w", number, err)
 	}
 
-	if head.DraftOpen {
+	if draftOpen {
 		return domain.Proposal{}, domain.DefinitionVersion{}, fmt.Errorf("approve proposal %d: %w", number, domain.ErrProposalDraftOpen)
 	}
 
-	if head.Current == "" {
+	if current == "" {
 		return domain.Proposal{}, domain.DefinitionVersion{}, fmt.Errorf("approve proposal %d: no current version: %w", number, domain.ErrProposalStale)
 	}
 
@@ -131,7 +125,7 @@ func (dc *Decider) Approve(ctx context.Context, f domain.FactoryID, number int64
 		return domain.Proposal{}, domain.DefinitionVersion{}, fmt.Errorf("approve proposal %d: %w", number, domain.ErrProposalDraftOpen)
 	}
 
-	v, err := dc.publish(ctx, f, p, revision, head.Current)
+	v, err := dc.publish(ctx, f, p, revision, current)
 	if err != nil {
 		return domain.Proposal{}, domain.DefinitionVersion{}, err
 	}
