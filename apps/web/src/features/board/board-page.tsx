@@ -93,7 +93,7 @@ function DesktopColumns({
         </p>
       ) : null}
       <div
-        className="grid items-start gap-x-3"
+        className="grid items-start gap-3"
         style={{ gridTemplateColumns: `repeat(${board.stations.length}, minmax(176px, 1fr))` }}
       >
         {board.stations.map((s) => (

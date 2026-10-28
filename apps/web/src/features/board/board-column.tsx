@@ -2,13 +2,8 @@
 // meter and what the station says), then the expedite zone and the standard zone of cards. The
 // constraint's column is amber-edged; the drum's column splits its standard zone into the buffer's
 // Ready cards, "Next in" first, and the In progress cards. The phone keeps its station tabs (board-page).
-//
-// Every column's body starts at the same height. Each column spans the same rows of the stations grid
-// with CSS subgrid: the header row, then the expedite row (when drawn). So the header cards share one
-// height and the zones share one top edge. Each standard zone opens with a sub-header slot, one meta
-// line tall (its height is the label's own line height, not a pixel offset): the drum's labels sit in
-// it, and the other columns keep it empty, so their first cards line up. The slot and the rows are
-// desktop only (md and up); the phone's tabs show one column at a time, and it keeps its own layout.
+// On the desktop, every column's body starts at one height without subgrid: the header has a fixed min-height,
+// the expedite zone one card's height, and each standard zone opens with a one-line sub-header slot.
 import type { Board, BoardStation, ItemCard, PartsSummary } from '../../api/types';
 import { formatDuration, humanize, plural } from '../../shared/format';
 import { waitingOnYou } from '../../shared/item-state';
@@ -97,7 +92,10 @@ function ColumnHeader({
   const [left, right] = meta(station, decides, finishedThisWeek);
   return (
     <header
-      className={cn('flex flex-col gap-2 rounded-cell border border-line bg-card p-3', constraint && constraintEdge)}
+      className={cn(
+        'flex flex-col gap-2 rounded-cell border border-line bg-card p-3 md:min-h-[5.5rem]',
+        constraint && constraintEdge,
+      )}
     >
       <div className="flex items-center gap-2">
         <h2 className="m-0 min-w-0 truncate text-heading font-medium">{humanize(station.id)}</h2>
@@ -115,6 +113,14 @@ function ColumnHeader({
   );
 }
 
+/**
+ * A standard zone's first line on the desktop: the drum's labels sit here, and every other column keeps it
+ * empty, so all the zones' first cards start at the same height. Empty and hidden from screen readers.
+ */
+function SubHeaderSlot() {
+  return <div aria-hidden="true" className="hidden min-h-[1lh] px-1 text-meta md:block" />;
+}
+
 /** A zone's label row, as in the picture: "Ready, buffer 2 of 2" with "Next in", or "In progress". */
 function ZoneLabel({ children, aside }: { children: string; aside?: string | undefined }) {
   return (
@@ -123,11 +129,6 @@ function ZoneLabel({ children, aside }: { children: string; aside?: string | und
       {aside ? <span>{aside}</span> : null}
     </div>
   );
-}
-
-/** The sub-header slot a standard zone opens with on the desktop: empty and hidden from the screen readers, one line tall. */
-function SubHeaderSlot() {
-  return <div aria-hidden="true" className="hidden min-h-[1lh] px-1 text-meta md:block" />;
 }
 
 export interface StationColumnProps {
@@ -174,26 +175,22 @@ export function StationColumn({
     board.line.release.buffer !== null ? ` of ${board.line.release.buffer}` : ''
   }`;
 
-  // The column takes the header row and the expedite row (if drawn) and the zone row of the stations grid.
-  const rows = showExpedite ? 3 : 2;
   return (
-    <DropColumn
-      station={station}
-      className="flex min-w-0 flex-col gap-2 md:grid md:grid-rows-subgrid"
-      style={{ gridRow: `span ${rows} / span ${rows}` }}
-    >
+    <DropColumn station={station} className="flex min-w-0 flex-col gap-2">
       <ColumnHeader station={station} constraint={constraint} decides={decides} finishedThisWeek={finishedThisWeek} />
+      {/* On the desktop, one expedite card's height plus the zone's padding: every column's standard zone starts
+          at the same height, whether or not it holds an expedite card. A second card in a column moves that one. */}
       {showExpedite ? (
         <div
           className={cn(
-            'flex min-h-10 flex-col gap-2 rounded-cell p-2 md:self-start',
+            'flex min-h-10 flex-col gap-2 rounded-cell p-2 md:min-h-[199px]',
             expedite.length > 0 && 'bg-amber-tint',
           )}
         >
           {expedite.map(card)}
         </div>
       ) : null}
-      <div className="flex min-h-10 flex-col gap-2 rounded-cell bg-panel p-2 md:self-start">
+      <div className="flex min-h-10 flex-col gap-2 rounded-cell bg-panel p-2">
         {isDrum ? (
           <>
             <ZoneLabel aside="Next in">{bufferLabel}</ZoneLabel>
