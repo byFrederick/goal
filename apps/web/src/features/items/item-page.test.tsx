@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { type ReactNode, useState } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { toast } from 'sonner';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ApiError, cancelItem } from '../../api/client';
 import { keys } from '../../api/queries';
 import type { Factory, Item, ItemEvent, OrgSummary } from '../../api/types';
 import { TopBarSetContext, type TopBarState } from '../../app/top-bar';
@@ -10,7 +12,16 @@ import { renderFactoryPage, type Seed } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
 import { ItemPage } from './item-page';
 
-afterEach(cleanup);
+vi.mock(import('../../api/client'), async (original) => ({
+  ...(await original()),
+  cancelItem: vi.fn(async () => item({ state: 'cancelled' })),
+}));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 const org: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'A', factory_count: 1, role: null };
 const factory: Factory = {
@@ -119,7 +130,7 @@ function TopBarHarness({ children }: { children: ReactNode }) {
   );
 }
 
-function renderPage(it: Item, events: ItemEvent[] = [approval]) {
+function renderPage(it: Item, events: ItemEvent[] = [approval], grants: Factory = factory) {
   return renderFactoryPage({
     page: () => (
       <TopBarHarness>
@@ -129,7 +140,7 @@ function renderPage(it: Item, events: ItemEvent[] = [approval]) {
     path: 'items/$ref',
     location: 'items/147',
     org,
-    factory,
+    factory: grants,
     seed: [
       [keys.item(org.id, key), it],
       [keys.events(org.id, key), events],
@@ -271,6 +282,131 @@ describe('the item decisions at each width', () => {
     const field = await screen.findAllByRole('textbox', { name: 'Note for the agent' });
     expect(field.length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: 'Send note' }).length).toBeGreaterThan(0);
+  });
+});
+
+describe('Cancel item on an item page', () => {
+  const cancelled: Item = { ...item(), state: 'cancelled' };
+  const done: Item = { ...item(), state: 'done' };
+  const noDecide: Factory = { ...factory, can: ['item:operate'] };
+
+  function stubWidth(phone: boolean) {
+    window.matchMedia = (query: string) =>
+      ({
+        matches: phone && query === '(max-width: 767px)',
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as unknown as MediaQueryList;
+  }
+
+  afterEach(() => {
+    delete (window as { matchMedia?: unknown }).matchMedia;
+  });
+
+  /** Opens the dialog from the desktop top bar's button. */
+  async function openDialog() {
+    const bar = await screen.findByLabelText('Top bar');
+    fireEvent.click(within(bar).getByRole('button', { name: 'Cancel item' }));
+    return screen.findByRole('dialog', { name: 'Cancel goal#147?' });
+  }
+
+  it('shows Cancel item in the top bar for an open item the caller may decide', async () => {
+    stubWidth(false);
+    renderPage(item());
+
+    const bar = await screen.findByLabelText('Top bar');
+    expect(within(bar).getByRole('button', { name: 'Cancel item' })).toBeTruthy();
+  });
+
+  it('hides Cancel item on a done item, a cancelled item and without item:decide', async () => {
+    stubWidth(false);
+    renderPage(done);
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.queryByRole('button', { name: 'Cancel item' })).toBeNull();
+    cleanup();
+
+    renderPage(cancelled);
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.queryByRole('button', { name: 'Cancel item' })).toBeNull();
+    cleanup();
+
+    renderPage(item(), [approval], noDecide);
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.queryByRole('button', { name: 'Cancel item' })).toBeNull();
+  });
+
+  it('puts Cancel item in the More actions menu on a phone, not as a button', async () => {
+    stubWidth(true);
+    renderPage(item());
+
+    const bar = await screen.findByLabelText('Top bar');
+    expect(within(bar).queryByRole('button', { name: 'Cancel item' })).toBeNull();
+    fireEvent.keyDown(await within(bar).findByRole('button', { name: 'More actions' }), { key: 'Enter' });
+    expect(await screen.findByRole('menuitem', { name: 'Cancel item' })).toBeTruthy();
+  });
+
+  it('opens the confirm dialog with its copy and cancels with the typed reason', async () => {
+    stubWidth(false);
+    renderPage(item());
+
+    const dialog = await openDialog();
+    expect(
+      within(dialog).getByText(
+        "The factory stops working on it and its pull request stays open. You can't reopen a cancelled item.",
+      ),
+    ).toBeTruthy();
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Reason' }), {
+      target: { value: 'Duplicate of #12' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel item' }));
+
+    await waitFor(() => expect(cancelItem).toHaveBeenCalledWith('org-1', key, 'Duplicate of #12'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(toast.success).toHaveBeenCalledWith('Cancelled goal#147.');
+  });
+
+  it('cancels with no reason when the field is empty', async () => {
+    stubWidth(false);
+    renderPage(item());
+
+    const dialog = await openDialog();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel item' }));
+
+    await waitFor(() => expect(cancelItem).toHaveBeenCalledWith('org-1', key, undefined));
+  });
+
+  it('Escape closes the dialog and cancels nothing', async () => {
+    stubWidth(false);
+    renderPage(item());
+
+    const dialog = await openDialog();
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(cancelItem).not.toHaveBeenCalled();
+  });
+
+  it('shows a 409 refusal inline in the dialog, with no error toast, and clears it on reopen', async () => {
+    stubWidth(false);
+    vi.mocked(cancelItem).mockRejectedValueOnce(
+      new ApiError({ title: 'Conflict', status: 409, code: 'item-closed', detail: 'goal#147 is done' }),
+    );
+    renderPage(item());
+
+    const dialog = await openDialog();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel item' }));
+
+    expect((await within(dialog).findByRole('alert')).textContent).toBe('goal#147 is done');
+    expect(toast.error).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    const reopened = await openDialog();
+    expect(within(reopened).queryByRole('alert')).toBeNull();
   });
 });
 

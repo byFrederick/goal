@@ -294,6 +294,20 @@ test('send an item back with a reason', async ({ page }) => {
   ).toBeVisible();
 });
 
+test('cancel an open item with a reason: it stops, and Cancel item goes', async ({ page }) => {
+  await page.goto('/o/acme/f/goal/items/12');
+  await page.getByRole('button', { name: 'Cancel item' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Cancel goal#12?' });
+  await dialog.getByLabel('Reason').fill('Duplicate of #3');
+  await expectAccessible(page);
+  await dialog.getByRole('button', { name: 'Cancel item' }).click();
+
+  await expect(dialog).toBeHidden();
+  await expectToast(page, 'Cancelled goal#12.');
+  await expect(page.getByRole('button', { name: 'Cancel item' })).toBeHidden();
+});
+
 test('merge every pull request at the merge station', async ({ page }) => {
   await page.goto('/o/acme/f/goal/items/6');
   // goal#6 opened two: one on GitHub, one on GitLab; the item and its output name both.
