@@ -30,6 +30,28 @@ const hourMs = 3_600_000;
 const dayMs = 86_400_000;
 
 const namePattern = /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/;
+const toolNamePattern = /^[A-Za-z0-9_.-]{1,128}$/;
+
+/**
+ * The tools a PATCH sets, as the contract says: each named once, with a mode allow, ask or off. Sorted
+ * by name, as goald answers them. A string is the refusal's detail.
+ */
+function toolsOf(value: unknown): Connection['tools'] | string {
+  if (!Array.isArray(value)) return 'tools must be a list of tool modes';
+  const seen = new Set<string>();
+  const tools: Connection['tools'] = [];
+  for (const entry of value) {
+    const { name, mode } = (entry ?? {}) as Record<string, unknown>;
+    if (typeof name !== 'string' || !toolNamePattern.test(name)) {
+      return `tool name "${String(name)}" must be 1 to 128 letters, digits, underscores, dots or dashes`;
+    }
+    if (seen.has(name)) return `tool "${name}" is named twice`;
+    if (mode !== 'allow' && mode !== 'ask' && mode !== 'off') return `tool "${name}" mode must be allow, ask or off`;
+    seen.add(name);
+    tools.push({ name, mode });
+  }
+  return tools.sort((a, b) => a.name.localeCompare(b.name));
+}
 
 /** A kind as the mock keeps it: its contract shape and what the rules need of its file. */
 interface MockKind {
@@ -285,6 +307,14 @@ function seedConnections(now: number, by: Actor): { conns: MockConnection[]; his
       description: 'npx @playwright/mcp, no secret',
       fields: { command: 'npx -y @playwright/mcp@0.0.41' },
       last_used_at: at(-40 * minuteMs),
+      tools: [
+        { name: 'create_comment', mode: 'ask' },
+        { name: 'update_issue_status', mode: 'allow' },
+        { name: 'create_issue', mode: 'off' },
+        { name: 'list_issues', mode: 'allow' },
+        { name: 'get_issue', mode: 'allow' },
+      ],
+      waiting_approvals: 2,
     }),
     made(5, 'aws-prod', 'aws', {
       description: 'Production, read-only role',
@@ -538,6 +568,11 @@ export function createConnections({
     }
     const broken = fieldRefusal(kind, fields, [...secrets].sort());
     if (broken) return refuse(res, 400, ...broken);
+    if (b.tools !== undefined && !kind.kind.modes.includes('mcp')) {
+      return refuse(res, 400, `kind "${kind.kind.name}" has no MCP server, so its tools have no mode`);
+    }
+    const tools = b.tools === undefined ? c.connection.tools : toolsOf(b.tools);
+    if (typeof tools === 'string') return refuse(res, 400, tools);
     const by = actor(req);
     const from = c.connection.name;
     Object.assign(c.connection, {
@@ -545,6 +580,7 @@ export function createConnections({
       description: typeof b.description === 'string' ? b.description : c.connection.description,
       fields,
       secrets_set: [...secrets].sort(),
+      tools,
       updated_by: by,
       updated_at: new Date(clock()).toISOString(),
     });

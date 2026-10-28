@@ -112,6 +112,8 @@ export function connectionFixture(over: Partial<Connection> & Pick<Connection, '
     used_by: { factories: [], knowledge_sources: [] },
     last_used_at: null,
     last_test: null,
+    tools: [],
+    waiting_approvals: 0,
     created_by: { kind: 'user', id: 'user-1', name: 'Freddy Cruz' },
     created_at: '2026-10-01T00:00:00Z',
     updated_by: { kind: 'user', id: 'user-1', name: 'Freddy Cruz' },

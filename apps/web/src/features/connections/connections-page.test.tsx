@@ -52,7 +52,7 @@ const connections: Connection[] = [
   connectionFixture({ name: 'claude', kind: 'anthropic', status: 'ok' }),
   connectionFixture({ name: 'datadog', kind: 'datadog', status: 'ok' }),
   connectionFixture({ name: 'pagerduty', kind: 'datadog', status: 'failing' }),
-  connectionFixture({ name: 'context7', kind: 'mcp-server', status: 'untested' }),
+  connectionFixture({ name: 'context7', kind: 'mcp-server', status: 'untested', waiting_approvals: 2 }),
 ];
 
 /** Renders the list at /o/acme/connections with the connections the API answers. */
@@ -107,16 +107,15 @@ describe('the Connections list', () => {
     expect(screen.queryByRole('heading', { level: 2, name: 'MCP servers' })).toBeNull();
   });
 
-  it('shows the Connected and Need attention tiles, and the writes tile disabled as not available yet', async () => {
+  it('shows the Connected and Need attention tiles, and the writes waiting across the connections, linking to Needs you', async () => {
     renderList();
     const connected = await screen.findByText('Connected');
     expect(within(connected.parentElement as HTMLElement).getByText('3')).toBeTruthy();
     expect(within(screen.getByText('Need attention').parentElement as HTMLElement).getByText('1')).toBeTruthy();
 
-    const writes = screen.getByRole('button', { name: /Writes waiting for your OK/ });
-    expect(writes.getAttribute('aria-disabled')).toBe('true');
-    writes.focus();
-    expect((await screen.findAllByText('Not available yet')).length).toBeGreaterThan(0);
+    const writes = screen.getByRole('link', { name: /Writes waiting for your OK/ });
+    expect(within(writes).getByText('2')).toBeTruthy();
+    expect(writes.getAttribute('href')).toBe('/o/acme/needs-you');
   });
 
   it('calls out the failing connection above the list, with Replace secret…', async () => {
