@@ -334,6 +334,14 @@ export class DraftSession {
     if (before.parseError) this.scheduleDirty();
   }
 
+  /**
+   * Reads the draft's model from goald and adopts it. A saved file (the YAML view) changes the
+   * sections in goald, not here, so a caller that patches the sections reads them after this.
+   */
+  async reloadModel(): Promise<void> {
+    this.adopt(await this.api.getDraftModel(this.opts.org, this.opts.factory));
+  }
+
   /** No draft is open: the editor shows this version (the running one) until the first edit. */
   adoptVersion(version: VersionModel): void {
     const m = modelOf(version.model);

@@ -81,6 +81,26 @@ type DefinitionVersion struct {
 	PublishedAt   *time.Time
 }
 
+type DraftRequest struct {
+	ID             uuid.UUID
+	OrgID          uuid.UUID
+	FactoryID      uuid.UUID
+	Requester      string
+	Text           string
+	Agent          *string
+	Status         string
+	Summary        string
+	ChangedPaths   []string
+	CostUsd        float64
+	Turns          int32
+	Error          string
+	CreatedAt      time.Time
+	StartedAt      *time.Time
+	FinishedAt     *time.Time
+	LeaseHolder    *uuid.UUID
+	LeaseExpiresAt *time.Time
+}
+
 type EvalResult struct {
 	EvalRunID  uuid.UUID
 	OrgID      uuid.UUID

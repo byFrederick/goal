@@ -58,7 +58,7 @@ type pulled struct {
 	Manifest map[string]string `json:"manifest"`
 }
 
-// factory runs goal factory validate|push|pull|list|publish|versions|restore|archive|delete.
+// factory runs goal factory validate|push|pull|list|publish|versions|restore|archive|delete|ask.
 func factory(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	if len(args) == 0 {
 		return errUsage
@@ -83,6 +83,8 @@ func factory(ctx context.Context, out *printer, getenv func(string) string, args
 		return factoryArchive(ctx, out, getenv, rest)
 	case "delete":
 		return factoryDelete(ctx, out, getenv, rest)
+	case "ask":
+		return factoryAsk(ctx, out, getenv, rest, pollEvery)
 	default:
 		return errUsage
 	}

@@ -189,9 +189,11 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return eng.SetLines(lines)
 	}, definitions.Config{CacheBytes: s.DefinitionCacheBytes}, log)
 
+	// A draft request's box (ADR 0021) gets its request and the factory's draft from the gateway's
+	// bundle; the engine's RunDefinition signs its token.
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Connections: connections, Events: store, Clock: clock, Logger: log,
-		Knowledge: kb.searcher, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store,
+		Knowledge: kb.searcher, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore,
 	}, gateway.Config{Key: []byte(key)})
 	if err != nil {
 		return err
@@ -238,11 +240,11 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 			Mode: api.AuthMode(s.Auth), EmailCodes: s.EmailCodes, Google: s.Google, SecureCookies: s.strictTransport(),
 		},
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
-		Connections: connections, Credentials: credentials, Intake: intake, ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
+		Connections: connections, Credentials: credentials, Intake: intake, DraftRequests: postgres.NewDraftRequests(store),
+		ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
-		Jonah: jonahDeps(store, authors, clock, log),
-		Clock: clock, Logger: log,
+		Jonah: jonahDeps(store, authors, clock, log), Clock: clock, Logger: log,
 	})
 	if err != nil {
 		return err

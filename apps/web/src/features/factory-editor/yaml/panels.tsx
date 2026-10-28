@@ -1,14 +1,14 @@
 // The YAML view's panels (screens build/definition): the Problems panel under the editor (B's
 // problems with where each is, "Checked as you type, the same checks as publish"), the Outline
 // column beside it, and the block a problem gets under its line in Monaco. A quick fix ("Use
-// large") is shown, not run: it is not built yet, so it stays disabled with "Not available yet"
-// (ADR 0016, decision 4).
+// large") is applied from the block under its line, and from the Problems panel on phones, where
+// the editor is a textarea with no blocks (frame/problem-fixes.tsx).
 import { CircleAlert, Info } from 'lucide-react';
 import type { DefinitionProblem } from '../../../api/types';
 import { plural } from '../../../shared/format';
-import { Button } from '../../../ui/button';
 import { cn } from '../../../ui/cn';
-import { NotAvailable } from '../../../ui/not-available';
+import { QuickFixes } from '../frame/problem-fixes';
+import { usePhoneEditor } from './code-editor';
 import { factoryFile } from './files';
 import type { OutlineItem } from './outline';
 
@@ -31,7 +31,7 @@ function ProblemIcon({ severity }: { severity: DefinitionProblem['severity'] }) 
 
 const severityText = { error: 'Error', warning: 'Warning', info: 'Note' } as const;
 
-/** Under a line of the editor: its problems, with their quick fixes shown and not yet built. */
+/** Under a line of the editor: its problems, each with its quick fixes. */
 export function ProblemBlock({ problems }: { problems: DefinitionProblem[] }) {
   return (
     <div className="flex flex-col gap-2 rounded-control border border-rework-tint bg-card px-3 py-2">
@@ -41,13 +41,7 @@ export function ProblemBlock({ problems }: { problems: DefinitionProblem[] }) {
             <ProblemIcon severity={p.severity} />
             <span>{p.message}</span>
           </p>
-          {fixesOf(p).map((fix) => (
-            <NotAvailable key={fix.label}>
-              <Button size="sm" variant="white" className="h-6 px-2 text-meta">
-                {fix.label}
-              </Button>
-            </NotAvailable>
-          ))}
+          <QuickFixes fixes={fixesOf(p)} dense />
         </div>
       ))}
     </div>
@@ -62,6 +56,8 @@ interface ProblemsPanelProps {
 }
 
 export function ProblemsPanel({ problems, onGo, headingId }: ProblemsPanelProps) {
+  // On a phone the editor has no blocks under the lines, so the row carries the quick fixes.
+  const phone = usePhoneEditor();
   const counted = problems.filter((p) => p.severity !== 'info').length;
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-2 border-t border-line bg-panel px-4 py-3">
@@ -100,6 +96,7 @@ export function ProblemsPanel({ problems, onGo, headingId }: ProblemsPanelProps)
                 ) : (
                   <span className="text-muted">{problemLocation(p)}</span>
                 )}
+                {phone ? <QuickFixes fixes={fixesOf(p)} /> : null}
               </div>
             </li>
           ))}

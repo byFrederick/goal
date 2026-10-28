@@ -103,8 +103,8 @@ export function seedPeople(now: number, { acme, labs, factories }: SeedOrgs): Mo
       [acme]: [
         member(d.owner, 'owner', 0),
         member(d.okafor, 'admin', 0),
-        member(d.lindqvist, 'member', 1, { [factories.goal]: 'editor', [factories.sre]: 'editor' }),
-        member(d.ortiz, 'member', 2, { [factories.support]: 'viewer' }),
+        member(d.lindqvist, 'member', 1, { [factories.goal]: 'approver', [factories.sre]: 'editor' }),
+        member(d.ortiz, 'member', 2, { [factories.goal]: 'viewer', [factories.support]: 'viewer' }),
       ],
       [labs]: [member(d.owner, 'owner', 0), member(d.ortiz, 'member', 2)],
     },
