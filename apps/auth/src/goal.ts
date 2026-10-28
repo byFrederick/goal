@@ -1,5 +1,6 @@
 // Goal's side of the database for the auth service: the definer functions of migration 00044
-// (the security log, its counts, the bootstrap claim, invitations' factory roles) and the few reads
+// (the security log, its counts, the bootstrap claim, invitations' factory roles), of 00078 (sign-up
+// by domain) and the few reads
 // and stamps of Better Auth's own rows that Goal's rules need. Every query is static and
 // parameterized; nothing here returns a code, a token or a hash.
 import { createHash } from 'node:crypto';
@@ -101,6 +102,32 @@ export class GoalDatabase {
   async isInvitee(email: string, now: Date): Promise<boolean> {
     const { rows } = await this.pool.query<{ ok: boolean }>('SELECT goal_is_invitee($1, $2) AS ok', [email, now]);
     return rows[0]?.ok === true;
+  }
+
+  /**
+   * signupDomainOrg is the live organization whose sign-up domain is exactly email's domain, with
+   * its join role (goal_signup_domain_org, 00078); null for any other address, a webmail domain or
+   * a deleted organization.
+   */
+  async signupDomainOrg(email: string): Promise<{ org: string; joinRole: string } | null> {
+    const { rows } = await this.pool.query<{ org_id: string; join_role: string }>(
+      'SELECT org_id, join_role FROM goal_signup_domain_org($1)',
+      [email],
+    );
+    const row = rows[0];
+    return row ? { org: row.org_id, joinRole: row.join_role } : null;
+  }
+
+  /**
+   * applySignupDomain joins user, by their verified email, to the organization of its sign-up
+   * domain with its join role (goal_apply_signup_domain, 00078) and returns that organization; null
+   * when there is none, they are invited to it, or they are already a member. Idempotent.
+   */
+  async applySignupDomain(user: string): Promise<string | null> {
+    const { rows } = await this.pool.query<{ org: string | null }>('SELECT goal_apply_signup_domain($1) AS org', [
+      user,
+    ]);
+    return rows[0]?.org ?? null;
   }
 
   /** orgIsLive is true when org is an organization that has not been deleted (goal_org_live). */
