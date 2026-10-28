@@ -3744,6 +3744,32 @@ setFactoryRole       pat-demoted      403 forbidden            404 org-not-found
 setFactoryRole       pat-removed      401 unauthenticated      401 unauthenticated
 setFactoryRole       pat-platform     403 forbidden            404 org-not-found
 setFactoryRole       pat-deleted-org  401 unauthenticated      401 unauthenticated
+setItemLane          anonymous        401 unauthenticated      401 unauthenticated
+setItemLane          owner            200                      404 org-not-found
+setItemLane          admin            200                      404 org-not-found
+setItemLane          viewer           403 forbidden            404 org-not-found
+setItemLane          approver         200                      404 org-not-found
+setItemLane          editor           200                      404 org-not-found
+setItemLane          member-no-roles  404 item-not-found       404 org-not-found
+setItemLane          other-org-owner  404 org-not-found        200
+setItemLane          platform-admin   404 org-not-found        404 org-not-found
+setItemLane          stale-owner      200                      404 org-not-found
+setItemLane          key-scoped       403 forbidden            404 org-not-found
+setItemLane          key-restricted   404 item-not-found       404 org-not-found
+setItemLane          key-other-org    404 org-not-found        200
+setItemLane          key-expired      401 unauthenticated      401 unauthenticated
+setItemLane          key-revoked      401 unauthenticated      401 unauthenticated
+setItemLane          bearer-owner     200                      404 org-not-found
+setItemLane          pat-approver     403 forbidden            404 org-not-found
+setItemLane          pat-owner        200                      404 org-not-found
+setItemLane          pat-viewer       403 forbidden            404 org-not-found
+setItemLane          pat-other-org    404 org-not-found        200
+setItemLane          pat-expired      401 unauthenticated      401 unauthenticated
+setItemLane          pat-revoked      401 unauthenticated      401 unauthenticated
+setItemLane          pat-demoted      404 item-not-found       404 org-not-found
+setItemLane          pat-removed      401 unauthenticated      401 unauthenticated
+setItemLane          pat-platform     200                      404 org-not-found
+setItemLane          pat-deleted-org  401 unauthenticated      401 unauthenticated
 setTouchReason       anonymous        401 unauthenticated      401 unauthenticated
 setTouchReason       owner            200                      404 org-not-found
 setTouchReason       admin            200                      404 org-not-found

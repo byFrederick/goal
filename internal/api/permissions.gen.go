@@ -191,6 +191,7 @@ var operationScopes = map[string]string{
 	"searchOrg":                   "org:read",
 	"searchSkills":                "org:read",
 	"setFactoryRole":              "member:manage",
+	"setItemLane":                 "item:operate",
 	"setTouchReason":              "item:operate",
 	"startEvalRun":                "definition:edit",
 	"streamEvents":                "org:read",

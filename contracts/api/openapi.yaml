@@ -3038,6 +3038,35 @@ paths:
               schema: { $ref: "#/components/schemas/Item" }
         "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/items/{item}/lane:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/ItemRef"
+    post:
+      operationId: setItemLane
+      x-goal-scope: item:operate
+      tags: [work]
+      summary: Set an open item's lane
+      description: >-
+        The lane picks the agent at the stations that route by lane; the item stays at its station
+        and in its state, and a lane_set event (from, to) records the change. The lane is trimmed;
+        when any station of the item's line routes by lane, it must be one of the lanes routed.
+        400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress
+        (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts
+        carry their own lanes), same-lane or item-changed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetLaneRequest" }
+      responses:
+        "200":
+          description: The item with its new lane
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/pause:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -4993,6 +5022,11 @@ components:
           type: string
           maxLength: 500
           description: Why; required when the station is upstream of the item's (the agent reads it)
+    SetLaneRequest:
+      type: object
+      required: [lane]
+      properties:
+        lane: { type: string, minLength: 1, maxLength: 100, description: The lane to set, one a station of the item's line routes when any does }
     PauseRequest:
       type: object
       properties:
@@ -5216,7 +5250,7 @@ components:
       required: [event_id, kind, station, at, actor, planned, reason, reason_by]
       properties:
         event_id: { type: integer, format: int64, description: The naming event; its reason is set by setTouchReason }
-        kind: { type: string, description: "The naming event's kind: merged, rejected, approved, moved, paused, cancelled, retried, note, ..." }
+        kind: { type: string, description: "The naming event's kind: merged, rejected, approved, moved, paused, cancelled, retried, lane_set, note, ..." }
         station: { type: string, nullable: true }
         at: { type: string, format: date-time }
         actor: { $ref: "#/components/schemas/Actor" }

@@ -18,6 +18,7 @@ var errNoIntake = errors.New("engine: no intake state (Deps.Intake)")
 const (
 	stepFailures = "only.failuresInARow"
 	stepDedupe   = "only.dedupe"
+	stepModel    = "only.modelAgrees"
 	stepPerDay   = "limits.perDay"
 	stepBudget   = "limits.pauseOnBudget"
 )
@@ -25,8 +26,8 @@ const (
 // Intake hands an event to the triggers of its factory's current line (ADR 0026) and returns
 // one firing for each trigger it reached, in declaration order: every enabled trigger whose on:
 // and filter match it (domain.Trigger.Matches). A trigger it does not reach records nothing. For
-// each one reached, the checks run in order (only.failuresInARow, only.dedupe, limits.perDay,
-// limits.pauseOnBudget); the first that fails records a skipped firing whose reason starts with
+// each one reached, the checks run in order (only.failuresInARow, only.dedupe, only.modelAgrees,
+// limits.perDay, limits.pauseOnBudget); the first that fails records a skipped firing whose reason starts with
 // its step, and when all pass the trigger creates its item and records a created firing with it.
 // Replaying an event with the same idempotency key returns the firing recorded first and creates
 // nothing. The factory must belong to the organization in ctx; any other is ports.ErrNotFound.
@@ -82,7 +83,7 @@ func (e *Engine) fire(ctx context.Context, l domain.Line, t domain.Trigger, ev d
 		Dedupe: t.DedupeValue(ev), At: now,
 	}
 
-	reason, err := e.triggerChecks(ctx, l, t, f.Dedupe, now)
+	reason, err := e.triggerChecks(ctx, l, t, ev, f.Dedupe, now)
 	if err != nil {
 		return domain.TriggerFiring{}, err
 	}
@@ -105,7 +106,7 @@ func (e *Engine) fire(ctx context.Context, l domain.Line, t domain.Trigger, ev d
 
 	attrs := []any{
 		slog.String("org_id", string(l.OrgID)), slog.String("factory", string(l.FactoryID)), slog.String("trigger", t.Name),
-		slog.String("outcome", string(got.Outcome)), slog.String("reason", got.Reason), slog.String("item", string(got.ItemID)),
+		slog.String("outcome", string(got.Outcome)), slog.String("reason", loggedReason(got.Reason)), slog.String("item", string(got.ItemID)),
 	}
 
 	if !fresh && f.ItemID != "" {
@@ -120,10 +121,17 @@ func (e *Engine) fire(ctx context.Context, l domain.Line, t domain.Trigger, ev d
 }
 
 // triggerChecks runs t's only and limits steps in order and returns why the first that fails
-// skips the event, "" when all pass. Reasons hold no event text.
-func (e *Engine) triggerChecks(ctx context.Context, l domain.Line, t domain.Trigger, dedupe string, now time.Time) (string, error) {
+// skips the event, "" when all pass. Reasons hold no event text, but for the model's reason.
+func (e *Engine) triggerChecks(ctx context.Context, l domain.Line, t domain.Trigger, ev domain.IntakeEvent, dedupe string, now time.Time) (string, error) {
 	if reason, err := e.onlyChecks(ctx, l, t, dedupe); reason != "" || err != nil {
 		return reason, err
+	}
+
+	if t.Only.ModelAgrees != nil {
+		// Last of only, so the model is asked only about events that would otherwise go on.
+		if reason := e.modelAgrees(ctx, l, t, ev); reason != "" {
+			return reason, nil
+		}
 	}
 
 	return e.limitChecks(ctx, l, t, now)
@@ -154,6 +162,16 @@ func (e *Engine) onlyChecks(ctx context.Context, l domain.Line, t domain.Trigger
 	}
 
 	return "", nil
+}
+
+// loggedReason is a firing's reason as the log holds it: a model check's without the model's
+// words, which the event shaped.
+func loggedReason(reason string) string {
+	if strings.HasPrefix(reason, stepModel+": ") {
+		return stepModel
+	}
+
+	return reason
 }
 
 // limitChecks runs limits.perDay, then limits.pauseOnBudget.
