@@ -65,30 +65,24 @@ describe('the mock Jonah API', () => {
     expect(waiting.body.proposals.map((p: { number: number }) => p.number)).toEqual([8, 7]);
   });
 
-  it('answers 409 review-in-flight to a second manual review until a reset', async () => {
+  it('answers 409 review-loop-not-running to a manual review of every known factory, and 404 to an unknown one', async () => {
     const api = jonah();
-    const first = await call(api, '/factories/software/jonah/reviews', 'POST');
-    expect(first.status).toBe(202);
-    expect(first.body.trigger).toBe('manual');
+    for (const factory of ['software', 'goal']) {
+      const review = await call(api, `/factories/${factory}/jonah/reviews`, 'POST', factory);
+      expect(review.status).toBe(409);
+      expect(review.body.code).toBe('review-loop-not-running');
+      expect(review.body.detail).toBe("Reviews start when Jonah's review loop ships");
+    }
 
-    const second = await call(api, '/factories/software/jonah/reviews', 'POST');
-    expect(second.status).toBe(409);
-    expect(second.body.code).toBe('review-in-flight');
-
-    api.reset();
-    const after = await call(api, '/factories/software/jonah/reviews', 'POST');
-    expect(after.status).toBe(202);
+    const unknown = await call(api, '/factories/nowhere/jonah/reviews', 'POST', 'nowhere');
+    expect(unknown.status).toBe(404);
+    expect(unknown.body.code).toBe('factory-not-found');
   });
 
-  it('has no version for a factory without a seed: nothing waits and a review is version-not-found', async () => {
-    const api = jonah();
-    const overview = await call(api, '/factories/goal/jonah', 'GET', 'goal');
+  it('has no version for a factory without a seed: nothing waits and nothing was noticed', async () => {
+    const overview = await call(jonah(), '/factories/goal/jonah', 'GET', 'goal');
     expect(overview.body.waiting).toBe(0);
     expect(overview.body.observations).toEqual([]);
-
-    const review = await call(api, '/factories/goal/jonah/reviews', 'POST', 'goal');
-    expect(review.status).toBe(404);
-    expect(review.body.code).toBe('version-not-found');
   });
 
   it('serves proposal 7 as the picture shows it: two files, the four runs as evidence and the versions it moves between', async () => {
