@@ -2,6 +2,7 @@ package docker
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -94,6 +95,28 @@ func TestValidateBox_RefusesUnsafeSpecs(t *testing.T) {
 	} {
 		if _, err := validateBox(spec); err == nil {
 			t.Errorf("%s: validateBox accepted %+v", name, spec)
+		}
+	}
+}
+
+// BoxSizes gives each size the CPUs and memory its boxes get, smallest first, as the screen of
+// the organization's models shows them.
+func TestBoxSizes_SizeMatchesTheLimits(t *testing.T) {
+	t.Parallel()
+
+	want := []domain.BoxSize{
+		{Size: domain.SandboxSmall, VCPUs: 1, MemoryBytes: 2 << 30},
+		{Size: domain.SandboxMedium, VCPUs: 2, MemoryBytes: 4 << 30},
+		{Size: domain.SandboxLarge, VCPUs: 4, MemoryBytes: 8 << 30},
+	}
+
+	if got := BoxSizes(); !slices.Equal(got, want) {
+		t.Errorf("BoxSizes() = %v, want %v", got, want)
+	}
+
+	for _, s := range BoxSizes() {
+		if l := boxLimits[s.Size]; l.CPUs != s.VCPUs || l.MemoryBytes != s.MemoryBytes {
+			t.Errorf("size %s = %v, but its box gets %v", s.Size, s, l)
 		}
 	}
 }

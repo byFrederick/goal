@@ -216,31 +216,45 @@ type Organization struct {
 	MaxSlots  *int32
 }
 
+type SavedView struct {
+	ID        uuid.UUID
+	OrgID     uuid.UUID
+	FactoryID uuid.UUID
+	OwnerID   uuid.UUID
+	Name      string
+	Shared    bool
+	Filters   []byte
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 type WorkItem struct {
-	ID             uuid.UUID
-	FactoryID      uuid.UUID
-	Number         int64
-	ParentID       *uuid.UUID
-	Type           string
-	Lane           *string
-	Title          string
-	Body           string
-	Station        string
-	State          string
-	ClassOfService string
-	Priority       int16
-	Size           *string
-	ReworkCount    int32
-	CostUsd        float64
-	Outputs        []byte
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	DoneAt         *time.Time
-	OrgID          uuid.UUID
-	PartKey        *string
-	PartPaths      []string
-	Paths          []string
-	BaseCommit     *string
-	Trigger        *string
-	Source         *string
+	ID                uuid.UUID
+	FactoryID         uuid.UUID
+	Number            int64
+	ParentID          *uuid.UUID
+	Type              string
+	Lane              *string
+	Title             string
+	Body              string
+	Station           string
+	State             string
+	ClassOfService    string
+	Priority          int16
+	Size              *string
+	ReworkCount       int32
+	CostUsd           float64
+	Outputs           []byte
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	DoneAt            *time.Time
+	OrgID             uuid.UUID
+	PartKey           *string
+	PartPaths         []string
+	Paths             []string
+	BaseCommit        *string
+	Trigger           *string
+	Source            *string
+	IntegrationBranch *string
+	IntegrationLandAt *string
 }

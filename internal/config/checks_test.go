@@ -145,6 +145,16 @@ var locatedCases = []struct {
 		code: "buffer-not-at-constraint", severity: domain.SeverityWarning, section: domain.SectionLine, pointer: "/line/stations/0/buffer",
 	},
 	{
+		name: "integration lands at no merge station",
+		doc:  baseFactory + "    flow:\n      assemblies:\n        integration: { landAt: work } #here\n",
+		code: "integration-land-at-not-merge", section: domain.SectionLine, pointer: "/line/flow/assemblies/integration/land_at",
+	},
+	{
+		name: "integration branch without a merge station",
+		doc:  baseFactory + "    flow:\n      assemblies:\n        integration: { mode: branch } #here\n",
+		code: "integration-without-merge-station", section: domain.SectionLine, pointer: "/line/flow/assemblies/integration/mode",
+	},
+	{
 		name: "agents beyond wip", doc: edited(workAgentLine, workAgentLine+"        agents: 3 #here\n        wip: 2\n"),
 		code: "agents-exceed-wip", section: domain.SectionLine, pointer: "/line/stations/1/agents", wantFixes: 2,
 	},
@@ -271,6 +281,10 @@ var locatedCases = []struct {
 	{
 		name: "trigger placeholder", doc: withTriggers(`          title: "Sweep {{ repo }}"`, `          title: "Sweep {{}}" #here`),
 		code: codePlaceholderInvalid, section: domain.SectionFiles,
+	},
+	{
+		name: "starter work type", doc: withStarter("    type: docs\n", "    type: chore #here\n"),
+		code: codeUnknownWorkType, section: domain.SectionFiles,
 	},
 }
 
@@ -596,4 +610,53 @@ func FuzzCheck(f *testing.F) {
 			}
 		}
 	})
+}
+
+// mergeLine is baseFactory with a gated agent station whose approval merges, between work and done.
+var mergeLine = edited(doneStation, "      - id: land\n        kind: agent\n        agent: worker\n"+
+	"        gate: { onReject: work }\n        action: merge\n"+doneStation)
+
+// flow.assemblies.integration.landAt names an agent station with a gate and action merge, and mode
+// branch needs a merge station on the line; each problem names its code.
+func TestCheck_AssemblyIntegration(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, doc, integration, code string
+	}{
+		{name: "landAt names no station", doc: mergeLine, integration: "{ landAt: nowhere }", code: codeUnknownStation},
+		{name: "landAt at an agent station without a gate", doc: mergeLine, integration: "{ landAt: work }", code: codeIntegrationLandAtNotMerge},
+		{name: "landAt at a queue", doc: mergeLine, integration: "{ landAt: inbox }", code: codeIntegrationLandAtNotMerge},
+		{
+			name: "landAt at a gate that does not merge", integration: "{ landAt: land }",
+			doc: strings.Replace(mergeLine, "        action: merge\n", "", 1), code: codeIntegrationLandAtNotMerge,
+		},
+		{
+			name: "landAt at a human merge station", integration: "{ landAt: land }",
+			doc: edited(doneStation, "      - { id: land, kind: human, action: merge }\n"+doneStation), code: codeIntegrationLandAtNotMerge,
+		},
+		{name: "branch without a merge station", doc: baseFactory, integration: "{ mode: branch }", code: codeIntegrationWithoutMerge},
+		{name: "branch with a merge station", doc: mergeLine, integration: "{ mode: branch, landAt: land }"},
+		{name: "trunk without a merge station", doc: baseFactory, integration: "{ mode: trunk, minParts: 2 }"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, problems := Check(checkTree(tt.doc+"    flow:\n      assemblies:\n        integration: "+tt.integration+"\n", nil))
+
+			if tt.code == "" {
+				if len(problems) > 0 {
+					t.Errorf("problems %+v, want none", problems)
+				}
+
+				return
+			}
+
+			if indexOf(problems, tt.code) < 0 {
+				t.Errorf("problems %+v, want %s", problems, tt.code)
+			}
+		})
+	}
 }

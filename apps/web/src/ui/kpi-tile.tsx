@@ -113,7 +113,8 @@ function KpiMeter({ bar }: { bar: KpiBar }) {
   );
 }
 
-function Sparkline({ points, label }: KpiSparkline) {
+/** A trend line over its points, a `img` named by `label`. The table's cells size it with `className`. */
+export function Sparkline({ points, label, className }: KpiSparkline & { className?: string }) {
   const min = Math.min(...points);
   const span = Math.max(...points) - min || 1;
   const step = points.length > 1 ? 100 / (points.length - 1) : 0;
@@ -127,7 +128,7 @@ function Sparkline({ points, label }: KpiSparkline) {
       preserveAspectRatio="none"
       role="img"
       aria-label={label}
-      className="block h-8 w-full text-run"
+      className={cn('block h-8 w-full text-run', className)}
     >
       <polyline
         points={line}

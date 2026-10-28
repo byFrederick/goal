@@ -285,6 +285,33 @@ func TestSettings_Models(t *testing.T) {
 	}
 }
 
+// The egress addresses: none by default; GOAL_EGRESS_ADDRESSES lists CIDRs, and a value that is
+// not one refuses to start, naming the variable.
+func TestSettings_EgressAddresses(t *testing.T) {
+	t.Parallel()
+
+	s, err := settingsFrom(envOf(nil))
+	if err != nil || len(s.EgressAddresses) != 0 {
+		t.Fatalf("default egress addresses = %v (%v), want none", s.EgressAddresses, err)
+	}
+
+	s, err = settingsFrom(envOf(map[string]string{egressAddressesEnv: " 203.0.113.0/24 ,, 2001:db8::/48"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []netip.Prefix{netip.MustParsePrefix("203.0.113.0/24"), netip.MustParsePrefix("2001:db8::/48")}
+	if !slices.Equal(s.EgressAddresses, want) {
+		t.Errorf("egress addresses = %v, want %v", s.EgressAddresses, want)
+	}
+
+	for _, bad := range []string{"203.0.113.7", "example.com", "203.0.113.0/33"} {
+		if _, err := settingsFrom(envOf(map[string]string{egressAddressesEnv: bad})); err == nil || !strings.Contains(err.Error(), egressAddressesEnv) {
+			t.Errorf("GOAL_EGRESS_ADDRESSES=%s: %v, want a refusal naming it", bad, err)
+		}
+	}
+}
+
 func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 	t.Parallel()
 

@@ -14,6 +14,7 @@ import {
 import { getBuilderMeta, getSkillFiles, type SkillKey, searchSkills } from './builder';
 import {
   ApiError,
+  estimateEvalRun,
   type FlowRange,
   getAgentStats,
   getAttention,
@@ -25,6 +26,7 @@ import {
   getInbox,
   getItem,
   getItemParts,
+  getJudge,
   getLeadTime,
   getMe,
   getMetrics,
@@ -33,11 +35,13 @@ import {
   getTouchMetrics,
   getWeekly,
   type ItemFilter,
+  listEvals,
   listFactories,
   listInvitations,
   listItemEvents,
   listItemRuns,
   listItems,
+  listJudges,
   listMembers,
   listOrgRuns,
   listOrgs,
@@ -50,6 +54,7 @@ import {
   listConnectionKinds,
   listConnections,
 } from './connections';
+import { listCredentials } from './credentials';
 import {
   getDraft,
   getDraftFile,
@@ -75,6 +80,8 @@ import {
   listKnowledgeSources,
   searchKnowledge,
 } from './knowledge';
+import { getOrgPolicy } from './policy';
+import { type SearchQuery, searchOrg } from './search';
 import { getOrgSpend } from './spend';
 import type { Factory, ItemEvent, SpendWindow } from './types';
 import { getWebhookDelivery, listWebhookDeliveries, listWebhookEndpoints } from './webhooks';
@@ -132,6 +139,8 @@ export const keys = {
   /** What each factory needs from people now (the rail's badges). */
   attention: (org: string) => ['org', org, 'attention'] as const,
   settings: (org: string) => ['org', org, 'settings'] as const,
+  /** The organization's model and tool policy (ADR 0024), the Models and policies screen. */
+  policy: (org: string) => ['org', org, 'policy'] as const,
   apiKeys: (org: string) => ['org', org, 'api-keys'] as const,
   /** Its members (spec 3 §10.1); identity service changes invalidate members and invitations. */
   members: (org: string) => ['org', org, 'members'] as const,
@@ -151,6 +160,8 @@ export const keys = {
   /** Audit entries about connections: every one's (`all`) or one's, by its id. */
   connectionActivity: (org: string, id?: string) => ['org', org, 'connections', 'activity', id ?? 'all'] as const,
   connectionKinds: (org: string) => ['org', org, 'connection-kinds'] as const,
+  /** The organization's credentials (ADR 0017): the list, which a connection's change also moves. */
+  credentials: (org: string) => ['org', org, 'credentials'] as const,
   /**
    * The prefix of everything of the organization's knowledge base (spec 4 §10): the source lists
    * by filter, each source and its documents, a document's text, searches. `event: knowledge` re-reads
@@ -165,6 +176,8 @@ export const keys = {
   knowledgeDocuments: (org: string, name: string) => ['org', org, 'knowledge', 'source', name, 'documents'] as const,
   knowledgeDocument: (org: string, id: string) => ['org', org, 'knowledge', 'document', id] as const,
   knowledgeSearch: (org: string, query: KnowledgeQuery) => ['org', org, 'knowledge', 'search', query] as const,
+  /** The shell's search box (sidebar-search.tsx): one entry per debounced query and limit. */
+  search: (org: string, query: SearchQuery) => ['org', org, 'search', query] as const,
   /** The prefix of every factory overview window. */
   overviews: (org: string) => ['org', org, 'overview'] as const,
   overview: (org: string, window: string) => ['org', org, 'overview', window] as const,
@@ -206,6 +219,10 @@ export const keys = {
   runs: (org: string, filter?: RunsFilter) =>
     filter ? (['org', org, 'runs', filter] as const) : (['org', org, 'runs'] as const),
   parts: (org: string, item: string) => ['org', org, 'item', item, 'parts'] as const,
+  /** The prefix of a factory's eval cases and their estimate (Jonah's Evals). A `definition` event refreshes it. */
+  evals: (org: string, factory: string) => ['org', org, 'factory', factory, 'evals'] as const,
+  /** The prefix of a factory's judges (Jonah's Judges). A `definition` event refreshes it. */
+  judges: (org: string, factory: string) => ['org', org, 'factory', factory, 'judges'] as const,
   /** The factory's intake (sources and triggers); item and definition events refresh it. */
   intake: (org: string, factory: string) => ['org', org, 'factory', factory, 'intake'] as const,
 };
@@ -324,6 +341,14 @@ export const connectionActivityQuery = (org: string, id?: string) =>
     staleTime: 30_000,
   });
 
+/** The organization's credentials, by name, never a value (credential:read: every member). */
+export const credentialsQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.credentials(org),
+    queryFn: ({ signal }) => listCredentials(org, signal),
+    staleTime: 30_000,
+  });
+
 /** The organization's knowledge sources; `factory` (an id) narrows them to what its current version lists. */
 export const knowledgeSourcesQuery = (org: string, filter: KnowledgeSourceFilter = {}) =>
   queryOptions({
@@ -368,10 +393,27 @@ export const knowledgeSearchQuery = (org: string, query: KnowledgeQuery) =>
     retry: retryUnlessRefused,
   });
 
+/** The shell's search results; the previous answer stays shown while the next one loads. */
+export const searchQuery = (org: string, query: SearchQuery) =>
+  queryOptions({
+    queryKey: keys.search(org, query),
+    queryFn: ({ signal }) => searchOrg(org, query, signal),
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+    retry: retryUnlessRefused,
+  });
+
 export const settingsQuery = (org: string) =>
   queryOptions({
     queryKey: keys.settings(org),
     queryFn: ({ signal }) => getOrgSettings(org, signal),
+    staleTime: 30_000,
+  });
+
+export const policyQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.policy(org),
+    queryFn: ({ signal }) => getOrgPolicy(org, signal),
     staleTime: 30_000,
   });
 
@@ -507,6 +549,34 @@ export const itemQuery = (org: string, item: string) =>
   queryOptions({ queryKey: keys.item(org, item), queryFn: ({ signal }) => getItem(org, item, signal) });
 
 /** An assembly's parts: under the item's key, so the stream's item events refresh them. */
+/** The factory's eval cases of the current version and their summary (listEvals). */
+export const evalsQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: [...keys.evals(org, factory), 'cases'] as const,
+    queryFn: ({ signal }) => listEvals(org, factory, signal),
+  });
+
+/** The factory's judges of the current version, each with its 30 days (listJudges). */
+export const judgesQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: [...keys.judges(org, factory), 'list'] as const,
+    queryFn: ({ signal }) => listJudges(org, factory, signal),
+  });
+
+/** One judge of the current version with its file, its scores and where it runs (getJudge). */
+export const judgeQuery = (org: string, factory: string, judge: string) =>
+  queryOptions({
+    queryKey: [...keys.judges(org, factory), 'judge', judge] as const,
+    queryFn: ({ signal }) => getJudge(org, factory, judge, signal),
+  });
+
+/** What a run of every case would cost about (estimateEvalRun): a read, so it is asked again on each refresh. */
+export const evalEstimateQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: [...keys.evals(org, factory), 'estimate'] as const,
+    queryFn: ({ signal }) => estimateEvalRun(org, factory, {}, signal),
+  });
+
 export const partsQuery = (org: string, item: string) =>
   queryOptions({ queryKey: keys.parts(org, item), queryFn: ({ signal }) => getItemParts(org, item, signal) });
 

@@ -442,3 +442,47 @@ func nextKnowledgeEvent(t *testing.T, notices <-chan ports.ItemNotice, org domai
 
 	return got
 }
+
+// noticeSource is the source the verdict's notice test judges a document of.
+const noticeSource = "handbook"
+
+// A verdict commits with its audit entry and sends its source's knowledge event, so the
+// stream's clients read the usage again.
+func TestNotices_VerdictIsAKnowledgeEvent(t *testing.T) {
+	t.Parallel()
+
+	d := newConnectionsDB(t)
+	k := NewKnowledge(d.store)
+	acme := newOrgID(t, d.store)
+	ctx := domain.WithOrg(t.Context(), acme)
+
+	src, err := k.CreateSource(ctx, domain.NewKnowledgeSource{Name: noticeSource, Title: "Handbook", Kind: domain.SourceUpload}, domain.LocalUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc, err := k.AddUpload(ctx, noticeSource, domain.KnowledgeDocument{
+		Title: "leave.md", MIME: domain.MediaMarkdown, Bytes: 3, Blob: domain.BlobHash(strings.Repeat("ab", 32)),
+	}, domain.LocalUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	notices := listening(t, NewNotices(d.store, nil), "") // the database is this test's: only its events
+	if n := next(t, notices); !n.Resync {
+		t.Fatalf("first notice = %+v; want Resync", n)
+	}
+
+	if _, err := k.GiveVerdict(ctx, domain.KnowledgeVerdict{Document: doc.ID, Verdict: domain.KnowledgeMisled, Note: "old", By: domain.LocalUser}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := nextKnowledgeEvent(t, notices, acme); got != (knowledgeEvent{SourceID: string(src.ID), Name: noticeSource, Status: "idle"}) {
+		t.Errorf("the verdict's event = %+v; want handbook's", got)
+	}
+
+	entries, err := d.store.AuditLog(ctx, ports.AuditQuery{Limit: 10, Action: domain.AuditKnowledgeVerdictGiven})
+	if err != nil || len(entries) != 1 || entries[0].TargetID != string(doc.ID) || entries[0].Data["verdict"] != "misled" {
+		t.Errorf("audit = %+v, %v; want the one knowledge_verdict.given on the document", entries, err)
+	}
+}

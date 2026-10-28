@@ -69,6 +69,7 @@ type Engine interface {
 	Cancel(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
 	Merge(ctx context.Context, id domain.ItemID, by domain.Actor, method string) (domain.Item, error)
 	Note(ctx context.Context, id domain.ItemID, by domain.Actor, text string) (domain.Event, error)
+	Answer(ctx context.Context, id domain.ItemID, by domain.Actor, answer string, choiceIndex *int) (domain.Item, error)
 	Link(ctx context.Context, id, needs domain.ItemID, by domain.Actor) (domain.Edge, error)
 	Unlink(ctx context.Context, id, needs domain.ItemID, by domain.Actor) error
 	AddPart(ctx context.Context, assembly domain.ItemID, by domain.Actor, part domain.NewPart) (domain.Item, domain.Parts, error)
@@ -186,6 +187,17 @@ type Deps struct {
 	KnowledgeUploads KnowledgeUploads
 	KnowledgeSearch  KnowledgeSearch
 	UploadMaxBytes   int64
+	// OrgPolicies is the organization policy (ADR 0024), over the install's models (Builder's
+	// Meta). BoxSizes are small, medium and large as the active sandbox backend sizes them, and
+	// EgressAddresses where agents' traffic leaves from (GOAL_EGRESS_ADDRESSES): facts the policy
+	// screen shows beside it.
+	OrgPolicies     ports.OrgPolicies
+	BoxSizes        []domain.BoxSize
+	EgressAddresses []netip.Prefix
+	// Judges serve Jonah's judges routes (judges.go). Optional: while it is nil those routes
+	// answer 503 judges-unavailable; when set, all three of its collaborators are.
+	Judges *JudgeDeps
+
 	// Evals serve Jonah's evals routes (evals.go). Optional: while it is nil those routes answer
 	// 503 evals-unavailable; when set, all three of its collaborators are.
 	Evals *EvalDeps
@@ -201,6 +213,8 @@ func (d Deps) complete() bool {
 		d.Audit == nil, d.Access == nil, d.Authorizer == nil, d.Platform == nil, d.Feed == nil, d.Builder == nil, d.Clock == nil,
 		d.Connections == nil, d.Credentials == nil, d.Intake == nil, d.ParseKind == nil, d.ConnectionTransport == nil, d.OrgRetention <= 0,
 		d.Knowledge == nil, d.KnowledgeUploads == nil, d.KnowledgeSearch == nil, d.UploadMaxBytes <= 0,
+		d.OrgPolicies == nil, len(d.BoxSizes) == 0,
+		d.Judges != nil && (d.Judges.Judges == nil || d.Judges.Scores == nil || d.Judges.Tries == nil),
 		d.Evals != nil && (d.Evals.Runs == nil || d.Evals.Loop == nil || d.Evals.Judges == nil),
 	}
 
@@ -243,8 +257,9 @@ var errInvalid = errors.New("invalid request")
 func New(d Deps) (http.Handler, error) {
 	if !d.complete() {
 		return nil, errors.New("api: Engine, Items, Factories, Definitions, Versions, Orgs, Audit, Access, Authorizer, Platform, Feed, Builder, Clock, " +
-			"Connections, Credentials, Intake, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeSearch, a positive UploadMaxBytes " +
-			"and a positive OrgRetention are required, and Evals, when set, needs Runs, Loop and Judges")
+			"Connections, Credentials, Intake, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeSearch, OrgPolicies, BoxSizes, " +
+			"a positive UploadMaxBytes and a positive OrgRetention are required, Judges, when set, needs Judges, Scores and Tries, " +
+			"and Evals, when set, needs Runs, Loop and Judges")
 	}
 
 	if err := d.failsClosed(); err != nil {
@@ -262,7 +277,8 @@ func New(d Deps) (http.Handler, error) {
 		builder: d.Builder, connections: d.Connections, credentials: d.Credentials, intake: d.Intake, parseKind: d.ParseKind, codehosts: d.CodeHosts,
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
 		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, search: d.KnowledgeSearch, uploadMax: d.UploadMaxBytes,
-		evals: d.Evals, clock: d.Clock, log: log,
+		policies: d.OrgPolicies, boxSizes: slices.Clone(d.BoxSizes), egress: slices.Clone(d.EgressAddresses),
+		judges: d.Judges, evals: d.Evals, clock: d.Clock, log: log,
 	}
 	s.inbox = append([]InboxSource{workInbox{s: s}}, d.InboxSources...)
 
@@ -390,6 +406,12 @@ type server struct {
 	uploads   KnowledgeUploads
 	search    KnowledgeSearch
 	uploadMax int64
+	// policies, boxSizes and egress serve the policy routes.
+	policies ports.OrgPolicies
+	boxSizes []domain.BoxSize
+	egress   []netip.Prefix
+	// judges serve the judges routes; nil when this goald does not.
+	judges *JudgeDeps
 	// evals serve the evals routes; nil when this goald does not run evals.
 	evals *EvalDeps
 	clock ports.Clock
@@ -471,6 +493,10 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 	}
 
 	out.Waiting = waiting[it.ID]
+
+	if out.Question, err = s.openQuestion(ctx, it.ID); err != nil {
+		return nil, err
+	}
 
 	return gen.GetItem200JSONResponse(out), nil
 }
@@ -609,7 +635,8 @@ func problemOf(err error) gen.Problem {
 	// wrap ports.ErrNameTaken); the credentials' before the connections' (both wrap
 	// ports.ErrNoMasterKey).
 	for _, answer := range []func(error) (gen.Problem, bool){
-		fixedProblem, edgeProblem, partProblem, credentialProblem, webhookProblem, connectionProblem, knowledgeProblem, evalProblem, definitionProblem, controlProblem, agentProblem, triggerProblem, apiKeyProblem, personalTokenProblem,
+		fixedProblem, policyProblem, edgeProblem, partProblem, credentialProblem, webhookProblem, connectionProblem, knowledgeProblem, judgeProblem, evalProblem, definitionProblem,
+		controlProblem, questionProblem, agentProblem, triggerProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {
 			return p

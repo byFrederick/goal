@@ -169,3 +169,24 @@ func TestTaskToken_EvalNamesNoConnection(t *testing.T) {
 		t.Errorf("production claims encode a kind: %s", plain)
 	}
 }
+
+func TestTaskToken_CarriesTheRunsBranchAndBase(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
+	key := []byte("gateway-key")
+	claims := TaskClaims{
+		OrgID: "o1", FactoryID: "f1", VersionID: "v1", ItemID: "i1", Station: stationBuild, Agent: testAgent, RunID: "r1",
+		Branch: "goal/2-store", Base: "goal/a1-big-request", ExpiresAt: now.Add(time.Hour).Unix(),
+	}
+
+	token, err := SignTaskToken(key, claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := VerifyTaskToken(key, token, now)
+	if err != nil || got.Branch != claims.Branch || got.Base != claims.Base {
+		t.Errorf("VerifyTaskToken = %+v, %v; want branch %q and base %q", got, err, claims.Branch, claims.Base)
+	}
+}

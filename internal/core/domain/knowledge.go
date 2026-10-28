@@ -462,6 +462,15 @@ func (v KnowledgeVerdict) Check() error {
 	return errors.Join(errs...)
 }
 
+// AuditEntry is v's audit entry, AuditKnowledgeVerdictGiven on its document: its kind and run,
+// never its note (decision 6).
+func (v KnowledgeVerdict) AuditEntry() AuditEntry {
+	return AuditEntry{
+		Actor: v.By, Action: AuditKnowledgeVerdictGiven, TargetKind: AuditTargetKnowledgeDocument, TargetID: string(v.Document),
+		Data: map[string]any{"verdict": string(v.Verdict), "run": string(v.Run)},
+	}
+}
+
 // CheckUsageDays refuses a usage window outside 1 to MaxUsageDays days (ErrInvalid).
 func CheckUsageDays(days int) error {
 	if days < 1 || days > MaxUsageDays {
@@ -500,6 +509,9 @@ const (
 	AuditKnowledgeSourceDeleted    = "knowledge_source.deleted"
 	AuditKnowledgeDocumentUploaded = "knowledge_document.uploaded"
 	AuditKnowledgeDocumentDeleted  = "knowledge_document.deleted"
+	// AuditKnowledgeVerdictGiven is a verdict on a document, with its kind and run but never its
+	// note (ADR 0027, decision 6).
+	AuditKnowledgeVerdictGiven = "knowledge_verdict.given"
 )
 
 // Audit target kinds of the knowledge base.

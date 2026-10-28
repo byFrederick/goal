@@ -156,35 +156,44 @@ func TestCheck_Triggers(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, problems := Check(checkTree(tt.doc, nil))
-
-			if tt.code == "" {
-				if len(problems) > 0 {
-					t.Fatalf("problems = %+v, want none", problems)
-				}
-
-				return
-			}
-
-			if len(problems) != 1 {
-				t.Fatalf("want one %s problem, got %+v", tt.code, problems)
-			}
-
-			p := problems[0]
-			if p.Code != tt.code || p.Severity != domain.SeverityError || p.File != FileName || p.Check == "" {
-				t.Errorf("problem = %+v, want an error %s in %s with a check", p, tt.code, FileName)
-			}
-
-			if want := markedLine(tt.doc); p.Line != want {
-				t.Errorf("problem line = %d, want %d: %+v", p.Line, want, p)
-			}
-
-			for _, m := range tt.message {
-				if !strings.Contains(p.Message, m) {
-					t.Errorf("message %q does not name %s", p.Message, m)
-				}
-			}
+			checkOneProblem(t, tt.doc, tt.code, tt.message)
 		})
+	}
+}
+
+// checkOneProblem checks that doc has no problem when code is "", and otherwise exactly one: an
+// error with that code in factory.yaml, on the line marked "#here", whose message names each of
+// message.
+func checkOneProblem(t *testing.T, doc, code string, message []string) {
+	t.Helper()
+
+	_, problems := Check(checkTree(doc, nil))
+
+	if code == "" {
+		if len(problems) > 0 {
+			t.Fatalf("problems = %+v, want none", problems)
+		}
+
+		return
+	}
+
+	if len(problems) != 1 {
+		t.Fatalf("want one %s problem, got %+v", code, problems)
+	}
+
+	p := problems[0]
+	if p.Code != code || p.Severity != domain.SeverityError || p.File != FileName || p.Check == "" {
+		t.Errorf("problem = %+v, want an error %s in %s with a check", p, code, FileName)
+	}
+
+	if want := markedLine(doc); p.Line != want {
+		t.Errorf("problem line = %d, want %d: %+v", p.Line, want, p)
+	}
+
+	for _, m := range message {
+		if !strings.Contains(p.Message, m) {
+			t.Errorf("message %q does not name %s", p.Message, m)
+		}
 	}
 }
 

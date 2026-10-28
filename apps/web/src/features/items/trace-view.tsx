@@ -1,6 +1,7 @@
 import {
   Circle,
   CircleCheck,
+  CircleHelp,
   CircleX,
   FileText,
   type LucideIcon,
@@ -166,7 +167,9 @@ function noteRow(note: NoteEntry): Row {
     key: note.key,
     at: note.at,
     tone,
-    icon: people ? MessageSquare : Circle,
+    icon: note.question ? CircleHelp : people ? MessageSquare : Circle,
+    // An open question's row says Now, in the you ink.
+    meta: note.open ? <span className="text-you-ink">Now</span> : undefined,
     children: (
       <>
         <span>{note.text}</span>

@@ -88,7 +88,9 @@ const gateMergeTimeout = 2 * time.Minute
 // with the engine as actor: the connections are opened for the engine's use on the item, so it
 // is no person's touch. The pull requests are those of the item's outputs and of the gate's own
 // output, which only t holds yet. A refusal is returned, so the item blocks at the gate (or,
-// for a conflict, goes back to be built: conflictRework) and never moves on unmerged.
+// for a conflict, goes back to be built: conflictRework) and never moves on unmerged. A landing
+// root whose gate output says pull_requests: [] (domain.NoPullRequests), and whose outputs name
+// none, moves on with nothing merged: its integration branch had nothing to land.
 func (e *Engine) mergeOnApproval(ctx context.Context, c claimed, l domain.Line, t *ports.Transition) error {
 	if c.station.Action != domain.ActionMerge {
 		return nil
@@ -105,6 +107,12 @@ func (e *Engine) mergeOnApproval(ctx context.Context, c claimed, l domain.Line, 
 	}
 
 	it.Outputs[c.station.ID] = t.Output
+
+	if it.Landing() && domain.NoPullRequests(t.Output) && len(it.PullRequests(l)) == 0 {
+		e.log.InfoContext(ctx, "empty landing", slog.String("item", string(it.ID)), slog.String("branch", it.IntegrationBranch))
+
+		return nil
+	}
 
 	merged, err := e.mergeAll(ctx, l, it, domain.EngineActor, MergeSquash, t.At)
 	if err != nil {

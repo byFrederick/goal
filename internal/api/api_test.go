@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -127,6 +128,18 @@ func inOrg(t *testing.T) context.Context {
 
 var t0 = time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
 
+// testBoxSizes are the harness's sandbox sizes, as the docker backend's; testEgress its one egress
+// address (GOAL_EGRESS_ADDRESSES).
+var testBoxSizes = []domain.BoxSize{
+	{Size: domain.SandboxSmall, VCPUs: 1, MemoryBytes: 2 << 30},
+	{Size: domain.SandboxMedium, VCPUs: 2, MemoryBytes: 4 << 30},
+	{Size: domain.SandboxLarge, VCPUs: 4, MemoryBytes: 8 << 30},
+}
+
+const testEgress = "203.0.113.0/24"
+
+var testEgressAddresses = []netip.Prefix{netip.MustParsePrefix(testEgress)}
+
 type harness struct {
 	srv      *httptest.Server
 	engine   *engine.Engine
@@ -174,6 +187,10 @@ type harness struct {
 	evals      *porttest.Evals
 	evalJudges *porttest.Judges
 	evalLoop   *jonah.Evals
+	// judges are the versions' judges as tests set them, judgeScores their scores; tries are
+	// queued by a jonah loop over them and the store's finished runs.
+	judges      *porttest.Judges
+	judgeScores *porttest.JudgeScores
 }
 
 // acme's one prompt and its path.
@@ -430,31 +447,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		t.Fatal(err)
 	}
 
-	feed := api.NewFeed(h.notices, h.defNotices, nil)
-	if in != nil {
-		feed.EndOnAccessChanges(in.access)
-	}
-
-	ctx, stop := context.WithCancel(domain.WithOrg(context.Background(), testOrg))
-	done := make(chan error, 1)
-
-	go func() { done <- feed.Run(ctx) }()
-
-	// Both listeners' first resyncs are past before any test subscribes: the feed starts them in
-	// their own goroutines, and a resync that came after a subscription would reach the stream.
-	if err := h.notices.AwaitListeners(ctx, 1); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := h.defNotices.AwaitListeners(ctx, 1); err != nil {
-		t.Fatal(err)
-	}
-
-	if in != nil {
-		if err := in.access.AwaitListeners(ctx, 1); err != nil {
-			t.Fatal(err)
-		}
-	}
+	feed, stopFeed := h.startFeed(t, in)
 
 	h.seam, h.tenancy = &seam{}, tenancy
 	h.skills, h.skillSource = &flakyObjects{ObjectStore: porttest.NewObjectStore()}, porttest.NewSkillSource()
@@ -486,11 +479,14 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		// GitLab's code host lists no repositories, as the gitlab adapter.
 		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()},
 		Knowledge: h.kb, KnowledgeUploads: h.uploads, KnowledgeSearch: knowledge.NewSearcher(h.kb, nil, nil), UploadMaxBytes: testUploadMax, Clock: h.clock,
+		OrgPolicies: porttest.NewOrgPolicies([]string{modelOpus, modelHaiku}, tenancy, h.clock.Now), BoxSizes: testBoxSizes, EgressAddresses: testEgressAddresses,
 	}
 	if in != nil {
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity
 		deps.Auth = api.AuthConfig{Mode: api.AuthSession, EmailCodes: !in.noEmailCodes, Google: in.google}
 	}
+
+	deps.Judges = h.judgeDeps(tenancy)
 
 	handler, err := api.New(h.withEvals(deps, tenancy, opts))
 	if err != nil {
@@ -500,16 +496,64 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.srv = httptest.NewServer(handler)
 
 	t.Cleanup(func() {
-		stop() // ends every stream before the server closes
-
-		if err := <-done; err != nil {
-			t.Error(err)
-		}
-
+		stopFeed() // ends every stream before the server closes
 		h.srv.Close()
 	})
 
 	return h
+}
+
+// startFeed runs the harness's feed until the returned stop, which waits for it to end.
+func (h *harness) startFeed(t *testing.T, in *signIn) (*api.Feed, func()) {
+	t.Helper()
+
+	feed := api.NewFeed(h.notices, h.defNotices, nil)
+	if in != nil {
+		feed.EndOnAccessChanges(in.access)
+	}
+
+	ctx, stop := context.WithCancel(domain.WithOrg(context.Background(), testOrg))
+	done := make(chan error, 1)
+
+	go func() { done <- feed.Run(ctx) }()
+
+	// Both listeners' first resyncs are past before any test subscribes: the feed starts them in
+	// their own goroutines, and a resync that came after a subscription would reach the stream.
+	if err := h.notices.AwaitListeners(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.defNotices.AwaitListeners(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	if in != nil {
+		if err := in.access.AwaitListeners(ctx, 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	return feed, func() {
+		stop()
+
+		if err := <-done; err != nil {
+			t.Error(err)
+		}
+	}
+}
+
+// judgeDeps are h's judges and their scores, with a jonah loop over them and the store's finished
+// runs for tries.
+func (h *harness) judgeDeps(tenancy *porttest.Tenancy) *api.JudgeDeps {
+	h.judges, h.judgeScores = porttest.NewJudges(), porttest.NewJudgeScores(h.store)
+
+	return &api.JudgeDeps{
+		Judges: h.judges, Scores: h.judgeScores,
+		Tries: jonah.New(jonah.Deps{
+			Orgs: tenancy, Runs: h.store, Finished: porttest.NewFinishedRuns(h.store), Judges: h.judges, Scores: h.judgeScores,
+			Runner: porttest.NewJudgeRunner(nil), Clock: h.clock,
+		}, jonah.Config{}),
+	}
 }
 
 // engineConnections are the connections the engine's runs and merges get: acme's model connection

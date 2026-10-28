@@ -21,6 +21,8 @@ usage:
                                                   (at a station with action: merge)
   goal note <item> "<text>"                       leave a note for the agents: the item's next run
                                                   reads it
+  goal answer <item> "<text>" | --choice <n>      answer the question the item's agent asked, in
+                                                  your words or by its choice's number (from 1)
   goal move <item> <station> [--reason "..."]     put the item at another station (a reason is needed
                                                   upstream, where it counts as rework); a run in
                                                   progress is stopped
@@ -70,6 +72,13 @@ usage:
                                                   across its factories (--max-slots 0: no cap)
   goal org delete <slug> [--yes]                  delete it after typing its name (--yes: no prompt);
                                                   it is purged after GOAL_ORG_RETENTION
+  goal policy get                                 the organization's policy: allowed models and the default,
+                                                  denied commands, tool defaults, box time limit; who uses
+                                                  each model and box size, and the egress addresses
+  goal policy set [--models M,M] [--default M] [--deny-command P]... [--box-limit 3h]
+                                                  change what the flags name (owners and admins), keeping
+                                                  the rest as read; refused when the policy changed since
+                                                  it was read (--deny-command replaces the list)
   goal key list                                   the organization's API keys: hint, scopes, factories,
                                                   ceiling, expiry, last use
   goal key create <name> --scope S [--scope S]... [--factory F]... [--role viewer|approver|editor] [--expires 90d]
@@ -145,6 +154,12 @@ usage:
                                                   week), per merged item and on rework, and each
                                                   factory's budget: running, stopped or over_budget,
                                                   its spend today and in the last 7 days
+  goal judge list [--factory F] [--json]          the factory's judges (default: the organization's only
+                                                  factory): enabled, sample, pass mark, and over the last
+                                                  30 days the pass rate, runs scored and cost; then what
+                                                  its judge runs cost (--json: goald's answer as it came)
+  goal judge try <slug> [--factory F] [--json]    queue the judge on the 10 newest finished runs of its
+                                                  agents; the tries never count in its 30-day figures
   goal triggers list <factory> [--json]           the factory's triggers in definition order: on or off,
                                                   when they fire, what they create, the items they
                                                   created in the last 7 days, and why one may not be
@@ -209,7 +224,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, move, pause, the decisions, status, andon, factory, connection, credential, knowledge, search, runs, eval, spend, triggers, webhooks) acts in one
+Every command that talks to goald (run, follow, item, note, answer, move, pause, the decisions, status, andon, factory, policy, connection, credential, knowledge, search, runs, eval, spend, judge, triggers, webhooks) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or
