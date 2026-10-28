@@ -53,6 +53,7 @@ func (e *Engine) budgets(ctx context.Context, lines map[domain.FactoryID]domain.
 		}
 
 		e.noteBudget(ctx, l, b)
+		e.warnBudget(ctx, l, b, now)
 
 		switch {
 		case !b.Exhausted:
@@ -108,15 +109,56 @@ func (e *Engine) noteBudget(ctx context.Context, l domain.Line, b domain.BudgetS
 		slog.Time("since", b.Since), slog.Int(budgetGauge, gauge))
 }
 
+// budgetWarnShare is the share of the weekly budget whose spend raises the budget event.
+const budgetWarnShare = 0.8
+
+// warnBudget queues the budget event (ADR 0023, decisions 2 and 3) when the factory's spend is at
+// or over 80% of its weekly budget and this instance has not queued it since the spend got
+// there. The outbox keeps it to once per factory per budget window across instances. A factory
+// with no weekly budget raises none. A failure is logged and tried again on the next tick.
+func (e *Engine) warnBudget(ctx context.Context, l domain.Line, b domain.BudgetStatus, now time.Time) {
+	if e.outbox == nil || b.WeeklyUSD <= 0 {
+		return
+	}
+
+	over := b.SpentUSD >= budgetWarnShare*b.WeeklyUSD
+
+	e.budgetMu.Lock()
+	warned := e.warned[l.FactoryID]
+
+	if !over {
+		delete(e.warned, l.FactoryID)
+	}
+	e.budgetMu.Unlock()
+
+	if !over || warned {
+		return
+	}
+
+	if err := e.outbox.QueueBudgetNotification(domain.WithOrg(ctx, l.OrgID), l.FactoryID, b.SpentUSD, b.WeeklyUSD, now); err != nil {
+		e.log.WarnContext(ctx, "budget_notification_failed", slog.String("org_id", string(l.OrgID)),
+			slog.String("factory", string(l.FactoryID)), slog.String("error", err.Error()))
+
+		return
+	}
+
+	e.budgetMu.Lock()
+	e.warned[l.FactoryID] = true
+	e.budgetMu.Unlock()
+}
+
 // forgetBudgets drops the budget state of factories that are no longer loaded.
 func (e *Engine) forgetBudgets(lines map[domain.FactoryID]domain.Line) {
 	e.budgetMu.Lock()
 	defer e.budgetMu.Unlock()
 
-	maps.DeleteFunc(e.exhausted, func(id domain.FactoryID, _ bool) bool {
+	unloaded := func(id domain.FactoryID, _ bool) bool {
 		_, loaded := lines[id]
 		return !loaded
-	})
+	}
+
+	maps.DeleteFunc(e.exhausted, unloaded)
+	maps.DeleteFunc(e.warned, unloaded)
 }
 
 // track registers the run this instance is about to work on under lease and returns its

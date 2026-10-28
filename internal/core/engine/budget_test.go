@@ -282,6 +282,48 @@ func TestWeeklyBudget_ResumesWhenTheCapRises(t *testing.T) {
 	}
 }
 
+// The budget event is queued once when the spend first reaches 80% of the weekly cap, with the
+// spend and the cap, and not again on the ticks after it.
+func TestWeeklyBudget_QueuesNotificationAt80Percent(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, budgeted(10, domain.BudgetDrain, 1), porttest.Succeed(`{}`))
+	h.spent(t, t0, 7.9)
+
+	h.step(t)
+
+	if got := h.outbox.Budget(); len(got) != 0 {
+		t.Fatalf("budget notifications at 79%% = %+v; want none", got)
+	}
+
+	h.spent(t, t0, 0.1)
+	h.step(t)
+	h.step(t)
+
+	want := []porttest.BudgetNotification{{FactoryID: factoryID, SpentUSD: 8, WeeklyUSD: 10, At: t0}}
+	if got := h.outbox.Budget(); len(got) != 1 || got[0].FactoryID != want[0].FactoryID ||
+		got[0].WeeklyUSD != 10 || got[0].SpentUSD < 7.99 || !got[0].At.Equal(t0) {
+		t.Fatalf("budget notifications = %+v; want %+v", got, want)
+	}
+
+	if n := h.outbox.Calls(); n != 1 {
+		t.Errorf("QueueBudgetNotification called %d times; want once while the spend stays over 80%%", n)
+	}
+}
+
+func TestWeeklyBudget_NoNotificationWithoutBudget(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, lineOf(agentStation(stWork, agWorker, 1, 1)), porttest.Succeed(`{}`))
+	h.spent(t, t0, 1000)
+
+	h.step(t)
+
+	if n := h.outbox.Calls(); n != 0 {
+		t.Errorf("QueueBudgetNotification called %d times; want never without a weekly budget", n)
+	}
+}
+
 // spendReads counts the SpendSince calls made through a store.
 type spendReads struct {
 	ports.Store

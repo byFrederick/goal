@@ -115,9 +115,12 @@ type Deps struct {
 	ModelCheck ports.ModelCheck
 	// Audit takes the trigger.tried entry of each trigger dry run (try.go); nil leaves TryTrigger
 	// failing with errNoAudit.
-	Audit  ports.Audit
-	Clock  ports.Clock
-	Logger *slog.Logger // nil discards logs
+	Audit ports.Audit
+	// NotificationOutbox queues the budget event when a factory's weekly spend first reaches 80%
+	// of its cap (budget.go; ADR 0023 decision 3); nil queues none.
+	NotificationOutbox ports.NotificationOutbox
+	Clock              ports.Clock
+	Logger             *slog.Logger // nil discards logs
 }
 
 func (d Deps) complete() bool {
@@ -212,6 +215,7 @@ type Engine struct {
 	intake      ports.Intake
 	modelCheck  ports.ModelCheck
 	audit       ports.Audit
+	outbox      ports.NotificationOutbox
 	clock       ports.Clock
 	log         *slog.Logger
 	cfg         Config
@@ -235,6 +239,10 @@ type Engine struct {
 	// the spend afresh and logs what it finds.
 	budgetMu  sync.Mutex
 	exhausted map[domain.FactoryID]bool
+	// warned holds the factories whose budget event this instance queued and whose spend is still
+	// at or over 80%, so the outbox is not asked again each tick. Also only a hint: the outbox
+	// itself queues once per factory per budget window, whichever instance asks.
+	warned map[domain.FactoryID]bool
 }
 
 // New returns an engine for the given lines.
@@ -272,8 +280,8 @@ func New(d Deps, cfg Config) (*Engine, error) {
 
 	return &Engine{
 		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, connections: d.Connections,
-		credentials: d.Credentials, codehosts: d.CodeHosts, minters: d.Minters, policies: d.Policies, intake: d.Intake, modelCheck: d.ModelCheck, audit: d.Audit, clock: d.Clock, log: log, cfg: cfg, lines: lines,
-		active: map[domain.ItemID]*activeRun{}, exhausted: map[domain.FactoryID]bool{},
+		credentials: d.Credentials, codehosts: d.CodeHosts, minters: d.Minters, policies: d.Policies, intake: d.Intake, modelCheck: d.ModelCheck, audit: d.Audit, outbox: d.NotificationOutbox, clock: d.Clock, log: log, cfg: cfg, lines: lines,
+		active: map[domain.ItemID]*activeRun{}, exhausted: map[domain.FactoryID]bool{}, warned: map[domain.FactoryID]bool{},
 	}, nil
 }
 

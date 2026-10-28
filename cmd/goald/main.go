@@ -202,7 +202,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
 		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, CodeHosts: hosts, Clock: clock,
-		Minters: minters(s), Policies: policies, Intake: intake, Audit: store, Logger: log,
+		Minters: minters(s), Policies: policies, Intake: intake, Audit: store, NotificationOutbox: store, Logger: log,
 	}, engine.Config{
 		TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: boxes.gateway, GatewayKeyRef: s.GatewayKeyRef, MaxRuns: s.MaxRuns,
 	})

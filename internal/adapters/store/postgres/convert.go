@@ -95,7 +95,9 @@ func leaseFrom(l db.Lease) domain.Lease {
 	}
 }
 
-// appendEvents inserts events in order; their ids come from the table's identity column.
+// appendEvents inserts events in order; their ids come from the table's identity column. In the
+// same transaction it queues the notifications of the items that start waiting for a person
+// (itemNotifications), which only a batch with such an event pays for.
 func appendEvents(ctx context.Context, q *db.Queries, events []domain.Event) error {
 	if len(events) == 0 {
 		return nil
@@ -131,7 +133,7 @@ func appendEvents(ctx context.Context, q *db.Queries, events []domain.Event) err
 		return fmt.Errorf("append events: %w", err)
 	}
 
-	return nil
+	return itemNotifications(ctx, q, events)
 }
 
 func eventRow(e domain.Event) (db.InsertEventsParams, error) {
