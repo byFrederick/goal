@@ -37,6 +37,9 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_GITHUB_API_URL` | config | no | Retired: a github connection's host gives its API; goald ignores it and warns while it is set. |
 | `GOAL_GITHUB_TOKEN` | secret | no | Retired: goal connection import-env turns it into the github connection once; goald ignores it and warns while it is set. |
 | `GOAL_GITHUB_WEB_URL` | config | no | Retired: the GitHub Enterprise origin goal connection import-env gives the github connection; goald ignores it and warns while it is set. |
+| `GOAL_JONAH_REVIEW_EVERY` | config | no | How often goald queues Jonah threshold reviews and runs the queued reviews. 1m when unset. |
+| `GOAL_JONAH_REVIEW_LEASE_MARGIN` | config | no | How long a Jonah review's lease lasts beyond its run's time limit; a review whose goald died is taken again once the lease ends. 5m when unset. |
+| `GOAL_JONAH_REVIEW_TIMEOUT` | config | no | The time limit of one Jonah review run. 30m when unset. |
 | `GOAL_KB_WORKERS` | config | no | How many knowledge sources one goald syncs at once (0: none). |
 | `GOAL_LEGACY_IMPORT` | config | no | Retired: the legacy import is gone; goald ignores it and warns while it is set. |
 | `GOAL_LISTEN` | config | no | goald's address for the API, the UI and, without GOAL_GATEWAY_LISTEN, the gateway. |
