@@ -81,6 +81,14 @@ tags:
       log of the deliveries each received, kept 30 days. Anyone who sees the factory reads them;
       its editors (and the organization's owners and admins) create, rotate and delete endpoints,
       after a recent sign-in, never with a key or a personal token.
+  - name: views
+    description: >-
+      A factory's saved views (ADR 0020 decisions 1 and 2): named sets of the Items page's URL
+      search params. A reader of the factory lists its shared views and their own personal ones,
+      and manages their own; creating, renaming or deleting a shared view also needs
+      factory:manage. Only a signed-in person owns a view, so API keys, personal tokens and
+      GOAL_AUTH=none only list, and see the shared views; their writes answer 403
+      person-required.
   - name: definitions
     description: >-
       Factory definitions: creating factories, the one shared draft per factory (Visual
@@ -2453,6 +2461,90 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/WebhookDeliveryRequest" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/views:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: listSavedViews
+      x-goal-scope: factory:read
+      tags: [views]
+      summary: The factory's shared views and the caller's own
+      description: >-
+        The shared views first, then the caller's personal views, each by name (case ignored).
+        Never another person's personal view; an API key or a personal token sees only the shared
+        views.
+      responses:
+        "200":
+          description: The views
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SavedViewList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createSavedView
+      x-goal-scope: factory:read
+      tags: [views]
+      summary: Save a view
+      description: >-
+        A personal view of the caller, or a shared view of the factory, which also needs
+        factory:manage (403 forbidden without it). 403 person-required for an API key, a personal
+        token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60
+        characters, over 20 filters, over 20 values in one or a value over 200 characters; 409
+        view-name-taken for a name the caller's personal views (personal) or the factory's shared
+        views (shared) already use, case ignored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewSavedView" }
+      responses:
+        "201":
+          description: The view
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SavedView" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/views/{view}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/SavedViewRef"
+    patch:
+      operationId: updateSavedView
+      x-goal-scope: factory:read
+      tags: [views]
+      summary: Rename a view and replace its filters
+      description: >-
+        Whether a view is shared is fixed when it is created. A shared view needs factory:manage
+        (403 forbidden without it); 403 person-required for an API key, a personal token or
+        GOAL_AUTH=none; 404
+        view-not-found for a view the caller does not see (another person's personal view
+        included); 400 invalid-view and 409 view-name-taken as createSavedView.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SavedViewChange" }
+      responses:
+        "200":
+          description: The view
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SavedView" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteSavedView
+      x-goal-scope: factory:read
+      tags: [views]
+      summary: Delete a view
+      description: >-
+        A shared view needs factory:manage (403 forbidden without it); 403 person-required for an
+        API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another
+        person's personal view included).
+      responses:
+        "204": { description: Deleted }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/stream:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -3830,6 +3922,12 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
 components:
   parameters:
+    SavedViewRef:
+      name: view
+      in: path
+      required: true
+      description: The saved view's id
+      schema: { type: string }
     WebhookEndpointRef:
       name: endpoint
       in: path
@@ -8321,3 +8419,42 @@ components:
         source_id: { type: string }
         name: { type: string }
         status: { type: string, enum: [idle, syncing, failed] }
+    SavedViewFilters:
+      type: object
+      description: >-
+        The Items page's URL search params, each key with its values in order: at most 20 keys, 20
+        values per key and 200 characters per value
+      additionalProperties:
+        type: array
+        items: { type: string }
+    NewSavedView:
+      type: object
+      required: [name, shared, filters]
+      properties:
+        name: { type: string, description: "1 to 60 characters, trimmed" }
+        shared: { type: boolean, description: "Every reader of the factory sees it; false: only its owner" }
+        filters: { $ref: "#/components/schemas/SavedViewFilters" }
+    SavedViewChange:
+      type: object
+      required: [name, filters]
+      properties:
+        name: { type: string, description: "1 to 60 characters, trimmed" }
+        filters: { $ref: "#/components/schemas/SavedViewFilters" }
+    SavedView:
+      type: object
+      required: [id, name, shared, filters, mine, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        shared: { type: boolean }
+        filters: { $ref: "#/components/schemas/SavedViewFilters" }
+        mine: { type: boolean, description: The caller made it }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    SavedViewList:
+      type: object
+      required: [views]
+      properties:
+        views:
+          type: array
+          items: { $ref: "#/components/schemas/SavedView" }

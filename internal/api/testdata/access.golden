@@ -468,6 +468,32 @@ createPersonalToken  pat-demoted      403 forbidden            404 org-not-found
 createPersonalToken  pat-removed      401 unauthenticated      401 unauthenticated
 createPersonalToken  pat-platform     403 forbidden            404 org-not-found
 createPersonalToken  pat-deleted-org  401 unauthenticated      401 unauthenticated
+createSavedView      anonymous        401 unauthenticated      401 unauthenticated
+createSavedView      owner            200                      404 org-not-found
+createSavedView      admin            200                      404 org-not-found
+createSavedView      viewer           200                      404 org-not-found
+createSavedView      approver         200                      404 org-not-found
+createSavedView      editor           200                      404 org-not-found
+createSavedView      member-no-roles  404 factory-not-found    404 org-not-found
+createSavedView      other-org-owner  404 org-not-found        200
+createSavedView      platform-admin   404 org-not-found        404 org-not-found
+createSavedView      stale-owner      200                      404 org-not-found
+createSavedView      key-scoped       200                      404 org-not-found
+createSavedView      key-restricted   404 factory-not-found    404 org-not-found
+createSavedView      key-other-org    404 org-not-found        200
+createSavedView      key-expired      401 unauthenticated      401 unauthenticated
+createSavedView      key-revoked      401 unauthenticated      401 unauthenticated
+createSavedView      bearer-owner     200                      404 org-not-found
+createSavedView      pat-approver     200                      404 org-not-found
+createSavedView      pat-owner        200                      404 org-not-found
+createSavedView      pat-viewer       200                      404 org-not-found
+createSavedView      pat-other-org    404 org-not-found        200
+createSavedView      pat-expired      401 unauthenticated      401 unauthenticated
+createSavedView      pat-revoked      401 unauthenticated      401 unauthenticated
+createSavedView      pat-demoted      404 factory-not-found    404 org-not-found
+createSavedView      pat-removed      401 unauthenticated      401 unauthenticated
+createSavedView      pat-platform     200                      404 org-not-found
+createSavedView      pat-deleted-org  401 unauthenticated      401 unauthenticated
 createWebhookEndpoint anonymous        401 unauthenticated      401 unauthenticated
 createWebhookEndpoint owner            200                      404 org-not-found
 createWebhookEndpoint admin            200                      404 org-not-found
@@ -702,6 +728,32 @@ deleteOrg            pat-demoted      403 forbidden            404 org-not-found
 deleteOrg            pat-removed      401 unauthenticated      401 unauthenticated
 deleteOrg            pat-platform     403 forbidden            404 org-not-found
 deleteOrg            pat-deleted-org  401 unauthenticated      401 unauthenticated
+deleteSavedView      anonymous        401 unauthenticated      401 unauthenticated
+deleteSavedView      owner            200                      404 org-not-found
+deleteSavedView      admin            200                      404 org-not-found
+deleteSavedView      viewer           200                      404 org-not-found
+deleteSavedView      approver         200                      404 org-not-found
+deleteSavedView      editor           200                      404 org-not-found
+deleteSavedView      member-no-roles  404 factory-not-found    404 org-not-found
+deleteSavedView      other-org-owner  404 org-not-found        200
+deleteSavedView      platform-admin   404 org-not-found        404 org-not-found
+deleteSavedView      stale-owner      200                      404 org-not-found
+deleteSavedView      key-scoped       200                      404 org-not-found
+deleteSavedView      key-restricted   404 factory-not-found    404 org-not-found
+deleteSavedView      key-other-org    404 org-not-found        200
+deleteSavedView      key-expired      401 unauthenticated      401 unauthenticated
+deleteSavedView      key-revoked      401 unauthenticated      401 unauthenticated
+deleteSavedView      bearer-owner     200                      404 org-not-found
+deleteSavedView      pat-approver     200                      404 org-not-found
+deleteSavedView      pat-owner        200                      404 org-not-found
+deleteSavedView      pat-viewer       200                      404 org-not-found
+deleteSavedView      pat-other-org    404 org-not-found        200
+deleteSavedView      pat-expired      401 unauthenticated      401 unauthenticated
+deleteSavedView      pat-revoked      401 unauthenticated      401 unauthenticated
+deleteSavedView      pat-demoted      404 factory-not-found    404 org-not-found
+deleteSavedView      pat-removed      401 unauthenticated      401 unauthenticated
+deleteSavedView      pat-platform     200                      404 org-not-found
+deleteSavedView      pat-deleted-org  401 unauthenticated      401 unauthenticated
 deleteWebhookEndpoint anonymous        401 unauthenticated      401 unauthenticated
 deleteWebhookEndpoint owner            200                      404 org-not-found
 deleteWebhookEndpoint admin            200                      404 org-not-found
@@ -2756,6 +2808,32 @@ listRuns             pat-demoted      404 factory-not-found    404 org-not-found
 listRuns             pat-removed      401 unauthenticated      401 unauthenticated
 listRuns             pat-platform     200                      404 org-not-found
 listRuns             pat-deleted-org  401 unauthenticated      401 unauthenticated
+listSavedViews       anonymous        401 unauthenticated      401 unauthenticated
+listSavedViews       owner            200                      404 org-not-found
+listSavedViews       admin            200                      404 org-not-found
+listSavedViews       viewer           200                      404 org-not-found
+listSavedViews       approver         200                      404 org-not-found
+listSavedViews       editor           200                      404 org-not-found
+listSavedViews       member-no-roles  404 factory-not-found    404 org-not-found
+listSavedViews       other-org-owner  404 org-not-found        200
+listSavedViews       platform-admin   404 org-not-found        404 org-not-found
+listSavedViews       stale-owner      200                      404 org-not-found
+listSavedViews       key-scoped       200                      404 org-not-found
+listSavedViews       key-restricted   404 factory-not-found    404 org-not-found
+listSavedViews       key-other-org    404 org-not-found        200
+listSavedViews       key-expired      401 unauthenticated      401 unauthenticated
+listSavedViews       key-revoked      401 unauthenticated      401 unauthenticated
+listSavedViews       bearer-owner     200                      404 org-not-found
+listSavedViews       pat-approver     200                      404 org-not-found
+listSavedViews       pat-owner        200                      404 org-not-found
+listSavedViews       pat-viewer       200                      404 org-not-found
+listSavedViews       pat-other-org    404 org-not-found        200
+listSavedViews       pat-expired      401 unauthenticated      401 unauthenticated
+listSavedViews       pat-revoked      401 unauthenticated      401 unauthenticated
+listSavedViews       pat-demoted      404 factory-not-found    404 org-not-found
+listSavedViews       pat-removed      401 unauthenticated      401 unauthenticated
+listSavedViews       pat-platform     200                      404 org-not-found
+listSavedViews       pat-deleted-org  401 unauthenticated      401 unauthenticated
 listTemplates        anonymous        401 unauthenticated      401 unauthenticated
 listTemplates        owner            200                      404 org-not-found
 listTemplates        admin            200                      404 org-not-found
@@ -4004,6 +4082,32 @@ updateOrgSettings    pat-demoted      403 forbidden            404 org-not-found
 updateOrgSettings    pat-removed      401 unauthenticated      401 unauthenticated
 updateOrgSettings    pat-platform     403 forbidden            404 org-not-found
 updateOrgSettings    pat-deleted-org  401 unauthenticated      401 unauthenticated
+updateSavedView      anonymous        401 unauthenticated      401 unauthenticated
+updateSavedView      owner            200                      404 org-not-found
+updateSavedView      admin            200                      404 org-not-found
+updateSavedView      viewer           200                      404 org-not-found
+updateSavedView      approver         200                      404 org-not-found
+updateSavedView      editor           200                      404 org-not-found
+updateSavedView      member-no-roles  404 factory-not-found    404 org-not-found
+updateSavedView      other-org-owner  404 org-not-found        200
+updateSavedView      platform-admin   404 org-not-found        404 org-not-found
+updateSavedView      stale-owner      200                      404 org-not-found
+updateSavedView      key-scoped       200                      404 org-not-found
+updateSavedView      key-restricted   404 factory-not-found    404 org-not-found
+updateSavedView      key-other-org    404 org-not-found        200
+updateSavedView      key-expired      401 unauthenticated      401 unauthenticated
+updateSavedView      key-revoked      401 unauthenticated      401 unauthenticated
+updateSavedView      bearer-owner     200                      404 org-not-found
+updateSavedView      pat-approver     200                      404 org-not-found
+updateSavedView      pat-owner        200                      404 org-not-found
+updateSavedView      pat-viewer       200                      404 org-not-found
+updateSavedView      pat-other-org    404 org-not-found        200
+updateSavedView      pat-expired      401 unauthenticated      401 unauthenticated
+updateSavedView      pat-revoked      401 unauthenticated      401 unauthenticated
+updateSavedView      pat-demoted      404 factory-not-found    404 org-not-found
+updateSavedView      pat-removed      401 unauthenticated      401 unauthenticated
+updateSavedView      pat-platform     200                      404 org-not-found
+updateSavedView      pat-deleted-org  401 unauthenticated      401 unauthenticated
 uploadKnowledgeDocuments anonymous        401 unauthenticated      401 unauthenticated
 uploadKnowledgeDocuments owner            200                      404 org-not-found
 uploadKnowledgeDocuments admin            200                      404 org-not-found

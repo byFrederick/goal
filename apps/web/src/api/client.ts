@@ -50,6 +50,7 @@ import type {
   NewItem,
   NewOrg,
   NewPartRequest,
+  NewSavedView,
   NoteReceipt,
   Org,
   OrgAttention,
@@ -60,6 +61,9 @@ import type {
   OrgSummary,
   RunList,
   RunStatus,
+  SavedView,
+  SavedViewChange,
+  SavedViewList,
   TouchMetrics,
   TouchReason,
   Version,
@@ -435,6 +439,33 @@ export function getJudge(org: string, factory: string, judge: string, signal?: A
   );
 }
 
+/** The factory's shared views, then the caller's personal ones, each by name (ADR 0020). */
+export function listSavedViews(org: string, factory: string, signal?: AbortSignal): Promise<SavedViewList> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/views'), { params: { path: { org, factory } }, ...cancel(signal) }),
+  );
+}
+
+/** 400 invalid-view; 403 forbidden for a shared view without factory:manage; 409 view-name-taken. */
+export function createSavedView(org: string, factory: string, view: NewSavedView): Promise<SavedView> {
+  return unwrap(goal.POST(orgPath('/factories/{factory}/views'), { params: { path: { org, factory } }, body: view }));
+}
+
+/** Renames a view and replaces its filters. 404 view-not-found, 403 forbidden, 400 invalid-view, 409 view-name-taken. */
+export function updateSavedView(
+  org: string,
+  factory: string,
+  view: string,
+  change: SavedViewChange,
+): Promise<SavedView> {
+  return unwrap(
+    goal.PATCH(orgPath('/factories/{factory}/views/{view}'), {
+      params: { path: { org, factory, view } },
+      body: change,
+    }),
+  );
+}
+
 /**
  * Adds a judge and publishes it as the next version. 409 judge-exists, draft-open, definition-invalid,
  * draft-base-moved, evals-pending and evals-failing are the page's to show.
@@ -458,6 +489,11 @@ export function tryJudge(org: string, factory: string, judge: string): Promise<J
   return unwrap(
     goal.POST(orgPath('/factories/{factory}/judges/{judge}/try'), { params: { path: { org, factory, judge } } }),
   );
+}
+
+/** 404 view-not-found; 403 forbidden for a shared view without factory:manage. */
+export async function deleteSavedView(org: string, factory: string, view: string): Promise<void> {
+  await unwrap(goal.DELETE(orgPath('/factories/{factory}/views/{view}'), { params: { path: { org, factory, view } } }));
 }
 
 export interface ItemFilter {

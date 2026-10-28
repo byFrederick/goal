@@ -80,13 +80,14 @@ import { intakeOf } from './intake.ts';
 import { createJudges } from './judges.ts';
 import { createKeys } from './keys.ts';
 import { createKnowledge } from './knowledge.ts';
-import { membersFor, orgCanOf } from './people.ts';
+import { directory, membersFor, orgCanOf } from './people.ts';
 import { createPolicy } from './policy.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
 import { orgRunsOf } from './runs.ts';
 import { type SearchSource, search } from './search.ts';
 import { createSpend } from './spend.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
+import { createViews } from './views.ts';
 import { createWebhooks } from './webhooks.ts';
 
 type Next = (err?: unknown) => void;
@@ -239,6 +240,12 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     factory: (org, key) => findFactory(key, org),
   });
   const judges = createJudges({
+    factory: (org, key) => findFactory(key, org),
+  });
+  // The views are the caller's: the signed-in person's, else the local user's (directory.owner).
+  const views = createViews({
+    clock,
+    caller: (req) => auth.who(req)?.person.id ?? directory.owner.id,
     factory: (org, key) => findFactory(key, org),
   });
   const webhooks = createWebhooks({
@@ -1397,6 +1404,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       knowledge.reset(clock());
       evals.reset();
       judges.reset();
+      views.reset();
       webhooks.reset();
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
       const cookie = auth.reset(authSettings(body.auth));
@@ -1492,6 +1500,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (rest === '/search' && method === 'GET') return searchOf(org, url, forCaller(req, org), res);
     if (await evals.handle(org, rest, method, res, () => readBody(req))) return;
     if (await judges.handle(org, rest, method, res, () => readBody(req))) return;
+    if (await views.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await spend.handle(org, rest, method, url, res)) return;
     if (await policy.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await webhooks.handle(org.id, rest, method, req, res, () => readBody(req))) return;
