@@ -379,3 +379,148 @@ func eventLines(events []gen.IntakeEvent) []string {
 
 	return out
 }
+
+// scheduled records a firing of nightly-audit for the instant at, created with item when it is
+// set and skipped otherwise, and returns it.
+func (h *harness) scheduled(t *testing.T, item domain.ItemID, at time.Time) domain.TriggerFiring {
+	t.Helper()
+
+	f := domain.TriggerFiring{
+		FactoryID: acmeID, Trigger: nightlyName, Source: domain.TriggerSchedule, EventKey: domain.OnSchedule,
+		IdempotencyKey: at.UTC().Format(time.RFC3339), Outcome: domain.FiringSkipped, Reason: "limits.perDay: earlier", At: at,
+	}
+	if item != "" {
+		f.Outcome, f.ItemID, f.Reason = domain.FiringCreated, item, ""
+	}
+
+	got, _, err := h.intake.RecordFiring(inOrg(t), f)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return got
+}
+
+const nightlyTry = intakePath + "/triggers/" + nightlyName + "/try"
+
+// tryBody is a try's request body naming firing.
+func tryBody(firing string) string {
+	return `{"firing":"` + firing + `"}`
+}
+
+// A schedule firing the trigger would create an item for answers would_create with the item, each
+// step passed, and creates nothing; the trigger's events name their ids for it.
+func TestTryTrigger_Matched(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	f := h.scheduled(t, "", oct(22, 4))
+
+	var d gen.IntakeTriggerDetail
+	if h.call(t, http.MethodGet, intakePath+"/triggers/"+nightlyName, "", &d); len(d.Events) != 1 || d.Events[0].Id != f.ID {
+		t.Fatalf("events = %+v; want the firing %s", d.Events, f.ID)
+	}
+
+	var got gen.TriggerTry
+	if code := h.call(t, http.MethodPost, nightlyTry, tryBody(f.ID), &got); code != http.StatusOK {
+		t.Fatalf("try = %d", code)
+	}
+
+	if !got.Matched || got.Outcome != gen.TriggerTryOutcomeWouldCreate || got.Reason != nil || got.Firing != f.ID || got.ModelCheck != nil {
+		t.Errorf("try = %+v; want matched, would_create, no reason, no model check", got)
+	}
+
+	if it := got.Item; it == nil || it.Title != "Nightly audit" || it.Type != "feature" || it.Station != stInbox || it.Expedite ||
+		!strings.Contains(it.Brief, "untrusted") {
+		t.Errorf("item = %+v; want the Nightly audit feature at inbox, its brief marking the event untrusted", got.Item)
+	}
+
+	var steps []string
+	for _, s := range got.Steps {
+		steps = append(steps, string(s.Step)+" "+string(s.Outcome))
+	}
+
+	if want := "when passed, create passed, limits.perDay passed"; strings.Join(steps, ", ") != want {
+		t.Errorf("steps = %v; want %s", steps, want)
+	}
+
+	if items, err := h.store.ListItems(inOrg(t), ports.ItemQuery{FactoryID: acmeID}); err != nil || len(items) != 0 {
+		t.Errorf("items = %d, %v; want none", len(items), err)
+	}
+
+	tried, err := h.tenancy.AuditLog(inOrg(t), ports.AuditQuery{Limit: 10, Action: domain.AuditTriggerTried})
+	if err != nil || len(tried) != 1 || tried[0].TargetID != nightlyName || tried[0].Data["firing"] != f.ID {
+		t.Errorf("trigger.tried = %+v, %v; want one naming nightly-audit and the firing", tried, err)
+	}
+}
+
+// A firing the trigger would skip answers skipped, with the step that skips it and its reason, and
+// the later steps not reached.
+func TestTryTrigger_Skipped(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	today := h.intakeItem(t, domain.ItemFromSchedule, nightlyName, h.clock.Now().Add(-time.Hour))
+	f := h.scheduled(t, today.ID, h.clock.Now().Add(-time.Hour))
+
+	var got gen.TriggerTry
+	if code := h.call(t, http.MethodPost, nightlyTry, tryBody(f.ID), &got); code != http.StatusOK {
+		t.Fatalf("try = %d", code)
+	}
+
+	want := "limits.perDay: 1 items created today (UTC), the limit is 1"
+	if !got.Matched || got.Outcome != gen.TriggerTryOutcomeSkipped || deref(got.Reason) != want {
+		t.Errorf("try = matched %t, %s %q; want matched, skipped %q", got.Matched, got.Outcome, deref(got.Reason), want)
+	}
+
+	if last := got.Steps[len(got.Steps)-1]; last.Step != gen.LimitsPerDay || last.Outcome != gen.TriggerTryStepOutcomeSkipped ||
+		deref(last.Reason) != "1 items created today (UTC), the limit is 1" {
+		t.Errorf("perDay step = %+v; want skipped with its reason", last)
+	}
+}
+
+// A try answers 404 for a firing not among the trigger's newest and for an unknown trigger, 422
+// for a firing whose event was not stored, 400 without a firing, and 403 to a viewer.
+func TestTryTrigger_Refusals(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	f := h.scheduled(t, "", oct(22, 4))
+	h.fire(t, flakyName, "TestOrgRLS", "", "only.dedupe: open", oct(22, 5))
+
+	var d gen.IntakeTriggerDetail
+	h.call(t, http.MethodGet, flakyPath, "", &d)
+
+	if len(d.Events) != 1 {
+		t.Fatalf("flaky events = %+v; want one", d.Events)
+	}
+
+	for _, c := range []struct {
+		what, path, body string
+		status           int
+		code             string
+	}{
+		{"an unknown firing", nightlyTry, tryBody("no-such-firing"), http.StatusNotFound, "firing-not-found"},
+		{"another trigger's firing", nightlyTry, tryBody(d.Events[0].Id), http.StatusNotFound, "firing-not-found"},
+		{"an unknown trigger", intakePath + "/triggers/no-such-trigger/try", tryBody(f.ID), http.StatusNotFound, "trigger-not-found"},
+		{"a GitHub firing", flakyPath + "/try", tryBody(d.Events[0].Id), http.StatusUnprocessableEntity, "event-not-stored"},
+	} {
+		if code, p := problemOfCall(t, h, http.MethodPost, c.path, c.body); code != c.status || deref(p.Code) != c.code {
+			t.Errorf("%s: %d %s, want %d %s", c.what, code, deref(p.Code), c.status, c.code)
+		}
+	}
+
+	if code := h.call(t, http.MethodPost, nightlyTry, `{"firing":""}`, nil); code != http.StatusBadRequest {
+		t.Errorf("a try without a firing = %d, want 400", code)
+	}
+
+	h.as(acmeMember(domain.FactoryViewer))
+
+	if code, p := problemOfCall(t, h, http.MethodPost, nightlyTry, tryBody(f.ID)); code != http.StatusForbidden || deref(p.Code) != "forbidden" {
+		t.Errorf("a viewer's try = %d %s, want 403 forbidden", code, deref(p.Code))
+	}
+
+	if tried, _ := h.tenancy.AuditLog(inOrg(t), ports.AuditQuery{Limit: 10, Action: domain.AuditTriggerTried}); len(tried) != 0 {
+		t.Errorf("trigger.tried entries = %d, want none for refused tries", len(tried))
+	}
+}

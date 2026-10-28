@@ -42,6 +42,7 @@ var permissionRules = map[string]rule{
 	"platform:manage":       {level: "install", fresh: true, platformAdmin: true},
 	"platform:read":         {level: "install", platformAdmin: true},
 	"public":                {level: "install"},
+	"trigger:try":           {level: "factory", factoryRole: "editor", keys: true, pat: true},
 	"webhook:manage":        {level: "factory", factoryRole: "editor", fresh: true},
 }
 
@@ -193,6 +194,7 @@ var operationScopes = map[string]string{
 	"syncKnowledgeSource":         "knowledge:manage",
 	"testConnection":              "connection:manage",
 	"transferOwnership":           "org:transfer",
+	"tryIntakeTrigger":            "trigger:try",
 	"tryJudge":                    "definition:publish",
 	"unlinkItem":                  "item:operate",
 	"updateConnection":            "connection:manage",

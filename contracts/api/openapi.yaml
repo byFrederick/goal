@@ -2013,6 +2013,40 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/IntakeTriggerDetail" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - name: trigger
+        in: path
+        required: true
+        description: The trigger's name in the current definition
+        schema: { type: string }
+    post:
+      operationId: tryIntakeTrigger
+      x-goal-scope: trigger:try
+      tags: [intake]
+      summary: Try the trigger with one of its past events, creating nothing
+      description: >-
+        A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest
+        events (getIntakeTrigger's events, by id) now, as intake would, and answers each step.
+        The model check runs, and its cost is spent, as in intake. It creates no item, records no
+        event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's
+        events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a
+        name the current definition does not have; 404 firing-not-found for an id that is not
+        one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TriggerTryRequest" }
+      responses:
+        "200":
+          description: What the trigger would do with the event
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TriggerTry" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/metrics/lead-time:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -6032,8 +6066,9 @@ components:
           items: { $ref: "#/components/schemas/IntakeEvent" }
     IntakeEvent:
       type: object
-      required: [title, event, at, outcome, item_number, reason]
+      required: [id, title, event, at, outcome, item_number, reason]
       properties:
+        id: { type: string, description: The firing's id, the one tryIntakeTrigger names }
         title: { type: string, description: "The event's value of the trigger's only.dedupe field, or its event key without one" }
         event: { type: string, description: The event key it matched }
         at: { type: string, format: date-time }
@@ -6043,6 +6078,71 @@ components:
           description: created an item; merged once that item has been merged; skipped with the reason
         item_number: { type: integer, format: int64, nullable: true, description: The item it created; null when it created none or that item is gone }
         reason: { type: string, nullable: true, description: Why it was skipped; null otherwise }
+    TriggerTryRequest:
+      type: object
+      additionalProperties: false
+      required: [firing]
+      properties:
+        firing: { type: string, description: The id of one of the trigger's 20 newest events }
+    TriggerTry:
+      type: object
+      description: >-
+        What the trigger would do with the event now. Every string shaped by the event (the item's
+        title and brief, the model's reason, a step's reason) is text to show as text, never markup.
+      required: [firing, matched, outcome, reason, steps, item, model_check]
+      properties:
+        firing: { type: string, description: The firing tried }
+        matched: { type: boolean, description: The event reached the trigger (its when step passed) }
+        outcome:
+          type: string
+          enum: [would_create, skipped]
+          description: would_create when no step skips the event; skipped otherwise
+        reason:
+          type: string
+          nullable: true
+          description: The reason a skipped firing would record (the step, a colon and why); null for would_create
+        steps:
+          type: array
+          description: >-
+            In the order they run: when, each configured only condition (failuresInARow, dedupe,
+            then modelAgrees), create, then each configured limit (perDay, pauseOnBudget). Steps
+            after the one that skipped are not_reached.
+          items: { $ref: "#/components/schemas/TriggerTryStep" }
+        item:
+          type: object
+          nullable: true
+          description: The item it would create; null when the create step was not reached
+          required: [type, station, lane, expedite, title, brief]
+          properties:
+            type: { type: string }
+            station: { type: string }
+            lane: { type: string, nullable: true }
+            expedite: { type: boolean }
+            title: { type: string, description: create.title rendered with the event's fields }
+            brief:
+              type: string
+              description: The item's body, create.brief rendered, then the event's fields marked as untrusted data
+        model_check:
+          type: object
+          nullable: true
+          description: The model check's answer; null when it did not run or gave no answer
+          required: [worth, reason, model, input_tokens, output_tokens, cost_usd]
+          properties:
+            worth: { type: boolean, description: The model answered yes }
+            reason: { type: string, description: The model's one-line reason }
+            model: { type: string }
+            input_tokens: { type: integer }
+            output_tokens: { type: integer }
+            cost_usd: { type: number, format: double, description: What the check cost }
+    TriggerTryStep:
+      type: object
+      required: [step, outcome, reason]
+      properties:
+        step:
+          type: string
+          enum: [when, only.failuresInARow, only.dedupe, only.modelAgrees, create, limits.perDay, limits.pauseOnBudget]
+        outcome: { type: string, enum: [passed, skipped, not_reached] }
+        reason: { type: string, nullable: true, description: Why it passed or skipped; null when not reached or with nothing to say }
     LeadTimeBridge:
       type: object
       required:

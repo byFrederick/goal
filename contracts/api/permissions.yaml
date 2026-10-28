@@ -66,6 +66,10 @@ permissions:
   - {name: andon:manage,       level: factory, factory_role: approver, keys: true, pat: true}
   - {name: definition:edit,    level: factory, factory_role: editor,   keys: true, pat: true}  # high impact
   - {name: definition:publish, level: factory, factory_role: editor,   keys: true, pat: true}  # high impact
+  # A dry run of a trigger against a past event (ADR 0028 decision 2): who edits the definition
+  # tries its triggers. A try spends the model check's cost and shows the event, so reading the
+  # trigger (intake:read) is not enough.
+  - {name: trigger:try,        level: factory, factory_role: editor,   keys: true, pat: true}
   - {name: factory:manage,     level: factory, factory_role: editor,   keys: true}
   # A factory's webhook endpoints (ADR 0026 decision 2): anyone who sees the factory reads them
   # (factory:read); its editors create, rotate and delete them after a recent sign-in, never with

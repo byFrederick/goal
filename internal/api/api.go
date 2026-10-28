@@ -75,6 +75,7 @@ type Engine interface {
 	AddPart(ctx context.Context, assembly domain.ItemID, by domain.Actor, part domain.NewPart) (domain.Item, domain.Parts, error)
 	PullAndon(ctx context.Context, f domain.FactoryID, by domain.Actor, reason string) (domain.AndonPull, error)
 	ClearAndon(ctx context.Context, f domain.FactoryID, by domain.Actor, note string) (domain.AndonPull, error)
+	TryTrigger(ctx context.Context, f domain.FactoryID, trigger, firing string, by domain.Actor) (domain.TriggerTry, error)
 }
 
 // Items reads items, their history and runs, a factory's latest milestone events, the leases on them, a factory's flow and its

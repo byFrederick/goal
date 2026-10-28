@@ -13,6 +13,7 @@ import (
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/engine"
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
@@ -29,14 +30,24 @@ const (
 
 var errTriggerNotFound = fmt.Errorf("trigger %w", ports.ErrNotFound)
 
-// triggerProblem is the problem of a trigger the current definition does not have, when err is one.
+// triggerProblem is the problem of a trigger the current definition does not have, of a firing a
+// try cannot name and of one whose event a try cannot rebuild, when err is one.
 func triggerProblem(err error) (gen.Problem, bool) {
-	if !errors.Is(err, errTriggerNotFound) {
+	var p gen.Problem
+
+	switch {
+	case errors.Is(err, errTriggerNotFound), errors.Is(err, engine.ErrTriggerNotFound):
+		p = detailed(http.StatusNotFound, err)
+		p.Code = optional("trigger-not-found")
+	case errors.Is(err, engine.ErrFiringNotFound):
+		p = detailed(http.StatusNotFound, err)
+		p.Code = optional("firing-not-found")
+	case errors.Is(err, engine.ErrEventNotStored):
+		p = detailed(http.StatusUnprocessableEntity, err)
+		p.Code = optional("event-not-stored")
+	default:
 		return gen.Problem{}, false
 	}
-
-	p := detailed(http.StatusNotFound, err)
-	p.Code = optional("trigger-not-found")
 
 	return p, true
 }
@@ -131,6 +142,66 @@ func (s *server) GetIntakeTrigger(ctx context.Context, req gen.GetIntakeTriggerR
 	}
 
 	return out, nil
+}
+
+func (s *server) TryIntakeTrigger(ctx context.Context, req gen.TryIntakeTriggerRequestObject) (gen.TryIntakeTriggerResponseObject, error) {
+	if req.Body == nil || req.Body.Firing == "" {
+		return nil, fmt.Errorf("%w: name the firing to try", errInvalid)
+	}
+
+	by, err := actorOf(ctx, "try a trigger")
+	if err != nil {
+		return nil, err
+	}
+
+	f, err := s.factory(ctx, req.Factory)
+	if err != nil {
+		return nil, err
+	}
+
+	got, err := s.engine.TryTrigger(ctx, f.Line().FactoryID, req.Trigger, req.Body.Firing, by)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.TryIntakeTrigger200JSONResponse(triggerTry(got)), nil
+}
+
+// triggerTry is a try as the API answers it.
+func triggerTry(t domain.TriggerTry) gen.TriggerTry {
+	e := t.Evaluation
+	out := gen.TriggerTry{
+		Firing: t.Firing.ID, Matched: e.Matched(), Outcome: gen.TriggerTryOutcome(e.Outcome()), Reason: optional(e.FiringReason()),
+		Steps: make([]gen.TriggerTryStep, len(e.Steps)),
+	}
+
+	for i, st := range e.Steps {
+		out.Steps[i] = gen.TriggerTryStep{Step: gen.TriggerTryStepStep(st.Step), Outcome: gen.TriggerTryStepOutcome(st.Outcome), Reason: optional(st.Reason)}
+	}
+
+	if it := e.Item; it != nil {
+		out.Item = &struct {
+			Brief    string  `json:"brief"`
+			Expedite bool    `json:"expedite"`
+			Lane     *string `json:"lane"`
+			Station  string  `json:"station"`
+			Title    string  `json:"title"`
+			Type     string  `json:"type"`
+		}{Brief: it.Body, Expedite: it.Class == domain.ClassExpedite, Lane: optional(it.Lane), Station: it.Station, Title: it.Title, Type: it.Type}
+	}
+
+	if m := e.Model; m != nil {
+		out.ModelCheck = &struct {
+			CostUsd      float64 `json:"cost_usd"`
+			InputTokens  int     `json:"input_tokens"`
+			Model        string  `json:"model"`
+			OutputTokens int     `json:"output_tokens"`
+			Reason       string  `json:"reason"`
+			Worth        bool    `json:"worth"`
+		}{CostUsd: m.CostUSD, InputTokens: m.InputTokens, Model: m.Model, OutputTokens: m.OutputTokens, Reason: m.Reason, Worth: m.Worth}
+	}
+
+	return out
 }
 
 // tallySources fills out's window and source counts from w.
@@ -297,7 +368,7 @@ func triggerSource(t domain.Trigger) domain.TriggerSource {
 // intakeEvent is a firing as a trigger's recent events show it.
 func intakeEvent(e domain.FiringEntry) gen.IntakeEvent {
 	f := e.Firing
-	out := gen.IntakeEvent{Title: cmp.Or(f.Dedupe, f.EventKey), Event: f.EventKey, At: f.At}
+	out := gen.IntakeEvent{Id: f.ID, Title: cmp.Or(f.Dedupe, f.EventKey), Event: f.EventKey, At: f.At}
 
 	if e.ItemNumber > 0 {
 		out.ItemNumber = &e.ItemNumber

@@ -107,6 +107,7 @@ const detail: IntakeTriggerDetail = {
   week: { created: 3, merged: 2, spend_usd: 7.8 },
   events: [
     {
+      id: 'firing-1',
       title: 'TestLeaseExpiry',
       event: 'github.check_run.failed',
       at: '2026-10-27T14:05:00Z',
@@ -115,6 +116,7 @@ const detail: IntakeTriggerDetail = {
       reason: null,
     },
     {
+      id: 'firing-2',
       title: 'TestBoardStream',
       event: 'github.check_run.failed',
       at: '2026-10-26T18:20:00Z',
@@ -123,6 +125,7 @@ const detail: IntakeTriggerDetail = {
       reason: null,
     },
     {
+      id: 'firing-3',
       title: 'TestLeaseExpiry',
       event: 'github.check_run.failed',
       at: '2026-10-23T09:00:00Z',
