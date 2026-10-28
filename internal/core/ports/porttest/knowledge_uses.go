@@ -78,6 +78,11 @@ func (k *Knowledge) GiveVerdict(ctx context.Context, v domain.KnowledgeVerdict) 
 
 		v.Source = d.doc.Source
 		v.At = cmp.Or(v.At, time.Now()).UTC()
+
+		if err := k.audit.Append(ctx, v.AuditEntry()); err != nil {
+			return err
+		}
+
 		d.verdicts[verdictKey{actor: v.By.Ref(), run: v.Run}] = v
 
 		return nil
@@ -234,6 +239,29 @@ func (k *Knowledge) RunUses(ctx context.Context, run domain.RunID) ([]domain.Kno
 
 	slices.SortFunc(out, func(a, b domain.KnowledgeUse) int {
 		return cmp.Or(a.At.Compare(b.At), cmp.Compare(a.Document, b.Document), cmp.Compare(a.Kind, b.Kind))
+	})
+
+	return out, err
+}
+
+// RunVerdicts implements ports.Knowledge.
+func (k *Knowledge) RunVerdicts(ctx context.Context, run domain.RunID) ([]domain.KnowledgeVerdict, error) {
+	var out []domain.KnowledgeVerdict
+
+	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
+		for _, d := range o.docs {
+			for key, v := range d.verdicts {
+				if run != "" && key.run == run {
+					out = append(out, v)
+				}
+			}
+		}
+
+		return nil
+	})
+
+	slices.SortFunc(out, func(a, b domain.KnowledgeVerdict) int {
+		return cmp.Or(a.At.Compare(b.At), cmp.Compare(a.Document, b.Document), cmp.Compare(a.By.Ref(), b.By.Ref()))
 	})
 
 	return out, err
