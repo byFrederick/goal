@@ -11,7 +11,7 @@ import { Switch } from '../../ui/switch';
 import { useTriggerToggle } from './trigger-toggle';
 
 /** The square and icon each source is drawn with (its tile is a foundation token, its icon white). */
-const sourceIcon: Record<IntakeTrigger['source'], { icon: LucideIcon; tile: string; label: string }> = {
+export const sourceIcon: Record<IntakeTrigger['source'], { icon: LucideIcon; tile: string; label: string }> = {
   github: { icon: GitBranch, tile: 'bg-ink', label: 'GitHub' },
   schedule: { icon: Clock, tile: 'bg-muted', label: 'Schedule' },
   webhook: { icon: Webhook, tile: 'bg-run', label: 'Webhook' },

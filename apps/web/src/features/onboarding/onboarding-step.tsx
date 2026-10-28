@@ -1,5 +1,5 @@
-// A step under an organization (/o/$org/get-started/<key>). Steps 2 to 5 are built (code-step.tsx,
-// factory-step.tsx, line-step.tsx, budget-step.tsx); the later steps are built by later parts and fill the
+// A step under an organization (/o/$org/get-started/<key>). Steps 2 to 6 are built (code-step.tsx,
+// factory-step.tsx, line-step.tsx, budget-step.tsx, intake-step.tsx); the later steps are built by later parts and fill the
 // layout's form and panel. Until then a step shows the layout with an empty form.
 import { Link } from '@tanstack/react-router';
 import type { OrgSummary } from '../../api/types';
@@ -8,6 +8,7 @@ import { BudgetStep } from './budget-step';
 import type { OnboardingSearch } from './code-search';
 import { CodeStep } from './code-step';
 import { FactoryStep } from './factory-step';
+import { IntakeStep } from './intake-step';
 import { LineStep } from './line-step';
 import { OnboardingLayout } from './onboarding-layout';
 import { type OrgOnboardingStepKey, previousStep } from './steps';
@@ -25,6 +26,7 @@ export function OnboardingStepPage({
   if (step === 'factory') return <FactoryStep org={org} search={search} />;
   if (step === 'line') return <LineStep org={org} search={search} />;
   if (step === 'budget') return <BudgetStep org={org} search={search} />;
+  if (step === 'intake') return <IntakeStep org={org} search={search} />;
   const previous = previousStep(step);
   return (
     <OnboardingLayout

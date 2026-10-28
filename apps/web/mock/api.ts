@@ -1647,7 +1647,10 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       const key = decodeURIComponent(rest.split('/')[2] ?? '');
       const factory = findFactory(key, org.id);
       if (!factory) return problem(res, 404, 'Factory not found', key);
-      return json(res, 200, intakeOf(factory.name));
+      const def = state.definitions[factory.id];
+      const current = def?.versions.find((v) => v.id === def.current);
+      const bytes = current?.files.get('factory.yaml');
+      return json(res, 200, intakeOf(factory.name, bytes ? new TextDecoder().decode(bytes) : ''));
     }
 
     let m = rest.match(/^\/factories\/([^/]+)\/agents\/([^/]+)\/stats$/);
