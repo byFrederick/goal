@@ -426,13 +426,36 @@ func TestTryTrigger_Matched(t *testing.T) {
 		t.Fatalf("try = %d", code)
 	}
 
-	if !got.Matched || got.Outcome != gen.TriggerTryOutcomeWouldCreate || got.Reason != nil || got.Firing != f.ID || got.ModelCheck != nil {
-		t.Errorf("try = %+v; want matched, would_create, no reason, no model check", got)
-	}
+	checkWouldCreate(t, got, f)
 
 	if it := got.Item; it == nil || it.Title != "Nightly audit" || it.Type != "feature" || it.Station != stInbox || it.Expedite ||
 		!strings.Contains(it.Brief, "untrusted") {
 		t.Errorf("item = %+v; want the Nightly audit feature at inbox, its brief marking the event untrusted", got.Item)
+	}
+
+	h.wantTriedOnly(t, f)
+}
+
+// wantTriedOnly checks that acme has no item and one trigger.tried entry, for nightly-audit and f.
+func (h *harness) wantTriedOnly(t *testing.T, f domain.TriggerFiring) {
+	t.Helper()
+
+	if items, err := h.store.ListItems(inOrg(t), ports.ItemQuery{FactoryID: acmeID}); err != nil || len(items) != 0 {
+		t.Errorf("items = %d, %v; want none", len(items), err)
+	}
+
+	tried, err := h.tenancy.AuditLog(inOrg(t), ports.AuditQuery{Limit: 10, Action: domain.AuditTriggerTried})
+	if err != nil || len(tried) != 1 || tried[0].TargetID != nightlyName || tried[0].Data["firing"] != f.ID {
+		t.Errorf("trigger.tried = %+v, %v; want one naming nightly-audit and the firing", tried, err)
+	}
+}
+
+// checkWouldCreate checks that got, a try of f, matched and would create an item, each step passed.
+func checkWouldCreate(t *testing.T, got gen.TriggerTry, f domain.TriggerFiring) {
+	t.Helper()
+
+	if !got.Matched || got.Outcome != gen.TriggerTryOutcomeWouldCreate || got.Reason != nil || got.Firing != f.ID || got.ModelCheck != nil {
+		t.Errorf("try = %+v; want matched, would_create, no reason, no model check", got)
 	}
 
 	var steps []string
@@ -442,15 +465,6 @@ func TestTryTrigger_Matched(t *testing.T) {
 
 	if want := "when passed, create passed, limits.perDay passed"; strings.Join(steps, ", ") != want {
 		t.Errorf("steps = %v; want %s", steps, want)
-	}
-
-	if items, err := h.store.ListItems(inOrg(t), ports.ItemQuery{FactoryID: acmeID}); err != nil || len(items) != 0 {
-		t.Errorf("items = %d, %v; want none", len(items), err)
-	}
-
-	tried, err := h.tenancy.AuditLog(inOrg(t), ports.AuditQuery{Limit: 10, Action: domain.AuditTriggerTried})
-	if err != nil || len(tried) != 1 || tried[0].TargetID != nightlyName || tried[0].Data["firing"] != f.ID {
-		t.Errorf("trigger.tried = %+v, %v; want one naming nightly-audit and the firing", tried, err)
 	}
 }
 

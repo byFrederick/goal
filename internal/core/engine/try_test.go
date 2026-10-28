@@ -94,7 +94,7 @@ func (h *harness) intakeState(t *testing.T, item domain.ItemID) (string, []domai
 func TestTryTrigger_WritesNothing(t *testing.T) {
 	t.Parallel()
 
-	h, mc := modelHarness(t, domain.ModelAnswer{Worth: true, Reason: "Worth it", Model: "claude-haiku-5-5", CostUSD: 0.01}, nightly())
+	h, mc := modelHarness(t, domain.ModelAnswer{Worth: true, Reason: "Worth it", CostUSD: 0.01}, nightly())
 	f := h.fireNightly(t)
 	wantCreated(t, f)
 
@@ -115,7 +115,14 @@ func TestTryTrigger_WritesNothing(t *testing.T) {
 		t.Errorf("Ask was called %d times, want twice: the firing and the try", n)
 	}
 
-	added := audit2[:len(audit2)-len(audit)]
+	checkTried(t, audit2[:len(audit2)-len(audit)], f)
+}
+
+// checkTried checks that added, the audit entries a try of f added newest first, are its
+// trigger.tried entry, naming the trigger, the firing and would_create but none of the event's
+// text, the brief or the model's reason, and the model connection's connection.used.
+func checkTried(t *testing.T, added []domain.AuditEntry, f domain.TriggerFiring) {
+	t.Helper()
 
 	var actions []string
 	for _, a := range added {
@@ -142,68 +149,75 @@ func TestTryTrigger_WritesNothing(t *testing.T) {
 func TestTryTrigger_ReportsEachStep(t *testing.T) {
 	t.Parallel()
 
-	t.Run("dedupe", func(t *testing.T) {
-		t.Parallel()
+	t.Run("dedupe", tryDedupeSkip)
+	t.Run("model no", tryModelNo)
+	t.Run("would create", tryWouldCreate)
+}
 
-		tr := nightly()
-		tr.Only.Dedupe = "instant"
-		h, mc := modelHarness(t, domain.ModelAnswer{Worth: true, Reason: "Worth it"}, tr)
-		f := h.fireNightly(t)
-		wantCreated(t, f)
+// A dedupe skip leaves the later steps not reached and asks no model.
+func tryDedupeSkip(t *testing.T) {
+	t.Parallel()
 
-		got := h.try(t, trNightly, f.ID).Evaluation
-		want := fmt.Sprintf("[{when passed the trigger's schedule fired} {only.dedupe skipped item %s is open for the same instant} "+
-			"{only.modelAgrees not_reached } {create not_reached } {limits.perDay not_reached }]", f.ItemID)
+	tr := nightly()
+	tr.Only.Dedupe = "instant"
+	h, mc := modelHarness(t, domain.ModelAnswer{Worth: true, Reason: "Worth it"}, tr)
+	f := h.fireNightly(t)
+	wantCreated(t, f)
 
-		if s := fmt.Sprint(got.Steps); s != want {
-			t.Errorf("steps = %s\nwant %s", s, want)
-		}
+	got := h.try(t, trNightly, f.ID).Evaluation
+	want := fmt.Sprintf("[{when passed the trigger's schedule fired} {only.dedupe skipped item %s is open for the same instant} "+
+		"{only.modelAgrees not_reached } {create not_reached } {limits.perDay not_reached }]", f.ItemID)
 
-		if got.Item != nil || got.Model != nil || len(mc.Calls()) != 1 {
-			t.Errorf("item %+v, model %+v, %d calls; want no item, no model check, only the firing's call", got.Item, got.Model, len(mc.Calls()))
-		}
-	})
+	if s := fmt.Sprint(got.Steps); s != want {
+		t.Errorf("steps = %s\nwant %s", s, want)
+	}
 
-	t.Run("model no", func(t *testing.T) {
-		t.Parallel()
+	if got.Item != nil || got.Model != nil || len(mc.Calls()) != 1 {
+		t.Errorf("item %+v, model %+v, %d calls; want no item, no model check, only the firing's call", got.Item, got.Model, len(mc.Calls()))
+	}
+}
 
-		h, _ := modelHarness(t, domain.ModelAnswer{Reason: "A flaky test", Model: "claude-haiku-5-5", InputTokens: 300, OutputTokens: 20, CostUSD: 0.004}, nightly())
-		f := h.fireNightly(t)
-		wantSkipped(t, f, domain.StepModel)
+// A model's no skips with its reason, the answer and its cost.
+func tryModelNo(t *testing.T) {
+	t.Parallel()
 
-		got := h.try(t, trNightly, f.ID).Evaluation
-		want := "[{when passed the trigger's schedule fired} {only.modelAgrees skipped A flaky test} {create not_reached } {limits.perDay not_reached }]"
+	h, _ := modelHarness(t, domain.ModelAnswer{Reason: "A flaky test", InputTokens: 300, OutputTokens: 20, CostUSD: 0.004}, nightly())
+	f := h.fireNightly(t)
+	wantSkipped(t, f, domain.StepModel)
 
-		if s := fmt.Sprint(got.Steps); s != want {
-			t.Errorf("steps = %s\nwant %s", s, want)
-		}
+	got := h.try(t, trNightly, f.ID).Evaluation
+	want := "[{when passed the trigger's schedule fired} {only.modelAgrees skipped A flaky test} {create not_reached } {limits.perDay not_reached }]"
 
-		if got.Model == nil || got.Model.CostUSD != 0.004 || got.Model.InputTokens != 300 || got.FiringReason() != f.Reason {
-			t.Errorf("model %+v, reason %q; want the answer with its cost, the firing's reason %q", got.Model, got.FiringReason(), f.Reason)
-		}
-	})
+	if s := fmt.Sprint(got.Steps); s != want {
+		t.Errorf("steps = %s\nwant %s", s, want)
+	}
 
-	t.Run("would create", func(t *testing.T) {
-		t.Parallel()
+	if got.Model == nil || got.Model.CostUSD != 0.004 || got.Model.InputTokens != 300 || got.FiringReason() != f.Reason {
+		t.Errorf("model %+v, reason %q; want the answer with its cost, the firing's reason %q", got.Model, got.FiringReason(), f.Reason)
+	}
+}
 
-		tr := nightly()
-		tr.Only.ModelAgrees = nil
-		h := intakeHarness(t, tr)
-		f := h.fireNightly(t)
+// An event no step skips renders the item it would create.
+func tryWouldCreate(t *testing.T) {
+	t.Parallel()
 
-		got := h.try(t, trNightly, f.ID).Evaluation
-		want := "[{when passed the trigger's schedule fired} {create passed } {limits.perDay passed 1 of the 5 items a day created today (UTC)}]"
+	tr := nightly()
+	tr.Only.ModelAgrees = nil
+	h := intakeHarness(t, tr)
+	f := h.fireNightly(t)
 
-		if s := fmt.Sprint(got.Steps); s != want {
-			t.Errorf("steps = %s\nwant %s", s, want)
-		}
+	got := h.try(t, trNightly, f.ID).Evaluation
+	want := "[{when passed the trigger's schedule fired} {create passed } {limits.perDay passed 1 of the 5 items a day created today (UTC)}]"
 
-		key := t0.Format(time.RFC3339)
-		if it := got.Item; it == nil || it.Title != "Audit of "+key || it.Station != stWork || it.Type != typeFeature ||
-			!strings.HasPrefix(it.Body, "Audit \""+key+"\".") {
-			t.Errorf("item = %+v; want the rendered title and brief at %s", got.Item, stWork)
-		}
-	})
+	if s := fmt.Sprint(got.Steps); s != want {
+		t.Errorf("steps = %s\nwant %s", s, want)
+	}
+
+	key := t0.Format(time.RFC3339)
+	if it := got.Item; it == nil || it.Title != "Audit of "+key || it.Station != stWork || it.Type != typeFeature ||
+		!strings.HasPrefix(it.Body, "Audit \""+key+"\".") {
+		t.Errorf("item = %+v; want the rendered title and brief at %s", got.Item, stWork)
+	}
 }
 
 // A try refuses a firing that is not among the trigger's newest, a trigger the line does not have
