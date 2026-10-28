@@ -7,7 +7,10 @@ import { type Env, hosts, read } from './env.js';
 import { type Base, baseFile, Exec, entrypoint, Gone, keepOutcomeMs, messageOf, parseBase, wrapped } from './exec.js';
 import { outbound } from './services.js';
 
-/** The instance type of each size: the smallest workable is standard-1 (spec 4 §4.6). */
+/**
+ * The instance type of each size: the smallest workable is standard-1 (spec 4 §4.6). BoxSizes in
+ * internal/adapters/sandboxes/cloudflare/sandboxes.go copies their vCPU and memory; change both.
+ */
 const instances = { small: 'standard-2', medium: 'standard-3', large: 'standard-4' } as const;
 type Size = keyof typeof instances;
 

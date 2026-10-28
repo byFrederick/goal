@@ -299,6 +299,38 @@ Differences from `docs/design/screens/build/agents.jpg`, each for a reason:
 - The summary counts the agents' positions at stations, not copies, so it reads "4 agents" where the picture reads 15.
 - The Factory defaults' connections read the mock seed (github, playwright), not the picture's (github, cloudflare, context7): the seed has no cloudflare or context7 connection.
 
+### The intake trigger page
+
+`…/f/$factory/intake/$trigger` (`features/intake/`, ADR 0016's `trigger` screen) shows one trigger of the
+factory's current definition: its title with the on/off switch, this week's created, merged and spend,
+the When, Only if, Create and Limits blocks, its recent events, and its YAML in the definition. Reads go
+through `intakeTriggerQuery` (`GET …/intake/triggers/{trigger}`) and the definition's `factory.yaml`
+(the open draft's when there is one, else the running version's).
+
+Save changes writes `spec.board.triggers[name]` and nothing else. `trigger-save.ts` runs the draft files
+API in order: open the draft, read `factory.yaml` for its sha256, put the file back with `If-Match`,
+validate the draft, publish it. `trigger-yaml.ts` splices only the keys that changed into the text, so
+every other line and comment stays byte for byte. A file with no `triggers` key, or an empty one, gets its first
+trigger written in place (and `board` under `spec` when that is missing too). The draft-model API cannot carry `board.triggers`
+yet (`internal/factorymodel/model.go`), which is why the page does not use it.
+
+Rules the page follows:
+- A draft with edits of its own blocks the save, with a link to the definition editor: the page never
+  publishes someone else's draft. An invalid save leaves this page's own write in the draft, so that write does not
+  block the fix; the page clears the mark once a save publishes or a 412 moves the draft.
+- A 412 draft conflict keeps the typed edits and reloads the draft; the user saves again.
+- The Create lane select offers Standard and Expedite, then the chosen station's route keys (`readBoard`'s `lanes`:
+  a lane is a key of the station's `route`, factory.schema.json). A lane the file names stays selectable.
+- Validation problems from `validateDraft` are placed by their line: a problem inside a trigger's key
+  shows under that block, any other problem above the form. Save stays off while an error stands.
+- A name the definition does not have opens a blank trigger when the URL has `?on=<event key>` (the New
+  trigger picker's choice). The picker itself is not on this page.
+- "Try with a past event", "A model agrees it is worth an item" and "+ Add another event" render disabled
+  with "Not available yet" (ADR 0016, decision 4; ADR 0028 for the model check).
+
+Stream events: a `definition` event and an `item` event both invalidate `intakeKeys.root`, so the
+trigger's results and its YAML re-read.
+
 ### Intake
 
 The Intake screens (ADR 0016, `intake/`; the triggers of ADR 0026) are `features/intake/`, under `…/f/$factory/intake`. `intake.index.tsx` renders the page and `intake.new.tsx` renders the same page with the New trigger picker over it (`new-trigger-dialog.tsx`). Both are leaf route files: the trigger page (`intake/new/$source`, `intake/$trigger`) and the Webhooks page add their own routes beside them.

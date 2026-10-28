@@ -23,6 +23,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_DATABASE_URL` | secret | no | goald's PostgreSQL URL, as goal_app under row-level security; by default compose's database with GOAL_PG_APP_PASSWORD. |
 | `GOAL_DEFAULT_AGENT_IMAGE` | config | no | Retired: GOAL_AGENT_IMAGE replaced it; goald ignores it and warns while it is set. |
 | `GOAL_DEFINITION_CACHE_BYTES` | config | no | How many bytes of no-longer-current factory definition files goald keeps for the runs pinned to them. |
+| `GOAL_EGRESS_ADDRESSES` | public | no | The addresses agents' traffic leaves the install from, comma-separated CIDRs, shown on the organization's models and policies screen; empty by default. |
 | `GOAL_EGRESS_IMAGE` | config | no | Retired: compose's goal-egress service replaced it; goald ignores it and warns while it is set. |
 | `GOAL_EGRESS_NAME` | config | no | Retired: compose's goal-egress service replaced it; goald ignores it and warns while it is set. |
 | `GOAL_EMBED_KEY` | secret | no | The bearer key of the embeddings API. |
@@ -162,6 +163,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_AUTH_PROXY_SECRET` | secret | yes | The secret goald sends with every request it forwards to the auth service, which refuses any other; goal up generates one per start. |
 | `GOAL_BOOTSTRAP_OWNER_EMAIL` | config | no | The first owner's address: until someone signs in it is the only one that may, and becomes platform admin; goal up requires it under sign-in. |
 | `GOAL_DATABASE_URL` | secret | no | goald's PostgreSQL URL, as goal_app under row-level security; by default compose's database with GOAL_PG_APP_PASSWORD. |
+| `GOAL_EGRESS_ADDRESSES` | public | no | The addresses agents' traffic leaves the install from, comma-separated CIDRs, shown on the organization's models and policies screen; empty by default. |
 | `GOAL_EMBED_KEY` | secret | no | The bearer key of the embeddings API. |
 | `GOAL_EMBED_MODEL` | config | no | The embeddings model, of 1024 dimensions; changing it re-embeds every knowledge source. |
 | `GOAL_EMBED_URL` | config | no | An OpenAI-compatible embeddings API; set, the knowledge base uses hybrid search instead of keywords only. |
