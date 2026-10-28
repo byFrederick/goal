@@ -60,8 +60,8 @@ func (e *Engine) Ask(ctx context.Context, id domain.ItemID, run domain.RunID, ag
 		return domain.Item{}, fmt.Errorf("ask on item %s: %w", id, err)
 	}
 
-	if _, open := domain.OpenQuestion(events); open {
-		return domain.Item{}, fmt.Errorf("ask on item %s: %w", id, ErrQuestionOpen)
+	if err := waitsForAPerson(events); err != nil {
+		return domain.Item{}, fmt.Errorf("ask on item %s: %w", id, err)
 	}
 
 	if it.State != domain.StateInProgress {
@@ -201,16 +201,14 @@ func validQuestion(question string, choices []string) (string, []string, error) 
 	return question, trimmed, nil
 }
 
-// openQuestion reports whether an item has an open question.
-func (e *Engine) openQuestion(ctx context.Context, id domain.ItemID) (bool, error) {
+// waitingForAPerson is waitsForAPerson of an item's events.
+func (e *Engine) waitingForAPerson(ctx context.Context, id domain.ItemID) error {
 	events, err := e.itemEvents(ctx, id)
 	if err != nil {
-		return false, err
+		return err
 	}
 
-	_, open := domain.OpenQuestion(events)
-
-	return open, nil
+	return waitsForAPerson(events)
 }
 
 // itemEvents reads every event of an item, in append order.
@@ -233,20 +231,30 @@ func (e *Engine) itemEvents(ctx context.Context, id domain.ItemID) ([]domain.Eve
 	}
 }
 
-// peopleSaid reads what people said since the item's latest run started, which its next run's
-// brief carries: their notes and the questions they answered.
-func (e *Engine) peopleSaid(ctx context.Context, id domain.ItemID) ([]domain.Event, []domain.Answer, error) {
+// saidByPeople is what people said since an item's latest run started, which its next run's
+// brief carries.
+type saidByPeople struct {
+	notes []domain.Event
+	// answers are the questions people answered (ADR 0018).
+	answers []domain.Answer
+	// tools are the tool calls people approved or denied (ADR 0031).
+	tools []domain.ToolDecision
+}
+
+// peopleSaid reads what people said since the item's latest run started: their notes, the
+// questions they answered and the tool calls they decided.
+func (e *Engine) peopleSaid(ctx context.Context, id domain.ItemID) (saidByPeople, error) {
 	notes, err := e.withNotes(ctx, id, nil)
 	if err != nil {
-		return nil, nil, err
+		return saidByPeople{}, err
 	}
 
 	events, err := e.itemEvents(ctx, id)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read answers: %w", err)
+		return saidByPeople{}, fmt.Errorf("read answers: %w", err)
 	}
 
-	return notes, domain.AnswersSinceLastRun(events), nil
+	return saidByPeople{notes: notes, answers: domain.AnswersSinceLastRun(events), tools: domain.ToolDecisionsSinceLastRun(events)}, nil
 }
 
 // answersSection is the questions the item's agents asked and the answers people gave since its

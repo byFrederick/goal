@@ -127,27 +127,30 @@ func testTakeLease(f *fixture) {
 	})
 }
 
-// An agent's question takes its own lease (ADR 0018): the span ends with the outcome asked, which
-// the store must accept, and the item waits for a person at its station.
+// An agent's question (ADR 0018) or Ask-first tool call (ADR 0031) takes its own lease: the span
+// ends with the outcome asked or awaiting_approval, which the store must accept, and the item
+// waits for a person at its station.
 func testTakeLeaseAsked(f *fixture) {
-	t := f.t
-	t2 := t1.Add(2 * time.Minute)
+	for _, outcome := range []domain.LeaseOutcome{domain.LeaseAsked, domain.LeaseAwaitingApproval} {
+		t := f.t
+		t2 := t1.Add(2 * time.Minute)
 
-	it := f.create(t, domain.NewItem{})
-	f.claim(t, work, 1, t1)
+		it := f.create(t, domain.NewItem{})
+		f.claim(t, work, 1, t1)
 
-	ask := ports.Transition{
-		ItemID: it.ID, From: domain.Position{Station: stWork, State: domain.StateInProgress},
-		To: domain.Position{Station: stWork, State: domain.StateWaitingHuman}, TakeLease: true, Outcome: domain.LeaseAsked, At: t2,
+		ask := ports.Transition{
+			ItemID: it.ID, From: domain.Position{Station: stWork, State: domain.StateInProgress},
+			To: domain.Position{Station: stWork, State: domain.StateWaitingHuman}, TakeLease: true, Outcome: outcome, At: t2,
+		}
+
+		if got := f.move(t, ask); got.Position() != ask.To {
+			t.Fatalf("%s: item at %+v after the ask; want %+v", outcome, got.Position(), ask.To)
+		}
+
+		sameLeaseSpans(t, f.LeaseSpans(t, f.org, it.ID), []domain.LeaseSpan{
+			{ItemID: it.ID, Station: stWork, Agent: agWorker, Slot: 1, AcquiredAt: t1, EndedAt: t2, Outcome: outcome},
+		})
 	}
-
-	if got := f.move(t, ask); got.Position() != ask.To {
-		t.Fatalf("item at %+v after the ask; want %+v", got.Position(), ask.To)
-	}
-
-	sameLeaseSpans(t, f.LeaseSpans(t, f.org, it.ID), []domain.LeaseSpan{
-		{ItemID: it.ID, Station: stWork, Agent: agWorker, Slot: 1, AcquiredAt: t1, EndedAt: t2, Outcome: domain.LeaseAsked},
-	})
 }
 
 func sameLeaseSpans(t *testing.T, got, want []domain.LeaseSpan) {
