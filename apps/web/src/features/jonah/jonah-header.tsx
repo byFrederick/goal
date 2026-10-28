@@ -39,7 +39,6 @@ const tabClass =
   '-mb-px inline-flex h-10 shrink-0 items-center gap-2 border-b-2 px-3 text-body transition-colors duration-200';
 
 export function JonahHeader({ tab, counts = {} }: { tab: JonahTab; counts?: Partial<Record<JonahTab, number>> }) {
-  const params = useFactoryParams();
   const factory = useFactory();
   const intro = tab === 'overview' || tab === 'proposals' ? overviewIntro(factory.title ?? factory.name) : introOf[tab];
   return (
@@ -54,63 +53,51 @@ export function JonahHeader({ tab, counts = {} }: { tab: JonahTab; counts?: Part
         </div>
       </header>
 
-      <nav aria-label="Jonah" className="flex gap-1 overflow-x-auto border-b border-line">
-        {tabOrder.map((t) => {
-          const current = t === tab;
-          const classes = cn(
-            tabClass,
-            current ? 'border-run font-control text-ink' : 'border-transparent text-ink-soft hover:text-ink',
-          );
-          const count = counts[t];
-          const label = (
-            <>
-              {tabLabels[t]}
-              {count === undefined ? null : (
-                <span className="ml-2 text-meta font-normal text-muted tabular-nums">{count}</span>
-              )}
-            </>
-          );
-          if (t === 'overview' || t === 'proposals') {
-            // Overview is the factory's Jonah page itself; Proposals is its tab (?tab=proposals).
-            return (
-              <Link
-                key={t}
-                to="/o/$org/f/$factory/jonah"
-                params={params}
-                search={t === 'proposals' ? { tab: 'proposals' } : {}}
-                aria-current={current ? 'page' : undefined}
-                className={classes}
-              >
-                {label}
-              </Link>
-            );
-          }
-          if (t === 'judges') {
-            return (
-              <Link
-                key={t}
-                to="/o/$org/f/$factory/jonah/judges"
-                params={params}
-                aria-current={current ? 'page' : undefined}
-                className={classes}
-              >
-                {label}
-              </Link>
-            );
-          }
-          if (t !== 'evals') {
-            return (
-              <NotAvailable key={t} label={tabLabels[t]}>
-                <button type="button" className={cn(classes, 'cursor-not-allowed')}>
-                  {label}
-                </button>
-              </NotAvailable>
-            );
-          }
+      <JonahTabs tab={tab} counts={counts} />
+    </div>
+  );
+}
+
+/** The Jonah tab bar: Overview, Proposals, Judges, Evals and Bake-offs, with the tab the page is on current. */
+export function JonahTabs({ tab, counts = {} }: { tab: JonahTab; counts?: Partial<Record<JonahTab, number>> }) {
+  const params = useFactoryParams();
+  return (
+    <nav aria-label="Jonah" className="flex gap-1 overflow-x-auto border-b border-line">
+      {tabOrder.map((t) => {
+        const current = t === tab;
+        const classes = cn(
+          tabClass,
+          current ? 'border-run font-control text-ink' : 'border-transparent text-ink-soft hover:text-ink',
+        );
+        const count = counts[t];
+        const label = (
+          <>
+            {tabLabels[t]}
+            {count === undefined ? null : (
+              <span className="ml-2 text-meta font-normal text-muted tabular-nums">{count}</span>
+            )}
+          </>
+        );
+        if (t === 'overview' || t === 'proposals') {
+          // Overview is the factory's Jonah page itself; Proposals is its tab (?tab=proposals).
           return (
             <Link
               key={t}
-              to="/o/$org/f/$factory/jonah/evals"
+              to="/o/$org/f/$factory/jonah"
+              params={params}
+              search={t === 'proposals' ? { tab: 'proposals' } : {}}
+              aria-current={current ? 'page' : undefined}
+              className={classes}
+            >
+              {label}
+            </Link>
+          );
+        }
+        if (t === 'judges') {
+          return (
+            <Link
+              key={t}
+              to="/o/$org/f/$factory/jonah/judges"
               params={params}
               aria-current={current ? 'page' : undefined}
               className={classes}
@@ -118,8 +105,28 @@ export function JonahHeader({ tab, counts = {} }: { tab: JonahTab; counts?: Part
               {label}
             </Link>
           );
-        })}
-      </nav>
-    </div>
+        }
+        if (t !== 'evals') {
+          return (
+            <NotAvailable key={t} label={tabLabels[t]}>
+              <button type="button" className={cn(classes, 'cursor-not-allowed')}>
+                {label}
+              </button>
+            </NotAvailable>
+          );
+        }
+        return (
+          <Link
+            key={t}
+            to="/o/$org/f/$factory/jonah/evals"
+            params={params}
+            aria-current={current ? 'page' : undefined}
+            className={classes}
+          >
+            {label}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
