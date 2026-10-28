@@ -461,6 +461,18 @@ describe('the desktop Board, as the screen draws it', () => {
     expect(within(build).getByRole('img', { name: '1 of 1 in progress' })).toBeTruthy();
     expect(within(build).getByRole('link', { name: 'Wire the retry flag' })).toBeTruthy();
   });
+
+  it('keeps the empty sub-header slot of a column without drum labels out of the reading order', async () => {
+    const drum = board({ release: { policy: 'push', enforced: false, drum: 'build', buffer: 2, in_buffer: 0 } });
+    renderBoardPage({ page: ShellBoard, org, factory, board: drum });
+
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const investigate = within(columns).getByRole('region', { name: 'Investigate' });
+    const slot = investigate.querySelector('[aria-hidden="true"].min-h-\\[1lh\\]');
+    expect(slot).not.toBeNull();
+    expect(slot?.textContent).toBe('');
+    expect(within(investigate).queryByText('In progress')).toBeNull();
+  });
 });
 
 describe('board filters and grouping', () => {

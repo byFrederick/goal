@@ -56,3 +56,54 @@ test('on a phone the empty sub-header slot is not shown', async ({ page }) => {
     await expect(slots.nth(i)).toBeHidden();
   }
 });
+
+test.describe('at 1680 px', () => {
+  test.use({ viewport: { width: 1680, height: 1000 } });
+
+  test('the columns sit side by side, every card lies in its column and no header overflows', async ({ page }) => {
+    await page.goto('/o/acme/f/goal/board');
+    await expect(page.getByRole('region', { name: 'Stations' })).toBeVisible();
+    await page.waitForLoadState('networkidle');
+
+    // Every column's box, its cards' boxes (the expedite card too) and its header's overflow, in one layout pass.
+    const layout = await page.evaluate(() => {
+      const columns = Array.from(
+        document.querySelectorAll<HTMLElement>('section[aria-label="Stations"] > div > section'),
+      );
+      return columns.map((column) => {
+        const box = column.getBoundingClientRect();
+        const header = column.querySelector<HTMLElement>(':scope > header');
+        return {
+          name: column.getAttribute('aria-label') ?? 'column',
+          left: box.left,
+          right: box.right,
+          cards: Array.from(column.querySelectorAll<HTMLElement>('article')).map((card) => {
+            const rect = card.getBoundingClientRect();
+            return { title: card.textContent?.slice(0, 40) ?? '', left: rect.left, right: rect.right };
+          }),
+          header: header ? { scrollWidth: header.scrollWidth, clientWidth: header.clientWidth } : null,
+        };
+      });
+    });
+
+    expect(layout.length).toBeGreaterThan(1);
+    for (let i = 0; i + 1 < layout.length; i++) {
+      const left = layout[i];
+      const right = layout[i + 1];
+      if (!left || !right) continue;
+      expect(left.right, `${left.name} overlaps ${right.name}`).toBeLessThanOrEqual(right.left);
+    }
+    for (const column of layout) {
+      for (const card of column.cards) {
+        expect(card.left, `${card.title} starts before ${column.name}`).toBeGreaterThanOrEqual(column.left);
+        expect(card.right, `${card.title} spills out of ${column.name}`).toBeLessThanOrEqual(column.right);
+      }
+      expect(column.header, `${column.name} has no header`).not.toBeNull();
+      expect(column.header?.scrollWidth, `${column.name} header overflows`).toBeLessThanOrEqual(
+        column.header?.clientWidth ?? 0,
+      );
+    }
+    // Guard against a vacuous pass: the mock has cards, the expedite one among them.
+    expect(layout.some((column) => column.cards.length > 0)).toBe(true);
+  });
+});
