@@ -91,12 +91,15 @@ type bundleConnection struct {
 	Docs string          `json:"docs,omitempty"`
 }
 
-// bundleRepository is the factory's repository and the item's branch, which prepare checks out:
-// the remote branch when it exists, otherwise a new one from the default branch. FreshBase is
-// how prepare brings an existing branch up to date with the default branch (rebase or merge).
+// bundleRepository is the factory's repository and the run's branch, which prepare checks out:
+// the remote branch when it exists, otherwise a new one from Base. Base is the branch the run
+// builds on and opens its pull request into, an assembly's integration branch for its parts in
+// integration mode branch (ADR 0033), and empty for the default branch. FreshBase is how prepare
+// brings an existing branch up to date with the default branch (rebase or merge).
 type bundleRepository struct {
 	URL       string           `json:"url"`
 	Branch    string           `json:"branch"`
+	Base      string           `json:"base,omitempty"`
 	FreshBase domain.FreshBase `json:"fresh_base,omitempty"`
 }
 
@@ -246,7 +249,13 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 		return runBundle{}, err
 	}
 
-	if err := g.addRepository(ctx, line.Runtime.Repository, it.Branch(), line.Flow.Assemblies.FreshBase, &b); err != nil {
+	// The engine decided the run's branch and base at run start; a token from before names neither.
+	branch, base := it.Branch(), ""
+	if c.Branch != "" {
+		branch, base = c.Branch, c.Base
+	}
+
+	if err := g.addRepository(ctx, line.Runtime.Repository, branch, base, line.Flow.Assemblies.FreshBase, &b); err != nil {
 		return runBundle{}, err
 	}
 
@@ -393,13 +402,13 @@ func withoutPlan(schema []byte) ([]byte, error) {
 // addRepository puts the repository in b with the git login of its connection, which clones it;
 // a public repository needs none.
 func (g *Gateway) addRepository(
-	ctx context.Context, repo domain.Repository, branch string, fresh domain.FreshBase, b *runBundle,
+	ctx context.Context, repo domain.Repository, branch, base string, fresh domain.FreshBase, b *runBundle,
 ) error {
 	if repo.URL == "" {
 		return nil
 	}
 
-	b.Repository = &bundleRepository{URL: repo.URL, Branch: branch, FreshBase: fresh}
+	b.Repository = &bundleRepository{URL: repo.URL, Branch: branch, Base: base, FreshBase: fresh}
 
 	if repo.Connection == "" {
 		return nil
