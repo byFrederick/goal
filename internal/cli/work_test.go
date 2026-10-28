@@ -228,8 +228,12 @@ func (g *controlGoald) handler(action string) http.HandlerFunc {
 		}
 
 		it := gen.Item{Ref: notedRef, State: gen.ItemStateQueued, Station: stationSpec}
-		if action == verbPause {
+		switch action {
+		case verbPause:
 			it.State, it.Station = gen.ItemStateBlocked, "build"
+		case verbLane:
+			lane, _ := b["lane"].(string)
+			it.Lane = &lane
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -277,12 +281,50 @@ func TestControl_MoveAndPauseSendTheirRequests(t *testing.T) {
 	}
 }
 
+func TestControl_LaneSendsItsRequest(t *testing.T) {
+	t.Parallel()
+
+	g := &controlGoald{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/orgs/acme/items/{item}/lane", g.handler(verbLane))
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	env := testEnv(t, srv.URL, map[string]string{envOrg: orgAcme})
+
+	var out bytes.Buffer
+	if err := run(t.Context(), []string{verbLane, notedRef, "web"}, &printer{w: &out}, env, nil); err != nil {
+		t.Fatalf("goal lane: %v", err)
+	}
+
+	if want := "✓ set the lane of goal#1 to web\n"; out.String() != want {
+		t.Errorf("output %q; want %q", out.String(), want)
+	}
+
+	if !slices.Equal(g.called, []string{"lane goal#1"}) || g.bodies[0]["lane"] != "web" {
+		t.Errorf("goald got %v with %v", g.called, g.bodies)
+	}
+}
+
+func TestDescribe_LaneSet(t *testing.T) {
+	t.Parallel()
+
+	for from, want := range map[string]string{"api": "lane api → web", "": "lane (none) → web"} {
+		if got := describe(gen.Event{Kind: "lane_set", Data: map[string]any{"from": from, "to": "web"}}); got != want {
+			t.Errorf("describe(lane_set from %q) = %q, want %q", from, got, want)
+		}
+	}
+}
+
 func TestControl_UsageErrors(t *testing.T) {
 	t.Parallel()
 
 	env := testEnv(t, "http://127.0.0.1:1", nil) // never reached
 
-	for _, args := range [][]string{{verbMove}, {verbMove, notedRef}, {verbMove, notedRef, "a", "b"}, {verbPause}, {verbPause, notedRef, "x"}} {
+	for _, args := range [][]string{{verbMove}, {verbMove, notedRef}, {verbMove, notedRef, "a", "b"}, {verbPause}, {verbPause, notedRef, "x"},
+		{verbLane}, {verbLane, notedRef}, {verbLane, notedRef, " "}, {verbLane, notedRef, "a", "b"},
+	} {
 		if err := run(t.Context(), args, &printer{w: &bytes.Buffer{}}, env, nil); !errors.Is(err, errUsage) {
 			t.Errorf("goal %v = %v; want a usage error", args, err)
 		}
