@@ -199,6 +199,22 @@ The panel on steps 3 and 4 (`factory-preview.tsx`) shows the organization, the f
 
 The mock starts with no organization on `POST /__mock/reset` with `{"orgs": "none"}`.
 
+The end of onboarding is the Floor's two aside cards (ADR 0032 decision 2, `docs/design/screens/get-started/ready.jpg`). **Finish setting up** (`setup-card.tsx`, the rules in `setup-progress.ts`) lists nine rows in the picture's order, each done or to do from data the factory already has, with no stored progress:
+
+- Invite people: more than one member, or any invitation (`membersQuery`, `invitationsQuery`). To do links to `/o/<slug>/members`.
+- Connect Slack: a connection of kind `slack`. To do links to `/o/<slug>/connections/new?kind=slack`.
+- Add knowledge: any knowledge source. To do links to `/o/<slug>/knowledge/new`.
+- Organization: always done.
+- GitHub, N repositories: a connection of kind `github`. N is the published definition's `basics.repository` (one or none). To do links to the GitHub connection form.
+- The line, N stations: the published version's stations, not counting the Done station (`versionModelQuery`, `modelOf`). The picture's "4 stations" is Intake, Spec, Build and Review.
+- Budgets and targets: `review.budget` sets a cap, or `line.flow.targets` sets a target. To do links to the Review section of the definition.
+- N triggers: every trigger in `intakeQuery`, switched on or off. Done when there is one. To do links to the factory's intake.
+- First item merged: an item of the factory in state `done` (`itemsQuery`, one item). To do offers New item.
+
+The count reads "N of 9 done" beside a ring (`role=img`). Closing the card (Hide setup) writes `goal.setup-hidden.<factory id>` to localStorage, so it stays closed in that browser only; the card renders nothing when all nine are done. Its loading, error (with Retry, which reads only the failed queries) and ready states are the Floor cards' own.
+
+**How work gets in** (`ways-in-card.tsx`) lists the ways an item arrives. A "Label an issue" row for each enabled `github.issues.labeled` trigger shows the label it matches, read from the published intake entry's `filter.label` (`labelRows`), with a Copy button. "Mention @<factory> in Slack" offers Connect only while the organization has no slack connection. "New item, or press C" opens the new-item composer (not drawn without `item:create`). "goal item create" copies the CLI command. With no triggers, a line says so under the rows.
+
 ### Signing in (phase 3)
 
 With `GOAL_AUTH=session` people sign in on `/sign-in` with an emailed code or Google (spec 3 §10). Only `api/auth.ts` calls the identity service (`/api/auth/*` on goald's origin, Better Auth's own contract, ADR 0007), with `better-auth/client` at the version `apps/auth/` pins (`better-auth: catalog:` in `pnpm-workspace.yaml`) and the email OTP, organization and device client plugins; it is imported only by the sign-in routes, the re-auth dialog and, through `import()`, the account's actions and the keep-alive, so the first bundle never carries it. goald reads the session from its httpOnly cookie; no script holds a token.
@@ -299,6 +315,7 @@ The Floor (`features/floor/floor-page.tsx`) is the header, the line and the KPI 
   - **Throughput by week** (`weekly-card.tsx`): `weeklyQuery`, bars of items merged a day with the dashed target line.
   - **Activity** (`activity-card.tsx`): `activityQuery` (`listFactoryActivity`, five rows, the "Live" chip), one sentence per event from `activity-words.ts`, with the actor named by role (`actorRole` drops a copy number). The key sits under the factory's prefix, so a stream item event refetches it; nothing polls.
   - Each card has its own loading (aria-busy with an sr-only "Loading"), empty and error states (`card-states.tsx`, with Retry).
+  - The aside (from `xl`, 1280 px, a third column beside the figures; below the figures under it): the setup checklist and How work gets in, described under Onboarding. Both cards stay out of the Floor's grid, so they do not change the existing cards' layout.
   - The human touches panel is not on the Floor; the item page keeps its own (`features/items/touches-card.tsx`).
 
 ### Phone Board

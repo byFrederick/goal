@@ -104,9 +104,12 @@ export function WaysInCard() {
           <WayLine
             tile="bg-you-ink"
             icon={<Hash size={14} strokeWidth={1.6} aria-hidden="true" />}
-            text="Mention in Slack"
+            text={
+              <>
+                Mention <Chip>@{factory.name}</Chip> in Slack
+              </>
+            }
           >
-            <Chip>@{factory.name}</Chip>
             {hasSlack ? null : (
               <Button asChild size="sm" variant="secondary">
                 <Link to="/o/$org/connections/new" params={{ org: org.slug }} search={{ kind: 'slack' }}>
