@@ -172,6 +172,8 @@ export type {
   SectionSave,
   SectionSummary,
   SignInMethod,
+  SignupDomain,
+  SignupDomainInput,
   SkillFiles,
   SkillListing,
   SkillPage,
