@@ -171,4 +171,14 @@ test('step 4 continues to step 5, which publishes the factory, step 6 turns on a
   await expectNoHorizontalScroll(page);
   await page.getByRole('link', { name: 'Go to the Floor' }).click();
   await expect(page).toHaveURL(/\/o\/goal\/f\//);
+
+  // The Floor's checklist: the flow sent an invite and finished the starter item, so seven of nine are done.
+  // Slack and knowledge are still to do, and their rows link to the pages that do them.
+  await expect(page.getByRole('heading', { name: 'Finish setting up' })).toBeVisible();
+  await expect(page.getByRole('img', { name: '7 of 9 done' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Connect' })).toHaveAttribute(
+    'href',
+    '/o/goal/connections/new?kind=slack',
+  );
+  await expect(page.getByRole('link', { name: 'Add' })).toHaveAttribute('href', '/o/goal/knowledge/new');
 });

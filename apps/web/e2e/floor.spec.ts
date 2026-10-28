@@ -128,3 +128,17 @@ test('a phone shows the range the URL names', async ({ page }) => {
   await expect(page.getByText(/, compared with the 30 days before$/)).toBeVisible();
   await expectNoHorizontalScroll(page);
 });
+
+test('the setup checklist hides when closed and stays hidden after a reload', async ({ page }) => {
+  await page.goto('/o/acme/f/software');
+  const checklist = page.getByRole('heading', { name: 'Finish setting up' });
+  await expect(checklist).toBeVisible();
+  await expect(page.getByRole('img', { name: /of 9 done$/ })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Hide setup' }).click();
+  await expect(checklist).toHaveCount(0);
+
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Floor' })).toBeVisible();
+  await expect(checklist).toHaveCount(0);
+});
