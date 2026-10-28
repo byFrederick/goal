@@ -32,10 +32,12 @@ var withPlatformRows = map[string]string{
 // withoutOrgID are the tables that carry no org_id, and why. A phase that adds a table without
 // org_id adds it here in the same pull request, with its reason.
 var withoutOrgID = map[string]string{
-	"goose_db_version": "the migration log, goal_owner's alone",
-	"organizations":    "the tenant itself; its policy compares id with goal_org()",
-	"platform_admins":  "install-level: who may create organizations; reached only through definers",
-	"auth_events":      "install-level security log (sign-ins, codes, devices); reached only through definers",
+	"goose_db_version":         "the migration log, goal_owner's alone",
+	"organizations":            "the tenant itself; its policy compares id with goal_org()",
+	"platform_admins":          "install-level: who may create organizations; reached only through definers",
+	"auth_events":              "install-level security log (sign-ins, codes, devices); reached only through definers",
+	"notification_preferences": "a person's own, in every organization (ADR 0023); every statement filters by user_id",
+	"notification_settings":    "a person's own, in every organization (ADR 0023); every statement filters by user_id",
 }
 
 // The tenancy kit, checked on the fully migrated schema: every table with org_id has row-level
