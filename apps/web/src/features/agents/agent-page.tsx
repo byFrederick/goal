@@ -74,7 +74,7 @@ function SendBackReasons({ stats }: { stats: AgentStats }) {
     <SectionCard
       title="Why review sent work back"
       description={`${stats.sent_back.count} times in the last 7 days`}
-      aside={<AskJonahButton stats={stats} />}
+      aside={<AskJonahButton />}
     >
       {stats.reasons.length === 0 ? (
         <p className="m-0 text-body text-muted">Nothing was sent back in the last 7 days.</p>
