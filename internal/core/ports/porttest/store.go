@@ -39,6 +39,7 @@ type Store struct {
 	leaseLog  map[domain.ItemID][]domain.LeaseSpan
 	andon     []andonRecord
 	edges     []domain.Edge // item needs, in the order they were added
+	views     map[domain.SavedViewID]savedViewRecord
 	ids       int
 	changes   changes
 }
@@ -62,6 +63,7 @@ func NewStore() *Store {
 		labels:    map[int64]touchLabel{},
 		spans:     map[domain.ItemID][]domain.Span{},
 		leaseLog:  map[domain.ItemID][]domain.LeaseSpan{},
+		views:     map[domain.SavedViewID]savedViewRecord{},
 	}
 }
 
@@ -146,6 +148,7 @@ func (s *Store) purge(org domain.OrgID) {
 
 	delete(s.orgCaps, org)
 	s.andon = slices.DeleteFunc(s.andon, func(a andonRecord) bool { return a.org == org })
+	maps.DeleteFunc(s.views, func(_ domain.SavedViewID, v savedViewRecord) bool { return v.org == org })
 }
 
 // orgOf returns the organization in ctx, as row-level security requires.
