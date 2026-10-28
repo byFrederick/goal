@@ -61,3 +61,36 @@ test.describe('the Credentials page', () => {
     await expect(control).toHaveAttribute('aria-disabled', 'true');
   });
 });
+
+test.describe('the New credential page', () => {
+  test('creates one credential scoped to a factory and one of its agents', async ({ page }) => {
+    await page.goto('/o/acme/credentials/new');
+    await expect(page.getByRole('heading', { level: 1, name: 'New credential' })).toBeVisible();
+
+    await page.getByLabel('Name').fill('e2e-token-2028');
+    await page.getByLabel('Value').fill('test-token');
+    await page.getByRole('button', { name: /Software/ }).click();
+    await page.getByRole('checkbox', { name: 'architect' }).check();
+    await expectAccessible(page);
+    await page.getByRole('button', { name: 'Create credential' }).click();
+
+    await expect(page).toHaveURL(/\/o\/acme\/credentials$/);
+    await expect(page.getByRole('row').filter({ hasText: 'e2e-token-2028' })).toBeVisible();
+    await expectNoHorizontalScroll(page);
+  });
+
+  test('imports the names of a pasted YAML after a dry run, skipping the existing one', async ({ page }) => {
+    await page.goto('/o/acme/credentials/new?panel=import');
+    await page
+      .getByLabel('Paste .env or YAML')
+      .fill('credentials:\n  sentry-token: test-1\n  linear-key: test-2\n  cloudflare-token: test-3\n');
+
+    await expect(page.getByText('3 found')).toBeVisible();
+    await expect(page.getByText('Already exists')).toBeVisible();
+    await expect(page.getByText('Used by 2 connections')).toBeVisible();
+    await page.getByRole('button', { name: 'Import 2' }).click();
+
+    await expect(page).toHaveURL(/\/o\/acme\/credentials$/);
+    await expect(page.getByRole('row').filter({ hasText: 'sentry-token' })).toBeVisible();
+  });
+});

@@ -7,6 +7,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Actor, Credential, CredentialType, Factory, Org } from '@goal/api-client';
 
+/** The contract's CredentialName pattern (contracts/api/openapi.yaml). */
+const credentialName = /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/;
+
 const minuteMs = 60_000;
 const hourMs = 3_600_000;
 const dayMs = 86_400_000;
@@ -86,7 +89,7 @@ function seeds(): Seed[] {
       expiresInDays: 2,
       remindDays: 7,
       usedAgo: hourMs,
-      connections: ['cloudflare'],
+      connections: ['cloudflare', 'cloudflare-preview'],
     },
     {
       name: 'claude-subscription',
@@ -203,6 +206,65 @@ export function createCredentials({ clock, actor, stale, factories, acme }: Deps
 
   const named = (org: string, name: string) => list(org).find((s) => s.credential.name === name);
 
+  /** The names an import's text defines: a .env's keys, or the keys under a YAML credentials: map; null when it does not parse. */
+  const namesOf = (format: string, text: string): string[] | null => {
+    const lines = text.split('\n');
+    if (format === 'env') {
+      return lines.flatMap((line) => {
+        const key = /^\s*([A-Za-z_][A-Za-z0-9_]*)=/.exec(line)?.[1];
+        return key ? [key.toLowerCase().replace(/_/g, '-')] : [];
+      });
+    }
+    const top = lines.findIndex((line) => /^credentials:\s*$/.test(line));
+    if (top < 0) return null;
+    return lines.slice(top + 1).flatMap((line) => {
+      const key = /^\s+([^\s:#]+):/.exec(line)?.[1];
+      return key ? [key] : [];
+    });
+  };
+
+  /** A new credential as the contract has it: no value is kept, and the scope and agents are the seed's by name. */
+  const add = (
+    org: string,
+    name: string,
+    input: Partial<Credential>,
+    scope: string[] | null,
+    agents: Record<string, string[]>,
+    by: Actor,
+    now: number,
+  ) => {
+    const expiresAt = input.expires_at ?? null;
+    const seed: Seed = {
+      name,
+      type: input.type ?? 'api_key',
+      description: input.description ?? '',
+      factories: scope,
+      agents,
+      expiresInDays: null,
+      remindDays: input.remind_days ?? 0,
+      usedAgo: null,
+      connections: [],
+    };
+    const credential: Credential = {
+      id: `cred-${name}`,
+      name,
+      type: seed.type,
+      description: seed.description,
+      scope: { all_factories: scope === null, factories: [] },
+      agents: {},
+      expires_at: expiresAt,
+      remind_days: seed.remindDays,
+      last_used_at: null,
+      used_by: { connections: [], agents: [] },
+      created_by: by,
+      created_at: new Date(now).toISOString(),
+      updated_by: by,
+      updated_at: new Date(now).toISOString(),
+    };
+    list(org).push({ credential, seed });
+    return credential;
+  };
+
   return {
     reset,
     async handle(org, rest, method, req, res, body) {
@@ -211,6 +273,72 @@ export function createCredentials({ clock, actor, stale, factories, acme }: Deps
           .map((s) => out(org.id, s))
           .sort((a, b) => a.name.localeCompare(b.name));
         send(res, 200, { credentials });
+        return true;
+      }
+      if (rest === '/credentials' && method === 'POST') {
+        if (stale(req, res)) return true;
+        const input = (await body()) as Partial<Credential> & Record<string, unknown>;
+        const name = typeof input.name === 'string' ? input.name : '';
+        if (!credentialName.test(name) || typeof input.value !== 'string' || input.value === '') {
+          send(res, 400, {
+            title: 'Bad Request',
+            status: 400,
+            detail: `"${name}" is not a credential name`,
+            code: 'credential-invalid',
+          });
+          return true;
+        }
+        if (named(org.id, name)) {
+          refuse(res, 409, `credential "${name}" already exists`, 'credential-name-taken');
+          return true;
+        }
+        const scope = input.scope as { all_factories?: boolean; factories?: string[] } | undefined;
+        const everyFactory = scope?.all_factories === true;
+        const byId = new Map(factories(org.id).map((f) => [f.id, f.name]));
+        const names = (scope?.factories ?? []).flatMap((id) => byId.get(id) ?? []);
+        const agents = Object.fromEntries(
+          Object.entries((input.agents ?? {}) as Record<string, string[]>).flatMap(([id, list]) =>
+            byId.has(id) ? [[byId.get(id) as string, list]] : [],
+          ),
+        );
+        const saved = add(org.id, name, input, everyFactory ? null : names, agents, actor(req), clock());
+        send(res, 201, out(org.id, named(org.id, saved.name) as Stored));
+        return true;
+      }
+      if (rest === '/credentials/import' && method === 'POST') {
+        if (stale(req, res)) return true;
+        const input = await body();
+        const format = input.format;
+        const text = typeof input.text === 'string' ? input.text : '';
+        const names = format === 'env' || format === 'yaml' ? namesOf(format, text) : null;
+        if (!names || names.some((name) => !credentialName.test(name))) {
+          send(res, 400, {
+            title: 'Bad Request',
+            status: 400,
+            detail: 'the import does not parse, or a name is not a credential name',
+            code: 'credential-invalid',
+          });
+          return true;
+        }
+        const dryRun = input.dry_run === true;
+        const onConflict = input.on_conflict === 'replace' ? 'replace' : 'skip';
+        const unique = [...new Set(names)];
+        const outcomes = unique.map((name) => {
+          const existing = named(org.id, name);
+          if (!existing) {
+            if (!dryRun) add(org.id, name, {}, [], {}, actor(req), clock());
+            return { name, exists: false, connections: 0, ...(dryRun ? {} : { outcome: 'created' as const }) };
+          }
+          const connections = existing.seed.connections.length;
+          if (dryRun) return { name, exists: true, connections };
+          if (onConflict === 'replace') {
+            existing.credential.updated_by = actor(req);
+            existing.credential.updated_at = new Date(clock()).toISOString();
+            return { name, exists: true, connections, outcome: 'replaced' as const };
+          }
+          return { name, exists: true, connections, outcome: 'skipped' as const };
+        });
+        send(res, 200, { dry_run: dryRun, credentials: outcomes });
         return true;
       }
       const m = rest.match(/^\/credentials\/([^/]+)$/);
