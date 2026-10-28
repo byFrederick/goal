@@ -44,6 +44,9 @@ const (
 	LeaseTaken LeaseOutcome = "taken"
 	// LeaseAsked: the agent asked a person a question (ADR 0018); the item waits for the answer.
 	LeaseAsked LeaseOutcome = "asked"
+	// LeaseAwaitingApproval: the agent called an Ask-first connection tool (ADR 0031); the item
+	// waits for a person to approve or deny the call.
+	LeaseAwaitingApproval LeaseOutcome = "awaiting_approval"
 )
 
 // Finished reports whether the agent completed its task: advanced, rejected or escalated.

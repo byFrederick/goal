@@ -82,8 +82,9 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 	}
 
 	// What people said since the item's last run: their notes (a retry adds those left
-	// meanwhile) and their answers to its agents' questions (ADR 0018).
-	notes, answers, err := e.peopleSaid(ctx, it.ID)
+	// meanwhile), their answers to its agents' questions (ADR 0018) and their decisions on its
+	// agents' tool calls (ADR 0031).
+	said, err := e.peopleSaid(ctx, it.ID)
 	if err != nil {
 		e.block(ctx, log, c, err.Error())
 		return
@@ -102,7 +103,7 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 	rejection, attempt, lost := "", 1, 0
 
 	for {
-		res, chk, err := e.runOnce(ctx, c, &b, joinParts(preloaded, feedbackOf(notes, answers, rejection)))
+		res, chk, err := e.runOnce(ctx, c, &b, joinParts(preloaded, feedbackOf(said, rejection)))
 
 		if e.cut(ctx, log, c, err) {
 			return
@@ -133,7 +134,7 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 			return
 		}
 
-		if notes, err = e.withNotes(ctx, it.ID, notes); err != nil {
+		if said.notes, err = e.withNotes(ctx, it.ID, said.notes); err != nil {
 			log.WarnContext(ctx, "notes left during the run do not reach its retry", slog.Any("error", err))
 		}
 
@@ -662,9 +663,10 @@ func (e *Engine) preloaded(ctx context.Context, l domain.Line, st domain.Station
 }
 
 // feedbackOf is what goald adds to the brief for one attempt: the notes people left, their
-// answers to the agents' questions and, on a retry, why the previous attempt was rejected.
-func feedbackOf(notes []domain.Event, answers []domain.Answer, rejection string) string {
-	return joinParts(notesSection(notes), answersSection(answers), rejection)
+// answers to the agents' questions, their decisions on the agents' tool calls and, on a retry,
+// why the previous attempt was rejected.
+func feedbackOf(said saidByPeople, rejection string) string {
+	return joinParts(notesSection(said.notes), answersSection(said.answers), toolDecisionsSection(said.tools), rejection)
 }
 
 // joinParts joins the non-empty parts with a blank line.
