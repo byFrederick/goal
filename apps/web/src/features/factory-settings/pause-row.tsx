@@ -1,5 +1,6 @@
 // The Pause row of the Danger zone: Pause or Resume the factory (pauseFactory, resumeFactory). It shows
 // with factory:manage on the factory's `can`, and not for an archived factory (Restore starts it paused).
+// The sidebar's search runs the same change through useTogglePause.
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -10,24 +11,27 @@ import { Button } from '../../ui/button';
 import { refreshFactory } from './refresh';
 import { ZoneRow } from './zone-row';
 
-export function PauseRow({ org, factory }: { org: OrgSummary; factory: Factory }) {
+/** Pauses the factory it is given, or resumes it when it is paused; a refusal is passed to `reportError`. */
+export function useTogglePause(org: OrgSummary, reportError: (message: string) => void) {
   const client = useQueryClient();
-  const [error, setError] = useState<string | null>(null);
-
-  const toggle = useMutation({
-    mutationFn: () => (factory.paused ? resumeFactory(org.id, factory.id) : pauseFactory(org.id, factory.id)),
-    onMutate: () => setError(null),
-    onSuccess: (answer) => {
+  return useMutation({
+    mutationFn: (factory: Factory) =>
+      factory.paused ? resumeFactory(org.id, factory.id) : pauseFactory(org.id, factory.id),
+    onSuccess: (answer, factory) => {
       client.setQueryData(defKeys.factory(org.id, factory.id), answer);
       toast.success(answer.paused ? `Paused ${factory.name}` : `Resumed ${factory.name}`);
     },
-    onError: (err) => {
-      setError(
+    onError: (err) =>
+      reportError(
         err instanceof ApiError ? (err.detail ?? err.title) : 'goald is not answering. Try again once it is running.',
-      );
-    },
-    onSettled: () => refreshFactory(client, org.id, factory.id),
+      ),
+    onSettled: (_answer, _err, factory) => refreshFactory(client, org.id, factory.id),
   });
+}
+
+export function PauseRow({ org, factory }: { org: OrgSummary; factory: Factory }) {
+  const [error, setError] = useState<string | null>(null);
+  const toggle = useTogglePause(org, setError);
 
   return (
     <ZoneRow
@@ -39,7 +43,14 @@ export function PauseRow({ org, factory }: { org: OrgSummary; factory: Factory }
       }
       error={error}
       action={
-        <Button variant="secondary" disabled={toggle.isPending} onClick={() => toggle.mutate()}>
+        <Button
+          variant="secondary"
+          disabled={toggle.isPending}
+          onClick={() => {
+            setError(null);
+            toggle.mutate(factory);
+          }}
+        >
           {factory.paused ? (toggle.isPending ? 'Resuming…' : 'Resume') : toggle.isPending ? 'Pausing…' : 'Pause'}
         </Button>
       }
