@@ -197,3 +197,19 @@ test('the YAML editor at 375 px: the file tree waits behind Files, and the Outli
   await expect(page.getByRole('navigation', { name: 'Definition files' })).toBeVisible();
   await expectAccessible(page);
 });
+
+test('Ask the factory queues a change: the bar shows it running, then done, and the input is open again', async ({
+  page,
+}) => {
+  await page.goto(basics);
+  const input = page.getByRole('textbox', { name: 'Ask the factory to change its definition' });
+  await input.fill('give Review a 4th reviewer');
+  await page.getByRole('button', { name: 'Ask', exact: true }).click();
+
+  await expect(input).toBeDisabled();
+  // The box's result arrives on the stream's definition event; the bar refreshes without a reload.
+  await expect(page.getByText('Done')).toBeVisible({ timeout: 10_000 });
+  await expect(input).toBeEnabled();
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+});

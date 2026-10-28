@@ -17,9 +17,12 @@ import type {
   Comparison,
   Draft,
   DraftModel,
+  DraftRequest,
+  DraftRequestList,
   Factory,
   FileInfo,
   FileMap,
+  NewDraftRequest,
   NewFactoryRequest,
   PublishRequest,
   RestoreRequest,
@@ -280,6 +283,47 @@ export function deleteDraftFile(org: string, factory: string, path: string, sha2
 }
 
 /** Validates the draft at its revision, with unsaved YAML (`overlay`) and the moves the publish will carry. */
+/** The factory's asked definition changes (ADR 0021), newest first. */
+export function listDraftRequests(org: string, factory: string, signal?: AbortSignal): Promise<DraftRequestList> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/draft/requests'), {
+      params: { path: { org, factory } },
+      ...cancel(signal),
+    }),
+  );
+}
+
+/** Asks for a change to the factory's definition: queued, then run in a box that writes its draft. 409 draft-request-open while one runs. */
+export function createDraftRequest(
+  org: string,
+  factory: string,
+  request: NewDraftRequest,
+  signal?: AbortSignal,
+): Promise<DraftRequest> {
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/draft/requests'), {
+      params: { path: { org, factory } },
+      body: request,
+      ...cancel(signal),
+    }),
+  );
+}
+
+/** One of the factory's draft requests; 404 draft-request-not-found for another factory's. */
+export function getDraftRequest(
+  org: string,
+  factory: string,
+  draftRequest: string,
+  signal?: AbortSignal,
+): Promise<DraftRequest> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/draft/requests/{draft_request}'), {
+      params: { path: { org, factory, draft_request: draftRequest } },
+      ...cancel(signal),
+    }),
+  );
+}
+
 export function validateDraft(
   org: string,
   factory: string,

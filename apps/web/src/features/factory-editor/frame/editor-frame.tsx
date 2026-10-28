@@ -1,7 +1,7 @@
 // The Definition editor's frame (D §10.3, screens build/definition): the header (the breadcrumb with
 // the Live chip, the Form | YAML toggle in Form, Versions, Review changes and Publish), the draft
 // banner (the change count, the problem sentence, Review changes and Discard draft), the Ask bar
-// (not built yet), the status line, the section tiles in Form, then the section (children), and the
+// (a request in words, ADR 0021), the status line, the section tiles in Form, then the section (children), and the
 // dialogs a draft can need: discard, conflicts, a discard elsewhere and the unsaved-changes guard.
 // It reads the draft session and B's draft; sections render inside it through `section-views.tsx`.
 // View only (no definition:edit, canvas Define-View): the running version's chip, a banner saying who
