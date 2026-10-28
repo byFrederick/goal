@@ -134,27 +134,28 @@ func TestStation_Humanize(t *testing.T) {
 func TestLine_LandingStation(t *testing.T) {
 	t.Parallel()
 
-	gate := &Gate{OnReject: "build"}
+	gate := &Gate{OnReject: stationBuild}
 	stations := []Station{
-		{ID: "inbox", Kind: KindQueue},
-		{ID: "early", Kind: KindAgent, Gate: gate, Action: ActionMerge},
-		{ID: "plan", Kind: KindAgent},
-		{ID: "build", Kind: KindAgent},
-		{ID: "review", Kind: KindAgent, Gate: gate},
-		{ID: "merge", Kind: KindAgent, Gate: gate, Action: ActionMerge},
-		{ID: "release", Kind: KindAgent, Gate: gate, Action: ActionMerge},
-		{ID: "done", Kind: KindDone},
+		{ID: "backlog", Kind: KindQueue},
+		{ID: "early-merge", Kind: KindAgent, Gate: gate, Action: ActionMerge},
+		{ID: "planning", Kind: KindAgent},
+		{ID: stationBuild, Kind: KindAgent},
+		{ID: "gatekeep", Kind: KindAgent, Gate: gate},
+		{ID: "ship", Kind: KindAgent, Gate: gate, Action: ActionMerge},
+		{ID: "ship-again", Kind: KindAgent, Gate: gate, Action: ActionMerge},
+		{ID: "finished", Kind: KindDone},
 	}
+	early, planning, ship, shipAgain := stations[1].ID, stations[2].ID, stations[5].ID, stations[6].ID
 
 	tests := []struct {
 		name, landAt, plan, want string
 		ok                       bool
 	}{
-		{name: "landAt", landAt: "release", plan: "plan", want: "release", ok: true},
-		{name: "first merge after the plan", plan: "plan", want: "merge", ok: true},
-		{name: "merge before the plan skipped", plan: "build", want: "merge", ok: true},
-		{name: "plan at the first merge station", plan: "merge", want: "release", ok: true},
-		{name: "no merge station after the plan", plan: "release"},
+		{name: "landAt", landAt: shipAgain, plan: planning, want: shipAgain, ok: true},
+		{name: "first merge after the plan", plan: planning, want: ship, ok: true},
+		{name: "merge before the plan skipped", plan: stationBuild, want: ship, ok: true},
+		{name: "plan at a merge station", plan: early, want: ship, ok: true},
+		{name: "no merge station after the plan", plan: shipAgain},
 		{name: "plan not on the line", plan: "nowhere"},
 	}
 
@@ -172,7 +173,7 @@ func TestLine_LandingStation(t *testing.T) {
 		})
 	}
 
-	if s, ok := (Line{Stations: []Station{{ID: "plan", Kind: KindAgent}, {ID: "done", Kind: KindDone}}}).LandingStation("plan"); ok {
+	if s, ok := (Line{Stations: []Station{stations[2], stations[7]}}).LandingStation(planning); ok {
 		t.Errorf("LandingStation on a line with no merge station = %q, want none", s.ID)
 	}
 }
