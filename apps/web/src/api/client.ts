@@ -60,6 +60,7 @@ import type {
   OrgSummary,
   RunList,
   RunStatus,
+  ToolDecision,
   TouchMetrics,
   TouchReason,
   Version,
@@ -572,6 +573,11 @@ export function approveItem(org: string, item: string): Promise<Item> {
 
 export function rejectItem(org: string, item: string, reason: string): Promise<Item> {
   return unwrap(goal.POST(orgPath('/items/{item}/reject'), { params: { path: { org, item } }, body: { reason } }));
+}
+
+/** Decides the item's open tool approval: approve, with always_allow for a standing rule, or deny with a note (ADR 0031). */
+export function decideToolApproval(org: string, item: string, body: ToolDecision): Promise<Item> {
+  return unwrap(goal.POST(orgPath('/items/{item}/tool-approval'), { params: { path: { org, item } }, body }));
 }
 
 /** Answers the item's open question: a choice by its index in Item.question.choices, or the person's own words. */

@@ -21,7 +21,7 @@ import (
 )
 
 // Without a gateway listener the main one serves the gateway beside the API and the SPA; with one,
-// it serves only /mcp and /run and the main one answers them with 404 (phase 3 §5.5, threat model row 4).
+// it serves only /mcp, /run and /run/tool-approval and the main one answers them with 404 (phase 3 §5.5, threat model row 4).
 func TestRoutes_TheGatewayListenerServesOnlyTheGateway(t *testing.T) {
 	t.Parallel()
 
@@ -42,7 +42,7 @@ func TestRoutes_TheGatewayListenerServesOnlyTheGateway(t *testing.T) {
 		return rec.Body.String()
 	}
 
-	paths := []string{"/mcp", "/run", "/v1/health", "/v1/orgs", "/", "/board"}
+	paths := []string{"/mcp", "/run", "/run/tool-approval", "/v1/health", "/v1/orgs", "/", "/board"}
 
 	one, none := routes(false, named(toAPI), named(toGateway), named(toSPA))
 	if none != nil {
@@ -56,9 +56,9 @@ func TestRoutes_TheGatewayListenerServesOnlyTheGateway(t *testing.T) {
 		h    http.Handler
 		want []string // for paths, in order
 	}{
-		{name: "one listener", h: one, want: []string{toGateway, toGateway, toAPI, toAPI, toSPA, toSPA}},
-		{name: "main listener beside a gateway listener", h: primary, want: []string{notFound, notFound, toAPI, toAPI, toSPA, toSPA}},
-		{name: "gateway listener", h: gatewayOnly, want: []string{toGateway, toGateway, notFound, notFound, notFound, notFound}},
+		{name: "one listener", h: one, want: []string{toGateway, toGateway, toGateway, toAPI, toAPI, toSPA, toSPA}},
+		{name: "main listener beside a gateway listener", h: primary, want: []string{notFound, notFound, notFound, toAPI, toAPI, toSPA, toSPA}},
+		{name: "gateway listener", h: gatewayOnly, want: []string{toGateway, toGateway, toGateway, notFound, notFound, notFound, notFound}},
 	}
 
 	for _, tt := range tests {
@@ -75,7 +75,7 @@ func TestRoutes_TheGatewayListenerServesOnlyTheGateway(t *testing.T) {
 func TestEgress_ForwardsTheGatewaysPaths(t *testing.T) {
 	t.Parallel()
 
-	if got, want := egress.GatewayPaths(), []string{api.GatewayPath, api.RunPath}; !slices.Equal(got, want) {
+	if got, want := egress.GatewayPaths(), []string{api.GatewayPath, api.RunPath, api.ToolApprovalPath}; !slices.Equal(got, want) {
 		t.Errorf("egress forwards %v, goald serves the gateway at %v", got, want)
 	}
 }

@@ -101,7 +101,7 @@ func TestConnections_InUseByAFactory(t *testing.T) {
 
 	s := &server{
 		factories: oneFactory{f}, defs: definitionsOf(ctx, t, f, false), connections: conns, knowledge: porttest.NewKnowledge(conns, tenancy),
-		authz: AllowAll{}, clock: porttest.NewClock(mxNow),
+		authz: AllowAll{}, clock: porttest.NewClock(mxNow), items: porttest.NewStore(),
 	}
 
 	if _, err := conns.Create(ctx, domain.NewConnection{Name: connGitHub, Kind: connGitHub, Secrets: map[string]string{fieldToken: "t"}}, domain.LocalUser); err != nil {
@@ -145,7 +145,7 @@ func TestConnections_AnArchivedFactoryUsesNothing(t *testing.T) {
 
 	s := &server{
 		factories: oneFactory{f}, defs: definitionsOf(ctx, t, f, true), connections: conns, knowledge: porttest.NewKnowledge(conns, tenancy),
-		authz: AllowAll{}, clock: porttest.NewClock(mxNow),
+		authz: AllowAll{}, clock: porttest.NewClock(mxNow), items: porttest.NewStore(),
 	}
 
 	for _, n := range []string{connGitHub, "repos"} {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"path"
 	"slices"
@@ -65,6 +66,16 @@ type bundleSpec struct {
 	// Rules are the factory rules that apply to the run (ADR 0014), in declaration order, which
 	// the worker writes to the agent's rules.
 	Rules []bundleRule `json:"rules"`
+	// GrantedCalls are the Ask-first calls a person approved for this run (ADR 0031 decision 5),
+	// which the worker allows once each when connection, tool and canonical input match.
+	GrantedCalls []grantedCall `json:"granted_calls"`
+}
+
+// grantedCall is one call approved for the run, its input as canonical JSON.
+type grantedCall struct {
+	Connection string          `json:"connection"`
+	Tool       string          `json:"tool"`
+	Input      json.RawMessage `json:"input"`
 }
 
 // bundleRule is one factory rule of the run: its name, the hash of its rule file in the run's
@@ -89,6 +100,12 @@ type bundleConnection struct {
 	// the worker starts in the box; nil without one.
 	MCP  *domain.KindMCP `json:"mcp,omitempty"`
 	Docs string          `json:"docs,omitempty"`
+	// ToolModes are the connection's tools that ask first or are off for the run's agent (ADR
+	// 0031 decision 3); a tool not in it is allow.
+	ToolModes map[string]domain.ConnectionToolMode `json:"tool_modes"`
+	// AlwaysAllowOffered are the tools of ToolModes, sorted, whose ask comes from the
+	// organization connection's mode, so a person may answer it with Always allow.
+	AlwaysAllowOffered []string `json:"always_allow_offered"`
 }
 
 // bundleRepository is the factory's repository and the run's branch, which prepare checks out:
@@ -227,6 +244,7 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 			Connections:      []bundleConnection{},
 			KnowledgeSources: g.searchable(line),
 			Rules:            []bundleRule{},
+			GrantedCalls:     []grantedCall{},
 		},
 		Files: make(map[string][]byte, len(agentFiles)),
 		Git:   []gitCredential{},
@@ -263,7 +281,45 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 		return runBundle{}, err
 	}
 
+	if err := g.addGrantedCalls(ctx, c, &b); err != nil {
+		return runBundle{}, err
+	}
+
 	return b, nil
+}
+
+// addGrantedCalls puts the calls approved for the run in b (domain.GrantedCalls).
+func (g *Gateway) addGrantedCalls(ctx context.Context, c domain.TaskClaims, b *runBundle) error {
+	events, err := g.itemEvents(ctx, c.ItemID)
+	if err != nil {
+		return err
+	}
+
+	for _, call := range domain.GrantedCalls(events, c.RunID) {
+		b.Spec.GrantedCalls = append(b.Spec.GrantedCalls, grantedCall{Connection: call.Connection, Tool: call.Tool, Input: call.Input})
+	}
+
+	return nil
+}
+
+// itemEvents are all of item id's events, in append order.
+func (g *Gateway) itemEvents(ctx context.Context, id domain.ItemID) ([]domain.Event, error) {
+	var all []domain.Event
+
+	for after := int64(0); ; {
+		events, err := g.events.ItemEvents(ctx, id, after, eventPage)
+		if err != nil {
+			return nil, fmt.Errorf("events of item %s: %w", id, err)
+		}
+
+		all = append(all, events...)
+
+		if len(events) < eventPage {
+			return all, nil
+		}
+
+		after = events[len(events)-1].ID
+	}
 }
 
 // addRules puts the factory rules that apply to the run in b, matched by its agent, station and
@@ -414,7 +470,7 @@ func (g *Gateway) addRepository(
 		return nil
 	}
 
-	o, _, err := g.outline(ctx, repo.Connection)
+	_, o, _, err := g.outline(ctx, repo.Connection)
 	if err != nil {
 		return err
 	}
@@ -427,21 +483,30 @@ func (g *Gateway) addRepository(
 }
 
 // addConnections describes the agent's organization connections that its token grants in b, with
-// their git logins and CLI tools. The model connection gives the agent's env only, so it is not
-// described.
+// their git logins, CLI tools and the effective modes of their tools for the agent. The model
+// connection gives the agent's env only, so it is not described.
 func (g *Gateway) addConnections(ctx context.Context, c domain.TaskClaims, line domain.Line, agent domain.AgentSpec, b *runBundle) error {
+	var rules standingRules
+
 	for _, name := range agent.Connections {
 		if !slices.Contains(line.Connections, name) || !slices.Contains(c.Connections, name) {
 			continue // one the factory does not list, or the token does not grant
 		}
 
-		o, k, err := g.outline(ctx, name)
+		conn, o, k, err := g.outline(ctx, name)
 		if err != nil {
 			return err
 		}
 
+		active, err := rules.of(ctx, g.connections, conn)
+		if err != nil {
+			return err
+		}
+
+		modes := domain.EffectiveToolModes(conn.ToolModes, active, conn.ID, agent.Name)
 		b.Spec.Connections = append(b.Spec.Connections, bundleConnection{
 			Name: name, Kind: k.Name, Title: k.Title, Env: nonNil(o.Env), MCP: o.MCP, Docs: k.Spec.Docs,
+			ToolModes: modes.Modes, AlwaysAllowOffered: modes.AlwaysAllowOffered,
 		})
 
 		if o.Git != nil {
@@ -456,20 +521,43 @@ func (g *Gateway) addConnections(ctx context.Context, c domain.TaskClaims, line 
 	return nil
 }
 
-// outline is the connection name of the organization in ctx, as its kind renders it without any
-// secret value.
-func (g *Gateway) outline(ctx context.Context, name string) (domain.ConnectionOutline, domain.ConnectionKind, error) {
+// standingRules are the organization's active standing rules, read once for a bundle and only
+// when one of its connections has a tool that asks first.
+type standingRules struct {
+	rules  []domain.StandingRule
+	loaded bool
+}
+
+// of returns the active rules when conn has a tool that asks first, and none otherwise.
+func (s *standingRules) of(ctx context.Context, connections Connections, conn domain.Connection) ([]domain.StandingRule, error) {
+	if s.loaded || !slices.Contains(slices.Collect(maps.Values(conn.ToolModes)), domain.ToolModeAsk) {
+		return s.rules, nil
+	}
+
+	rules, err := connections.StandingRules(ctx, false)
+	if err != nil {
+		return nil, fmt.Errorf("standing rules: %w", err)
+	}
+
+	s.rules, s.loaded = rules, true
+
+	return s.rules, nil
+}
+
+// outline is the connection name of the organization in ctx, and it as its kind renders it
+// without any secret value.
+func (g *Gateway) outline(ctx context.Context, name string) (domain.Connection, domain.ConnectionOutline, domain.ConnectionKind, error) {
 	conn, err := g.connections.Get(ctx, name)
 	if err != nil {
-		return domain.ConnectionOutline{}, domain.ConnectionKind{}, fmt.Errorf("connection %s: %w", name, err)
+		return domain.Connection{}, domain.ConnectionOutline{}, domain.ConnectionKind{}, fmt.Errorf("connection %s: %w", name, err)
 	}
 
 	k, err := g.connections.Kind(ctx, conn.Kind)
 	if err != nil {
-		return domain.ConnectionOutline{}, domain.ConnectionKind{}, fmt.Errorf("connection %s: kind %s: %w", name, conn.Kind, err)
+		return domain.Connection{}, domain.ConnectionOutline{}, domain.ConnectionKind{}, fmt.Errorf("connection %s: kind %s: %w", name, conn.Kind, err)
 	}
 
-	return k.Outline(conn), k, nil
+	return conn, k.Outline(conn), k, nil
 }
 
 func gitCredentialOf(g domain.KindGit) gitCredential {

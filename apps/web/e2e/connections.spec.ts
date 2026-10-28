@@ -277,6 +277,24 @@ test.describe('a connection’s page', () => {
     expect(oldName).toEqual([]);
   });
 
+  test('setting a tool to Ask first holds after a reload, and the writes waiting link to Needs you', async ({
+    page,
+  }) => {
+    await page.goto('/o/acme/connections/playwright');
+    const tool = page.getByRole('group', { name: 'create_issue' });
+    await tool.getByRole('button', { name: 'Ask first' }).click();
+    await expect(tool.getByRole('button', { name: 'Ask first' })).toHaveAttribute('aria-pressed', 'true');
+
+    await page.reload();
+    await expect(
+      page.getByRole('group', { name: 'create_issue' }).getByRole('button', { name: 'Ask first' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+
+    await page.goto('/o/acme/connections');
+    const writes = page.getByRole('link', { name: 'Writes waiting for your OK 2' });
+    await expect(writes).toHaveAttribute('href', '/o/acme/needs-you');
+  });
+
   test('an unknown connection is not found', async ({ page }) => {
     await page.goto('/o/acme/connections/nothing-here');
     await expect(page.getByRole('heading', { name: 'No such connection' })).toBeVisible();

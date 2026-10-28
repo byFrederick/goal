@@ -2332,7 +2332,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Approve an item waiting for a human; it moves to the next station */
+        /**
+         * Approve an item waiting for a human; it moves to the next station
+         * @description 409 tool-approval-open while the item has an open tool approval (Item.tool_approval): the item waits for a decision on the call, decided with decideToolApproval, not on the item (ADR 0031 decision 9).
+         */
         post: operations["approveItem"];
         delete?: never;
         options?: never;
@@ -2359,6 +2362,31 @@ export interface paths {
          * @description Answers the item's open question (Item.question) with one of its choices or in the caller's own words, as ADR 0018 decides. The engine records question_answered and puts the item back in its station's arrival state, rework_count unchanged; its next run's brief carries the question and the answer. Audited as item.answered with the answer's length and the choice index, never its text. 400 when the body has both answer and choice or neither, or the answer is not 1 to 2000 characters; 400 bad-choice for a choice outside the question's choices; 409 no-open-question when the item has none (none was asked, it was answered, or a move, pause or rejection withdrew it), item-closed for a done or cancelled item, item-changed when it moved meanwhile.
          */
         post: operations["answerItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/items/{item}/tool-approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or deny the tool call an item's agent asked to make
+         * @description Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs connection:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without connection:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+         */
+        post: operations["decideToolApproval"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2715,8 +2743,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Rename a connection, or change its description, fields or secrets
-         * @description fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+         * Rename a connection, or change its description, fields, secrets or tool modes
+         * @description fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
          */
         patch: operations["updateConnection"];
         trace?: never;
@@ -2741,6 +2769,54 @@ export interface paths {
          */
         post: operations["testConnection"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/standing-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's standing rules
+         * @description The rules Always allow created (ADR 0031 decision 7), oldest first: each lets one agent role call one tool of one organization connection without asking, in every factory of the organization. The active ones, and the revoked ones too with revoked=true.
+         */
+        get: operations["listStandingRules"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/standing-rules/{rule}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The standing rule's id */
+                rule: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a standing rule
+         * @description The rule's agent role asks first again from its next run. A rule is never deleted: revoking sets revoked_at and revoked_by, audited as standing_rule.revoked. 404 for a rule that does not exist, 409 standing-rule-revoked for one revoked already. Needs a sign-in from the last 10 minutes.
+         */
+        delete: operations["revokeStandingRule"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3907,6 +3983,63 @@ export interface components {
             waiting?: components["schemas"]["ItemWaiting"];
             /** @description The question the item's agent asked a person and nobody has answered yet (ADR 0018); getItem and answerItem only, absent or null when there is none */
             question?: components["schemas"]["ItemQuestion"] | null;
+            /** @description The tool call the item's agent asked to make that waits for a person's decision (ADR 0031); getItem and decideToolApproval only, absent or null when there is none */
+            tool_approval?: components["schemas"]["ToolApproval"] | null;
+        };
+        /** @description A run's call of an Ask-first connection tool that waits for a person, read from its tool_approval_requested event */
+        ToolApproval: {
+            /**
+             * Format: int64
+             * @description The approval's id
+             */
+            id: number;
+            /** @description The organization connection's name */
+            connection: string;
+            /** @description The tool's name as the connection's MCP server lists it, as in create_comment */
+            tool: string;
+            /** @description The call's input, any JSON value, as canonical JSON (keys sorted); at most 16 KiB */
+            input: unknown;
+            /** @description The calling agent's role name, as in architect; never its copy number */
+            agent: string;
+            /** @description The run that asked; it ended when it asked */
+            run_id: string;
+            /** Format: date-time */
+            asked_at: string;
+            /** @description Whether a person may approve the call with always_allow: its ask comes from the organization connection's mode alone */
+            always_allow_offered: boolean;
+        };
+        /** @description A person's decision on an item's open tool approval */
+        ToolDecision: {
+            /** @enum {string} */
+            decision: "approve" | "deny";
+            /**
+             * @description With approve only: also let the agent role call this tool of this connection without asking from now on (a standing rule); needs connection:manage
+             * @default false
+             */
+            always_allow?: boolean;
+            /** @description With deny only, the person's reason, 1 to 2000 characters (surrounding space is trimmed) */
+            note?: string;
+        };
+        StandingRuleList: {
+            rules: components["schemas"]["StandingRule"][];
+        };
+        /** @description Lets one agent role call one tool of one organization connection without asking, in every factory of the organization (ADR 0031 decision 7) */
+        StandingRule: {
+            id: string;
+            connection_id: string;
+            /** @description The connection's name; null once the connection is deleted */
+            connection: string | null;
+            tool: string;
+            /** @description The agent's role, its name in the definition, as in architect */
+            agent: string;
+            created_by: components["schemas"]["Actor"];
+            /** Format: date-time */
+            created_at: string;
+            /** @description The item it was approved on */
+            item_id: string;
+            revoked_by: components["schemas"]["Actor"] | null;
+            /** Format: date-time */
+            revoked_at: string | null;
         };
         /** @description An agent's open question about an item, read from its question_asked event */
         ItemQuestion: {
@@ -5067,7 +5200,7 @@ export interface components {
             run_id?: string;
             /** Format: date-time */
             at: string;
-            /** @description What happened, as in submitted, moved, note or lease_taken. question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue */
+            /** @description What happened, as in submitted, moved, note or lease_taken. question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue. tool_approval_requested: the item's agent asked to make a call of an Ask-first connection tool (data connection, tool, input, agent as the role name, run_id, always_allow_offered); the run ends and the item waits at its station. tool_approval_granted: a person approved it (data approval_id, always_allow; actor); tool_approval_denied: a person denied it (data approval_id, note when given; actor); either way the item goes back to its station's queue */
             kind: string;
             station?: string;
             actor: string;
@@ -5534,12 +5667,12 @@ export interface components {
             truncated: boolean;
         };
         /**
-         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row
+         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny
          * @enum {string}
          */
-        InboxEntryKind: "decision" | "question" | "andon" | "rework_warning" | "blocked" | "expedite";
+        InboxEntryKind: "decision" | "question" | "tool_approval" | "andon" | "rework_warning" | "blocked" | "expedite";
         InboxEntry: {
-            /** @description "<kind>:<id of what waits>": decision:, question:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station> */
+            /** @description "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station> */
             id: string;
             kind: components["schemas"]["InboxEntryKind"];
             factory: {
@@ -5549,7 +5682,7 @@ export interface components {
             };
             /**
              * Format: date-time
-             * @description Since when it waits: the item's last change (decision, question, blocked), its creation (expedite), the pull (andon), now (rework_warning)
+             * @description Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning)
              */
             since: string;
             /** @description The item it is about, or null for an entry that is about no item */
@@ -5564,6 +5697,8 @@ export interface components {
             blocked: components["schemas"]["InboxBlocked"] | null;
             /** @description A question entry's open question; absent or null for other kinds */
             question?: components["schemas"]["ItemQuestion"] | null;
+            /** @description A tool_approval entry's open tool approval; absent or null for other kinds */
+            tool_approval?: components["schemas"]["ToolApproval"] | null;
             /** @description The open pull of an andon entry; null for other kinds */
             andon: components["schemas"]["AndonPull"] | null;
             /** @description The gate tally of a rework warning; null for other kinds */
@@ -6261,12 +6396,26 @@ export interface components {
             env?: string[];
             /** @description getConnection only, its kind's docs for agents */
             docs?: string;
+            /** @description Its tools and their modes (ADR 0031 decisions 1 and 2), sorted by name: one entry for each tool the last test listed and each tool with a mode set, a tool without a mode being allow; empty for a connection never tested and without modes */
+            tools: components["schemas"]["ConnectionTool"][];
+            /** @description The open tool approvals on this connection in the organization, by its current name; the connections list's "Writes waiting for your OK" is their sum */
+            waiting_approvals: number;
             created_by: components["schemas"]["Actor"];
             /** Format: date-time */
             created_at: string;
             updated_by: components["schemas"]["Actor"];
             /** Format: date-time */
             updated_at: string;
+        };
+        /**
+         * @description What a run may do with one tool of the connection (ADR 0031 decision 1): allow runs the call, ask pauses it for a person, off refuses it
+         * @enum {string}
+         */
+        ConnectionToolMode: "allow" | "ask" | "off";
+        ConnectionTool: {
+            /** @description The tool's name as the MCP server lists it, without the connection prefix: 1 to 128 letters, digits, underscores, dots or dashes */
+            name: string;
+            mode: components["schemas"]["ConnectionToolMode"];
         };
         /** @description What uses a connection, so it cannot be deleted or renamed meanwhile */
         ConnectionUsers: {
@@ -6303,6 +6452,8 @@ export interface components {
             secrets?: {
                 [key: string]: string;
             };
+            /** @description Every tool's mode: replaces them all, so send the full list (a tool left out goes back to allow). Only for a connection whose kind has an MCP server; a tool named twice is refused. */
+            tools?: components["schemas"]["ConnectionTool"][];
         };
         /** @description 3 to 40 lowercase letters, digits and inner dashes, starting with a letter; an agent gets it as the env variable of the name upper-cased with each - turned into _, which must not be one reserved for the platform */
         CredentialName: string;
@@ -10076,6 +10227,37 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    decideToolApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolDecision"];
+            };
+        };
+        responses: {
+            /** @description The item after the decision */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Problem"];
+        };
+    };
     rejectItem: {
         parameters: {
             query?: never;
@@ -10607,6 +10789,60 @@ export interface operations {
                     "application/json": components["schemas"]["ConnectionTestResult"];
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listStandingRules: {
+        parameters: {
+            query?: {
+                /** @description Also list the revoked rules */
+                revoked?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The rules */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandingRuleList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    revokeStandingRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The standing rule's id */
+                rule: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The revoked rule */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandingRule"];
+                };
+            };
+            409: components["responses"]["Conflict"];
             default: components["responses"]["Problem"];
         };
     };

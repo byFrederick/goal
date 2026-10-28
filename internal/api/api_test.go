@@ -428,7 +428,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		Store: h.store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
 		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock,
 		CodeHosts:   map[string]ports.CodeHost{"github": h.codehost},
-		Connections: engineConnections(t, newTenancy(t)),
+		Connections: sharedRules{Connections: engineConnections(t, newTenancy(t)), h: h},
 		Credentials: porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), tenancy, nil),
 	}, engine.Config{Image: "ghcr.io/acme/goal-agent:1", GatewayURL: "http://gateway.example.com/mcp", GatewayKeyRef: "env:GOAL_GATEWAY_KEY"})
 	if err != nil {
@@ -554,6 +554,25 @@ func (h *harness) judgeDeps(tenancy *porttest.Tenancy) *api.JudgeDeps {
 			Runner: porttest.NewJudgeRunner(nil), Clock: h.clock,
 		}, jonah.Config{}),
 	}
+}
+
+// sharedRules are the engine's connections with the standing rules kept in the API's (h.conns),
+// as goald's one store keeps both: a rule Always allow creates is one the API lists and revokes.
+type sharedRules struct {
+	*porttest.Connections
+	h *harness
+}
+
+func (c sharedRules) StandingRules(ctx context.Context, includeRevoked bool) ([]domain.StandingRule, error) {
+	return c.h.conns.StandingRules(ctx, includeRevoked)
+}
+
+func (c sharedRules) CreateStandingRule(ctx context.Context, n domain.NewStandingRule, by domain.Actor) (domain.StandingRule, error) {
+	return c.h.conns.CreateStandingRule(ctx, n, by)
+}
+
+func (c sharedRules) RevokeStandingRule(ctx context.Context, id domain.StandingRuleID, by domain.Actor) (domain.StandingRule, error) {
+	return c.h.conns.RevokeStandingRule(ctx, id, by)
 }
 
 // engineConnections are the connections the engine's runs and merges get: acme's model connection

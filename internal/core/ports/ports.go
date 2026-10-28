@@ -285,6 +285,12 @@ type Store interface {
 	// factory id. Factories with nothing pending are included with zeros.
 	Attention(ctx context.Context) ([]domain.Attention, error)
 
+	// OpenToolApprovals counts the organization's open tool approvals by the name of their
+	// connection (ADR 0031 decision 10): the waiting_human items whose latest
+	// tool_approval_requested has no decision or withdrawal after it (domain.OpenToolApproval).
+	// A connection with none has no entry.
+	OpenToolApprovals(ctx context.Context) (map[string]int, error)
+
 	// PullAndon opens an andon pull on p.FactoryID: p's kind, station, reason, data and PulledAt,
 	// pulled by the actor (PulledBy is its Ref()), with the audit entry andon.pulled in the same
 	// transaction. It returns the stored pull with its id. It returns ErrConflict when the factory

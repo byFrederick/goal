@@ -268,3 +268,47 @@ func (q *Queries) NotesSinceLastRun(ctx context.Context, itemID uuid.UUID) ([]It
 	}
 	return items, nil
 }
+
+const openToolApprovals = `-- name: OpenToolApprovals :many
+SELECT coalesce(e.data->>'connection', '')::text AS connection, count(*)::bigint AS open
+FROM work_items w
+CROSS JOIN LATERAL (
+  SELECT l.kind, l.data FROM item_events l
+  WHERE l.item_id = w.id
+    AND l.kind IN ('tool_approval_requested', 'tool_approval_granted', 'tool_approval_denied',
+                   'moved', 'paused', 'rejected', 'cancelled')
+  ORDER BY l.id DESC
+  LIMIT 1
+) e
+WHERE w.state = 'waiting_human' AND e.kind = 'tool_approval_requested'
+GROUP BY 1
+ORDER BY 1
+`
+
+type OpenToolApprovalsRow struct {
+	Connection string
+	Open       int64
+}
+
+// The organization's open tool approvals by connection name (row-level security, no WHERE
+// org_id): the waiting_human items whose latest tool approval request, decision or withdrawal
+// (domain.OpenToolApproval's kinds) is a request, on item_events_item_idx.
+func (q *Queries) OpenToolApprovals(ctx context.Context) ([]OpenToolApprovalsRow, error) {
+	rows, err := q.db.Query(ctx, openToolApprovals)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OpenToolApprovalsRow
+	for rows.Next() {
+		var i OpenToolApprovalsRow
+		if err := rows.Scan(&i.Connection, &i.Open); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

@@ -19,6 +19,7 @@ export function ageOf(entry: InboxEntry, now = Date.now()): number {
 /** The row's title: the asking role and its question, the item's title, or what the entry is when it is about no item. */
 export function titleOf(entry: InboxEntry): string {
   if (entry.kind === 'question' && entry.question) return `${entry.question.agent}: ${entry.question.text}`;
+  if (entry.kind === 'tool_approval' && entry.tool_approval) return approvalTitle(entry.tool_approval);
   if (entry.item) return entry.item.title;
   if (entry.kind === 'andon') return 'Line stopped';
   if (entry.kind === 'rework_warning' && entry.rework) {
@@ -27,10 +28,17 @@ export function titleOf(entry: InboxEntry): string {
   return humanize(entry.kind);
 }
 
+/** An Approval's title: the agent role that asks and the tool it wants to call. */
+export function approvalTitle(approval: { agent: string; tool: string }): string {
+  return `${approval.agent} wants to call ${approval.tool}`;
+}
+
 /** The line under the title: the item and its station, or the factory when no item is involved. */
 function whereOf(entry: InboxEntry): string {
   const station = humanize(entry.station ?? entry.item?.station ?? '');
-  if (entry.kind === 'question' && entry.item) return `#${entry.item.number} at ${station}, run paused`;
+  if ((entry.kind === 'question' || entry.kind === 'tool_approval') && entry.item) {
+    return `#${entry.item.number} at ${station}, run paused`;
+  }
   const about = entry.item ? entry.item.ref : (entry.factory.title ?? entry.factory.name);
   return [about, station].filter(Boolean).join(' at ');
 }
@@ -84,7 +92,7 @@ function NeedsRow({
   const org = useOrg();
   const type = typeOf(entry);
   const typeClass =
-    type === 'decision' || type === 'question'
+    type === 'approval' || type === 'decision' || type === 'question'
       ? 'text-you-ink'
       : type === 'alert'
         ? 'text-rework-ink'

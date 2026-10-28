@@ -1021,6 +1021,20 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
             },
           ];
         }
+        if (it.tool_approval) {
+          if (!decides) return [];
+          return [
+            {
+              ...base,
+              id: `tool_approval:${it.id}`,
+              kind: 'tool_approval',
+              since: it.tool_approval.asked_at,
+              action: null,
+              approval: null,
+              tool_approval: it.tool_approval,
+            },
+          ];
+        }
         if (it.state === 'waiting_human') {
           if (!decides) return [];
           return [
@@ -1066,7 +1080,15 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     return [...items, ...warnings];
   };
 
-  const kindOrder: InboxEntry['kind'][] = ['decision', 'question', 'andon', 'rework_warning', 'blocked', 'expedite'];
+  const kindOrder: InboxEntry['kind'][] = [
+    'decision',
+    'question',
+    'tool_approval',
+    'andon',
+    'rework_warning',
+    'blocked',
+    'expedite',
+  ];
 
   /**
    * A board station's statistics: the seeded busy and send-back shares and queue trend, how long
@@ -1899,7 +1921,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     }
 
     m = rest.match(
-      /^\/items\/([^/]+)(?:\/(events|runs|parts|notes|approve|reject|merge|retry|move|pause|cancel|answer))?$/,
+      /^\/items\/([^/]+)(?:\/(events|runs|parts|notes|approve|reject|merge|retry|move|pause|cancel|answer|tool-approval))?$/,
     );
     if (!m) return problem(res, 404, 'Not found', path);
 
@@ -2004,6 +2026,44 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       emit(it, 'lease_taken', by, { action: verb, actor: 'user:local' });
       it.agent = null;
     };
+
+    if (action === 'tool-approval') {
+      // goald checks the body first, then whether the item is still open, then the open approval (ADR 0031).
+      const decision = body.decision;
+      const alwaysAllow = body.always_allow === true;
+      const hasNote = body.note !== undefined;
+      const note = typeof body.note === 'string' ? body.note.trim() : '';
+      if (decision !== 'approve' && decision !== 'deny') {
+        return problem(res, 400, 'Bad Request', 'decision is approve or deny');
+      }
+      if (alwaysAllow && decision === 'deny') {
+        return problem(res, 400, 'Bad Request', 'always_allow goes with approve, not deny');
+      }
+      if (decision === 'approve' && hasNote) {
+        return problem(res, 400, 'Bad Request', 'an approval takes no note');
+      }
+      if (decision === 'deny' && (!note || [...note].length > 2000)) {
+        return problem(res, 400, 'Bad Request', 'a note is 1 to 2000 characters');
+      }
+      if (closed) return problem(res, 409, 'Conflict', `${ref(it)} is ${it.state}`, 'item-closed');
+      const call = it.tool_approval;
+      if (!call) {
+        return problem(res, 409, 'Conflict', `${ref(it)} has no open tool approval`, 'no-open-tool-approval');
+      }
+      if (alwaysAllow && !call.always_allow_offered) {
+        return problem(res, 409, 'Conflict', 'the approval does not offer always allow', 'always-allow-not-offered');
+      }
+      emit(it, decision === 'approve' ? 'tool_approval_granted' : 'tool_approval_denied', by, {
+        approval_id: call.id,
+        actor: 'user:local',
+        ...(decision === 'approve' ? { always_allow: alwaysAllow } : { note }),
+      });
+      // The run's next one carries the decision; the item goes back to its station's arrival state.
+      it.tool_approval = null;
+      it.state = 'queued';
+      it.agent = null;
+      return json(res, 200, full(it));
+    }
 
     if (action === 'move') {
       const to = typeof body.to === 'string' ? body.to.trim() : '';

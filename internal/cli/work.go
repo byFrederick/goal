@@ -263,7 +263,17 @@ func following(ctx context.Context, err error) error {
 func stopped(out *printer, it *gen.Item) error {
 	out.printf("\n%s is %s at %s (cost %s)\n", it.Ref, it.State, it.Station, usd(it.CostUsd))
 
-	if it.State == "waiting_human" {
+	if a := it.ToolApproval; it.State == "waiting_human" && a != nil {
+		out.printf("  %s\n", toolAsk(a.Agent, a.Connection, a.Tool, a.Input))
+		out.printf("  goal item %s           # read it, with the outputs so far\n", it.Ref)
+		out.printf("  goal approve %s        # let the agent make this one call\n", it.Ref)
+
+		if a.AlwaysAllowOffered {
+			out.printf("  goal approve %s --always-allow   # and let %s call it without asking from now on\n", it.Ref, a.Agent)
+		}
+
+		out.printf("  goal deny %s --note \"...\"\n", it.Ref)
+	} else if it.State == "waiting_human" {
 		out.printf("  goal item %s           # read it, with the outputs so far\n", it.Ref)
 		out.printf("  goal approve %s        # or goal merge %s at a merge station\n", it.Ref, it.Ref)
 		out.printf("  goal reject %s --reason \"...\"\n", it.Ref)
@@ -275,6 +285,18 @@ func stopped(out *printer, it *gen.Item) error {
 	}
 
 	return nil
+}
+
+// toolAsk is the line of an agent's call that waits for a person: its role, the connection, the
+// tool and the input cut to one short line.
+func toolAsk(agent, connection, tool string, input any) string {
+	in, ok := input.(string)
+	if !ok {
+		b, _ := json.Marshal(input)
+		in = string(b)
+	}
+
+	return fmt.Sprintf("%s asks to call %s %s: %s", agent, connection, tool, cut(oneLine(in), 100))
 }
 
 // describe renders one event as a short line, or "" for noise (token usage, successful tool
@@ -317,7 +339,29 @@ var describers = map[string]func(gen.Event) string{
 	"check_failed": func(e gen.Event) string {
 		return fmt.Sprintf("check `%s` failed (exit %v)", str(e, "command"), e.Data["exit_code"])
 	},
-	"approved":       func(e gen.Event) string { return "approved by " + e.Actor },
+	"approved": func(e gen.Event) string { return "approved by " + e.Actor },
+	"tool_approval_requested": func(e gen.Event) string {
+		line := toolAsk(str(e, "agent"), str(e, "connection"), str(e, "tool"), e.Data["input"])
+		if offered, _ := e.Data["always_allow_offered"].(bool); offered {
+			line += " (always allow offered)"
+		}
+
+		return line
+	},
+	"tool_approval_granted": func(e gen.Event) string {
+		if always, _ := e.Data["always_allow"].(bool); always {
+			return "tool call approved by " + e.Actor + ", always allow"
+		}
+
+		return "tool call approved by " + e.Actor
+	},
+	"tool_approval_denied": func(e gen.Event) string {
+		if note := str(e, "note"); note != "" {
+			return cut(oneLine("tool call denied by "+e.Actor+": "+note), 300)
+		}
+
+		return "tool call denied by " + e.Actor
+	},
 	"lease_taken":    func(e gen.Event) string { return "run stopped by " + e.Actor + " (" + str(e, "action") + ")" },
 	"paused":         withReason,
 	"note":           func(e gen.Event) string { return "note from " + e.Actor + ": " + cut(oneLine(str(e, "text")), 300) },
@@ -461,6 +505,8 @@ const (
 	verbReject  = "reject"
 	verbRetry   = "retry"
 	verbMerge   = "merge"
+	// verbDeny denies the call an item's agent asked to make; reject sends work back instead.
+	verbDeny = "deny"
 	// verbNote leaves a note for the agents; not a decision.
 	verbNote = "note"
 	// verbAnswer answers the question an item's agent asked; not a decision either.
@@ -471,17 +517,18 @@ const (
 	verbLane  = "lane"
 )
 
-// decide acts on an item: goal approve <item>; goal reject <item> --reason "..."; goal retry
+// decide acts on an item: goal approve <item> [--always-allow]; goal reject <item> --reason "..."; goal retry
 // <item>; goal merge <item>. Each takes --factory for a bare item number and --org. The decider
 // is the request's actor, the local user (phase 2.2 has no sign-in).
 func decide(ctx context.Context, out *printer, getenv func(string) string, verb string, args []string) error {
 	fs := newFlags(verb)
 	reason := fs.String("reason", "", "what must change (reject)")
+	always := fs.Bool("always-allow", false, "approve the waiting tool call and let the agent make it without asking from now on (approve)")
 	factory := fs.String("factory", "", "the factory of a bare item number")
 	org := addOrgFlag(fs)
 
 	pos, err := parseInterspersed(fs, args)
-	if err != nil || len(pos) != 1 || (verb == verbReject) != (*reason != "") {
+	if err != nil || len(pos) != 1 || (verb == verbReject) != (*reason != "") || (*always && verb != verbApprove) {
 		return errUsage
 	}
 
@@ -495,6 +542,10 @@ func decide(ctx context.Context, out *printer, getenv func(string) string, verb 
 		return err
 	}
 
+	if verb == verbApprove {
+		return approve(ctx, out, c, ref, *always)
+	}
+
 	it, err := act(ctx, c, verb, ref, *reason)
 	if err != nil {
 		return err
@@ -503,6 +554,113 @@ func decide(ctx context.Context, out *printer, getenv func(string) string, verb 
 	out.printf("✓ %s %s; now %s at %s\n", done[verb], it.Ref, it.State, it.Station)
 
 	return nil
+}
+
+// codeToolApprovalOpen is goald's refusal to approve an item while a tool call of its agent
+// waits: the call is decided on its own (ADR 0031 decision 6).
+const codeToolApprovalOpen = "tool-approval-open"
+
+// approve approves an item, or the tool call it waits on. --always-allow decides the call alone;
+// a plain approve that goald refuses because a call waits approves that call, so one verb answers
+// either kind of wait.
+func approve(ctx context.Context, out *printer, c orgClient, ref string, always bool) error {
+	if !always {
+		res, err := c.ApproveItemWithResponse(ctx, c.org, ref)
+		if err != nil {
+			return apiDown(err)
+		}
+
+		if it := res.JSON200; it != nil {
+			out.printf("✓ %s %s; now %s at %s\n", done[verbApprove], it.Ref, it.State, it.Station)
+
+			return nil
+		}
+
+		if problemCode(res.ApplicationproblemJSON409) != codeToolApprovalOpen {
+			return problem(res.HTTPResponse, conflictOr(res.ApplicationproblemJSON409, res.ApplicationproblemJSONDefault))
+		}
+	}
+
+	d := gen.ToolDecision{Decision: gen.Approve}
+	if always {
+		d.AlwaysAllow = &always
+	}
+
+	it, err := decideTool(ctx, c, ref, d)
+	if err != nil {
+		return err
+	}
+
+	also := ""
+	if always {
+		also = ", and always allowed it"
+	}
+
+	out.printf("✓ approved %s's tool call%s; now %s at %s\n", it.Ref, also, it.State, it.Station)
+
+	return nil
+}
+
+// denyItem denies the call an item's agent asked to make: goal deny <item> [--note "..."]
+// [--factory F]. The item goes back to its station, and the next run's brief carries the denial
+// and the note.
+func denyItem(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	fs := newFlags(verbDeny)
+	note := fs.String("note", "", "why, for the agent's next run")
+	factory := fs.String("factory", "", "the factory of a bare item number")
+	org := addOrgFlag(fs)
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 1 || (*note != "" && strings.TrimSpace(*note) == "") {
+		return errUsage
+	}
+
+	c, err := connect(ctx, getenv, *org)
+	if err != nil {
+		return err
+	}
+
+	ref, err := itemRef(ctx, c, pos[0], *factory)
+	if err != nil {
+		return err
+	}
+
+	it, err := decideTool(ctx, c, ref, gen.ToolDecision{Decision: gen.Deny, Note: optional(*note)})
+	if err != nil {
+		return err
+	}
+
+	out.printf("✓ denied %s's tool call; now %s at %s\n", it.Ref, it.State, it.Station)
+
+	return nil
+}
+
+// decideTool sends a decision on the item's open tool approval and returns the item after it.
+func decideTool(ctx context.Context, c orgClient, ref string, d gen.ToolDecision) (*gen.Item, error) {
+	res, err := c.DecideToolApprovalWithResponse(ctx, c.org, ref, d)
+	if err != nil {
+		return nil, apiDown(err)
+	}
+
+	if res.JSON200 == nil {
+		return nil, toolRefused(res.HTTPResponse, conflictOr(res.ApplicationproblemJSON409, res.ApplicationproblemJSONDefault), ref)
+	}
+
+	return res.JSON200, nil
+}
+
+// toolRefused says goald's refusal of a tool decision: the two a decision can run into in plain
+// words, by the problem's code, anything else as the other verbs say it. The call may have been
+// decided or withdrawn since it was read.
+func toolRefused(res *http.Response, p *gen.Problem, ref string) error {
+	switch problemCode(p) {
+	case "no-open-tool-approval":
+		return fmt.Errorf("%s has no tool call waiting for a decision", ref)
+	case "always-allow-not-offered":
+		return errors.New("this call does not offer Always allow: its Ask first comes from the factory definition")
+	default:
+		return problem(res, p)
+	}
 }
 
 // noteItem leaves the local user's note for the agents working an item: goal note <item>
@@ -743,16 +901,9 @@ func optional(s string) *string {
 // done is what each decision did, for the line that confirms it.
 var done = map[string]string{verbApprove: "approved", verbReject: "rejected", verbRetry: "retried", verbMerge: "merged"}
 
-// act sends one decision and returns the item after it, or why it was refused.
+// act sends a reject, retry or merge and returns the item after it, or why it was refused.
 func act(ctx context.Context, c orgClient, verb, ref, reason string) (*gen.Item, error) {
 	switch verb {
-	case verbApprove:
-		res, err := c.ApproveItemWithResponse(ctx, c.org, ref)
-		if err != nil {
-			return nil, apiDown(err)
-		}
-
-		return answer(res.JSON200, res.HTTPResponse, conflictOr(res.ApplicationproblemJSON409, res.ApplicationproblemJSONDefault))
 	case verbReject:
 		res, err := c.RejectItemWithResponse(ctx, c.org, ref, gen.Rejection{Reason: reason})
 		if err != nil {

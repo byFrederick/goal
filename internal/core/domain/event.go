@@ -121,6 +121,19 @@ const (
 	// choice's text, or the person's words), choice_index only when a choice was picked, and
 	// actor (ref).
 	EventQuestionAnswered EventKind = "question_answered"
+	// EventToolApprovalRequested is a run's call of an Ask-first connection tool (ADR 0031
+	// decision 4): the run ends and the item waits for a person's decision at its station. Data
+	// connection (its name), tool, input (the call's JSON input), agent (the role), run_id and
+	// always_allow_offered.
+	EventToolApprovalRequested EventKind = "tool_approval_requested"
+	// EventToolApprovalGranted is a person's approval of the item's open tool approval: the item
+	// goes back to its station's arrival state and its next run may make that one call. Data
+	// approval_id (the request's event id), always_allow and actor (ref).
+	EventToolApprovalGranted EventKind = "tool_approval_granted"
+	// EventToolApprovalDenied is a person's denial of the item's open tool approval: the item
+	// goes back to its station's arrival state and its next run's brief carries the denial. Data
+	// approval_id, note (only when the person gave one) and actor (ref).
+	EventToolApprovalDenied EventKind = "tool_approval_denied"
 )
 
 // Audit of items.

@@ -230,6 +230,11 @@ func (s *server) ListConnections(ctx context.Context, req gen.ListConnectionsReq
 		return nil, err
 	}
 
+	waiting, err := s.waitingApprovals(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	kind := deref(req.Params.Kind)
 	out := gen.ListConnections200JSONResponse{Connections: []gen.Connection{}}
 
@@ -238,7 +243,7 @@ func (s *server) ListConnections(ctx context.Context, req gen.ListConnectionsReq
 			continue
 		}
 
-		out.Connections = append(out.Connections, s.connectionOut(ctx, c, kinds[c.Kind], users[c.Name], sources[c.Name]))
+		out.Connections = append(out.Connections, s.connectionOut(ctx, c, kinds[c.Kind], users[c.Name], sources[c.Name], waiting[c.Name]))
 	}
 
 	return out, nil
@@ -264,7 +269,12 @@ func (s *server) CreateConnection(ctx context.Context, req gen.CreateConnectionR
 		return nil, err
 	}
 
-	return gen.CreateConnection201JSONResponse(s.connectionOut(ctx, c, kind, nil, nil)), nil
+	waiting, err := s.waitingApprovals(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.CreateConnection201JSONResponse(s.connectionOut(ctx, c, kind, nil, nil, waiting[c.Name])), nil
 }
 
 // GetConnection is one connection with the env names a run gets from it and its kind's docs.
@@ -289,15 +299,21 @@ func (s *server) GetConnection(ctx context.Context, req gen.GetConnectionRequest
 		return nil, err
 	}
 
-	out := s.connectionOut(ctx, c, kind, users[c.Name], sources[c.Name])
+	waiting, err := s.waitingApprovals(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := s.connectionOut(ctx, c, kind, users[c.Name], sources[c.Name], waiting[c.Name])
 	env := append([]string{}, kind.Outline(c).Env...)
 	out.Env, out.Docs = &env, optional(kind.Spec.Docs)
 
 	return gen.GetConnection200JSONResponse(out), nil
 }
 
-// UpdateConnection renames a connection or changes its description, fields or secrets; a
-// rename waits until no current version names it.
+// UpdateConnection renames a connection or changes its description, fields, secrets or tool
+// modes; a rename waits until no current version names it, and modes need a kind with an MCP
+// server (ADR 0031 decision 2).
 func (s *server) UpdateConnection(ctx context.Context, req gen.UpdateConnectionRequestObject) (gen.UpdateConnectionResponseObject, error) {
 	by, ok := domain.ActorFrom(ctx)
 	if !ok {
@@ -317,12 +333,9 @@ func (s *server) UpdateConnection(ctx context.Context, req gen.UpdateConnectionR
 		}
 	}
 
-	p := domain.ConnectionPatch{Name: b.Name, Description: b.Description, Secrets: deref(b.Secrets)}
-	if b.Fields != nil {
-		p.Fields = *b.Fields
-		if p.Fields == nil {
-			p.Fields = map[string]string{}
-		}
+	p, err := s.patchIn(ctx, req.Connection, b)
+	if err != nil {
+		return nil, err
 	}
 
 	c, err := s.connections.Update(ctx, req.Connection, p, by)
@@ -340,7 +353,80 @@ func (s *server) UpdateConnection(ctx context.Context, req gen.UpdateConnectionR
 		return nil, err
 	}
 
-	return gen.UpdateConnection200JSONResponse(s.connectionOut(ctx, c, kind, users[c.Name], sources[c.Name])), nil
+	waiting, err := s.waitingApprovals(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.UpdateConnection200JSONResponse(s.connectionOut(ctx, c, kind, users[c.Name], sources[c.Name], waiting[c.Name])), nil
+}
+
+// patchIn is the change b asks of the connection name: fields, when present, replace every
+// non-secret value, and tools every tool's mode.
+func (s *server) patchIn(ctx context.Context, name string, b *gen.ConnectionPatch) (domain.ConnectionPatch, error) {
+	p := domain.ConnectionPatch{Name: b.Name, Description: b.Description, Secrets: deref(b.Secrets)}
+	if b.Fields != nil {
+		p.Fields = *b.Fields
+		if p.Fields == nil {
+			p.Fields = map[string]string{}
+		}
+	}
+
+	if b.Tools != nil {
+		modes, err := s.toolModesIn(ctx, name, *b.Tools)
+		if err != nil {
+			return domain.ConnectionPatch{}, err
+		}
+
+		p.ToolModes = modes
+	}
+
+	return p, nil
+}
+
+// toolModesIn are the modes of a patch's tools for the connection name, which every tool's mode
+// replaces: refused (400) for a kind without an MCP server, a tool named twice, a malformed name
+// or an unknown mode.
+func (s *server) toolModesIn(ctx context.Context, name string, tools []gen.ConnectionTool) (map[string]domain.ConnectionToolMode, error) {
+	c, err := s.connections.Get(ctx, name)
+	if err != nil {
+		return nil, connectionError(err, name, errConnectionNotFound)
+	}
+
+	kind, err := s.connections.Kind(ctx, c.Kind)
+	if err != nil {
+		return nil, err
+	}
+
+	if kind.Spec.MCP == nil {
+		return nil, fmt.Errorf("%w: connection %s is of kind %s, which has no MCP server and so no tools", errConnectionInvalid, c.Name, kind.Name)
+	}
+
+	modes := make(map[string]domain.ConnectionToolMode, len(tools))
+
+	for _, t := range tools {
+		if _, twice := modes[t.Name]; twice {
+			return nil, fmt.Errorf("%w: tool %q is named twice", errConnectionInvalid, t.Name)
+		}
+
+		modes[t.Name] = domain.ConnectionToolMode(t.Mode)
+	}
+
+	if err := domain.CheckToolModes(modes); err != nil {
+		return nil, fmt.Errorf("%w: %w", errConnectionInvalid, err)
+	}
+
+	return modes, nil
+}
+
+// waitingApprovals are the organization's open tool approvals by connection name.
+func (s *server) waitingApprovals(ctx context.Context) (map[string]int, error) {
+	waiting, err := s.items.OpenToolApprovals(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("count the open tool approvals: %w", err)
+	}
+
+	return waiting, nil
 }
 
 // DeleteConnection deletes a connection no current version names (and no knowledge source uses).
@@ -592,11 +678,13 @@ func (s *server) kindsByName(ctx context.Context) (map[string]domain.ConnectionK
 }
 
 // connectionOut is a connection as the contract has it, never a secret value: what uses it (the
-// factories the caller sees among by, the knowledge sources that read it) and its status.
-func (s *server) connectionOut(ctx context.Context, c domain.Connection, kind domain.ConnectionKind, by []factoryUse, sources []string) gen.Connection {
+// factories the caller sees among by, the knowledge sources that read it), its status, its tools
+// and the tool approvals waiting on it.
+func (s *server) connectionOut(ctx context.Context, c domain.Connection, kind domain.ConnectionKind, by []factoryUse, sources []string, waiting int) gen.Connection {
 	out := gen.Connection{
 		Id: string(c.ID), Name: c.Name, Kind: c.Kind, Description: c.Description, Fields: map[string]string{},
 		SecretsSet: slices.Clone(c.SecretFields), Status: connectionStatus(c, kind), LastUsedAt: c.LastUsedAt,
+		Tools: toolsOut(c), WaitingApprovals: waiting,
 		UsedBy:    gen.ConnectionUsers{Factories: []gen.ConnectionFactory{}, KnowledgeSources: append([]string{}, sources...)},
 		CreatedBy: s.actorOut(c.CreatedBy), CreatedAt: c.CreatedAt, UpdatedBy: s.actorOut(c.UpdatedBy), UpdatedAt: c.UpdatedAt,
 	}
@@ -616,6 +704,29 @@ func (s *server) connectionOut(ctx context.Context, c domain.Connection, kind do
 	if c.LastTest != nil {
 		t := testOut(*c.LastTest)
 		out.LastTest = &t
+	}
+
+	return out
+}
+
+// toolsOut are c's tools sorted by name: those its last test listed and those with a mode, a tool
+// without one being allow (ADR 0031 decisions 1 and 2).
+func toolsOut(c domain.Connection) []gen.ConnectionTool {
+	var names []string
+	if c.LastTest != nil {
+		names = slices.Clone(c.LastTest.Tools)
+	}
+
+	names = slices.Compact(slices.Sorted(slices.Values(append(names, slices.Collect(maps.Keys(c.ToolModes))...))))
+	out := make([]gen.ConnectionTool, 0, len(names))
+
+	for _, name := range names {
+		mode, ok := c.ToolModes[name]
+		if !ok {
+			mode = domain.ToolModeAllow
+		}
+
+		out = append(out, gen.ConnectionTool{Name: name, Mode: gen.ConnectionToolMode(mode)})
 	}
 
 	return out
