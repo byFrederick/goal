@@ -28,26 +28,23 @@ type runEnv struct {
 	secrets []string
 }
 
-// runEnv resolves the run's connections, each use audited as connection.used: the runtime's model
-// and repository connections and the organization connections of the agent's list. It opens the
-// credentials they refer to and the ones listed for the run's agent (ADR 0017 decisions 5 to 7),
-// each use audited as credential.used by the port. The line runs (domain.Line.Refusal), so it has
-// a model connection.
-func (e *Engine) runEnv(ctx context.Context, c claimed, run domain.RunID) (runEnv, error) {
-	rt := c.line.Runtime
-	own := slices.DeleteFunc(slices.Clone(c.agent.Connections), func(n string) bool { return !slices.Contains(c.line.Connections, n) })
-
+// runEnv resolves the run's connections, each use audited as connection.used: the model and
+// repository connections and the agent's own (own). It opens the credentials they
+// refer to and, but for a Jonah run, which gets only the model connection's env, the ones listed
+// for the run's agent (ADR 0017 decisions 5 to 7), each use audited as credential.used by the
+// port. A line that runs (domain.Line.Refusal) has a model connection.
+func (e *Engine) runEnv(ctx context.Context, req domain.RunRequest, own []string, run domain.RunID) (runEnv, error) {
 	var names []string
 
-	for _, n := range append([]string{rt.ModelConnection, rt.Repository.Connection}, own...) {
+	for _, n := range append([]string{req.ModelConnection, req.Repository.Connection}, own...) {
 		if n != "" && !slices.Contains(names, n) {
 			names = append(names, n)
 		}
 	}
 
-	use := domain.CredentialUse{Factory: c.line.FactoryID, Agent: c.agent.Name, Run: run}
+	use := domain.CredentialUse{Factory: req.FactoryID, Agent: req.Agent, Run: run}
 
-	conns, opened, err := e.resolve(ctx, names, use)
+	conns, opened, err := e.resolve(ctx, names, use, req.Kind != domain.RunKindJonah)
 	if err != nil {
 		return runEnv{}, err
 	}
@@ -63,15 +60,17 @@ func (e *Engine) runEnv(ctx context.Context, c claimed, run domain.RunID) (runEn
 		}
 	}
 
-	if err := agentEnv(rt.ModelConnection, own, conns, &env); err != nil {
+	if err := agentEnv(req.ModelConnection, own, conns, &env); err != nil {
 		return runEnv{}, err
 	}
 
-	if err := credentialEnv(use, opened, conns, &env); err != nil {
-		return runEnv{}, err
+	if req.Kind != domain.RunKindJonah {
+		if err := credentialEnv(use, opened, conns, &env); err != nil {
+			return runEnv{}, err
+		}
 	}
 
-	if err := repositoryEnv(rt.Repository, conns, &env); err != nil {
+	if err := repositoryEnv(req.Repository, conns, &env); err != nil {
 		return runEnv{}, err
 	}
 
@@ -166,8 +165,9 @@ type runConnection struct {
 
 // resolve opens and renders the named connections for use's run, by name, each secret field that
 // refers to a credential filled with its value before its kind renders it (ADR 0017 decision 5),
-// and returns the credentials it opened: those and the ones listed for use's agent.
-func (e *Engine) resolve(ctx context.Context, names []string, use domain.CredentialUse) (map[string]runConnection, []domain.ResolvedCredential, error) {
+// and returns the credentials it opened: those and, when listed is set, the ones listed for use's
+// agent.
+func (e *Engine) resolve(ctx context.Context, names []string, use domain.CredentialUse, listed bool) (map[string]runConnection, []domain.ResolvedCredential, error) {
 	out := make(map[string]runConnection, len(names))
 
 	var resolved []domain.ResolvedConnection
@@ -179,7 +179,7 @@ func (e *Engine) resolve(ctx context.Context, names []string, use domain.Credent
 		}
 	}
 
-	opened, err := e.openCredentials(ctx, resolved, use)
+	opened, err := e.openCredentials(ctx, resolved, use, listed)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -216,12 +216,12 @@ func (e *Engine) resolve(ctx context.Context, names []string, use domain.Credent
 	return out, opened, nil
 }
 
-// openCredentials opens, once each, the credentials resolved's connections refer to and the ones
-// whose agent list names use's agent for its factory. A referred credential that is missing or
+// openCredentials opens, once each, the credentials resolved's connections refer to and, when
+// listed is set, the ones whose agent list names use's agent for its factory. A referred credential that is missing or
 // does not allow the factory fails with an error that names it and the connections that refer to
 // it, wrapping ports.ErrNotFound or ports.ErrCredentialNotAllowed. Resolve audits each use as
 // credential.used and sets its last use; no error holds a value.
-func (e *Engine) openCredentials(ctx context.Context, resolved []domain.ResolvedConnection, use domain.CredentialUse) ([]domain.ResolvedCredential, error) {
+func (e *Engine) openCredentials(ctx context.Context, resolved []domain.ResolvedConnection, use domain.CredentialUse, listed bool) ([]domain.ResolvedCredential, error) {
 	refs := map[string][]string{} // credential → the connections that refer to it
 
 	for _, r := range resolved {
@@ -243,7 +243,7 @@ func (e *Engine) openCredentials(ctx context.Context, resolved []domain.Resolved
 
 	for _, c := range all {
 		byName[c.Name] = c
-		if c.ForAgent(use.Factory, use.Agent) {
+		if listed && c.ForAgent(use.Factory, use.Agent) {
 			names = append(names, c.Name)
 		}
 	}

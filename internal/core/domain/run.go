@@ -116,6 +116,73 @@ type RunResult struct {
 	Error string
 }
 
+// RunRequest is one agent run for engine.RunTask: what it records, which sandbox it opens, what
+// the gateway serves it and what it is given. A line's run (Kind station) works an item at a
+// station under the item's lease; a Jonah review's (Kind jonah, ADR 0034 decision 1) works no
+// item, holds no lease, clones no repository and gets only the model connection (Check).
+type RunRequest struct {
+	OrgID     OrgID
+	FactoryID FactoryID
+	// Version is the published definition version the run starts on.
+	Version DefinitionVersionID
+	// Kind is whose run it is; empty is RunKindStation.
+	Kind RunKind
+	// Station and Item are the station and the item a line's run works at; both empty for a Jonah
+	// run.
+	Station string
+	Item    ItemID
+	// Agent names the run's agent and Model its model.
+	Agent string
+	Model string
+	// Brief is what goald adds to the bundle's brief for this run (GOAL_FEEDBACK); empty adds
+	// nothing.
+	Brief string
+	// Bundle is the kind of task token the gateway serves the run's bundle by: empty for the
+	// version's agent at the station, as for every line's run.
+	Bundle TaskKind
+	// Repository is what the sandbox's prepare clones on Branch; zero clones nothing.
+	Repository Repository
+	// Branch and Base are the run's branch and the branch it is cut from (TaskClaims).
+	Branch, Base string
+	// ModelConnection is the connection that gives the run its model access.
+	ModelConnection string
+	// Connections are the organization connections the agent gets besides the model's.
+	Connections []string
+	// DeniedCommands are added to the agent's deny rules (TaskClaims.DeniedCommands).
+	DeniedCommands []string
+	// Size is the sandbox's size; empty is medium.
+	Size SandboxSize
+	// Timeout bounds the run; BoxLimit, when set, bounds how long its sandbox may live (the
+	// organization policy's box time limit). Zero takes the engine's defaults.
+	Timeout, BoxLimit time.Duration
+	// Lease is the lease the run heartbeats while it runs, and loses the run with when it is lost;
+	// nil holds none.
+	Lease *Lease
+}
+
+// ErrBadRunRequest refuses a RunRequest that Check does not accept.
+var ErrBadRunRequest = fmt.Errorf("bad run request: %w", ErrInvalid)
+
+// Check reports why r cannot run: a request without its organization, factory, agent or model
+// connection, a station run without its item and station, or a Jonah run with an item, a station,
+// a lease, a repository or a connection besides the model's.
+func (r RunRequest) Check() error {
+	switch {
+	case r.OrgID == "" || r.FactoryID == "" || r.Agent == "" || r.ModelConnection == "":
+		return fmt.Errorf("%w: it needs an organization, a factory, an agent and a model connection", ErrBadRunRequest)
+	case r.Kind == RunKindJonah:
+		if r.Item != "" || r.Station != "" || r.Lease != nil || r.Repository != (Repository{}) || len(r.Connections) > 0 {
+			return fmt.Errorf("%w: a Jonah run has no item, station, lease, repository or connection but the model's", ErrBadRunRequest)
+		}
+	case r.Kind != "" && r.Kind != RunKindStation:
+		return fmt.Errorf("%w: unknown run kind %q", ErrBadRunRequest, r.Kind)
+	case r.Item == "" || r.Station == "":
+		return fmt.Errorf("%w: a station run needs its item and station", ErrBadRunRequest)
+	}
+
+	return nil
+}
+
 // Decision is a gate's ruling on an item.
 type Decision string
 
