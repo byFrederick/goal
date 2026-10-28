@@ -206,12 +206,12 @@ describe('Items page header and views', () => {
     expect(screen.queryByText('Shipped long ago')).toBeNull();
   });
 
-  it('renders Save view, Set lane and Source as not available, and does nothing when pressed', async () => {
+  it('renders Source as not available, and opens the save dialog from Save view', async () => {
     renderItems([item({ id: 'a', ref: 'sre#1', title: 'Some work' })]);
 
-    const save = await screen.findByRole('button', { name: '+ Save view' });
-    expect(save.getAttribute('aria-disabled')).toBe('true');
-    fireEvent.click(save);
+    fireEvent.click(await screen.findByRole('button', { name: '+ Save view' }));
+    expect(await screen.findByRole('dialog', { name: 'Save view' })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Cancel' }), { key: 'Escape' });
     const source = screen.getByRole('button', { name: /^Source/ });
     expect(source.getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(source);
