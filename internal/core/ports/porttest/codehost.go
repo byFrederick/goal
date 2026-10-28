@@ -23,6 +23,9 @@ type CodeHost struct {
 	mu       sync.Mutex
 	prs      map[string]*ports.PullRequest
 	moves    map[string]string // url → the head a push moves it to once it is next read
+	pending  map[string]int    // url → how many more reads report its mergeability pending
+	reads    map[string]int    // url → how many times it was read
+	refuse   map[string]int    // url → how many more merges are refused though it reads mergeable
 	merges   []MergeCall
 	branches []string
 	updated  []string                        // urls whose branches were updated, in order
@@ -136,6 +139,42 @@ func (c *CodeHost) MoveHeadAfterRead(url, sha string) {
 	c.moves[url] = sha
 }
 
+// PendingReads makes the next n reads of the pull request at url report its mergeability as
+// still being computed (MergeabilityPending), as a host does for a while after its branch moved;
+// the reads after them report what the pull request is.
+func (c *CodeHost) PendingReads(url string, n int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.pending == nil {
+		c.pending = map[string]int{}
+	}
+
+	c.pending[url] = n
+}
+
+// RefuseMerges makes the next n merges of the pull request at url refused with
+// ports.ErrNotMergeable although it reads mergeable, as GitHub refuses one whose required checks
+// have not run on its head yet.
+func (c *CodeHost) RefuseMerges(url string, n int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.refuse == nil {
+		c.refuse = map[string]int{}
+	}
+
+	c.refuse[url] = n
+}
+
+// Reads returns how many times the pull request at url was read.
+func (c *CodeHost) Reads(url string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.reads[url]
+}
+
 // MergeCall is one merge asked of the fake: the pull request, the connection it came with and how.
 type MergeCall struct {
 	URL        string
@@ -186,6 +225,17 @@ func (c *CodeHost) PullRequest(_ context.Context, conn domain.ResolvedConnection
 
 	read := *pr
 
+	if c.reads == nil {
+		c.reads = map[string]int{}
+	}
+
+	c.reads[url]++
+
+	if c.pending[url] > 0 {
+		read.MergeabilityPending = true
+		c.pending[url]--
+	}
+
 	if sha, ok := c.moves[url]; ok {
 		pr.HeadSHA = sha
 
@@ -214,6 +264,9 @@ func (c *CodeHost) Merge(_ context.Context, conn domain.ResolvedConnection, url 
 		return "", fmt.Errorf("pull request %s: %w", url, ports.ErrNotMergeable)
 	case pr.HeadSHA != m.HeadSHA:
 		return "", fmt.Errorf("pull request %s: head moved: %w", url, ports.ErrNotMergeable)
+	case c.refuse[url] > 0:
+		c.refuse[url]--
+		return "", fmt.Errorf("pull request %s: required checks are expected: %w", url, ports.ErrNotMergeable)
 	}
 
 	pr.Open, pr.Merged, pr.Mergeable, pr.MergeSHA = false, true, false, "merge-"+pr.HeadSHA

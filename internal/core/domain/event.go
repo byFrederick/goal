@@ -49,6 +49,11 @@ const (
 	// It is not a rejection: the item's rework count is unchanged. Data reason (the pull request,
 	// its base, the files and what to do) and pull_request.
 	EventMergeConflict EventKind = "merge_conflict"
+	// EventMergeDeferred is a gate's merge the engine put off because a pull request was not
+	// mergeable yet with no conflict (its mergeability still computing, checks not passed on its
+	// head, its head moved), sending the item back to the gate's queue so its agent runs again.
+	// Data reason, pull_request and deferrals (how many in a row, this one included).
+	EventMergeDeferred EventKind = "merge_deferred"
 	// EventEdgeAdded and EventEdgeRemoved are a dependency of the item added or removed: data
 	// needs (the item it needs), kind and actor (ref).
 	EventEdgeAdded   EventKind = "edge_added"
