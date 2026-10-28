@@ -522,7 +522,7 @@ const software = definition({
   ],
 });
 
-// Templates: the catalog's latest versions, "5 in the bucket".
+// Templates: the catalog's latest versions, "8 in the bucket".
 
 interface TemplateLine {
   id: string;
@@ -713,6 +713,79 @@ const templateSpecs: TemplateSpec[] = [
       { id: 'triage', name: 'Triage', kind: 'agent', agent: 'triager', wip: 4 },
       { id: 'investigate', name: 'Investigate', kind: 'agent', agent: 'investigator', wip: 2 },
       { id: 'approve', name: 'Approve', kind: 'human' },
+      { id: 'done', name: 'Done', kind: 'done' },
+    ],
+  },
+  {
+    name: 'software-delivery',
+    version: 1,
+    title: 'Software delivery',
+    summary: 'Requests become small pull requests a reviewer merges.',
+    description: 'A specifier writes the spec, a builder opens the pull request and a reviewer merges it.',
+    purpose: 'Turns requests into small, reviewed pull requests.',
+    connectors: ['github'],
+    changed: '2026-10-20',
+    workTypes: ['feature', 'fix'],
+    connections: ['github'],
+    agents: [
+      { name: 'specifier', description: 'Writes the spec.', prompt: 'Write a short spec for the request.' },
+      { name: 'builder', description: 'Opens the pull request.', prompt: 'Build the change and open a pull request.' },
+    ],
+    stations: [
+      { id: 'inbox', name: 'Inbox', kind: 'queue' },
+      { id: 'spec', name: 'Spec', kind: 'agent', agent: 'specifier', wip: 2 },
+      { id: 'build', name: 'Build', kind: 'agent', agent: 'builder', wip: 2 },
+      { id: 'review', name: 'Review', kind: 'human' },
+      { id: 'done', name: 'Done', kind: 'done' },
+    ],
+  },
+  {
+    name: 'incident-response',
+    version: 1,
+    title: 'Incident response',
+    summary: 'Alerts become investigations, fixes and postmortems.',
+    description:
+      'A triager sorts each alert, an investigator finds the cause, a fixer proposes the fix and a person reviews it.',
+    purpose: 'Takes alerts from triage to a reviewed fix.',
+    connectors: [],
+    changed: '2026-10-21',
+    workTypes: ['incident'],
+    agents: [
+      { name: 'triager', description: 'Sorts alerts.', prompt: 'Sort the alert by severity.' },
+      { name: 'investigator', description: 'Finds the cause.', prompt: 'Find the cause of the incident.' },
+      { name: 'fixer', description: 'Proposes the fix.', prompt: 'Propose the smallest fix for the cause.' },
+    ],
+    stations: [
+      { id: 'inbox', name: 'Inbox', kind: 'queue' },
+      { id: 'triage', name: 'Triage', kind: 'agent', agent: 'triager', wip: 4 },
+      { id: 'investigate', name: 'Investigate', kind: 'agent', agent: 'investigator', wip: 2 },
+      { id: 'fix', name: 'Fix', kind: 'agent', agent: 'fixer', wip: 1 },
+      { id: 'review', name: 'Review', kind: 'human' },
+      { id: 'done', name: 'Done', kind: 'done' },
+    ],
+  },
+  {
+    name: 'support-replies',
+    version: 1,
+    title: 'Support replies',
+    summary: 'Tickets get drafted answers a person approves.',
+    description:
+      'A triager sorts each ticket, a drafter writes the answer, a person approves it and the reply is sent.',
+    purpose: 'Drafts support replies that a person approves before they go out.',
+    connectors: [],
+    changed: '2026-10-22',
+    workTypes: ['ticket'],
+    agents: [
+      { name: 'triager', description: 'Sorts tickets.', prompt: 'Sort the ticket by topic and urgency.' },
+      { name: 'drafter', description: 'Drafts the answer.', prompt: 'Draft a reply from the runbooks.' },
+      { name: 'sender', description: 'Sends the approved reply.', prompt: 'Send the approved reply to the customer.' },
+    ],
+    stations: [
+      { id: 'inbox', name: 'Inbox', kind: 'queue' },
+      { id: 'triage', name: 'Triage', kind: 'agent', agent: 'triager', wip: 4 },
+      { id: 'draft', name: 'Draft', kind: 'agent', agent: 'drafter', wip: 2 },
+      { id: 'approve', name: 'Approve', kind: 'human' },
+      { id: 'send', name: 'Send', kind: 'agent', agent: 'sender', wip: 1 },
       { id: 'done', name: 'Done', kind: 'done' },
     ],
   },
