@@ -2,6 +2,7 @@
 // on Start, the way to start and the template. Kept apart from the wizard's components so the
 // route's validateSearch does not pull them into the initial bundle.
 import { type DefinitionSearch, validateDefinitionSearch } from './sections';
+import type { PresetId } from './start/model-presets';
 import type { StartKind } from './start/start-choice';
 
 export interface WizardSearch extends DefinitionSearch {
@@ -11,6 +12,8 @@ export interface WizardSearch extends DefinitionSearch {
   from?: StartKind;
   /** The template chosen on Start. */
   template?: string;
+  /** The model preset last saved on the Line step. */
+  preset?: PresetId;
 }
 
 export function validateWizardSearch(search: Record<string, unknown>): WizardSearch {
@@ -20,5 +23,6 @@ export function validateWizardSearch(search: Record<string, unknown>): WizardSea
     out.from = search.from;
   }
   if (typeof search.template === 'string' && search.template !== '') out.template = search.template;
+  if (search.preset === 'quality' || search.preset === 'cost') out.preset = search.preset;
   return out;
 }
