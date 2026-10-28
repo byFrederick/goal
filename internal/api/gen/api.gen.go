@@ -84,6 +84,33 @@ func (e AuthMode) Valid() bool {
 	}
 }
 
+// Defines values for BakeOffState.
+const (
+	BakeOffStateCancelled BakeOffState = "cancelled"
+	BakeOffStateDone      BakeOffState = "done"
+	BakeOffStateFailed    BakeOffState = "failed"
+	BakeOffStateQueued    BakeOffState = "queued"
+	BakeOffStateRunning   BakeOffState = "running"
+)
+
+// Valid indicates whether the value is a known member of the BakeOffState enum.
+func (e BakeOffState) Valid() bool {
+	switch e {
+	case BakeOffStateCancelled:
+		return true
+	case BakeOffStateDone:
+		return true
+	case BakeOffStateFailed:
+		return true
+	case BakeOffStateQueued:
+		return true
+	case BakeOffStateRunning:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for BlankStartKind.
 const (
 	BlankStartKindBlank BlankStartKind = "blank"
@@ -1968,6 +1995,138 @@ type AuthEventPage struct {
 
 // AuthMode session: people sign in and every request carries a session or an API key. none: sign-in is off (GOAL_AUTH=none, a loopback install), every request acts as the local user.
 type AuthMode string
+
+// BakeOff defines model for BakeOff.
+type BakeOff struct {
+	Agent string `json:"agent"`
+
+	// Arms By arm number
+	Arms []BakeOffArm `json:"arms"`
+
+	// Cases How many of the agent's eval cases it runs
+	Cases int `json:"cases"`
+
+	// CostUsd What its recorded tries cost
+	CostUsd     float64    `json:"cost_usd"`
+	CreatedAt   time.Time  `json:"created_at"`
+	EstimateUsd float64    `json:"estimate_usd"`
+	FinishedAt  *time.Time `json:"finished_at,omitempty"`
+
+	// Id The id of its eval run
+	Id string `json:"id"`
+
+	// PerCase By case name, the tries passed of each arm so far, out of trials
+	PerCase []BakeOffCase `json:"per_case"`
+
+	// RecommendedArm The arm with the highest pass rate, then the lowest cost per item; null while the bake-off is not done or when an arm errored on every try (ADR 0029 decision 4)
+	RecommendedArm *int         `json:"recommended_arm"`
+	State          BakeOffState `json:"state"`
+
+	// Station The first station the agent works at
+	Station string `json:"station"`
+
+	// Trials Tries per case on every arm
+	Trials int `json:"trials"`
+
+	// Version The published version it runs
+	Version int `json:"version"`
+}
+
+// BakeOffState defines model for BakeOff.State.
+type BakeOffState string
+
+// BakeOffApply defines model for BakeOffApply.
+type BakeOffApply struct {
+	// Arm The arm whose model to write
+	Arm int `json:"arm"`
+}
+
+// BakeOffArm defines model for BakeOffArm.
+type BakeOffArm struct {
+	// Arm Its number
+	Arm int `json:"arm"`
+
+	// IsCurrent The agent's model in the bake-off's version
+	IsCurrent bool   `json:"is_current"`
+	Model     string `json:"model"`
+
+	// Summary Its row of the report, null until the bake-off is done
+	Summary *BakeOffArmSummary `json:"summary"`
+}
+
+// BakeOffArmSummary defines model for BakeOffArmSummary.
+type BakeOffArmSummary struct {
+	// CostPerItemUsd The mean cost of a try
+	CostPerItemUsd float64 `json:"cost_per_item_usd"`
+
+	// Errors Tries that failed for an infrastructure reason; they count as not passed
+	Errors int `json:"errors"`
+
+	// Judged The advisory judge's share; null when no judge scores the agent
+	Judged *BakeOffJudged `json:"judged"`
+
+	// PassRate passed of tries
+	PassRate float64 `json:"pass_rate"`
+	Passed   int     `json:"passed"`
+
+	// TimePerItemSeconds The mean duration of a try
+	TimePerItemSeconds float64 `json:"time_per_item_seconds"`
+	Tries              int     `json:"tries"`
+
+	// Turns The mean turns of a try
+	Turns float64 `json:"turns"`
+}
+
+// BakeOffCase defines model for BakeOffCase.
+type BakeOffCase struct {
+	// Arms By arm number
+	Arms []BakeOffCaseArm `json:"arms"`
+	Case string           `json:"case"`
+}
+
+// BakeOffCaseArm defines model for BakeOffCaseArm.
+type BakeOffCaseArm struct {
+	Arm int `json:"arm"`
+
+	// Passed The case's tries on the arm that passed
+	Passed int `json:"passed"`
+}
+
+// BakeOffJudged defines model for BakeOffJudged.
+type BakeOffJudged struct {
+	// Judge The judge's slug
+	Judge string `json:"judge"`
+
+	// Share The share of the arm's tries the judge passed
+	Share float64 `json:"share"`
+
+	// Title The judge's title when the version has it
+	Title *string `json:"title,omitempty"`
+}
+
+// BakeOffList defines model for BakeOffList.
+type BakeOffList struct {
+	// BakeOffs Newest first
+	BakeOffs []BakeOff `json:"bake_offs"`
+}
+
+// BakeOffRequest defines model for BakeOffRequest.
+type BakeOffRequest struct {
+	// Agent The agent to bake off
+	Agent string `json:"agent"`
+
+	// Models The arms' models, 2 to 4 distinct ids, the agent's model among them; absent, the agent's model and goald's default models
+	Models *[]string `json:"models,omitempty"`
+
+	// Trials Tries per case on every arm
+	Trials *int `json:"trials,omitempty"`
+}
+
+// BakeOffStarted defines model for BakeOffStarted.
+type BakeOffStarted struct {
+	BakeOff  BakeOff      `json:"bake_off"`
+	Estimate EvalEstimate `json:"estimate"`
+}
 
 // Base64File defines model for Base64File.
 type Base64File struct {
@@ -5050,9 +5209,12 @@ type PolicyModel struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run has no use of the document). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open.
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run has no use of the document). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422).
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
+
+	// Estimate learning-budget-exhausted only, the estimate of the bake-off it refused
+	Estimate *EvalEstimate `json:"estimate,omitempty"`
 
 	// Etag draft-conflict on a section save only, the section's etag now (resend with it to overwrite)
 	Etag *string `json:"etag,omitempty"`
@@ -6028,6 +6190,9 @@ type WeeklyThroughput struct {
 	} `json:"weeks"`
 }
 
+// BakeOffRef defines model for BakeOffRef.
+type BakeOffRef = string
+
 // ConnectionRef defines model for ConnectionRef.
 type ConnectionRef = string
 
@@ -6494,6 +6659,12 @@ type ReplaceDraftTreeJSONRequestBody = DraftTree
 
 // ValidateDraftJSONRequestBody defines body for ValidateDraft for application/json ContentType.
 type ValidateDraftJSONRequestBody = ValidateDraftRequest
+
+// StartBakeOffJSONRequestBody defines body for StartBakeOff for application/json ContentType.
+type StartBakeOffJSONRequestBody = BakeOffRequest
+
+// ApplyBakeOffJSONRequestBody defines body for ApplyBakeOff for application/json ContentType.
+type ApplyBakeOffJSONRequestBody = BakeOffApply
 
 // AddEvalCaseJSONRequestBody defines body for AddEvalCase for application/json ContentType.
 type AddEvalCaseJSONRequestBody = EvalCaseFromRun
@@ -7511,6 +7682,63 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals (the `ListEvals` operationId).
 	ListEvals(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListBakeOffs The factory's bake-offs, newest first
+	//
+	// At most the 20 newest bake-offs (ADR 0029): eval runs of kind bake-off, each of one agent on two to four models. 503 evals-unavailable.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `ListBakeOffs` operationId).
+	ListBakeOffs(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// StartBakeOffWithBody Start a bake-off of one agent across models on the current version
+	//
+	// Queues a bake-off of the agent's eval cases in the current version, each run trials times (default 3) on every arm, and answers at once; goald's eval loop works the tries. Without models, the arms are the agent's model and goald's default models (GOAL_BAKEOFF_MODELS). The estimate is cases × trials × arms × the price of a try, as estimateEvalRun prices it. 404 version-not-found for a factory never published; 409 learning-budget-exhausted, with the estimate, when it exceeds what is left of the learning budget; 422 invalid-bake-off for an agent the version does not have or that works at no station, arms that are not 2 to 4 distinct model ids with the agent's model among them, trials outside 1 to 10 and an agent with no eval cases; 503 evals-unavailable.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `StartBakeOff` operationId).
+	StartBakeOffWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// StartBakeOff Start a bake-off of one agent across models on the current version
+	//
+	// Queues a bake-off of the agent's eval cases in the current version, each run trials times (default 3) on every arm, and answers at once; goald's eval loop works the tries. Without models, the arms are the agent's model and goald's default models (GOAL_BAKEOFF_MODELS). The estimate is cases × trials × arms × the price of a try, as estimateEvalRun prices it. 404 version-not-found for a factory never published; 409 learning-budget-exhausted, with the estimate, when it exceeds what is left of the learning budget; 422 invalid-bake-off for an agent the version does not have or that works at no station, arms that are not 2 to 4 distinct model ids with the agent's model among them, trials outside 1 to 10 and an agent with no eval cases; 503 evals-unavailable.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `StartBakeOff` operationId).
+	StartBakeOff(ctx context.Context, org OrgRef, factory FactoryRef, body StartBakeOffJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetBakeOff One bake-off with its arms, its tries passed per case and its recommendation
+	//
+	// 404 eval-run-not-found for a bake-off that is not the factory's and for an eval run that is not a bake-off; 503 evals-unavailable.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off} (the `GetBakeOff` operationId).
+	GetBakeOff(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ApplyBakeOffWithBody Write an arm's model as the agent's model into the factory's draft
+	//
+	// Sets agents[].model of the bake-off's agent in the draft to the arm's model, opening a draft from the current version when none is open. It never publishes: the draft publishes as any other, through the eval gate (ADR 0029 decision 7). 404 eval-run-not-found; 412 draft-conflict when the agent changed since the bake-off's version; 422 invalid-bake-off for an arm the bake-off does not have; 503 evals-unavailable.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply (the `ApplyBakeOff` operationId).
+	ApplyBakeOffWithBody(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ApplyBakeOff Write an arm's model as the agent's model into the factory's draft
+	//
+	// Sets agents[].model of the bake-off's agent in the draft to the arm's model, opening a draft from the current version when none is open. It never publishes: the draft publishes as any other, through the eval gate (ADR 0029 decision 7). 404 eval-run-not-found; 412 draft-conflict when the agent changed since the bake-off's version; 422 invalid-bake-off for an arm the bake-off does not have; 503 evals-unavailable.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply (the `ApplyBakeOff` operationId).
+	ApplyBakeOff(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, body ApplyBakeOffJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RerunBakeOff Run a bake-off again on the current version
+	//
+	// Queues a new bake-off of the same agent with the same arms and trials, on the factory's current version, which may be newer than the original's (ADR 0029 decision 7). 404 eval-run-not-found; then the refusals of startBakeOff.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/rerun (the `RerunBakeOff` operationId).
+	RerunBakeOff(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AddEvalCaseWithBody Add an eval case from a past run and publish it
 	//
@@ -9856,6 +10084,133 @@ func (c *Client) ValidateDraft(ctx context.Context, org OrgRef, factory FactoryR
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals (the `ListEvals` operationId).
 func (c *Client) ListEvals(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListEvalsRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListBakeOffs The factory's bake-offs, newest first
+//
+// At most the 20 newest bake-offs (ADR 0029): eval runs of kind bake-off, each of one agent on two to four models. 503 evals-unavailable.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `ListBakeOffs` operationId).
+func (c *Client) ListBakeOffs(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListBakeOffsRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// StartBakeOffWithBody Start a bake-off of one agent across models on the current version
+//
+// Queues a bake-off of the agent's eval cases in the current version, each run trials times (default 3) on every arm, and answers at once; goald's eval loop works the tries. Without models, the arms are the agent's model and goald's default models (GOAL_BAKEOFF_MODELS). The estimate is cases × trials × arms × the price of a try, as estimateEvalRun prices it. 404 version-not-found for a factory never published; 409 learning-budget-exhausted, with the estimate, when it exceeds what is left of the learning budget; 422 invalid-bake-off for an agent the version does not have or that works at no station, arms that are not 2 to 4 distinct model ids with the agent's model among them, trials outside 1 to 10 and an agent with no eval cases; 503 evals-unavailable.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `StartBakeOff` operationId).
+func (c *Client) StartBakeOffWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStartBakeOffRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// StartBakeOff Start a bake-off of one agent across models on the current version
+//
+// Queues a bake-off of the agent's eval cases in the current version, each run trials times (default 3) on every arm, and answers at once; goald's eval loop works the tries. Without models, the arms are the agent's model and goald's default models (GOAL_BAKEOFF_MODELS). The estimate is cases × trials × arms × the price of a try, as estimateEvalRun prices it. 404 version-not-found for a factory never published; 409 learning-budget-exhausted, with the estimate, when it exceeds what is left of the learning budget; 422 invalid-bake-off for an agent the version does not have or that works at no station, arms that are not 2 to 4 distinct model ids with the agent's model among them, trials outside 1 to 10 and an agent with no eval cases; 503 evals-unavailable.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `StartBakeOff` operationId).
+func (c *Client) StartBakeOff(ctx context.Context, org OrgRef, factory FactoryRef, body StartBakeOffJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStartBakeOffRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetBakeOff One bake-off with its arms, its tries passed per case and its recommendation
+//
+// 404 eval-run-not-found for a bake-off that is not the factory's and for an eval run that is not a bake-off; 503 evals-unavailable.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off} (the `GetBakeOff` operationId).
+func (c *Client) GetBakeOff(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetBakeOffRequest(c.Server, org, factory, bakeOff)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ApplyBakeOffWithBody Write an arm's model as the agent's model into the factory's draft
+//
+// Sets agents[].model of the bake-off's agent in the draft to the arm's model, opening a draft from the current version when none is open. It never publishes: the draft publishes as any other, through the eval gate (ADR 0029 decision 7). 404 eval-run-not-found; 412 draft-conflict when the agent changed since the bake-off's version; 422 invalid-bake-off for an arm the bake-off does not have; 503 evals-unavailable.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply (the `ApplyBakeOff` operationId).
+func (c *Client) ApplyBakeOffWithBody(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewApplyBakeOffRequestWithBody(c.Server, org, factory, bakeOff, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ApplyBakeOff Write an arm's model as the agent's model into the factory's draft
+//
+// Sets agents[].model of the bake-off's agent in the draft to the arm's model, opening a draft from the current version when none is open. It never publishes: the draft publishes as any other, through the eval gate (ADR 0029 decision 7). 404 eval-run-not-found; 412 draft-conflict when the agent changed since the bake-off's version; 422 invalid-bake-off for an arm the bake-off does not have; 503 evals-unavailable.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply (the `ApplyBakeOff` operationId).
+func (c *Client) ApplyBakeOff(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, body ApplyBakeOffJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewApplyBakeOffRequest(c.Server, org, factory, bakeOff, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RerunBakeOff Run a bake-off again on the current version
+//
+// Queues a new bake-off of the same agent with the same arms and trials, on the factory's current version, which may be newer than the original's (ADR 0029 decision 7). 404 eval-run-not-found; then the refusals of startBakeOff.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/rerun (the `RerunBakeOff` operationId).
+func (c *Client) RerunBakeOff(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRerunBakeOffRequest(c.Server, org, factory, bakeOff)
 	if err != nil {
 		return nil, err
 	}
@@ -15118,6 +15473,258 @@ func NewListEvalsRequest(server string, org OrgRef, factory FactoryRef) (*http.R
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListBakeOffsRequest constructs an http.Request for the ListBakeOffs method
+func NewListBakeOffsRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/evals/bake-offs", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewStartBakeOffRequest calls the generic StartBakeOff builder with application/json body
+func NewStartBakeOffRequest(server string, org OrgRef, factory FactoryRef, body StartBakeOffJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewStartBakeOffRequestWithBody(server, org, factory, "application/json", bodyReader)
+}
+
+// NewStartBakeOffRequestWithBody constructs an http.Request for the StartBakeOff method, with any body, and a specified content type
+func NewStartBakeOffRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/evals/bake-offs", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetBakeOffRequest constructs an http.Request for the GetBakeOff method
+func NewGetBakeOffRequest(server string, org OrgRef, factory FactoryRef, bakeOff BakeOffRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "bake_off", bakeOff, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/evals/bake-offs/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewApplyBakeOffRequest calls the generic ApplyBakeOff builder with application/json body
+func NewApplyBakeOffRequest(server string, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, body ApplyBakeOffJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewApplyBakeOffRequestWithBody(server, org, factory, bakeOff, "application/json", bodyReader)
+}
+
+// NewApplyBakeOffRequestWithBody constructs an http.Request for the ApplyBakeOff method, with any body, and a specified content type
+func NewApplyBakeOffRequestWithBody(server string, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "bake_off", bakeOff, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/evals/bake-offs/%s/apply", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewRerunBakeOffRequest constructs an http.Request for the RerunBakeOff method
+func NewRerunBakeOffRequest(server string, org OrgRef, factory FactoryRef, bakeOff BakeOffRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "bake_off", bakeOff, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/evals/bake-offs/%s/rerun", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -21049,6 +21656,69 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals (the `ListEvals` operationId).
 	ListEvalsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListEvalsResponse, error)
 
+	// ListBakeOffsWithResponse The factory's bake-offs, newest first
+	//
+	// At most the 20 newest bake-offs (ADR 0029): eval runs of kind bake-off, each of one agent on two to four models. 503 evals-unavailable.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `ListBakeOffs` operationId).
+	ListBakeOffsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListBakeOffsResponse, error)
+
+	// StartBakeOffWithBodyWithResponse Start a bake-off of one agent across models on the current version
+	//
+	// Queues a bake-off of the agent's eval cases in the current version, each run trials times (default 3) on every arm, and answers at once; goald's eval loop works the tries. Without models, the arms are the agent's model and goald's default models (GOAL_BAKEOFF_MODELS). The estimate is cases × trials × arms × the price of a try, as estimateEvalRun prices it. 404 version-not-found for a factory never published; 409 learning-budget-exhausted, with the estimate, when it exceeds what is left of the learning budget; 422 invalid-bake-off for an agent the version does not have or that works at no station, arms that are not 2 to 4 distinct model ids with the agent's model among them, trials outside 1 to 10 and an agent with no eval cases; 503 evals-unavailable.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `StartBakeOff` operationId).
+	StartBakeOffWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StartBakeOffResponse, error)
+
+	// StartBakeOffWithResponse Start a bake-off of one agent across models on the current version
+	//
+	// Queues a bake-off of the agent's eval cases in the current version, each run trials times (default 3) on every arm, and answers at once; goald's eval loop works the tries. Without models, the arms are the agent's model and goald's default models (GOAL_BAKEOFF_MODELS). The estimate is cases × trials × arms × the price of a try, as estimateEvalRun prices it. 404 version-not-found for a factory never published; 409 learning-budget-exhausted, with the estimate, when it exceeds what is left of the learning budget; 422 invalid-bake-off for an agent the version does not have or that works at no station, arms that are not 2 to 4 distinct model ids with the agent's model among them, trials outside 1 to 10 and an agent with no eval cases; 503 evals-unavailable.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `StartBakeOff` operationId).
+	StartBakeOffWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body StartBakeOffJSONRequestBody, reqEditors ...RequestEditorFn) (*StartBakeOffResponse, error)
+
+	// GetBakeOffWithResponse One bake-off with its arms, its tries passed per case and its recommendation
+	//
+	// 404 eval-run-not-found for a bake-off that is not the factory's and for an eval run that is not a bake-off; 503 evals-unavailable.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off} (the `GetBakeOff` operationId).
+	GetBakeOffWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, reqEditors ...RequestEditorFn) (*GetBakeOffResponse, error)
+
+	// ApplyBakeOffWithBodyWithResponse Write an arm's model as the agent's model into the factory's draft
+	//
+	// Sets agents[].model of the bake-off's agent in the draft to the arm's model, opening a draft from the current version when none is open. It never publishes: the draft publishes as any other, through the eval gate (ADR 0029 decision 7). 404 eval-run-not-found; 412 draft-conflict when the agent changed since the bake-off's version; 422 invalid-bake-off for an arm the bake-off does not have; 503 evals-unavailable.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply (the `ApplyBakeOff` operationId).
+	ApplyBakeOffWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ApplyBakeOffResponse, error)
+
+	// ApplyBakeOffWithResponse Write an arm's model as the agent's model into the factory's draft
+	//
+	// Sets agents[].model of the bake-off's agent in the draft to the arm's model, opening a draft from the current version when none is open. It never publishes: the draft publishes as any other, through the eval gate (ADR 0029 decision 7). 404 eval-run-not-found; 412 draft-conflict when the agent changed since the bake-off's version; 422 invalid-bake-off for an arm the bake-off does not have; 503 evals-unavailable.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply (the `ApplyBakeOff` operationId).
+	ApplyBakeOffWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, body ApplyBakeOffJSONRequestBody, reqEditors ...RequestEditorFn) (*ApplyBakeOffResponse, error)
+
+	// RerunBakeOffWithResponse Run a bake-off again on the current version
+	//
+	// Queues a new bake-off of the same agent with the same arms and trials, on the factory's current version, which may be newer than the original's (ADR 0029 decision 7). 404 eval-run-not-found; then the refusals of startBakeOff.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/rerun (the `RerunBakeOff` operationId).
+	RerunBakeOffWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, reqEditors ...RequestEditorFn) (*RerunBakeOffResponse, error)
+
 	// AddEvalCaseWithBodyWithResponse Add an eval case from a past run and publish it
 	//
 	// Writes evals/cases/{name}.yaml from the past agent run: its agent, and its item's title, body, type and lane as the input, checked by the agent's contract or by judge, with tries tries (default 1). The file goes into a new draft of the current version, which publishes as the next version through the same checks and eval gate as publishDraft (ADR 0025 decision 5). 400 invalid-request for a name that is not a slug; 404 run-not-found for a run that is not the factory's; 409 eval-case-exists when the current version has the case, draft-open when the factory already has a draft (the draft this call opened is discarded), and the publish's own conflicts. When the eval gate refuses (evals-pending, evals-failing) the draft stays open, so it publishes once its run passes. 503 evals-unavailable.
@@ -25019,6 +25689,246 @@ func (r ListEvalsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ListEvalsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListBakeOffsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *BakeOffList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListBakeOffsResponse) GetJSON200() *BakeOffList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListBakeOffsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListBakeOffsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListBakeOffsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListBakeOffsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListBakeOffsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type StartBakeOffResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *BakeOffStarted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r StartBakeOffResponse) GetJSON202() *BakeOffStarted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r StartBakeOffResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r StartBakeOffResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r StartBakeOffResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r StartBakeOffResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r StartBakeOffResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetBakeOffResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *BakeOff
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetBakeOffResponse) GetJSON200() *BakeOff {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetBakeOffResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetBakeOffResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetBakeOffResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetBakeOffResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetBakeOffResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ApplyBakeOffResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Draft
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ApplyBakeOffResponse) GetJSON200() *Draft {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ApplyBakeOffResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ApplyBakeOffResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ApplyBakeOffResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ApplyBakeOffResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ApplyBakeOffResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RerunBakeOffResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *BakeOffStarted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r RerunBakeOffResponse) GetJSON202() *BakeOffStarted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RerunBakeOffResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RerunBakeOffResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RerunBakeOffResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RerunBakeOffResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RerunBakeOffResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -30751,6 +31661,111 @@ func (c *ClientWithResponses) ListEvalsWithResponse(ctx context.Context, org Org
 	return ParseListEvalsResponse(rsp)
 }
 
+// ListBakeOffsWithResponse The factory's bake-offs, newest first
+//
+// At most the 20 newest bake-offs (ADR 0029): eval runs of kind bake-off, each of one agent on two to four models. 503 evals-unavailable.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `ListBakeOffs` operationId).
+func (c *ClientWithResponses) ListBakeOffsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListBakeOffsResponse, error) {
+	rsp, err := c.ListBakeOffs(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListBakeOffsResponse(rsp)
+}
+
+// StartBakeOffWithBodyWithResponse Start a bake-off of one agent across models on the current version
+//
+// Queues a bake-off of the agent's eval cases in the current version, each run trials times (default 3) on every arm, and answers at once; goald's eval loop works the tries. Without models, the arms are the agent's model and goald's default models (GOAL_BAKEOFF_MODELS). The estimate is cases × trials × arms × the price of a try, as estimateEvalRun prices it. 404 version-not-found for a factory never published; 409 learning-budget-exhausted, with the estimate, when it exceeds what is left of the learning budget; 422 invalid-bake-off for an agent the version does not have or that works at no station, arms that are not 2 to 4 distinct model ids with the agent's model among them, trials outside 1 to 10 and an agent with no eval cases; 503 evals-unavailable.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `StartBakeOff` operationId).
+func (c *ClientWithResponses) StartBakeOffWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StartBakeOffResponse, error) {
+	rsp, err := c.StartBakeOffWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStartBakeOffResponse(rsp)
+}
+
+// StartBakeOffWithResponse Start a bake-off of one agent across models on the current version
+//
+// Queues a bake-off of the agent's eval cases in the current version, each run trials times (default 3) on every arm, and answers at once; goald's eval loop works the tries. Without models, the arms are the agent's model and goald's default models (GOAL_BAKEOFF_MODELS). The estimate is cases × trials × arms × the price of a try, as estimateEvalRun prices it. 404 version-not-found for a factory never published; 409 learning-budget-exhausted, with the estimate, when it exceeds what is left of the learning budget; 422 invalid-bake-off for an agent the version does not have or that works at no station, arms that are not 2 to 4 distinct model ids with the agent's model among them, trials outside 1 to 10 and an agent with no eval cases; 503 evals-unavailable.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs (the `StartBakeOff` operationId).
+func (c *ClientWithResponses) StartBakeOffWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body StartBakeOffJSONRequestBody, reqEditors ...RequestEditorFn) (*StartBakeOffResponse, error) {
+	rsp, err := c.StartBakeOff(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStartBakeOffResponse(rsp)
+}
+
+// GetBakeOffWithResponse One bake-off with its arms, its tries passed per case and its recommendation
+//
+// 404 eval-run-not-found for a bake-off that is not the factory's and for an eval run that is not a bake-off; 503 evals-unavailable.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off} (the `GetBakeOff` operationId).
+func (c *ClientWithResponses) GetBakeOffWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, reqEditors ...RequestEditorFn) (*GetBakeOffResponse, error) {
+	rsp, err := c.GetBakeOff(ctx, org, factory, bakeOff, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetBakeOffResponse(rsp)
+}
+
+// ApplyBakeOffWithBodyWithResponse Write an arm's model as the agent's model into the factory's draft
+//
+// Sets agents[].model of the bake-off's agent in the draft to the arm's model, opening a draft from the current version when none is open. It never publishes: the draft publishes as any other, through the eval gate (ADR 0029 decision 7). 404 eval-run-not-found; 412 draft-conflict when the agent changed since the bake-off's version; 422 invalid-bake-off for an arm the bake-off does not have; 503 evals-unavailable.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply (the `ApplyBakeOff` operationId).
+func (c *ClientWithResponses) ApplyBakeOffWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ApplyBakeOffResponse, error) {
+	rsp, err := c.ApplyBakeOffWithBody(ctx, org, factory, bakeOff, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseApplyBakeOffResponse(rsp)
+}
+
+// ApplyBakeOffWithResponse Write an arm's model as the agent's model into the factory's draft
+//
+// Sets agents[].model of the bake-off's agent in the draft to the arm's model, opening a draft from the current version when none is open. It never publishes: the draft publishes as any other, through the eval gate (ADR 0029 decision 7). 404 eval-run-not-found; 412 draft-conflict when the agent changed since the bake-off's version; 422 invalid-bake-off for an arm the bake-off does not have; 503 evals-unavailable.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply (the `ApplyBakeOff` operationId).
+func (c *ClientWithResponses) ApplyBakeOffWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, body ApplyBakeOffJSONRequestBody, reqEditors ...RequestEditorFn) (*ApplyBakeOffResponse, error) {
+	rsp, err := c.ApplyBakeOff(ctx, org, factory, bakeOff, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseApplyBakeOffResponse(rsp)
+}
+
+// RerunBakeOffWithResponse Run a bake-off again on the current version
+//
+// Queues a new bake-off of the same agent with the same arms and trials, on the factory's current version, which may be newer than the original's (ADR 0029 decision 7). 404 eval-run-not-found; then the refusals of startBakeOff.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/rerun (the `RerunBakeOff` operationId).
+func (c *ClientWithResponses) RerunBakeOffWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, bakeOff BakeOffRef, reqEditors ...RequestEditorFn) (*RerunBakeOffResponse, error) {
+	rsp, err := c.RerunBakeOff(ctx, org, factory, bakeOff, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRerunBakeOffResponse(rsp)
+}
+
 // AddEvalCaseWithBodyWithResponse Add an eval case from a past run and publish it
 //
 // Writes evals/cases/{name}.yaml from the past agent run: its agent, and its item's title, body, type and lane as the input, checked by the agent's contract or by judge, with tries tries (default 1). The file goes into a new draft of the current version, which publishes as the next version through the same checks and eval gate as publishDraft (ADR 0025 decision 5). 400 invalid-request for a name that is not a slug; 404 run-not-found for a run that is not the factory's; 409 eval-case-exists when the current version has the case, draft-open when the factory already has a draft (the draft this call opened is discarded), and the publish's own conflicts. When the eval gate refuses (evals-pending, evals-failing) the draft stays open, so it publishes once its run passes. 503 evals-unavailable.
@@ -34579,6 +35594,171 @@ func ParseListEvalsResponse(rsp *http.Response) (*ListEvalsResponse, error) {
 	return response, nil
 }
 
+// ParseListBakeOffsResponse parses an HTTP response from a ListBakeOffsWithResponse call
+func ParseListBakeOffsResponse(rsp *http.Response) (*ListBakeOffsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListBakeOffsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest BakeOffList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseStartBakeOffResponse parses an HTTP response from a StartBakeOffWithResponse call
+func ParseStartBakeOffResponse(rsp *http.Response) (*StartBakeOffResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &StartBakeOffResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest BakeOffStarted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetBakeOffResponse parses an HTTP response from a GetBakeOffWithResponse call
+func ParseGetBakeOffResponse(rsp *http.Response) (*GetBakeOffResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetBakeOffResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest BakeOff
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseApplyBakeOffResponse parses an HTTP response from a ApplyBakeOffWithResponse call
+func ParseApplyBakeOffResponse(rsp *http.Response) (*ApplyBakeOffResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ApplyBakeOffResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Draft
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRerunBakeOffResponse parses an HTTP response from a RerunBakeOffWithResponse call
+func ParseRerunBakeOffResponse(rsp *http.Response) (*RerunBakeOffResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RerunBakeOffResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest BakeOffStarted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseAddEvalCaseResponse parses an HTTP response from a AddEvalCaseWithResponse call
 func ParseAddEvalCaseResponse(rsp *http.Response) (*AddEvalCaseResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -37971,6 +39151,21 @@ type ServerInterface interface {
 	// ListEvals The eval cases of the current version, with their last tries and a summary
 	// (GET /v1/orgs/{org}/factories/{factory}/evals)
 	ListEvals(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// ListBakeOffs The factory's bake-offs, newest first
+	// (GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs)
+	ListBakeOffs(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// StartBakeOff Start a bake-off of one agent across models on the current version
+	// (POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs)
+	StartBakeOff(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// GetBakeOff One bake-off with its arms, its tries passed per case and its recommendation
+	// (GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off})
+	GetBakeOff(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, bakeOff BakeOffRef)
+	// ApplyBakeOff Write an arm's model as the agent's model into the factory's draft
+	// (POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply)
+	ApplyBakeOff(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, bakeOff BakeOffRef)
+	// RerunBakeOff Run a bake-off again on the current version
+	// (POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/rerun)
+	RerunBakeOff(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, bakeOff BakeOffRef)
 	// AddEvalCase Add an eval case from a past run and publish it
 	// (POST /v1/orgs/{org}/factories/{factory}/evals/cases)
 	AddEvalCase(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
@@ -40644,6 +41839,208 @@ func (siw *ServerInterfaceWrapper) ListEvals(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListEvals(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListBakeOffs operation middleware
+func (siw *ServerInterfaceWrapper) ListBakeOffs(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListBakeOffs(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StartBakeOff operation middleware
+func (siw *ServerInterfaceWrapper) StartBakeOff(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StartBakeOff(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetBakeOff operation middleware
+func (siw *ServerInterfaceWrapper) GetBakeOff(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "bake_off" -------------
+	var bakeOff BakeOffRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "bake_off", r.PathValue("bake_off"), &bakeOff, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "bake_off", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetBakeOff(w, r, org, factory, bakeOff)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApplyBakeOff operation middleware
+func (siw *ServerInterfaceWrapper) ApplyBakeOff(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "bake_off" -------------
+	var bakeOff BakeOffRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "bake_off", r.PathValue("bake_off"), &bakeOff, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "bake_off", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApplyBakeOff(w, r, org, factory, bakeOff)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RerunBakeOff operation middleware
+func (siw *ServerInterfaceWrapper) RerunBakeOff(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "bake_off" -------------
+	var bakeOff BakeOffRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "bake_off", r.PathValue("bake_off"), &bakeOff, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "bake_off", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RerunBakeOff(w, r, org, factory, bakeOff)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -44884,6 +46281,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run}", wrapper.GetEvalRun)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run}/cancel", wrapper.CancelEvalRun)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/cases", wrapper.AddEvalCase)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/bake-offs", wrapper.ListBakeOffs)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/bake-offs", wrapper.StartBakeOff)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}", wrapper.GetBakeOff)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/rerun", wrapper.RerunBakeOff)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply", wrapper.ApplyBakeOff)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/items", wrapper.ListItems)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/items", wrapper.SubmitItem)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/board", wrapper.GetBoard)
@@ -47436,6 +48838,211 @@ type ListEvalsdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ListEvalsdefaultApplicationProblemPlusJSONResponse) VisitListEvalsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListBakeOffsRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type ListBakeOffsResponseObject interface {
+	VisitListBakeOffsResponse(w http.ResponseWriter) error
+}
+
+type ListBakeOffs200JSONResponse BakeOffList
+
+func (response ListBakeOffs200JSONResponse) VisitListBakeOffsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListBakeOffsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListBakeOffsdefaultApplicationProblemPlusJSONResponse) VisitListBakeOffsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartBakeOffRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Body    *StartBakeOffJSONRequestBody
+}
+
+type StartBakeOffResponseObject interface {
+	VisitStartBakeOffResponse(w http.ResponseWriter) error
+}
+
+type StartBakeOff202JSONResponse BakeOffStarted
+
+func (response StartBakeOff202JSONResponse) VisitStartBakeOffResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartBakeOffdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response StartBakeOffdefaultApplicationProblemPlusJSONResponse) VisitStartBakeOffResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBakeOffRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	BakeOff BakeOffRef `json:"bake_off"`
+}
+
+type GetBakeOffResponseObject interface {
+	VisitGetBakeOffResponse(w http.ResponseWriter) error
+}
+
+type GetBakeOff200JSONResponse BakeOff
+
+func (response GetBakeOff200JSONResponse) VisitGetBakeOffResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBakeOffdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetBakeOffdefaultApplicationProblemPlusJSONResponse) VisitGetBakeOffResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApplyBakeOffRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	BakeOff BakeOffRef `json:"bake_off"`
+	Body    *ApplyBakeOffJSONRequestBody
+}
+
+type ApplyBakeOffResponseObject interface {
+	VisitApplyBakeOffResponse(w http.ResponseWriter) error
+}
+
+type ApplyBakeOff200JSONResponse Draft
+
+func (response ApplyBakeOff200JSONResponse) VisitApplyBakeOffResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApplyBakeOffdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ApplyBakeOffdefaultApplicationProblemPlusJSONResponse) VisitApplyBakeOffResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RerunBakeOffRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	BakeOff BakeOffRef `json:"bake_off"`
+}
+
+type RerunBakeOffResponseObject interface {
+	VisitRerunBakeOffResponse(w http.ResponseWriter) error
+}
+
+type RerunBakeOff202JSONResponse BakeOffStarted
+
+func (response RerunBakeOff202JSONResponse) VisitRerunBakeOffResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RerunBakeOffdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RerunBakeOffdefaultApplicationProblemPlusJSONResponse) VisitRerunBakeOffResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -51657,6 +53264,21 @@ type StrictServerInterface interface {
 	// ListEvals The eval cases of the current version, with their last tries and a summary
 	// (GET /v1/orgs/{org}/factories/{factory}/evals)
 	ListEvals(ctx context.Context, request ListEvalsRequestObject) (ListEvalsResponseObject, error)
+	// ListBakeOffs The factory's bake-offs, newest first
+	// (GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs)
+	ListBakeOffs(ctx context.Context, request ListBakeOffsRequestObject) (ListBakeOffsResponseObject, error)
+	// StartBakeOff Start a bake-off of one agent across models on the current version
+	// (POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs)
+	StartBakeOff(ctx context.Context, request StartBakeOffRequestObject) (StartBakeOffResponseObject, error)
+	// GetBakeOff One bake-off with its arms, its tries passed per case and its recommendation
+	// (GET /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off})
+	GetBakeOff(ctx context.Context, request GetBakeOffRequestObject) (GetBakeOffResponseObject, error)
+	// ApplyBakeOff Write an arm's model as the agent's model into the factory's draft
+	// (POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply)
+	ApplyBakeOff(ctx context.Context, request ApplyBakeOffRequestObject) (ApplyBakeOffResponseObject, error)
+	// RerunBakeOff Run a bake-off again on the current version
+	// (POST /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/rerun)
+	RerunBakeOff(ctx context.Context, request RerunBakeOffRequestObject) (RerunBakeOffResponseObject, error)
 	// AddEvalCase Add an eval case from a past run and publish it
 	// (POST /v1/orgs/{org}/factories/{factory}/evals/cases)
 	AddEvalCase(ctx context.Context, request AddEvalCaseRequestObject) (AddEvalCaseResponseObject, error)
@@ -53756,6 +55378,158 @@ func (sh *strictHandler) ListEvals(w http.ResponseWriter, r *http.Request, org O
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListEvalsResponseObject); ok {
 		if err := validResponse.VisitListEvalsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListBakeOffs operation middleware
+func (sh *strictHandler) ListBakeOffs(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request ListBakeOffsRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListBakeOffs(ctx, request.(ListBakeOffsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListBakeOffs")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListBakeOffsResponseObject); ok {
+		if err := validResponse.VisitListBakeOffsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// StartBakeOff operation middleware
+func (sh *strictHandler) StartBakeOff(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request StartBakeOffRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	var body StartBakeOffJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.StartBakeOff(ctx, request.(StartBakeOffRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "StartBakeOff")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(StartBakeOffResponseObject); ok {
+		if err := validResponse.VisitStartBakeOffResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetBakeOff operation middleware
+func (sh *strictHandler) GetBakeOff(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, bakeOff BakeOffRef) {
+	var request GetBakeOffRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.BakeOff = bakeOff
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetBakeOff(ctx, request.(GetBakeOffRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetBakeOff")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetBakeOffResponseObject); ok {
+		if err := validResponse.VisitGetBakeOffResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ApplyBakeOff operation middleware
+func (sh *strictHandler) ApplyBakeOff(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, bakeOff BakeOffRef) {
+	var request ApplyBakeOffRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.BakeOff = bakeOff
+
+	var body ApplyBakeOffJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ApplyBakeOff(ctx, request.(ApplyBakeOffRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ApplyBakeOff")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ApplyBakeOffResponseObject); ok {
+		if err := validResponse.VisitApplyBakeOffResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RerunBakeOff operation middleware
+func (sh *strictHandler) RerunBakeOff(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, bakeOff BakeOffRef) {
+	var request RerunBakeOffRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.BakeOff = bakeOff
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RerunBakeOff(ctx, request.(RerunBakeOffRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RerunBakeOff")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RerunBakeOffResponseObject); ok {
+		if err := validResponse.VisitRerunBakeOffResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

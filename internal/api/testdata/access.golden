@@ -104,6 +104,32 @@ answerItem           pat-demoted      404 item-not-found       404 org-not-found
 answerItem           pat-removed      401 unauthenticated      401 unauthenticated
 answerItem           pat-platform     200                      404 org-not-found
 answerItem           pat-deleted-org  401 unauthenticated      401 unauthenticated
+applyBakeOff         anonymous        401 unauthenticated      401 unauthenticated
+applyBakeOff         owner            200                      404 org-not-found
+applyBakeOff         admin            200                      404 org-not-found
+applyBakeOff         viewer           403 forbidden            404 org-not-found
+applyBakeOff         approver         403 forbidden            404 org-not-found
+applyBakeOff         editor           200                      404 org-not-found
+applyBakeOff         member-no-roles  404 factory-not-found    404 org-not-found
+applyBakeOff         other-org-owner  404 org-not-found        200
+applyBakeOff         platform-admin   404 org-not-found        404 org-not-found
+applyBakeOff         stale-owner      200                      404 org-not-found
+applyBakeOff         key-scoped       403 forbidden            404 org-not-found
+applyBakeOff         key-restricted   404 factory-not-found    404 org-not-found
+applyBakeOff         key-other-org    404 org-not-found        200
+applyBakeOff         key-expired      401 unauthenticated      401 unauthenticated
+applyBakeOff         key-revoked      401 unauthenticated      401 unauthenticated
+applyBakeOff         bearer-owner     200                      404 org-not-found
+applyBakeOff         pat-approver     403 forbidden            404 org-not-found
+applyBakeOff         pat-owner        200                      404 org-not-found
+applyBakeOff         pat-viewer       403 forbidden            404 org-not-found
+applyBakeOff         pat-other-org    404 org-not-found        200
+applyBakeOff         pat-expired      401 unauthenticated      401 unauthenticated
+applyBakeOff         pat-revoked      401 unauthenticated      401 unauthenticated
+applyBakeOff         pat-demoted      404 factory-not-found    404 org-not-found
+applyBakeOff         pat-removed      401 unauthenticated      401 unauthenticated
+applyBakeOff         pat-platform     200                      404 org-not-found
+applyBakeOff         pat-deleted-org  401 unauthenticated      401 unauthenticated
 approveItem          anonymous        401 unauthenticated      401 unauthenticated
 approveItem          owner            200                      404 org-not-found
 approveItem          admin            200                      404 org-not-found
@@ -884,6 +910,32 @@ getAuthConfig        pat-demoted      install: 200
 getAuthConfig        pat-removed      install: 200
 getAuthConfig        pat-platform     install: 200
 getAuthConfig        pat-deleted-org  install: 200
+getBakeOff           anonymous        401 unauthenticated      401 unauthenticated
+getBakeOff           owner            200                      404 org-not-found
+getBakeOff           admin            200                      404 org-not-found
+getBakeOff           viewer           200                      404 org-not-found
+getBakeOff           approver         200                      404 org-not-found
+getBakeOff           editor           200                      404 org-not-found
+getBakeOff           member-no-roles  404 factory-not-found    404 org-not-found
+getBakeOff           other-org-owner  404 org-not-found        200
+getBakeOff           platform-admin   404 org-not-found        404 org-not-found
+getBakeOff           stale-owner      200                      404 org-not-found
+getBakeOff           key-scoped       200                      404 org-not-found
+getBakeOff           key-restricted   404 factory-not-found    404 org-not-found
+getBakeOff           key-other-org    404 org-not-found        200
+getBakeOff           key-expired      401 unauthenticated      401 unauthenticated
+getBakeOff           key-revoked      401 unauthenticated      401 unauthenticated
+getBakeOff           bearer-owner     200                      404 org-not-found
+getBakeOff           pat-approver     200                      404 org-not-found
+getBakeOff           pat-owner        200                      404 org-not-found
+getBakeOff           pat-viewer       200                      404 org-not-found
+getBakeOff           pat-other-org    404 org-not-found        200
+getBakeOff           pat-expired      401 unauthenticated      401 unauthenticated
+getBakeOff           pat-revoked      401 unauthenticated      401 unauthenticated
+getBakeOff           pat-demoted      404 factory-not-found    404 org-not-found
+getBakeOff           pat-removed      401 unauthenticated      401 unauthenticated
+getBakeOff           pat-platform     200                      404 org-not-found
+getBakeOff           pat-deleted-org  401 unauthenticated      401 unauthenticated
 getBoard             anonymous        401 unauthenticated      401 unauthenticated
 getBoard             owner            200                      404 org-not-found
 getBoard             admin            200                      404 org-not-found
@@ -2080,6 +2132,32 @@ listAuthEvents       pat-demoted      install: 403 forbidden
 listAuthEvents       pat-removed      install: 401 unauthenticated
 listAuthEvents       pat-platform     install: 403 forbidden
 listAuthEvents       pat-deleted-org  install: 401 unauthenticated
+listBakeOffs         anonymous        401 unauthenticated      401 unauthenticated
+listBakeOffs         owner            200                      404 org-not-found
+listBakeOffs         admin            200                      404 org-not-found
+listBakeOffs         viewer           200                      404 org-not-found
+listBakeOffs         approver         200                      404 org-not-found
+listBakeOffs         editor           200                      404 org-not-found
+listBakeOffs         member-no-roles  404 factory-not-found    404 org-not-found
+listBakeOffs         other-org-owner  404 org-not-found        200
+listBakeOffs         platform-admin   404 org-not-found        404 org-not-found
+listBakeOffs         stale-owner      200                      404 org-not-found
+listBakeOffs         key-scoped       200                      404 org-not-found
+listBakeOffs         key-restricted   404 factory-not-found    404 org-not-found
+listBakeOffs         key-other-org    404 org-not-found        200
+listBakeOffs         key-expired      401 unauthenticated      401 unauthenticated
+listBakeOffs         key-revoked      401 unauthenticated      401 unauthenticated
+listBakeOffs         bearer-owner     200                      404 org-not-found
+listBakeOffs         pat-approver     200                      404 org-not-found
+listBakeOffs         pat-owner        200                      404 org-not-found
+listBakeOffs         pat-viewer       200                      404 org-not-found
+listBakeOffs         pat-other-org    404 org-not-found        200
+listBakeOffs         pat-expired      401 unauthenticated      401 unauthenticated
+listBakeOffs         pat-revoked      401 unauthenticated      401 unauthenticated
+listBakeOffs         pat-demoted      404 factory-not-found    404 org-not-found
+listBakeOffs         pat-removed      401 unauthenticated      401 unauthenticated
+listBakeOffs         pat-platform     200                      404 org-not-found
+listBakeOffs         pat-deleted-org  401 unauthenticated      401 unauthenticated
 listConnectionKinds  anonymous        401 unauthenticated      401 unauthenticated
 listConnectionKinds  owner            200                      404 org-not-found
 listConnectionKinds  admin            200                      404 org-not-found
@@ -3250,6 +3328,32 @@ replaceDraftTree     pat-demoted      404 factory-not-found    404 org-not-found
 replaceDraftTree     pat-removed      401 unauthenticated      401 unauthenticated
 replaceDraftTree     pat-platform     200                      404 org-not-found
 replaceDraftTree     pat-deleted-org  401 unauthenticated      401 unauthenticated
+rerunBakeOff         anonymous        401 unauthenticated      401 unauthenticated
+rerunBakeOff         owner            200                      404 org-not-found
+rerunBakeOff         admin            200                      404 org-not-found
+rerunBakeOff         viewer           403 forbidden            404 org-not-found
+rerunBakeOff         approver         403 forbidden            404 org-not-found
+rerunBakeOff         editor           200                      404 org-not-found
+rerunBakeOff         member-no-roles  404 factory-not-found    404 org-not-found
+rerunBakeOff         other-org-owner  404 org-not-found        200
+rerunBakeOff         platform-admin   404 org-not-found        404 org-not-found
+rerunBakeOff         stale-owner      200                      404 org-not-found
+rerunBakeOff         key-scoped       403 forbidden            404 org-not-found
+rerunBakeOff         key-restricted   404 factory-not-found    404 org-not-found
+rerunBakeOff         key-other-org    404 org-not-found        200
+rerunBakeOff         key-expired      401 unauthenticated      401 unauthenticated
+rerunBakeOff         key-revoked      401 unauthenticated      401 unauthenticated
+rerunBakeOff         bearer-owner     200                      404 org-not-found
+rerunBakeOff         pat-approver     403 forbidden            404 org-not-found
+rerunBakeOff         pat-owner        200                      404 org-not-found
+rerunBakeOff         pat-viewer       403 forbidden            404 org-not-found
+rerunBakeOff         pat-other-org    404 org-not-found        200
+rerunBakeOff         pat-expired      401 unauthenticated      401 unauthenticated
+rerunBakeOff         pat-revoked      401 unauthenticated      401 unauthenticated
+rerunBakeOff         pat-demoted      404 factory-not-found    404 org-not-found
+rerunBakeOff         pat-removed      401 unauthenticated      401 unauthenticated
+rerunBakeOff         pat-platform     200                      404 org-not-found
+rerunBakeOff         pat-deleted-org  401 unauthenticated      401 unauthenticated
 restoreFactory       anonymous        401 unauthenticated      401 unauthenticated
 restoreFactory       owner            200                      404 org-not-found
 restoreFactory       admin            200                      404 org-not-found
@@ -3640,6 +3744,32 @@ setTouchReason       pat-demoted      404 item-not-found       404 org-not-found
 setTouchReason       pat-removed      401 unauthenticated      401 unauthenticated
 setTouchReason       pat-platform     200                      404 org-not-found
 setTouchReason       pat-deleted-org  401 unauthenticated      401 unauthenticated
+startBakeOff         anonymous        401 unauthenticated      401 unauthenticated
+startBakeOff         owner            200                      404 org-not-found
+startBakeOff         admin            200                      404 org-not-found
+startBakeOff         viewer           403 forbidden            404 org-not-found
+startBakeOff         approver         403 forbidden            404 org-not-found
+startBakeOff         editor           200                      404 org-not-found
+startBakeOff         member-no-roles  404 factory-not-found    404 org-not-found
+startBakeOff         other-org-owner  404 org-not-found        200
+startBakeOff         platform-admin   404 org-not-found        404 org-not-found
+startBakeOff         stale-owner      200                      404 org-not-found
+startBakeOff         key-scoped       403 forbidden            404 org-not-found
+startBakeOff         key-restricted   404 factory-not-found    404 org-not-found
+startBakeOff         key-other-org    404 org-not-found        200
+startBakeOff         key-expired      401 unauthenticated      401 unauthenticated
+startBakeOff         key-revoked      401 unauthenticated      401 unauthenticated
+startBakeOff         bearer-owner     200                      404 org-not-found
+startBakeOff         pat-approver     403 forbidden            404 org-not-found
+startBakeOff         pat-owner        200                      404 org-not-found
+startBakeOff         pat-viewer       403 forbidden            404 org-not-found
+startBakeOff         pat-other-org    404 org-not-found        200
+startBakeOff         pat-expired      401 unauthenticated      401 unauthenticated
+startBakeOff         pat-revoked      401 unauthenticated      401 unauthenticated
+startBakeOff         pat-demoted      404 factory-not-found    404 org-not-found
+startBakeOff         pat-removed      401 unauthenticated      401 unauthenticated
+startBakeOff         pat-platform     200                      404 org-not-found
+startBakeOff         pat-deleted-org  401 unauthenticated      401 unauthenticated
 startEvalRun         anonymous        401 unauthenticated      401 unauthenticated
 startEvalRun         owner            200                      404 org-not-found
 startEvalRun         admin            200                      404 org-not-found

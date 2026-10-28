@@ -172,7 +172,7 @@ func (tt attachCase) worker(t *testing.T) (*Sandboxes, *[]string, *int) {
 	}))
 	t.Cleanup(srv.Close)
 
-	s, err := New(Config{URL: srv.URL, Key: "key"}, slog.New(slog.DiscardHandler))
+	s, err := New(Config{URL: srv.URL, Key: "key", Client: srv.Client()}, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +240,9 @@ func TestSandboxes_TransportErrorsAreSandboxLost(t *testing.T) {
 				srv.Close()
 			}
 
-			s, err := New(Config{URL: srv.URL, Key: "key"}, slog.New(slog.DiscardHandler))
+			// The server's own client: httptest.Server.Close closes the idle connections of
+			// http.DefaultTransport, which would break a parallel subtest's request.
+			s, err := New(Config{URL: srv.URL, Key: "key", Client: srv.Client()}, slog.New(slog.DiscardHandler))
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -187,6 +187,8 @@ type harness struct {
 	evals      *porttest.Evals
 	evalJudges *porttest.Judges
 	evalLoop   *jonah.Evals
+	// versions is the definitions cache, which reads the line of a version a bake-off runs.
+	versions *definitions.Cache
 	// judges are the versions' judges as tests set them, judgeScores their scores; tries are
 	// queued by a jonah loop over them and the store's finished runs.
 	judges      *porttest.Judges
@@ -449,7 +451,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 
 	feed, stopFeed := h.startFeed(t, in)
 
-	h.seam, h.tenancy = &seam{}, tenancy
+	h.seam, h.tenancy, h.versions = &seam{}, tenancy, defs
 	h.skills, h.skillSource = &flakyObjects{ObjectStore: porttest.NewObjectStore()}, porttest.NewSkillSource()
 	h.builder = builder.New(h.skills, h.clock, builder.Config{
 		Models: []builder.Model{{ID: "claude-opus-5-5", Label: "Claude Opus 5.5"}, {ID: "claude-haiku-5-5", Label: "Claude Haiku 5.5"}},
