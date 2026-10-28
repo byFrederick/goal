@@ -351,6 +351,27 @@ func (e ConnectionKindModes) Valid() bool {
 	}
 }
 
+// Defines values for ConnectionToolMode.
+const (
+	ConnectionToolModeAllow ConnectionToolMode = "allow"
+	ConnectionToolModeAsk   ConnectionToolMode = "ask"
+	ConnectionToolModeOff   ConnectionToolMode = "off"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionToolMode enum.
+func (e ConnectionToolMode) Valid() bool {
+	switch e {
+	case ConnectionToolModeAllow:
+		return true
+	case ConnectionToolModeAsk:
+		return true
+	case ConnectionToolModeOff:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ConstraintSource.
 const (
 	Configured ConstraintSource = "configured"
@@ -2293,7 +2314,10 @@ type Connection struct {
 	SecretsSet []string `json:"secrets_set"`
 
 	// Status missing-secret: a required secret field is not set (its kind gained one); else the last test's outcome, untested before any
-	Status    ConnectionStatus `json:"status"`
+	Status ConnectionStatus `json:"status"`
+
+	// Tools Its tools and their modes (ADR 0031 decisions 1 and 2), sorted by name: one entry for each tool the last test listed and each tool with a mode set, a tool without a mode being allow; empty for a connection never tested and without modes
+	Tools     []ConnectionTool `json:"tools"`
 	UpdatedAt time.Time        `json:"updated_at"`
 
 	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
@@ -2301,6 +2325,9 @@ type Connection struct {
 
 	// UsedBy What uses a connection, so it cannot be deleted or renamed meanwhile
 	UsedBy ConnectionUsers `json:"used_by"`
+
+	// WaitingApprovals The open tool approvals on this connection in the organization, by its current name; the connections list's "Writes waiting for your OK" is their sum
+	WaitingApprovals int `json:"waiting_approvals"`
 }
 
 // ConnectionStatus missing-secret: a required secret field is not set (its kind gained one); else the last test's outcome, untested before any
@@ -2410,6 +2437,9 @@ type ConnectionPatch struct {
 
 	// Secrets The secret fields to replace, by name; an empty value clears an optional one
 	Secrets *map[string]string `json:"secrets,omitempty"`
+
+	// Tools Every tool's mode: replaces them all, so send the full list (a tool left out goes back to allow). Only for a connection whose kind has an MCP server; a tool named twice is refused.
+	Tools *[]ConnectionTool `json:"tools,omitempty"`
 }
 
 // ConnectionTestResult defines model for ConnectionTestResult.
@@ -2423,6 +2453,18 @@ type ConnectionTestResult struct {
 	// Status The test request's HTTP status, when it got one
 	Status *int `json:"status,omitempty"`
 }
+
+// ConnectionTool defines model for ConnectionTool.
+type ConnectionTool struct {
+	// Mode What a run may do with one tool of the connection (ADR 0031 decision 1): allow runs the call, ask pauses it for a person, off refuses it
+	Mode ConnectionToolMode `json:"mode"`
+
+	// Name The tool's name as the MCP server lists it, without the connection prefix: 1 to 128 letters, digits, underscores, dots or dashes
+	Name string `json:"name"`
+}
+
+// ConnectionToolMode What a run may do with one tool of the connection (ADR 0031 decision 1): allow runs the call, ask pauses it for a person, off refuses it
+type ConnectionToolMode string
 
 // ConnectionUsers What uses a connection, so it cannot be deleted or renamed meanwhile
 type ConnectionUsers struct {
@@ -7196,18 +7238,18 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/connections/{connection} (the `GetConnection` operationId).
 	GetConnection(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// UpdateConnectionWithBody Rename a connection, or change its description, fields or secrets
+	// UpdateConnectionWithBody Rename a connection, or change its description, fields, secrets or tool modes
 	//
-	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
 	UpdateConnectionWithBody(ctx context.Context, org OrgRef, connection ConnectionRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// UpdateConnection Rename a connection, or change its description, fields or secrets
+	// UpdateConnection Rename a connection, or change its description, fields, secrets or tool modes
 	//
-	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -9064,9 +9106,9 @@ func (c *Client) GetConnection(ctx context.Context, org OrgRef, connection Conne
 	return c.Client.Do(req)
 }
 
-// UpdateConnectionWithBody Rename a connection, or change its description, fields or secrets
+// UpdateConnectionWithBody Rename a connection, or change its description, fields, secrets or tool modes
 //
-// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 //
 // Takes any type of body and a specified content type.
 //
@@ -9083,9 +9125,9 @@ func (c *Client) UpdateConnectionWithBody(ctx context.Context, org OrgRef, conne
 	return c.Client.Do(req)
 }
 
-// UpdateConnection Rename a connection, or change its description, fields or secrets
+// UpdateConnection Rename a connection, or change its description, fields, secrets or tool modes
 //
-// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -20953,18 +20995,18 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/connections/{connection} (the `GetConnection` operationId).
 	GetConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*GetConnectionResponse, error)
 
-	// UpdateConnectionWithBodyWithResponse Rename a connection, or change its description, fields or secrets
+	// UpdateConnectionWithBodyWithResponse Rename a connection, or change its description, fields, secrets or tool modes
 	//
-	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
 	UpdateConnectionWithBodyWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateConnectionResponse, error)
 
-	// UpdateConnectionWithResponse Rename a connection, or change its description, fields or secrets
+	// UpdateConnectionWithResponse Rename a connection, or change its description, fields, secrets or tool modes
 	//
-	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -30539,9 +30581,9 @@ func (c *ClientWithResponses) GetConnectionWithResponse(ctx context.Context, org
 	return ParseGetConnectionResponse(rsp)
 }
 
-// UpdateConnectionWithBodyWithResponse Rename a connection, or change its description, fields or secrets
+// UpdateConnectionWithBodyWithResponse Rename a connection, or change its description, fields, secrets or tool modes
 //
-// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -30554,9 +30596,9 @@ func (c *ClientWithResponses) UpdateConnectionWithBodyWithResponse(ctx context.C
 	return ParseUpdateConnectionResponse(rsp)
 }
 
-// UpdateConnectionWithResponse Rename a connection, or change its description, fields or secrets
+// UpdateConnectionWithResponse Rename a connection, or change its description, fields, secrets or tool modes
 //
-// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -38592,7 +38634,7 @@ type ServerInterface interface {
 	// GetConnection One connection, with the env names a run gets from it and its kind's docs
 	// (GET /v1/orgs/{org}/connections/{connection})
 	GetConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef)
-	// UpdateConnection Rename a connection, or change its description, fields or secrets
+	// UpdateConnection Rename a connection, or change its description, fields, secrets or tool modes
 	// (PATCH /v1/orgs/{org}/connections/{connection})
 	UpdateConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef)
 	// ListConnectionRepositories The owners and repositories a code host connection reaches
@@ -52555,7 +52597,7 @@ type StrictServerInterface interface {
 	// GetConnection One connection, with the env names a run gets from it and its kind's docs
 	// (GET /v1/orgs/{org}/connections/{connection})
 	GetConnection(ctx context.Context, request GetConnectionRequestObject) (GetConnectionResponseObject, error)
-	// UpdateConnection Rename a connection, or change its description, fields or secrets
+	// UpdateConnection Rename a connection, or change its description, fields, secrets or tool modes
 	// (PATCH /v1/orgs/{org}/connections/{connection})
 	UpdateConnection(ctx context.Context, request UpdateConnectionRequestObject) (UpdateConnectionResponseObject, error)
 	// ListConnectionRepositories The owners and repositories a code host connection reaches

@@ -2718,8 +2718,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Rename a connection, or change its description, fields or secrets
-         * @description fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+         * Rename a connection, or change its description, fields, secrets or tool modes
+         * @description fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
          */
         patch: operations["updateConnection"];
         trace?: never;
@@ -6367,12 +6367,26 @@ export interface components {
             env?: string[];
             /** @description getConnection only, its kind's docs for agents */
             docs?: string;
+            /** @description Its tools and their modes (ADR 0031 decisions 1 and 2), sorted by name: one entry for each tool the last test listed and each tool with a mode set, a tool without a mode being allow; empty for a connection never tested and without modes */
+            tools: components["schemas"]["ConnectionTool"][];
+            /** @description The open tool approvals on this connection in the organization, by its current name; the connections list's "Writes waiting for your OK" is their sum */
+            waiting_approvals: number;
             created_by: components["schemas"]["Actor"];
             /** Format: date-time */
             created_at: string;
             updated_by: components["schemas"]["Actor"];
             /** Format: date-time */
             updated_at: string;
+        };
+        /**
+         * @description What a run may do with one tool of the connection (ADR 0031 decision 1): allow runs the call, ask pauses it for a person, off refuses it
+         * @enum {string}
+         */
+        ConnectionToolMode: "allow" | "ask" | "off";
+        ConnectionTool: {
+            /** @description The tool's name as the MCP server lists it, without the connection prefix: 1 to 128 letters, digits, underscores, dots or dashes */
+            name: string;
+            mode: components["schemas"]["ConnectionToolMode"];
         };
         /** @description What uses a connection, so it cannot be deleted or renamed meanwhile */
         ConnectionUsers: {
@@ -6409,6 +6423,8 @@ export interface components {
             secrets?: {
                 [key: string]: string;
             };
+            /** @description Every tool's mode: replaces them all, so send the full list (a tool left out goes back to allow). Only for a connection whose kind has an MCP server; a tool named twice is refused. */
+            tools?: components["schemas"]["ConnectionTool"][];
         };
         /** @description 3 to 40 lowercase letters, digits and inner dashes, starting with a letter; an agent gets it as the env variable of the name upper-cased with each - turned into _, which must not be one reserved for the platform */
         CredentialName: string;
