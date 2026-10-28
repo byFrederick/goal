@@ -43,9 +43,10 @@ function refusal(err: unknown): string {
 }
 
 /**
- * Applies a quick fix to the draft. What is typed is saved first, so the fix patches what goald
- * holds; then the fix's patch is applied to the sections' saved values (ops.ts). `pending` is the
- * fix being applied, and `error` says why the last one did not apply; the draft is then unchanged.
+ * Applies a quick fix to the draft. What is typed is saved first, and the draft is read again so
+ * the fix patches what goald holds now (a saved file changes the sections there); then the fix's
+ * patch is applied to those values (ops.ts). `pending` is the fix being applied, and `error` says
+ * why the last one did not apply; the draft is then unchanged.
  */
 export function useApplyFix() {
   const session = useDraftSession();
@@ -61,6 +62,7 @@ export function useApplyFix() {
         setError(refusal(refused));
         return;
       }
+      await session.reloadModel();
       const s = session.getSnapshot().sections;
       const model = {
         basics: s.basics.local,

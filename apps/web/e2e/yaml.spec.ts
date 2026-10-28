@@ -99,6 +99,20 @@ test('a quick fix applies to the draft: xlarge is set to large (flow 3, YAML)', 
   await expectNoHorizontalScroll(page);
 });
 
+test('a quick fix applies in dark mode too (flow 3, YAML)', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await openYaml(page, 'basics');
+  await replaceLine(page, 'size: large', 'size: xlarge');
+  await expect(problems(page)).toContainText('spec.runtime.size: must be small, medium or large');
+  await expectAccessible(page);
+
+  await page.getByRole('button', { name: 'Use large' }).first().click();
+  await expectShown(page, 'size: large');
+  await expect(problems(page)).not.toContainText('must be small, medium or large');
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+});
+
 test('a factory.yaml that stops parsing holds Form until it parses again', async ({ page }) => {
   await openYaml(page, 'basics');
   await replaceLine(page, 'kind: Factory', 'kind: Factory: x');

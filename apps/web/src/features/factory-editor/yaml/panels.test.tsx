@@ -8,13 +8,11 @@ import { DraftSession, type SessionApi } from '../draft/session';
 import { DraftSessionContext } from '../draft/use-draft';
 import { Outline, ProblemBlock, ProblemsPanel } from './panels';
 
-// A session holding a draft whose runtime size is xlarge, with no save sent: the fix is applied to it.
-function draftSession(): DraftSession {
-  const session = new DraftSession({ org: 'acme', factory: 'f1', api: {} as SessionApi });
-  session.adopt({
-    revision: 1,
+function draftModel(size: string, revision: number) {
+  return {
+    revision,
     model: {
-      basics: { id: 'f1', name: 'goal', size: 'xlarge' },
+      basics: { id: 'f1', name: 'goal', size },
       line: { stations: [] },
       agents: { agents: [] },
       connections: [],
@@ -23,7 +21,34 @@ function draftSession(): DraftSession {
     etags: { basics: '', line: '', agents: '', connections: '', review: '' },
     edited: {},
     ranges: {},
-  });
+  };
+}
+
+/** goald as the session sees it: its draft holds `size` (the saves answer with the new revision). */
+function goald(size: string, revision = 1) {
+  return {
+    getDraftModel: vi.fn(async () => draftModel(size, revision)),
+    saveDraftSection: vi.fn(async () => ({
+      revision: revision + 1,
+      updated_at: '',
+      sections: [],
+      change_count: 0,
+      problem_count: 0,
+    })),
+    putDraftFile: vi.fn(async () => ({
+      revision: revision + 1,
+      updated_at: '',
+      sections: [],
+      change_count: 0,
+      problem_count: 0,
+    })),
+  };
+}
+
+// A session holding a draft whose runtime size is xlarge, with no save sent: the fix is applied to it.
+function draftSession(size = 'xlarge', api = goald(size)): DraftSession {
+  const session = new DraftSession({ org: 'acme', factory: 'f1', api: api as unknown as SessionApi, debounceMs: 0 });
+  session.adopt(draftModel(size, 1) as never);
   return session;
 }
 
@@ -115,6 +140,26 @@ describe('ProblemBlock', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Use large' }));
     await waitFor(() => expect(session.getSnapshot().sections.basics.local).toMatchObject({ size: 'large' }));
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('applies the fix to what goald holds after a typed file save, and saves the section', async () => {
+    // The session shows large; the YAML view was typed to xlarge and saved, so goald now holds xlarge.
+    const api = goald('xlarge', 2);
+    session.dispose();
+    session = draftSession('large', api);
+    session.editFile('factory.yaml', 'basics:\n  size: xlarge\n');
+    renderInDraft(<ProblemBlock problems={[problem()]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Use large' }));
+    await waitFor(() =>
+      expect(api.saveDraftSection).toHaveBeenCalledWith(
+        'acme',
+        'f1',
+        'basics',
+        expect.anything(),
+        expect.objectContaining({ value: expect.objectContaining({ size: 'large' }) }),
+      ),
+    );
+    expect(api.putDraftFile).toHaveBeenCalled();
   });
 
   it('shows the error when the apply fails, and leaves the draft as it was', async () => {
