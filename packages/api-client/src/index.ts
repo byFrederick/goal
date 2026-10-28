@@ -13,7 +13,7 @@
 import createClient, { type ClientOptions } from "openapi-fetch";
 import type { components, paths } from "./schema.gen";
 
-export { ApiError, type Problem, type Result, unwrap } from "./problem";
+export { ApiError, problemOf, type Problem, type Result, unwrap } from "./problem";
 export { type OrgPath, orgPath } from "./routes";
 export type { components, operations, paths } from "./schema.gen";
 export {
@@ -44,6 +44,8 @@ export type ItemSpan = Schemas["ItemSpan"];
 export type ItemWaiting = Schemas["ItemWaiting"];
 export type ItemQuestion = Schemas["ItemQuestion"];
 export type ItemAnswer = Schemas["ItemAnswer"];
+export type ToolApproval = Schemas["ToolApproval"];
+export type ToolDecision = Schemas["ToolDecision"];
 export type ItemBudget = Schemas["ItemBudget"];
 export type CurrentRun = Schemas["CurrentRun"];
 export type ItemPage = Schemas["ItemPage"];

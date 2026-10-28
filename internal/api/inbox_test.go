@@ -37,7 +37,7 @@ func (h *harness) inbox(t *testing.T, query string) gen.Inbox {
 // inboxItems seeds one item of each kind of the line factory: a decision with a brief, a question,
 // a blocked item, a paused one and an expedite one.
 type inboxItems struct {
-	decision, question, blocked, paused, expedite domain.Item
+	decision, question, toolApproval, blocked, paused, expedite domain.Item
 }
 
 func (h *harness) seedInboxItems(t *testing.T) inboxItems {
@@ -51,6 +51,7 @@ func (h *harness) seedInboxItems(t *testing.T) inboxItems {
 				"pull_request": "https://github.com/acme/app/pull/3", "tests": 12}`)
 		})
 	s.question = h.asked(t, "Organization", "Factory")
+	s.toolApproval = h.toolAsked(t, true)
 	s.blocked = h.seed(t, stBuild, domain.StateBlocked, t0.Add(-2*time.Hour))
 	h.blockedBy(t, s.blocked, domain.EventBlocked, "checks failed")
 	s.paused = h.seed(t, stBuild, domain.StateBlocked, t0.Add(-time.Hour))
@@ -89,7 +90,7 @@ func TestAPI_InboxEntriesOfEveryKind(t *testing.T) {
 		kinds = append(kinds, string(e.Kind)+" "+e.Factory.Name)
 	}
 
-	want := []string{"decision line", "question line", "andon acme", "rework_warning review", "blocked line", "blocked line", "expedite line"}
+	want := []string{"decision line", "question line", "tool_approval line", "andon acme", "rework_warning review", "blocked line", "blocked line", "expedite line"}
 	if !reflect.DeepEqual(kinds, want) {
 		t.Fatalf("entries = %v; want %v", kinds, want)
 	}
@@ -129,6 +130,7 @@ func checkItemEntries(t *testing.T, got gen.Inbox, seeded inboxItems) {
 	}
 
 	checkQuestionEntry(t, entryOf(got, seeded.question.ID), seeded.question)
+	checkToolApprovalEntry(t, entryOf(got, seeded.toolApproval.ID), seeded.toolApproval)
 
 	if b := entryOf(got, seeded.blocked.ID).Blocked; b == nil || deref(b.Reason) != "checks failed" || b.Paused {
 		t.Errorf("blocked entry = %+v; want its failure", b)
@@ -153,6 +155,19 @@ func checkQuestionEntry(t *testing.T, e gen.InboxEntry, it domain.Item) {
 	}
 }
 
+// checkToolApprovalEntry checks the entry of an item whose agent asked to call a tool: the call,
+// by the agent's role name, without a brief or a question.
+func checkToolApprovalEntry(t *testing.T, e gen.InboxEntry, it domain.Item) {
+	t.Helper()
+
+	if e.Kind != gen.InboxEntryKindToolApproval || e.Id != "tool_approval:"+string(it.ID) || e.ToolApproval == nil ||
+		e.ToolApproval.Connection != approvalConnection || e.ToolApproval.Tool != approvalTool ||
+		asJSON(t, e.ToolApproval.Input) != approvalInput || e.ToolApproval.Agent != agBackend || e.ToolApproval.RunId != askingRun ||
+		!e.ToolApproval.AskedAt.Equal(e.Since) || e.Question != nil || e.Approval != nil || e.Action != nil {
+		t.Errorf("tool approval entry = %+v; want the open call without a brief", e)
+	}
+}
+
 func checkLineEntries(t *testing.T, got gen.Inbox) {
 	t.Helper()
 
@@ -167,7 +182,8 @@ func checkLineEntries(t *testing.T, got gen.Inbox) {
 			if e.Rework == nil || !reflect.DeepEqual(*e.Rework, want) {
 				t.Errorf("rework warning = %+v; want %+v", e.Rework, want)
 			}
-		case gen.InboxEntryKindDecision, gen.InboxEntryKindQuestion, gen.InboxEntryKindBlocked, gen.InboxEntryKindExpedite:
+		case gen.InboxEntryKindDecision, gen.InboxEntryKindQuestion, gen.InboxEntryKindToolApproval, gen.InboxEntryKindBlocked,
+			gen.InboxEntryKindExpedite:
 		}
 	}
 }

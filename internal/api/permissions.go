@@ -44,6 +44,10 @@ const (
 	permItemCreate    domain.Permission = "item:create"
 	permItemOperate   domain.Permission = "item:operate"
 	permAndonManage   domain.Permission = "andon:manage"
+	// permConnectionManage changes the organization's connections; Always allow needs it too,
+	// because a standing rule changes how a connection behaves in every factory (ADR 0031
+	// decision 8).
+	permConnectionManage domain.Permission = "connection:manage"
 	// permTokenCreate creates a personal token: a lasting credential, so only a session signed
 	// in through the browser may (spec 3 §4.5), never a CLI session, whose device approval may have
 	// been phished.

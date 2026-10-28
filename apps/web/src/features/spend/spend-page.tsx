@@ -1,20 +1,22 @@
 // Spend and billing (canvas "Spend and billing", organization/spend.html): what the organization's agent
 // runs cost over a window, where the money went (by day, factory, agent and model), each factory's
 // budget against today and the week, and who pays for the models. The window is in the URL
-// (?window=week|month|90d) and the figures come from getOrgSpend. Export CSV is not built yet, so it is
-// shown disabled (ADR 0016, decision 4).
-import { useQuery } from '@tanstack/react-query';
+// (?window=week|month|90d) and the figures come from getOrgSpend. Export CSV downloads the same window as
+// CSV (exportOrgSpend, ADR 0020 decision 3).
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { Download, TriangleAlert } from 'lucide-react';
+import { exportFailure, saveCsv } from '../../api/download';
 import { spendQuery } from '../../api/queries';
+import { exportOrgSpend } from '../../api/spend';
 import type { OrgSpend } from '../../api/types';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { EmptyState } from '../../ui/empty-state';
-import { NotAvailable } from '../../ui/not-available';
 import { PageHeader } from '../../ui/page-header';
 import { SegmentedControl } from '../../ui/segmented-control';
+import { Spinner } from '../../ui/spinner';
 import { BarList, type SpendRow } from './bar-list';
 import { Budgets } from './budgets';
 import { SpendDays } from './days-chart';
@@ -28,6 +30,11 @@ export function SpendPage() {
   const window = spendSearch(useSearch({ strict: false })).window ?? 'week';
   const navigate = useNavigate();
   const query = useQuery(spendQuery(org.id, window));
+  const exportSpend = useMutation({
+    mutationFn: () => exportOrgSpend(org.id, window),
+    onSuccess: saveCsv,
+  });
+  const exporting = exportSpend.isPending;
 
   const windowControl = (
     <SegmentedControl
@@ -39,12 +46,18 @@ export function SpendPage() {
     />
   );
   const exportCsv = (
-    <NotAvailable label="Export CSV">
-      <Button variant="secondary" size="sm">
-        <Download size={15} strokeWidth={1.6} aria-hidden="true" />
-        Export CSV
-      </Button>
-    </NotAvailable>
+    <Button
+      variant="secondary"
+      size="sm"
+      aria-busy={exporting || undefined}
+      onClick={() => {
+        if (!exporting) exportSpend.mutate();
+      }}
+      className="aria-busy:cursor-progress"
+    >
+      {exporting ? <Spinner tone="dark" /> : <Download size={15} strokeWidth={1.6} aria-hidden="true" />}
+      Export CSV
+    </Button>
   );
 
   return (
@@ -58,6 +71,11 @@ export function SpendPage() {
           </>
         }
       />
+      {exportSpend.isError ? (
+        <div role="alert">
+          <Callout tone="rework">{exportFailure(exportSpend.error, 'spend')}</Callout>
+        </div>
+      ) : null}
       {query.isPending ? (
         <div aria-busy="true">
           <span role="status" className="sr-only">

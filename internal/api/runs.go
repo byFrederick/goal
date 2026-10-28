@@ -81,26 +81,10 @@ func (s *server) ListRuns(ctx context.Context, req gen.ListRunsRequestObject) (g
 		return nil, err
 	}
 
-	var fs []*config.Factory
-
-	if ref := deref(req.Params.Factory); ref != "" {
-		f, err := s.factory(ctx, ref)
-		if err != nil {
-			return nil, err
-		}
-
-		fs = []*config.Factory{f}
-	} else {
-		fs = s.visibleFactories(ctx)
+	byID, err := s.runFactories(ctx, &q, deref(req.Params.Factory))
+	if err != nil {
+		return nil, err
 	}
-
-	byID := make(map[domain.FactoryID]*config.Factory, len(fs))
-	for _, f := range fs {
-		id := domain.FactoryID(f.Metadata.ID)
-		byID[id], q.Factories = f, append(q.Factories, id)
-	}
-
-	q.Number, q.NumberOf = refNumber(q.Text, fs)
 
 	limit := q.Limit
 	q.Limit++ // one more tells whether a next page exists
@@ -138,6 +122,70 @@ func (s *server) ListRuns(ctx context.Context, req gen.ListRunsRequestObject) (g
 	}
 
 	return out, nil
+}
+
+// runFactories sets q's factories, the one ref names (404 when the caller does not see it) or
+// every factory the caller sees, and the item number q's text names among them; it returns them
+// by id.
+func (s *server) runFactories(ctx context.Context, q *ports.RunQuery, ref string) (map[domain.FactoryID]*config.Factory, error) {
+	var fs []*config.Factory
+
+	if ref != "" {
+		f, err := s.factory(ctx, ref)
+		if err != nil {
+			return nil, err
+		}
+
+		fs = []*config.Factory{f}
+	} else {
+		fs = s.visibleFactories(ctx)
+	}
+
+	byID := make(map[domain.FactoryID]*config.Factory, len(fs))
+	for _, f := range fs {
+		id := domain.FactoryID(f.Metadata.ID)
+		byID[id], q.Factories = f, append(q.Factories, id)
+	}
+
+	q.Number, q.NumberOf = refNumber(q.Text, fs)
+
+	return byID, nil
+}
+
+// runsHeader is the runs export's header row: the list's JSON fields, the factory and the item
+// flattened.
+var runsHeader = strings.Fields("id factory item_ref item_title station agent model status started_at ended_at turns cost_usd")
+
+func (s *server) ExportRuns(ctx context.Context, req gen.ExportRunsRequestObject) (gen.ExportRunsResponseObject, error) {
+	p := req.Params
+
+	q, err := s.runQuery(gen.ListRunsParams{Factory: p.Factory, Status: p.Status, Since: p.Since, Until: p.Until, Q: p.Q})
+	if err != nil {
+		return nil, err
+	}
+
+	byID, err := s.runFactories(ctx, &q, deref(p.Factory))
+	if err != nil {
+		return nil, err
+	}
+
+	rows := func(ctx context.Context, maxRows int, emit func([]string) error) error {
+		return s.items.EachOrgRun(ctx, q, maxRows, func(r domain.ListedRun) error {
+			name := byID[r.FactoryID].Metadata.Name
+
+			ended := ""
+			if !r.EndedAt.IsZero() {
+				ended = r.EndedAt.UTC().Format(time.RFC3339)
+			}
+
+			return emit([]string{
+				string(r.ID), name, domain.ItemRef{Factory: name, Number: r.ItemNumber}.String(), r.ItemTitle, r.Station, r.Agent, r.Model,
+				string(r.Result.Status), r.StartedAt.UTC().Format(time.RFC3339), ended, strconv.Itoa(r.Result.Turns), usd(r.Result.CostUSD),
+			})
+		})
+	}
+
+	return csvExport{ctx: ctx, log: s.log, what: "runs", day: s.clock.Now(), header: runsHeader, max: s.exportMax, rows: rows}, nil
 }
 
 // runQuery reads the list's filters, its window (the clock's UTC day by default), its limit

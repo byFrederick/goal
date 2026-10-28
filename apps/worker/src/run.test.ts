@@ -1,4 +1,4 @@
-import type { Options, query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { CanUseTool, Options, query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorkerEvent } from './events.js';
 import { runTask } from './run.js';
@@ -472,5 +472,62 @@ describe('runTask live notes', () => {
     expect(noToken.calls[0]?.inputs).toHaveLength(1);
     expect(finishedEvents(noUrl.events)).toHaveLength(1);
     expect(finishedEvents(noToken.events)).toHaveLength(1);
+  });
+});
+
+describe('runTask Ask-first tool calls', () => {
+  it('stops the agent at an Ask-first call, reports it, sends no tool result and ends with finished', async () => {
+    const askSpec: TaskSpec = {
+      ...spec,
+      connections: [
+        {
+          name: 'issues',
+          kind: 'issue-tracker',
+          title: 'Issue tracker',
+          env: [],
+          mcp: { url: 'https://issues.example.com/mcp' },
+          tool_modes: { create_comment: 'ask' },
+        },
+      ],
+    };
+    let verdict: Awaited<ReturnType<CanUseTool>> | undefined;
+    const fake = ((params: { prompt: AsyncIterable<SDKUserMessage>; options: Options }) => {
+      const check = params.options.canUseTool as CanUseTool;
+      return (async function* () {
+        verdict = await check(
+          'mcp__issues__create_comment',
+          { body: 'test-input' },
+          { signal: new AbortController().signal, toolUseID: 't1', requestId: 'q1' },
+        );
+        // The SDK ends the query after the interrupt: nothing more is yielded.
+        yield* [];
+      })();
+    }) as unknown as typeof query;
+    const gw = gateway((url) =>
+      url.pathname === '/run/tool-approval' ? new Response(null, { status: 202 }) : Response.json({ notes: [] }),
+    );
+    const events: WorkerEvent[] = [];
+
+    const code = await runTask(askSpec, files, {
+      query: fake,
+      emit: (e) => events.push(e),
+      now: () => at,
+      env,
+      abortController: new AbortController(),
+      fetch: gw.fetch,
+      notePollMs: 0,
+    });
+
+    expect(verdict).toMatchObject({ behavior: 'deny', interrupt: true });
+    const reports = gw.requests.filter((r) => r.url.pathname === '/run/tool-approval');
+    expect(reports).toHaveLength(1);
+    expect(JSON.parse(String(reports[0]?.init?.body))).toEqual({
+      connection: 'issues',
+      tool: 'create_comment',
+      input: { body: 'test-input' },
+    });
+    expect(events.some((e) => e.type === 'tool_result')).toBe(false);
+    expect(events.at(-1)).toMatchObject({ type: 'finished', status: 'failed' });
+    expect(code).toBe(1);
   });
 });

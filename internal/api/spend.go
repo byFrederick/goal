@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -18,17 +19,12 @@ import (
 // factories the caller sees, and each factory's budget from its current version.
 
 func (s *server) GetOrgSpend(ctx context.Context, req gen.GetOrgSpendRequestObject) (gen.GetOrgSpendResponseObject, error) {
-	period := domain.SpendThisWeek
-	if req.Params.Window != nil {
-		period = domain.SpendPeriod(*req.Params.Window)
+	w, err := s.spendWindow(req.Params.Window)
+	if err != nil {
+		return nil, err
 	}
 
-	now := s.clock.Now().UTC()
-	w := domain.SpendWindow{Period: period, Now: now}
-
-	if err := w.Check(); err != nil {
-		return nil, fmt.Errorf("%w: window must be week, month or 90d", errInvalid)
-	}
+	now := w.Now
 
 	sp, err := s.items.OrgSpend(ctx, w)
 	if err != nil {
@@ -43,6 +39,51 @@ func (s *server) GetOrgSpend(ctx context.Context, req gen.GetOrgSpendRequestObje
 	}
 
 	return gen.GetOrgSpend200JSONResponse(out), nil
+}
+
+// spendWindow is the window the query names (this week when absent), ending now; another is
+// errInvalid.
+func (s *server) spendWindow(window *gen.SpendWindow) (domain.SpendWindow, error) {
+	period := domain.SpendThisWeek
+	if window != nil {
+		period = domain.SpendPeriod(*window)
+	}
+
+	w := domain.SpendWindow{Period: period, Now: s.clock.Now().UTC()}
+	if err := w.Check(); err != nil {
+		return w, fmt.Errorf("%w: window must be week, month or 90d", errInvalid)
+	}
+
+	return w, nil
+}
+
+// spendHeader is the spend export's header row.
+var spendHeader = strings.Fields("factory agent model cost_usd")
+
+// ExportSpend writes the window's spend of the factories the caller sees, by factory, agent and
+// model.
+func (s *server) ExportSpend(ctx context.Context, req gen.ExportSpendRequestObject) (gen.ExportSpendResponseObject, error) {
+	w, err := s.spendWindow(req.Params.Window)
+	if err != nil {
+		return nil, err
+	}
+
+	fs := s.visibleFactories(ctx)
+	names := make(map[domain.FactoryID]string, len(fs))
+	ids := make([]domain.FactoryID, 0, len(fs))
+
+	for _, f := range fs {
+		id := domain.FactoryID(f.Metadata.ID)
+		names[id], ids = f.Metadata.Name, append(ids, id)
+	}
+
+	rows := func(ctx context.Context, maxRows int, emit func([]string) error) error {
+		return s.items.EachAgentModelSpend(ctx, w, ids, maxRows, func(r domain.AgentModelSpend) error {
+			return emit([]string{names[r.FactoryID], r.Agent, r.Model, usd(r.USD)})
+		})
+	}
+
+	return csvExport{ctx: ctx, log: s.log, what: "spend", day: w.Now, header: spendHeader, max: s.exportMax, rows: rows}, nil
 }
 
 // spendOut is sp with only the factories the caller sees. When a factory it does not see spent,

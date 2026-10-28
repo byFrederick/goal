@@ -81,6 +81,14 @@ tags:
       log of the deliveries each received, kept 30 days. Anyone who sees the factory reads them;
       its editors (and the organization's owners and admins) create, rotate and delete endpoints,
       after a recent sign-in, never with a key or a personal token.
+  - name: views
+    description: >-
+      A factory's saved views (ADR 0020 decisions 1 and 2): named sets of the Items page's URL
+      search params. A reader of the factory lists its shared views and their own personal ones,
+      and manages their own; creating, renaming or deleting a shared view also needs
+      factory:manage. Only a signed-in person owns a view, so API keys, personal tokens and
+      GOAL_AUTH=none only list, and see the shared views; their writes answer 403
+      person-required.
   - name: definitions
     description: >-
       Factory definitions: creating factories, the one shared draft per factory (Visual
@@ -859,6 +867,40 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/OrgSpend" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/spend/export:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: exportSpend
+      x-goal-scope: org:read
+      tags: [spend]
+      summary: The organization's spend over a window as CSV, one row per factory, agent and model
+      description: >-
+        The CSV export of getOrgSpend (ADR 0020, decision 3): the runs that started in the
+        window's [since, until) in the factories the caller sees, summed by factory, agent and
+        model and ordered by factory id, agent and model. The header row is factory, agent, model,
+        cost_usd; factory is the factory's metadata.name and cost_usd is decimal USD. The body is
+        streamed. More than 100000 rows is a 413 problem export-too-large, answered before any
+        byte of the body; every error before the first row is a problem, and one after it ends
+        the stream early. A window outside the enum is a 400 problem.
+      parameters:
+        - name: window
+          in: query
+          description: As for getOrgSpend
+          schema: { $ref: "#/components/schemas/SpendWindow" }
+      responses:
+        "200":
+          description: The spend rows as CSV
+          headers:
+            Content-Disposition:
+              description: attachment; filename="spend-<yyyy-mm-dd>.csv", the UTC day of the export
+              required: true
+              schema: { type: string }
+          content:
+            text/csv:
+              schema: { type: string }
+        "413": { $ref: "#/components/responses/Problem" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/metrics/touches:
     parameters:
@@ -2453,6 +2495,90 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/WebhookDeliveryRequest" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/views:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: listSavedViews
+      x-goal-scope: factory:read
+      tags: [views]
+      summary: The factory's shared views and the caller's own
+      description: >-
+        The shared views first, then the caller's personal views, each by name (case ignored).
+        Never another person's personal view; an API key or a personal token sees only the shared
+        views.
+      responses:
+        "200":
+          description: The views
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SavedViewList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createSavedView
+      x-goal-scope: factory:read
+      tags: [views]
+      summary: Save a view
+      description: >-
+        A personal view of the caller, or a shared view of the factory, which also needs
+        factory:manage (403 forbidden without it). 403 person-required for an API key, a personal
+        token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60
+        characters, over 20 filters, over 20 values in one or a value over 200 characters; 409
+        view-name-taken for a name the caller's personal views (personal) or the factory's shared
+        views (shared) already use, case ignored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewSavedView" }
+      responses:
+        "201":
+          description: The view
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SavedView" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/views/{view}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/SavedViewRef"
+    patch:
+      operationId: updateSavedView
+      x-goal-scope: factory:read
+      tags: [views]
+      summary: Rename a view and replace its filters
+      description: >-
+        Whether a view is shared is fixed when it is created. A shared view needs factory:manage
+        (403 forbidden without it); 403 person-required for an API key, a personal token or
+        GOAL_AUTH=none; 404
+        view-not-found for a view the caller does not see (another person's personal view
+        included); 400 invalid-view and 409 view-name-taken as createSavedView.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SavedViewChange" }
+      responses:
+        "200":
+          description: The view
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SavedView" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteSavedView
+      x-goal-scope: factory:read
+      tags: [views]
+      summary: Delete a view
+      description: >-
+        A shared view needs factory:manage (403 forbidden without it); 403 person-required for an
+        API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another
+        person's personal view included).
+      responses:
+        "204": { description: Deleted }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/stream:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -2751,6 +2877,57 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/OrgRunList" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/runs/export:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: exportRuns
+      x-goal-scope: org:read
+      tags: [work]
+      summary: The organization's agent runs as CSV, with the filters of listRuns
+      description: >-
+        The CSV export of listRuns (ADR 0020, decision 3): every run listRuns would list over its
+        pages, with the same filters and the same order (newest first), one row per run and no
+        paging. The header row is id, factory, item_ref, item_title, station, agent, model,
+        status, started_at, ended_at, turns, cost_usd: factory is the factory's metadata.name,
+        agent the agent's name in its factory, times are RFC 3339 in UTC (ended_at empty while the
+        run runs) and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a
+        413 problem export-too-large, answered before any byte of the body; every error before the
+        first row is a problem, and one after it ends the stream early.
+      parameters:
+        - name: factory
+          in: query
+          description: As for listRuns
+          schema: { type: string }
+        - name: status
+          in: query
+          description: As for listRuns
+          schema: { $ref: "#/components/schemas/RunStatus" }
+        - name: since
+          in: query
+          description: As for listRuns
+          schema: { type: string, format: date-time }
+        - name: until
+          in: query
+          description: As for listRuns
+          schema: { type: string, format: date-time }
+        - name: q
+          in: query
+          description: As for listRuns
+          schema: { type: string, maxLength: 200 }
+      responses:
+        "200":
+          description: The runs as CSV
+          headers:
+            Content-Disposition:
+              description: attachment; filename="runs-<yyyy-mm-dd>.csv", the UTC day of the export
+              required: true
+              schema: { type: string }
+          content:
+            text/csv:
+              schema: { type: string }
+        "413": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/runs/{run}:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -2802,6 +2979,10 @@ paths:
       operationId: approveItem
       x-goal-scope: item:decide
       summary: Approve an item waiting for a human; it moves to the next station
+      description: >-
+        409 tool-approval-open while the item has an open tool approval (Item.tool_approval):
+        the item waits for a decision on the call, decided with decideToolApproval, not on the
+        item (ADR 0031 decision 9).
       responses:
         "200":
           description: The item after the decision
@@ -2836,6 +3017,42 @@ paths:
       responses:
         "200":
           description: The item after the answer
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/items/{item}/tool-approval:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/ItemRef"
+    post:
+      operationId: decideToolApproval
+      x-goal-scope: item:decide
+      summary: Approve or deny the tool call an item's agent asked to make
+      description: >-
+        Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve
+        records tool_approval_granted and grants that one call, with exactly its input, to the
+        item's next run; with always_allow it also creates the standing rule that lets the
+        agent role call the tool of the connection without asking (audited as
+        standing_rule.created), which also needs connection:manage in the organization and so a
+        sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which
+        the next run's brief carries. Either way the item goes back to its station's arrival
+        state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a
+        note that is not 1 to 2000 characters; 403 for always_allow without connection:manage
+        (reauth-required for a session signed in longer ago), the item unchanged; 409
+        no-open-tool-approval when the item has none (none was asked, it was decided, or a move,
+        pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set
+        and the approval does not offer it, item-closed for a done or cancelled item,
+        item-changed when it moved meanwhile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ToolDecision" }
+      responses:
+        "200":
+          description: The item after the decision
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
@@ -2890,6 +3107,35 @@ paths:
       responses:
         "200":
           description: The item at its new station
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/items/{item}/lane:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/ItemRef"
+    post:
+      operationId: setItemLane
+      x-goal-scope: item:operate
+      tags: [work]
+      summary: Set an open item's lane
+      description: >-
+        The lane picks the agent at the stations that route by lane; the item stays at its station
+        and in its state, and a lane_set event (from, to) records the change. The lane is trimmed;
+        when any station of the item's line routes by lane, it must be one of the lanes routed.
+        400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress
+        (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts
+        carry their own lanes), same-lane or item-changed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetLaneRequest" }
+      responses:
+        "200":
+          description: The item with its new lane
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
@@ -3215,11 +3461,13 @@ paths:
       operationId: updateConnection
       x-goal-scope: connection:manage
       tags: [connections]
-      summary: Rename a connection, or change its description, fields or secrets
+      summary: Rename a connection, or change its description, fields, secrets or tool modes
       description: >-
         fields, when present, replaces every non-secret value; secrets replaces the named secret
         fields only (an empty value clears an optional one), audited as
-        connection.secret_replaced; the rest as connection.updated. A rename is 409
+        connection.secret_replaced; the rest as connection.updated. tools, when present, replaces
+        every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no
+        MCP server, an unknown mode or a malformed tool name. A rename is 409
         connection-in-use while a factory's current version names the connection, 409
         connection-name-taken when another has the name. The kind never changes. Needs a sign-in
         from the last 10 minutes.
@@ -3271,6 +3519,56 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ConnectionTestResult" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/standing-rules:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: listStandingRules
+      x-goal-scope: connection:read
+      tags: [connections]
+      summary: The organization's standing rules
+      description: >-
+        The rules Always allow created (ADR 0031 decision 7), oldest first: each lets one agent
+        role call one tool of one organization connection without asking, in every factory of
+        the organization. The active ones, and the revoked ones too with revoked=true.
+      parameters:
+        - name: revoked
+          in: query
+          description: Also list the revoked rules
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: The rules
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandingRuleList" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/standing-rules/{rule}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - name: rule
+        in: path
+        required: true
+        description: The standing rule's id
+        schema: { type: string }
+    delete:
+      operationId: revokeStandingRule
+      x-goal-scope: connection:manage
+      tags: [connections]
+      summary: Revoke a standing rule
+      description: >-
+        The rule's agent role asks first again from its next run. A rule is never deleted:
+        revoking sets revoked_at and revoked_by, audited as standing_rule.revoked. 404 for a rule
+        that does not exist, 409 standing-rule-revoked for one revoked already. Needs a sign-in
+        from the last 10 minutes.
+      responses:
+        "200":
+          description: The revoked rule
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StandingRule" }
+        "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/connections/{connection}/repositories:
     parameters:
@@ -3779,6 +4077,12 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
 components:
   parameters:
+    SavedViewRef:
+      name: view
+      in: path
+      required: true
+      description: The saved view's id
+      schema: { type: string }
     WebhookEndpointRef:
       name: endpoint
       in: path
@@ -4844,6 +5148,11 @@ components:
           type: string
           maxLength: 500
           description: Why; required when the station is upstream of the item's (the agent reads it)
+    SetLaneRequest:
+      type: object
+      required: [lane]
+      properties:
+        lane: { type: string, minLength: 1, maxLength: 100, description: The lane to set, one a station of the item's line routes when any does }
     PauseRequest:
       type: object
       properties:
@@ -4914,6 +5223,77 @@ components:
             getItem and answerItem only, absent or null when there is none
           nullable: true
           allOf: [{ $ref: "#/components/schemas/ItemQuestion" }]
+        tool_approval:
+          description: >-
+            The tool call the item's agent asked to make that waits for a person's decision (ADR
+            0031); getItem and decideToolApproval only, absent or null when there is none
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/ToolApproval" }]
+    ToolApproval:
+      type: object
+      description: >-
+        A run's call of an Ask-first connection tool that waits for a person, read from its
+        tool_approval_requested event
+      required: [id, connection, tool, input, agent, run_id, asked_at, always_allow_offered]
+      properties:
+        id: { type: integer, format: int64, description: The approval's id, its tool_approval_requested event's }
+        connection: { type: string, description: The organization connection's name }
+        tool: { type: string, description: "The tool's name as the connection's MCP server lists it, as in create_comment" }
+        input:
+          description: The call's input, any JSON value, as canonical JSON (keys sorted); at most 16 KiB
+        agent: { type: string, description: "The calling agent's role name, as in architect; never its copy number" }
+        run_id: { type: string, description: The run that asked; it ended when it asked }
+        asked_at: { type: string, format: date-time }
+        always_allow_offered:
+          type: boolean
+          description: >-
+            Whether a person may approve the call with always_allow: its ask comes from the
+            organization connection's mode alone
+    ToolDecision:
+      type: object
+      description: A person's decision on an item's open tool approval
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [approve, deny]
+        always_allow:
+          type: boolean
+          default: false
+          description: >-
+            With approve only: also let the agent role call this tool of this connection without
+            asking from now on (a standing rule); needs connection:manage
+        note:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: With deny only, the person's reason, 1 to 2000 characters (surrounding space is trimmed)
+    StandingRuleList:
+      type: object
+      required: [rules]
+      properties:
+        rules:
+          type: array
+          items: { $ref: "#/components/schemas/StandingRule" }
+    StandingRule:
+      type: object
+      description: >-
+        Lets one agent role call one tool of one organization connection without asking, in every
+        factory of the organization (ADR 0031 decision 7)
+      required: [id, connection_id, connection, tool, agent, created_by, created_at, item_id, revoked_by, revoked_at]
+      properties:
+        id: { type: string }
+        connection_id: { type: string }
+        connection: { type: string, nullable: true, description: The connection's name; null once the connection is deleted }
+        tool: { type: string }
+        agent: { type: string, description: "The agent's role, its name in the definition, as in architect" }
+        created_by: { $ref: "#/components/schemas/Actor" }
+        created_at: { type: string, format: date-time }
+        item_id: { type: string, description: The item it was approved on }
+        revoked_by:
+          allOf: [{ $ref: "#/components/schemas/Actor" }]
+          nullable: true
+        revoked_at: { type: string, format: date-time, nullable: true }
     ItemQuestion:
       type: object
       description: An agent's open question about an item, read from its question_asked event
@@ -5067,7 +5447,7 @@ components:
       required: [event_id, kind, station, at, actor, planned, reason, reason_by]
       properties:
         event_id: { type: integer, format: int64, description: The naming event; its reason is set by setTouchReason }
-        kind: { type: string, description: "The naming event's kind: merged, rejected, approved, moved, paused, cancelled, retried, note, ..." }
+        kind: { type: string, description: "The naming event's kind: merged, rejected, approved, moved, paused, cancelled, retried, lane_set, note, ..." }
         station: { type: string, nullable: true }
         at: { type: string, format: date-time }
         actor: { $ref: "#/components/schemas/Actor" }
@@ -6311,7 +6691,13 @@ components:
             item's agent asked a person (data question, choices, agent as the role name, run_id);
             the run ends and the item waits at its station. question_answered: a person answered
             (data answer, the picked choice's text or their words; choice_index only when a
-            choice was picked; actor); the item goes back to its station's queue
+            choice was picked; actor); the item goes back to its station's queue.
+            tool_approval_requested: the item's agent asked to make a call of an Ask-first
+            connection tool (data connection, tool, input, agent as the role name, run_id,
+            always_allow_offered); the run ends and the item waits at its station.
+            tool_approval_granted: a person approved it (data approval_id, always_allow; actor);
+            tool_approval_denied: a person denied it (data approval_id, note when given; actor);
+            either way the item goes back to its station's queue
         station: { type: string }
         actor: { type: string }
         data:
@@ -6853,8 +7239,10 @@ components:
         truncated: { type: boolean, description: More entries exist than limit; the most recent were kept }
     InboxEntryKind:
       type: string
-      description: What waits; later phases add kinds, which clients that do not know them show as a generic row
-      enum: [decision, question, andon, rework_warning, blocked, expedite]
+      description: >-
+        What waits; later phases add kinds, which clients that do not know them show as a generic
+        row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny
+      enum: [decision, question, tool_approval, andon, rework_warning, blocked, expedite]
     InboxEntry:
       type: object
       required: [id, kind, factory, since, item, station, action, approval, blocked, andon, rework]
@@ -6862,7 +7250,7 @@ components:
         id:
           type: string
           description: >-
-            "<kind>:<id of what waits>": decision:, question:, blocked: and expedite:<item id>,
+            "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>,
             andon:<pull id>, rework_warning:<factory id>:<gate station>
         kind: { $ref: "#/components/schemas/InboxEntryKind" }
         factory:
@@ -6876,7 +7264,7 @@ components:
           type: string
           format: date-time
           description: >-
-            Since when it waits: the item's last change (decision, question, blocked), its creation
+            Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation
             (expedite), the pull (andon), now (rework_warning)
         item:
           description: The item it is about, or null for an entry that is about no item
@@ -6904,6 +7292,11 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/ItemQuestion"
+        tool_approval:
+          description: A tool_approval entry's open tool approval; absent or null for other kinds
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/ToolApproval"
         andon:
           description: The open pull of an andon entry; null for other kinds
           nullable: true
@@ -7718,7 +8111,7 @@ components:
     Connection:
       type: object
       description: An organization's connection (spec 4 §4.3), never a secret value
-      required: [id, name, kind, description, fields, secrets_set, status, used_by, last_used_at, last_test, created_by, created_at, updated_by, updated_at]
+      required: [id, name, kind, description, fields, secrets_set, status, used_by, last_used_at, last_test, tools, waiting_approvals, created_by, created_at, updated_by, updated_at]
       properties:
         id: { type: string }
         name: { $ref: "#/components/schemas/ConnectionName" }
@@ -7748,10 +8141,39 @@ components:
           description: getConnection only, the env names a run gets from it
           items: { type: string }
         docs: { type: string, description: "getConnection only, its kind's docs for agents" }
+        tools:
+          type: array
+          description: >-
+            Its tools and their modes (ADR 0031 decisions 1 and 2), sorted by name: one entry for
+            each tool the last test listed and each tool with a mode set, a tool without a mode
+            being allow; empty for a connection never tested and without modes
+          items: { $ref: "#/components/schemas/ConnectionTool" }
+        waiting_approvals:
+          type: integer
+          minimum: 0
+          description: >-
+            The open tool approvals on this connection in the organization, by its current name;
+            the connections list's "Writes waiting for your OK" is their sum
         created_by: { $ref: "#/components/schemas/Actor" }
         created_at: { type: string, format: date-time }
         updated_by: { $ref: "#/components/schemas/Actor" }
         updated_at: { type: string, format: date-time }
+    ConnectionToolMode:
+      type: string
+      description: >-
+        What a run may do with one tool of the connection (ADR 0031 decision 1): allow runs the
+        call, ask pauses it for a person, off refuses it
+      enum: [allow, ask, off]
+    ConnectionTool:
+      type: object
+      required: [name, mode]
+      properties:
+        name:
+          type: string
+          description: >-
+            The tool's name as the MCP server lists it, without the connection prefix: 1 to 128
+            letters, digits, underscores, dots or dashes
+        mode: { $ref: "#/components/schemas/ConnectionToolMode" }
     ConnectionUsers:
       type: object
       description: What uses a connection, so it cannot be deleted or renamed meanwhile
@@ -7801,6 +8223,13 @@ components:
           writeOnly: true
           description: The secret fields to replace, by name; an empty value clears an optional one
           additionalProperties: { type: string }
+        tools:
+          type: array
+          description: >-
+            Every tool's mode: replaces them all, so send the full list (a tool left out goes back
+            to allow). Only for a connection whose kind has an MCP server; a tool named twice is
+            refused.
+          items: { $ref: "#/components/schemas/ConnectionTool" }
     CredentialName:
       type: string
       description: >-
@@ -8336,3 +8765,42 @@ components:
         source_id: { type: string }
         name: { type: string }
         status: { type: string, enum: [idle, syncing, failed] }
+    SavedViewFilters:
+      type: object
+      description: >-
+        The Items page's URL search params, each key with its values in order: at most 20 keys, 20
+        values per key and 200 characters per value
+      additionalProperties:
+        type: array
+        items: { type: string }
+    NewSavedView:
+      type: object
+      required: [name, shared, filters]
+      properties:
+        name: { type: string, description: "1 to 60 characters, trimmed" }
+        shared: { type: boolean, description: "Every reader of the factory sees it; false: only its owner" }
+        filters: { $ref: "#/components/schemas/SavedViewFilters" }
+    SavedViewChange:
+      type: object
+      required: [name, filters]
+      properties:
+        name: { type: string, description: "1 to 60 characters, trimmed" }
+        filters: { $ref: "#/components/schemas/SavedViewFilters" }
+    SavedView:
+      type: object
+      required: [id, name, shared, filters, mine, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        shared: { type: boolean }
+        filters: { $ref: "#/components/schemas/SavedViewFilters" }
+        mine: { type: boolean, description: The caller made it }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    SavedViewList:
+      type: object
+      required: [views]
+      properties:
+        views:
+          type: array
+          items: { $ref: "#/components/schemas/SavedView" }

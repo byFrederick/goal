@@ -146,6 +146,13 @@ type Config struct {
 	// TransientBackoff is the wait before an item whose sandbox was lost runs again in a new one;
 	// it doubles with each loss (default 15s).
 	TransientBackoff time.Duration
+	// MergeWait is how long a gate's merge reads a pull request again while its host is still
+	// computing whether it can be merged, before putting the merge off (default 60s). It must be
+	// shorter than the gate merge's own bound (gateMergeTimeout, 2m).
+	MergeWait time.Duration
+	// MergeDeferrals is how many times in a row a gate's merge may be put off because a pull
+	// request is not mergeable yet before the item blocks (default 5).
+	MergeDeferrals int
 	// SweepLimit caps leases requeued per sweep and items released per queue station per tick (default 100).
 	SweepLimit int
 	// Image is the agent image every sandbox starts from (required).
@@ -185,6 +192,8 @@ const (
 	defaultCheckTimeout = 30 * time.Minute
 	defaultBackoff      = 15 * time.Second
 	defaultSweepLimit   = 100
+	defaultMergeWait    = time.Minute
+	defaultDeferrals    = 5
 	cleanupTimeout      = 10 * time.Second
 )
 
@@ -237,6 +246,10 @@ func New(d Deps, cfg Config) (*Engine, error) {
 	cfg = withDefaults(cfg)
 	if cfg.HeartbeatEvery >= cfg.LeaseTTL {
 		return nil, fmt.Errorf("engine: heartbeat every %s must be shorter than the lease TTL %s", cfg.HeartbeatEvery, cfg.LeaseTTL)
+	}
+
+	if cfg.MergeWait >= gateMergeTimeout {
+		return nil, fmt.Errorf("engine: the merge wait %s must be shorter than a gate merge's bound %s", cfg.MergeWait, gateMergeTimeout)
 	}
 
 	if cfg.Image == "" || cfg.GatewayURL == "" || cfg.GatewayKeyRef == "" {
@@ -346,6 +359,14 @@ func withDefaults(cfg Config) Config {
 
 	if cfg.SweepLimit <= 0 {
 		cfg.SweepLimit = defaultSweepLimit
+	}
+
+	if cfg.MergeWait <= 0 {
+		cfg.MergeWait = defaultMergeWait
+	}
+
+	if cfg.MergeDeferrals <= 0 {
+		cfg.MergeDeferrals = defaultDeferrals
 	}
 
 	return cfg

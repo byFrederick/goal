@@ -174,6 +174,8 @@ export type {
   Targets,
   Template,
   TemplateSummary,
+  ToolApproval,
+  ToolDecision,
   Touch,
   TouchCount,
   TouchHeadline,
@@ -209,9 +211,20 @@ export type NewCredential = Schemas['NewCredential'];
 export type CredentialImport = Schemas['CredentialImport'];
 export type CredentialImportResult = Schemas['CredentialImportResult'];
 export type CredentialImportOutcome = Schemas['CredentialImportOutcome'];
+// The organization's knowledge usage (ADR 0027): where a source's documents were used, and the runs of one document.
+export type KnowledgeUsage = Schemas['KnowledgeUsage'];
+export type KnowledgeDocumentUsage = Schemas['KnowledgeDocumentUsage'];
+export type KnowledgeDocumentUsePage = Schemas['KnowledgeDocumentUsePage'];
+export type KnowledgeDocumentUse = Schemas['KnowledgeDocumentUse'];
 export type AgentSpend = Schemas['AgentSpend'];
 export type ModelSpend = Schemas['ModelSpend'];
 export type OrgSpend = Schemas['OrgSpend'];
+/** A saved view of the Items page (ADR 0020): its filters are the page's URL search params, each key with its values. */
+export type SavedView = Schemas['SavedView'];
+export type SavedViewFilters = Schemas['SavedViewFilters'];
+export type SavedViewList = Schemas['SavedViewList'];
+export type NewSavedView = Schemas['NewSavedView'];
+export type SavedViewChange = Schemas['SavedViewChange'];
 /** The organization's policy (ADR 0024): what it allows every factory, the facts about it, and its parts. */
 export type OrgPolicyInput = Schemas['OrgPolicyInput'];
 export type OrgPolicyView = Schemas['OrgPolicyView'];

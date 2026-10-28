@@ -2,10 +2,12 @@
 // (or yesterday), newest first. The KPI tiles and the filter chips read the window's summary; the
 // table reads one page of runs under the same filter. Filters, factory, range and search live in
 // the URL. Stream events refresh the queries (shared/invalidation.ts); nothing polls.
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { Activity, ChevronDown, Search } from 'lucide-react';
+import { Activity, ChevronDown, Download, Search } from 'lucide-react';
 import { Fragment, type ReactNode, useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { exportOrgRuns, type RunsExportFilter } from '../../api/client';
+import { exportFailure, saveCsv } from '../../api/download';
 import { factoriesQuery, runsQuery } from '../../api/queries';
 import type { OrgRun, RunStatus, RunSummary } from '../../api/types';
 import { FactoryBadge } from '../../app/factory-badge';
@@ -22,6 +24,7 @@ import { EmptyState } from '../../ui/empty-state';
 import { Input } from '../../ui/field';
 import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '../../ui/menu';
 import { NotAvailable } from '../../ui/not-available';
+import { Spinner } from '../../ui/spinner';
 import { type RunsRange, type RunsSearch, rangeWord, runsWindow } from './search';
 
 /** The rows one page asks for: the footer counts what is shown, and paging is not built yet. */
@@ -143,15 +146,24 @@ export function RunsPage() {
 
   // The window is the UTC day (or the day before): stable within the day, so the query key is too.
   const day = runsWindow(search.range);
-  const filter = {
-    ...(search.factory ? { factory: search.factory } : {}),
-    ...(search.status ? { status: search.status } : {}),
-    since: day.since,
-    until: day.until,
-    ...(search.q ? { q: search.q } : {}),
-    limit: pageSize,
-  };
-  const runs = useQuery(runsQuery(org.id, filter));
+  // The list and its CSV export take the same filter; the export has no page. Memoised so the top bar's
+  // actions, which hold the export, are rebuilt only when a filter changes.
+  const exportFilter = useMemo<RunsExportFilter>(
+    () => ({
+      ...(search.factory ? { factory: search.factory } : {}),
+      ...(search.status ? { status: search.status } : {}),
+      since: day.since,
+      until: day.until,
+      ...(search.q ? { q: search.q } : {}),
+    }),
+    [search.factory, search.status, search.q, day.since, day.until],
+  );
+  const runs = useQuery(runsQuery(org.id, { ...exportFilter, limit: pageSize }));
+  const exportRuns = useMutation({
+    mutationFn: () => exportOrgRuns(org.id, exportFilter),
+    onSuccess: saveCsv,
+  });
+  const exporting = exportRuns.isPending;
 
   const setSearch = useCallback(
     (next: Partial<RunsSearch>) =>
@@ -216,12 +228,21 @@ export function RunsPage() {
             </MenuRadioGroup>
           </MenuContent>
         </Menu>
-        <NotAvailable label="Export CSV">
-          <Button variant="secondary">Export CSV</Button>
-        </NotAvailable>
+        <Button
+          variant="secondary"
+          aria-busy={exporting || undefined}
+          onClick={() => {
+            if (!exporting) exportRuns.mutate();
+          }}
+          className="aria-busy:cursor-progress"
+        >
+          {exporting ? <Spinner tone="dark" /> : <Download size={14} strokeWidth={1.75} aria-hidden="true" />}
+          Export CSV
+        </Button>
       </>
     ),
-    [factoryLabel, factoryKey, rangeKey, factories.data, setSearch],
+    // exportRuns.mutate is stable; exporting changes the button's busy state.
+    [factoryLabel, factoryKey, rangeKey, factories.data, setSearch, exporting, exportRuns.mutate],
   );
 
   const summary = runs.data?.summary;
@@ -236,6 +257,12 @@ export function RunsPage() {
         <h1 className="m-0 text-page-title tracking-display">Runs</h1>
         <p className="m-0 text-body text-muted">Every time an agent worked on an item, in all factories.</p>
       </div>
+
+      {exportRuns.isError ? (
+        <div role="alert">
+          <Callout tone="rework">{exportFailure(exportRuns.error, 'runs')}</Callout>
+        </div>
+      ) : null}
 
       {runs.isPending ? (
         <div aria-busy="true">

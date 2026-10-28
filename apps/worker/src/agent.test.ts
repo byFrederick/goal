@@ -1,8 +1,8 @@
 import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { CanUseTool, Options } from '@anthropic-ai/claude-agent-sdk';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { CanUseTool, Options, PermissionResult } from '@anthropic-ai/claude-agent-sdk';
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import { agentQuery, connectionPermission, taskPrompt } from './agent.js';
 import { type Connection, parseSpec, type TaskSpec } from './spec.js';
 
@@ -46,12 +46,28 @@ const connections: Connection[] = [
 /** The run's env: the connections' values, which nothing the worker configures may carry. */
 const env = { ISSUES_TOKEN: 'issues-s3cr3t', ISSUES_SITE: 'issues.example.com', GOAL_GATEWAY_TOKEN: 'gateway-token' };
 
+/** A fetch no test expects: a request that reaches it is one the worker should not have made. */
+const noFetch = (async () => {
+  throw new Error('no request expected');
+}) as typeof globalThis.fetch;
+
+/** A fetch that answers every request with status and records each one it was asked for. */
+function gatewayAnswering(status: number) {
+  const requests: { url: string; init: RequestInit }[] = [];
+  const fetch = (async (input: string | URL, init?: RequestInit) => {
+    requests.push({ url: String(input), init: init ?? {} });
+    return new Response(null, { status });
+  }) as typeof globalThis.fetch;
+  return { fetch, requests };
+}
+
 function optionsOf(spec: Partial<TaskSpec>): Options {
   return agentQuery(
     parseSpec(JSON.stringify({ ...base, ...spec })),
     { prompt: 'You are the engineer.' },
     env,
     new AbortController(),
+    noFetch,
   ).options;
 }
 
@@ -62,15 +78,23 @@ function systemPromptOf(spec: Partial<TaskSpec>): string {
 }
 
 /** Asks options' permission check about one call, as Claude Code does for a call nothing pre-approved. */
+async function verdictOf(
+  options: Pick<Options, 'canUseTool'>,
+  tool: string,
+  input: Record<string, unknown> = { q: 'x' },
+): Promise<PermissionResult> {
+  const check = options.canUseTool as CanUseTool;
+  const result = await check(tool, input, { signal: new AbortController().signal, toolUseID: 't1', requestId: 'q1' });
+  if (!result) throw new Error(`no decision on ${tool}`);
+  return result;
+}
+
 async function decide(
   options: Pick<Options, 'canUseTool'>,
   tool: string,
   input: Record<string, unknown> = { q: 'x' },
 ): Promise<'allow' | 'deny'> {
-  const check = options.canUseTool as CanUseTool;
-  const result = await check(tool, input, { signal: new AbortController().signal, toolUseID: 't1', requestId: 'q1' });
-  if (!result) throw new Error(`no decision on ${tool}`);
-  return result.behavior;
+  return (await verdictOf(options, tool, input)).behavior;
 }
 
 describe('agentQuery', () => {
@@ -83,9 +107,9 @@ describe('agentQuery', () => {
   it("puts goald's feedback for this attempt (GOAL_FEEDBACK) right after the brief", () => {
     const spec = parseSpec(JSON.stringify(base));
     const feedback = 'Your previous attempt was rejected: `task check` exited 1.';
-    const { prompt } = agentQuery(spec, { prompt: 'p' }, { GOAL_FEEDBACK: feedback }, new AbortController());
+    const { prompt } = agentQuery(spec, { prompt: 'p' }, { GOAL_FEEDBACK: feedback }, new AbortController(), noFetch);
     expect(prompt.startsWith(`Add a health endpoint\n\n${feedback}\n\n## Finishing`)).toBe(true);
-    expect(agentQuery(spec, { prompt: 'p' }, {}, new AbortController()).prompt).not.toContain('rejected');
+    expect(agentQuery(spec, { prompt: 'p' }, {}, new AbortController(), noFetch).prompt).not.toContain('rejected');
   });
 
   it('appends only the prompt when the factory has no purpose', () => {
@@ -203,13 +227,173 @@ describe('agentQuery', () => {
   });
 });
 
+describe('the permission check of off and Ask-first connection tools', () => {
+  const gateway = 'http://gateway.internal/mcp';
+  const reportUrl = 'http://gateway.internal/run/tool-approval';
+  const create = 'mcp__issues__create_comment';
+  /** The issues connection with these tool modes, and the run's gateway. */
+  const permissionWith = (
+    modes: Record<string, 'ask' | 'off'>,
+    reach: { fetch: typeof globalThis.fetch; token?: string | undefined },
+    extra: Partial<TaskSpec> = {},
+  ): CanUseTool =>
+    connectionPermission(
+      {
+        tools_allow: [],
+        tools_deny: [],
+        gateway_url: gateway,
+        ...extra,
+        connections: [{ ...issues, tool_modes: modes }],
+      },
+      { token: 'gateway-token', ...reach },
+    );
+  const body = { body: 'hello' };
+  let stderr: MockInstance<typeof process.stderr.write>;
+
+  beforeEach(() => {
+    stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('denies an off tool with no request, and leaves the other tools of the connection to their rules', async () => {
+    const gw = gatewayAnswering(202);
+    const check = permissionWith({ create_comment: 'off' }, gw);
+
+    expect(await decide({ canUseTool: check }, create, body)).toBe('deny');
+    expect(await decide({ canUseTool: check }, 'mcp__issues__list_issues', body)).toBe('allow');
+    expect(gw.requests).toEqual([]);
+  });
+
+  it('allows a tool with no mode, or a mode for another tool', async () => {
+    const gw = gatewayAnswering(202);
+
+    expect(await decide({ canUseTool: permissionWith({}, gw) }, create, body)).toBe('allow');
+    expect(await decide({ canUseTool: permissionWith({ close_issue: 'ask' }, gw) }, create, body)).toBe('allow');
+    expect(gw.requests).toEqual([]);
+  });
+
+  it('denies an Ask-first tool that tools_deny matches before it reads the mode or sends a request', async () => {
+    const gw = gatewayAnswering(202);
+    const check = permissionWith({ create_comment: 'ask' }, gw, { tools_deny: ['issues__create_*'] });
+
+    expect(await verdictOf({ canUseTool: check }, create, body)).toEqual({
+      behavior: 'deny',
+      message: "The agent's tool rules do not let it call issues__create_comment.",
+    });
+    expect(gw.requests).toEqual([]);
+  });
+
+  it('reports an Ask-first call to the gateway with the task token and interrupts the agent on 202', async () => {
+    const gw = gatewayAnswering(202);
+    const verdict = await verdictOf({ canUseTool: permissionWith({ create_comment: 'ask' }, gw) }, create, body);
+
+    expect(verdict).toMatchObject({ behavior: 'deny', interrupt: true });
+    expect(verdict).toHaveProperty('message', 'The call issues__create_comment waits for a person to approve it.');
+    expect(gw.requests).toHaveLength(1);
+    const [request] = gw.requests;
+    expect(request?.url).toBe(reportUrl);
+    expect(request?.init.method).toBe('POST');
+    expect(request?.init.headers).toEqual({
+      Authorization: 'Bearer gateway-token',
+      'Content-Type': 'application/json',
+    });
+    expect(JSON.parse(String(request?.init.body))).toEqual({
+      connection: 'issues',
+      tool: 'create_comment',
+      input: body,
+    });
+  });
+
+  it.each([409, 413, 500])('denies without interrupt and sends on when the gateway answers %i', async (status) => {
+    const gw = gatewayAnswering(status);
+    const verdict = await verdictOf({ canUseTool: permissionWith({ create_comment: 'ask' }, gw) }, create, body);
+
+    expect(verdict).toEqual({
+      behavior: 'deny',
+      message: 'The call issues__create_comment could not be sent for approval, so it did not run.',
+    });
+    expect(gw.requests).toHaveLength(1);
+    expect(stderr).toHaveBeenCalledWith(
+      `goal-agent: tool approval for issues__create_comment not requested: the gateway answered ${status}\n`,
+    );
+  });
+
+  it('denies without interrupt when the report is rejected', async () => {
+    const offline = (async () => {
+      throw new Error('fetch failed');
+    }) as typeof globalThis.fetch;
+    const verdict = await verdictOf(
+      { canUseTool: permissionWith({ create_comment: 'ask' }, { fetch: offline }) },
+      create,
+      body,
+    );
+
+    expect(verdict).toMatchObject({ behavior: 'deny' });
+    expect(verdict).not.toHaveProperty('interrupt');
+    expect(stderr).toHaveBeenCalledWith(
+      'goal-agent: tool approval for issues__create_comment not requested: fetch failed\n',
+    );
+  });
+
+  it('denies without any request when the run has no gateway or no task token', async () => {
+    const gw = gatewayAnswering(202);
+    const noGateway = permissionWith({ create_comment: 'ask' }, gw, { gateway_url: undefined });
+    const noToken = permissionWith({ create_comment: 'ask' }, { ...gw, token: undefined });
+
+    for (const check of [noGateway, noToken]) {
+      const verdict = await verdictOf({ canUseTool: check }, create, body);
+      expect(verdict).toMatchObject({ behavior: 'deny' });
+      expect(verdict).not.toHaveProperty('interrupt');
+    }
+    expect(gw.requests).toEqual([]);
+  });
+
+  it('runs an Ask-first call a grant matches, whatever the order of its keys, once', async () => {
+    const gw = gatewayAnswering(202);
+    const granted = [{ connection: 'issues', tool: 'create_comment', input: { a: 1, b: { d: [1, 'x'], c: true } } }];
+    const check = permissionWith({ create_comment: 'ask' }, gw, { granted_calls: granted });
+
+    expect(await decide({ canUseTool: check }, create, { b: { c: true, d: [1, 'x'] }, a: 1 })).toBe('allow');
+    expect(gw.requests).toEqual([]);
+  });
+
+  it('asks again on a second use of a grant, and on the same call with another input', async () => {
+    const gw = gatewayAnswering(202);
+    const input = { body: 'hello' };
+    const granted = [{ connection: 'issues', tool: 'create_comment', input }];
+    const check = permissionWith({ create_comment: 'ask' }, gw, { granted_calls: granted });
+
+    expect(await decide({ canUseTool: check }, create, input)).toBe('allow');
+    expect(await verdictOf({ canUseTool: check }, create, input)).toMatchObject({ behavior: 'deny', interrupt: true });
+    expect(await verdictOf({ canUseTool: check }, create, { body: 'bye' })).toMatchObject({ interrupt: true });
+    expect(gw.requests).toHaveLength(2);
+  });
+
+  it('never writes a tool input to stderr', async () => {
+    const gw = gatewayAnswering(409);
+    const secret = { body: 'test-secret' };
+
+    await verdictOf({ canUseTool: permissionWith({ create_comment: 'ask' }, gw) }, create, secret);
+
+    const written = stderr.mock.calls.map((call: unknown[]) => String(call[0])).join('');
+    expect(written).toContain('issues__create_comment');
+    expect(written).not.toContain('test-secret');
+  });
+});
+
 describe('the permission check of escalated built-in writes', () => {
   const write = (file_path: string) => ({ file_path, content: '# Rules' });
   const bash = (command: string) => ({ command });
   let workspace: string;
   const at = (rel: string) => join(workspace, rel);
   const checkOf = (spec: Partial<TaskSpec>, dir = workspace) => ({
-    canUseTool: connectionPermission({ tools_allow: [], tools_deny: [], connections, ...spec }, dir),
+    canUseTool: connectionPermission(
+      { tools_allow: [], tools_deny: [], connections, ...spec },
+      { fetch: noFetch, token: undefined },
+      dir,
+    ),
   });
 
   beforeEach(async () => {

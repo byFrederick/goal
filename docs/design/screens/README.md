@@ -45,9 +45,9 @@ How to use them:
 | `floor`: the andon panel, six KPI tiles, needs you, where work waits, throughput, activity | `/o/$org/f/$factory` | restyle |  |
 | `board`: columns with WIP meters, expedite lane, Ready and In progress, assembly lines | `…/board` | restyle | |
 | `item`: stepper, the agent's question with quick answers, run timeline, note composer, details, cost, overlaps, rules | `…/items/$ref` | restyle | Watch live, Trace, Teardown |
-| `items`: saved views, filters, grouped by assembly, bulk actions | `…/items` | restyle | Save view, Set lane |
+| `items`: saved views, filters, grouped by assembly, bulk actions | `…/items` | restyle |  |
 | `needs-you`: list across factories by type, detail with Approve, Deny, "Edit, then approve" | `/o/$org/needs-you` (new page; replaces the inbox drawer) | new | Always allow |
-| `runs`: every run across factories | `/o/$org/runs` | new (runs exist in the API) | Export CSV, Send to Jonah |
+| `runs`: every run across factories | `/o/$org/runs` | new (runs exist in the API) | Send to Jonah |
 
 ## Intake (`intake/`)
 
@@ -79,14 +79,14 @@ Every Jonah screen is a **new feature** (phase 5, [ADR 0002](../../adr/0002-jona
 | `connections`: grouped by code hosts, apps, MCP servers and model providers | `/o/$org/connections` | restyle | writes waiting for approval |
 | `connection-add`: catalog and details, tool permissions, factories, test | `/o/$org/connections/new` | restyle | the per-tool "Ask first" setting |
 | `credentials`, `credential-new` | `/o/$org/credentials` | new feature: today secrets live in connection fields. The spec decides how credentials relate to connections. | encryption in the browser |
-| `knowledge` | `/o/$org/knowledge` | restyle | verdicts on whether knowledge helped or misled, "where it was used" |
+| `knowledge` | `/o/$org/knowledge` | restyle |  |
 
 ## Organization (`organization/`)
 
 | Screen | Route | Status | Not built yet |
 |---|---|---|---|
 | `members` | `/o/$org/members` | restyle | restricting sign-up to a domain |
-| `spend`: spend by factory, agent and model; budgets; who pays for models | `/o/$org/spend` | new (budgets and costs exist) | Export CSV, routers |
+| `spend`: spend by factory, agent and model; budgets; who pays for models | `/o/$org/spend` | new (budgets and costs exist) | routers |
 | `models`: models agents may use, harness, tool policy, box sizes, egress | `/o/$org/models` | new (model connections exist) | routers, other harnesses |
 | `api-keys` | `/o/$org/api-keys` | restyle | the Goal MCP server address |
 | `org-settings` | `/o/$org/settings` | restyle | single sign-on, your own bucket |

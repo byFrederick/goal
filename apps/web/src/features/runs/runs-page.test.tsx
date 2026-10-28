@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+
+import { ApiError } from '@goal/api-client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   createMemoryHistory,
@@ -15,6 +17,7 @@ import { acmeOrg, seed } from '../../../mock/fixtures.ts';
 import { orgRunsOf } from '../../../mock/runs.ts';
 import type { RunsFilter } from '../../api/client';
 import * as client from '../../api/client';
+import * as download from '../../api/download';
 import { factoriesQuery } from '../../api/queries';
 import type { OrgRunList, OrgSummary } from '../../api/types';
 import { TopBarSetContext, type TopBarState } from '../../app/top-bar';
@@ -33,7 +36,9 @@ vi.mock(import('../../api/client'), async (original) => ({
     if (!calls.answer) throw new Error('no answer set for listOrgRuns');
     return calls.answer(filter);
   }),
+  exportOrgRuns: vi.fn(async () => ({ blob: new Blob(['id\n']), filename: 'runs-2026-10-27.csv' })),
 }));
+vi.mock(import('../../api/download'), async (original) => ({ ...(await original()), saveCsv: vi.fn() }));
 
 // A fixed day, so the mock's runs fall in "today" (UTC) whatever hour the tests run.
 const now = Date.parse('2026-10-27T15:00:00Z');
@@ -252,22 +257,66 @@ describe('the Runs page filters live in the URL', () => {
   });
 });
 
-describe('the controls that are not built yet', () => {
-  it('renders Export CSV disabled, focusable, and inert', async () => {
-    const { router } = renderRuns();
+describe('the Export CSV button', () => {
+  it('asks for the export with the filters in the URL and no page, then saves the file goald named', async () => {
+    renderRuns('?status=failed&factory=sre&range=yesterday&q=checkout');
+    fireEvent.click(await screen.findByRole('button', { name: 'Export CSV' }));
+
+    await waitFor(() => expect(download.saveCsv).toHaveBeenCalledOnce());
+    expect(client.exportOrgRuns).toHaveBeenCalledWith(acmeOrg, {
+      factory: 'sre',
+      status: 'failed',
+      since: yesterday,
+      until: today,
+      q: 'checkout',
+    });
+    expect(vi.mocked(client.exportOrgRuns).mock.calls[0]?.[1]).not.toHaveProperty('limit');
+    expect(vi.mocked(client.exportOrgRuns).mock.calls[0]?.[1]).not.toHaveProperty('cursor');
+    expect(vi.mocked(download.saveCsv).mock.calls[0]?.[0].filename).toBe('runs-2026-10-27.csv');
+  });
+
+  it('shows the busy state while the download starts, and ignores a second click', async () => {
+    vi.mocked(client.exportOrgRuns).mockImplementationOnce(() => new Promise(() => {}));
+    renderRuns();
     await screen.findByRole('table');
-    const before = router.state.location.href;
-    const calls = vi.mocked(client.listOrgRuns).mock.calls.length;
+
+    const exportButton = () => screen.getByRole('button', { name: 'Export CSV' });
+    fireEvent.click(exportButton());
+    await waitFor(() => expect(exportButton().getAttribute('aria-busy')).toBe('true'));
+    fireEvent.click(exportButton());
+
+    expect(client.exportOrgRuns).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a 413 export-too-large in the error callout and keeps the figures on screen', async () => {
+    vi.mocked(client.exportOrgRuns).mockRejectedValueOnce(
+      new ApiError({
+        title: 'Export too large',
+        status: 413,
+        detail: 'More than 100000 runs match; narrow the filters.',
+      }),
+    );
+    renderRuns();
+    const table = await screen.findByRole('table');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(within(alert).getByText('Export too large: More than 100000 runs match; narrow the filters.')).toBeTruthy();
+    expect(download.saveCsv).not.toHaveBeenCalled();
+    expect(screen.getByRole('table')).toBe(table);
+    expect(screen.getByText('Runs today')).toBeTruthy();
+  });
+});
+
+describe('the controls that are not built yet', () => {
+  it('does not render Export CSV as not available: the button is live', async () => {
+    renderRuns();
+    await screen.findByRole('table');
 
     const control = screen.getByRole('button', { name: 'Export CSV' });
-    expect(control.getAttribute('aria-disabled')).toBe('true');
-    expect(control.tabIndex).not.toBe(-1);
-    fireEvent.focus(control);
-    expect(await screen.findByText('Not available yet')).toBeTruthy();
-    fireEvent.click(control);
-
-    expect(router.state.location.href).toBe(before);
-    expect(vi.mocked(client.listOrgRuns).mock.calls.length).toBe(calls);
+    expect(control.getAttribute('aria-disabled')).toBeNull();
+    expect(screen.queryByText('Not available yet')).toBeNull();
   });
 
   it('renders the Waiting on you tile and chip disabled, and says why', async () => {

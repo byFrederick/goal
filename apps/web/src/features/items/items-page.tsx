@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { ChevronDown } from 'lucide-react';
-import { useId, useMemo } from 'react';
-import { itemsQuery } from '../../api/queries';
+import { useId, useMemo, useState } from 'react';
+import { itemsQuery, viewsQuery } from '../../api/queries';
 import type { ItemState } from '../../api/types';
 import { TopBarSlot } from '../../app/top-bar';
 import { useFactory, useFactoryParams } from '../../shared/factory';
@@ -21,6 +21,7 @@ import { BulkActions } from './bulk-actions';
 import {
   applyFilters,
   countsOf,
+  filtersOf,
   type ItemsFilters,
   type ItemsView,
   isAssemblyCard,
@@ -29,6 +30,8 @@ import {
   selectionParam,
   stateChoices,
 } from './items-filters';
+import { SaveViewDialog } from './save-view-dialog';
+import { SavedViewLinks, tabLink } from './saved-views';
 
 /** The value a filter menu shows for "any": no filter in the URL. */
 const any = '*';
@@ -37,10 +40,6 @@ const any = '*';
 const filterButton =
   'inline-flex min-h-11 items-center gap-2 rounded-control border border-dashed border-rule bg-card px-3 text-secondary font-medium text-ink-soft transition-colors hover:bg-panel hover:text-ink md:min-h-8';
 const chosenButton = 'border-solid border-transparent bg-run-tint text-run-ink hover:bg-run-tint hover:text-run-ink';
-
-/** A saved view or a grouping's link: 44 px on a phone. */
-const tabLink =
-  'inline-flex min-h-11 items-center gap-2 border-b-2 px-3 text-body no-underline transition-colors md:min-h-9';
 
 /** One filter menu: the chosen value (or "any"), and a radio list of the values the list offers. */
 function FilterMenu({
@@ -119,6 +118,8 @@ export function ItemsPage() {
   const everything = useQuery(itemsQuery(org.id, factory.id, { limit: 200 }));
   const listed = useQuery(itemsQuery(org.id, factory.id, { state: listState, limit: 200 }));
   const actions = useMemo(() => <ItemsActions />, []);
+  const savedViews = useQuery(viewsQuery(org.id, factory.id));
+  const [saving, setSaving] = useState(false);
 
   const canOperate = holds(factory, 'item:operate');
   const decides = holds(factory, 'item:decide');
@@ -133,6 +134,7 @@ export function ItemsPage() {
   const shown = applyFilters(listed.data?.items ?? [], filters, now);
   const rows = flat ? [] : listRows(shown, all, narrowed);
   const counts = countsOf(all, now);
+  const urlFilters = filtersOf({ state, show, view, type, lane, assembly });
   const selected = new Set(selectedIds(sel));
   const checked = shown.filter((it) => !isAssemblyCard(it) && selected.has(it.id));
 
@@ -241,6 +243,7 @@ export function ItemsPage() {
 
       <nav
         aria-label="Saved views"
+        aria-busy={savedViews.isPending || undefined}
         className="-mx-4 flex gap-1 overflow-x-auto border-b border-line px-4 md:mx-0 md:px-0"
       >
         {/* A tab is active by its whole search, and inactive tabs take their aria-current from the view. */}
@@ -262,11 +265,23 @@ export function ItemsPage() {
             <span className="text-meta text-muted tabular-nums">{v.count}</span>
           </Link>
         ))}
-        <NotAvailable>
-          <button type="button" className={cn(tabLink, 'border-transparent text-run-ink')}>
-            + Save view
-          </button>
-        </NotAvailable>
+        <SavedViewLinks
+          org={org}
+          factory={factory}
+          views={savedViews.data?.views ?? []}
+          currentFilters={urlFilters}
+          builtInCurrent={views.some((v) => v.current)}
+          failed={savedViews.isError}
+          onRetry={() => void savedViews.refetch()}
+        />
+        {savedViews.isPending ? <span className="sr-only">Loading</span> : null}
+        <button
+          type="button"
+          className={cn(tabLink, 'border-transparent text-run-ink')}
+          onClick={() => setSaving(true)}
+        >
+          + Save view
+        </button>
       </nav>
 
       <fieldset className="m-0 flex min-w-0 flex-wrap items-center gap-2 border-0 p-0">
@@ -313,6 +328,10 @@ export function ItemsPage() {
           />
         </div>
       </fieldset>
+
+      {saving ? (
+        <SaveViewDialog org={org} factory={factory} filters={urlFilters} onClose={() => setSaving(false)} />
+      ) : null}
 
       {checked.length > 0 ? (
         <BulkActions

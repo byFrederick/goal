@@ -1,8 +1,9 @@
 // Needs you (/o/$org/needs-you, ADR 0016 wave 2): what waits on a person across the organization's
 // factories, with the decision in view. The tab, the factory and the selected entry are in the URL.
 // Desktop is a split: the list, then the detail. A phone shows the list, or the approve view when the
-// URL names an entry. Approve and Deny call the same endpoints as the item page; J, K, A and D work
-// from the keyboard, but not while a field or the Deny dialog has focus.
+// URL names an entry. A Decision's Approve and Deny call the same endpoints as the item page; an
+// Approval's call the tool-approval endpoint, with Always allow when offered (ADR 0031). J, K, A and D
+// work from the keyboard, but not while a field or the Deny dialog has focus.
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { ChevronDown, Inbox } from 'lucide-react';
@@ -10,23 +11,25 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { factoriesQuery, inboxQuery } from '../../api/queries';
 import type { InboxEntry } from '../../api/types';
 import { usePhone } from '../../app/phone-chrome';
-import { useOrg } from '../../shared/org';
+import { useOrg, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
 import { Count } from '../../ui/count';
 import { EmptyState } from '../../ui/empty-state';
 import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '../../ui/menu';
-import { NotAvailable } from '../../ui/not-available';
-import { type DecidedEntry, decisionOf, useEntryDecision } from './actions';
+import { alwaysAllowOffered, type DecidedEntry, decisionOf, useEntryDecision } from './actions';
 import { DenyDialog } from './deny-dialog';
 import { Detail } from './detail';
 import { NeedsList } from './rows';
 import { factoriesOf, type NeedsSearch, needsSearch, tabCounts, visibleEntries } from './search';
 import { type NeedsTab, tabs, typeLabel, typeOf } from './types';
 
-/** An entry that is a Decision and has its item: the only kind Approve and Deny apply to. */
+/** An entry that is a Decision or an Approval and has its item: the kinds Approve and Deny apply to. */
 function decidable(entry: InboxEntry | undefined): DecidedEntry['entry'] | undefined {
-  return entry && typeOf(entry) === 'decision' && entry.item ? (entry as DecidedEntry['entry']) : undefined;
+  const type = entry && typeOf(entry);
+  return entry && (type === 'decision' || type === 'approval') && entry.item
+    ? (entry as DecidedEntry['entry'])
+    : undefined;
 }
 
 export function NeedsYouPage() {
@@ -40,11 +43,19 @@ export function NeedsYouPage() {
   const factories = useQuery(factoriesQuery(org.id));
   const decide = useEntryDecision();
   const [denying, setDenying] = useState(false);
+  // Always allow is the one choice an Approval carries. It names the entry it is checked for, so a
+  // checked box never carries over to another entry.
+  const [alwaysAllowFor, setAlwaysAllowFor] = useState<string | undefined>(undefined);
+  const canManageConnections = useOrgHolds('connection:manage');
 
   const entries = inbox.data?.entries ?? [];
   const visible = visibleEntries(entries, search);
   const selected = visible.find((e) => e.id === search.entry) ?? visible[0];
   const current = decidable(selected);
+  const allowAlways = current !== undefined && alwaysAllowOffered(current, canManageConnections);
+  const alwaysAllow = current !== undefined && alwaysAllowFor === current.id;
+  const setAlwaysAllow = (checked: boolean) => setAlwaysAllowFor(checked && current ? current.id : undefined);
+  const approvalCurrent = current !== undefined && typeOf(current) === 'approval';
   const approving = phone && visible.some((e) => e.id === search.entry);
   const counts = tabCounts(entries, search.factory);
   const factoryOf = (entry: InboxEntry) => factories.data?.find((f) => f.id === entry.factory.id);
@@ -53,6 +64,10 @@ export function NeedsYouPage() {
 
   const approve = () => {
     if (!current) return;
+    if (approvalCurrent) {
+      decide.mutate({ entry: current, decision: { kind: 'tool_approve', always_allow: allowAlways && alwaysAllow } });
+      return;
+    }
     const decision = decisionOf(current) === 'merge' ? ({ kind: 'merge' } as const) : ({ kind: 'approve' } as const);
     decide.mutate({ entry: current, decision });
   };
@@ -65,7 +80,13 @@ export function NeedsYouPage() {
       onOpenChange={setDenying}
       pending={decide.isPending}
       onConfirm={(reason) =>
-        decide.mutate({ entry: current, decision: { kind: 'reject', reason } }, { onSuccess: () => setDenying(false) })
+        decide.mutate(
+          {
+            entry: current,
+            decision: approvalCurrent ? { kind: 'tool_deny', reason } : { kind: 'reject', reason },
+          },
+          { onSuccess: () => setDenying(false) },
+        )
       }
     />
   ) : null;
@@ -198,6 +219,9 @@ export function NeedsYouPage() {
           factory={factoryOf(selected)}
           phone
           pending={decide.isPending}
+          allowAlways={allowAlways}
+          alwaysAllow={alwaysAllow}
+          onAlwaysAllow={setAlwaysAllow}
           onApprove={approve}
           onDeny={() => setDenying(true)}
         />
@@ -235,6 +259,9 @@ export function NeedsYouPage() {
               entry={selected}
               factory={factoryOf(selected)}
               pending={decide.isPending}
+              allowAlways={allowAlways}
+              alwaysAllow={alwaysAllow}
+              onAlwaysAllow={setAlwaysAllow}
               onApprove={approve}
               onDeny={() => setDenying(true)}
             />
@@ -255,7 +282,7 @@ function Kbd({ children }: { children: ReactNode }) {
   return <kbd className="font-control text-meta text-ink-soft">{children}</kbd>;
 }
 
-/** The tabs: All, Approvals, Decisions, Questions, Alerts, each with its count. Approvals is not built yet. */
+/** The tabs: All, Approvals, Decisions, Questions, Alerts, each with its count. */
 function TabGroup({
   counts,
   value,
@@ -270,7 +297,7 @@ function TabGroup({
       <legend className="sr-only">Show</legend>
       {tabs.map((tab) => {
         const pressed = value === tab.value;
-        const button = (
+        return (
           <button
             key={tab.value}
             type="button"
@@ -284,15 +311,6 @@ function TabGroup({
             {tab.label}
             <span className="text-meta text-muted tabular-nums">{counts[tab.value]}</span>
           </button>
-        );
-        // Approvals has no backend yet: its tab shows, disabled, with the tooltip.
-        const notBuilt = tab.value === 'approval';
-        return notBuilt ? (
-          <NotAvailable key={tab.value} label={tab.label}>
-            {button}
-          </NotAvailable>
-        ) : (
-          button
         );
       })}
     </fieldset>

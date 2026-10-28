@@ -1,8 +1,16 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { answerItem, approveItem, getInbox, listItemEvents, mergeItem, rejectItem } from '../../api/client';
-import { factoriesQuery, inboxQuery, keys } from '../../api/queries';
+import {
+  answerItem,
+  approveItem,
+  decideToolApproval,
+  getInbox,
+  listItemEvents,
+  mergeItem,
+  rejectItem,
+} from '../../api/client';
+import { factoriesQuery, inboxQuery, keys, orgQuery } from '../../api/queries';
 import type { Inbox, InboxEntry, Item, ItemCard, OrgSummary } from '../../api/types';
 import { renderOrgPage } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
@@ -16,6 +24,7 @@ vi.mock('../../api/client', async (importOriginal) => ({
   rejectItem: vi.fn(),
   listItemEvents: vi.fn(),
   answerItem: vi.fn(),
+  decideToolApproval: vi.fn(),
 }));
 
 afterEach(() => {
@@ -317,19 +326,170 @@ describe('Needs you: the keyboard path', () => {
 });
 
 describe('Needs you: controls not built yet', () => {
-  it('renders the Approvals and Questions tabs disabled, with aria-disabled', async () => {
-    renderPage();
-
-    const tab = await screen.findByRole('button', { name: /Approvals/ });
-    expect(tab.getAttribute('aria-disabled')).toBe('true');
-  });
-
-  it('renders Edit, then approve and the Always allow checkbox disabled', async () => {
+  it('renders Edit, then approve disabled, with its tooltip', async () => {
     renderPage();
 
     const edit = await screen.findByRole('button', { name: 'Edit, then approve' });
     expect(edit.getAttribute('aria-disabled')).toBe('true');
-    expect(screen.getByRole('checkbox').getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('shows no Always allow checkbox on a Decision', async () => {
+    renderPage();
+
+    await screen.findByRole('button', { name: /^Approve/ });
+    expect(screen.queryByRole('checkbox')).toBeNull();
+  });
+});
+
+/** The architect's add_issue_comment call on software#151, which the API offers Always allow for. */
+const call = {
+  id: 9,
+  connection: 'github',
+  tool: 'add_issue_comment',
+  input: { body: 'Thanks for the request.', issue_number: 212 },
+  agent: 'architect',
+  run_id: 'run-1',
+  asked_at: since,
+  always_allow_offered: true,
+};
+
+/** A tool call an architect asks to make on software#151, waiting for a decision. */
+const approval: InboxEntry = {
+  id: 'tool_approval:item-151',
+  kind: 'tool_approval',
+  factory,
+  since,
+  item: card({
+    id: 'item-151',
+    ref: 'software#151',
+    number: 151,
+    title: 'Webhook as an intake source',
+    station: 'spec',
+  }),
+  station: 'spec',
+  action: null,
+  approval: null,
+  blocked: null,
+  andon: null,
+  rework: null,
+  tool_approval: call,
+};
+
+/** Renders the page with the approval among the entries and the caller's organization grants. */
+function renderApproval({
+  entries = [approval],
+  can = ['connection:manage'],
+  search = {},
+}: {
+  entries?: InboxEntry[];
+  can?: string[];
+  search?: Record<string, string>;
+} = {}) {
+  return renderPage({
+    search,
+    seed: [
+      [inboxQuery(org.id).queryKey, inbox(entries)],
+      [factoriesQuery(org.id).queryKey, factories()],
+      [orgQuery(org.id).queryKey, { role: 'owner', can }],
+    ],
+  });
+}
+
+describe('Needs you: Approvals', () => {
+  it('shows the call the agent asks to make, with its input, tool and connection', async () => {
+    renderApproval({ search: { entry: 'tool_approval:item-151' } });
+
+    expect(await screen.findByRole('heading', { name: 'architect wants to call add_issue_comment' })).toBeTruthy();
+    expect(screen.getByText('The call it will make')).toBeTruthy();
+    expect(screen.getByText(/"issue_number": 212/)).toBeTruthy();
+    expect(screen.getByText('github')).toBeTruthy();
+  });
+
+  it('draws the approval row with its type, its title and its item and station', async () => {
+    renderApproval();
+
+    const list = await screen.findByRole('list', { name: /Waiting on you/ });
+    expect(within(list).getByText('Approval')).toBeTruthy();
+    expect(within(list).getByText('architect wants to call add_issue_comment')).toBeTruthy();
+    expect(within(list).getByText('#151 at Spec, run paused')).toBeTruthy();
+  });
+
+  it('approves the call with always_allow false when the box is clear', async () => {
+    vi.mocked(decideToolApproval).mockResolvedValue({ id: 'item-151', state: 'queued' } as unknown as Item);
+    renderApproval({ search: { entry: 'tool_approval:item-151' } });
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Approve/ }));
+
+    await waitFor(() =>
+      expect(decideToolApproval).toHaveBeenCalledWith('org-1', 'item-151', {
+        decision: 'approve',
+        always_allow: false,
+      }),
+    );
+    expect(approveItem).not.toHaveBeenCalled();
+  });
+
+  it('approves with Always allow when the box is checked', async () => {
+    vi.mocked(decideToolApproval).mockResolvedValue({ id: 'item-151', state: 'queued' } as unknown as Item);
+    renderApproval({ search: { entry: 'tool_approval:item-151' } });
+
+    const box = await screen.findByRole('checkbox', { name: 'Always allow architect to add_issue_comment' });
+    fireEvent.click(box);
+    fireEvent.click(screen.getByRole('button', { name: /^Approve/ }));
+
+    await waitFor(() =>
+      expect(decideToolApproval).toHaveBeenCalledWith('org-1', 'item-151', { decision: 'approve', always_allow: true }),
+    );
+  });
+
+  it('hides Always allow when the API does not offer it for the call', async () => {
+    renderApproval({
+      search: { entry: 'tool_approval:item-151' },
+      entries: [{ ...approval, tool_approval: { ...call, always_allow_offered: false } }],
+    });
+
+    await screen.findByRole('button', { name: /^Approve/ });
+    expect(screen.queryByRole('checkbox')).toBeNull();
+  });
+
+  it('hides Always allow from a person who lacks connection:manage', async () => {
+    renderApproval({ search: { entry: 'tool_approval:item-151' }, can: ['item:decide'] });
+
+    await screen.findByRole('button', { name: /^Approve/ });
+    expect(screen.queryByRole('checkbox')).toBeNull();
+  });
+
+  it('keeps Edit, then approve disabled on an approval', async () => {
+    renderApproval({ search: { entry: 'tool_approval:item-151' } });
+
+    const edit = await screen.findByRole('button', { name: 'Edit, then approve' });
+    expect(edit.getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('denies with the reason, sent as the note', async () => {
+    vi.mocked(decideToolApproval).mockResolvedValue({ id: 'item-151', state: 'queued' } as unknown as Item);
+    renderApproval({ search: { entry: 'tool_approval:item-151' } });
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Deny/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Deny software#151' });
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'Keep it to the spec.' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Deny' }));
+
+    await waitFor(() =>
+      expect(decideToolApproval).toHaveBeenCalledWith('org-1', 'item-151', {
+        decision: 'deny',
+        note: 'Keep it to the spec.',
+      }),
+    );
+  });
+
+  it('shows approvals under the Approvals tab and no decisions', async () => {
+    renderApproval({ entries: [decision, approval], search: { type: 'approval' } });
+
+    const list = await screen.findByRole('list', { name: /Waiting on you/ });
+    expect(within(list).getByText('architect wants to call add_issue_comment')).toBeTruthy();
+    expect(within(list).queryByText('Ship the retry fix')).toBeNull();
+    expect(screen.getByRole('button', { name: /^Approvals/ }).getAttribute('aria-disabled')).toBeNull();
   });
 });
 

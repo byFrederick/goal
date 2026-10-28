@@ -49,6 +49,11 @@ const (
 	// It is not a rejection: the item's rework count is unchanged. Data reason (the pull request,
 	// its base, the files and what to do) and pull_request.
 	EventMergeConflict EventKind = "merge_conflict"
+	// EventMergeDeferred is a gate's merge the engine put off because a pull request was not
+	// mergeable yet with no conflict (its mergeability still computing, checks not passed on its
+	// head, its head moved), sending the item back to the gate's queue so its agent runs again.
+	// Data reason, pull_request and deferrals (how many in a row, this one included).
+	EventMergeDeferred EventKind = "merge_deferred"
 	// EventEdgeAdded and EventEdgeRemoved are a dependency of the item added or removed: data
 	// needs (the item it needs), kind and actor (ref).
 	EventEdgeAdded   EventKind = "edge_added"
@@ -83,6 +88,9 @@ const (
 	// Data reason (optional) and actor (ref); a part cancelled with its assembly names it
 	// (assembly), and an assembly's counts the parts it cancelled (parts).
 	EventCancelled EventKind = "cancelled"
+	// EventLaneSet is a person setting an open item's lane, which picks the agent at stations
+	// that route by lane. Data from (the old lane, "" when it had none), to and actor (ref).
+	EventLaneSet EventKind = "lane_set"
 	// EventLeaseTaken is a person's action on an item in progress (move, pause, cancel, send back) that
 	// took its lease: the instance running it stops the run. Data actor (ref) and action.
 	EventLeaseTaken EventKind = "lease_taken"
@@ -113,6 +121,19 @@ const (
 	// choice's text, or the person's words), choice_index only when a choice was picked, and
 	// actor (ref).
 	EventQuestionAnswered EventKind = "question_answered"
+	// EventToolApprovalRequested is a run's call of an Ask-first connection tool (ADR 0031
+	// decision 4): the run ends and the item waits for a person's decision at its station. Data
+	// connection (its name), tool, input (the call's JSON input), agent (the role), run_id and
+	// always_allow_offered.
+	EventToolApprovalRequested EventKind = "tool_approval_requested"
+	// EventToolApprovalGranted is a person's approval of the item's open tool approval: the item
+	// goes back to its station's arrival state and its next run may make that one call. Data
+	// approval_id (the request's event id), always_allow and actor (ref).
+	EventToolApprovalGranted EventKind = "tool_approval_granted"
+	// EventToolApprovalDenied is a person's denial of the item's open tool approval: the item
+	// goes back to its station's arrival state and its next run's brief carries the denial. Data
+	// approval_id, note (only when the person gave one) and actor (ref).
+	EventToolApprovalDenied EventKind = "tool_approval_denied"
 )
 
 // Audit of items.
@@ -123,6 +144,8 @@ const (
 	AuditItemMoved = "item.moved"
 	// AuditItemPaused is a person pausing an item (station, reason).
 	AuditItemPaused = "item.paused"
+	// AuditItemLaneSet is a person setting an item's lane (from, to).
+	AuditItemLaneSet = "item.lane_set"
 	// AuditItemCancelled is a person cancelling an item (station, reason; assembly for a part
 	// cancelled with its assembly).
 	AuditItemCancelled = "item.cancelled"

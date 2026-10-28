@@ -12,6 +12,36 @@ import (
 	"github.com/google/uuid"
 )
 
+const countAgentModelSpend = `-- name: CountAgentModelSpend :one
+SELECT count(*) FROM (
+  SELECT DISTINCT factory_id, agent, model
+  FROM agent_runs
+  WHERE factory_id = ANY ($1::uuid[])
+    AND started_at >= $2::timestamptz AND started_at < $3::timestamptz
+  LIMIT $4::bigint
+) keys
+`
+
+type CountAgentModelSpendParams struct {
+	Factories []uuid.UUID
+	Since     time.Time
+	Until     time.Time
+	MaxRows   int64
+}
+
+// How many rows OrgSpendByAgentModel has over all its pages, counted up to max_rows.
+func (q *Queries) CountAgentModelSpend(ctx context.Context, arg CountAgentModelSpendParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAgentModelSpend,
+		arg.Factories,
+		arg.Since,
+		arg.Until,
+		arg.MaxRows,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const orgMergedByDay = `-- name: OrgMergedByDay :many
 SELECT date_trunc('day', done_at, 'UTC')::timestamptz AS day, count(*) AS merged
 FROM work_items
@@ -103,6 +133,75 @@ func (q *Queries) OrgSpendByAgent(ctx context.Context, arg OrgSpendByAgentParams
 	for rows.Next() {
 		var i OrgSpendByAgentRow
 		if err := rows.Scan(&i.FactoryID, &i.Agent, &i.SpendUsd); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const orgSpendByAgentModel = `-- name: OrgSpendByAgentModel :many
+SELECT factory_id, agent, model, sum(cost_usd)::float8 AS spend_usd
+FROM agent_runs
+WHERE factory_id = ANY ($1::uuid[])
+  AND started_at >= $2::timestamptz AND started_at < $3::timestamptz
+  AND (NOT $4::boolean
+       OR (factory_id, agent COLLATE "C", model COLLATE "C")
+          > ($5::uuid, $6::text COLLATE "C", $7::text COLLATE "C"))
+GROUP BY factory_id, agent, model
+ORDER BY factory_id, agent COLLATE "C", model COLLATE "C"
+LIMIT $8::bigint
+`
+
+type OrgSpendByAgentModelParams struct {
+	Factories    []uuid.UUID
+	Since        time.Time
+	Until        time.Time
+	Paged        bool
+	AfterFactory uuid.UUID
+	AfterAgent   string
+	AfterModel   string
+	MaxRows      int64
+}
+
+type OrgSpendByAgentModelRow struct {
+	FactoryID uuid.UUID
+	Agent     string
+	Model     string
+	SpendUsd  float64
+}
+
+// The cost of the factories' runs started in [since, until), by factory, agent and model, ordered
+// by bytes (COLLATE "C", as Go compares strings) and after the key (after_factory, after_agent,
+// after_model) when paged, for the spend export (ports.Spend.EachAgentModelSpend). The key is the
+// grouping, so filtering runs by it before grouping keeps exactly the groups after it.
+func (q *Queries) OrgSpendByAgentModel(ctx context.Context, arg OrgSpendByAgentModelParams) ([]OrgSpendByAgentModelRow, error) {
+	rows, err := q.db.Query(ctx, orgSpendByAgentModel,
+		arg.Factories,
+		arg.Since,
+		arg.Until,
+		arg.Paged,
+		arg.AfterFactory,
+		arg.AfterAgent,
+		arg.AfterModel,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrgSpendByAgentModelRow
+	for rows.Next() {
+		var i OrgSpendByAgentModelRow
+		if err := rows.Scan(
+			&i.FactoryID,
+			&i.Agent,
+			&i.Model,
+			&i.SpendUsd,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

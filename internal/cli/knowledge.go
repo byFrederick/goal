@@ -3,20 +3,24 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
-// knowledgeCommand runs goal knowledge sources | add | sync | upload | documents | rm | search: the
-// organization's knowledge base (spec 4 §9). Members list and search it; adding, syncing,
+// knowledgeCommand runs goal knowledge sources | add | sync | upload | documents | rm | search |
+// usage | uses | verdict: the organization's knowledge base (spec 4 §9) and where agents used it
+// (ADR 0027). Members list and search it, read its usage and give verdicts; adding, syncing,
 // uploading and removing needs an owner or admin, or a key with knowledge:manage.
 func knowledgeCommand(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	if len(args) == 0 {
@@ -26,6 +30,7 @@ func knowledgeCommand(ctx context.Context, out *printer, getenv func(string) str
 	handler, ok := map[string]command{
 		"sources": knowledgeSources, "add": knowledgeAdd, "sync": knowledgeSync, "upload": knowledgeUpload,
 		"documents": knowledgeDocuments, "rm": knowledgeRemove, "search": knowledgeSearch,
+		"usage": knowledgeUsage, "uses": knowledgeUses, "verdict": knowledgeVerdict,
 	}[args[0]]
 	if !ok {
 		return errUsage
@@ -415,4 +420,262 @@ func snippetLine(text string) string {
 	}
 
 	return line
+}
+
+// knowledgeUsage prints each document's use over the window: its runs and the verdicts on it, of
+// one source or, without --source, of every source in turn.
+func knowledgeUsage(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	fs := newFlags("knowledge usage")
+	orgFlag := addOrgFlag(fs)
+	source := fs.String("source", "", "only this source (default: every source)")
+	days := fs.Int("days", 0, "the window in days, 1 to 90 (default 7)")
+	asJSON := fs.Bool("json", false, "print goald's answer as it came, one per source")
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 0 || *days < 0 {
+		return errUsage
+	}
+
+	c, err := connect(ctx, getenv, *orgFlag)
+	if err != nil {
+		return err
+	}
+
+	sources, err := usageSources(ctx, c, *source)
+	if err != nil || len(sources) == 0 {
+		if err == nil {
+			out.printf("no knowledge sources in %s; add one with `goal knowledge add <name> --kind upload`\n", c.org)
+		}
+
+		return err
+	}
+
+	answers, err := sourceUsages(ctx, c, sources, *days)
+	if err != nil {
+		return err
+	}
+
+	var docs []gen.KnowledgeDocumentUsage
+
+	for _, res := range answers {
+		if *asJSON {
+			out.printf("%s\n", bytes.TrimSuffix(res.Body, []byte("\n")))
+		}
+
+		docs = append(docs, res.JSON200.Documents...)
+	}
+
+	switch {
+	case *asJSON:
+	case len(docs) == 0:
+		out.printf("no run used a document of %s in the last %d days\n", strings.Join(sources, ", "), answers[0].JSON200.Days)
+	default:
+		printUsage(out, docs)
+	}
+
+	return nil
+}
+
+// sourceUsages is goald's usage answer for each of sources, in their order, over days (goald's
+// default when 0).
+func sourceUsages(ctx context.Context, c orgClient, sources []string, days int) ([]*gen.GetKnowledgeUsageResponse, error) {
+	params := &gen.GetKnowledgeUsageParams{}
+	if days > 0 {
+		params.Days = &days
+	}
+
+	answers := make([]*gen.GetKnowledgeUsageResponse, 0, len(sources))
+
+	for _, name := range sources {
+		params.Source = name
+
+		res, err := c.GetKnowledgeUsageWithResponse(ctx, c.org, params)
+		if err != nil {
+			return nil, apiDown(err)
+		}
+
+		if res.JSON200 == nil {
+			return nil, fmt.Errorf("%s: %w", name, problem(res.HTTPResponse, res.ApplicationproblemJSONDefault))
+		}
+
+		answers = append(answers, res)
+	}
+
+	return answers, nil
+}
+
+// usageSources is source, or without one the name of every source of the organization.
+func usageSources(ctx context.Context, c orgClient, source string) ([]string, error) {
+	if source != "" {
+		return []string{source}, nil
+	}
+
+	res, err := c.ListKnowledgeSourcesWithResponse(ctx, c.org, &gen.ListKnowledgeSourcesParams{})
+	if err != nil {
+		return nil, apiDown(err)
+	}
+
+	if res.JSON200 == nil {
+		return nil, problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	}
+
+	names := make([]string, 0, len(res.JSON200.Sources))
+	for _, s := range res.JSON200.Sources {
+		names = append(names, s.Name)
+	}
+
+	return names, nil
+}
+
+// printUsage prints one row per document: helped and misled count agents and people, with the
+// people's share in brackets.
+func printUsage(out *printer, docs []gen.KnowledgeDocumentUsage) {
+	var b bytes.Buffer
+
+	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(tw, "DOCUMENT\tTITLE\tSOURCE\tRUNS\tHELPED\tMISLED")
+
+	for _, d := range docs {
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\n", d.Id, d.Title, d.Source, d.Runs,
+			verdictCount(d.AgentsHelped, d.PeopleHelped), verdictCount(d.AgentsMisled, d.PeopleMisled))
+	}
+
+	_ = tw.Flush()
+
+	out.printf("%s", b.String())
+}
+
+// verdictCount is a total of verdicts, "3 (1 people)" when people gave some of them.
+func verdictCount(agents, people int) string {
+	if people == 0 {
+		return strconv.Itoa(agents)
+	}
+
+	return fmt.Sprintf("%d (%d people)", agents+people, people)
+}
+
+// knowledgeUses lists the runs that used a document, newest first, page by page.
+func knowledgeUses(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	fs := newFlags("knowledge uses")
+	orgFlag := addOrgFlag(fs)
+	asJSON := fs.Bool("json", false, "print every page's uses as one JSON object")
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 1 {
+		return errUsage
+	}
+
+	c, err := connect(ctx, getenv, *orgFlag)
+	if err != nil {
+		return err
+	}
+
+	uses := []gen.KnowledgeDocumentUse{}
+	params := &gen.ListKnowledgeDocumentUsesParams{}
+
+	for {
+		res, err := c.ListKnowledgeDocumentUsesWithResponse(ctx, c.org, pos[0], params)
+		if err != nil {
+			return apiDown(err)
+		}
+
+		if res.JSON200 == nil {
+			return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+		}
+
+		uses = append(uses, res.JSON200.Uses...)
+
+		if res.JSON200.NextAfter == nil {
+			break
+		}
+
+		params.After = res.JSON200.NextAfter
+	}
+
+	if *asJSON {
+		raw, err := json.Marshal(gen.KnowledgeDocumentUsePage{Uses: uses})
+		if err != nil {
+			return fmt.Errorf("knowledge document %s uses: %w", pos[0], err)
+		}
+
+		out.printf("%s\n", raw)
+
+		return nil
+	}
+
+	if len(uses) == 0 {
+		out.printf("no run used knowledge document %s\n", pos[0])
+
+		return nil
+	}
+
+	var b bytes.Buffer
+
+	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(tw, "RUN\tITEM\tTITLE\tFACTORY\tKINDS\tFIRST USE")
+
+	for _, u := range uses {
+		kinds := make([]string, 0, len(u.Kinds))
+		for _, k := range u.Kinds {
+			kinds = append(kinds, string(k))
+		}
+
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", u.RunId, u.Item.Ref, u.Item.Title, u.Factory.Name,
+			strings.Join(kinds, ","), u.At.Local().Format(time.DateTime))
+	}
+
+	_ = tw.Flush()
+
+	out.printf("%s", b.String())
+
+	return nil
+}
+
+// knowledgeVerdict gives the caller's verdict on a document, of a run that used it with --run.
+func knowledgeVerdict(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	fs := newFlags("knowledge verdict")
+	orgFlag := addOrgFlag(fs)
+	run := fs.String("run", "", "the run that used the document")
+	note := fs.String("note", "", "why, in a sentence or two")
+	asJSON := fs.Bool("json", false, "print goald's answer as it came")
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 2 {
+		return errUsage
+	}
+
+	verdict := gen.KnowledgeVerdictInputVerdict(pos[1])
+	if verdict != gen.KnowledgeVerdictInputVerdictHelped && verdict != gen.KnowledgeVerdictInputVerdictMisled {
+		return errUsage
+	}
+
+	c, err := connect(ctx, getenv, *orgFlag)
+	if err != nil {
+		return err
+	}
+
+	res, err := c.GiveKnowledgeVerdictWithResponse(ctx, c.org, pos[0],
+		gen.KnowledgeVerdictInput{Verdict: verdict, RunId: optional(*run), Note: optional(*note)})
+	if err != nil {
+		return apiDown(err)
+	}
+
+	if res.JSON200 == nil {
+		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	}
+
+	if *asJSON {
+		out.printf("%s", res.Body)
+
+		return nil
+	}
+
+	line := fmt.Sprintf("✓ %s: knowledge document %s of %s", res.JSON200.Verdict, res.JSON200.Document, res.JSON200.Source)
+	if r := deref(res.JSON200.RunId); r != "" {
+		line += ", run " + r
+	}
+
+	out.printf("%s\n", line)
+
+	return nil
 }
