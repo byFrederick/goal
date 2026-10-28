@@ -2,6 +2,7 @@ package domain
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -49,5 +50,34 @@ func TestAssemblyProgress_CountsMergedWorkingAndWaitingParts(t *testing.T) {
 
 	if got := a.PartNumber("other"); got != 0 {
 		t.Errorf("PartNumber(other) = %d, want 0", got)
+	}
+}
+
+// An assembly's integration branch is goal/a<number>-<slug>, with exactly the slug of Branch.
+func TestIntegrationBranch_UsesTheItemBranchSlug(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		number int64
+		title  string
+		want   string
+	}{
+		{330, "Integration branches for assemblies", "goal/a330-integration-branches-for-assemblies"},
+		{12, "  Fix: lease sweep (again)!  ", "goal/a12-fix-lease-sweep-again"},
+		{3, "Ünïcode only ✓", "goal/a3-n-code-only"},
+		{4, "???", "goal/a4"},
+		{5, "", "goal/a5"},
+		{5, "a very long title that keeps going well past the limit of a branch", "goal/a5-a-very-long-title-that-keeps-going-well-p"},
+	}
+
+	for _, tc := range tests {
+		root := Item{Number: tc.number, Title: tc.title}
+		if got := IntegrationBranch(root); got != tc.want {
+			t.Errorf("IntegrationBranch(%d, %q) = %q, want %q", tc.number, tc.title, got, tc.want)
+		}
+
+		if got, item := IntegrationBranch(root), root.Branch(); strings.TrimPrefix(got, "goal/a") != strings.TrimPrefix(item, "goal/") {
+			t.Errorf("IntegrationBranch(%q) = %q does not share Branch's slug %q", tc.title, got, item)
+		}
 	}
 }

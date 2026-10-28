@@ -36,6 +36,7 @@ func itemFrom(w db.WorkItem) (domain.Item, error) {
 	it := domain.Item{
 		ID: domain.ItemID(w.ID.String()), OrgID: domain.OrgID(w.OrgID.String()), FactoryID: domain.FactoryID(w.FactoryID.String()),
 		Number: w.Number, BaseCommit: deref(w.BaseCommit),
+		IntegrationBranch: deref(w.IntegrationBranch), IntegrationLandAt: deref(w.IntegrationLandAt),
 		Type: w.Type, Lane: deref(w.Lane), Title: w.Title, Body: w.Body, Station: w.Station,
 		State: domain.ItemState(w.State), Class: domain.ClassOfService(w.ClassOfService), Priority: int(w.Priority),
 		ReworkCount: int(w.ReworkCount), CostUSD: w.CostUsd, Outputs: outputs,

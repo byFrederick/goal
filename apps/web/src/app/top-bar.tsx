@@ -67,6 +67,7 @@ const factoryRoutePages: Record<string, string> = {
   '/o/$org/f/$factory/agents/$agent': 'agents',
   '/o/$org/f/$factory/definition/': 'definition',
   '/o/$org/f/$factory/definition/$section': 'definition',
+  '/o/$org/f/$factory/intake/$trigger': 'intake',
   '/o/$org/f/$factory/settings': 'settings',
 };
 
