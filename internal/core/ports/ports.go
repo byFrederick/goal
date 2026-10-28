@@ -678,6 +678,8 @@ type NewRun struct {
 	Agent               string
 	Model               string
 	StartedAt           time.Time
+	// Kind is whose run it is; empty is domain.RunKindStation.
+	Kind domain.RunKind
 }
 
 // Assembly is a planning item's transition to state assembly and the parts its plan names.

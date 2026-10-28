@@ -2052,6 +2052,186 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/jonah": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * What Jonah noticed this week, its policy, its proposals waiting and its cost
+         * @description The policy is the current version's learning.jonah (its defaults where it sets none) with the roles that may approve a proposal (those holding definition:publish). waiting counts the proposals still proposed; month_cost_usd is what the factory's jonah runs cost since the first of this UTC month; observations are those made since Monday 00:00 UTC, newest first; last_review is the newest review, absent before the first. 503 jonah-unavailable.
+         */
+        get: operations["getJonahOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/jonah/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /** The factory's proposals, newest (highest number) first */
+        get: operations["listProposals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The proposal's number in its factory, from 1 */
+                number: components["parameters"]["ProposalNumber"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One proposal with its files, its evidence and the versions it moves between
+         * @description Each file has its content in the version the proposal was made against (empty for a new file) and its new content; the client renders the diff. 404 proposal-not-found.
+         */
+        get: operations["getProposal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The proposal's number in its factory, from 1 */
+                number: components["parameters"]["ProposalNumber"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish the proposal as a new version, as the caller (ADR 0034 decision 7)
+         * @description Opens a draft from the current version, writes the proposal's files and publishes it through the usual validation and gates. 409 draft-open when the factory already has an open draft (it is left untouched); proposal-stale when a file's current SHA-256 is not its base_sha256 (no draft is left); proposal-decided when it is no longer proposed; the publish's own refusals (definition-invalid, evals-pending, evals-failing; the eval gate keeps the draft open). 404 proposal-not-found.
+         */
+        post: operations["approveProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/edit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The proposal's number in its factory, from 1 */
+                number: components["parameters"]["ProposalNumber"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Write the proposal's files into the draft, opening one if none is open (decision 8)
+         * @description Sets the proposal applied; the caller continues in the builder. 409 draft-conflict when the draft's copy of a file is not its base_sha256 (nothing is written); proposal-decided when it is no longer proposed. 404 proposal-not-found.
+         */
+        post: operations["editProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The proposal's number in its factory, from 1 */
+                number: components["parameters"]["ProposalNumber"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject the proposal with a reason, which later reviews read (decision 9)
+         * @description 400 invalid-request for a missing or blank reason or one over 2000 characters; 409 proposal-decided when it is no longer proposed. 404 proposal-not-found.
+         */
+        post: operations["rejectProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/jonah/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue a manual review of the factory's sent-back runs (decision 2)
+         * @description The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. 409 review-loop-not-running while no review loop runs (none does until software#344 ships): nothing is queued. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+         */
+        post: operations["queueJonahReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/andon": {
         parameters: {
             query?: never;
@@ -5283,6 +5463,153 @@ export interface components {
         JudgeTries: {
             tries: components["schemas"]["JudgeTry"][];
         };
+        /** @description The current version's learning.jonah, with its defaults where it sets none */
+        JonahPolicy: {
+            enabled: boolean;
+            /** @description Sent-back touches that queue a review, and how often an observation is seen before it is proposed */
+            propose_after: number;
+            /**
+             * Format: double
+             * @description What review runs may cost over 7 days
+             */
+            weekly_usd: number;
+            /** @description The review run's model: learning.jonah.model, else runtime.model; absent when neither is set */
+            model?: string;
+            /** @description The roles holding definition:publish: organization roles first, then factory roles */
+            approver_roles: string[];
+        };
+        JonahObservation: {
+            id: string;
+            summary: string;
+            detail: string;
+            /** @description The items it rests on, as <factory name>#<number> */
+            item_refs: string[];
+            /** @enum {string} */
+            state: "watching" | "proposed";
+            /** @description How often the pattern was seen */
+            count: number;
+            /** @description The count at which it becomes a proposal */
+            propose_after: number;
+            /**
+             * Format: int64
+             * @description The number of the proposal it became
+             */
+            proposal?: number;
+            /** Format: date-time */
+            created_at: string;
+        };
+        JonahReview: {
+            id: string;
+            /** @enum {string} */
+            state: "pending" | "running" | "done" | "failed";
+            /** @enum {string} */
+            trigger: "manual" | "threshold";
+            /** @description Why a failed review failed */
+            error?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            finished_at?: string;
+        };
+        JonahOverview: {
+            policy: components["schemas"]["JonahPolicy"];
+            /** @description Proposals still proposed */
+            waiting: number;
+            /**
+             * Format: double
+             * @description What the factory's jonah runs cost since the first of this UTC month
+             */
+            month_cost_usd: number;
+            /** @description The observations made since Monday 00:00 UTC, newest first */
+            observations: components["schemas"]["JonahObservation"][];
+            last_review?: components["schemas"]["JonahReview"];
+        };
+        /** @enum {string} */
+        ProposalState: "proposed" | "published" | "applied" | "rejected" | "superseded";
+        /** @description The metric the proposal should move at one station; before is computed from the recorded events */
+        ProposalEstimate: {
+            /** @enum {string} */
+            metric: "sent_back_rate" | "lead_time_p85";
+            station: string;
+            /** Format: double */
+            before: number;
+            /** Format: double */
+            after: number;
+            /**
+             * Format: double
+             * @description The change in cost per item
+             */
+            cost_per_item_usd: number;
+        };
+        ProposalEntry: {
+            /** Format: int64 */
+            number: number;
+            title: string;
+            state: components["schemas"]["ProposalState"];
+            /** Format: date-time */
+            created_at: string;
+            paths: string[];
+            /** @description The agents whose prompt it edits (agents/<name>.md), in path order */
+            agents: string[];
+            estimate?: components["schemas"]["ProposalEstimate"];
+            evidence_count: number;
+        };
+        ProposalPage: {
+            proposals: components["schemas"]["ProposalEntry"][];
+            /**
+             * Format: int64
+             * @description The after of the next page; absent on the last
+             */
+            next?: number;
+        };
+        ProposalFile: {
+            path: string;
+            /** @description The SHA-256 of the file the review read; empty for a new file */
+            base_sha256: string;
+            /** @description The file in the version the proposal was made against; empty for a new file */
+            base_content: string;
+            /** @description The file's new content */
+            content: string;
+        };
+        ProposalEvidence: {
+            /** @description <factory name>#<number>, or the item's id when it is gone */
+            item_ref: string;
+            item_title: string;
+            station?: string;
+            /** @description The quoted reason it was sent back */
+            quote: string;
+        };
+        Proposal: components["schemas"]["ProposalEntry"] & {
+            summary: string;
+            files: components["schemas"]["ProposalFile"][];
+            evidence: components["schemas"]["ProposalEvidence"][];
+            /** @description The number of the version the review read */
+            made_against_version: number;
+            /** @description The number Approve would publish it as */
+            publishes_as_version: number;
+            /** @description The version Approve published */
+            published_version?: number;
+            reject_reason?: string;
+            /** @description The actor ref of who decided it */
+            decided_by?: string;
+            /** Format: date-time */
+            decided_at?: string;
+        };
+        ProposalReject: {
+            reason: string;
+        };
+        ProposalDecided: {
+            /** Format: int64 */
+            number: number;
+            state: components["schemas"]["ProposalState"];
+            /** @description The version Approve published */
+            version?: number;
+            /**
+             * Format: int64
+             * @description The draft's revision after Edit
+             */
+            draft_revision?: number;
+        };
         AgentStats: {
             agent: string;
             /** Format: date */
@@ -7493,6 +7820,8 @@ export interface components {
         DraftRequestRef: string;
         /** @description The judge's slug: its file name in evals/judges without .md */
         JudgeRef: string;
+        /** @description The proposal's number in its factory, from 1 */
+        ProposalNumber: number;
         /** @description The eval run's id */
         EvalRunRef: string;
         /** @description The bake-off's id, the id of its eval run */
@@ -10358,6 +10687,206 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JudgeTries"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getJonahOverview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The overview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JonahOverview"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listProposals: {
+        parameters: {
+            query?: {
+                /** @description Only proposals in this state */
+                state?: components["schemas"]["ProposalState"];
+                /** @description The keyset of the next page; only proposals numbered below it (next of the page before) */
+                after?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of proposals */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The proposal's number in its factory, from 1 */
+                number: components["parameters"]["ProposalNumber"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The proposal */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Proposal"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    approveProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The proposal's number in its factory, from 1 */
+                number: components["parameters"]["ProposalNumber"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The decided proposal and the version it published */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalDecided"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    editProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The proposal's number in its factory, from 1 */
+                number: components["parameters"]["ProposalNumber"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The decided proposal and the draft's revision */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalDecided"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    rejectProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The proposal's number in its factory, from 1 */
+                number: components["parameters"]["ProposalNumber"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalReject"];
+            };
+        };
+        responses: {
+            /** @description The decided proposal */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalDecided"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    queueJonahReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The queued review */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JonahReview"];
                 };
             };
             default: components["responses"]["Problem"];

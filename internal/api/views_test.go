@@ -95,7 +95,7 @@ func TestSavedViews_ListSharedAndOwn(t *testing.T) {
 		want   []string
 	}{
 		{"viewer", cookie(viewerToken), []string{"Expedite bugs", "Mine*"}},
-		{"owner", cookie(ownerToken), []string{"Expedite bugs*", "Owner's*"}},
+		{roleOwner, cookie(ownerToken), []string{"Expedite bugs*", "Owner's*"}},
 		{"API key", bearer(key.Secret), []string{"Expedite bugs"}},
 	} {
 		views := h.listViews(t, c.header)

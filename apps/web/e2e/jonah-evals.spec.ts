@@ -48,7 +48,7 @@ test('a factory with no cases says so and offers adding one', async ({ page }) =
   await expect(page.getByText('No eval cases yet')).toBeVisible();
 });
 
-test('the tabs Overview, Proposals and Bake-offs say they are not available yet', async ({ page }) => {
+test('the Bake-offs tab says it is not available yet', async ({ page }) => {
   await page.goto('/o/acme/f/software/jonah/evals');
   await expect(page.getByRole('navigation', { name: 'Jonah' }).getByRole('link', { name: 'Evals' })).toHaveAttribute(
     'aria-current',

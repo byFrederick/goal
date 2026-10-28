@@ -295,7 +295,7 @@ func TestRun_LandingRunsOnTheIntegrationBranch(t *testing.T) {
 }
 
 // A landing the gate rejects goes back to build, which reworks it on the integration branch with
-// the default branch as its base.
+// the default branch as its base and hears to fix what the rejection asks for, not to land it.
 func TestRun_RejectedLandingReworksOnTheIntegrationBranch(t *testing.T) {
 	t.Parallel()
 
@@ -317,5 +317,39 @@ func TestRun_RejectedLandingReworksOnTheIntegrationBranch(t *testing.T) {
 		t.Fatalf("runs %d, want the gate's then the worker's", len(runs))
 	}
 
-	h.expectLandingRun(t, runs[1])
+	h.expectLandingReworkRun(t, runs[1])
+
+	// The rejection reason reaches the rework's brief as the gate's output among the earlier
+	// stations' outputs, which the run bundle serves.
+	if out := string(h.item(t, root.ID).Outputs[stReview]); !strings.Contains(out, "conflicts with main") {
+		t.Errorf("gate output %q does not keep the rejection reason", out)
+	}
+}
+
+// expectLandingReworkRun fails unless run reworked the landing assembly away from its landing
+// station: on the integration branch with the default branch as its base, told to fix what the
+// rejection asks for and push, and not told to land the assembly.
+func (h *harness) expectLandingReworkRun(t *testing.T, run porttest.ExecCall) {
+	t.Helper()
+
+	if c := h.claims(t, run.Env["GOAL_GATEWAY_TOKEN"]); c.Branch != integrationBranch || c.Base != "" {
+		t.Errorf("token branch %q base %q; want %q on the default branch", c.Branch, c.Base, integrationBranch)
+	}
+
+	note := run.Env["GOAL_FEEDBACK"]
+	for _, s := range []string{
+		"`" + integrationBranch + "` checked out", "This is the assembly's integration branch `" + integrationBranch + "`",
+		"it lands on the default branch", "Fix what the last rejection asks for here",
+		"push to `" + integrationBranch + "` as a plain push", "keep its pull request into the default branch open",
+	} {
+		if !strings.Contains(note, s) {
+			t.Errorf("feedback %q does not mention %q", note, s)
+		}
+	}
+
+	for _, s := range []string{"landing the whole assembly", "gh pr create", "This part builds on"} {
+		if strings.Contains(note, s) {
+			t.Errorf("feedback %q mentions %q at a station that does not land", note, s)
+		}
+	}
 }

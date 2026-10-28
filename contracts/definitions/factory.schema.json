@@ -663,6 +663,23 @@
           "type": "object",
           "additionalProperties": false,
           "properties": { "schedule": { "type": "string" } }
+        },
+        "jonah": {
+          "type": "object",
+          "description": "The reviews that turn sent-back runs into proposals for the definition (ADR 0034).",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean", "default": true, "description": "Whether sent-back runs queue reviews at all." },
+            "proposeAfter": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 5,
+              "description": "The sent-back touches that queue a review, and the times an observation is seen before it becomes a proposal."
+            },
+            "weeklyUsd": { "type": "number", "minimum": 0, "default": 10, "description": "What the review runs may cost over the last 7 days, in USD." },
+            "model": { "$ref": "#/$defs/model", "description": "The review run's model; runtime.model when omitted." }
+          }
         }
       }
     }

@@ -741,6 +741,45 @@ func TestRules_AreThePinnedVersionsNotTheCurrentOnes(t *testing.T) {
 	}
 }
 
+// A Jonah review reads every file of the version it started on, not the current one's, and a
+// change to what it is given leaves the cached version as it was.
+func TestVersionFiles_AreThePinnedVersionsFiles(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	v1Files := withRules(acme(acmeName, noteContract), "Use %w.\n")
+	v1 := h.publish(t, org, v1Files)
+	h.publish(t, org, withRules(acme(acmeName, noteContract), "Use errors.Join.\n")) // current
+	c := h.cache(t, nil)
+
+	got, err := c.VersionFiles(ctxOf(t, org), v1.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(got) != len(v1Files) {
+		t.Errorf("files %v, want %v", slices.Sorted(maps.Keys(got)), slices.Sorted(maps.Keys(v1Files)))
+	}
+
+	for p, body := range v1Files {
+		if string(got[p]) != body {
+			t.Errorf("%s = %q, want %q", p, got[p], body)
+		}
+	}
+
+	got["rules/errors.md"][0] = 'X'
+	delete(got, config.FileName)
+
+	again, err := c.VersionFiles(ctxOf(t, org), v1.ID)
+	if err != nil || string(again["rules/errors.md"]) != v1Files["rules/errors.md"] || again[config.FileName] == nil {
+		t.Errorf("VersionFiles after changing its answer = %v; want the version's files unchanged", err)
+	}
+
+	if _, err := c.VersionFiles(ctxOf(t, other), v1.ID); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("VersionFiles from another organization = %v, want ErrNotFound", err)
+	}
+}
+
 func TestLookup_ReloadsOnAMiss(t *testing.T) {
 	t.Parallel()
 
@@ -900,5 +939,57 @@ func TestReads_SeeOnlyTheOrgInTheirContext(t *testing.T) {
 
 	if fs := c.Factories(t.Context()); len(fs) != 0 {
 		t.Errorf("Factories without an organization = %v, want none", fs)
+	}
+}
+
+func TestCurrentLines_AreTheOrgsCurrentLines(t *testing.T) {
+	t.Parallel()
+
+	const betaID domain.FactoryID = "5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a02"
+
+	h := newHarness(t)
+	h.publish(t, org, acme(acmeName, noteContract))
+	v2 := h.publish(t, org, acme(acmeName, bodyContract))
+	h.publish(t, org, withID(acme("beta", noteContract), betaID)) // archived below
+	h.publish(t, other, withID(acme(acmeName, noteContract), otherID))
+	h.archive(t, org, betaID)
+
+	c := h.cache(t, nil)
+
+	lines, err := c.CurrentLines(ctxOf(t, org))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := domain.Line{OrgID: org, FactoryID: acmeID, VersionID: v2.ID, Number: 2}
+	if len(lines) != 1 || !sameVersion(lines[0], want) || lines[0].Name != acmeName {
+		t.Fatalf("current lines = %+v, want only acme's v2 in org", lines)
+	}
+
+	if _, err := c.CurrentLines(t.Context()); !errors.Is(err, domain.ErrNoOrg) {
+		t.Errorf("CurrentLines without an organization = %v, want ErrNoOrg", err)
+	}
+}
+
+func TestLine_ReadsAPinnedVersionInItsOrg(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	v1 := h.publish(t, org, acme(acmeName, noteContract))
+	v2 := h.publish(t, org, acme(acmeName, bodyContract))
+	c := h.cache(t, nil) // loads v2 only
+
+	for _, want := range []domain.Line{
+		{OrgID: org, FactoryID: acmeID, VersionID: v1.ID, Number: 1},
+		{OrgID: org, FactoryID: acmeID, VersionID: v2.ID, Number: 2},
+	} {
+		l, err := c.Line(ctxOf(t, org), want.VersionID)
+		if err != nil || !sameVersion(l, want) || len(l.Stations) != 2 {
+			t.Errorf("Line(%s) = %+v, %v; want acme's version %d", want.VersionID, l, err, want.Number)
+		}
+	}
+
+	if _, err := c.Line(ctxOf(t, other), v1.ID); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("Line from another organization = %v, want ErrNotFound", err)
 	}
 }

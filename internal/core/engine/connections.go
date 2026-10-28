@@ -28,28 +28,34 @@ type runEnv struct {
 	secrets []string
 }
 
-// runEnv resolves the run's connections, each use audited as connection.used: the runtime's model
-// and repository connections and the organization connections of the agent's list. It opens the
-// credentials they refer to and the ones listed for the run's agent (ADR 0017 decisions 5 to 7),
-// each use audited as credential.used by the port. The line runs (domain.Line.Refusal), so it has
-// a model connection.
-func (e *Engine) runEnv(ctx context.Context, c claimed, run domain.RunID) (runEnv, error) {
-	rt := c.line.Runtime
-	own := slices.DeleteFunc(slices.Clone(c.agent.Connections), func(n string) bool { return !slices.Contains(c.line.Connections, n) })
-
+// runEnv resolves the run's connections, each use audited as connection.used: the request's model
+// and repository connections and its own. It opens the credentials they refer to and the ones
+// listed for the run's agent (ADR 0017 decisions 5 to 7), each use audited as credential.used by
+// the port. A Jonah run (ADR 0017 decision 1) gets only the model connection's env, so after
+// resolving it keeps only the credentials the model connection refers to. The line runs
+// (domain.Line.Refusal), so it has a model connection.
+func (e *Engine) runEnv(ctx context.Context, req domain.RunRequest, own []string, run domain.RunID) (runEnv, error) {
 	var names []string
 
-	for _, n := range append([]string{rt.ModelConnection, rt.Repository.Connection}, own...) {
+	for _, n := range append([]string{req.ModelConnection, req.Repository.Connection}, own...) {
 		if n != "" && !slices.Contains(names, n) {
 			names = append(names, n)
 		}
 	}
 
-	use := domain.CredentialUse{Factory: c.line.FactoryID, Agent: c.agent.Name, Run: run}
+	use := domain.CredentialUse{Factory: req.FactoryID, Agent: req.Agent, Run: run}
 
 	conns, opened, err := e.resolve(ctx, names, use)
 	if err != nil {
 		return runEnv{}, err
+	}
+
+	if req.Kind == domain.RunKindJonah {
+		modelRefs := conns[req.ModelConnection].refs
+
+		opened = slices.DeleteFunc(opened, func(rc domain.ResolvedCredential) bool {
+			return !slices.Contains(modelRefs, rc.Credential.Name)
+		})
 	}
 
 	env := runEnv{prepare: map[string]string{}, gitHosts: map[string]string{}}
@@ -63,7 +69,7 @@ func (e *Engine) runEnv(ctx context.Context, c claimed, run domain.RunID) (runEn
 		}
 	}
 
-	if err := agentEnv(rt.ModelConnection, own, conns, &env); err != nil {
+	if err := agentEnv(req.ModelConnection, own, conns, &env); err != nil {
 		return runEnv{}, err
 	}
 
@@ -71,7 +77,7 @@ func (e *Engine) runEnv(ctx context.Context, c claimed, run domain.RunID) (runEn
 		return runEnv{}, err
 	}
 
-	if err := repositoryEnv(rt.Repository, conns, &env); err != nil {
+	if err := repositoryEnv(req.Repository, conns, &env); err != nil {
 		return runEnv{}, err
 	}
 
@@ -162,6 +168,8 @@ type runConnection struct {
 	kind domain.ConnectionKind
 	// secrets are its secret field values and the values minted for the run.
 	secrets []string
+	// refs are the credentials its secret fields refer to.
+	refs []string
 }
 
 // resolve opens and renders the named connections for use's run, by name, each secret field that
@@ -185,7 +193,10 @@ func (e *Engine) resolve(ctx context.Context, names []string, use domain.Credent
 	}
 
 	for _, r := range fillRefs(resolved, opened) {
-		rc := runConnection{name: r.Connection.Name, kind: r.Kind, secrets: r.SecretValues()}
+		rc := runConnection{
+			name: r.Connection.Name, kind: r.Kind, secrets: r.SecretValues(),
+			refs: slices.Collect(maps.Values(r.SecretRefs)),
+		}
 
 		minted, err := e.mint(ctx, r, use.Run, &rc)
 		if err != nil {

@@ -10,6 +10,7 @@ import {
   invalidationsFor,
   isOverviewKey,
   knowledgeInvalidations,
+  learningInvalidations,
   resyncInvalidations,
 } from './invalidation';
 
@@ -337,6 +338,30 @@ describe('connectionInvalidations', () => {
   test('a publish re-reads what uses each connection', () => {
     expect(definitionInvalidations(acme, definition({ kind: 'current', number: 9 }))).toContainEqual(
       keys.connections(acme),
+    );
+  });
+});
+
+describe('Jonah reads', () => {
+  test("a learning event re-reads the factory's Jonah overview and proposals, and nothing of another factory", async () => {
+    const client = new QueryClient();
+    client.setQueryData([...keys.jonah(acme, goal), 'overview'], {});
+    client.setQueryData([...keys.jonah(acme, goal), 'proposals', { state: 'proposed' }], []);
+    client.setQueryData([...keys.jonah(acme, sre), 'overview'], {});
+    client.setQueryData(keys.judges(acme, goal), {});
+
+    const stale = await staleAfter(client, learningInvalidations(acme, { factory_id: goal }));
+
+    expect(stale).toEqual([
+      [...keys.jonah(acme, goal), 'overview'],
+      [...keys.jonah(acme, goal), 'proposals', { state: 'proposed' }],
+    ]);
+  });
+
+  test('a learning event with no factory names no key, and a publish re-reads the policy the overview shows', async () => {
+    expect(learningInvalidations(acme, {})).toEqual([]);
+    expect(definitionInvalidations(acme, definition({ kind: 'current', number: 9 }))).toContainEqual(
+      keys.jonah(acme, goal),
     );
   });
 });

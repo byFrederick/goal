@@ -52,9 +52,18 @@ import (
 	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/egress"
 	"github.com/byFrederick/goal/internal/gateway"
+	"github.com/byFrederick/goal/internal/jonah"
 	"github.com/byFrederick/goal/internal/knowledge"
 	"github.com/byFrederick/goal/internal/retention"
 )
+
+// jonahDeps serve the Jonah routes over store: decisions publish and edit through the same
+// authoring service as the builder.
+func jonahDeps(store *postgres.Store, authors *authoring.Service, clock ports.Clock, log *slog.Logger) *api.JonahDeps {
+	return &api.JonahDeps{Store: store, Decisions: jonah.NewDecider(jonah.DecideDeps{
+		Proposals: store, Authoring: api.NewJonahAuthoring(authors), Audit: store, Clock: clock, Log: log,
+	})}
+}
 
 // minKeyBytes is the shortest gateway key goald accepts (openssl rand -hex 32 gives 64).
 const minKeyBytes = 32
@@ -184,7 +193,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// bundle; the engine's RunDefinition signs its token.
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Connections: connections, Events: store, Clock: clock, Logger: log,
-		Knowledge: kb.searcher, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng},
+		Knowledge: kb.searcher, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store,
 		DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore,
 	}, gateway.Config{Key: []byte(key)})
 	if err != nil {
@@ -236,6 +245,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
+		Jonah: jonahDeps(store, authors, clock, log),
 		Clock: clock, Logger: log,
 	})
 	if err != nil {
@@ -248,7 +258,10 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	purger := retention.New(store, objects, clock, s.OrgRetention, log)
 
 	return serve(ctx, log, s, servers, eng, defs, definitionNotices, feed,
-		jobs{purger: purger, platform: platform, clock: clock, identity: newIdentityWatch(s, store), ingestor: kb.ingestor})
+		jobs{
+			purger: purger, platform: platform, clock: clock, identity: newIdentityWatch(s, store), ingestor: kb.ingestor,
+			reviews: jonahReviewLoop(s, store, defs, eng, clock, log), scheduleLock: intake,
+		})
 }
 
 // knowledgeBase is the knowledge base as goald wires it (spec 4 §4.8): its sources and documents
@@ -521,13 +534,16 @@ func (a engineToolApprovals) RequestToolApproval(ctx context.Context, c gateway.
 }
 
 // jobs are goald's scheduled jobs: the purge of deleted organizations, the sign-in clean-up, the
-// knowledge base's ingestion and under GOAL_AUTH=session the startup watch of the identity service.
+// knowledge base's ingestion, the Jonah reviews (swept under the schedule lock) and under
+// GOAL_AUTH=session the startup watch of the identity service.
 type jobs struct {
-	purger   *retention.Purger
-	platform ports.Platform
-	clock    ports.Clock
-	identity *identityWatch
-	ingestor *knowledge.Ingestor
+	purger       *retention.Purger
+	platform     ports.Platform
+	clock        ports.Clock
+	identity     *identityWatch
+	ingestor     *knowledge.Ingestor
+	reviews      *jonah.Reviews
+	scheduleLock scheduleLock
 }
 
 // serve runs the HTTP servers, the engine, the stream feed, the definitions reloads and the
@@ -577,6 +593,7 @@ func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Se
 	wg.Go(func() { j.purger.Run(ctx, purgeEvery) })
 	wg.Go(func() { cleanUpAuth(ctx, log, j.platform, j.clock, authCleanUpEvery) })
 	wg.Go(func() { fireSchedules(ctx, log, eng, j.clock, scheduleEvery) })
+	wg.Go(func() { runJonahReviews(ctx, log, j.scheduleLock, j.reviews, j.clock, s.JonahReviewEvery) })
 
 	if s.KBWorkers > 0 {
 		wg.Go(func() { j.ingestor.Run(ctx) })

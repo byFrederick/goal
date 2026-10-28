@@ -21,7 +21,7 @@ The work is split into the parts of one assembly (config, store, part bases, lan
 5. **A part's base is its assembly's integration branch,** unless the part's pull request was already opened against another base, which it keeps. The agent is told the base, and the worker branches from it.
 6. **`closeAssembly` lands a root with an integration branch instead of finishing it.** When the last part is done or cancelled, the root moves to the landing station as `queued`, with an `assembly_landing` event, instead of to done.
 7. **The landing run opens a pull request from the integration branch into the default branch, and the gate's approval merges it through `mergeOnApproval`,** like any other item's. An empty landing, where no part changed anything, may be approved with `pull_requests: []`.
-8. **A rejected landing goes back to build on the integration branch:** the gate's `onReject` station reworks the root, whose runs work on the integration branch.
+8. **A rejected landing goes back to build on the integration branch:** the gate's `onReject` station reworks the root, whose runs work on the integration branch. Only a run at the landing station hears that it lands the whole assembly; a rework elsewhere hears to fix what the last rejection asks for, push to the integration branch as a plain push and keep its pull request into the default branch open.
 9. **Trunk mode is unchanged.** Without the block, or with `mode: trunk`, every part merges into the default branch and `closeAssembly` moves the root to done, as before.
 
 ## Consequences

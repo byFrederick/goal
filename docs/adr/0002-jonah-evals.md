@@ -1,6 +1,6 @@
 # ADR 0002 — Jonah: evaluation and self-remediation
 
-Status: accepted as amended for phase 5 (2026-10-24; [amendment](#amendment--phase-5-the-minimal-loop)) · Amended 2026-10-27 by [ADR 0025](0025-judges-and-evals-as-the-screens-show-them.md) ([amendment](#amendment--2026-10-27-judges-and-evals-as-the-screens-show-them)) · first proposed 2026-10-23 · amended by [ADR 0005](0005-factory-definitions-in-object-storage.md) (definitions and visible cases live in the bucket) · Plan: [docs/history/jonah/README.md](../history/jonah/README.md)
+Status: accepted as amended for phase 5 (2026-10-24; [amendment](#amendment--phase-5-the-minimal-loop)) · Amended 2026-10-27 by [ADR 0025](0025-judges-and-evals-as-the-screens-show-them.md) ([amendment](#amendment--2026-10-27-judges-and-evals-as-the-screens-show-them)) · Amended 2026-10-28 by [ADR 0034](0034-jonah-proposals.md) (proposals from reviews of sent-back runs, approved by publishing; [amendment line](#amendment--phase-5-the-minimal-loop)) · first proposed 2026-10-23 · amended by [ADR 0005](0005-factory-definitions-in-object-storage.md) (definitions and visible cases live in the bucket) · Plan: [docs/history/jonah/README.md](../history/jonah/README.md)
 
 ## Context
 
@@ -61,6 +61,8 @@ Status: accepted · 2026-10-24 · replaces decisions 1–9 and 11 where they dif
 5. **People decide** through one review list. Two opt-in switches replace the autonomy levels: auto-accept facts, and auto-publish an edit only when it touches `agents/` or `skills/` alone, the eval set has at least five cases, nothing errored and nothing regressed. Jonah never changes `evals/` without a person. Restore is the undo, and touches per definition version are the check after publish.
 
 **Consequences.** Much less to build and to explain; the measuring stick (cases) still changes only by review. Overfitting to retro-made cases and judge errors are accepted risks while judges stay advisory; calibration, the holdout and online sampling can return later on the same tables.
+
+2026-10-28: decisions 2 and 5 of this amendment, for proposals, are replaced by [ADR 0034](0034-jonah-proposals.md): one Jonah review per factory reads many sent-back runs and proposes multi-file edits (now including `rules/`), and Approve publishes them.
 
 ## Amendment — 2026-10-27: judges and evals as the screens show them
 

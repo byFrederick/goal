@@ -52,11 +52,13 @@ import { Route as OOrgFFactoryIntakeNewRouteImport } from './routes/o.$org.f.$fa
 import { Route as OOrgFFactoryIntakeWebhooksRouteImport } from './routes/o.$org.f.$factory.intake.webhooks'
 import { Route as OOrgFFactoryItemsIndexRouteImport } from './routes/o.$org.f.$factory.items.index'
 import { Route as OOrgFFactoryItemsRefRouteImport } from './routes/o.$org.f.$factory.items.$ref'
+import { Route as OOrgFFactoryJonahIndexRouteImport } from './routes/o.$org.f.$factory.jonah.index'
 import { Route as OOrgFFactoryJonahEvalsRouteImport } from './routes/o.$org.f.$factory.jonah.evals'
 import { Route as OOrgFFactoryJonahBakeOffsIndexRouteImport } from './routes/o.$org.f.$factory.jonah.bake-offs.index'
 import { Route as OOrgFFactoryJonahBakeOffsBakeOffRouteImport } from './routes/o.$org.f.$factory.jonah.bake-offs.$bakeOff'
 import { Route as OOrgFFactoryJonahJudgesIndexRouteImport } from './routes/o.$org.f.$factory.jonah.judges.index'
 import { Route as OOrgFFactoryJonahJudgesJudgeRouteImport } from './routes/o.$org.f.$factory.jonah.judges.$judge'
+import { Route as OOrgFFactoryJonahProposalsNumberRouteImport } from './routes/o.$org.f.$factory.jonah.proposals.$number'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -277,6 +279,11 @@ const OOrgFFactoryItemsRefRoute = OOrgFFactoryItemsRefRouteImport.update({
   path: '/items/$ref',
   getParentRoute: () => OOrgFFactoryRoute,
 } as any)
+const OOrgFFactoryJonahIndexRoute = OOrgFFactoryJonahIndexRouteImport.update({
+  id: '/jonah/',
+  path: '/jonah/',
+  getParentRoute: () => OOrgFFactoryRoute,
+} as any)
 const OOrgFFactoryJonahEvalsRoute = OOrgFFactoryJonahEvalsRouteImport.update({
   id: '/jonah/evals',
   path: '/jonah/evals',
@@ -304,6 +311,12 @@ const OOrgFFactoryJonahJudgesJudgeRoute =
   OOrgFFactoryJonahJudgesJudgeRouteImport.update({
     id: '/jonah/judges/$judge',
     path: '/jonah/judges/$judge',
+    getParentRoute: () => OOrgFFactoryRoute,
+  } as any)
+const OOrgFFactoryJonahProposalsNumberRoute =
+  OOrgFFactoryJonahProposalsNumberRouteImport.update({
+    id: '/jonah/proposals/$number',
+    path: '/jonah/proposals/$number',
     getParentRoute: () => OOrgFFactoryRoute,
   } as any)
 
@@ -351,8 +364,10 @@ export interface FileRoutesByFullPath {
   '/o/$org/f/$factory/definition/': typeof OOrgFFactoryDefinitionIndexRoute
   '/o/$org/f/$factory/intake/': typeof OOrgFFactoryIntakeIndexRoute
   '/o/$org/f/$factory/items/': typeof OOrgFFactoryItemsIndexRoute
+  '/o/$org/f/$factory/jonah/': typeof OOrgFFactoryJonahIndexRoute
   '/o/$org/f/$factory/jonah/bake-offs/$bakeOff': typeof OOrgFFactoryJonahBakeOffsBakeOffRoute
   '/o/$org/f/$factory/jonah/judges/$judge': typeof OOrgFFactoryJonahJudgesJudgeRoute
+  '/o/$org/f/$factory/jonah/proposals/$number': typeof OOrgFFactoryJonahProposalsNumberRoute
   '/o/$org/f/$factory/jonah/bake-offs/': typeof OOrgFFactoryJonahBakeOffsIndexRoute
   '/o/$org/f/$factory/jonah/judges/': typeof OOrgFFactoryJonahJudgesIndexRoute
 }
@@ -397,8 +412,10 @@ export interface FileRoutesByTo {
   '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionIndexRoute
   '/o/$org/f/$factory/intake': typeof OOrgFFactoryIntakeIndexRoute
   '/o/$org/f/$factory/items': typeof OOrgFFactoryItemsIndexRoute
+  '/o/$org/f/$factory/jonah': typeof OOrgFFactoryJonahIndexRoute
   '/o/$org/f/$factory/jonah/bake-offs/$bakeOff': typeof OOrgFFactoryJonahBakeOffsBakeOffRoute
   '/o/$org/f/$factory/jonah/judges/$judge': typeof OOrgFFactoryJonahJudgesJudgeRoute
+  '/o/$org/f/$factory/jonah/proposals/$number': typeof OOrgFFactoryJonahProposalsNumberRoute
   '/o/$org/f/$factory/jonah/bake-offs': typeof OOrgFFactoryJonahBakeOffsIndexRoute
   '/o/$org/f/$factory/jonah/judges': typeof OOrgFFactoryJonahJudgesIndexRoute
 }
@@ -448,8 +465,10 @@ export interface FileRoutesById {
   '/o/$org/f/$factory/definition/': typeof OOrgFFactoryDefinitionIndexRoute
   '/o/$org/f/$factory/intake/': typeof OOrgFFactoryIntakeIndexRoute
   '/o/$org/f/$factory/items/': typeof OOrgFFactoryItemsIndexRoute
+  '/o/$org/f/$factory/jonah/': typeof OOrgFFactoryJonahIndexRoute
   '/o/$org/f/$factory/jonah/bake-offs/$bakeOff': typeof OOrgFFactoryJonahBakeOffsBakeOffRoute
   '/o/$org/f/$factory/jonah/judges/$judge': typeof OOrgFFactoryJonahJudgesJudgeRoute
+  '/o/$org/f/$factory/jonah/proposals/$number': typeof OOrgFFactoryJonahProposalsNumberRoute
   '/o/$org/f/$factory/jonah/bake-offs/': typeof OOrgFFactoryJonahBakeOffsIndexRoute
   '/o/$org/f/$factory/jonah/judges/': typeof OOrgFFactoryJonahJudgesIndexRoute
 }
@@ -499,8 +518,10 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/definition/'
     | '/o/$org/f/$factory/intake/'
     | '/o/$org/f/$factory/items/'
+    | '/o/$org/f/$factory/jonah/'
     | '/o/$org/f/$factory/jonah/bake-offs/$bakeOff'
     | '/o/$org/f/$factory/jonah/judges/$judge'
+    | '/o/$org/f/$factory/jonah/proposals/$number'
     | '/o/$org/f/$factory/jonah/bake-offs/'
     | '/o/$org/f/$factory/jonah/judges/'
   fileRoutesByTo: FileRoutesByTo
@@ -545,8 +566,10 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/definition'
     | '/o/$org/f/$factory/intake'
     | '/o/$org/f/$factory/items'
+    | '/o/$org/f/$factory/jonah'
     | '/o/$org/f/$factory/jonah/bake-offs/$bakeOff'
     | '/o/$org/f/$factory/jonah/judges/$judge'
+    | '/o/$org/f/$factory/jonah/proposals/$number'
     | '/o/$org/f/$factory/jonah/bake-offs'
     | '/o/$org/f/$factory/jonah/judges'
   id:
@@ -595,8 +618,10 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/definition/'
     | '/o/$org/f/$factory/intake/'
     | '/o/$org/f/$factory/items/'
+    | '/o/$org/f/$factory/jonah/'
     | '/o/$org/f/$factory/jonah/bake-offs/$bakeOff'
     | '/o/$org/f/$factory/jonah/judges/$judge'
+    | '/o/$org/f/$factory/jonah/proposals/$number'
     | '/o/$org/f/$factory/jonah/bake-offs/'
     | '/o/$org/f/$factory/jonah/judges/'
   fileRoutesById: FileRoutesById
@@ -917,6 +942,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OOrgFFactoryItemsRefRouteImport
       parentRoute: typeof OOrgFFactoryRoute
     }
+    '/o/$org/f/$factory/jonah/': {
+      id: '/o/$org/f/$factory/jonah/'
+      path: '/jonah'
+      fullPath: '/o/$org/f/$factory/jonah/'
+      preLoaderRoute: typeof OOrgFFactoryJonahIndexRouteImport
+      parentRoute: typeof OOrgFFactoryRoute
+    }
     '/o/$org/f/$factory/jonah/evals': {
       id: '/o/$org/f/$factory/jonah/evals'
       path: '/jonah/evals'
@@ -950,6 +982,13 @@ declare module '@tanstack/react-router' {
       path: '/jonah/judges/$judge'
       fullPath: '/o/$org/f/$factory/jonah/judges/$judge'
       preLoaderRoute: typeof OOrgFFactoryJonahJudgesJudgeRouteImport
+      parentRoute: typeof OOrgFFactoryRoute
+    }
+    '/o/$org/f/$factory/jonah/proposals/$number': {
+      id: '/o/$org/f/$factory/jonah/proposals/$number'
+      path: '/jonah/proposals/$number'
+      fullPath: '/o/$org/f/$factory/jonah/proposals/$number'
+      preLoaderRoute: typeof OOrgFFactoryJonahProposalsNumberRouteImport
       parentRoute: typeof OOrgFFactoryRoute
     }
   }
@@ -1026,8 +1065,10 @@ interface OOrgFFactoryRouteChildren {
   OOrgFFactoryAgentsIndexRoute: typeof OOrgFFactoryAgentsIndexRoute
   OOrgFFactoryIntakeIndexRoute: typeof OOrgFFactoryIntakeIndexRoute
   OOrgFFactoryItemsIndexRoute: typeof OOrgFFactoryItemsIndexRoute
+  OOrgFFactoryJonahIndexRoute: typeof OOrgFFactoryJonahIndexRoute
   OOrgFFactoryJonahBakeOffsBakeOffRoute: typeof OOrgFFactoryJonahBakeOffsBakeOffRoute
   OOrgFFactoryJonahJudgesJudgeRoute: typeof OOrgFFactoryJonahJudgesJudgeRoute
+  OOrgFFactoryJonahProposalsNumberRoute: typeof OOrgFFactoryJonahProposalsNumberRoute
   OOrgFFactoryJonahBakeOffsIndexRoute: typeof OOrgFFactoryJonahBakeOffsIndexRoute
   OOrgFFactoryJonahJudgesIndexRoute: typeof OOrgFFactoryJonahJudgesIndexRoute
 }
@@ -1046,8 +1087,10 @@ const OOrgFFactoryRouteChildren: OOrgFFactoryRouteChildren = {
   OOrgFFactoryAgentsIndexRoute: OOrgFFactoryAgentsIndexRoute,
   OOrgFFactoryIntakeIndexRoute: OOrgFFactoryIntakeIndexRoute,
   OOrgFFactoryItemsIndexRoute: OOrgFFactoryItemsIndexRoute,
+  OOrgFFactoryJonahIndexRoute: OOrgFFactoryJonahIndexRoute,
   OOrgFFactoryJonahBakeOffsBakeOffRoute: OOrgFFactoryJonahBakeOffsBakeOffRoute,
   OOrgFFactoryJonahJudgesJudgeRoute: OOrgFFactoryJonahJudgesJudgeRoute,
+  OOrgFFactoryJonahProposalsNumberRoute: OOrgFFactoryJonahProposalsNumberRoute,
   OOrgFFactoryJonahBakeOffsIndexRoute: OOrgFFactoryJonahBakeOffsIndexRoute,
   OOrgFFactoryJonahJudgesIndexRoute: OOrgFFactoryJonahJudgesIndexRoute,
 }

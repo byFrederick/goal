@@ -31,6 +31,12 @@ const TaskKindEval TaskKind = "eval"
 // serves it only its bundle, with the draft's files and no repository.
 const TaskKindDraftRequest TaskKind = "draft_request"
 
+// TaskKindJonah is a Jonah review's run (ADR 0034 decision 1). Like an eval's, its token names
+// no connection, and it carries the review's window: the gateway serves it the factory's
+// definition files, its sent-back events in that window and its recently rejected proposals,
+// and no MCP tool.
+const TaskKindJonah TaskKind = "jonah"
+
 // TaskClaims scope one agent task's access to the MCP gateway: which organization, factory,
 // definition version, item, station, agent and run it acts for, which connections it may use,
 // what the organization policy decided at run start (the model and the denied commands) and
@@ -38,8 +44,8 @@ const TaskKindDraftRequest TaskKind = "draft_request"
 type TaskClaims struct {
 	// Audience is always TaskAudience: SignTaskToken sets it and VerifyTaskToken requires it.
 	Audience string `json:"aud"`
-	// Kind is empty for a production task, TaskKindEval for an eval try and TaskKindDraftRequest
-	// for a draft request's box.
+	// Kind is empty for a production task, TaskKindEval for an eval try, TaskKindJonah for a
+	// Jonah review and TaskKindDraftRequest for a draft request's box.
 	Kind      TaskKind  `json:"k,omitempty"`
 	OrgID     OrgID     `json:"o"`
 	FactoryID FactoryID `json:"f"`
@@ -68,7 +74,13 @@ type TaskClaims struct {
 	// revision of the factory's draft it read; a draft that moved past it is not served.
 	DraftRequest  DraftRequestID `json:"dr,omitempty"`
 	DraftRevision int64          `json:"dv,omitempty"`
-	ExpiresAt     int64          `json:"e"` // unix seconds
+	// WindowStart and WindowEnd (unix seconds) are a Jonah review's window, whose sent-back
+	// events the gateway serves it, and Manual says a person asked for the review. Only a
+	// TaskKindJonah token carries them, and it always carries a window.
+	WindowStart int64 `json:"ws,omitempty"`
+	WindowEnd   int64 `json:"we,omitempty"`
+	Manual      bool  `json:"jm,omitempty"`
+	ExpiresAt   int64 `json:"e"` // unix seconds
 }
 
 // SignTaskToken issues a per-task gateway token for TaskAudience, whatever c.Audience says. Any
@@ -144,19 +156,25 @@ func VerifyTaskToken(key []byte, token string, now time.Time) (TaskClaims, error
 	return c, nil
 }
 
-// checkKind refuses an eval task's claims that name a connection, a draft request's that name an
-// item, a station, a connection or no request, and any other task's that name a draft request.
+// checkKind refuses an eval or Jonah task's claims that name a connection, a Jonah task's
+// without a window, a window or Manual on any other kind of task, and a draft request's claims
+// that name an item, a station, a connection or no request, and any other task's that name a
+// draft request.
 func (c TaskClaims) checkKind() error {
 	switch {
 	case c.Kind == TaskKindEval && len(c.Connections) > 0:
 		return fmt.Errorf("%w: an eval task names connections", ErrBadTaskToken)
+	case c.Kind == TaskKindJonah && len(c.Connections) > 0:
+		return fmt.Errorf("%w: a jonah task names connections", ErrBadTaskToken)
+	case c.Kind == TaskKindJonah && (c.WindowStart <= 0 || c.WindowEnd <= c.WindowStart):
+		return fmt.Errorf("%w: a jonah task needs a window that ends after it starts", ErrBadTaskToken)
+	case c.Kind != TaskKindJonah && (c.WindowStart != 0 || c.WindowEnd != 0 || c.Manual):
+		return fmt.Errorf("%w: only a jonah task has a window", ErrBadTaskToken)
 	case c.Kind != TaskKindDraftRequest && (c.DraftRequest != "" || c.DraftRevision != 0):
 		return fmt.Errorf("%w: only a draft request's task names a draft request", ErrBadTaskToken)
-	case c.Kind != TaskKindDraftRequest:
-		return nil
-	case c.DraftRequest == "" || c.DraftRevision < 0:
+	case c.Kind == TaskKindDraftRequest && (c.DraftRequest == "" || c.DraftRevision < 0):
 		return fmt.Errorf("%w: a draft request's task names no request", ErrBadTaskToken)
-	case c.ItemID != "" || c.Station != "" || len(c.Connections) > 0:
+	case c.Kind == TaskKindDraftRequest && (c.ItemID != "" || c.Station != "" || len(c.Connections) > 0):
 		return fmt.Errorf("%w: a draft request's task names an item, a station or connections", ErrBadTaskToken)
 	}
 

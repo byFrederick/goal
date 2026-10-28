@@ -75,6 +75,7 @@ const factoryRoutePages: Record<string, string> = {
   '/o/$org/f/$factory/jonah/evals': 'jonah',
   '/o/$org/f/$factory/jonah/judges/': 'jonah',
   '/o/$org/f/$factory/jonah/judges/$judge': 'jonah',
+  '/o/$org/f/$factory/jonah/proposals/$number': 'jonah',
   '/o/$org/f/$factory/jonah/bake-offs/': 'jonah',
   '/o/$org/f/$factory/jonah/bake-offs/$bakeOff': 'jonah',
 };

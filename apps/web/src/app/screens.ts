@@ -38,6 +38,10 @@ export type FactoryPath =
   | '/o/$org/f/$factory/intake'
   | '/o/$org/f/$factory/definition'
   | '/o/$org/f/$factory/settings'
+  | '/o/$org/f/$factory/jonah'
+  | '/o/$org/f/$factory/jonah/proposals/$number'
+  | '/o/$org/f/$factory/jonah/bake-offs'
+  | '/o/$org/f/$factory/jonah/bake-offs/$bakeOff'
   | '/o/$org/f/$factory/jonah/evals'
   | '/o/$org/f/$factory/jonah/judges'
   | '/o/$org/f/$factory/jonah/judges/$judge';
@@ -119,14 +123,14 @@ export const factoryScreens: readonly FactoryScreen[] = [
     available: true,
     filters: '/o/$org/knowledge',
   },
-  // Jonah's Evals (ADR 0025); its Judges and Bake-offs are reached from its tabs, and Overview and Proposals are not built yet.
+  // Jonah's overview, Proposals and Bake-offs are built (ADR 0034, ADR 0029); its Judges and Evals are reached from its tabs.
   {
     id: 'jonah',
     label: 'Jonah',
     icon: SearchCheck,
     group: 'learn',
     available: true,
-    to: '/o/$org/f/$factory/jonah/evals',
+    to: '/o/$org/f/$factory/jonah',
   },
 ];
 
@@ -239,7 +243,7 @@ export const sidebarFactoryPages: readonly Listed<FactoryPath>[] = [
   { id: 'items', label: 'Items', available: true, to: '/o/$org/f/$factory/items' },
   { id: 'agents', label: 'Agents', available: true, to: '/o/$org/f/$factory/agents' },
   { id: 'intake', label: 'Intake', available: true, to: '/o/$org/f/$factory/intake' },
-  { id: 'jonah', label: 'Jonah', available: true, to: '/o/$org/f/$factory/jonah/evals' },
+  { id: 'jonah', label: 'Jonah', available: true, to: '/o/$org/f/$factory/jonah' },
   { id: 'definition', label: 'Definition', available: true, to: '/o/$org/f/$factory/definition' },
   { id: 'settings', label: 'Settings', available: true, to: '/o/$org/f/$factory/settings' },
 ];
