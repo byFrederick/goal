@@ -27,6 +27,10 @@ import (
 	"syscall"
 	"time"
 
+	// The runtime image has no zone database: embed it, so every IANA time zone a person picks
+	// for their digest (ADR 0023, decision 1) loads.
+	_ "time/tzdata"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/moby/moby/client"
 
@@ -232,7 +236,8 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Connections: connections, Credentials: credentials, Intake: intake, ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
-		Clock: clock, Logger: log,
+		NotificationPreferences: postgres.NewNotificationPreferences(store),
+		Clock:                   clock, Logger: log,
 	})
 	if err != nil {
 		return err
