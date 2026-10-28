@@ -422,23 +422,6 @@ export function addEvalCase(org: string, factory: string, from: EvalCaseFromRun)
   );
 }
 
-/** The factory's judges of the current version, each with its last 30 days (ADR 0025). 503 judges-unavailable while goald serves none. */
-export function listJudges(org: string, factory: string, signal?: AbortSignal): Promise<JudgeList> {
-  return unwrap(
-    goal.GET(orgPath('/factories/{factory}/judges'), { params: { path: { org, factory } }, ...cancel(signal) }),
-  );
-}
-
-/** One judge of the current version: its file, its 30 days, its newest scores and where it runs. 404 judge-not-found. */
-export function getJudge(org: string, factory: string, judge: string, signal?: AbortSignal): Promise<Judge> {
-  return unwrap(
-    goal.GET(orgPath('/factories/{factory}/judges/{judge}'), {
-      params: { path: { org, factory, judge } },
-      ...cancel(signal),
-    }),
-  );
-}
-
 /** The factory's shared views, then the caller's personal ones, each by name (ADR 0020). */
 export function listSavedViews(org: string, factory: string, signal?: AbortSignal): Promise<SavedViewList> {
   return unwrap(
@@ -466,6 +449,28 @@ export function updateSavedView(
   );
 }
 
+/** The factory's judges of the current version, each with its last 30 days (ADR 0025). 503 judges-unavailable while goald serves none. */
+export function listJudges(org: string, factory: string, signal?: AbortSignal): Promise<JudgeList> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/judges'), { params: { path: { org, factory } }, ...cancel(signal) }),
+  );
+}
+
+/** One judge of the current version: its file, its 30 days, its newest scores and where it runs. 404 judge-not-found. */
+export function getJudge(org: string, factory: string, judge: string, signal?: AbortSignal): Promise<Judge> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/judges/{judge}'), {
+      params: { path: { org, factory, judge } },
+      ...cancel(signal),
+    }),
+  );
+}
+
+/** 404 view-not-found; 403 forbidden for a shared view without factory:manage. */
+export async function deleteSavedView(org: string, factory: string, view: string): Promise<void> {
+  await unwrap(goal.DELETE(orgPath('/factories/{factory}/views/{view}'), { params: { path: { org, factory, view } } }));
+}
+
 /**
  * Adds a judge and publishes it as the next version. 409 judge-exists, draft-open, definition-invalid,
  * draft-base-moved, evals-pending and evals-failing are the page's to show.
@@ -489,11 +494,6 @@ export function tryJudge(org: string, factory: string, judge: string): Promise<J
   return unwrap(
     goal.POST(orgPath('/factories/{factory}/judges/{judge}/try'), { params: { path: { org, factory, judge } } }),
   );
-}
-
-/** 404 view-not-found; 403 forbidden for a shared view without factory:manage. */
-export async function deleteSavedView(org: string, factory: string, view: string): Promise<void> {
-  await unwrap(goal.DELETE(orgPath('/factories/{factory}/views/{view}'), { params: { path: { org, factory, view } } }));
 }
 
 export interface ItemFilter {
@@ -640,6 +640,11 @@ export function pauseItem(org: string, item: string, reason?: string): Promise<I
   return unwrap(
     goal.POST(orgPath('/items/{item}/pause'), { params: { path: { org, item } }, body: reason ? { reason } : {} }),
   );
+}
+
+/** Sets an open item's lane. 400 lane-required or unknown-lane; 409 item-closed, item-in-progress, item-is-assembly or same-lane. */
+export function setItemLane(org: string, item: string, lane: string): Promise<Item> {
+  return unwrap(goal.POST(orgPath('/items/{item}/lane'), { params: { path: { org, item } }, body: { lane } }));
 }
 
 /** Closes an open item as cancelled; an assembly cancels its open parts too. 409 item-closed when it is done or cancelled. */
