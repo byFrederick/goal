@@ -21,6 +21,7 @@ var orgTables = []string{
 	"factories", "work_items", "leases", "agent_runs", "item_events", "andon_pulls", "audit_log", "item_spans", "lease_spans",
 	"factory_roles", "connection_kinds", "connections", "item_touch_labels", "credentials", "judge_scores", "eval_runs", "eval_results", "eval_run_arms", "org_policies",
 	"webhook_endpoints", "webhook_deliveries", "trigger_firings", "knowledge_uses", "knowledge_verdicts", "standing_rules",
+	"org_signup_domains",
 }
 
 // withPlatformRows are the org tables whose org_id may be NULL for the platform's rows, and why;
@@ -32,10 +33,11 @@ var withPlatformRows = map[string]string{
 // withoutOrgID are the tables that carry no org_id, and why. A phase that adds a table without
 // org_id adds it here in the same pull request, with its reason.
 var withoutOrgID = map[string]string{
-	"goose_db_version": "the migration log, goal_owner's alone",
-	"organizations":    "the tenant itself; its policy compares id with goal_org()",
-	"platform_admins":  "install-level: who may create organizations; reached only through definers",
-	"auth_events":      "install-level security log (sign-ins, codes, devices); reached only through definers",
+	"goose_db_version":     "the migration log, goal_owner's alone",
+	"organizations":        "the tenant itself; its policy compares id with goal_org()",
+	"platform_admins":      "install-level: who may create organizations; reached only through definers",
+	"auth_events":          "install-level security log (sign-ins, codes, devices); reached only through definers",
+	"public_email_domains": "install-level list of webmail domains no organization may claim for sign-up (00078); read only by definers",
 }
 
 // The tenancy kit, checked on the fully migrated schema: every table with org_id has row-level

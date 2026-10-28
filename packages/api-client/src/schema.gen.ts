@@ -220,6 +220,33 @@ export interface paths {
         patch: operations["updateOrgSettings"];
         trace?: never;
     };
+    "/v1/orgs/{org}/settings/signup-domain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Let anyone with a verified email at a domain sign up and join
+         * @description Sets the organization's one sign-up domain (ADR 0023, decision 7). From then on a person whose verified sign-in email is exactly at the domain (subdomains not included) may sign up without an invitation and joins as a member with join_role on every factory that exists then. Only an owner may set it, with a sign-in from the last 10 minutes, and only to the domain of their own sign-in email. Audited as org.signup_domain_set; setting what is already set changes nothing. A malformed domain or an unknown role is 400; a domain the caller's email is not at is 400 signup-domain-not-yours; a public webmail domain is 400 signup-domain-public; a domain another live organization holds is 409 signup-domain-taken.
+         */
+        put: operations["setSignupDomain"];
+        post?: never;
+        /**
+         * Stop sign-up by domain
+         * @description Clears the sign-up domain: from then on only invited people sign up. Members who joined by the domain stay. Audited as org.signup_domain_cleared; nothing to clear is no change. Needs a sign-in from the last 10 minutes.
+         */
+        delete: operations["clearSignupDomain"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/policy": {
         parameters: {
             query?: never;
@@ -4060,6 +4087,23 @@ export interface components {
             slug: string;
             mark: string;
             slots: components["schemas"]["OrgSlots"];
+            /** @description The domain whose people may sign up without an invitation; absent when none is set */
+            signup_domain?: components["schemas"]["SignupDomain"];
+        };
+        /** @description Sign-up by domain (ADR 0023, decision 7): anyone whose verified email is exactly at domain may sign up, joining as a member with join_role on every factory that exists then */
+        SignupDomain: {
+            /** @description Lower case */
+            domain: string;
+            join_role: components["schemas"]["FactoryRole"];
+            set_by: components["schemas"]["Actor"];
+            /** Format: date-time */
+            set_at: string;
+        };
+        SignupDomainInput: {
+            /** @description A domain such as example.com; case is ignored */
+            domain: string;
+            /** @description The factory role people who join get; viewer when absent */
+            join_role?: components["schemas"]["FactoryRole"];
         };
         /** @description Slot caps: how many agents may run at once across the organization's factories (max) and in each factory. null is no cap. */
         OrgSlots: {
@@ -7756,6 +7800,56 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["OrgSettings"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    setSignupDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignupDomainInput"];
+            };
+        };
+        responses: {
+            /** @description The sign-up domain now set */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupDomain"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    clearSignupDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cleared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };

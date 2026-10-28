@@ -386,6 +386,48 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/OrgSettings" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/settings/signup-domain:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    put:
+      operationId: setSignupDomain
+      x-goal-scope: org:signup_domain
+      tags: [orgs]
+      summary: Let anyone with a verified email at a domain sign up and join
+      description: >-
+        Sets the organization's one sign-up domain (ADR 0023, decision 7). From then on a person
+        whose verified sign-in email is exactly at the domain (subdomains not included) may sign
+        up without an invitation and joins as a member with join_role on every factory that
+        exists then. Only an owner may set it, with a sign-in from the last 10 minutes, and only
+        to the domain of their own sign-in email. Audited as org.signup_domain_set; setting what
+        is already set changes nothing. A malformed domain or an unknown role is 400; a domain
+        the caller's email is not at is 400 signup-domain-not-yours; a public webmail domain is
+        400 signup-domain-public; a domain another live organization holds is 409
+        signup-domain-taken.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SignupDomainInput" }
+      responses:
+        "200":
+          description: The sign-up domain now set
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SignupDomain" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: clearSignupDomain
+      x-goal-scope: org:signup_domain
+      tags: [orgs]
+      summary: Stop sign-up by domain
+      description: >-
+        Clears the sign-up domain: from then on only invited people sign up. Members who joined
+        by the domain stay. Audited as org.signup_domain_cleared; nothing to clear is no change.
+        Needs a sign-in from the last 10 minutes.
+      responses:
+        "204": { description: Cleared }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/policy:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -5096,6 +5138,28 @@ components:
         slug: { type: string }
         mark: { type: string }
         slots: { $ref: "#/components/schemas/OrgSlots" }
+        signup_domain:
+          description: The domain whose people may sign up without an invitation; absent when none is set
+          allOf: [{ $ref: "#/components/schemas/SignupDomain" }]
+    SignupDomain:
+      type: object
+      description: >-
+        Sign-up by domain (ADR 0023, decision 7): anyone whose verified email is exactly at domain
+        may sign up, joining as a member with join_role on every factory that exists then
+      required: [domain, join_role, set_by, set_at]
+      properties:
+        domain: { type: string, description: Lower case, matched exactly; subdomains are not included }
+        join_role: { $ref: "#/components/schemas/FactoryRole" }
+        set_by: { $ref: "#/components/schemas/Actor" }
+        set_at: { type: string, format: date-time }
+    SignupDomainInput:
+      type: object
+      required: [domain]
+      properties:
+        domain: { type: string, minLength: 1, maxLength: 253, description: "A domain such as example.com; case is ignored" }
+        join_role:
+          description: The factory role people who join get; viewer when absent
+          allOf: [{ $ref: "#/components/schemas/FactoryRole" }]
     OrgSlots:
       type: object
       description: >-

@@ -47,3 +47,13 @@ UPDATE organizations SET deleted_at = $1, updated_at = now() WHERE id = goal_org
 -- Tells every goald, on goal_definitions, that the transaction's organization was deleted (kind
 -- org): its lines stop at once.
 SELECT pg_notify('goal_definitions', json_build_object('org_id', goal_org(), 'kind', 'org')::text);
+
+-- name: SignupDomain :one
+-- The transaction's organization's sign-up domain (ADR 0023, decision 7).
+SELECT domain, join_role, set_by, set_at FROM org_signup_domains WHERE org_id = goal_org();
+
+-- name: SetSignupDomain :exec
+-- Sets (a domain) or clears (null) the transaction's organization's sign-up domain for the owner
+-- acting_user, audited (goal_set_signup_domain, 00078).
+SELECT goal_set_signup_domain(sqlc.arg(acting_user)::uuid, sqlc.narg(domain)::text, sqlc.arg(join_role)::text,
+                              sqlc.arg(by_ref)::text, sqlc.narg(request_id)::text);

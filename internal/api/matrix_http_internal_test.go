@@ -210,7 +210,12 @@ func (mxOrgs) UpdateOrg(context.Context, domain.Actor, ports.OrgUpdate) (domain.
 
 func (mxOrgs) DeleteOrg(context.Context, domain.Actor, time.Time) error { panic(errReached) }
 
-func (mxOrgs) FactorySlots(context.Context) (map[domain.FactoryID]int, error) { panic(errReached) }
+func (mxOrgs) FactorySlots(context.Context) (map[domain.FactoryID]int, error)  { panic(errReached) }
+func (mxOrgs) SignupDomain(context.Context) (domain.SignupDomain, bool, error) { panic(errReached) }
+func (mxOrgs) SetSignupDomain(context.Context, domain.Actor, string, domain.FactoryRole) (domain.SignupDomain, error) {
+	panic(errReached)
+}
+func (mxOrgs) ClearSignupDomain(context.Context, domain.Actor) error { panic(errReached) }
 
 func (mxOrgs) Org(_ context.Context, ref string) (domain.Org, error) {
 	for _, o := range []domain.Org{{ID: mxAcme, Slug: "acme", Name: "Acme"}, {ID: mxOther, Slug: "other", Name: "Other"}} {
