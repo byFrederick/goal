@@ -13,6 +13,8 @@ import { stationLabel } from './labels';
 import { LineChecks } from './line-checks';
 import { LineEditorProvider, useLineEditor } from './line-editor';
 import { LinePreview } from './line-preview';
+import { PresetControl } from './model-preset-control';
+import { ModelsBox } from './models-box';
 import { StationDnd } from './station-dnd';
 import { lineColumns, StationRow } from './station-row';
 
@@ -20,6 +22,7 @@ export function LineSection({ place, search }: SectionViewProps) {
   return (
     <LineEditorProvider place={place}>
       <Stations selected={search.station} />
+      {place === 'wizard' ? <ModelsBox preset={<PresetControl />} /> : null}
       <div className="flex flex-col gap-4">
         <LinePreview />
         <FlowPanel />
