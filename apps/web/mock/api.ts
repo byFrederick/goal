@@ -239,13 +239,13 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     clock,
     factory: (org, key) => findFactory(key, org),
   });
+  const judges = createJudges({
+    factory: (org, key) => findFactory(key, org),
+  });
   // The views are the caller's: the signed-in person's, else the local user's (directory.owner).
   const views = createViews({
     clock,
     caller: (req) => auth.who(req)?.person.id ?? directory.owner.id,
-    factory: (org, key) => findFactory(key, org),
-  });
-  const judges = createJudges({
     factory: (org, key) => findFactory(key, org),
   });
   const webhooks = createWebhooks({
@@ -1403,6 +1403,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       credentials.reset(clock());
       knowledge.reset(clock());
       evals.reset();
+      judges.reset();
       views.reset();
       judges.reset();
       webhooks.reset();
@@ -1499,6 +1500,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (rest === '/search' && method === 'GET') return searchOf(org, url, forCaller(req, org), res);
     if (await evals.handle(org, rest, method, res, () => readBody(req))) return;
+    if (await judges.handle(org, rest, method, res, () => readBody(req))) return;
     if (await views.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await judges.handle(org, rest, method, res, () => readBody(req))) return;
     if (await spend.handle(org, rest, method, url, res)) return;

@@ -101,13 +101,13 @@ func TestAPI_ItemsByReference(t *testing.T) {
 	h := newHarness(t)
 	submitted := h.submit(t)
 
-	if submitted.Ref != "acme#1" {
+	if submitted.Ref != acmeItemRef {
 		t.Errorf("ref = %q, want acme#1", submitted.Ref)
 	}
 
 	for _, ref := range []string{"acme%231", acmeID + "%231", submitted.Id} {
 		var it gen.Item
-		if code := h.call(t, http.MethodGet, "/v1/orgs/acme/items/"+ref, "", &it); code != http.StatusOK || it.Id != submitted.Id || it.Ref != "acme#1" {
+		if code := h.call(t, http.MethodGet, "/v1/orgs/acme/items/"+ref, "", &it); code != http.StatusOK || it.Id != submitted.Id || it.Ref != acmeItemRef {
 			t.Errorf("GET /v1/items/%s = %d %s %s, want the item", ref, code, it.Id, it.Ref)
 		}
 	}

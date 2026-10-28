@@ -79,6 +79,8 @@ var operationScopes = map[string]string{
 	"deleteWebhookEndpoint":       "webhook:manage",
 	"discardDraft":                "definition:edit",
 	"estimateEvalRun":             "factory:read",
+	"exportRuns":                  "org:read",
+	"exportSpend":                 "org:read",
 	"formatDefinition":            "org:read",
 	"getAgentStats":               "factory:read",
 	"getAndon":                    "factory:read",

@@ -30,6 +30,9 @@ var (
 	ErrOrgFull = errors.New("organization slots full")
 	// ErrFactoryFull means the factory runs as many agents as its slot cap allows.
 	ErrFactoryFull = errors.New("factory slots full")
+	// ErrTooMany means a read would return more rows than its caller's cap allows; nothing was
+	// returned.
+	ErrTooMany = errors.New("too many rows")
 	// ErrConflict means a compare-and-set guard failed: the item is no longer where a
 	// transition expected it, or a draft is no longer at the revision a save expected.
 	ErrConflict = errors.New("changed concurrently")
@@ -217,6 +220,12 @@ type Store interface {
 	// when set. The summary counts every run of q.Factories in the window, whatever q.Status,
 	// q.Text and q.Number say. No factory finds nothing.
 	OrgRuns(ctx context.Context, q RunQuery) ([]domain.ListedRun, domain.RunSummary, error)
+
+	// EachOrgRun calls each with every run OrgRuns would list for q over all its pages, in
+	// OrgRuns' order (q.Limit and q.After are not used), without holding them all at once. When
+	// more than max runs match it returns ErrTooMany before it calls each, so a caller can refuse
+	// before it writes anything; an error from each stops it and is returned.
+	EachOrgRun(ctx context.Context, q RunQuery, maxRows int, each func(domain.ListedRun) error) error
 
 	// Transition moves an item as described by t, compare-and-set on t.From (and on t.Lease
 	// when set). It returns ErrConflict or ErrLeaseLost when the guard fails; nothing changes.

@@ -32,8 +32,10 @@ import (
 )
 
 const (
-	acmeID    = "8d4f2b1a-3c5e-4f60-9a7b-1c2d3e4f5a6b"
-	acmeItems = "/v1/orgs/acme/factories/acme/items"
+	acmeID      = "8d4f2b1a-3c5e-4f60-9a7b-1c2d3e4f5a6b"
+	acmeItems   = "/v1/orgs/acme/factories/acme/items"
+	acmeItemRef = "acme#1"
+	lineItemRef = "line#1"
 )
 
 // acme is inbox → approve (human) → done: enough to submit, read and decide on items, with an
@@ -452,7 +454,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.seam, h.tenancy = &seam{}, tenancy
 	h.skills, h.skillSource = &flakyObjects{ObjectStore: porttest.NewObjectStore()}, porttest.NewSkillSource()
 	h.builder = builder.New(h.skills, h.clock, builder.Config{
-		Models: []builder.Model{{ID: "claude-opus-5-5", Label: "Claude Opus 5.5"}, {ID: "claude-haiku-5-5", Label: "Claude Haiku 5.5"}},
+		Models: []builder.Model{{ID: "claude-opus-5-5", Label: "Claude Opus 5.5"}, {ID: modelHaiku, Label: "Claude Haiku 5.5"}},
 	})
 
 	// One identity keeps the people and the organizations' API keys: the sign-in's under
