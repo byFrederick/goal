@@ -23,6 +23,13 @@ type EvalDeps struct {
 	Runner   ports.EvalRunner
 	Finished ports.FinishedRuns
 	Clock    ports.Clock
+	// Budget is the learning budget bake-offs are refused over; nil means none is kept.
+	Budget LearningBudget
+	// Drafts writes an applied bake-off arm's model into the factory's draft; nil refuses Apply.
+	Drafts DraftModels
+	// BakeOffModels are the models a bake-off that names none tries beside the agent's own
+	// (GOAL_BAKEOFF_MODELS).
+	BakeOffModels []string
 	// Log may be nil.
 	Log *slog.Logger
 }
@@ -96,10 +103,10 @@ func (e *Evals) Work(ctx context.Context) (int, error) {
 
 	for _, org := range orgs {
 		octx := domain.WithOrg(ctx, org)
-		suites := map[domain.EvalRunID][]ports.EvalSuiteCase{}
+		cache := &workCache{suites: map[domain.EvalRunID][]ports.EvalSuiteCase{}, arms: map[domain.EvalRunID][]domain.BakeOffArm{}}
 
 		for ctx.Err() == nil {
-			claimed, recorded, err := e.workOne(octx, suites)
+			claimed, recorded, err := e.workOne(octx, cache)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("eval work of org %s: %w", org, err))
 
@@ -119,9 +126,15 @@ func (e *Evals) Work(ctx context.Context) (int, error) {
 	return worked, errors.Join(errs...)
 }
 
+// workCache keeps what one Work read of each run: its cases, and a bake-off's arms.
+type workCache struct {
+	suites map[domain.EvalRunID][]ports.EvalSuiteCase
+	arms   map[domain.EvalRunID][]domain.BakeOffArm
+}
+
 // workOne claims the next try and runs it: whether it claimed one and whether its result was
-// recorded. suites keeps the cases of the runs this Work read.
-func (e *Evals) workOne(ctx context.Context, suites map[domain.EvalRunID][]ports.EvalSuiteCase) (claimed, recorded bool, err error) {
+// recorded.
+func (e *Evals) workOne(ctx context.Context, cache *workCache) (claimed, recorded bool, err error) {
 	c, err := e.d.Evals.ClaimResult(ctx, e.d.Clock.Now(), attempts*e.c.Timeout+e.c.Margin)
 	if errors.Is(err, ports.ErrNotFound) {
 		return false, false, nil
@@ -137,7 +150,7 @@ func (e *Evals) workOne(ctx context.Context, suites map[domain.EvalRunID][]ports
 		return true, false, fmt.Errorf("eval run %s: %w", c.EvalRunID, err)
 	}
 
-	o, err := e.try(ctx, run, c, suites)
+	o, err := e.try(ctx, run, c, cache)
 	if err != nil {
 		return true, false, err
 	}
@@ -171,6 +184,14 @@ func (e *Evals) finishIfDone(ctx context.Context, id domain.EvalRunID) error {
 		return nil
 	}
 
+	// A bake-off's summaries are written before it is done, so a done bake-off always has them;
+	// writing them again replaces them.
+	if run.Kind == domain.EvalKindBakeOff {
+		if err := e.summarize(ctx, id); err != nil {
+			return err
+		}
+	}
+
 	_, err = e.d.Evals.FinishRun(ctx, id, domain.EvalRunDone, e.d.Clock.Now())
 	if errors.Is(err, ports.ErrConflict) {
 		return nil
@@ -191,12 +212,29 @@ func evalError(checkedBy, format string, a ...any) domain.EvalOutcome {
 }
 
 // try runs claimed try c of run and returns the outcome to record. A case the run's content no
-// longer has, or has changed, is an error outcome; a read that failed is an error, and the try is
-// left to its lease.
-func (e *Evals) try(ctx context.Context, run domain.EvalRun, c domain.EvalResult, suites map[domain.EvalRunID][]ports.EvalSuiteCase) (domain.EvalOutcome, error) {
+// longer has, or has changed, is an error outcome, as is a bake-off try of an arm the bake-off
+// lacks; a read that failed is an error, and the try is left to its lease.
+func (e *Evals) try(ctx context.Context, run domain.EvalRun, c domain.EvalResult, cache *workCache) (domain.EvalOutcome, error) {
 	if run.State.Final() {
 		return evalError("", EvalCancelled), nil
 	}
+
+	var model string
+
+	if run.Kind == domain.EvalKindBakeOff {
+		m, ok, err := e.armModel(ctx, run.ID, c.Arm, cache)
+		if err != nil {
+			return domain.EvalOutcome{}, err
+		}
+
+		if !ok {
+			return evalError("", "the bake-off has no arm %d", c.Arm), nil
+		}
+
+		model = m
+	}
+
+	suites := cache.suites
 
 	cases, ok := suites[run.ID]
 	if !ok {
@@ -224,11 +262,11 @@ func (e *Evals) try(ctx context.Context, run domain.EvalRun, c domain.EvalResult
 		return evalError(sc.Case.CheckedBy(), "case %s changed since the run was queued: its file's hash is %s, not %s", c.Case, sc.Case.SHA256, c.CaseSHA256), nil
 	}
 
-	return e.runTry(ctx, ports.EvalTask{Run: run, Case: sc.Case, Try: c.Try, Judge: sc.Judge, Patch: sc.Patch, Kind: domain.TaskKindEval})
+	return e.runTry(ctx, ports.EvalTask{Run: run, Case: sc.Case, Try: c.Try, Judge: sc.Judge, Patch: sc.Patch, Kind: domain.TaskKindEval, Model: model})
 }
 
-// runTry runs t, once more after an infrastructure error, and grades it. The cost and turns of
-// every attempt count. A try whose run was cancelled meanwhile is an error with reason cancelled
+// runTry runs t, once more after an infrastructure error, and grades it. The cost, turns and time
+// of every attempt count. A try whose run was cancelled meanwhile is an error with reason cancelled
 // and no retry; when ctx ends (goald stops) the try is left to its lease.
 func (e *Evals) runTry(ctx context.Context, t ports.EvalTask) (domain.EvalOutcome, error) {
 	checkedBy := t.Case.CheckedBy()
@@ -239,6 +277,8 @@ func (e *Evals) runTry(ctx context.Context, t ports.EvalTask) (domain.EvalOutcom
 		last  error
 	)
 
+	start := e.d.Clock.Now()
+
 	for range attempts {
 		out, cancelled, err := e.attempt(ctx, t)
 		cost += out.CostUSD
@@ -246,7 +286,7 @@ func (e *Evals) runTry(ctx context.Context, t ports.EvalTask) (domain.EvalOutcom
 
 		if cancelled {
 			o := evalError(checkedBy, EvalCancelled)
-			o.RunID, o.CostUSD, o.Turns = out.RunID, cost, turns
+			o.RunID, o.CostUSD, o.Turns, o.Duration = out.RunID, cost, turns, e.d.Clock.Now().Sub(start)
 
 			return o, nil
 		}
@@ -265,13 +305,13 @@ func (e *Evals) runTry(ctx context.Context, t ports.EvalTask) (domain.EvalOutcom
 		}
 
 		o := grade(t, out)
-		o.CostUSD, o.Turns = cost, turns
+		o.CostUSD, o.Turns, o.Duration = cost, turns, e.d.Clock.Now().Sub(start)
 
 		return o, nil
 	}
 
 	o := evalError(checkedBy, "the try's run failed twice: %v", last)
-	o.CostUSD, o.Turns = cost, turns
+	o.CostUSD, o.Turns, o.Duration = cost, turns, e.d.Clock.Now().Sub(start)
 
 	return o, nil
 }
