@@ -65,3 +65,15 @@ export function longWaitSentence(waits: Metrics['long_waits']): string | null {
   if (!waits || waits.items === 0) return null;
   return `${plural(waits.items, 'item')} waited more than a day in front of ${humanize(waits.station)}.`;
 }
+
+/**
+ * The hands-off rate against the range before, in whole points: more is better. Each rate is rounded
+ * first, so the delta agrees with the figures the tile shows. None when either range finished nothing.
+ */
+export function handsOffDelta(
+  current: { finished: number; touchless_rate: number },
+  previous: { finished: number; touchless_rate: number } | undefined,
+): number | null {
+  if (!previous || current.finished === 0 || previous.finished === 0) return null;
+  return Math.round(current.touchless_rate * 100) - Math.round(previous.touchless_rate * 100);
+}
