@@ -14,8 +14,9 @@ import (
 )
 
 // integrationBranch is the integration branch of the assembly that the assembly helper builds:
-// item 1, "big request"; mainBranch is a repository's default branch.
+// item 1, assemblyTitle; mainBranch is a repository's default branch.
 const (
+	assemblyTitle     = "big request"
 	integrationBranch = "goal/a1-big-request"
 	mainBranch        = "main"
 )
@@ -67,7 +68,7 @@ func (h *harness) countSets(t *testing.T) *integrationSets {
 func (h *harness) assembly(t *testing.T, n int) (domain.Item, []domain.Item) {
 	t.Helper()
 
-	it := h.at(t, h.submit(t, domain.NewItem{Title: "big request"}), stWork, domain.StateReady)
+	it := h.at(t, h.submit(t, domain.NewItem{Title: assemblyTitle}), stWork, domain.StateReady)
 
 	plan := make([]domain.NewPart, 0, n)
 	for _, key := range []string{keyStore, "parts-api", "parts-web"}[:n] {
@@ -250,4 +251,71 @@ func TestRun_PartHearsItsIntegrationBase(t *testing.T) {
 			}
 		})
 	}
+}
+
+// expectLandingRun fails unless run worked on the integration branch with the default branch as
+// its base and heard that it lands the whole assembly.
+func (h *harness) expectLandingRun(t *testing.T, run porttest.ExecCall) {
+	t.Helper()
+
+	if c := h.claims(t, run.Env["GOAL_GATEWAY_TOKEN"]); c.Branch != integrationBranch || c.Base != "" {
+		t.Errorf("token branch %q base %q; want %q on the default branch", c.Branch, c.Base, integrationBranch)
+	}
+
+	note := run.Env["GOAL_FEEDBACK"]
+	for _, s := range []string{
+		"`" + integrationBranch + "` checked out", "landing the whole assembly", "merge the default branch into `" + integrationBranch + "`",
+		"gh pr create --base <default branch> --head " + integrationBranch, "pull_request",
+	} {
+		if !strings.Contains(note, s) {
+			t.Errorf("feedback %q does not mention %q", note, s)
+		}
+	}
+
+	if strings.Contains(note, "This part builds on") {
+		t.Errorf("feedback %q tells the landing it is a part", note)
+	}
+}
+
+// A finished assembly's landing run works on its integration branch, based on the default branch,
+// and hears how to land it.
+func TestRun_LandingRunsOnTheIntegrationBranch(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, landingLine(), byAgent(map[string]string{agReviewer: approveEmpty}))
+	h.landing(t)
+	h.step(t)
+
+	runs := h.worker.Runs()
+	if len(runs) != 1 {
+		t.Fatalf("%d runs, want 1", len(runs))
+	}
+
+	h.expectLandingRun(t, runs[0])
+}
+
+// A landing the gate rejects goes back to build, which reworks it on the integration branch with
+// the default branch as its base.
+func TestRun_RejectedLandingReworksOnTheIntegrationBranch(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, landingLine(), byAgent(map[string]string{
+		agReviewer: `{"decision":"reject","reason":"conflicts with main"}`,
+		agWorker:   `{"summary":"reconciled"}`,
+	}))
+	root := h.landing(t)
+	h.step(t) // rejected
+
+	if got := h.item(t, root.ID); got.Position() != (domain.Position{Station: stBuild, State: domain.StateQueued}) {
+		t.Fatalf("assembly at %+v, want back at build (events %v)", got.Position(), h.kinds(root.ID))
+	}
+
+	h.step(t) // reworked
+
+	runs := h.worker.Runs()
+	if len(runs) != 2 || runs[1].Sandbox.Agent != agWorker {
+		t.Fatalf("runs %d, want the gate's then the worker's", len(runs))
+	}
+
+	h.expectLandingRun(t, runs[1])
 }

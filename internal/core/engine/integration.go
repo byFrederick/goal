@@ -14,9 +14,17 @@ import (
 // when none is set yet, the assembly has at least minParts parts and the part names no pull
 // request; the store sets it once, so a part that lost that race reads the assembly again. A part
 // that names a pull request keeps the base the pull request was opened against, read from its code
-// host: a failed read fails the claim rather than guess the default branch.
+// host: a failed read fails the claim rather than guess the default branch. A landing root
+// (domain.Item.Landing) works on its integration branch with the default branch as its base, at
+// every station.
 func (e *Engine) integrate(ctx context.Context, log *slog.Logger, c *claimed) error {
 	it := c.item
+	if it.Landing() {
+		c.branch, c.base = domain.RunBase(it, it, "")
+
+		return nil
+	}
+
 	if it.ParentID == "" {
 		return nil
 	}

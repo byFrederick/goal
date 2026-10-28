@@ -696,6 +696,15 @@ func workspaceNote(c claimed, b *box, env runEnv) string {
 
 	note := fmt.Sprintf("## Workspace\n\nYour working directory is a clone of %s with branch `%s` checked out (%s). %s",
 		r.URL, cmp.Or(c.branch, c.item.Branch()), state, env.pushNote(host))
+	if c.item.Landing() {
+		return note + fmt.Sprintf("\n\nYou are landing the whole assembly: `%s` is its integration branch, which holds "+
+			"every part's merged work, and it lands on the default branch (origin/HEAD). First merge the default branch into `%s` "+
+			"and resolve any conflicts there; never rebase it. Then, if no pull request from `%s` into the default branch is open, "+
+			"open one with `gh pr create --base <default branch> --head %s`, and name it in your output's pull_request. "+
+			"When `%s` has no commits beyond the default branch, open none and report `\"pull_requests\": []` instead.",
+			c.branch, c.branch, c.branch, c.branch, c.branch)
+	}
+
 	if c.base == "" {
 		return note
 	}
