@@ -65,6 +65,7 @@ type Engine interface {
 	Reject(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
 	Retry(ctx context.Context, id domain.ItemID, by domain.Actor) (domain.Item, error)
 	Move(ctx context.Context, id domain.ItemID, to string, by domain.Actor, reason string) (domain.Item, error)
+	SetLane(ctx context.Context, id domain.ItemID, lane string, by domain.Actor) (domain.Item, error)
 	Pause(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
 	Cancel(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
 	Merge(ctx context.Context, id domain.ItemID, by domain.Actor, method string) (domain.Item, error)

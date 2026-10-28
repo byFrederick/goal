@@ -83,6 +83,9 @@ const (
 	// Data reason (optional) and actor (ref); a part cancelled with its assembly names it
 	// (assembly), and an assembly's counts the parts it cancelled (parts).
 	EventCancelled EventKind = "cancelled"
+	// EventLaneSet is a person setting an open item's lane, which picks the agent at stations
+	// that route by lane. Data from (the old lane, "" when it had none), to and actor (ref).
+	EventLaneSet EventKind = "lane_set"
 	// EventLeaseTaken is a person's action on an item in progress (move, pause, cancel, send back) that
 	// took its lease: the instance running it stops the run. Data actor (ref) and action.
 	EventLeaseTaken EventKind = "lease_taken"
@@ -123,6 +126,8 @@ const (
 	AuditItemMoved = "item.moved"
 	// AuditItemPaused is a person pausing an item (station, reason).
 	AuditItemPaused = "item.paused"
+	// AuditItemLaneSet is a person setting an item's lane (from, to).
+	AuditItemLaneSet = "item.lane_set"
 	// AuditItemCancelled is a person cancelling an item (station, reason; assembly for a part
 	// cancelled with its assembly).
 	AuditItemCancelled = "item.cancelled"
