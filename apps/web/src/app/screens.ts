@@ -119,7 +119,7 @@ export const factoryScreens: readonly FactoryScreen[] = [
     available: true,
     filters: '/o/$org/knowledge',
   },
-  // Jonah's Evals (ADR 0025); its Judges are reached from its tabs, and Overview, Proposals and Bake-offs are not built yet.
+  // Jonah's Evals (ADR 0025); its Judges and Bake-offs are reached from its tabs, and Overview and Proposals are not built yet.
   {
     id: 'jonah',
     label: 'Jonah',
