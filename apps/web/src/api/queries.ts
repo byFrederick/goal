@@ -70,9 +70,11 @@ import { listApiKeys, listMemberTokens, listPersonalTokens } from './keys';
 import {
   getKnowledgeDocument,
   getKnowledgeSource,
+  getKnowledgeUsage,
   type KnowledgeQuery,
   type KnowledgeSourceFilter,
   listKnowledgeDocuments,
+  listKnowledgeDocumentUses,
   listKnowledgeSources,
   searchKnowledge,
 } from './knowledge';
@@ -171,6 +173,10 @@ export const keys = {
   knowledgeDocuments: (org: string, name: string) => ['org', org, 'knowledge', 'source', name, 'documents'] as const,
   knowledgeDocument: (org: string, id: string) => ['org', org, 'knowledge', 'document', id] as const,
   knowledgeSearch: (org: string, query: KnowledgeQuery) => ['org', org, 'knowledge', 'search', query] as const,
+  /** Where one source's documents were used over `days` days (ADR 0027, decision 3). */
+  knowledgeUsage: (org: string, source: string, days: number) =>
+    ['org', org, 'knowledge', 'usage', source, days] as const,
+  knowledgeDocumentUses: (org: string, id: string) => ['org', org, 'knowledge', 'document', id, 'uses'] as const,
   /** The prefix of every factory overview window. */
   overviews: (org: string) => ['org', org, 'overview'] as const,
   overview: (org: string, window: string) => ['org', org, 'overview', window] as const,
@@ -368,6 +374,23 @@ export const knowledgeDocumentQuery = (org: string, id: string) =>
   queryOptions({
     queryKey: keys.knowledgeDocument(org, id),
     queryFn: ({ signal }) => getKnowledgeDocument(org, id, signal),
+    staleTime: 30_000,
+    retry: retryUnlessRefused,
+  });
+
+/** Where a source's documents were used over the last `days` days (7 by default), the most used first. */
+export const knowledgeUsageQuery = (org: string, source: string, days = 7) =>
+  queryOptions({
+    queryKey: keys.knowledgeUsage(org, source, days),
+    queryFn: ({ signal }) => getKnowledgeUsage(org, source, days, signal),
+    staleTime: 30_000,
+  });
+
+/** The first page of the runs that used a document, newest first (the card's uses under a document). */
+export const knowledgeDocumentUsesQuery = (org: string, id: string, limit = 50) =>
+  queryOptions({
+    queryKey: keys.knowledgeDocumentUses(org, id),
+    queryFn: ({ signal }) => listKnowledgeDocumentUses(org, id, { limit }, signal),
     staleTime: 30_000,
     retry: retryUnlessRefused,
   });
