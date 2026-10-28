@@ -48,6 +48,9 @@ const usage = `usage:
   goal move <item> <station> [--reason "..."]     put the item at another station (a reason is needed
                                                   upstream, where it counts as rework); a run in
                                                   progress is stopped
+  goal lane <item> <lane>                         set the lane of an open item that is not in
+                                                  progress: it picks the agent where a station
+                                                  routes by lane
   goal pause <item> [--reason "..."]              stop the item where it is (goal retry resumes it);
                                                   a run in progress is stopped
   goal status [--factory F] [--window 7d]         per factory over the last days (1d to 90d): work in
@@ -322,7 +325,7 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 
 	// The commands on one item, and the command groups, by name.
 	if handler, ok := map[string]command{
-		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbAnswer: answerItem, verbMove: moveItem, verbPause: pauseItem,
+		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbAnswer: answerItem, verbMove: moveItem, verbLane: laneItem, verbPause: pauseItem,
 		"status": status, "factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
 		"connection": connectionCommand, "credential": credentialCommand, "policy": policyCommand, "knowledge": knowledgeCommand, "search": search, "runs": runs, "eval": evalCommand, "spend": spend,
 		"judge": judgeCommand, "triggers": triggersCommand, "webhooks": webhooksCommand,
