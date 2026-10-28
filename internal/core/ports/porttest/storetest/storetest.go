@@ -149,6 +149,10 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"OrgTouches_EachFactoryAndTheirTotal", testOrgTouches},
 		{"LabelTouch_OnTheNamingEventOnly", testLabelTouch},
 		{"Touches_NeedAnOrgAndSeeOnlyItsItems", testTouchesTenancy},
+		{"SavedViews_SharedFirstThenOwnByName", testSavedViewsListOrderAndVisibility},
+		{"SavedViews_NameTakenPerOwnerOrFactory", testSavedViewsNameTaken},
+		{"SavedViews_UpdateAndDelete", testSavedViewsUpdateAndDelete},
+		{"SavedViews_OtherOrgSeesNothing", testSavedViewsOtherOrgSeesNothing},
 	}
 
 	for _, tc := range tests {

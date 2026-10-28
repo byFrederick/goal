@@ -319,6 +319,28 @@ type Store interface {
 	// It is never an item event, so it is not a touch itself. It returns ErrNotFound when event
 	// names no touch of the organization; reason must be valid (domain.TouchReason.Valid).
 	LabelTouch(ctx context.Context, event int64, reason domain.TouchReason, by domain.Actor) error
+
+	// ListSavedViews returns the factory's shared views and viewer's own personal views, shared
+	// first, then by name (case ignored). It never returns another person's personal view; an
+	// empty viewer (an API key or a personal token) sees only the shared ones, and an unknown
+	// factory has none.
+	ListSavedViews(ctx context.Context, factory domain.FactoryID, viewer domain.UserID) ([]domain.SavedView, error)
+
+	// CreateSavedView stores v (validated by domain.SavedView.Validate) with a new id, created
+	// and updated at v.CreatedAt, and returns it. It returns domain.ErrSavedViewNameTaken when the
+	// owner has a personal view of the name (personal) or the factory a shared view of it
+	// (shared), case ignored, and ErrNotFound when the organization has no such factory.
+	CreateSavedView(ctx context.Context, v domain.SavedView) (domain.SavedView, error)
+
+	// UpdateSavedView renames the factory's view id and replaces its filters (validated as
+	// CreateSavedView does), updated at at, and returns it. It returns ErrNotFound when the
+	// factory has no such view and domain.ErrSavedViewNameTaken as CreateSavedView does. Whether
+	// the caller may change the view is the caller's check.
+	UpdateSavedView(ctx context.Context, factory domain.FactoryID, id domain.SavedViewID, name string, filters map[string][]string, at time.Time) (domain.SavedView, error)
+
+	// DeleteSavedView deletes the factory's view id, or returns ErrNotFound. Deleting or purging
+	// the factory deletes its views.
+	DeleteSavedView(ctx context.Context, factory domain.FactoryID, id domain.SavedViewID) error
 }
 
 // FlowStats is the read model of how work flows: spans of time items spend at stations and the
