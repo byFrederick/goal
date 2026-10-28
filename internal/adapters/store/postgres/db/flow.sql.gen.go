@@ -228,13 +228,13 @@ LIMIT 1
 
 type CurrentRunParams struct {
 	UsageKind string
-	ItemID    uuid.UUID
+	ItemID    *uuid.UUID
 }
 
 type CurrentRunRow struct {
 	ID                  uuid.UUID
 	FactoryID           uuid.UUID
-	ItemID              uuid.UUID
+	ItemID              *uuid.UUID
 	Station             string
 	Agent               string
 	Model               string
@@ -638,7 +638,7 @@ type LiveRunsParams struct {
 }
 
 type LiveRunsRow struct {
-	ItemID       uuid.UUID
+	ItemID       *uuid.UUID
 	UsageTurns   int64
 	LastToolCall []byte
 	LastPlan     []byte

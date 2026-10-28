@@ -56,7 +56,7 @@ func (s *Store) CurrentRun(ctx context.Context, id domain.ItemID) (*domain.Curre
 	}
 
 	r, err := fetch(ctx, s.read, func(q *db.Queries) (db.CurrentRunRow, error) {
-		return q.CurrentRun(ctx, db.CurrentRunParams{ItemID: uid, UsageKind: string(domain.EventUsage)})
+		return q.CurrentRun(ctx, db.CurrentRunParams{ItemID: &uid, UsageKind: string(domain.EventUsage)})
 	})
 	if notFound(err) {
 		return nil, nil
@@ -111,7 +111,7 @@ func (s *Store) LiveRuns(ctx context.Context, factory domain.FactoryID) (map[dom
 			return nil, fmt.Errorf("live runs of factory %s: last plan of item %s: %w", factory, r.ItemID, err)
 		}
 
-		out[domain.ItemID(r.ItemID.String())] = live
+		out[itemIDOf(r.ItemID)] = live
 	}
 
 	return out, nil

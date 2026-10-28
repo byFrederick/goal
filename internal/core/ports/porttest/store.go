@@ -174,6 +174,18 @@ func (s *Store) visible(id domain.ItemID, org domain.OrgID) (*domain.Item, bool)
 	return it, true
 }
 
+// runVisible reports whether run r is org's: by its item, or by its factory for a Jonah run,
+// which works no item.
+func (s *Store) runVisible(r *domain.Run, org domain.OrgID) bool {
+	if r.ItemID == "" {
+		return s.factories[r.FactoryID] == org
+	}
+
+	_, ok := s.visible(r.ItemID, org)
+
+	return ok
+}
+
 // Await blocks until cond holds or ctx ends; cond is re-checked after every change.
 // cond may call the store's methods.
 func (s *Store) Await(ctx context.Context, cond func() bool) error {
@@ -526,7 +538,15 @@ func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, err
 	defer s.changes.signal()
 	defer s.mu.Unlock()
 
-	if _, ok := s.visible(r.ItemID, org); !ok {
+	kind := cmp.Or(r.Kind, domain.RunKindStation)
+
+	// Only a Jonah run may work no item; it writes no run_started item event.
+	switch _, ok := s.visible(r.ItemID, org); {
+	case r.ItemID == "" && kind == domain.RunKindJonah:
+		if s.factories[r.FactoryID] != org {
+			return "", fmt.Errorf("factory %s: %w", r.FactoryID, ports.ErrNotFound)
+		}
+	case !ok:
 		return "", fmt.Errorf("item %s: %w", r.ItemID, ports.ErrNotFound)
 	}
 
@@ -535,7 +555,12 @@ func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, err
 		Agent: r.Agent, Model: r.Model, Result: domain.RunResult{Status: domain.RunRunning}, StartedAt: r.StartedAt,
 	}
 	s.runs[run.ID] = run
-	s.jonah.runKinds[run.ID] = cmp.Or(r.Kind, domain.RunKindStation)
+	s.jonah.runKinds[run.ID] = kind
+
+	if r.ItemID == "" {
+		return run.ID, nil
+	}
+
 	s.append(domain.Event{
 		FactoryID: r.FactoryID, ItemID: r.ItemID, RunID: run.ID, At: r.StartedAt,
 		Kind: domain.EventRunStarted, Station: r.Station, Actor: r.Agent,
@@ -556,11 +581,7 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 	defer s.mu.Unlock()
 
 	r, ok := s.runs[id]
-	if ok {
-		_, ok = s.visible(r.ItemID, org)
-	}
-
-	if !ok {
+	if !ok || !s.runVisible(r, org) {
 		return fmt.Errorf("run %s: %w", id, ports.ErrNotFound)
 	}
 
@@ -569,6 +590,11 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 	}
 
 	r.Result, r.EndedAt = res, endedAt
+
+	if r.ItemID == "" { // a Jonah run: no item cost, no run_finished item event
+		return nil
+	}
+
 	s.items[r.ItemID].CostUSD += res.CostUSD
 	s.append(domain.Event{
 		FactoryID: r.FactoryID, ItemID: r.ItemID, RunID: id, At: endedAt, Kind: domain.EventRunFinished,
@@ -620,11 +646,7 @@ func (s *Store) Run(ctx context.Context, id domain.RunID) (domain.Run, error) {
 	defer s.mu.Unlock()
 
 	r, ok := s.runs[id]
-	if ok {
-		_, ok = s.visible(r.ItemID, org)
-	}
-
-	if !ok {
+	if !ok || !s.runVisible(r, org) {
 		return domain.Run{}, fmt.Errorf("run %s: %w", id, ports.ErrNotFound)
 	}
 
@@ -979,7 +1001,7 @@ func (s *Store) RunsOver(ctx context.Context, runs []domain.RunID) ([]domain.Run
 			continue
 		}
 
-		if _, ok := s.visible(r.ItemID, org); !ok {
+		if !s.runVisible(r, org) {
 			continue
 		}
 

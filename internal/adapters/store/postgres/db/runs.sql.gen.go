@@ -122,7 +122,7 @@ type FinishRunParams struct {
 
 type FinishRunRow struct {
 	FactoryID uuid.UUID
-	ItemID    uuid.UUID
+	ItemID    *uuid.UUID
 	Station   string
 	Agent     string
 }
@@ -190,7 +190,7 @@ type InsertRunParams struct {
 	ID                  uuid.UUID
 	FactoryID           uuid.UUID
 	DefinitionVersionID *uuid.UUID
-	ItemID              uuid.UUID
+	ItemID              *uuid.UUID
 	Station             string
 	Agent               string
 	Model               string
@@ -199,7 +199,7 @@ type InsertRunParams struct {
 }
 
 // A run records the definition version it starts on; NULL only for runs from before versions.
-// kind is station for a line's run, jonah for a review's.
+// kind is station for a line's run, jonah for a review's, which alone may have no item (00077).
 func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) error {
 	_, err := q.db.Exec(ctx, insertRun,
 		arg.ID,
@@ -223,7 +223,7 @@ LIMIT $2::bigint
 `
 
 type ItemRunsParams struct {
-	ItemID  uuid.UUID
+	ItemID  *uuid.UUID
 	MaxRuns int64
 }
 
@@ -479,9 +479,9 @@ const runItem = `-- name: RunItem :one
 SELECT item_id FROM agent_runs WHERE id = $1
 `
 
-func (q *Queries) RunItem(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+func (q *Queries) RunItem(ctx context.Context, id uuid.UUID) (*uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, runItem, id)
-	var item_id uuid.UUID
+	var item_id *uuid.UUID
 	err := row.Scan(&item_id)
 	return item_id, err
 }

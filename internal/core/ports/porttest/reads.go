@@ -146,15 +146,15 @@ func (s *Store) OrgRuns(ctx context.Context, q ports.RunQuery) ([]domain.ListedR
 	)
 
 	for _, r := range s.runs {
-		it, ok := s.visible(r.ItemID, org)
-		if !ok || !slices.Contains(q.Factories, r.FactoryID) || r.StartedAt.Before(q.Since) || !r.StartedAt.Before(q.Until) {
+		if !s.runVisible(r, org) || !slices.Contains(q.Factories, r.FactoryID) || r.StartedAt.Before(q.Since) || !r.StartedAt.Before(q.Until) {
 			continue
 		}
 
 		countRun(&sum, r)
 		spend[r.FactoryID] += r.Result.CostUSD
 
-		if runMatches(q, r, it) {
+		// The list shows runs with their item; a Jonah run without one counts in the summary only.
+		if it, ok := s.items[r.ItemID]; ok && runMatches(q, r, it) {
 			match = append(match, domain.ListedRun{Run: *r, ItemNumber: it.Number, ItemTitle: it.Title})
 		}
 	}
@@ -269,8 +269,8 @@ func (s *Store) spend(org domain.OrgID, factory domain.FactoryID, since, until t
 	var usd float64
 
 	for _, r := range s.runs {
-		it, ok := s.visible(r.ItemID, org)
-		if !ok || r.FactoryID != factory || !ofType(it, typ) {
+		// A Jonah run without an item counts toward every type's spend only when typ is "".
+		if !s.runVisible(r, org) || r.FactoryID != factory || (r.ItemID == "" && typ != "") || !ofType(s.items[r.ItemID], typ) {
 			continue
 		}
 
