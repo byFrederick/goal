@@ -334,6 +334,15 @@ function validate(
   // schema
   const name = typeof basics.name === 'string' ? basics.name : '';
   if (!name) add('schema-required', 'error', 'schema', '/basics/name', 'metadata.name is required');
+  // A runtime size outside the enum: goald's message, with the nearest size as its fix (enumFixes).
+  const sizes = ['small', 'medium', 'large'];
+  if (basics.size !== undefined && !sizes.includes(String(basics.size))) {
+    const got = String(basics.size);
+    const best = sizes.reduce((a, b) => (distance(got, b) < distance(got, a) ? b : a));
+    add('enum', 'error', 'schema', '/basics/size', 'spec.runtime.size: must be small, medium or large', [
+      replaceFix(`Use ${best}`, 'basics', '/size', best),
+    ]);
+  }
   // A blank skeleton has neither until the Line and Agents sections add them.
   if (stations.length === 0)
     add('schema-required', 'error', 'schema', '/line/stations', 'spec.board.stations is required');
@@ -521,6 +530,23 @@ function validate(
     read,
     name,
   );
+}
+
+/** The edit distance between two words: the allowed value nearest to a wrong one has the fewest. */
+function distance(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(
+        (prev[j] ?? 0) + 1,
+        (cur[j - 1] ?? 0) + 1,
+        (prev[j - 1] ?? 0) + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    prev = cur;
+  }
+  return prev[b.length] ?? 0;
 }
 
 function replaceFix(label: string, section: string, path: string, value: unknown): ProblemFix {
