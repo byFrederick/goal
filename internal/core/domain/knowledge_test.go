@@ -95,3 +95,18 @@ func TestCheckUsageDays(t *testing.T) {
 		}
 	}
 }
+
+func TestKnowledgeVerdict_AuditEntryHasNoNote(t *testing.T) {
+	t.Parallel()
+
+	by := Actor{Kind: ActorUser, ID: "u1", Name: "Ada"}
+	e := KnowledgeVerdict{Document: "d", Run: "r", Item: "i", Verdict: KnowledgeMisled, Note: "names the old port", By: by}.AuditEntry()
+
+	if e.Action != AuditKnowledgeVerdictGiven || e.TargetKind != AuditTargetKnowledgeDocument || e.TargetID != "d" || e.Actor != by {
+		t.Errorf("AuditEntry = %+v; want knowledge_verdict.given on document d by Ada", e)
+	}
+
+	if len(e.Data) != 2 || e.Data["verdict"] != "misled" || e.Data["run"] != "r" {
+		t.Errorf("AuditEntry data = %v; want the verdict and the run only, never the note", e.Data)
+	}
+}
