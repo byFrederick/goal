@@ -2,7 +2,7 @@
 // for a person, how Jonah works in this factory, the pass rate by judge (not built yet) and what Jonah noticed
 // this week. Proposals lists the factory's proposals in the state the URL names. Both read the Jonah queries
 // and show loading, error, empty and ready. Nothing polls: a `learning` or `definition` event or a resync
-// refreshes them. "Look for improvements now" is disabled until Jonah's review loop ships (software#344).
+// refreshes them. "Look for improvements now" is disabled until Jonah's review loop ships (the software item 344).
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Play, Settings } from 'lucide-react';
@@ -53,7 +53,7 @@ export function JonahError({ error, retry }: { error: unknown; retry: () => void
 }
 
 /**
- * "Look for improvements now" is off until Jonah's review loop ships (software#344): no loop claims a queued
+ * "Look for improvements now" is off until Jonah's review loop ships (software item 344): no loop claims a queued
  * review, and goald answers 409 review-loop-not-running. The button is disabled and never calls the API.
  */
 function LookForImprovements() {
