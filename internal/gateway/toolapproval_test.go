@@ -16,6 +16,13 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
+// The plain bodies of the gateway's refusals of a token, and a good report's body.
+const (
+	bodyUnauthorized = "unauthorized"
+	bodyForbidden    = "forbidden"
+	goodReport       = `{"connection":"docs","tool":"create_page","input":{}}`
+)
+
 // fakeToolApprovals stands in for the engine behind POST /run/tool-approval: it keeps every call
 // reported to it and answers with err.
 type fakeToolApprovals struct {
@@ -162,8 +169,8 @@ func TestToolApproval_RefusesABadToken(t *testing.T) {
 
 	expired := c
 	expired.ExpiresAt = h.clock.Now().Add(-1).Unix()
-	stranger := c
-	stranger.Agent = "stranger"
+	outsider := c
+	outsider.Agent = "outsider"
 	otherItem := c
 	otherItem.ItemID = "00000000-0000-7000-8000-0000000000ff"
 
@@ -172,16 +179,16 @@ func TestToolApproval_RefusesABadToken(t *testing.T) {
 		status      int
 		body        string
 	}{
-		{name: "no token", status: http.StatusUnauthorized, body: "unauthorized"},
-		{name: "garbage", token: "not-a-token", status: http.StatusUnauthorized, body: "unauthorized"},
-		{name: "expired", token: h.token(t, expired), status: http.StatusUnauthorized, body: "unauthorized"},
-		{name: "another audience", token: h.tokenFor(t, c, "goal-api"), status: http.StatusUnauthorized, body: "unauthorized"},
-		{name: "agent not in the definition", token: h.token(t, stranger), status: http.StatusForbidden, body: "forbidden"},
-		{name: "item not in the organization", token: h.token(t, otherItem), status: http.StatusForbidden, body: "forbidden"},
+		{name: "no token", status: http.StatusUnauthorized, body: bodyUnauthorized},
+		{name: "not a token", token: "not-a-token", status: http.StatusUnauthorized, body: bodyUnauthorized},
+		{name: "an expired token", token: h.token(t, expired), status: http.StatusUnauthorized, body: bodyUnauthorized},
+		{name: "a token for the API", token: h.tokenFor(t, c, "goal-api"), status: http.StatusUnauthorized, body: bodyUnauthorized},
+		{name: "an agent the definition lacks", token: h.token(t, outsider), status: http.StatusForbidden, body: bodyForbidden},
+		{name: "item not in the organization", token: h.token(t, otherItem), status: http.StatusForbidden, body: bodyForbidden},
 	}
 
 	for _, tt := range tests {
-		status, _, body := report(t, http.MethodPost, url, tt.token, `{"connection":"docs","tool":"create_page","input":{}}`)
+		status, _, body := report(t, http.MethodPost, url, tt.token, goodReport)
 		if status != tt.status || body != tt.body {
 			t.Errorf("%s: %d %q, want %d %q", tt.name, status, body, tt.status, tt.body)
 		}
@@ -209,7 +216,8 @@ func TestToolApproval_Refusals(t *testing.T) {
 		status int
 		// passed is whether the call reaches the engine.
 		passed bool
-		reason string
+		// answer, when set, is the body the run reads.
+		answer string
 	}{
 		{name: "not JSON", body: `{"connection":`, status: http.StatusBadRequest},
 		{name: "unknown field", body: `{"connection":"docs","tool":"create_page","input":{},"agent":"reviewer"}`, status: http.StatusBadRequest},
@@ -221,27 +229,27 @@ func TestToolApproval_Refusals(t *testing.T) {
 		{name: "input over 16 KiB", body: `{"connection":"docs","tool":"create_page","input":` + big + `}`, status: http.StatusRequestEntityTooLarge},
 		{name: "padded input under 16 KiB", body: `{"connection":"docs","tool":"create_page","input":` + padded + `}`, status: http.StatusAccepted, passed: true},
 		{
-			name: "an open tool approval or question", body: `{"connection":"docs","tool":"create_page","input":{}}`,
-			engine: fmt.Errorf("engine: %w", ErrToolApprovalOpen), status: http.StatusConflict, passed: true, reason: "open",
+			name: "an open tool approval or question", body: goodReport,
+			engine: fmt.Errorf("engine: %w", ErrToolApprovalOpen), status: http.StatusConflict, passed: true, answer: answerApprovalOpen,
 		},
 		{
-			name: "a run that has ended", body: `{"connection":"docs","tool":"create_page","input":{}}`,
-			engine: fmt.Errorf("engine: %w", ErrRunEnded), status: http.StatusConflict, passed: true, reason: "ended",
+			name: "a run that has ended", body: goodReport,
+			engine: fmt.Errorf("engine: %w", ErrRunEnded), status: http.StatusConflict, passed: true, answer: answerRunEnded,
 		},
 		{
-			name: "a call the engine finds malformed", body: `{"connection":"docs","tool":"create_page","input":{}}`,
+			name: "a call the engine finds malformed", body: goodReport,
 			engine: fmt.Errorf("engine: %w", ErrBadToolCall), status: http.StatusBadRequest, passed: true,
 		},
 		{
-			name: "an engine failure", body: `{"connection":"docs","tool":"create_page","input":{}}`,
+			name: "an engine failure", body: goodReport,
 			engine: errors.New("database is down"), status: http.StatusServiceUnavailable, passed: true,
 		},
 	}
 
-	bodies := map[string]string{}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			h := newHarness(t, Config{})
 			h.approvals.answer(tt.engine)
 
@@ -258,14 +266,10 @@ func TestToolApproval_Refusals(t *testing.T) {
 				t.Errorf("body %q tells the run the engine's error", body)
 			}
 
-			if tt.reason != "" {
-				bodies[tt.reason] = body
+			if tt.answer != "" && body != tt.answer {
+				t.Errorf("body = %q, want %q", body, tt.answer)
 			}
 		})
-	}
-
-	if bodies["open"] == bodies["ended"] {
-		t.Errorf("an open approval and an ended run both answer %q, want different bodies", bodies["open"])
 	}
 }
 

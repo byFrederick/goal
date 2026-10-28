@@ -207,7 +207,7 @@ func TestServeRun_ServesTheRunsBundle(t *testing.T) {
 
 	h := newHarnessWith(t, Config{}, harnessDeps{yaml: bundleYAML, files: bundleFiles})
 	it := h.submit(t, factoryID, "Add a health endpoint", "For the load balancer.")
-	h.setToolModes(t, connTracker, map[string]domain.ConnectionToolMode{"create_comment": domain.ToolModeAsk, "delete_issue": domain.ToolModeOff})
+	h.setToolModes(t, connTracker, map[string]domain.ConnectionToolMode{toolComment: domain.ToolModeAsk, toolDelete: domain.ToolModeOff})
 
 	c := h.claims()
 	c.ItemID, c.Connections = it.ID, []string{connTracker, connDocs}
@@ -248,8 +248,8 @@ func TestServeRun_ServesTheRunsBundle(t *testing.T) {
 					Name: connTracker, Kind: "issue-tracker", Title: trackerTitle, Env: []string{"ISSUES_SITE", "ISSUES_TOKEN"},
 					MCP:                &domain.KindMCP{URL: "https://issues.example.com/mcp", Headers: map[string]string{"Authorization": "Bearer ${ISSUES_TOKEN}"}},
 					Docs:               "File and read issues with the issues CLI or its MCP tools.",
-					ToolModes:          map[string]domain.ConnectionToolMode{"create_comment": domain.ToolModeAsk, "delete_issue": domain.ToolModeOff},
-					AlwaysAllowOffered: []string{"create_comment"},
+					ToolModes:          map[string]domain.ConnectionToolMode{toolComment: domain.ToolModeAsk, toolDelete: domain.ToolModeOff},
+					AlwaysAllowOffered: []string{toolComment},
 				},
 				{
 					Name: connDocs, Kind: kindStdio, Title: "MCP server", Env: []string{},
@@ -739,6 +739,13 @@ func TestBundle_ModelAndDeniedCommandsFromTheTaskToken(t *testing.T) {
 	}
 }
 
+// Tools of the issue tracker the tool mode tests set modes on.
+const (
+	toolComment = "create_comment"
+	toolEdit    = "edit_issue"
+	toolDelete  = "delete_issue"
+)
+
 // setToolModes sets modes on the harness organization's connection name.
 func (h *harness) setToolModes(t *testing.T, name string, modes map[string]domain.ConnectionToolMode) domain.Connection {
 	t.Helper()
@@ -763,22 +770,22 @@ func TestBundle_ToolModesAndAlwaysAllowOffered(t *testing.T) {
 	ctx := domain.WithOrg(t.Context(), h.org)
 
 	h.setToolModes(t, connTracker, map[string]domain.ConnectionToolMode{
-		"create_comment": domain.ToolModeAsk, "close_issue": domain.ToolModeAsk, "edit_issue": domain.ToolModeAsk,
-		"delete_issue": domain.ToolModeOff, "get_issue": domain.ToolModeAllow,
+		toolComment: domain.ToolModeAsk, "close_issue": domain.ToolModeAsk, toolEdit: domain.ToolModeAsk,
+		toolDelete: domain.ToolModeOff, "get_issue": domain.ToolModeAllow,
 	})
 
 	for _, rule := range []domain.NewStandingRule{
 		{Connection: connTracker, Tool: "close_issue", Agent: agentEngineer, Item: it.ID},
-		{Connection: connTracker, Tool: "delete_issue", Agent: agentEngineer, Item: it.ID},
-		{Connection: connTracker, Tool: "create_comment", Agent: "reviewer", Item: it.ID},
-		{Connection: connTracker, Tool: "edit_issue", Agent: agentEngineer, Item: it.ID},
+		{Connection: connTracker, Tool: toolDelete, Agent: agentEngineer, Item: it.ID},
+		{Connection: connTracker, Tool: toolComment, Agent: "reviewer", Item: it.ID},
+		{Connection: connTracker, Tool: toolEdit, Agent: agentEngineer, Item: it.ID},
 	} {
 		r, err := h.connections.CreateStandingRule(ctx, rule, domain.LocalUser)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if rule.Tool == "edit_issue" {
+		if rule.Tool == toolEdit {
 			if _, err := h.connections.RevokeStandingRule(ctx, r.ID, domain.LocalUser); err != nil {
 				t.Fatal(err)
 			}
@@ -796,13 +803,13 @@ func TestBundle_ToolModesAndAlwaysAllowOffered(t *testing.T) {
 	issues, docs := b.Spec.Connections[0], b.Spec.Connections[1]
 
 	wantModes := map[string]domain.ConnectionToolMode{
-		"create_comment": domain.ToolModeAsk, "edit_issue": domain.ToolModeAsk, "delete_issue": domain.ToolModeOff,
+		toolComment: domain.ToolModeAsk, toolEdit: domain.ToolModeAsk, toolDelete: domain.ToolModeOff,
 	}
 	if !reflect.DeepEqual(issues.ToolModes, wantModes) {
 		t.Errorf("issues tool_modes = %v, want %v", issues.ToolModes, wantModes)
 	}
 
-	if want := []string{"create_comment", "edit_issue"}; !slices.Equal(issues.AlwaysAllowOffered, want) {
+	if want := []string{toolComment, toolEdit}; !slices.Equal(issues.AlwaysAllowOffered, want) {
 		t.Errorf("issues always_allow_offered = %v, want %v", issues.AlwaysAllowOffered, want)
 	}
 
@@ -822,7 +829,7 @@ func TestBundle_GrantedCallsOfTheRun(t *testing.T) {
 	ctx := domain.WithOrg(t.Context(), h.org)
 
 	ev := func(kind domain.EventKind, run domain.RunID, data map[string]any) domain.Event {
-		return domain.Event{FactoryID: factoryID, ItemID: it.ID, RunID: run, At: h.clock.Now(), Kind: kind, Station: "build", Actor: agentEngineer, Data: data}
+		return domain.Event{FactoryID: factoryID, ItemID: it.ID, RunID: run, At: h.clock.Now(), Kind: kind, Station: h.claims().Station, Actor: agentEngineer, Data: data}
 	}
 	asked := func(run domain.RunID, tool, input string) domain.Event {
 		return ev(domain.EventToolApprovalRequested, run, map[string]any{
@@ -833,10 +840,10 @@ func TestBundle_GrantedCallsOfTheRun(t *testing.T) {
 
 	if err := h.store.AppendEvents(ctx,
 		ev(domain.EventRunStarted, "run-0", nil),
-		asked("run-0", "create_comment", `{"body":"early"}`),
+		asked("run-0", toolComment, `{"body":"early"}`),
 		ev(domain.EventToolApprovalGranted, "", map[string]any{domain.KeyAlwaysAllow: false}),
 		ev(domain.EventRunStarted, "run-1", nil),
-		asked("run-1", "create_comment", `{ "issue": 7, "body": "Done" }`),
+		asked("run-1", toolComment, `{ "issue": 7, "body": "Done" }`),
 		ev(domain.EventToolApprovalGranted, "", map[string]any{domain.KeyAlwaysAllow: false}),
 		asked("run-1", "close_issue", `{"issue":7}`),
 		ev(domain.EventToolApprovalDenied, "", map[string]any{domain.KeyNote: "not yet"}),
@@ -850,7 +857,7 @@ func TestBundle_GrantedCallsOfTheRun(t *testing.T) {
 	c.ItemID, c.Connections = it.ID, []string{connTracker}
 
 	c.RunID = "run-2"
-	want := []grantedCall{{Connection: connTracker, Tool: "create_comment", Input: json.RawMessage(`{"body":"Done","issue":7}`)}}
+	want := []grantedCall{{Connection: connTracker, Tool: toolComment, Input: json.RawMessage(`{"body":"Done","issue":7}`)}}
 
 	if got := h.fetchBundle(t, url, c).Spec.GrantedCalls; mustJSON(t, got) != mustJSON(t, want) {
 		t.Errorf("granted_calls of run-2 = %s, want %s", mustJSON(t, got), mustJSON(t, want))
