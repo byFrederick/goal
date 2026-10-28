@@ -1,5 +1,7 @@
-import type { ServerResponse } from 'node:http';
-import { describe, expect, it } from 'vitest';
+import { createServer, type Server, type ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createMockApi, type MockApi } from './api.ts';
 import { createBakeOffs } from './bake-offs.ts';
 
 // A response that records what the handler wrote, so the routes are tested without a server.
@@ -115,5 +117,41 @@ describe('the mock bake-offs API', () => {
     const api = bakeOffs();
     const res = await call(api, base, 'GET', {}, 'missing');
     expect(res.status).toBe(404);
+  });
+});
+
+// The whole mock API, the way the screen reaches it: evals answers every sub-path it does not
+// know, so the bake-off routes must win over it.
+describe('GET /v1/orgs/acme/factories/software/evals/bake-offs through createMockApi', () => {
+  let api: MockApi;
+  let server: Server;
+  let base = '';
+
+  beforeAll(async () => {
+    api = createMockApi();
+    server = createServer((req, res) =>
+      api.handle(req, res, () => {
+        res.statusCode = 404;
+        res.end();
+      }),
+    );
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/orgs/acme/factories/software/evals/bake-offs`;
+  });
+
+  afterAll(async () => {
+    api.close();
+    await new Promise((resolve) => server.close(resolve));
+  });
+
+  it('lists the picture’s bake-off and serves its detail, not a 404 from the evals mock', async () => {
+    const list = await fetch(base);
+    expect(list.status).toBe(200);
+    const body = (await list.json()) as { bake_offs: { id: string }[] };
+    expect(body.bake_offs.map((b) => b.id)).toEqual(['bake-off-1']);
+
+    const detail = await fetch(`${base}/bake-off-1`);
+    expect(detail.status).toBe(200);
+    expect(await detail.json()).toMatchObject({ id: 'bake-off-1', recommended_arm: 1 });
   });
 });

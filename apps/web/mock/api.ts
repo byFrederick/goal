@@ -1496,8 +1496,10 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await credentials.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (rest === '/search' && method === 'GET') return searchOf(org, url, forCaller(req, org), res);
-    if (await evals.handle(org, rest, method, res, () => readBody(req))) return;
+    // Bake-offs sit under /evals, and the evals handler answers every sub-path it does not know,
+    // so bake-offs must be tried first.
     if (await bakeOffs.handle(org, rest, method, res, () => readBody(req))) return;
+    if (await evals.handle(org, rest, method, res, () => readBody(req))) return;
     if (await judges.handle(org, rest, method, res, () => readBody(req))) return;
     if (await spend.handle(org, rest, method, url, res)) return;
     if (await policy.handle(org, rest, method, req, res, () => readBody(req))) return;
