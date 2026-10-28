@@ -448,8 +448,64 @@ export function seedDefinitions(): Record<string, MockDefinition> {
     '0b7d9e21-58a4-4f0e-b6c3-2a9d8e7f6a51': sre,
     '5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a01': support,
     '9e8d7c6b-5a49-4382-9172-6a5b4c3d2e1f': research,
+    '0c3e8f42-7a19-4d6b-9e25-5b1f0a7c3d88': software,
   };
 }
+
+// The Software factory (the Floor's fixtures): its intake triggers, the flaky-test trigger of the
+// intake page (trigger.jpg). Version 2 is the one that runs; version 1 has no trigger yet.
+const softwareYaml = (
+  triggers: string,
+) => `# Software: turns intake requests into reviewed pull requests for the product repositories.
+apiVersion: goal/v1
+kind: Factory
+metadata:
+  id: 0c3e8f42-7a19-4d6b-9e25-5b1f0a7c3d88
+  name: software
+  title: Software
+spec:
+  board:
+    workTypes: [feature, fix, refactor]
+    stations:
+      - { id: intake, name: Intake, kind: queue }
+      - { id: spec, name: Spec, kind: agent, agent: spec-writer, wip: 2 }
+      - { id: build, name: Build, kind: agent, agent: builder, wip: 2 }
+      - { id: review, name: Review, kind: agent, agent: reviewer, wip: 1 }
+      - { id: done, name: Done, kind: done }
+    flow:
+      constraint: build
+${triggers}`;
+
+const flakyTrigger = `    triggers:
+      - name: flaky-test-on-main
+        on: github.check_run.failed
+        filter: { branch: main, repo: byFrederick/goal }
+        only: { failuresInARow: 2, dedupe: check.name }
+        create:
+          type: fix
+          station: build
+          expedite: true
+          title: "Fix flaky {{check.name}} on main"
+          brief: "{{check.name}} failed twice in a row on main. Find the cause in {{check.logs_url}}, make the test deterministic, and say in the pull request why it was flaky. Do not skip or retry the test to make it pass."
+        limits: { perDay: 3, pauseOnBudget: true }
+`;
+
+const software = definition({
+  versions: [
+    {
+      id: '019a1c00-0000-7000-8000-0000000000f0',
+      message: 'First version',
+      at: day(10, '09:00'),
+      files: tree({ 'factory.yaml': softwareYaml('') }),
+    },
+    {
+      id: '019a1c00-0000-7000-8000-0000000000f1',
+      message: 'Add the flaky-test trigger',
+      at: day(20, '09:00'),
+      files: tree({ 'factory.yaml': softwareYaml(flakyTrigger) }),
+    },
+  ],
+});
 
 // Templates: the catalog's latest versions, "5 in the bucket".
 

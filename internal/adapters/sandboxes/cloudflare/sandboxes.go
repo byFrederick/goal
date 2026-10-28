@@ -27,6 +27,19 @@ import (
 
 var _ ports.Sandboxes = (*Sandboxes)(nil)
 
+// BoxSizes are the vCPU and memory of each sandbox size on Cloudflare, smallest first: the
+// instance types the control Worker starts boxes as (instances in
+// apps/control-worker/src/sandbox.ts: standard-2, standard-3 and standard-4), as Cloudflare's
+// Containers limits list them. Change the two together. GET /v1/orgs/{org}/policy shows them
+// under GOAL_SANDBOX=cloudflare.
+func BoxSizes() []domain.BoxSize {
+	return []domain.BoxSize{
+		{Size: domain.SandboxSmall, VCPUs: 1, MemoryBytes: 6 << 30},  // standard-2
+		{Size: domain.SandboxMedium, VCPUs: 2, MemoryBytes: 8 << 30}, // standard-3
+		{Size: domain.SandboxLarge, VCPUs: 4, MemoryBytes: 12 << 30}, // standard-4
+	}
+}
+
 // Config is where the sandbox API is and its key.
 type Config struct {
 	// URL is the Worker's sandbox API (GOAL_SANDBOX_URL): http://sandbox.internal from goald's

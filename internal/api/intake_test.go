@@ -350,7 +350,7 @@ func (h *harness) mergedAndSpent(t *testing.T, merged, spent domain.Item, usd fl
 		t.Fatal(err)
 	}
 
-	run, err := h.store.StartRun(inOrg(t), ports.NewRun{FactoryID: acmeID, ItemID: spent.ID, Station: stInbox, Agent: "writer", Model: "m", StartedAt: oct(23, 8)})
+	run, err := h.store.StartRun(inOrg(t), ports.NewRun{FactoryID: acmeID, ItemID: spent.ID, Station: stInbox, Agent: evalAgent, Model: "m", StartedAt: oct(23, 8)})
 	if err != nil {
 		t.Fatal(err)
 	}
