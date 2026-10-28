@@ -50,10 +50,25 @@ const (
 	overviewProposals    = 1000
 )
 
+// reviewLoopRunning says whether goald runs Jonah's review loop (software#344). Until it does, a
+// queued review waits for a claim that never comes, so QueueJonahReview refuses with
+// review-loop-not-running. software#344 sets this to true or deletes the gate.
+var reviewLoopRunning = false
+
 var (
-	errJonahUnavailable = errors.New("this goald serves no Jonah store")
-	errProposalNotFound = errors.New("no such proposal")
+	errJonahUnavailable     = errors.New("this goald serves no Jonah store")
+	errProposalNotFound     = errors.New("no such proposal")
+	errReviewLoopNotRunning = errors.New("review loop not running")
 )
+
+// reviewLoopNotRunning is the 409 a review gets while no loop runs. Its detail is the sentence a
+// person reads, not the sentinel's text.
+func reviewLoopNotRunning() gen.Problem {
+	code := "review-loop-not-running"
+	detail := "Reviews start when Jonah's review loop ships"
+
+	return gen.Problem{Title: http.StatusText(http.StatusConflict), Status: http.StatusConflict, Code: &code, Detail: &detail}
+}
 
 // jonahProblem answers the Jonah routes' own errors.
 func jonahProblem(err error) (gen.Problem, bool) {
@@ -62,6 +77,8 @@ func jonahProblem(err error) (gen.Problem, bool) {
 	var code string
 
 	switch {
+	case errors.Is(err, errReviewLoopNotRunning):
+		return reviewLoopNotRunning(), true
 	case errors.Is(err, errJonahUnavailable):
 		status, code = http.StatusServiceUnavailable, "jonah-unavailable"
 	case errors.Is(err, errProposalNotFound):
@@ -408,6 +425,10 @@ func (s *server) QueueJonahReview(ctx context.Context, req gen.QueueJonahReviewR
 	rec, err := s.jonahWrite(ctx, req.Factory)
 	if err != nil {
 		return nil, err
+	}
+
+	if !reviewLoopRunning {
+		return nil, errReviewLoopNotRunning
 	}
 
 	if rec.Current == nil {

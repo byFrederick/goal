@@ -289,28 +289,13 @@ func TestJonah_QueueReview(t *testing.T) {
 
 	h := newHarness(t)
 
-	var got gen.JonahReview
-	if code := h.call(t, http.MethodPost, acmeJonah+"/reviews", "", &got); code != http.StatusAccepted {
-		t.Fatalf("queue review = %d, want 202", code)
-	}
-
-	if got.State != gen.JonahReviewStatePending || got.Trigger != gen.JonahReviewTriggerManual {
-		t.Errorf("review = %+v, want pending and manual", got)
-	}
-
-	if n := h.audited(t, domain.AuditReviewQueued); n != 1 {
-		t.Errorf("%d %s entries, want 1", n, domain.AuditReviewQueued)
-	}
-
+	// No review loop runs yet (software#344): a review is refused before anything is queued.
 	code, p := problemOfCall(t, h, http.MethodPost, acmeJonah+"/reviews", "")
-	wantProblem(t, "a second review", code, p, http.StatusConflict, "review-in-flight")
+	wantProblem(t, "a review while no loop runs", code, p, http.StatusConflict, "review-loop-not-running")
 
-	// A factory whose review runs cost the weekly budget (default $10) over the last 7 days.
-	h = newHarness(t)
-	h.jonahRun(t, 10)
-
-	code, p = problemOfCall(t, h, http.MethodPost, acmeJonah+"/reviews", "")
-	wantProblem(t, "a review over budget", code, p, http.StatusConflict, "learning-budget-exhausted")
+	if n := h.audited(t, domain.AuditReviewQueued); n != 0 {
+		t.Errorf("%d %s entries, want none", n, domain.AuditReviewQueued)
+	}
 }
 
 // jonahRun records a finished review run of acme that cost usd, started an hour ago.
