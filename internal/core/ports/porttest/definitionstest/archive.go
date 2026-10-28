@@ -198,9 +198,18 @@ func testDeleteArchivedRemovesTheFactoryAndItsRows(f *fixture) {
 	ctx := f.ctx(t)
 	r, it := f.archivedFactory(t, acme)
 	kept := f.pausedFactory(t, zeta)
+	viewer := domain.UserID("00000000-0000-4000-8000-0000000000a1")
+
+	if _, err := f.Items.CreateSavedView(ctx, domain.SavedView{Factory: r.ID, Owner: viewer, Name: "mine", CreatedAt: t0}); err != nil {
+		t.Fatalf("CreateSavedView: %v", err)
+	}
 
 	if err := f.Definitions.DeleteArchivedFactory(ctx, r.ID, local); err != nil {
 		t.Fatalf("DeleteArchivedFactory: %v", err)
+	}
+
+	if views, err := f.Items.ListSavedViews(ctx, r.ID, viewer); err != nil || len(views) != 0 {
+		t.Errorf("ListSavedViews of a deleted factory = %+v, %v; want none", views, err)
 	}
 
 	_, err := f.Definitions.FactoryRecord(ctx, r.ID)
