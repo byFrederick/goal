@@ -28,6 +28,7 @@ const (
 	keyConnections = "connections"
 	keyKnowledge   = "knowledge"
 	keyImage       = "image"
+	keyStarter     = "starter"
 	keySettings    = "settings" // model only: a connection's connector settings
 	keyLegacy      = "legacy"   // model only: a connection in the inline type form
 
@@ -196,6 +197,9 @@ var (
 
 	budgetShape     = &shape{order: []string{"dailyUsd", "weeklyUsd", "onExhausted", "perItemUsd", "maxTurnsPerTask"}}
 	repositoryShape = &shape{verbatim: true, order: []string{"url", "connection", "token"}}
+
+	// starterShape is the root starter section, read for the model and never written by it.
+	starterShape = &shape{fields: map[string]*shape{"item": {order: []string{"title", "type", "body"}}}}
 )
 
 // connectionIdentity is a connection's name: an organization connection's is the item itself,

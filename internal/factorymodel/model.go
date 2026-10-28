@@ -56,6 +56,9 @@ type Model struct {
 	Agents      map[string]any `json:"agents"`
 	Connections []any          `json:"connections"`
 	Review      map[string]any `json:"review"`
+	// Starter is factory.yaml's starter section ({item: {title, type, body}}, ADR 0032), absent
+	// when the YAML has none. It is not a section: onboarding reads it, and YAML mode edits it.
+	Starter map[string]any `json:"starter,omitempty"`
 }
 
 // Section returns one section's value.
@@ -192,6 +195,10 @@ func readModel(root *yaml.Node, files fs.FS) Model {
 		case Review:
 			m.Review, _ = v.(map[string]any)
 		}
+	}
+
+	if n := lookup(root, []string{keyStarter}); n != nil {
+		m.Starter, _ = read(n, starterShape, files).(map[string]any)
 	}
 
 	return m
