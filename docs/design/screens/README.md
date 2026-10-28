@@ -45,7 +45,7 @@ How to use them:
 | `floor`: the andon panel, six KPI tiles, needs you, where work waits, throughput, activity | `/o/$org/f/$factory` | restyle |  |
 | `board`: columns with WIP meters, expedite lane, Ready and In progress, assembly lines | `…/board` | restyle | |
 | `item`: stepper, the agent's question with quick answers, run timeline, note composer, details, cost, overlaps, rules | `…/items/$ref` | restyle | Watch live, Trace, Teardown |
-| `items`: saved views, filters, grouped by assembly, bulk actions | `…/items` | restyle | Save view, Set lane |
+| `items`: saved views, filters, grouped by assembly, bulk actions | `…/items` | restyle | Set lane |
 | `needs-you`: list across factories by type, detail with Approve, Deny, "Edit, then approve" | `/o/$org/needs-you` (new page; replaces the inbox drawer) | new | Always allow |
 | `runs`: every run across factories | `/o/$org/runs` | new (runs exist in the API) | Export CSV, Send to Jonah |
 

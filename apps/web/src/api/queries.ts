@@ -43,6 +43,7 @@ import {
   listMembers,
   listOrgRuns,
   listOrgs,
+  listSavedViews,
   type RunsFilter,
 } from './client';
 import {
@@ -218,7 +219,16 @@ export const keys = {
   evals: (org: string, factory: string) => ['org', org, 'factory', factory, 'evals'] as const,
   /** The factory's intake (sources and triggers); item and definition events refresh it. */
   intake: (org: string, factory: string) => ['org', org, 'factory', factory, 'intake'] as const,
+  /** The factory's saved views (ADR 0020): the Items page's nav. Its mutations invalidate it. */
+  views: (org: string, factory: string) => ['org', org, 'factory', factory, 'views'] as const,
 };
+
+/** The factory's saved views, shared ones first (listSavedViews). */
+export const viewsQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: keys.views(org, factory),
+    queryFn: ({ signal }) => listSavedViews(org, factory, signal),
+  });
 
 export const intakeQuery = (org: string, factory: string) =>
   queryOptions({
