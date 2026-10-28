@@ -11,10 +11,19 @@ import (
 // People who own views, and ids that name no view or factory.
 const (
 	viewerA domain.UserID = "00000000-0000-4000-8000-0000000000a1"
-	viewerB   domain.UserID = "00000000-0000-4000-8000-0000000000b2"
+	viewerB domain.UserID = "00000000-0000-4000-8000-0000000000b2"
 
 	missingView    domain.SavedViewID = "00000000-0000-7000-8000-fffffffffffd"
 	missingFactory domain.FactoryID   = "00000000-0000-7000-8000-fffffffffffc"
+)
+
+// View names the tests use more than once.
+const (
+	viewAlpha = "Alpha"
+	viewOmega = "omega"
+	viewMine  = "mine"
+	// filterNew is a filter value of the views.
+	filterNew = "new-this-week"
 )
 
 // saveView creates a view of the fixture's factory unless v names another, at t0 unless it says.
@@ -68,16 +77,16 @@ func sameView(t *testing.T, what string, got, want domain.SavedView) {
 func testSavedViewsListOrderAndVisibility(f *fixture) {
 	t := f.t
 
-	mine := f.saveView(t, domain.SavedView{Owner: viewerA, Name: "  zeta ", Filters: map[string][]string{"state": {"queued", "blocked"}, "q": nil}})
+	mine := f.saveView(t, domain.SavedView{Owner: viewerA, Name: "  zeta ", Filters: map[string][]string{"state": {filterNew, "blocked"}, "q": nil}})
 	f.saveView(t, domain.SavedView{Owner: viewerA, Name: "Beta"})
-	f.saveView(t, domain.SavedView{Owner: viewerA, Name: "omega", Shared: true})
-	f.saveView(t, domain.SavedView{Owner: viewerB, Name: "Alpha", Shared: true})
+	f.saveView(t, domain.SavedView{Owner: viewerA, Name: viewOmega, Shared: true})
+	f.saveView(t, domain.SavedView{Owner: viewerB, Name: viewAlpha, Shared: true})
 	f.saveView(t, domain.SavedView{Owner: viewerB, Name: "aaa"})
 	f.saveView(t, domain.SavedView{Factory: f.newFactory(t), Owner: viewerA, Name: "elsewhere", Shared: true})
 
 	want := domain.SavedView{
 		ID: mine.ID, Factory: f.factory, Owner: viewerA, Name: "zeta",
-		Filters: map[string][]string{"state": {"queued", "blocked"}, "q": {}}, CreatedAt: t0, UpdatedAt: t0,
+		Filters: map[string][]string{"state": {filterNew, "blocked"}, "q": {}}, CreatedAt: t0, UpdatedAt: t0,
 	}
 	if mine.ID == "" {
 		t.Error("CreateSavedView returned no id")
@@ -100,9 +109,9 @@ func testSavedViewsListOrderAndVisibility(f *fixture) {
 		viewer domain.UserID
 		want   []string
 	}{
-		{viewerA, []string{"Alpha", "omega", "Beta", "zeta"}},
-		{viewerB, []string{"Alpha", "omega", "aaa"}},
-		{"", []string{"Alpha", "omega"}},
+		{viewerA, []string{viewAlpha, viewOmega, "Beta", "zeta"}},
+		{viewerB, []string{viewAlpha, viewOmega, "aaa"}},
+		{"", []string{viewAlpha, viewOmega}},
 	} {
 		if got := f.viewNames(t, f.factory, tc.viewer); !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("ListSavedViews(%q) = %q; want %q", tc.viewer, got, tc.want)
@@ -126,9 +135,9 @@ func testSavedViewsNameTaken(f *fixture) {
 
 	f.saveView(t, domain.SavedView{Owner: viewerA, Name: "Mine"})
 	f.saveView(t, domain.SavedView{Owner: viewerB, Name: "MINE"})
-	f.saveView(t, domain.SavedView{Owner: viewerA, Name: "mine", Shared: true})
-	f.saveView(t, domain.SavedView{Factory: f.newFactory(t), Owner: viewerA, Name: "mine"})
-	f.saveView(t, domain.SavedView{Factory: f.newFactory(t), Owner: viewerA, Name: "mine", Shared: true})
+	f.saveView(t, domain.SavedView{Owner: viewerA, Name: viewMine, Shared: true})
+	f.saveView(t, domain.SavedView{Factory: f.newFactory(t), Owner: viewerA, Name: viewMine})
+	f.saveView(t, domain.SavedView{Factory: f.newFactory(t), Owner: viewerA, Name: viewMine, Shared: true})
 
 	_, err := f.Store.CreateSavedView(ctx, domain.SavedView{Factory: f.factory, Owner: viewerA, Name: "mINE", CreatedAt: t0})
 	expect(t, "personal name of the same owner", err, domain.ErrSavedViewNameTaken)
@@ -136,7 +145,7 @@ func testSavedViewsNameTaken(f *fixture) {
 	_, err = f.Store.CreateSavedView(ctx, domain.SavedView{Factory: f.factory, Owner: viewerB, Name: " Mine ", Shared: true, CreatedAt: t0})
 	expect(t, "shared name of the same factory", err, domain.ErrSavedViewNameTaken)
 
-	other := f.saveView(t, domain.SavedView{Owner: viewerA, Name: "other"})
+	other := f.saveView(t, domain.SavedView{Owner: viewerA, Name: "spare"})
 	_, err = f.Store.UpdateSavedView(ctx, f.factory, other.ID, "MINE", nil, t1)
 	expect(t, "rename to a personal name taken", err, domain.ErrSavedViewNameTaken)
 
@@ -148,7 +157,7 @@ func testSavedViewsNameTaken(f *fixture) {
 		t.Errorf("renaming a view to its own name in another case: %v", err)
 	}
 
-	if got, want := f.viewNames(t, f.factory, viewerA), []string{"mine", "TEAM", "Mine", "other"}; !reflect.DeepEqual(got, want) {
+	if got, want := f.viewNames(t, f.factory, viewerA), []string{viewMine, "TEAM", "Mine", "spare"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("ListSavedViews(A) = %q; want %q", got, want)
 	}
 }
@@ -159,7 +168,7 @@ func testSavedViewsUpdateAndDelete(f *fixture) {
 	t := f.t
 	ctx := f.ctx(t)
 
-	v := f.saveView(t, domain.SavedView{Owner: viewerA, Name: "mine", Filters: map[string][]string{"state": {"queued"}}})
+	v := f.saveView(t, domain.SavedView{Owner: viewerA, Name: viewMine, Filters: map[string][]string{"state": {filterNew}}})
 
 	got, err := f.Store.UpdateSavedView(ctx, f.factory, v.ID, " renamed ", map[string][]string{"lane": {"backend"}}, t1)
 	if err != nil {
