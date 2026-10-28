@@ -43,6 +43,8 @@ const usage = `usage:
                                                   (at a station with action: merge)
   goal note <item> "<text>"                       leave a note for the agents: the item's next run
                                                   reads it
+  goal answer <item> "<text>" | --choice <n>      answer the question the item's agent asked, in
+                                                  your words or by its choice's number (from 1)
   goal move <item> <station> [--reason "..."]     put the item at another station (a reason is needed
                                                   upstream, where it counts as rework); a run in
                                                   progress is stopped
@@ -92,6 +94,13 @@ const usage = `usage:
                                                   across its factories (--max-slots 0: no cap)
   goal org delete <slug> [--yes]                  delete it after typing its name (--yes: no prompt);
                                                   it is purged after GOAL_ORG_RETENTION
+  goal policy get                                 the organization's policy: allowed models and the default,
+                                                  denied commands, tool defaults, box time limit; who uses
+                                                  each model and box size, and the egress addresses
+  goal policy set [--models M,M] [--default M] [--deny-command P]... [--box-limit 3h]
+                                                  change what the flags name (owners and admins), keeping
+                                                  the rest as read; refused when the policy changed since
+                                                  it was read (--deny-command replaces the list)
   goal key list                                   the organization's API keys: hint, scopes, factories,
                                                   ceiling, expiry, last use
   goal key create <name> --scope S [--scope S]... [--factory F]... [--role viewer|approver|editor] [--expires 90d]
@@ -231,7 +240,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, move, pause, the decisions, status, andon, factory, connection, credential, knowledge, search, runs, eval, spend, triggers, webhooks) acts in one
+Every command that talks to goald (run, follow, item, note, answer, move, pause, the decisions, status, andon, factory, policy, connection, credential, knowledge, search, runs, eval, spend, triggers, webhooks) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or
@@ -298,9 +307,9 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 
 	// The commands on one item, and the command groups, by name.
 	if handler, ok := map[string]command{
-		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbMove: moveItem, verbPause: pauseItem,
+		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbAnswer: answerItem, verbMove: moveItem, verbPause: pauseItem,
 		"status": status, "factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
-		"connection": connectionCommand, "credential": credentialCommand, "knowledge": knowledgeCommand, "search": search, "runs": runs, "eval": evalCommand, "spend": spend,
+		"connection": connectionCommand, "credential": credentialCommand, "policy": policyCommand, "knowledge": knowledgeCommand, "search": search, "runs": runs, "eval": evalCommand, "spend": spend,
 		"triggers": triggersCommand, "webhooks": webhooksCommand,
 	}[cmd]; ok {
 		return handler(ctx, out, getenv, rest)

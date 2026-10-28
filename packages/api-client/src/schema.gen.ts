@@ -220,6 +220,33 @@ export interface paths {
         patch: operations["updateOrgSettings"];
         trace?: never;
     };
+    "/v1/orgs/{org}/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's model and tool policy, with the install's models, box sizes and egress addresses
+         * @description The policy (ADR 0024) is a ceiling over every factory definition: the default policy of the install's models at revision 0 until someone saves one. The answer also carries read-only facts computed now from the published definitions the caller sees, never stored: which factories and agents use each model and each box size. The ETag is the policy's revision, quoted, the If-Match of putOrgPolicy.
+         */
+        get: operations["getOrgPolicy"];
+        /**
+         * Replace the organization's policy
+         * @description If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+         */
+        put: operations["putOrgPolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/audit": {
         parameters: {
             query?: never;
@@ -616,7 +643,7 @@ export interface paths {
         };
         /**
          * What waits for a person across the organization's factories
-         * @description The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (decision, then blocked, then expedite). Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision, andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+         * @description The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
          */
         get: operations["getInbox"];
         put?: never;
@@ -2201,6 +2228,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/items/{item}/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Answer the question an item's agent asked
+         * @description Answers the item's open question (Item.question) with one of its choices or in the caller's own words, as ADR 0018 decides. The engine records question_answered and puts the item back in its station's arrival state, rework_count unchanged; its next run's brief carries the question and the answer. Audited as item.answered with the answer's length and the choice index, never its text. 400 when the body has both answer and choice or neither, or the answer is not 1 to 2000 characters; 400 bad-choice for a choice outside the question's choices; 409 no-open-question when the item has none (none was asked, it was answered, or a move, pause or rejection withdrew it), item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+         */
+        post: operations["answerItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/items/{item}/reject": {
         parameters: {
             query?: never;
@@ -3376,6 +3428,83 @@ export interface components {
             name: string;
             max: number | null;
         };
+        /** @description What an organization allows every factory definition (ADR 0024). The revision is the If-Match header, never a field. */
+        OrgPolicyInput: {
+            /** @description The model ids agents may use, a non-empty subset of the install's models */
+            allowed_models: string[];
+            /** @description One of allowed_models, the model of an agent that names none */
+            default_model: string;
+            /** @description Claude Code Bash permission patterns no agent may run, such as Bash(terraform apply:*) */
+            denied_commands: string[];
+            tools: components["schemas"]["ToolPolicy"];
+            /** @description How long a box may run before it is stopped */
+            box_time_limit_minutes: number;
+        };
+        /** @description The tool policy defaults (ADR 0024 decision 2) */
+        ToolPolicy: {
+            /**
+             * @description Comments, issues, tickets and messages outside the item's branch
+             * @enum {string}
+             */
+            write_outside_branch: "off" | "ask" | "allowed";
+            /** @enum {string} */
+            merge_pull_request: "off" | "review_approval";
+            /**
+             * @description Search, fetch and documentation tools
+             * @enum {string}
+             */
+            read_web: "off" | "ask" | "allowed";
+            /** @enum {string} */
+            use_credentials: "off" | "attached_only";
+        };
+        OrgPolicyView: {
+            policy: components["schemas"]["OrgPolicyInput"];
+            /**
+             * Format: int64
+             * @description The policy's revision, 0 until a save; the ETag
+             */
+            revision: number;
+            /**
+             * Format: date-time
+             * @description When the policy was last saved; absent at revision 0
+             */
+            updated_at?: string;
+            /** @description The install's models (GOAL_MODELS), in its order */
+            models: components["schemas"]["PolicyModel"][];
+            /** @description small, medium and large, as the install's sandbox backend sizes them */
+            box_sizes: components["schemas"]["PolicyBoxSize"][];
+            /** @description The addresses agents' traffic leaves from, as CIDRs (GOAL_EGRESS_ADDRESSES); empty when not set */
+            egress_addresses: string[];
+        };
+        PolicyModel: {
+            id: string;
+            label: string;
+            /** @description The factories whose agents use the model now, by name; empty when none does. An agent uses its own model, else its factory's runtime.model, else the policy's default model. */
+            used_by: components["schemas"]["ModelUse"][];
+        };
+        ModelUse: {
+            factory_id: string;
+            name: string;
+            /** @description The names of the factory's agents that use the model */
+            agents: string[];
+        };
+        PolicyBoxSize: {
+            /** @enum {string} */
+            size: "small" | "medium" | "large";
+            /**
+             * Format: double
+             * @description The virtual CPUs a box of this size gets
+             */
+            vcpu: number;
+            /** Format: int64 */
+            memory_bytes: number;
+            /** @description The factories whose runtime.size is this size (medium when they name none), by name */
+            factories: components["schemas"]["SizeUse"][];
+        };
+        SizeUse: {
+            factory_id: string;
+            name: string;
+        };
         OrgSettingsPatch: {
             name?: string;
             slug?: string;
@@ -3562,6 +3691,28 @@ export interface components {
             dependents?: components["schemas"]["ItemLink"][];
             /** @description Why the item is not claimed yet; getItem only, absent unless it is queued or ready with an open need */
             waiting?: components["schemas"]["ItemWaiting"];
+            /** @description The question the item's agent asked a person and nobody has answered yet (ADR 0018); getItem and answerItem only, absent or null when there is none */
+            question?: components["schemas"]["ItemQuestion"] | null;
+        };
+        /** @description An agent's open question about an item, read from its question_asked event */
+        ItemQuestion: {
+            /** @description The question */
+            text: string;
+            /** @description The quick answers the agent offered, 0 to 4; empty for a free answer only */
+            choices: string[];
+            /** Format: date-time */
+            asked_at: string;
+            /** @description The asking agent's role name, as in frontend-engineer; never its copy number */
+            agent: string;
+            /** @description The run that asked; it ended when it asked */
+            run_id: string;
+        };
+        /** @description A person's answer to an item's open question; exactly one of answer and choice */
+        ItemAnswer: {
+            /** @description The answer in the person's own words, 1 to 2000 characters (surrounding space is trimmed) */
+            answer?: string;
+            /** @description The index of the picked choice in Item.question.choices */
+            choice?: number;
         };
         /** @description Why a queued or ready item is not claimed yet, derived from its open needs (those neither done nor cancelled) on every read and never stored. Planned and linked needs win over overlap ones */
         ItemWaiting: {
@@ -4550,6 +4701,7 @@ export interface components {
             run_id?: string;
             /** Format: date-time */
             at: string;
+            /** @description What happened, as in submitted, moved, note or lease_taken. question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue */
             kind: string;
             station?: string;
             actor: string;
@@ -5019,9 +5171,9 @@ export interface components {
          * @description What waits; later phases add kinds, which clients that do not know them show as a generic row
          * @enum {string}
          */
-        InboxEntryKind: "decision" | "andon" | "rework_warning" | "blocked" | "expedite";
+        InboxEntryKind: "decision" | "question" | "andon" | "rework_warning" | "blocked" | "expedite";
         InboxEntry: {
-            /** @description "<kind>:<id of what waits>": decision:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station> */
+            /** @description "<kind>:<id of what waits>": decision:, question:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station> */
             id: string;
             kind: components["schemas"]["InboxEntryKind"];
             factory: {
@@ -5031,7 +5183,7 @@ export interface components {
             };
             /**
              * Format: date-time
-             * @description Since when it waits: the item's last change (decision, blocked), its creation (expedite), the pull (andon), now (rework_warning)
+             * @description Since when it waits: the item's last change (decision, question, blocked), its creation (expedite), the pull (andon), now (rework_warning)
              */
             since: string;
             /** @description The item it is about, or null for an entry that is about no item */
@@ -5044,6 +5196,8 @@ export interface components {
             approval: components["schemas"]["ApprovalBrief"] | null;
             /** @description Why a blocked item is blocked; null for other kinds */
             blocked: components["schemas"]["InboxBlocked"] | null;
+            /** @description A question entry's open question; absent or null for other kinds */
+            question?: components["schemas"]["ItemQuestion"] | null;
             /** @description The open pull of an andon entry; null for other kinds */
             andon: components["schemas"]["AndonPull"] | null;
             /** @description The gate tally of a rework warning; null for other kinds */
@@ -6552,6 +6706,65 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrgSettings"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getOrgPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The policy and the facts */
+            200: {
+                headers: {
+                    /** @description The policy's revision, quoted ("3"), the If-Match of putOrgPolicy */
+                    ETag: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgPolicyView"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    putOrgPolicy: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The entity tag the write is based on, quoted ("<etag>"); writes without it are 428 */
+                "If-Match"?: components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrgPolicyInput"];
+            };
+        };
+        responses: {
+            /** @description The policy after the save, at its next revision */
+            200: {
+                headers: {
+                    /** @description The policy's new revision, quoted */
+                    ETag: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgPolicyView"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -9201,6 +9414,37 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description The item after the decision */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    answerItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ItemAnswer"];
+            };
+        };
+        responses: {
+            /** @description The item after the answer */
             200: {
                 headers: {
                     [name: string]: unknown;

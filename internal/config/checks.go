@@ -48,6 +48,9 @@ const (
 	codeCheckRunMissing = "check-run-missing"
 	codeBufferOffDrum   = "buffer-not-at-constraint"
 
+	codeIntegrationLandAtNotMerge = "integration-land-at-not-merge"
+	codeIntegrationWithoutMerge   = "integration-without-merge-station"
+
 	codeDuplicateName     = "duplicate-name"
 	codeUnknownAgent      = "unknown-agent"
 	codeUnknownSkill      = "unknown-skill"
@@ -392,6 +395,7 @@ func (c *checker) capacity(i int, s Station) {
 
 func (c *checker) flowAndLearning() {
 	c.constraint()
+	c.integration()
 
 	l := c.f.Spec.Learning
 	if l == nil || l.Librarian == nil {
@@ -438,6 +442,42 @@ func (c *checker) constraint() {
 				"station %s: a buffer matters only in front of the constraint, %s", s.ID, fl.Constraint)
 		}
 	}
+}
+
+// integration checks flow.assemblies.integration: landAt names an agent station with a gate and
+// action merge, where the integration branch lands, and mode branch needs a merge station on the
+// line (ADR 0033).
+func (c *checker) integration() {
+	fl := c.f.Spec.Board.Flow
+	if fl == nil || fl.Assemblies == nil || fl.Assemblies.Integration == nil {
+		return
+	}
+
+	in, stations := fl.Assemblies.Integration, c.f.Spec.Board.Stations
+	base := at("spec", "board", "flow", "assemblies", "integration")
+
+	if in.LandAt != "" {
+		switch i := slices.IndexFunc(stations, func(s Station) bool { return s.ID == in.LandAt }); {
+		case i < 0:
+			c.errorf(checkReferences, codeUnknownStation, append(base, "landAt"),
+				"flow.assemblies.integration.landAt %q is not a station", in.LandAt)
+		case !landing(stations[i]):
+			c.errorf(checkLine, codeIntegrationLandAtNotMerge, append(base, "landAt"),
+				"flow.assemblies.integration.landAt %q must be an agent station with a gate and action merge", in.LandAt)
+		}
+	}
+
+	merges := slices.ContainsFunc(stations, func(s Station) bool { return s.Action == string(domain.ActionMerge) })
+	if in.Mode == string(domain.IntegrationModeBranch) && !merges {
+		c.errorf(checkLine, codeIntegrationWithoutMerge, append(base, "mode"),
+			"flow.assemblies.integration.mode branch needs a station with action merge, where the integration branch lands")
+	}
+}
+
+// landing reports whether an integration branch can land at s: an agent station whose gate's
+// approval merges.
+func landing(s Station) bool {
+	return s.Kind == string(domain.KindAgent) && s.Gate != nil && s.Action == string(domain.ActionMerge)
 }
 
 // tools refuses a runtime.tools entry that is not a mise tool spec: the box installs each one.

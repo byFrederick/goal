@@ -51,7 +51,8 @@ type InboxQuery struct {
 	Limit int
 }
 
-// inboxKinds orders the inbox's entries by kind; a kind not listed comes last.
+// inboxKinds orders the inbox's entries by kind; a kind not listed comes last, and questions rank
+// with decisions (kindRank).
 var inboxKinds = []gen.InboxEntryKind{
 	gen.InboxEntryKindDecision, gen.InboxEntryKindAndon, gen.InboxEntryKindReworkWarning, gen.InboxEntryKindBlocked,
 	gen.InboxEntryKindExpedite,
@@ -309,10 +310,10 @@ func (s *server) GetInbox(ctx context.Context, req gen.GetInboxRequestObject) (g
 			return nil, err
 		}
 
-		// A decision is the caller's only where they may decide; the rest is for whoever sees
+		// A decision or a question is the caller's only where they may decide; the rest is for whoever sees
 		// the factory.
 		for _, e := range got {
-			if e.Kind != gen.InboxEntryKindDecision || s.ask(ctx, permItemDecide, domain.FactoryID(e.Factory.Id)) == nil {
+			if !decides(e.Kind) || s.ask(ctx, permItemDecide, domain.FactoryID(e.Factory.Id)) == nil {
 				entries = append(entries, e)
 			}
 		}
@@ -330,7 +331,16 @@ func (s *server) GetInbox(ctx context.Context, req gen.GetInboxRequestObject) (g
 	return out, nil
 }
 
+// decides reports whether an entry of kind k asks for a decision about an item (item:decide).
+func decides(k gen.InboxEntryKind) bool {
+	return k == gen.InboxEntryKindDecision || k == gen.InboxEntryKindQuestion
+}
+
 func kindRank(k gen.InboxEntryKind) int {
+	if k == gen.InboxEntryKindQuestion {
+		k = gen.InboxEntryKindDecision
+	}
+
 	if i := slices.Index(inboxKinds, k); i >= 0 {
 		return i
 	}

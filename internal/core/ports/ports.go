@@ -146,6 +146,15 @@ type Store interface {
 	// assembly ErrConflict; an unknown item ErrNotFound. A refused part writes nothing.
 	AddPart(ctx context.Context, n NewAssemblyPart) (domain.Item, domain.Parts, error)
 
+	// SetIntegrationBranch sets root's integration branch and the station where it lands when its
+	// last part closes, once, in one update: set is true when this call set them and false when
+	// root already had a branch, which neither changes (they stay after the assembly closes and if
+	// the line goes back to the default branch). An empty branch or landAt is domain.ErrInvalid,
+	// an unknown item ErrNotFound. While the assembly is open, closeAssembly then moves it, with a
+	// part done and not cancelled by a person, to landAt in state queued with an
+	// assembly_landing event instead of closing it done.
+	SetIntegrationBranch(ctx context.Context, root domain.ItemID, branch, landAt string, at time.Time) (set bool, err error)
+
 	// Parts returns an assembly's parts in plan order and how many are done. An unknown item has
 	// none.
 	Parts(ctx context.Context, parent domain.ItemID) (domain.Parts, error)

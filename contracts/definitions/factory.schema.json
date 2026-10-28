@@ -551,7 +551,7 @@
             },
             "assemblies": {
               "type": "object",
-              "description": "How runs keep item branches fresh, what a merge conflict does, whether items that edit the same files are built together whether a station's plan becomes an assembly and whether later runs hear what changed since a plan. Omitted keys take their defaults.",
+              "description": "How runs keep item branches fresh, what a merge conflict does, whether items that edit the same files are built together whether a station's plan becomes an assembly, whether later runs hear what changed since a plan and whether an assembly's parts merge into an integration branch. Omitted keys take their defaults.",
               "additionalProperties": false,
               "properties": {
                 "freshBase": { "enum": ["rebase", "merge"], "description": "How a run brings an existing item branch up to date with the default branch; default rebase." },
@@ -567,6 +567,30 @@
                 "changedSince": {
                   "type": "boolean",
                   "description": "true: a station with context [inflight] that finishes an item records the default branch's head of runtime.repository as its base commit (a plan's parts inherit it), and every later run of the item gets a Changed since your plan section listing the commits since then that changed files its paths match. false (the default): nothing is recorded."
+                },
+                "integration": {
+                  "type": "object",
+                  "description": "Whether an assembly's parts merge into one integration branch, goal/a<root number>-<root title slug>, that lands on the default branch at a gate (ADR 0033). Omitted keys take their defaults.",
+                  "additionalProperties": false,
+                  "properties": {
+                    "mode": {
+                      "enum": ["trunk", "branch"],
+                      "description": "trunk (the default): each part merges into the default branch. branch: an assembly's parts merge into its integration branch, which lands at the landing station; the line needs a station with action merge."
+                    },
+                    "refresh": {
+                      "enum": ["onLand", "eachPart"],
+                      "description": "When the integration branch takes in the default branch: onLand (the default), when it lands, or eachPart, before each part runs."
+                    },
+                    "minParts": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "The fewest parts an assembly needs for an integration branch; one with fewer stays on trunk. Default 0."
+                    },
+                    "landAt": {
+                      "type": "string",
+                      "description": "The station where the integration branch lands: an agent station with a gate and action merge. Default: the first station with action merge after the station whose plan made the assembly."
+                    }
+                  }
                 }
               }
             },

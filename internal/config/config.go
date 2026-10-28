@@ -436,13 +436,25 @@ type Retry struct {
 // does (rework or human) and whether items whose files overlap wait for each other (serialize
 // or allow), whether a station's plan becomes an assembly with its parts (materialize) and
 // whether later runs hear what changed on the default branch since a plan (changedSince); an
-// unset key takes its default, rebase, rework, serialize, true and false.
+// unset key takes its default, rebase, rework, serialize, true and false. Integration says
+// whether an assembly's parts merge into an integration branch (ADR 0033).
 type Assemblies struct {
-	FreshBase    string `json:"freshBase,omitempty"`
-	OnConflict   string `json:"onConflict,omitempty"`
-	Overlap      string `json:"overlap,omitempty"`
-	Materialize  *bool  `json:"materialize,omitempty"`
-	ChangedSince bool   `json:"changedSince,omitempty"`
+	FreshBase    string       `json:"freshBase,omitempty"`
+	OnConflict   string       `json:"onConflict,omitempty"`
+	Overlap      string       `json:"overlap,omitempty"`
+	Materialize  *bool        `json:"materialize,omitempty"`
+	ChangedSince bool         `json:"changedSince,omitempty"`
+	Integration  *Integration `json:"integration,omitempty"`
+}
+
+// Integration is board.flow.assemblies.integration: mode trunk or branch, refresh onLand or
+// eachPart, the fewest parts for an integration branch and the station where it lands; an unset
+// key takes its default, trunk, onLand, 0 and the first merge station after the plan.
+type Integration struct {
+	Mode     string `json:"mode,omitempty"`
+	Refresh  string `json:"refresh,omitempty"`
+	MinParts int    `json:"minParts,omitempty"`
+	LandAt   string `json:"landAt,omitempty"`
 }
 
 // Targets are what the line aims for; an unset target is zero.
