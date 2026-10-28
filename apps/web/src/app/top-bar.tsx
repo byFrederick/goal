@@ -70,6 +70,7 @@ const factoryRoutePages: Record<string, string> = {
   '/o/$org/f/$factory/definition/$section': 'definition',
   '/o/$org/f/$factory/intake/$trigger': 'intake',
   '/o/$org/f/$factory/settings': 'settings',
+  '/o/$org/f/$factory/jonah/evals': 'jonah',
 };
 
 /** The organization page each organization route shows, by route id. */
