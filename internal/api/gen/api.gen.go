@@ -4643,6 +4643,18 @@ type NewPlatformAdmin struct {
 	Email string `json:"email"`
 }
 
+// NewSavedView defines model for NewSavedView.
+type NewSavedView struct {
+	// Filters The Items page's URL search params, each key with its values in order: at most 20 keys, 20 values per key and 200 characters per value
+	Filters SavedViewFilters `json:"filters"`
+
+	// Name 1 to 60 characters, trimmed
+	Name string `json:"name"`
+
+	// Shared Every reader of the factory sees it; false: only its owner
+	Shared bool `json:"shared"`
+}
+
 // NewWebhookEndpoint defines model for NewWebhookEndpoint.
 type NewWebhookEndpoint struct {
 	// Kind How requests are signed and name their event. generic: X-Goal-Signature: sha256=<hex HMAC-SHA256 of the body> and the event in the body's event field; github: GitHub's X-Hub-Signature-256 and X-GitHub-Event.
@@ -5299,6 +5311,38 @@ type SaveResult struct {
 	// Sha256 A file save's new sha256
 	Sha256    *string   `json:"sha256,omitempty"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// SavedView defines model for SavedView.
+type SavedView struct {
+	CreatedAt time.Time `json:"created_at"`
+
+	// Filters The Items page's URL search params, each key with its values in order: at most 20 keys, 20 values per key and 200 characters per value
+	Filters SavedViewFilters `json:"filters"`
+	Id      string           `json:"id"`
+
+	// Mine The caller made it
+	Mine      bool      `json:"mine"`
+	Name      string    `json:"name"`
+	Shared    bool      `json:"shared"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// SavedViewChange defines model for SavedViewChange.
+type SavedViewChange struct {
+	// Filters The Items page's URL search params, each key with its values in order: at most 20 keys, 20 values per key and 200 characters per value
+	Filters SavedViewFilters `json:"filters"`
+
+	// Name 1 to 60 characters, trimmed
+	Name string `json:"name"`
+}
+
+// SavedViewFilters The Items page's URL search params, each key with its values in order: at most 20 keys, 20 values per key and 200 characters per value
+type SavedViewFilters map[string][]string
+
+// SavedViewList defines model for SavedViewList.
+type SavedViewList struct {
+	Views []SavedView `json:"views"`
 }
 
 // SearchItem defines model for SearchItem.
@@ -6070,6 +6114,9 @@ type RangeFrom = openapi_types.Date
 // RangeTo defines model for RangeTo.
 type RangeTo = openapi_types.Date
 
+// SavedViewRef defines model for SavedViewRef.
+type SavedViewRef = string
+
 // SectionRef defines model for SectionRef.
 type SectionRef = Section
 
@@ -6515,6 +6562,12 @@ type UpdateJudgeJSONRequestBody = JudgeWrite
 
 // RestoreVersionJSONRequestBody defines body for RestoreVersion for application/json ContentType.
 type RestoreVersionJSONRequestBody = RestoreRequest
+
+// CreateSavedViewJSONRequestBody defines body for CreateSavedView for application/json ContentType.
+type CreateSavedViewJSONRequestBody = NewSavedView
+
+// UpdateSavedViewJSONRequestBody defines body for UpdateSavedView for application/json ContentType.
+type UpdateSavedViewJSONRequestBody = SavedViewChange
 
 // CreateWebhookEndpointJSONRequestBody defines body for CreateWebhookEndpoint for application/json ContentType.
 type CreateWebhookEndpointJSONRequestBody = NewWebhookEndpoint
@@ -7765,6 +7818,56 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/versions/{version}/restore (the `RestoreVersion` operationId).
 	RestoreVersion(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, body RestoreVersionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListSavedViews The factory's shared views and the caller's own
+	//
+	// The shared views first, then the caller's personal views, each by name (case ignored). Never another person's personal view; an API key or a personal token sees only the shared views.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/views (the `ListSavedViews` operationId).
+	ListSavedViews(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateSavedViewWithBody Save a view
+	//
+	// A personal view of the caller, or a shared view of the factory, which also needs factory:manage (403 forbidden without it). 403 person-required for an API key, a personal token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60 characters, over 20 filters, over 20 values in one or a value over 200 characters; 409 view-name-taken for a name the caller's personal views (personal) or the factory's shared views (shared) already use, case ignored.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/views (the `CreateSavedView` operationId).
+	CreateSavedViewWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateSavedView Save a view
+	//
+	// A personal view of the caller, or a shared view of the factory, which also needs factory:manage (403 forbidden without it). 403 person-required for an API key, a personal token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60 characters, over 20 filters, over 20 values in one or a value over 200 characters; 409 view-name-taken for a name the caller's personal views (personal) or the factory's shared views (shared) already use, case ignored.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/views (the `CreateSavedView` operationId).
+	CreateSavedView(ctx context.Context, org OrgRef, factory FactoryRef, body CreateSavedViewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteSavedView Delete a view
+	//
+	// A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/views/{view} (the `DeleteSavedView` operationId).
+	DeleteSavedView(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateSavedViewWithBody Rename a view and replace its filters
+	//
+	// Whether a view is shared is fixed when it is created. A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included); 400 invalid-view and 409 view-name-taken as createSavedView.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/factories/{factory}/views/{view} (the `UpdateSavedView` operationId).
+	UpdateSavedViewWithBody(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateSavedView Rename a view and replace its filters
+	//
+	// Whether a view is shared is fixed when it is created. A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included); 400 invalid-view and 409 view-name-taken as createSavedView.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/factories/{factory}/views/{view} (the `UpdateSavedView` operationId).
+	UpdateSavedView(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, body UpdateSavedViewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListWebhookEndpoints The factory's webhook endpoints
 	//
@@ -10450,6 +10553,116 @@ func (c *Client) RestoreVersionWithBody(ctx context.Context, org OrgRef, factory
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/versions/{version}/restore (the `RestoreVersion` operationId).
 func (c *Client) RestoreVersion(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, body RestoreVersionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRestoreVersionRequest(c.Server, org, factory, version, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListSavedViews The factory's shared views and the caller's own
+//
+// The shared views first, then the caller's personal views, each by name (case ignored). Never another person's personal view; an API key or a personal token sees only the shared views.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/views (the `ListSavedViews` operationId).
+func (c *Client) ListSavedViews(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListSavedViewsRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateSavedViewWithBody Save a view
+//
+// A personal view of the caller, or a shared view of the factory, which also needs factory:manage (403 forbidden without it). 403 person-required for an API key, a personal token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60 characters, over 20 filters, over 20 values in one or a value over 200 characters; 409 view-name-taken for a name the caller's personal views (personal) or the factory's shared views (shared) already use, case ignored.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/views (the `CreateSavedView` operationId).
+func (c *Client) CreateSavedViewWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateSavedViewRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateSavedView Save a view
+//
+// A personal view of the caller, or a shared view of the factory, which also needs factory:manage (403 forbidden without it). 403 person-required for an API key, a personal token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60 characters, over 20 filters, over 20 values in one or a value over 200 characters; 409 view-name-taken for a name the caller's personal views (personal) or the factory's shared views (shared) already use, case ignored.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/views (the `CreateSavedView` operationId).
+func (c *Client) CreateSavedView(ctx context.Context, org OrgRef, factory FactoryRef, body CreateSavedViewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateSavedViewRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteSavedView Delete a view
+//
+// A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included).
+//
+// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/views/{view} (the `DeleteSavedView` operationId).
+func (c *Client) DeleteSavedView(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteSavedViewRequest(c.Server, org, factory, view)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateSavedViewWithBody Rename a view and replace its filters
+//
+// Whether a view is shared is fixed when it is created. A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included); 400 invalid-view and 409 view-name-taken as createSavedView.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /v1/orgs/{org}/factories/{factory}/views/{view} (the `UpdateSavedView` operationId).
+func (c *Client) UpdateSavedViewWithBody(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateSavedViewRequestWithBody(c.Server, org, factory, view, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateSavedView Rename a view and replace its filters
+//
+// Whether a view is shared is fixed when it is created. A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included); 400 invalid-view and 409 view-name-taken as createSavedView.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /v1/orgs/{org}/factories/{factory}/views/{view} (the `UpdateSavedView` operationId).
+func (c *Client) UpdateSavedView(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, body UpdateSavedViewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateSavedViewRequest(c.Server, org, factory, view, body)
 	if err != nil {
 		return nil, err
 	}
@@ -16781,6 +16994,210 @@ func NewRestoreVersionRequestWithBody(server string, org OrgRef, factory Factory
 	return req, nil
 }
 
+// NewListSavedViewsRequest constructs an http.Request for the ListSavedViews method
+func NewListSavedViewsRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/views", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateSavedViewRequest calls the generic CreateSavedView builder with application/json body
+func NewCreateSavedViewRequest(server string, org OrgRef, factory FactoryRef, body CreateSavedViewJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateSavedViewRequestWithBody(server, org, factory, "application/json", bodyReader)
+}
+
+// NewCreateSavedViewRequestWithBody constructs an http.Request for the CreateSavedView method, with any body, and a specified content type
+func NewCreateSavedViewRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/views", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteSavedViewRequest constructs an http.Request for the DeleteSavedView method
+func NewDeleteSavedViewRequest(server string, org OrgRef, factory FactoryRef, view SavedViewRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "view", view, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/views/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateSavedViewRequest calls the generic UpdateSavedView builder with application/json body
+func NewUpdateSavedViewRequest(server string, org OrgRef, factory FactoryRef, view SavedViewRef, body UpdateSavedViewJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateSavedViewRequestWithBody(server, org, factory, view, "application/json", bodyReader)
+}
+
+// NewUpdateSavedViewRequestWithBody constructs an http.Request for the UpdateSavedView method, with any body, and a specified content type
+func NewUpdateSavedViewRequestWithBody(server string, org OrgRef, factory FactoryRef, view SavedViewRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "view", view, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/views/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewListWebhookEndpointsRequest constructs an http.Request for the ListWebhookEndpoints method
 func NewListWebhookEndpointsRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
 	var err error
@@ -21342,6 +21759,60 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/versions/{version}/restore (the `RestoreVersion` operationId).
 	RestoreVersionWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, version VersionSelector, body RestoreVersionJSONRequestBody, reqEditors ...RequestEditorFn) (*RestoreVersionResponse, error)
+
+	// ListSavedViewsWithResponse The factory's shared views and the caller's own
+	//
+	// The shared views first, then the caller's personal views, each by name (case ignored). Never another person's personal view; an API key or a personal token sees only the shared views.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/views (the `ListSavedViews` operationId).
+	ListSavedViewsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListSavedViewsResponse, error)
+
+	// CreateSavedViewWithBodyWithResponse Save a view
+	//
+	// A personal view of the caller, or a shared view of the factory, which also needs factory:manage (403 forbidden without it). 403 person-required for an API key, a personal token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60 characters, over 20 filters, over 20 values in one or a value over 200 characters; 409 view-name-taken for a name the caller's personal views (personal) or the factory's shared views (shared) already use, case ignored.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/views (the `CreateSavedView` operationId).
+	CreateSavedViewWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSavedViewResponse, error)
+
+	// CreateSavedViewWithResponse Save a view
+	//
+	// A personal view of the caller, or a shared view of the factory, which also needs factory:manage (403 forbidden without it). 403 person-required for an API key, a personal token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60 characters, over 20 filters, over 20 values in one or a value over 200 characters; 409 view-name-taken for a name the caller's personal views (personal) or the factory's shared views (shared) already use, case ignored.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/views (the `CreateSavedView` operationId).
+	CreateSavedViewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body CreateSavedViewJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSavedViewResponse, error)
+
+	// DeleteSavedViewWithResponse Delete a view
+	//
+	// A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included).
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/views/{view} (the `DeleteSavedView` operationId).
+	DeleteSavedViewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, reqEditors ...RequestEditorFn) (*DeleteSavedViewResponse, error)
+
+	// UpdateSavedViewWithBodyWithResponse Rename a view and replace its filters
+	//
+	// Whether a view is shared is fixed when it is created. A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included); 400 invalid-view and 409 view-name-taken as createSavedView.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/factories/{factory}/views/{view} (the `UpdateSavedView` operationId).
+	UpdateSavedViewWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateSavedViewResponse, error)
+
+	// UpdateSavedViewWithResponse Rename a view and replace its filters
+	//
+	// Whether a view is shared is fixed when it is created. A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included); 400 invalid-view and 409 view-name-taken as createSavedView.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/factories/{factory}/views/{view} (the `UpdateSavedView` operationId).
+	UpdateSavedViewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, body UpdateSavedViewJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateSavedViewResponse, error)
 
 	// ListWebhookEndpointsWithResponse The factory's webhook endpoints
 	//
@@ -26315,6 +26786,191 @@ func (r RestoreVersionResponse) ContentType() string {
 	return ""
 }
 
+type ListSavedViewsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SavedViewList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListSavedViewsResponse) GetJSON200() *SavedViewList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListSavedViewsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListSavedViewsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListSavedViewsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListSavedViewsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListSavedViewsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateSavedViewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *SavedView
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateSavedViewResponse) GetJSON201() *SavedView {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateSavedViewResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateSavedViewResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateSavedViewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateSavedViewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateSavedViewResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DeleteSavedViewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r DeleteSavedViewResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteSavedViewResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteSavedViewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteSavedViewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteSavedViewResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateSavedViewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SavedView
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UpdateSavedViewResponse) GetJSON200() *SavedView {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r UpdateSavedViewResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateSavedViewResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateSavedViewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateSavedViewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateSavedViewResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListWebhookEndpointsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -31249,6 +31905,96 @@ func (c *ClientWithResponses) RestoreVersionWithResponse(ctx context.Context, or
 	return ParseRestoreVersionResponse(rsp)
 }
 
+// ListSavedViewsWithResponse The factory's shared views and the caller's own
+//
+// The shared views first, then the caller's personal views, each by name (case ignored). Never another person's personal view; an API key or a personal token sees only the shared views.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/views (the `ListSavedViews` operationId).
+func (c *ClientWithResponses) ListSavedViewsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListSavedViewsResponse, error) {
+	rsp, err := c.ListSavedViews(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListSavedViewsResponse(rsp)
+}
+
+// CreateSavedViewWithBodyWithResponse Save a view
+//
+// A personal view of the caller, or a shared view of the factory, which also needs factory:manage (403 forbidden without it). 403 person-required for an API key, a personal token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60 characters, over 20 filters, over 20 values in one or a value over 200 characters; 409 view-name-taken for a name the caller's personal views (personal) or the factory's shared views (shared) already use, case ignored.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/views (the `CreateSavedView` operationId).
+func (c *ClientWithResponses) CreateSavedViewWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSavedViewResponse, error) {
+	rsp, err := c.CreateSavedViewWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateSavedViewResponse(rsp)
+}
+
+// CreateSavedViewWithResponse Save a view
+//
+// A personal view of the caller, or a shared view of the factory, which also needs factory:manage (403 forbidden without it). 403 person-required for an API key, a personal token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60 characters, over 20 filters, over 20 values in one or a value over 200 characters; 409 view-name-taken for a name the caller's personal views (personal) or the factory's shared views (shared) already use, case ignored.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/views (the `CreateSavedView` operationId).
+func (c *ClientWithResponses) CreateSavedViewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body CreateSavedViewJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSavedViewResponse, error) {
+	rsp, err := c.CreateSavedView(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateSavedViewResponse(rsp)
+}
+
+// DeleteSavedViewWithResponse Delete a view
+//
+// A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included).
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/views/{view} (the `DeleteSavedView` operationId).
+func (c *ClientWithResponses) DeleteSavedViewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, reqEditors ...RequestEditorFn) (*DeleteSavedViewResponse, error) {
+	rsp, err := c.DeleteSavedView(ctx, org, factory, view, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteSavedViewResponse(rsp)
+}
+
+// UpdateSavedViewWithBodyWithResponse Rename a view and replace its filters
+//
+// Whether a view is shared is fixed when it is created. A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included); 400 invalid-view and 409 view-name-taken as createSavedView.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /v1/orgs/{org}/factories/{factory}/views/{view} (the `UpdateSavedView` operationId).
+func (c *ClientWithResponses) UpdateSavedViewWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateSavedViewResponse, error) {
+	rsp, err := c.UpdateSavedViewWithBody(ctx, org, factory, view, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateSavedViewResponse(rsp)
+}
+
+// UpdateSavedViewWithResponse Rename a view and replace its filters
+//
+// Whether a view is shared is fixed when it is created. A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included); 400 invalid-view and 409 view-name-taken as createSavedView.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /v1/orgs/{org}/factories/{factory}/views/{view} (the `UpdateSavedView` operationId).
+func (c *ClientWithResponses) UpdateSavedViewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, body UpdateSavedViewJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateSavedViewResponse, error) {
+	rsp, err := c.UpdateSavedView(ctx, org, factory, view, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateSavedViewResponse(rsp)
+}
+
 // ListWebhookEndpointsWithResponse The factory's webhook endpoints
 //
 // By name, each with its address, kind, the label of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret.
@@ -35479,6 +36225,134 @@ func ParseRestoreVersionResponse(rsp *http.Response) (*RestoreVersionResponse, e
 	return response, nil
 }
 
+// ParseListSavedViewsResponse parses an HTTP response from a ListSavedViewsWithResponse call
+func ParseListSavedViewsResponse(rsp *http.Response) (*ListSavedViewsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListSavedViewsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SavedViewList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateSavedViewResponse parses an HTTP response from a CreateSavedViewWithResponse call
+func ParseCreateSavedViewResponse(rsp *http.Response) (*CreateSavedViewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateSavedViewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest SavedView
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteSavedViewResponse parses an HTTP response from a DeleteSavedViewWithResponse call
+func ParseDeleteSavedViewResponse(rsp *http.Response) (*DeleteSavedViewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteSavedViewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateSavedViewResponse parses an HTTP response from a UpdateSavedViewWithResponse call
+func ParseUpdateSavedViewResponse(rsp *http.Response) (*UpdateSavedViewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateSavedViewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SavedView
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListWebhookEndpointsResponse parses an HTTP response from a ListWebhookEndpointsWithResponse call
 func ParseListWebhookEndpointsResponse(rsp *http.Response) (*ListWebhookEndpointsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -38052,6 +38926,18 @@ type ServerInterface interface {
 	// RestoreVersion Run an older published version again (rollback)
 	// (POST /v1/orgs/{org}/factories/{factory}/versions/{version}/restore)
 	RestoreVersion(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, version VersionSelector)
+	// ListSavedViews The factory's shared views and the caller's own
+	// (GET /v1/orgs/{org}/factories/{factory}/views)
+	ListSavedViews(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// CreateSavedView Save a view
+	// (POST /v1/orgs/{org}/factories/{factory}/views)
+	CreateSavedView(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// DeleteSavedView Delete a view
+	// (DELETE /v1/orgs/{org}/factories/{factory}/views/{view})
+	DeleteSavedView(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, view SavedViewRef)
+	// UpdateSavedView Rename a view and replace its filters
+	// (PATCH /v1/orgs/{org}/factories/{factory}/views/{view})
+	UpdateSavedView(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, view SavedViewRef)
 	// ListWebhookEndpoints The factory's webhook endpoints
 	// (GET /v1/orgs/{org}/factories/{factory}/webhooks)
 	ListWebhookEndpoints(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
@@ -42017,6 +42903,164 @@ func (siw *ServerInterfaceWrapper) RestoreVersion(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// ListSavedViews operation middleware
+func (siw *ServerInterfaceWrapper) ListSavedViews(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSavedViews(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateSavedView operation middleware
+func (siw *ServerInterfaceWrapper) CreateSavedView(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateSavedView(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteSavedView operation middleware
+func (siw *ServerInterfaceWrapper) DeleteSavedView(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "view" -------------
+	var view SavedViewRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "view", r.PathValue("view"), &view, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "view", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteSavedView(w, r, org, factory, view)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateSavedView operation middleware
+func (siw *ServerInterfaceWrapper) UpdateSavedView(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "view" -------------
+	var view SavedViewRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "view", r.PathValue("view"), &view, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "view", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateSavedView(w, r, org, factory, view)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListWebhookEndpoints operation middleware
 func (siw *ServerInterfaceWrapper) ListWebhookEndpoints(w http.ResponseWriter, r *http.Request) {
 
@@ -44910,6 +45954,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/rotate", wrapper.RotateWebhookSecret)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries", wrapper.ListWebhookDeliveries)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries/{delivery}", wrapper.GetWebhookDelivery)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/views", wrapper.ListSavedViews)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/views", wrapper.CreateSavedView)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/views/{view}", wrapper.DeleteSavedView)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/views/{view}", wrapper.UpdateSavedView)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/stream", wrapper.StreamEvents)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}", wrapper.GetItem)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/events", wrapper.ListItemEvents)
@@ -48559,6 +49607,164 @@ func (response RestoreVersiondefaultApplicationProblemPlusJSONResponse) VisitRes
 	return err
 }
 
+type ListSavedViewsRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type ListSavedViewsResponseObject interface {
+	VisitListSavedViewsResponse(w http.ResponseWriter) error
+}
+
+type ListSavedViews200JSONResponse SavedViewList
+
+func (response ListSavedViews200JSONResponse) VisitListSavedViewsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSavedViewsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListSavedViewsdefaultApplicationProblemPlusJSONResponse) VisitListSavedViewsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSavedViewRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Body    *CreateSavedViewJSONRequestBody
+}
+
+type CreateSavedViewResponseObject interface {
+	VisitCreateSavedViewResponse(w http.ResponseWriter) error
+}
+
+type CreateSavedView201JSONResponse SavedView
+
+func (response CreateSavedView201JSONResponse) VisitCreateSavedViewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSavedViewdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateSavedViewdefaultApplicationProblemPlusJSONResponse) VisitCreateSavedViewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteSavedViewRequestObject struct {
+	Org     OrgRef       `json:"org"`
+	Factory FactoryRef   `json:"factory"`
+	View    SavedViewRef `json:"view"`
+}
+
+type DeleteSavedViewResponseObject interface {
+	VisitDeleteSavedViewResponse(w http.ResponseWriter) error
+}
+
+type DeleteSavedView204Response struct {
+}
+
+func (response DeleteSavedView204Response) VisitDeleteSavedViewResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteSavedViewdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteSavedViewdefaultApplicationProblemPlusJSONResponse) VisitDeleteSavedViewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSavedViewRequestObject struct {
+	Org     OrgRef       `json:"org"`
+	Factory FactoryRef   `json:"factory"`
+	View    SavedViewRef `json:"view"`
+	Body    *UpdateSavedViewJSONRequestBody
+}
+
+type UpdateSavedViewResponseObject interface {
+	VisitUpdateSavedViewResponse(w http.ResponseWriter) error
+}
+
+type UpdateSavedView200JSONResponse SavedView
+
+func (response UpdateSavedView200JSONResponse) VisitUpdateSavedViewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSavedViewdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UpdateSavedViewdefaultApplicationProblemPlusJSONResponse) VisitUpdateSavedViewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListWebhookEndpointsRequestObject struct {
 	Org     OrgRef     `json:"org"`
 	Factory FactoryRef `json:"factory"`
@@ -51738,6 +52944,18 @@ type StrictServerInterface interface {
 	// RestoreVersion Run an older published version again (rollback)
 	// (POST /v1/orgs/{org}/factories/{factory}/versions/{version}/restore)
 	RestoreVersion(ctx context.Context, request RestoreVersionRequestObject) (RestoreVersionResponseObject, error)
+	// ListSavedViews The factory's shared views and the caller's own
+	// (GET /v1/orgs/{org}/factories/{factory}/views)
+	ListSavedViews(ctx context.Context, request ListSavedViewsRequestObject) (ListSavedViewsResponseObject, error)
+	// CreateSavedView Save a view
+	// (POST /v1/orgs/{org}/factories/{factory}/views)
+	CreateSavedView(ctx context.Context, request CreateSavedViewRequestObject) (CreateSavedViewResponseObject, error)
+	// DeleteSavedView Delete a view
+	// (DELETE /v1/orgs/{org}/factories/{factory}/views/{view})
+	DeleteSavedView(ctx context.Context, request DeleteSavedViewRequestObject) (DeleteSavedViewResponseObject, error)
+	// UpdateSavedView Rename a view and replace its filters
+	// (PATCH /v1/orgs/{org}/factories/{factory}/views/{view})
+	UpdateSavedView(ctx context.Context, request UpdateSavedViewRequestObject) (UpdateSavedViewResponseObject, error)
 	// ListWebhookEndpoints The factory's webhook endpoints
 	// (GET /v1/orgs/{org}/factories/{factory}/webhooks)
 	ListWebhookEndpoints(ctx context.Context, request ListWebhookEndpointsRequestObject) (ListWebhookEndpointsResponseObject, error)
@@ -54552,6 +55770,130 @@ func (sh *strictHandler) RestoreVersion(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RestoreVersionResponseObject); ok {
 		if err := validResponse.VisitRestoreVersionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListSavedViews operation middleware
+func (sh *strictHandler) ListSavedViews(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request ListSavedViewsRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListSavedViews(ctx, request.(ListSavedViewsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListSavedViews")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListSavedViewsResponseObject); ok {
+		if err := validResponse.VisitListSavedViewsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateSavedView operation middleware
+func (sh *strictHandler) CreateSavedView(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request CreateSavedViewRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	var body CreateSavedViewJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateSavedView(ctx, request.(CreateSavedViewRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateSavedView")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateSavedViewResponseObject); ok {
+		if err := validResponse.VisitCreateSavedViewResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteSavedView operation middleware
+func (sh *strictHandler) DeleteSavedView(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, view SavedViewRef) {
+	var request DeleteSavedViewRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.View = view
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteSavedView(ctx, request.(DeleteSavedViewRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteSavedView")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteSavedViewResponseObject); ok {
+		if err := validResponse.VisitDeleteSavedViewResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateSavedView operation middleware
+func (sh *strictHandler) UpdateSavedView(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, view SavedViewRef) {
+	var request UpdateSavedViewRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.View = view
+
+	var body UpdateSavedViewJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateSavedView(ctx, request.(UpdateSavedViewRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateSavedView")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateSavedViewResponseObject); ok {
+		if err := validResponse.VisitUpdateSavedViewResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
