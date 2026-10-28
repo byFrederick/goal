@@ -260,6 +260,14 @@ test('a blank factory: save and exit, resume from the Factories home, delete it'
   await continueTo(page, 'Line').click();
   await expect(page.getByRole('list', { name: 'Stations, in order' }).getByRole('listitem')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Add station' })).toBeVisible();
+
+  // Models: Quality first is pressed while the draft names no default model; Cost first saves and goes in the URL.
+  const preset = page.getByRole('group', { name: 'Model preset' });
+  await expect(preset.getByRole('button', { name: 'Quality first' })).toHaveAttribute('aria-pressed', 'true');
+  await preset.getByRole('button', { name: 'Cost first' }).click();
+  await expect(preset.getByRole('button', { name: 'Cost first' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(saved(page)).toBeVisible();
+  await expect(page).toHaveURL(/[?&]preset=cost\b/);
   await checkPage(page);
 
   await page.getByRole('button', { name: 'Save and exit' }).click();
