@@ -511,10 +511,11 @@ const (
 	verbNote = "note"
 	// verbAnswer answers the question an item's agent asked; not a decision either.
 	verbAnswer = "answer"
-	// verbMove, verbPause and verbLane are a person's controls of an item's flow.
-	verbMove  = "move"
-	verbPause = "pause"
-	verbLane  = "lane"
+	// verbMove, verbPause, verbCancel and verbLane are a person's controls of an item's flow.
+	verbMove   = "move"
+	verbPause  = "pause"
+	verbCancel = "cancel"
+	verbLane   = "lane"
 )
 
 // decide acts on an item: goal approve <item> [--always-allow]; goal reject <item> --reason "..."; goal retry
@@ -885,6 +886,45 @@ func pauseItem(ctx context.Context, out *printer, getenv func(string) string, ar
 	}
 
 	out.printf("✓ paused %s; now %s at %s (goal retry %s resumes it)\n", it.Ref, it.State, it.Station, it.Ref)
+
+	return nil
+}
+
+// cancelItem closes an item for good where it is: goal cancel <item> [--reason "..."] [--factory
+// F]. A run in progress is stopped; its pull request stays open. goald refuses an item that is
+// already done or cancelled.
+func cancelItem(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	fs := newFlags(verbCancel)
+	reason := fs.String("reason", "", "why it is cancelled")
+	factory := fs.String("factory", "", "the factory of a bare item number")
+	org := addOrgFlag(fs)
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 1 {
+		return errUsage
+	}
+
+	c, err := connect(ctx, getenv, *org)
+	if err != nil {
+		return err
+	}
+
+	ref, err := itemRef(ctx, c, pos[0], *factory)
+	if err != nil {
+		return err
+	}
+
+	res, err := c.CancelItemWithResponse(ctx, c.org, ref, gen.CancelRequest{Reason: optional(*reason)})
+	if err != nil {
+		return apiDown(err)
+	}
+
+	it, err := answer(res.JSON200, res.HTTPResponse, conflictOr(res.ApplicationproblemJSON409, res.ApplicationproblemJSONDefault))
+	if err != nil {
+		return err
+	}
+
+	out.printf("✓ cancelled %s\n", it.Ref)
 
 	return nil
 }
