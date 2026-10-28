@@ -343,10 +343,10 @@ function SpendThisWeek({ org, overview }: { org: OrgSummary; overview: FactoryOv
       <Link
         to="/o/$org/spend"
         params={{ org: org.slug }}
-        className="flex items-baseline justify-between gap-2 rounded-cell border border-line bg-card p-3 text-meta text-muted"
+        className="flex flex-wrap items-baseline justify-between gap-x-2 rounded-cell border border-line bg-card p-3 text-meta text-muted"
       >
         <span className="min-w-0 truncate">Spend this week</span>
-        <span className="min-w-0 truncate text-secondary font-semibold text-ink">{spent}</span>
+        <span className="whitespace-nowrap text-secondary font-semibold text-ink">{spent}</span>
       </Link>
     );
   }
@@ -358,9 +358,9 @@ function SpendThisWeek({ org, overview }: { org: OrgSummary; overview: FactoryOv
       params={{ org: org.slug }}
       className="flex flex-col gap-2 rounded-cell border border-line bg-card p-3"
     >
-      <div className="flex items-baseline justify-between gap-2 text-meta text-muted">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-meta text-muted">
         <span className="min-w-0 truncate">Spend this week</span>
-        <span className="min-w-0 truncate text-secondary font-semibold text-ink">{of}</span>
+        <span className="whitespace-nowrap text-secondary font-semibold text-ink">{of}</span>
       </div>
       {/* Decorative: the amount above says the same in words. */}
       <div aria-hidden="true" className="h-1.5 overflow-hidden rounded-chip bg-hover">

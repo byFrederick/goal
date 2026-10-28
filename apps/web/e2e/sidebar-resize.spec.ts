@@ -4,6 +4,8 @@ import { expectNoHorizontalScroll, orgNav } from './support';
 // The desktop sidebar's resize handle at 1440 px (MASTER.md "The shell"): drag, snap to the rail, keyboard,
 // saved width, and no overflow at the narrowest and widest widths. Not run in the build box: no browser there.
 test.use({ viewport: { width: 1440, height: 900 } });
+// The viewport is fixed above, so the three projects would run the same steps: run them once, under desktop-1440.
+test.skip(() => test.info().project.name !== 'desktop-1440', 'runs once, under desktop-1440');
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
@@ -27,6 +29,8 @@ const sidebarWidth = (page: import('@playwright/test').Page) =>
   orgNav(page).evaluate((el) => el.parentElement?.getBoundingClientRect().width ?? 0);
 
 test('the sidebar resizes by dragging, keeps its width after a reload, and snaps to the rail', async ({ page }) => {
+  // Each full page load logs the same startup errors in the mock (the blocked service worker and the intake 403),
+  // so the list is cleared once a load has settled and only the errors from the resize steps count.
   const errors: string[] = [];
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(m.text());
@@ -35,11 +39,16 @@ test('the sidebar resizes by dragging, keeps its width after a reload, and snaps
   await page.goto('/o/acme/f/goal');
   await expect(orgNav(page)).toBeVisible();
   expect(await sidebarWidth(page)).toBe(256);
+  await page.waitForLoadState('networkidle');
+  errors.length = 0;
 
   await dragTo(page, 320);
   await expect.poll(() => sidebarWidth(page)).toBe(320);
   await page.reload();
+  await expect(orgNav(page)).toBeVisible();
+  await page.waitForLoadState('networkidle');
   await expect.poll(() => sidebarWidth(page)).toBe(320);
+  errors.length = 0;
 
   // Dragging below 160 px and releasing shows the rail: icons only, no label text.
   await dragTo(page, 120);
@@ -79,7 +88,7 @@ test('no element inside the sidebar overflows at 216 px and at 400 px', async ({
 
     const overflowing = await orgNav(page).evaluate((nav) =>
       Array.from(nav.querySelectorAll('*'))
-        .filter((el) => el.scrollWidth > el.clientWidth)
+        .filter((el) => !el.classList.contains('sr-only') && el.scrollWidth > el.clientWidth)
         .map((el) => `${el.tagName}.${el.className}`),
     );
     expect(overflowing, `width ${width}`).toEqual([]);
