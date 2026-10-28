@@ -74,7 +74,7 @@ func (d *DraftRequests) Create(ctx context.Context, n domain.NewDraftRequest) (d
 	d.ids++
 	r := domain.DraftRequest{
 		ID: domain.DraftRequestID(fmt.Sprintf("01900000-0000-7000-8000-%012d", d.ids)), Org: org, Factory: n.Factory,
-		Requester: n.Requester, Text: n.Text, Agent: n.Agent, Status: domain.DraftRequestQueued,
+		Requester: storedActor(n.Requester), Text: n.Text, Agent: n.Agent, Status: domain.DraftRequestQueued,
 		CreatedAt: d.now().UTC().Truncate(time.Microsecond),
 	}
 	d.rows = append(d.rows, &draftRequestRow{r: r})
@@ -241,6 +241,15 @@ func (d *DraftRequests) RequeueExpired(_ context.Context, now time.Time) (int, e
 	}
 
 	return n, nil
+}
+
+// storedActor is a as the database gives it back: from its ref alone.
+func storedActor(a domain.Actor) domain.Actor {
+	if s, err := domain.ActorFromRef(a.Ref()); err == nil {
+		return s
+	}
+
+	return a
 }
 
 func cloneDraftRequest(r domain.DraftRequest) domain.DraftRequest {

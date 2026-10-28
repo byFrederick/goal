@@ -101,6 +101,7 @@ func TestDraftRequestResult_Check(t *testing.T) {
 		{"unknown status", func(r *domain.DraftRequestResult) { r.Status = "cancelled" }, false},
 		{"negative cost", func(r *domain.DraftRequestResult) { r.CostUSD = -1 }, false},
 		{"negative turns", func(r *domain.DraftRequestResult) { r.Turns = -1 }, false},
+		{"too many turns", func(r *domain.DraftRequestResult) { r.Turns = domain.MaxDraftRequestTurns + 1 }, false},
 		{"empty path", func(r *domain.DraftRequestResult) { r.ChangedPaths = []string{""} }, false},
 	}
 

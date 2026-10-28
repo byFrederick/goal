@@ -20,6 +20,8 @@ const (
 	MaxDraftRequestError   = 2000
 	// MaxDraftRequestList is the most requests one List returns.
 	MaxDraftRequestList = 100
+	// MaxDraftRequestTurns bounds a result's turn count.
+	MaxDraftRequestTurns = 1_000_000
 )
 
 // DraftRequestID is a draft request's id (a UUID).
@@ -139,8 +141,8 @@ type DraftRequestResult struct {
 	At           time.Time
 }
 
-// Check is ErrInvalid for a status other than done or failed, a negative cost or turn count, or
-// an empty changed path.
+// Check is ErrInvalid for a status other than done or failed, a negative cost, a turn count
+// outside 0 to MaxDraftRequestTurns, or an empty changed path.
 func (r DraftRequestResult) Check() error {
 	if err := r.Status.Check(); err != nil {
 		return err
@@ -150,8 +152,8 @@ func (r DraftRequestResult) Check() error {
 		return fmt.Errorf("a draft request ends done or failed, not %s: %w", r.Status, ErrInvalid)
 	}
 
-	if r.CostUSD < 0 || r.Turns < 0 {
-		return fmt.Errorf("draft request cost and turns must not be negative: %w", ErrInvalid)
+	if r.CostUSD < 0 || r.Turns < 0 || r.Turns > MaxDraftRequestTurns {
+		return fmt.Errorf("draft request cost must not be negative and turns must be 0 to %d: %w", MaxDraftRequestTurns, ErrInvalid)
 	}
 
 	for _, p := range r.ChangedPaths {
