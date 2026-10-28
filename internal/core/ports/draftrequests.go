@@ -22,11 +22,11 @@ type DraftRequests interface {
 	// (1 to domain.MaxDraftRequestList, else domain.ErrInvalid); none for an unknown factory.
 	List(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.DraftRequest, error)
 
-	// Claim leases until until the oldest queued request of any live organization (ctx needs
+	// Claim leases to until the oldest queued request of any live organization (ctx needs
 	// none), so every organization's requests take their turn in one order: it becomes running,
 	// started at now, under a new lease token. nil when none is queued.
 	Claim(ctx context.Context, now, until time.Time) (*domain.DraftRequestClaim, error)
-	// Heartbeat extends a lease held at now until until, under the claim's organization in ctx.
+	// Heartbeat extends a lease held at now to until, under the claim's organization in ctx.
 	// ErrLeaseLost when it ended, another claim took the request, or it is not running any more.
 	Heartbeat(ctx context.Context, l domain.DraftRequestLease, now, until time.Time) error
 	// Finish ends a running request as r says (domain.DraftRequestResult.Check, else

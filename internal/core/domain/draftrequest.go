@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -31,6 +32,7 @@ type DraftRequestID string
 // a lease, then done or failed.
 type DraftRequestStatus string
 
+// The draft request statuses.
 const (
 	DraftRequestQueued  DraftRequestStatus = "queued"
 	DraftRequestRunning DraftRequestStatus = "running"
@@ -156,10 +158,8 @@ func (r DraftRequestResult) Check() error {
 		return fmt.Errorf("draft request cost must not be negative and turns must be 0 to %d: %w", MaxDraftRequestTurns, ErrInvalid)
 	}
 
-	for _, p := range r.ChangedPaths {
-		if p == "" {
-			return fmt.Errorf("draft request changed path is empty: %w", ErrInvalid)
-		}
+	if slices.Contains(r.ChangedPaths, "") {
+		return fmt.Errorf("draft request changed path is empty: %w", ErrInvalid)
 	}
 
 	return nil

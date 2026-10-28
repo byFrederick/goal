@@ -120,11 +120,11 @@ func (d *DraftRequests) List(ctx context.Context, factory domain.FactoryID, limi
 
 	fid, err := uuid.Parse(string(factory))
 	if err != nil {
-		return nil, nil // a factory that is not a UUID has no requests
+		fid = uuid.Nil // a factory that is not a UUID has no requests, as no factory has the nil id
 	}
 
 	rows, err := fetch(ctx, d.s.read, func(q *db.Queries) ([]db.DraftRequest, error) {
-		return q.DraftRequests(ctx, db.DraftRequestsParams{FactoryID: fid, MaxRows: int32(limit)})
+		return q.DraftRequests(ctx, db.DraftRequestsParams{FactoryID: fid, MaxRows: int32(min(limit, domain.MaxDraftRequestList))}) //nolint:gosec // bounded by min
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list draft requests of factory %s: %w", factory, err)
@@ -237,7 +237,8 @@ func (d *DraftRequests) Finish(ctx context.Context, l domain.DraftRequestLease, 
 	n, err := fetch(ctx, d.s.inTx, func(q *db.Queries) (int64, error) {
 		return q.FinishDraftRequest(ctx, db.FinishDraftRequestParams{
 			Status: string(r.Status), Summary: cutChars(r.Summary, domain.MaxDraftRequestSummary), ChangedPaths: paths,
-			CostUsd: r.CostUSD, Turns: int32(r.Turns), Error: cutChars(r.Error, domain.MaxDraftRequestError),
+			CostUsd: r.CostUSD, Error: cutChars(r.Error, domain.MaxDraftRequestError),
+			Turns:      int32(min(r.Turns, domain.MaxDraftRequestTurns)), //nolint:gosec // bounded by min
 			FinishedAt: r.At, ID: id, LeaseHolder: holder,
 		})
 	})

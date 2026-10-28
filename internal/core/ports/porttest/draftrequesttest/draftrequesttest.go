@@ -51,6 +51,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Heartbeat_ExtendsTheLease", testHeartbeat},
 		{"Heartbeat_EndedLeaseLost", testHeartbeatEnded},
 		{"Finish_RecordsTheResult", testFinish},
+		{"Finish_CutsLongSummaryAndError", testFinishCuts},
 		{"Finish_InvalidRefused", testFinishInvalid},
 		{"Lease_StaleHolderLost", testStaleHolder},
 		{"RequeueExpired_OnlyEndedLeases", testRequeue},
@@ -139,9 +140,11 @@ func testRoundTrip(f *fixture) {
 		f.t.Fatalf("Create: %v", err)
 	}
 
-	if r.ID == "" || r.Org != f.org || r.Factory != f.factory || r.Requester.Ref() != asker.Ref() ||
-		r.Text != "give Review a 4th reviewer" || r.Agent != "reviewer" || r.Status != domain.DraftRequestQueued ||
-		r.CreatedAt.IsZero() || r.StartedAt != nil || r.FinishedAt != nil || r.LeaseExpiresAt != nil {
+	want := domain.DraftRequest{
+		ID: r.ID, Org: f.org, Factory: f.factory, Requester: asker, Text: "give Review a 4th reviewer", Agent: "reviewer",
+		Status: domain.DraftRequestQueued, CreatedAt: r.CreatedAt,
+	}
+	if r.ID == "" || r.CreatedAt.IsZero() || !same(r, want) {
 		f.t.Fatalf("Create = %+v, want a queued request as asked", r)
 	}
 
@@ -336,6 +339,7 @@ func testClaimConcurrent(f *fixture) {
 
 			if c != nil {
 				mu.Lock()
+
 				got = append(got, c.Request.ID)
 				mu.Unlock()
 			}
@@ -405,25 +409,30 @@ func testFinish(f *fixture) {
 	}
 
 	r := f.get(f.org, c.Request.ID)
-	if r.Status != domain.DraftRequestDone || r.Summary != "gave Review a 4th reviewer" ||
-		!slices.Equal(r.ChangedPaths, []string{"factory.yaml", "agents/reviewer.md"}) || r.CostUSD != 0.4321 || r.Turns != 12 ||
-		r.Error != "" || r.FinishedAt == nil || !r.FinishedAt.Equal(at) || r.LeaseExpiresAt != nil || r.StartedAt == nil {
-		f.t.Fatalf("finished = %+v, want done with the result", r)
+	want := c.Request
+	want.Status, want.Summary, want.ChangedPaths = domain.DraftRequestDone, "gave Review a 4th reviewer", []string{"factory.yaml", "agents/reviewer.md"}
+	want.CostUSD, want.Turns, want.FinishedAt, want.LeaseExpiresAt = 0.4321, 12, &at, nil
+
+	if !same(r, want) {
+		f.t.Fatalf("finished = %+v, want %+v", r, want)
 	}
 
 	if err := f.Requests.Finish(f.in(f.org), c.Lease, domain.DraftRequestResult{Status: domain.DraftRequestFailed, At: at}); !errors.Is(err, ports.ErrLeaseLost) {
 		f.t.Fatalf("a second Finish = %v, want ErrLeaseLost", err)
 	}
+}
 
-	f.create(f.org, f.NewFactory(f.t, f.org), "long")
-	c = f.claim(f.now)
+func testFinishCuts(f *fixture) {
+	at := f.now.Add(time.Second)
+	f.create(f.org, f.factory, "long")
+	c := f.claim(f.now)
 
 	long := strings.Repeat("é", domain.MaxDraftRequestSummary+10)
 	if err := f.Requests.Finish(f.in(f.org), c.Lease, domain.DraftRequestResult{Status: domain.DraftRequestFailed, Summary: long, Error: long, At: at}); err != nil {
 		f.t.Fatalf("Finish with a long summary: %v", err)
 	}
 
-	r = f.get(f.org, c.Request.ID)
+	r := f.get(f.org, c.Request.ID)
 	if r.Status != domain.DraftRequestFailed || len([]rune(r.Summary)) != domain.MaxDraftRequestSummary || len([]rune(r.Error)) != domain.MaxDraftRequestError {
 		f.t.Fatalf("failed = %s with a %d character summary and %d character error, want them cut", r.Status, len([]rune(r.Summary)), len([]rune(r.Error)))
 	}
@@ -585,9 +594,16 @@ func idsOf(rs []domain.DraftRequest) []domain.DraftRequestID {
 // same compares two reads of a request: times by instant, the requester by ref.
 func same(a, b domain.DraftRequest) bool {
 	return a.ID == b.ID && a.Org == b.Org && a.Factory == b.Factory && a.Requester.Ref() == b.Requester.Ref() &&
-		a.Text == b.Text && a.Agent == b.Agent && a.Status == b.Status && a.Summary == b.Summary &&
-		slices.Equal(a.ChangedPaths, b.ChangedPaths) && a.CostUSD == b.CostUSD && a.Turns == b.Turns && a.Error == b.Error &&
-		a.CreatedAt.Equal(b.CreatedAt) && sameTime(a.StartedAt, b.StartedAt) && sameTime(a.FinishedAt, b.FinishedAt) &&
+		a.Text == b.Text && a.Agent == b.Agent && a.Status == b.Status && sameResult(a, b) && sameTimes(a, b)
+}
+
+func sameResult(a, b domain.DraftRequest) bool {
+	return a.Summary == b.Summary && slices.Equal(a.ChangedPaths, b.ChangedPaths) && a.CostUSD == b.CostUSD &&
+		a.Turns == b.Turns && a.Error == b.Error
+}
+
+func sameTimes(a, b domain.DraftRequest) bool {
+	return a.CreatedAt.Equal(b.CreatedAt) && sameTime(a.StartedAt, b.StartedAt) && sameTime(a.FinishedAt, b.FinishedAt) &&
 		sameTime(a.LeaseExpiresAt, b.LeaseExpiresAt)
 }
 
