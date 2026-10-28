@@ -156,11 +156,19 @@ func VerifyTaskToken(key []byte, token string, now time.Time) (TaskClaims, error
 	return c, nil
 }
 
-// checkKind refuses an eval or Jonah task's claims that name a connection, a Jonah task's
-// without a window, a window or Manual on any other kind of task, and a draft request's claims
-// that name an item, a station, a connection or no request, and any other task's that name a
-// draft request.
+// checkKind refuses an eval, Jonah or draft request task's claims that name what its kind does not
+// have, and any other task's that name a Jonah window or a draft request.
 func (c TaskClaims) checkKind() error {
+	if err := c.checkEvalAndJonah(); err != nil {
+		return err
+	}
+
+	return c.checkDraftRequest()
+}
+
+// checkEvalAndJonah refuses an eval or Jonah task's claims that name a connection, a Jonah task's
+// without a window, and a window or Manual on any other kind of task.
+func (c TaskClaims) checkEvalAndJonah() error {
 	switch {
 	case c.Kind == TaskKindEval && len(c.Connections) > 0:
 		return fmt.Errorf("%w: an eval task names connections", ErrBadTaskToken)
@@ -170,6 +178,15 @@ func (c TaskClaims) checkKind() error {
 		return fmt.Errorf("%w: a jonah task needs a window that ends after it starts", ErrBadTaskToken)
 	case c.Kind != TaskKindJonah && (c.WindowStart != 0 || c.WindowEnd != 0 || c.Manual):
 		return fmt.Errorf("%w: only a jonah task has a window", ErrBadTaskToken)
+	}
+
+	return nil
+}
+
+// checkDraftRequest refuses a draft request's claims that name an item, a station, a connection or
+// no request, and any other task's that name a draft request.
+func (c TaskClaims) checkDraftRequest() error {
+	switch {
 	case c.Kind != TaskKindDraftRequest && (c.DraftRequest != "" || c.DraftRevision != 0):
 		return fmt.Errorf("%w: only a draft request's task names a draft request", ErrBadTaskToken)
 	case c.Kind == TaskKindDraftRequest && (c.DraftRequest == "" || c.DraftRevision < 0):

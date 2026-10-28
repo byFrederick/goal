@@ -211,10 +211,11 @@ func (g *Gateway) ServeRun(w http.ResponseWriter, r *http.Request) {
 // bundleOf is the bundle of the run c names: a Jonah review's for a TaskKindJonah token, a draft
 // request's definition bundle for a TaskKindDraftRequest one, and the run's bundle otherwise.
 func (g *Gateway) bundleOf(ctx context.Context, c domain.TaskClaims) (runBundle, error) {
-	switch c.Kind {
-	case domain.TaskKindJonah:
+	if c.Kind == domain.TaskKindJonah {
 		return g.jonahBundle(ctx, c)
-	case domain.TaskKindDraftRequest:
+	}
+
+	if c.Kind == domain.TaskKindDraftRequest {
 		return g.definitionBundle(ctx, c)
 	}
 

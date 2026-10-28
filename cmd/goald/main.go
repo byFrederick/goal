@@ -193,8 +193,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// bundle; the engine's RunDefinition signs its token.
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Connections: connections, Events: store, Clock: clock, Logger: log,
-		Knowledge: kb.searcher, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store,
-		DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore,
+		Knowledge: kb.searcher, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore,
 	}, gateway.Config{Key: []byte(key)})
 	if err != nil {
 		return err
@@ -245,8 +244,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
-		Jonah: jonahDeps(store, authors, clock, log),
-		Clock: clock, Logger: log,
+		Jonah: jonahDeps(store, authors, clock, log), Clock: clock, Logger: log,
 	})
 	if err != nil {
 		return err
