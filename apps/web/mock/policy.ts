@@ -191,7 +191,12 @@ export function createPolicy(options: PolicyOptions) {
     const body = (await readBody()) as unknown as OrgPolicyInput;
     const refusal = refusalOf(body);
     if (refusal) {
-      send(res, refusal.status, { title: refusal.title, status: refusal.status, detail: refusal.detail, code: refusal.code });
+      send(res, refusal.status, {
+        title: refusal.title,
+        status: refusal.status,
+        detail: refusal.detail,
+        code: refusal.code,
+      });
       return true;
     }
     entry.policy = body;

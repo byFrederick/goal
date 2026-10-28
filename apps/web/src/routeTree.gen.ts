@@ -21,6 +21,7 @@ import { Route as OOrgOrgRouteImport } from './routes/o.$org._org'
 import { Route as OOrgOrgIndexRouteImport } from './routes/o.$org._org.index'
 import { Route as OOrgOrgApiKeysRouteImport } from './routes/o.$org._org.api-keys'
 import { Route as OOrgOrgMembersRouteImport } from './routes/o.$org._org.members'
+import { Route as OOrgOrgModelsRouteImport } from './routes/o.$org._org.models'
 import { Route as OOrgOrgNeedsYouRouteImport } from './routes/o.$org._org.needs-you'
 import { Route as OOrgOrgRunsRouteImport } from './routes/o.$org._org.runs'
 import { Route as OOrgOrgSettingsRouteImport } from './routes/o.$org._org.settings'
@@ -105,6 +106,11 @@ const OOrgOrgApiKeysRoute = OOrgOrgApiKeysRouteImport.update({
 const OOrgOrgMembersRoute = OOrgOrgMembersRouteImport.update({
   id: '/members',
   path: '/members',
+  getParentRoute: () => OOrgOrgRoute,
+} as any)
+const OOrgOrgModelsRoute = OOrgOrgModelsRouteImport.update({
+  id: '/models',
+  path: '/models',
   getParentRoute: () => OOrgOrgRoute,
 } as any)
 const OOrgOrgNeedsYouRoute = OOrgOrgNeedsYouRouteImport.update({
@@ -254,6 +260,7 @@ export interface FileRoutesByFullPath {
   '/sign-in/code': typeof SignInCodeRoute
   '/o/$org/api-keys': typeof OOrgOrgApiKeysRoute
   '/o/$org/members': typeof OOrgOrgMembersRoute
+  '/o/$org/models': typeof OOrgOrgModelsRoute
   '/o/$org/needs-you': typeof OOrgOrgNeedsYouRoute
   '/o/$org/runs': typeof OOrgOrgRunsRoute
   '/o/$org/settings': typeof OOrgOrgSettingsRoute
@@ -293,6 +300,7 @@ export interface FileRoutesByTo {
   '/sign-in/code': typeof SignInCodeRoute
   '/o/$org/api-keys': typeof OOrgOrgApiKeysRoute
   '/o/$org/members': typeof OOrgOrgMembersRoute
+  '/o/$org/models': typeof OOrgOrgModelsRoute
   '/o/$org/needs-you': typeof OOrgOrgNeedsYouRoute
   '/o/$org/runs': typeof OOrgOrgRunsRoute
   '/o/$org/settings': typeof OOrgOrgSettingsRoute
@@ -331,6 +339,7 @@ export interface FileRoutesById {
   '/o/$org/_org': typeof OOrgOrgRouteWithChildren
   '/o/$org/_org/api-keys': typeof OOrgOrgApiKeysRoute
   '/o/$org/_org/members': typeof OOrgOrgMembersRoute
+  '/o/$org/_org/models': typeof OOrgOrgModelsRoute
   '/o/$org/_org/needs-you': typeof OOrgOrgNeedsYouRoute
   '/o/$org/_org/runs': typeof OOrgOrgRunsRoute
   '/o/$org/_org/settings': typeof OOrgOrgSettingsRoute
@@ -372,6 +381,7 @@ export interface FileRouteTypes {
     | '/sign-in/code'
     | '/o/$org/api-keys'
     | '/o/$org/members'
+    | '/o/$org/models'
     | '/o/$org/needs-you'
     | '/o/$org/runs'
     | '/o/$org/settings'
@@ -411,6 +421,7 @@ export interface FileRouteTypes {
     | '/sign-in/code'
     | '/o/$org/api-keys'
     | '/o/$org/members'
+    | '/o/$org/models'
     | '/o/$org/needs-you'
     | '/o/$org/runs'
     | '/o/$org/settings'
@@ -448,6 +459,7 @@ export interface FileRouteTypes {
     | '/o/$org/_org'
     | '/o/$org/_org/api-keys'
     | '/o/$org/_org/members'
+    | '/o/$org/_org/models'
     | '/o/$org/_org/needs-you'
     | '/o/$org/_org/runs'
     | '/o/$org/_org/settings'
@@ -572,6 +584,13 @@ declare module '@tanstack/react-router' {
       path: '/members'
       fullPath: '/o/$org/members'
       preLoaderRoute: typeof OOrgOrgMembersRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
+    '/o/$org/_org/models': {
+      id: '/o/$org/_org/models'
+      path: '/models'
+      fullPath: '/o/$org/models'
+      preLoaderRoute: typeof OOrgOrgModelsRouteImport
       parentRoute: typeof OOrgOrgRoute
     }
     '/o/$org/_org/needs-you': {
@@ -762,6 +781,7 @@ declare module '@tanstack/react-router' {
 interface OOrgOrgRouteChildren {
   OOrgOrgApiKeysRoute: typeof OOrgOrgApiKeysRoute
   OOrgOrgMembersRoute: typeof OOrgOrgMembersRoute
+  OOrgOrgModelsRoute: typeof OOrgOrgModelsRoute
   OOrgOrgNeedsYouRoute: typeof OOrgOrgNeedsYouRoute
   OOrgOrgRunsRoute: typeof OOrgOrgRunsRoute
   OOrgOrgSettingsRoute: typeof OOrgOrgSettingsRoute
@@ -778,6 +798,7 @@ interface OOrgOrgRouteChildren {
 const OOrgOrgRouteChildren: OOrgOrgRouteChildren = {
   OOrgOrgApiKeysRoute: OOrgOrgApiKeysRoute,
   OOrgOrgMembersRoute: OOrgOrgMembersRoute,
+  OOrgOrgModelsRoute: OOrgOrgModelsRoute,
   OOrgOrgNeedsYouRoute: OOrgOrgNeedsYouRoute,
   OOrgOrgRunsRoute: OOrgOrgRunsRoute,
   OOrgOrgSettingsRoute: OOrgOrgSettingsRoute,

@@ -2,7 +2,7 @@
 // the caller is in, each with its factory count and role and a check on the current one; Create
 // organization for whoever may create one (platform admins, or everyone with sign-in off); and the
 // current organization's pages. Members and roles shows the member count once it loads. Spend and
-// billing and Models and policies have no pages yet, so they render disabled (ADR 0016, decision 4).
+// billing has no page yet, so it renders disabled (ADR 0016, decision 4).
 // A Radix DropdownMenu under the sidebar's top row (sidebar.tsx); a bottom sheet on phones, opened by
 // the organization mark (org-mark.tsx). The sheet ends with the account (account-menu.tsx).
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
@@ -17,7 +17,7 @@ import { MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, menuRow } f
 import { NotAvailable } from '../ui/not-available';
 import { SheetContent, SheetLabel } from '../ui/sheet';
 import { AccountBlock } from './account-menu';
-import { apiKeysScreen, membersScreen, screensFor, settingsScreen } from './screens';
+import { apiKeysScreen, membersScreen, modelsScreen, screensFor, settingsScreen } from './screens';
 
 interface OrgChoice {
   org: OrgSummary;
@@ -167,12 +167,18 @@ export function OrgMenuContent({ org, onCreate, navigating }: OrgMenuProps) {
             Spend and billing
           </MenuItem>
         </NotAvailable>
-        <NotAvailable>
-          <MenuItem className={rowClass}>
+        <MenuItem
+          asChild
+          className={rowClass}
+          onSelect={() => {
+            navigating.current = model.leaves(orgPath(modelsScreen.to, org.slug));
+          }}
+        >
+          <Link to={modelsScreen.to} params={{ org: org.slug }}>
             <Shield {...iconProps} />
-            Models and policies
-          </MenuItem>
-        </NotAvailable>
+            {modelsScreen.label}
+          </Link>
+        </MenuItem>
         {model.canApiKeys ? (
           <MenuItem
             asChild
@@ -284,12 +290,15 @@ export function OrgSheetContent({ org, onCreate, onClose, navigating }: OrgSheet
           </NotAvailable>
         </li>
         <li>
-          <NotAvailable>
-            <button type="button" className={sheetRow}>
-              <Shield {...iconProps} />
-              Models and policies
-            </button>
-          </NotAvailable>
+          <Link
+            to={modelsScreen.to}
+            params={{ org: org.slug }}
+            onClick={() => go(orgPath(modelsScreen.to, org.slug))}
+            className={sheetRow}
+          >
+            <Shield {...iconProps} />
+            {modelsScreen.label}
+          </Link>
         </li>
         {model.canApiKeys ? (
           <li>

@@ -33,7 +33,5 @@ export function getOrgPolicy(org: string, signal?: AbortSignal): Promise<PolicyL
  * with its new ETag, and refuses a stale one with 409 policy-conflict, which changes nothing.
  */
 export function putOrgPolicy(org: string, body: OrgPolicyInput, etag: string): Promise<PolicyLoad> {
-  return withEtag(
-    goal.PUT(orgPath('/policy'), { params: { path: { org }, header: { 'If-Match': etag } }, body }),
-  );
+  return withEtag(goal.PUT(orgPath('/policy'), { params: { path: { org }, header: { 'If-Match': etag } }, body }));
 }
