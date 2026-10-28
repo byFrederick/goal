@@ -89,10 +89,14 @@ func changed() domain.NotificationPreferences {
 }
 
 func testDefault(t *testing.T, h Harness) {
+	t.Helper()
+
 	want(t, get(t, h, h.NewUser(t)), domain.DefaultNotificationPreferences())
 }
 
 func testRoundTrip(t *testing.T, h Harness) {
+	t.Helper()
+
 	user := h.NewUser(t)
 	p := changed()
 	set(t, h, user, p)
@@ -102,10 +106,13 @@ func testRoundTrip(t *testing.T, h Harness) {
 
 	// What a read returns is the caller's own.
 	got.Events[domain.NotifyAndon] = domain.NotificationChannels{}
+
 	want(t, get(t, h, user), p)
 }
 
 func testReplace(t *testing.T, h Harness) {
+	t.Helper()
+
 	user := h.NewUser(t)
 	set(t, h, user, changed())
 
@@ -115,13 +122,17 @@ func testReplace(t *testing.T, h Harness) {
 }
 
 func testInvalid(t *testing.T, h Harness) {
+	t.Helper()
+
 	user := h.NewUser(t)
 	set(t, h, user, changed())
 
 	for name, edit := range map[string]func(p *domain.NotificationPreferences){
-		"digest in Goal": func(p *domain.NotificationPreferences) { p.Events[domain.NotifyDigest] = domain.NotificationChannels{InGoal: true} },
-		"a bad email":    func(p *domain.NotificationPreferences) { p.Email = "not an email" },
-		"a bad zone":     func(p *domain.NotificationPreferences) { p.TimeZone = "Mars/Olympus" },
+		"digest in Goal": func(p *domain.NotificationPreferences) {
+			p.Events[domain.NotifyDigest] = domain.NotificationChannels{InGoal: true}
+		},
+		"a bad email": func(p *domain.NotificationPreferences) { p.Email = "not an email" },
+		"a bad zone":  func(p *domain.NotificationPreferences) { p.TimeZone = "Mars/Olympus" },
 	} {
 		p := domain.DefaultNotificationPreferences()
 		edit(&p)
@@ -135,6 +146,8 @@ func testInvalid(t *testing.T, h Harness) {
 }
 
 func testIsolation(t *testing.T, h Harness) {
+	t.Helper()
+
 	ada, bob := h.NewUser(t), h.NewUser(t)
 	set(t, h, bob, domain.DefaultNotificationPreferences())
 	set(t, h, ada, changed())

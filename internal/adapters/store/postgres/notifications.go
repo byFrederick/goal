@@ -13,7 +13,7 @@ import (
 
 var _ ports.NotificationPreferences = (*NotificationPreferences)(nil)
 
-// NotificationPreferences implements ports.NotificationPreferences over 00078's tables. They
+// NotificationPreferences implements ports.NotificationPreferences over 00080's tables. They
 // belong to a person, not an organization, and have no row-level security, so its transactions
 // bind no organization and every statement names the person (db/queries/notification_preferences.sql).
 type NotificationPreferences struct {
@@ -21,7 +21,9 @@ type NotificationPreferences struct {
 }
 
 // NewNotificationPreferences returns each person's notification preferences on s's pool.
-func NewNotificationPreferences(s *Store) *NotificationPreferences { return &NotificationPreferences{s: s} }
+func NewNotificationPreferences(s *Store) *NotificationPreferences {
+	return &NotificationPreferences{s: s}
+}
 
 // userTx runs fn in a transaction bound to no organization, with opts.
 func (n *NotificationPreferences) userTx(ctx context.Context, opts pgx.TxOptions, fn func(q *db.Queries) error) error {
