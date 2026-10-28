@@ -101,9 +101,51 @@ export const Judge = z.object({
 });
 export type Judge = z.infer<typeof Judge>;
 
+/** A factory definition file as a Jonah review reads it: its path in the definition, its sha256 and its text. */
+export const JonahFile = z.object({
+  path: z.string().min(1),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  content: z.string(),
+});
+export type JonahFile = z.infer<typeof JonahFile>;
+
+/** A sent-back event in the review's window: an item's touch that a station or a gate sent back, with its reason. */
+export const JonahEvent = z.object({
+  /** Names the event in the review's evidence; a proposal's evidence points at this id. */
+  id: z.string().min(1),
+  item_ref: z.string(),
+  title: z.string(),
+  station: z.string(),
+  agent: z.string(),
+  kind: z.string(),
+  reason: z.string(),
+});
+export type JonahEvent = z.infer<typeof JonahEvent>;
+
+/** A proposal the factory rejected in the last 90 days, with the reason a person gave: a later review does not repeat it. */
+export const JonahRejected = z.object({
+  title: z.string(),
+  summary: z.string(),
+  paths: z.array(z.string()),
+  reason: z.string(),
+});
+export type JonahRejected = z.infer<typeof JonahRejected>;
+
+/** Jonah mode (ADR 0034): the factory's definition, its sent-back events and its rejected proposals, read in one model call. */
+export const Jonah = z.object({
+  files: z.array(JonahFile),
+  events: z.array(JonahEvent),
+  rejected: z.array(JonahRejected),
+  /** The policy's proposeAfter: a threshold review proposes an observation only when its count reaches it. */
+  propose_after: z.number().int().min(1),
+  /** Whether a person asked for this review, which may propose below the threshold. */
+  manual: z.boolean(),
+});
+export type Jonah = z.infer<typeof Jonah>;
+
 const taskFields = z.object({
   factory_id: z.string().min(1),
-  /** Empty only in definition mode and judge mode, which need no item. */
+  /** Empty only in definition mode, judge mode and Jonah mode, which need no item. */
   item_id: z.string(),
   run_id: z.string().min(1),
   station: z.string(),
@@ -141,17 +183,31 @@ const taskFields = z.object({
   draft_request: DraftRequest.optional(),
   /** Judge mode (ADR 0025): the run scores this material with this judge, in one model call without tools. */
   judge: Judge.optional(),
+  /** Jonah mode (ADR 0034): the run reviews the factory and returns observations and proposals, in one model call without tools. */
+  jonah: Jonah.optional(),
 });
 
-type ModeFields = { item_id: string; draft_request?: DraftRequest | undefined; judge?: Judge | undefined };
+type ModeFields = {
+  item_id: string;
+  draft_request?: DraftRequest | undefined;
+  judge?: Judge | undefined;
+  jonah?: Jonah | undefined;
+};
 
-/** An item's run names its item; only definition mode and judge mode may leave it empty. */
-const itemNamed = (s: ModeFields) => s.draft_request !== undefined || s.judge !== undefined || s.item_id.length > 0;
-const itemMessage = { message: 'item_id is required outside definition mode and judge mode', path: ['item_id'] };
+/** An item's run names its item; only definition, judge and Jonah mode may leave it empty. */
+const itemNamed = (s: ModeFields) =>
+  s.draft_request !== undefined || s.judge !== undefined || s.jonah !== undefined || s.item_id.length > 0;
+const itemMessage = {
+  message: 'item_id is required outside definition mode, judge mode and Jonah mode',
+  path: ['item_id'],
+};
 
-/** A run is in one mode at most: a draft request's or a judge's. */
-const oneMode = (s: ModeFields) => !(s.draft_request && s.judge);
-const modeMessage = { message: 'a spec has a draft_request or a judge, not both', path: ['judge'] };
+/** A run is in one mode at most: a draft request's, a judge's or a Jonah review's. */
+const oneMode = (s: ModeFields) => [s.draft_request, s.judge, s.jonah].filter((m) => m !== undefined).length <= 1;
+const modeMessage = {
+  message: 'a spec has at most one mode: a draft_request, a judge or a jonah (not both)',
+  path: ['judge'],
+};
 
 /** The task as /goal/spec.json holds it: the bundle's spec plus the gateway's URL. It holds no secrets. */
 export const TaskSpec = taskFields.refine(itemNamed, itemMessage).refine(oneMode, modeMessage);
@@ -170,7 +226,7 @@ export function parseSpec(raw: string): TaskSpec {
 }
 
 /** A relative path without "." or ".." segments. */
-const relativePath = z
+export const relativePath = z
   .string()
   .regex(/^[A-Za-z0-9_@+-][A-Za-z0-9_.@+-]*(\/[A-Za-z0-9_@+-][A-Za-z0-9_.@+-]*)*$/)
   .refine((p) => !p.split('/').some((seg) => seg === '.' || seg === '..'), 'no . or .. segments');
@@ -238,5 +294,9 @@ export const Bundle = z
   .refine((b) => !(b.spec.judge && (b.repository || b.definition)), {
     message: "a judge's bundle has no repository and no definition",
     path: ['spec', 'judge'],
+  })
+  .refine((b) => !(b.spec.jonah && (b.repository || b.definition)), {
+    message: "a jonah's bundle has no repository and no definition",
+    path: ['spec', 'jonah'],
   });
 export type Bundle = z.infer<typeof Bundle>;

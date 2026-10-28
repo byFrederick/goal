@@ -79,6 +79,7 @@ import {
 } from './fixtures.ts';
 import { constraintOf, type DayRange, type FlowInput, leadTimeOf, metricsOf, rangeOf, weeklyOf } from './flow.ts';
 import { intakeOf } from './intake.ts';
+import { createJonah } from './jonah.ts';
 import { createJudges } from './judges.ts';
 import { createKeys } from './keys.ts';
 import { createKnowledge } from './knowledge.ts';
@@ -337,6 +338,10 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   });
   const judges = createJudges({
     factory: (org, key) => findFactory(key, org),
+  });
+  const jonah = createJonah({
+    factory: (org, key) => findFactory(key, org),
+    clock,
   });
   // The views are the caller's: the signed-in person's, else the local user's (directory.owner).
   const views = createViews({
@@ -1523,6 +1528,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       evals.reset();
       bakeOffs.reset();
       judges.reset();
+      jonah.reset();
       views.reset();
       webhooks.reset();
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
@@ -1622,6 +1628,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await bakeOffs.handle(org, rest, method, res, () => readBody(req))) return;
     if (await evals.handle(org, rest, method, res, () => readBody(req))) return;
     if (await judges.handle(org, rest, method, res, () => readBody(req))) return;
+    if (await jonah.handle(org, rest, method, url, res, () => readBody(req))) return;
     if (await views.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await spend.handle(org, rest, method, url, res)) return;
     if (await policy.handle(org, rest, method, req, res, () => readBody(req))) return;

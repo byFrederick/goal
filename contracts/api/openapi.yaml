@@ -100,6 +100,12 @@ tags:
       that scores a sample of its agents' finished runs. Viewers read them and their 30-day
       figures; those who may publish add, change and try them, and every change publishes a new
       version through the usual checks.
+  - name: learning
+    description: >-
+      Jonah's reviews of sent-back runs (ADR 0034): what it observed, its proposals of definition
+      changes, and deciding them. Approve publishes a new version (definition:publish), Edit
+      writes the proposal into the draft and Reject records a reason (definition:edit); goald
+      answers 503 jonah-unavailable while it serves no Jonah store.
   - name: evals
     description: >-
       Jonah's eval cases (ADR 0025): each evals/cases/<name>.yaml of a factory's definition, its
@@ -2406,6 +2412,168 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/JudgeTries" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/jonah:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: getJonahOverview
+      x-goal-scope: factory:read
+      tags: [learning]
+      summary: What Jonah noticed this week, its policy, its proposals waiting and its cost
+      description: >-
+        The policy is the current version's learning.jonah (its defaults where it sets none) with
+        the roles that may approve a proposal (those holding definition:publish). waiting counts
+        the proposals still proposed; month_cost_usd is what the factory's jonah runs cost since
+        the first of this UTC month; observations are those made since Monday 00:00 UTC, newest
+        first; last_review is the newest review, absent before the first. 503 jonah-unavailable.
+      responses:
+        "200":
+          description: The overview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JonahOverview" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/jonah/proposals:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: listProposals
+      x-goal-scope: factory:read
+      tags: [learning]
+      summary: The factory's proposals, newest (highest number) first
+      parameters:
+        - name: state
+          in: query
+          description: Only proposals in this state
+          schema: { $ref: "#/components/schemas/ProposalState" }
+        - name: after
+          in: query
+          description: The keyset of the next page; only proposals numbered below it (next of the page before)
+          schema: { type: integer, format: int64, minimum: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: One page of proposals
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProposalPage" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/ProposalNumber"
+    get:
+      operationId: getProposal
+      x-goal-scope: factory:read
+      tags: [learning]
+      summary: One proposal with its files, its evidence and the versions it moves between
+      description: >-
+        Each file has its content in the version the proposal was made against (empty for a new
+        file) and its new content; the client renders the diff. 404 proposal-not-found.
+      responses:
+        "200":
+          description: The proposal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Proposal" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/approve:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/ProposalNumber"
+    post:
+      operationId: approveProposal
+      x-goal-scope: definition:publish
+      tags: [learning]
+      summary: Publish the proposal as a new version, as the caller (ADR 0034 decision 7)
+      description: >-
+        Opens a draft from the current version, writes the proposal's files and publishes it
+        through the usual validation and gates. 409 draft-open when the factory already has an
+        open draft (it is left untouched); proposal-stale when a file's current SHA-256 is not
+        its base_sha256 (no draft is left); proposal-decided when it is no longer proposed; the
+        publish's own refusals (definition-invalid, evals-pending, evals-failing; the eval gate
+        keeps the draft open). 404 proposal-not-found.
+      responses:
+        "200":
+          description: The decided proposal and the version it published
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProposalDecided" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/edit:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/ProposalNumber"
+    post:
+      operationId: editProposal
+      x-goal-scope: definition:edit
+      tags: [learning]
+      summary: Write the proposal's files into the draft, opening one if none is open (decision 8)
+      description: >-
+        Sets the proposal applied; the caller continues in the builder. 409 draft-conflict when
+        the draft's copy of a file is not its base_sha256 (nothing is written); proposal-decided
+        when it is no longer proposed. 404 proposal-not-found.
+      responses:
+        "200":
+          description: The decided proposal and the draft's revision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProposalDecided" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/ProposalNumber"
+    post:
+      operationId: rejectProposal
+      x-goal-scope: definition:edit
+      tags: [learning]
+      summary: Reject the proposal with a reason, which later reviews read (decision 9)
+      description: >-
+        400 invalid-request for a missing or blank reason or one over 2000 characters; 409
+        proposal-decided when it is no longer proposed. 404 proposal-not-found.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProposalReject" }
+      responses:
+        "200":
+          description: The decided proposal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProposalDecided" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/jonah/reviews:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    post:
+      operationId: queueJonahReview
+      x-goal-scope: definition:edit
+      tags: [learning]
+      summary: Queue a manual review of the factory's sent-back runs (decision 2)
+      description: >-
+        The review reads the sent-back touches since the last review's window ended (30 days
+        back before the first) on the current version; goald's review loop runs it. 409
+        review-in-flight while a review is pending or running; learning-budget-exhausted while
+        the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404
+        version-not-found before the first publish.
+      responses:
+        "202":
+          description: The queued review
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JonahReview" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/andon:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -4258,6 +4426,12 @@ components:
       required: true
       description: "The judge's slug: its file name in evals/judges without .md"
       schema: { type: string }
+    ProposalNumber:
+      name: number
+      in: path
+      required: true
+      description: The proposal's number in its factory, from 1
+      schema: { type: integer, format: int64, minimum: 1 }
     EvalRunRef:
       name: eval_run
       in: path
@@ -6522,6 +6696,145 @@ components:
         tries:
           type: array
           items: { $ref: "#/components/schemas/JudgeTry" }
+    JonahPolicy:
+      type: object
+      description: The current version's learning.jonah, with its defaults where it sets none
+      required: [enabled, propose_after, weekly_usd, approver_roles]
+      properties:
+        enabled: { type: boolean }
+        propose_after:
+          type: integer
+          description: Sent-back touches that queue a review, and how often an observation is seen before it is proposed
+        weekly_usd: { type: number, format: double, description: What review runs may cost over 7 days }
+        model: { type: string, description: "The review run's model: learning.jonah.model, else runtime.model; absent when neither is set" }
+        approver_roles:
+          type: array
+          description: "The roles holding definition:publish: organization roles first, then factory roles"
+          items: { type: string }
+    JonahObservation:
+      type: object
+      required: [id, summary, detail, item_refs, state, count, propose_after, created_at]
+      properties:
+        id: { type: string }
+        summary: { type: string }
+        detail: { type: string }
+        item_refs:
+          type: array
+          description: "The items it rests on, as <factory name>#<number>"
+          items: { type: string }
+        state: { type: string, enum: [watching, proposed] }
+        count: { type: integer, description: How often the pattern was seen }
+        propose_after: { type: integer, description: The count at which it becomes a proposal }
+        proposal: { type: integer, format: int64, description: The number of the proposal it became }
+        created_at: { type: string, format: date-time }
+    JonahReview:
+      type: object
+      required: [id, state, trigger, created_at]
+      properties:
+        id: { type: string }
+        state: { type: string, enum: [pending, running, done, failed] }
+        trigger: { type: string, enum: [manual, threshold] }
+        error: { type: string, description: Why a failed review failed }
+        created_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+    JonahOverview:
+      type: object
+      required: [policy, waiting, month_cost_usd, observations]
+      properties:
+        policy: { $ref: "#/components/schemas/JonahPolicy" }
+        waiting: { type: integer, description: Proposals still proposed }
+        month_cost_usd: { type: number, format: double, description: "What the factory's jonah runs cost since the first of this UTC month" }
+        observations:
+          type: array
+          description: The observations made since Monday 00:00 UTC, newest first
+          items: { $ref: "#/components/schemas/JonahObservation" }
+        last_review: { $ref: "#/components/schemas/JonahReview" }
+    ProposalState:
+      type: string
+      enum: [proposed, published, applied, rejected, superseded]
+    ProposalEstimate:
+      type: object
+      description: The metric the proposal should move at one station; before is computed from the recorded events
+      required: [metric, station, before, after, cost_per_item_usd]
+      properties:
+        metric: { type: string, enum: [sent_back_rate, lead_time_p85] }
+        station: { type: string }
+        before: { type: number, format: double }
+        after: { type: number, format: double }
+        cost_per_item_usd: { type: number, format: double, description: The change in cost per item }
+    ProposalEntry:
+      type: object
+      required: [number, title, state, created_at, paths, agents, evidence_count]
+      properties:
+        number: { type: integer, format: int64 }
+        title: { type: string }
+        state: { $ref: "#/components/schemas/ProposalState" }
+        created_at: { type: string, format: date-time }
+        paths:
+          type: array
+          items: { type: string }
+        agents:
+          type: array
+          description: "The agents whose prompt it edits (agents/<name>.md), in path order"
+          items: { type: string }
+        estimate: { $ref: "#/components/schemas/ProposalEstimate" }
+        evidence_count: { type: integer }
+    ProposalPage:
+      type: object
+      required: [proposals]
+      properties:
+        proposals:
+          type: array
+          items: { $ref: "#/components/schemas/ProposalEntry" }
+        next: { type: integer, format: int64, description: "The after of the next page; absent on the last" }
+    ProposalFile:
+      type: object
+      required: [path, base_sha256, base_content, content]
+      properties:
+        path: { type: string }
+        base_sha256: { type: string, description: "The SHA-256 of the file the review read; empty for a new file" }
+        base_content: { type: string, description: The file in the version the proposal was made against; empty for a new file }
+        content: { type: string, description: The file's new content }
+    ProposalEvidence:
+      type: object
+      required: [item_ref, item_title, quote]
+      properties:
+        item_ref: { type: string, description: "<factory name>#<number>, or the item's id when it is gone" }
+        item_title: { type: string }
+        station: { type: string }
+        quote: { type: string, description: The quoted reason it was sent back }
+    Proposal:
+      allOf:
+        - $ref: "#/components/schemas/ProposalEntry"
+        - type: object
+          required: [summary, files, evidence, made_against_version, publishes_as_version]
+          properties:
+            summary: { type: string }
+            files:
+              type: array
+              items: { $ref: "#/components/schemas/ProposalFile" }
+            evidence:
+              type: array
+              items: { $ref: "#/components/schemas/ProposalEvidence" }
+            made_against_version: { type: integer, description: The number of the version the review read }
+            publishes_as_version: { type: integer, description: The number Approve would publish it as }
+            published_version: { type: integer, description: The version Approve published }
+            reject_reason: { type: string }
+            decided_by: { type: string, description: "The actor ref of who decided it" }
+            decided_at: { type: string, format: date-time }
+    ProposalReject:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, maxLength: 2000 }
+    ProposalDecided:
+      type: object
+      required: [number, state]
+      properties:
+        number: { type: integer, format: int64 }
+        state: { $ref: "#/components/schemas/ProposalState" }
+        version: { type: integer, description: The version Approve published }
+        draft_revision: { type: integer, format: int64, description: The draft's revision after Edit }
     AgentStats:
       type: object
       required: [agent, from, to, model, stations, tasks_finished, sent_back, median_turns, spend_per_task_usd, task_time_p85_minutes, spend_usd, reasons, denied_tool_calls]

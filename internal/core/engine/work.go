@@ -7,11 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"net/url"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -405,188 +403,54 @@ func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (
 	return chk, nil
 }
 
-// runOnce records a run and, while heartbeating the lease, runs it in the claim's sandbox (b,
-// created and prepared by the first run), checks its output and runs the station's checks. It
-// returns ErrLeaseLost when another instance took the item, an *outputError when the output
-// failed its checks, and any other error when the run could not be carried out.
+// runOnce runs the claim's next run with the shared run lifecycle (runTask) under the claim's
+// lease, in the claim's sandbox (b, created and prepared by the first run), and, when it
+// succeeded, checks its output, runs the station's checks and links a single item to the items
+// its output follows (follow), all while the lease is heartbeated. It returns ErrLeaseLost when
+// another instance took the item, an *outputError when the output failed its checks, and any
+// other error when the run could not be carried out.
 func (e *Engine) runOnce(ctx context.Context, c claimed, b *box, feedback string) (domain.RunResult, checked, error) {
-	runID, err := e.store.StartRun(ctx, ports.NewRun{
-		FactoryID: c.line.FactoryID, DefinitionVersionID: c.line.VersionID, ItemID: c.item.ID, Station: c.station.ID,
-		Agent: c.agent.Name, Model: c.model, StartedAt: e.clock.Now(),
+	var chk checked
+
+	res, err := e.runTask(ctx, runTask{
+		RunRequest: c.request(feedback), item: c.item, box: b,
+		// The agent's env gets the connections of its list the factory lists too, as the gateway
+		// serves them; its task token names its whole list.
+		own:       slices.DeleteFunc(slices.Clone(c.agent.Connections), func(n string) bool { return !slices.Contains(c.line.Connections, n) }),
+		workspace: func(b *box, env runEnv) string { return workspaceNote(c, b, env) },
+		then: func(ctx context.Context, runID domain.RunID, res domain.RunResult, scrub scrubber) error {
+			got, err := e.check(ctx, c, res.Output)
+			if err != nil {
+				return &outputError{err: err}
+			}
+
+			if err := e.runChecks(ctx, c, runID, b, scrub); err != nil {
+				return err
+			}
+
+			if err := e.follow(ctx, c, got); err != nil {
+				return err
+			}
+
+			chk = got
+
+			return nil
+		},
 	})
-	if err != nil {
-		return domain.RunResult{}, checked{}, fmt.Errorf("record run: %w", err)
-	}
-
-	taskCtx, stop := context.WithTimeout(ctx, c.timeout)
-	defer stop()
-
-	// Heartbeat from before the start: pulling the image, preparing the sandbox and the checks
-	// can all outlast the TTL.
-	var (
-		beats sync.WaitGroup
-		lost  bool
-	)
-
-	beatCtx, stopBeat := context.WithCancel(taskCtx)
-
-	beats.Go(func() { lost = e.heartbeat(beatCtx, c.lease, stop) })
-
-	res, chk, err := e.runInBox(taskCtx, c, runID, b, feedback)
-
-	stopBeat()
-	beats.Wait()
-
-	if lost {
-		return res, checked{}, ports.ErrLeaseLost
-	}
 
 	return res, chk, err
 }
 
-// runInBox opens the claim's sandbox when the run is its first, runs the agent there, checks
-// its output, runs the station's checks and links a single item to the items its output
-// follows (follow).
-func (e *Engine) runInBox(ctx context.Context, c claimed, runID domain.RunID, b *box, feedback string) (domain.RunResult, checked, error) {
-	token, err := e.gatewayToken(ctx, c, runID)
+// request is the claim's next run as a RunRequest, with brief added to its bundle's brief.
+func (c claimed) request(brief string) domain.RunRequest {
+	rt := c.line.Runtime
 
-	var (
-		env   runEnv
-		scrub scrubber
-	)
-
-	if err == nil {
-		env, err = e.runEnv(ctx, c, runID)
-		scrub = newScrubber(append(env.secrets, token)...)
+	return domain.RunRequest{
+		OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, Version: c.line.VersionID, Kind: domain.RunKindStation,
+		Station: c.station.ID, Item: c.item.ID, Agent: c.agent.Name, Model: c.model, Brief: brief,
+		Repository: rt.Repository, Branch: c.branch, Base: c.base, ModelConnection: rt.ModelConnection,
+		Connections: c.agent.Connections, DeniedCommands: c.deny, Size: rt.Size, Timeout: c.timeout, BoxLimit: c.boxLimit, Lease: &c.lease,
 	}
-
-	if err == nil {
-		prepareEnv := maps.Clone(env.prepare)
-		prepareEnv[envGatewayToken] = token
-		err = e.open(ctx, c, runID, b, prepareEnv, scrub)
-	}
-
-	if err != nil {
-		e.finishRun(ctx, runID, failure(ctx, err))
-		return domain.RunResult{}, checked{}, err
-	}
-
-	agentEnv := maps.Clone(env.agent)
-	agentEnv[envGatewayToken] = token
-
-	if f := joinParts(feedback, workspaceNote(c, b, env)); f != "" {
-		agentEnv[envFeedback] = f
-	}
-
-	res, lost := e.agent(ctx, c, runID, b, agentEnv, scrub)
-	e.finishRun(ctx, runID, res)
-
-	if lost != nil {
-		return res, checked{}, lost
-	}
-
-	if res.Status != domain.RunSucceeded {
-		return res, checked{}, nil
-	}
-
-	chk, err := e.check(ctx, c, res.Output)
-	if err != nil {
-		return res, checked{}, &outputError{err: err}
-	}
-
-	if err := e.runChecks(ctx, c, runID, b, scrub); err != nil {
-		return res, checked{}, err
-	}
-
-	if err := e.follow(ctx, c, chk); err != nil {
-		return res, checked{}, err
-	}
-
-	return res, chk, nil
-}
-
-// agent runs `goal-agent run` in the claim's sandbox with env, relays the events it reports and
-// returns its result. How the command ended (cancelled, timed out, crashed) wins over what the
-// worker reported; what reaches the store is scrubbed of the run's secrets. When the sandbox was
-// lost on the way the run failed, and the scrubbed error wrapping ports.ErrSandboxLost is returned too.
-func (e *Engine) agent(ctx context.Context, c claimed, runID domain.RunID, b *box, env map[string]string, scrub scrubber) (domain.RunResult, error) {
-	var fin *domain.WorkerFinished
-
-	started := e.clock.Now()
-
-	st, err := execLines(ctx, b.sandbox, ports.Exec{Argv: argvAgent, Env: env, Timeout: c.timeout}, func(line []byte) {
-		ev, f, err := domain.DecodeWorkerLine(line, e.clock.Now())
-
-		switch {
-		case errors.Is(err, domain.ErrNotWorkerLine):
-		case err != nil:
-			e.log.DebugContext(ctx, "ignored worker stdout line", slog.String("run", string(runID)), slog.Any("error", err))
-		case f != nil:
-			fin = f
-
-			for _, d := range f.Denials(e.clock.Now()) {
-				e.relay(ctx, c, runID, d, scrub)
-			}
-		default:
-			e.relay(ctx, c, runID, *ev, scrub)
-		}
-	})
-
-	var (
-		res  domain.RunResult
-		lost error
-	)
-
-	if fin != nil {
-		res = fin.Result()
-	}
-
-	switch {
-	case errors.Is(ctx.Err(), context.DeadlineExceeded), err == nil && st.TimedOut:
-		res.Status, res.Output, res.Error = domain.RunFailed, nil, fmt.Sprintf("timed out after %s", c.timeout)
-	case ctx.Err() != nil:
-		res.Status, res.Output, res.Error = domain.RunCancelled, nil, ctx.Err().Error()
-	case err != nil:
-		res.Status, res.Output, res.Error = domain.RunFailed, nil, "agent: "+err.Error()
-
-		if errors.Is(err, ports.ErrSandboxLost) {
-			lost = scrub.err(fmt.Errorf("agent: %w", err))
-		}
-	case fin == nil:
-		res.Status, res.Error = domain.RunFailed, fmt.Sprintf("worker exited with code %d without a result", st.Code)
-		if tail := strings.TrimSpace(st.StderrTail); tail != "" {
-			res.Error += ": " + tail
-		}
-	}
-
-	res.Error, res.Output = scrub.string(res.Error), scrub.json(res.Output)
-
-	e.log.InfoContext(ctx, "sandbox exec", slog.String("run", string(runID)), slog.String("step", "agent"),
-		slog.Int("exit", st.Code), slog.Float64("seconds", e.since(started)))
-
-	return res, lost
-}
-
-// relay records one event the agent reported, by the agent, for its run.
-func (e *Engine) relay(ctx context.Context, c claimed, runID domain.RunID, ev domain.Event, scrub scrubber) {
-	scrub.value(ev.Data)
-
-	rec := event(c.item, ev.Kind, ev.At, c.agent.Name, ev.Data)
-	rec.RunID = runID
-
-	if err := e.store.AppendEvents(ctx, rec); err != nil && ctx.Err() == nil {
-		e.log.WarnContext(ctx, "record agent event", slog.String("item", string(c.item.ID)), slog.Any("error", err))
-	}
-}
-
-// failure is the result of a run that could not be carried out: cancelled when its ctx was, so
-// a shutdown does not read as a failure.
-func failure(ctx context.Context, err error) domain.RunResult {
-	if ctx.Err() != nil && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return domain.RunResult{Status: domain.RunCancelled, Error: err.Error()}
-	}
-
-	return domain.RunResult{Status: domain.RunFailed, Error: err.Error()}
 }
 
 // exitTimedOut is the exit code a check reports when it ran out of time, as timeout(1) does.
@@ -621,7 +485,7 @@ func (e *Engine) runChecks(ctx context.Context, c claimed, runID domain.RunID, b
 			kind, data["output"] = domain.EventCheckFailed, output
 		}
 
-		e.record(ctx, c, runID, kind, data)
+		e.record(ctx, c.item, runID, kind, data)
 		e.log.InfoContext(ctx, "sandbox exec", slog.String("run", string(runID)), slog.String("step", "check"),
 			slog.Int("exit", code), slog.Float64("seconds", e.since(started)))
 
@@ -731,62 +595,6 @@ func workspaceNote(c claimed, b *box, env runEnv) string {
 var refreshWhen = map[domain.IntegrationRefresh]string{
 	domain.RefreshOnLand:   "when the assembly lands",
 	domain.RefreshEachPart: "before each part runs",
-}
-
-// gatewayToken signs the run's task token: what the gateway serves it (its bundle, its tools)
-// and until when.
-func (e *Engine) gatewayToken(ctx context.Context, c claimed, runID domain.RunID) (string, error) {
-	key, err := e.secrets.Resolve(ctx, e.cfg.GatewayKeyRef)
-	if err != nil {
-		return "", fmt.Errorf("gateway key: %w", err)
-	}
-
-	token, err := domain.SignTaskToken([]byte(key), domain.TaskClaims{
-		OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, VersionID: c.line.VersionID, ItemID: c.item.ID, Station: c.station.ID, Agent: c.agent.Name, RunID: runID,
-		Connections: c.agent.Connections, Model: c.model, DeniedCommands: c.deny, Branch: c.branch, Base: c.base, ExpiresAt: e.clock.Now().Add(c.timeout + e.cfg.LeaseTTL).Unix(),
-	})
-	if err != nil {
-		return "", fmt.Errorf("gateway token: %w", err)
-	}
-
-	return token, nil
-}
-
-// heartbeat extends the lease every HeartbeatEvery until ctx ends. When the lease is lost it
-// stops the task and reports true.
-func (e *Engine) heartbeat(ctx context.Context, lease domain.Lease, stopTask context.CancelFunc) bool {
-	t := e.clock.NewTicker(e.cfg.HeartbeatEvery)
-	defer t.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return false
-		case <-t.C():
-		}
-
-		now := e.clock.Now()
-
-		_, err := e.store.HeartbeatLease(ctx, lease, now, now.Add(e.cfg.LeaseTTL))
-
-		switch {
-		case errors.Is(err, ports.ErrLeaseLost):
-			stopTask()
-			return true
-		case err != nil && ctx.Err() == nil:
-			e.log.WarnContext(ctx, "heartbeat lease", slog.String("item", string(lease.ItemID)), slog.Any("error", err))
-		}
-	}
-}
-
-// finishRun records a run's result.
-func (e *Engine) finishRun(ctx context.Context, id domain.RunID, res domain.RunResult) {
-	ctx, cancel := cleanup(ctx)
-	defer cancel()
-
-	if err := e.store.FinishRun(ctx, id, res, e.clock.Now()); err != nil {
-		e.log.ErrorContext(ctx, "record run result", slog.String("run", string(id)), slog.Any("error", err))
-	}
 }
 
 // finish moves an item whose output passed its checks, with an event for each declared rule the

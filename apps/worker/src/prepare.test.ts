@@ -673,6 +673,29 @@ describe('prepare', () => {
       expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8')).judge).toEqual(judge);
     });
 
+    it('refuses a jonah review with a repository or a definition, and passes its spec on', async () => {
+      const jonah = {
+        files: [],
+        events: [],
+        rejected: [],
+        propose_after: 5,
+        manual: false,
+      };
+      const jonahSpec = { ...spec, item_id: '', station: '', jonah };
+      for (const bundle of [
+        { spec: jonahSpec, files: {}, repository: { url: 'https://example.com/a.git', branch: 'goal/1-x' } },
+        { spec: jonahSpec, files: {}, definition: { files: { 'factory.yaml': b64(factory) } } },
+      ]) {
+        const { exec, calls } = recorder();
+        await expect(prepare(depsWith(gatewayServing(bundle).fake, exec))).rejects.toThrow();
+        expect(calls).toEqual([]);
+      }
+
+      const { exec } = recorder();
+      await prepare(depsWith(gatewayServing({ spec: jonahSpec, files: {} }).fake, exec));
+      expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8')).jonah).toEqual(jonah);
+    });
+
     it('still needs an item outside definition mode', async () => {
       const { exec } = recorder();
       const bundle = { spec: { ...spec, item_id: '' }, files: {} };

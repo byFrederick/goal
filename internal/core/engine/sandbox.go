@@ -50,21 +50,22 @@ type prepared struct {
 	BranchExisted bool    `json:"branch_existed"`
 }
 
-// open creates the claim's sandbox on its first run and prepares it with env (the run's task token
-// and what clones the repository); a box already open is left as it is. scrub holds the run's
-// secrets.
-func (e *Engine) open(ctx context.Context, c claimed, runID domain.RunID, b *box, env map[string]string, scrub scrubber) error {
+// open creates the run's sandbox when it has none (a claim's first run) and prepares it with env
+// (the run's task token and what clones the repository, if any); a box already open is left as it
+// is. scrub holds the run's secrets.
+func (e *Engine) open(ctx context.Context, t runTask, runID domain.RunID, env map[string]string, scrub scrubber) error {
+	b := t.box
 	if b.sandbox != nil {
 		return nil
 	}
 
 	started := e.clock.Now()
-	size := cmp.Or(c.line.Runtime.Size, domain.SandboxMedium)
+	size := cmp.Or(t.Size, domain.SandboxMedium)
 
 	sb, err := e.sandboxes.Create(ctx, ports.SandboxSpec{
-		OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, ItemID: c.item.ID, RunID: runID, Station: c.station.ID, Agent: c.agent.Name,
-		Image: e.cfg.Image, Size: c.line.Runtime.Size, Env: map[string]string{envGatewayURL: e.cfg.GatewayURL},
-		Deadline: started.Add(boxLife(c, e.cfg)),
+		OrgID: t.OrgID, FactoryID: t.FactoryID, ItemID: t.Item, RunID: runID, Station: t.Station, Agent: t.Agent,
+		Image: e.cfg.Image, Size: t.Size, Env: map[string]string{envGatewayURL: e.cfg.GatewayURL},
+		Deadline: started.Add(boxLife(t.RunRequest, e.cfg)),
 	})
 	if err != nil {
 		return fmt.Errorf("create sandbox: %w", scrub.err(err))
@@ -72,7 +73,7 @@ func (e *Engine) open(ctx context.Context, c claimed, runID domain.RunID, b *box
 
 	b.sandbox = sb
 
-	e.record(ctx, c, runID, domain.EventSandboxStarted, map[string]any{"size": string(size), "seconds": e.since(started)})
+	e.record(ctx, t.item, runID, domain.EventSandboxStarted, map[string]any{"size": string(size), "seconds": e.since(started)})
 
 	var line *prepared
 
@@ -93,23 +94,23 @@ func (e *Engine) open(ctx context.Context, c claimed, runID domain.RunID, b *box
 	}
 
 	data := map[string]any{"seconds": line.Seconds, "tools": line.Tools}
-	if c.line.Runtime.Repository.URL != "" {
+	if t.Repository.URL != "" {
 		b.existed, data["branch_existed"] = line.BranchExisted, line.BranchExisted
 	}
 
-	e.record(ctx, c, runID, domain.EventPrepared, data)
+	e.record(ctx, t.item, runID, domain.EventPrepared, data)
 	e.log.InfoContext(ctx, "sandbox exec", slog.String("run", string(runID)), slog.String("step", "prepare"),
 		slog.Int("exit", st.Code), slog.Float64("seconds", e.since(started)))
 
 	return nil
 }
 
-// boxLife is how long a claim's sandbox may live: as long as both attempts may, since a retry runs
-// in the same sandbox, and never longer than the organization policy's box time limit.
-func boxLife(c claimed, cfg Config) time.Duration {
+// boxLife is how long a run's sandbox may live: as long as both attempts of a claim may, since a
+// retry runs in the same sandbox, and never longer than the organization policy's box time limit.
+func boxLife(req domain.RunRequest, cfg Config) time.Duration {
 	life := maxAttempts*cfg.TaskTimeout + cfg.LeaseTTL
-	if c.boxLimit > 0 {
-		life = min(life, c.boxLimit)
+	if req.BoxLimit > 0 {
+		life = min(life, req.BoxLimit)
 	}
 
 	return life
@@ -130,13 +131,18 @@ func (e *Engine) deleteBox(ctx context.Context, log *slog.Logger, b *box) {
 	}
 }
 
-// record appends an engine event of the run, logging a failure.
-func (e *Engine) record(ctx context.Context, c claimed, runID domain.RunID, kind domain.EventKind, data map[string]any) {
-	ev := event(c.item, kind, e.clock.Now(), domain.ActorEngine, data)
+// record appends an engine event of the run on its item, logging a failure. A run without an
+// item (a Jonah run) records none, as item events need an item.
+func (e *Engine) record(ctx context.Context, it domain.Item, runID domain.RunID, kind domain.EventKind, data map[string]any) {
+	if it.ID == "" {
+		return
+	}
+
+	ev := event(it, kind, e.clock.Now(), domain.ActorEngine, data)
 	ev.RunID = runID
 
 	if err := e.store.AppendEvents(ctx, ev); err != nil && ctx.Err() == nil {
-		e.log.WarnContext(ctx, "record run event", slog.String("item", string(c.item.ID)), slog.String("kind", string(kind)), slog.Any("error", err))
+		e.log.WarnContext(ctx, "record run event", slog.String("item", string(it.ID)), slog.String("kind", string(kind)), slog.Any("error", err))
 	}
 }
 

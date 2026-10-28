@@ -2,7 +2,7 @@
 // goald's HTTP API, always within one organization (org.go resolves which), it changes factory definitions (factory.go: goald keeps them as
 // drafts and published versions; a folder pulled with goal factory pull is edited and sent back
 // with goal factory push, which is the one way a definition changes outside the builder),
-// manages organizations, searches one (search.go), lists and revokes its standing rules (standingrules.go), lists its agent runs (runs.go), runs its eval cases (eval.go) and its bake-offs (bakeoff.go), reads its spend (spend.go), lists and tries Jonah's judges (judge.go), reads and tries a factory's triggers and manages its webhook endpoints (intake.go), and submits, follows and decides on work items. It also starts the
+// manages organizations, searches one (search.go), lists and revokes its standing rules (standingrules.go), lists its agent runs (runs.go), runs its eval cases (eval.go) and its bake-offs (bakeoff.go), lists, shows and decides Jonah's proposals (jonah.go), reads its spend (spend.go), lists and tries Jonah's judges (judge.go), reads and tries a factory's triggers and manages its webhook endpoints (intake.go), and submits, follows and decides on work items. It also starts the
 // local platform (goal up), validates folders offline (goal validate), and keeps the install's
 // skills and template catalogs in the bucket (catalog.go).
 //
@@ -195,6 +195,16 @@ const usage = `usage:
                                                   and print what it is about to cost
   goal eval show <run> [--factory F] [--json]     an eval run's state and cost, and each case's tries:
                                                   pass, fail or error
+  goal jonah [--factory F] [--state S]            Jonah's proposals of definition changes, newest first:
+                                                  number, title, state and the files they change (--state:
+                                                  proposed, published, applied, rejected or superseded)
+  goal jonah show <number> [--factory F]          a proposal's evidence and a unified diff of each file
+  goal jonah approve <number> [--factory F]       publish the proposal as a new version, as you
+  goal jonah edit <number> [--factory F]          write its files into the draft, to continue in the
+                                                  builder
+  goal jonah reject <number> --reason "..." [--factory F]
+                                                  reject it; later reviews read the reason
+  goal jonah look [--factory F]                   queue a review of the factory's sent-back runs now
   goal bake-off run <agent> [--model M]... [--trials N] [--follow] [--factory F] [--json]
                                                   print the estimate and the models, then start a bake-off
                                                   of the agent's eval cases on 2 to 4 models (default its
@@ -287,7 +297,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, connection, credential, knowledge, search, runs, eval, bake-off, spend, judge, triggers, webhooks) acts in one
+Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, connection, credential, knowledge, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or
@@ -357,7 +367,7 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbAnswer: answerItem, verbMove: moveItem, verbLane: laneItem, verbPause: pauseItem, verbCancel: cancelItem, verbDeny: denyItem,
 		"status": status, "factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
 		"connection": connectionCommand, "credential": credentialCommand, "policy": policyCommand, "knowledge": knowledgeCommand, "search": search, "runs": runs, "eval": evalCommand, "bake-off": bakeOffCommand, "spend": spend,
-		"judge": judgeCommand, "triggers": triggersCommand, "webhooks": webhooksCommand, cmdStandingRules: standingRulesCommand,
+		"judge": judgeCommand, "jonah": jonahCommand, "triggers": triggersCommand, "webhooks": webhooksCommand, cmdStandingRules: standingRulesCommand,
 	}[cmd]; ok {
 		return handler(ctx, out, getenv, rest)
 	}

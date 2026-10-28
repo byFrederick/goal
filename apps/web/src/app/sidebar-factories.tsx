@@ -2,9 +2,11 @@
 // then one collapsible group per factory that is not archived. A group is its letter badge and name,
 // with what it needs from people (a violet count) or an andon pull (a red dot). Only the open factory
 // starts expanded; its pages are plain text under a guide line, and the current one is a white chip.
+import { useQuery } from '@tanstack/react-query';
 import { Link, useMatch } from '@tanstack/react-router';
 import { ChevronDown, Plus } from 'lucide-react';
 import { useId, useState } from 'react';
+import { jonahOverviewQuery } from '../api/queries';
 import type { OrgSummary } from '../api/types';
 import { findFactory } from '../shared/factory';
 import { useOrgHolds } from '../shared/org';
@@ -17,7 +19,7 @@ import { newFactoryScreen, sidebarFactoryPages } from './screens';
 
 /** A row of the sidebar: the current page is a white chip (aria-current); a disabled row stays in the tab order. */
 export const rowClass =
-  'flex h-9 w-full items-center gap-3 rounded-control px-3 text-left text-body font-control text-ink-soft no-underline hover:bg-hover hover:text-ink aria-[current=page]:bg-card aria-[current=page]:text-ink aria-disabled:cursor-default aria-disabled:text-muted aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted';
+  'group flex h-9 w-full items-center gap-3 rounded-control px-3 text-left text-body font-control text-ink-soft no-underline hover:bg-hover hover:text-ink aria-[current=page]:bg-card aria-[current=page]:text-ink aria-disabled:cursor-default aria-disabled:text-muted aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted';
 
 export function FactoryGroups({ org, onNavigate }: { org: OrgSummary; onNavigate?: (() => void) | undefined }) {
   const squares = useFactorySquares(org);
@@ -79,6 +81,9 @@ function FactoryGroup({
   const pagesId = useId();
   const { factory, mark, attention, label } = square;
   const params = { org: org.slug, factory: factory.name };
+  // Jonah's waiting count is read for the expanded factory only; without it (a 503 while Jonah is off, or an error) the row shows no count.
+  const jonah = useQuery({ ...jonahOverviewQuery(org.id, factory.id), enabled: expanded });
+  const jonahWaiting = jonah.data?.waiting ?? 0;
 
   return (
     <>
@@ -127,6 +132,9 @@ function FactoryGroup({
                   className={rowClass}
                 >
                   {page.label}
+                  {page.id === 'jonah' && jonahWaiting > 0 ? (
+                    <Count value={jonahWaiting} label=" waiting for your review" />
+                  ) : null}
                 </Link>
               ) : (
                 <NotAvailable>
