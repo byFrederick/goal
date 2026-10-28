@@ -21,15 +21,15 @@ const (
 // intakeTitleWidth is how much of an event's title a row of goal triggers show keeps.
 const intakeTitleWidth = 60
 
-// triggersCommand is goal triggers list|show: a factory's triggers (ADR 0026) as its current
-// definition declares them, with what they created. Triggers change only through the definition
-// (goal factory push), so the CLI only reads them.
+// triggersCommand is goal triggers list|show|try: a factory's triggers (ADR 0026) as its current
+// definition declares them, with what they created, and a dry run of one against a past event
+// (ADR 0028 decision 2). Triggers change only through the definition (goal factory push).
 func triggersCommand(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	if len(args) == 0 {
 		return errUsage
 	}
 
-	handler, ok := map[string]command{subList: triggersList, subShow: triggersShow}[args[0]]
+	handler, ok := map[string]command{subList: triggersList, subShow: triggersShow, "try": triggersTry}[args[0]]
 	if !ok {
 		return errUsage
 	}
@@ -181,7 +181,7 @@ func printTrigger(out *printer, factory string, d *gen.IntakeTriggerDetail) {
 	var b bytes.Buffer
 
 	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "AT\tOUTCOME\tTITLE\tITEM")
+	_, _ = fmt.Fprintln(tw, "ID\tAT\tOUTCOME\tTITLE\tITEM")
 
 	for _, e := range d.Events {
 		item := "-"
@@ -193,12 +193,108 @@ func printTrigger(out *printer, factory string, d *gen.IntakeTriggerDetail) {
 			item = oneLine(*e.Reason)
 		}
 
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", stamp(e.At), e.Outcome, cut(oneLine(e.Title), intakeTitleWidth), item)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", e.Id, stamp(e.At), e.Outcome, cut(oneLine(e.Title), intakeTitleWidth), item)
 	}
 
 	_ = tw.Flush()
 
 	out.printf("%s", b.String())
+}
+
+// triggersTry is goal triggers try <factory> <trigger> --event ID [--json]: what the trigger would
+// do now with one of its 20 newest events. Nothing is created, but the model check runs and its
+// cost is spent.
+func triggersTry(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	fs, orgFlag, asJSON := intakeFlags("triggers try")
+	event := fs.String("event", "", "the event's id (the ID column of goal triggers show)")
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 2 || *event == "" {
+		return errUsage
+	}
+
+	c, err := connect(ctx, getenv, *orgFlag)
+	if err != nil {
+		return err
+	}
+
+	res, err := c.TryIntakeTriggerWithResponse(ctx, c.org, pos[0], pos[1], gen.TriggerTryRequest{Firing: *event})
+	if err != nil {
+		return apiDown(err)
+	}
+
+	if res.JSON200 == nil {
+		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	}
+
+	if *asJSON {
+		out.printf("%s", res.Body)
+
+		return nil
+	}
+
+	printTry(out, pos[1], res.JSON200)
+
+	return nil
+}
+
+// printTry prints a dry run: whether the event matched, its outcome, each step, the item it would
+// create and the model check, then that nothing was created. Event-shaped text goes through
+// oneLine, so it cannot break the layout.
+func printTry(out *printer, trigger string, tr *gen.TriggerTry) {
+	matched := "did not match"
+	if tr.Matched {
+		matched = "matched"
+	}
+
+	out.printf("%s with event %s: %s\n", trigger, tr.Firing, matched)
+
+	outcome := string(tr.Outcome)
+	if tr.Reason != nil {
+		outcome += " (" + oneLine(*tr.Reason) + ")"
+	}
+
+	out.printf("Outcome  %s\n", outcome)
+
+	var b bytes.Buffer
+
+	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(tw, "STEP\tOUTCOME\tREASON")
+
+	for _, s := range tr.Steps {
+		reason := "-"
+		if s.Reason != nil && *s.Reason != "" {
+			reason = oneLine(*s.Reason)
+		}
+
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", s.Step, s.Outcome, reason)
+	}
+
+	_ = tw.Flush()
+
+	out.printf("%s", b.String())
+
+	if it := tr.Item; it != nil {
+		lane := "-"
+		if it.Lane != nil && *it.Lane != "" {
+			lane = *it.Lane
+		}
+
+		out.printf("Item: %s at %s, lane %s, expedite %s\n", it.Type, it.Station, lane, yesNo(it.Expedite))
+		out.printf("  Title  %s\n", oneLine(it.Title))
+	} else {
+		out.printf("Item: none would be created\n")
+	}
+
+	if m := tr.ModelCheck; m != nil {
+		out.printf("Model check: worth %s, %s, %d in and %d out tokens, cost %s\n",
+			yesNo(m.Worth), m.Model, m.InputTokens, m.OutputTokens, fmt.Sprintf("$%.4f", m.CostUsd))
+		out.printf("  Reason  %s\n", oneLine(m.Reason))
+	} else {
+		out.printf("Model check: did not run\n")
+	}
+
+	out.printf("Nothing was created: this was a dry run (a model check's cost is still spent)\n")
 }
 
 // creates is what a trigger creates: its work type, the station it starts at, and expedite and

@@ -2,7 +2,7 @@
 // goald's HTTP API, always within one organization (org.go resolves which), it changes factory definitions (factory.go: goald keeps them as
 // drafts and published versions; a folder pulled with goal factory pull is edited and sent back
 // with goal factory push, which is the one way a definition changes outside the builder),
-// manages organizations, searches one (search.go), lists its agent runs (runs.go), runs its eval cases (eval.go), reads its spend (spend.go), lists and tries Jonah's judges (judge.go), reads a factory's triggers and manages its webhook endpoints (intake.go), and submits, follows and decides on work items. It also starts the
+// manages organizations, searches one (search.go), lists its agent runs (runs.go), runs its eval cases (eval.go), reads its spend (spend.go), lists and tries Jonah's judges (judge.go), reads and tries a factory's triggers and manages its webhook endpoints (intake.go), and submits, follows and decides on work items. It also starts the
 // local platform (goal up), validates folders offline (goal validate), and keeps the install's
 // skills and template catalogs in the bucket (catalog.go).
 //
@@ -188,6 +188,12 @@ const usage = `usage:
                                                   creating items (triggers change in the definition)
   goal triggers show <factory> <trigger> [--json] a trigger, what its items did in the last 7 days
                                                   and its recent events: created, merged or skipped
+  goal triggers try <factory> <trigger> --event ID [--json]
+                                                  dry-run the trigger on one of its 20 newest events
+                                                  (ID from goal triggers show): whether it matched,
+                                                  each step and why, the item it would create; nothing
+                                                  is created, but the model check runs and its cost is
+                                                  spent
   goal webhooks list <factory> [--json]           the factory's webhook endpoints: kind, address,
                                                   the triggers they feed, deliveries in 7 days
                                                   (never a secret)
