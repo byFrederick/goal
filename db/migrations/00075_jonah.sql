@@ -118,7 +118,7 @@ CREATE TABLE jonah_proposals (
   title                text NOT NULL CHECK (length(title) BETWEEN 1 AND 200),
   summary              text NOT NULL DEFAULT '' CHECK (length(summary) <= 4000),
   files                jsonb NOT NULL,
-  evidence             jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(evidence) = 'array' AND octet_length(evidence::text) <= 65536),
+  evidence             jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(evidence) = 'array' AND octet_length(evidence::text) <= 262144),
   estimate             jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(estimate) = 'object' AND octet_length(estimate::text) <= 4096),
   paths                text[] NOT NULL CHECK (goal_jonah_paths_allowed(paths)),
   published_version_id uuid,                                               -- the version Approve published

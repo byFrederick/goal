@@ -28,6 +28,7 @@ type AgentRun struct {
 	EndedAt             *time.Time
 	OrgID               uuid.UUID
 	DefinitionVersionID *uuid.UUID
+	Kind                string
 }
 
 type AndonPull struct {
@@ -169,6 +170,59 @@ type ItemTouch struct {
 	Planned   bool
 	Reason    *string
 	ReasonBy  *string
+}
+
+type JonahObservation struct {
+	ID         uuid.UUID
+	OrgID      uuid.UUID
+	FactoryID  uuid.UUID
+	ReviewID   uuid.UUID
+	Summary    string
+	Detail     string
+	ItemIds    []uuid.UUID
+	Count      int32
+	State      string
+	ProposalID *uuid.UUID
+	CreatedAt  time.Time
+}
+
+type JonahProposal struct {
+	ID                 uuid.UUID
+	OrgID              uuid.UUID
+	FactoryID          uuid.UUID
+	Number             int64
+	ReviewID           uuid.UUID
+	VersionID          uuid.UUID
+	State              string
+	Title              string
+	Summary            string
+	Files              []byte
+	Evidence           []byte
+	Estimate           []byte
+	Paths              []string
+	PublishedVersionID *uuid.UUID
+	RejectReason       string
+	DecidedBy          *string
+	DecidedAt          *time.Time
+	CreatedAt          time.Time
+}
+
+type JonahReview struct {
+	ID          uuid.UUID
+	OrgID       uuid.UUID
+	FactoryID   uuid.UUID
+	VersionID   uuid.UUID
+	Trigger     string
+	State       string
+	LeaseUntil  *time.Time
+	Attempts    int32
+	RunID       *uuid.UUID
+	WindowStart time.Time
+	WindowEnd   time.Time
+	Error       string
+	CreatedBy   string
+	CreatedAt   time.Time
+	FinishedAt  *time.Time
 }
 
 type JudgeScore struct {

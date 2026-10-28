@@ -3,6 +3,7 @@ package ports
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -129,4 +130,55 @@ type EvalTry struct {
 type EvalCheck struct {
 	Command  string
 	ExitCode int
+}
+
+// ErrProposalDecided is DecideProposal's answer for a proposal no longer in state proposed.
+var ErrProposalDecided = errors.New("proposal already decided")
+
+// JonahStore keeps a factory's Jonah reviews, proposals and observations (ADR 0034), for the
+// organization in ctx; *postgres.Store and *porttest.Store implement it next to ports.Store. At
+// most one review is pending or running per factory. A review is claimed under a lease, so any
+// instance may run it and a dead one's review is claimed again.
+type JonahStore interface {
+	// QueueJonahReview queues a pending review. n must pass Check (domain.ErrInvalid);
+	// ErrNotFound when the factory, or the version of that factory, does not exist. When the
+	// factory has a review pending or running, it returns that review with ErrConflict.
+	QueueJonahReview(ctx context.Context, n domain.NewJonahReview) (domain.JonahReview, error)
+	// ClaimJonahReview takes the oldest pending review, or running one whose lease ended by now,
+	// skipping reviews another transaction holds: running until now+lease, with one more
+	// attempt. ErrNotFound when nothing is claimable.
+	ClaimJonahReview(ctx context.Context, now time.Time, lease time.Duration) (domain.JonahReview, error)
+	// FinishJonahReview ends the claimed review as r says and, in the same transaction, stores
+	// its proposals with the factory's next numbers and its observations. claimed is what
+	// ClaimJonahReview returned; ErrLeaseLost unless the review still runs under that lease.
+	// r must pass Check (domain.ErrInvalid, and nothing is stored). It returns the review and
+	// the stored proposals, in r's order.
+	FinishJonahReview(ctx context.Context, claimed domain.JonahReview, r domain.JonahReviewResult) (domain.JonahReview, []domain.Proposal, error)
+	// JonahReviews is the factory's latest reviews, newest first, at most limit.
+	JonahReviews(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.JonahReview, error)
+	// Proposals is the factory's proposals that q selects, newest (highest number) first.
+	Proposals(ctx context.Context, q ProposalQuery) ([]domain.Proposal, error)
+	// Proposal is the factory's proposal of number. ErrNotFound when there is none.
+	Proposal(ctx context.Context, factory domain.FactoryID, number int64) (domain.Proposal, error)
+	// DecideProposal records d on the factory's proposal of number while it is proposed. d
+	// must pass Check; ErrNotFound when there is no such proposal, ErrProposalDecided when it
+	// is no longer proposed.
+	DecideProposal(ctx context.Context, factory domain.FactoryID, number int64, d domain.ProposalDecision) (domain.Proposal, error)
+	// Observations is the factory's latest observations, newest first, at most limit.
+	Observations(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.Observation, error)
+	// JonahSpendSince sums the cost of the factory's runs of kind jonah started at or after
+	// since: the weekly budget's spend (decision 2).
+	JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
+	// SentBackSince counts the factory's sent-back touches (a person's rejected or
+	// gate_rejected) at or after since: the threshold's count (decision 2).
+	SentBackSince(ctx context.Context, factory domain.FactoryID, since time.Time) (int, error)
+}
+
+// ProposalQuery selects a factory's proposals: in State when set, numbered below Before when
+// set (the keyset of the next page), at most Limit.
+type ProposalQuery struct {
+	Factory domain.FactoryID
+	State   domain.ProposalState
+	Before  int64
+	Limit   int
 }

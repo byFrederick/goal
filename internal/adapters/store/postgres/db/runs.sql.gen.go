@@ -15,7 +15,7 @@ import (
 const cancelLostRuns = `-- name: CancelLostRuns :many
 UPDATE agent_runs SET status = 'cancelled', error = $1, ended_at = $2
 WHERE id = ANY ($3::uuid[]) AND status = 'running'
-RETURNING id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id
+RETURNING id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind
 `
 
 type CancelLostRunsParams struct {
@@ -51,6 +51,7 @@ func (q *Queries) CancelLostRuns(ctx context.Context, arg CancelLostRunsParams) 
 			&i.EndedAt,
 			&i.OrgID,
 			&i.DefinitionVersionID,
+			&i.Kind,
 		); err != nil {
 			return nil, err
 		}
@@ -150,7 +151,7 @@ func (q *Queries) FinishRun(ctx context.Context, arg FinishRunParams) (FinishRun
 }
 
 const getRun = `-- name: GetRun :one
-SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id FROM agent_runs WHERE id = $1
+SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind FROM agent_runs WHERE id = $1
 `
 
 func (q *Queries) GetRun(ctx context.Context, id uuid.UUID) (AgentRun, error) {
@@ -174,14 +175,15 @@ func (q *Queries) GetRun(ctx context.Context, id uuid.UUID) (AgentRun, error) {
 		&i.EndedAt,
 		&i.OrgID,
 		&i.DefinitionVersionID,
+		&i.Kind,
 	)
 	return i, err
 }
 
 const insertRun = `-- name: InsertRun :exec
-INSERT INTO agent_runs (id, factory_id, definition_version_id, item_id, station, agent, model, status, started_at)
+INSERT INTO agent_runs (id, factory_id, definition_version_id, item_id, station, agent, model, status, started_at, kind)
 VALUES ($1, $2, $3, $4, $5,
-        $6, $7, 'running', $8)
+        $6, $7, 'running', $8, $9)
 `
 
 type InsertRunParams struct {
@@ -193,9 +195,11 @@ type InsertRunParams struct {
 	Agent               string
 	Model               string
 	StartedAt           time.Time
+	Kind                string
 }
 
 // A run records the definition version it starts on; NULL only for runs from before versions.
+// kind is station for a line's run, jonah for a review's.
 func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) error {
 	_, err := q.db.Exec(ctx, insertRun,
 		arg.ID,
@@ -206,12 +210,13 @@ func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) error {
 		arg.Agent,
 		arg.Model,
 		arg.StartedAt,
+		arg.Kind,
 	)
 	return err
 }
 
 const itemRuns = `-- name: ItemRuns :many
-SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id FROM agent_runs
+SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind FROM agent_runs
 WHERE item_id = $1
 ORDER BY started_at, id
 LIMIT $2::bigint
@@ -251,6 +256,7 @@ func (q *Queries) ItemRuns(ctx context.Context, arg ItemRunsParams) ([]AgentRun,
 			&i.EndedAt,
 			&i.OrgID,
 			&i.DefinitionVersionID,
+			&i.Kind,
 		); err != nil {
 			return nil, err
 		}
@@ -263,7 +269,7 @@ func (q *Queries) ItemRuns(ctx context.Context, arg ItemRunsParams) ([]AgentRun,
 }
 
 const listOrgRuns = `-- name: ListOrgRuns :many
-SELECT r.id, r.factory_id, r.item_id, r.station, r.agent, r.model, r.session_id, r.status, r.turns, r.input_tokens, r.output_tokens, r.cost_usd, r.error, r.started_at, r.ended_at, r.org_id, r.definition_version_id, w.number AS item_number, w.title AS item_title
+SELECT r.id, r.factory_id, r.item_id, r.station, r.agent, r.model, r.session_id, r.status, r.turns, r.input_tokens, r.output_tokens, r.cost_usd, r.error, r.started_at, r.ended_at, r.org_id, r.definition_version_id, r.kind, w.number AS item_number, w.title AS item_title
 FROM agent_runs r
 JOIN work_items w ON w.id = r.item_id
 WHERE r.factory_id = ANY ($1::uuid[])
@@ -346,6 +352,7 @@ func (q *Queries) ListOrgRuns(ctx context.Context, arg ListOrgRunsParams) ([]Lis
 			&i.AgentRun.EndedAt,
 			&i.AgentRun.OrgID,
 			&i.AgentRun.DefinitionVersionID,
+			&i.AgentRun.Kind,
 			&i.ItemNumber,
 			&i.ItemTitle,
 		); err != nil {

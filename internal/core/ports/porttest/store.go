@@ -40,6 +40,7 @@ type Store struct {
 	andon     []andonRecord
 	edges     []domain.Edge // item needs, in the order they were added
 	views     map[domain.SavedViewID]savedViewRecord
+	jonah     jonahRows
 	ids       int
 	changes   changes
 }
@@ -64,6 +65,7 @@ func NewStore() *Store {
 		spans:     map[domain.ItemID][]domain.Span{},
 		leaseLog:  map[domain.ItemID][]domain.LeaseSpan{},
 		views:     map[domain.SavedViewID]savedViewRecord{},
+		jonah:     jonahRows{runKinds: map[domain.RunID]domain.RunKind{}},
 	}
 }
 
@@ -149,6 +151,7 @@ func (s *Store) purge(org domain.OrgID) {
 	delete(s.orgCaps, org)
 	s.andon = slices.DeleteFunc(s.andon, func(a andonRecord) bool { return a.org == org })
 	maps.DeleteFunc(s.views, func(_ domain.SavedViewID, v savedViewRecord) bool { return v.org == org })
+	s.purgeJonah(org, "")
 }
 
 // orgOf returns the organization in ctx, as row-level security requires.
@@ -532,6 +535,7 @@ func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, err
 		Agent: r.Agent, Model: r.Model, Result: domain.RunResult{Status: domain.RunRunning}, StartedAt: r.StartedAt,
 	}
 	s.runs[run.ID] = run
+	s.jonah.runKinds[run.ID] = cmp.Or(r.Kind, domain.RunKindStation)
 	s.append(domain.Event{
 		FactoryID: r.FactoryID, ItemID: r.ItemID, RunID: run.ID, At: r.StartedAt,
 		Kind: domain.EventRunStarted, Station: r.Station, Actor: r.Agent,
