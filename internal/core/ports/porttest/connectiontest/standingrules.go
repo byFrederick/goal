@@ -123,14 +123,18 @@ func (f *fixture) rules(org domain.OrgID, includeRevoked bool) []domain.Standing
 	return got
 }
 
+// isNewRule reports whether r is an active rule for agent to call tool, created by admin on
+// approvedOn.
+func isNewRule(r domain.StandingRule, tool, agent string) bool {
+	return r.Tool == tool && r.Agent == agent && r.ItemID == approvedOn && r.CreatedBy.ID == admin.ID && !r.CreatedAt.IsZero() && r.Active()
+}
+
 func testCreateStandingRule(f *fixture) {
 	acme := f.NewOrg(f.t)
-	ctx := f.in(acme)
 	docs := f.docs(acme)
 
 	r := f.rule(acme, connDocs, toolComment, architect, admin)
-	f.expect(r.ID != "" && r.ConnectionID == docs.ID && r.Connection == connDocs && r.Tool == toolComment && r.Agent == architect &&
-		r.ItemID == approvedOn && r.CreatedBy.ID == admin.ID && !r.CreatedAt.IsZero() && r.Active(),
+	f.expect(r.ID != "" && r.ConnectionID == docs.ID && r.Connection == connDocs && isNewRule(r, toolComment, architect),
 		"CreateStandingRule = %+v; want an active rule of docs' id for architect", r)
 
 	e := f.one(acme, domain.AuditStandingRuleCreated)
@@ -144,6 +148,12 @@ func testCreateStandingRule(f *fixture) {
 
 	other := f.rule(acme, connDocs, toolComment, reviewer, admin)
 	f.expect(other.ID != r.ID, "a rule for another agent is the same rule")
+}
+
+func testCreateStandingRuleRefused(f *fixture) {
+	acme := f.NewOrg(f.t)
+	ctx := f.in(acme)
+	f.docs(acme)
 
 	_, err := f.c.CreateStandingRule(ctx, domain.NewStandingRule{Connection: "nothing", Tool: toolComment, Agent: architect, Item: approvedOn}, admin)
 	f.refused("CreateStandingRule of no connection", err, ports.ErrNotFound)
@@ -154,7 +164,8 @@ func testCreateStandingRule(f *fixture) {
 	_, err = f.c.CreateStandingRule(ctx, domain.NewStandingRule{Connection: connDocs, Tool: toolComment, Agent: "Architect", Item: approvedOn}, admin)
 	f.refused("CreateStandingRule of a malformed agent", err, domain.ErrInvalid)
 
-	f.expect(len(f.rules(acme, true)) == 2, "rules after refused creates = %+v; want two", f.rules(acme, true))
+	f.expect(len(f.rules(acme, true)) == 0, "rules after refused creates = %+v; want none", f.rules(acme, true))
+	f.expect(len(f.audit(acme, domain.AuditStandingRuleCreated)) == 0, "a refused create was audited")
 }
 
 func testRevokeStandingRule(f *fixture) {
@@ -162,7 +173,6 @@ func testRevokeStandingRule(f *fixture) {
 	ctx := f.in(acme)
 	f.docs(acme)
 	r := f.rule(acme, connDocs, toolComment, architect, admin)
-	kept := f.rule(acme, connDocs, toolIssue, architect, admin)
 
 	got, err := f.c.RevokeStandingRule(ctx, r.ID, editor)
 	if err != nil {
@@ -182,6 +192,18 @@ func testRevokeStandingRule(f *fixture) {
 	_, err = f.c.RevokeStandingRule(ctx, "00000000-0000-7000-8000-0000000000cc", editor)
 	f.refused("RevokeStandingRule of no rule", err, ports.ErrNotFound)
 	f.one(acme, domain.AuditStandingRuleRevoked)
+}
+
+func testStandingRulesActiveUnlessRevoked(f *fixture) {
+	acme := f.NewOrg(f.t)
+	ctx := f.in(acme)
+	f.docs(acme)
+	r := f.rule(acme, connDocs, toolComment, architect, admin)
+	kept := f.rule(acme, connDocs, toolIssue, architect, admin)
+
+	if _, err := f.c.RevokeStandingRule(ctx, r.ID, editor); err != nil {
+		f.t.Fatalf("RevokeStandingRule: %v", err)
+	}
 
 	active := f.rules(acme, false)
 	f.expect(len(active) == 1 && active[0].ID == kept.ID, "active rules = %+v; want only %s", active, kept.ID)

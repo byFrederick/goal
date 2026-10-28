@@ -6,6 +6,9 @@ import (
 	"testing"
 )
 
+// toolCreateComment is a tool name the tool mode and standing rule tests use.
+const toolCreateComment = "create_comment"
+
 func TestConnectionToolMode_ParsesOnlyAllowAskAndOff(t *testing.T) {
 	t.Parallel()
 
@@ -26,7 +29,7 @@ func TestConnectionToolMode_ParsesOnlyAllowAskAndOff(t *testing.T) {
 func TestConnectionToolMode_CheckToolModes(t *testing.T) {
 	t.Parallel()
 
-	ok := map[string]ConnectionToolMode{"create_comment": ToolModeAsk, "get_issue": ToolModeAllow, "delete.repo-1": ToolModeOff}
+	ok := map[string]ConnectionToolMode{toolCreateComment: ToolModeAsk, "get_issue": ToolModeAllow, "delete.repo-1": ToolModeOff}
 	if err := CheckToolModes(ok); err != nil {
 		t.Errorf("CheckToolModes(%v) = %v; want nil", ok, err)
 	}
@@ -36,7 +39,7 @@ func TestConnectionToolMode_CheckToolModes(t *testing.T) {
 	}
 
 	for name, modes := range map[string]map[string]ConnectionToolMode{
-		"an unknown mode":     {"create_comment": "deny"},
+		"an unknown mode":     {toolCreateComment: "deny"},
 		"an empty tool name":  {"": ToolModeAsk},
 		"a long tool name":    {strings.Repeat("t", MaxToolName+1): ToolModeAsk},
 		"a tool with a space": {"create comment": ToolModeAsk},
@@ -50,7 +53,7 @@ func TestConnectionToolMode_CheckToolModes(t *testing.T) {
 func TestNewStandingRule_Check(t *testing.T) {
 	t.Parallel()
 
-	valid := NewStandingRule{Connection: "acme-git", Tool: "create_comment", Agent: "architect", Item: "00000000-0000-7000-8000-0000000000aa"}
+	valid := NewStandingRule{Connection: "acme-git", Tool: toolCreateComment, Agent: "architect", Item: "00000000-0000-7000-8000-0000000000aa"}
 	if err := valid.Check(); err != nil {
 		t.Fatalf("Check(%+v) = %v; want nil", valid, err)
 	}
@@ -77,7 +80,7 @@ func TestNewStandingRule_Check(t *testing.T) {
 func TestNewStandingRule_ActiveUntilRevoked(t *testing.T) {
 	t.Parallel()
 
-	r := StandingRule{ID: "r1", Tool: "create_comment", Agent: "architect"}
+	r := StandingRule{ID: "r1", Tool: toolCreateComment, Agent: "architect"}
 	if !r.Active() {
 		t.Errorf("a rule without revoked_at is not active")
 	}

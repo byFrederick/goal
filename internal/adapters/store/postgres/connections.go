@@ -509,21 +509,7 @@ func (c *Connections) update(ctx context.Context, q *db.Queries, org domain.OrgI
 		return domain.Connection{}, err
 	}
 
-	if p.Name != nil {
-		out.Name = *p.Name
-	}
-
-	if p.Description != nil {
-		out.Description = *p.Description
-	}
-
-	if p.Fields != nil {
-		out.Fields = setValues(p.Fields)
-	}
-
-	if p.ToolModes != nil {
-		out.ToolModes = maps.Clone(p.ToolModes)
-	}
+	applyPatch(&out, p)
 
 	s := sealed{keyID: r.KeyID, nonce: r.Nonce, ciphertext: r.Ciphertext}
 
@@ -566,6 +552,26 @@ func (c *Connections) update(ctx context.Context, q *db.Queries, org domain.OrgI
 	}
 
 	return out, notifyConnection(ctx, q, r.ID, out.Name, changeUpdated)
+}
+
+// applyPatch sets out's name, description, fields and tool modes that p changes; secrets are
+// replaceSecrets'.
+func applyPatch(out *domain.Connection, p domain.ConnectionPatch) {
+	if p.Name != nil {
+		out.Name = *p.Name
+	}
+
+	if p.Description != nil {
+		out.Description = *p.Description
+	}
+
+	if p.Fields != nil {
+		out.Fields = setValues(p.Fields)
+	}
+
+	if p.ToolModes != nil {
+		out.ToolModes = maps.Clone(p.ToolModes)
+	}
 }
 
 // checkPatch refuses a patch's malformed name, description or tool modes.

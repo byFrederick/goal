@@ -452,17 +452,7 @@ func (c *Connections) Update(ctx context.Context, name string, p domain.Connecti
 		r.conn.Name = *p.Name
 	}
 
-	if p.Description != nil {
-		r.conn.Description = *p.Description
-	}
-
-	if p.Fields != nil {
-		r.conn.Fields = setOnly(p.Fields)
-	}
-
-	if p.ToolModes != nil {
-		r.conn.ToolModes = maps.Clone(p.ToolModes)
-	}
+	patchMetadata(&r.conn, p)
 
 	if err := c.replaceLocked(org, r, sealed, refs); err != nil {
 		return domain.Connection{}, err
@@ -483,6 +473,21 @@ func (c *Connections) Update(ctx context.Context, name string, p domain.Connecti
 	c.d.conns[org][r.conn.Name] = r
 
 	return cloneConnection(r.conn), nil
+}
+
+// patchMetadata sets conn's description, fields and tool modes that p changes.
+func patchMetadata(conn *domain.Connection, p domain.ConnectionPatch) {
+	if p.Description != nil {
+		conn.Description = *p.Description
+	}
+
+	if p.Fields != nil {
+		conn.Fields = setOnly(p.Fields)
+	}
+
+	if p.ToolModes != nil {
+		conn.ToolModes = maps.Clone(p.ToolModes)
+	}
 }
 
 // checkPatch refuses a patch's malformed name, description or references to credentials, and
