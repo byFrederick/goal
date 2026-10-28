@@ -17,12 +17,12 @@ import (
 
 var _ ports.DraftRequests = (*DraftRequests)(nil)
 
-// draftRequestOpenKey is 00078's partial unique index: one queued or running request per factory.
+// draftRequestOpenKey is 00080's partial unique index: one queued or running request per factory.
 const draftRequestOpenKey = "draft_requests_one_open_idx"
 
-// DraftRequests implements ports.DraftRequests over 00078's draft_requests, as goal_app under
+// DraftRequests implements ports.DraftRequests over 00080's draft_requests, as goal_app under
 // row-level security: every statement sees the organization in ctx, but the claim and the
-// requeue, which run 00078's definers in no organization.
+// requeue, which run 00080's definers in no organization.
 type DraftRequests struct {
 	s *Store
 }

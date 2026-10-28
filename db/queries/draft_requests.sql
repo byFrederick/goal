@@ -1,5 +1,5 @@
--- Draft requests (ports.DraftRequests; migration 00078), under row-level security: every statement
--- sees the transaction's organization only, but the claim and the requeue, which run 00078's
+-- Draft requests (ports.DraftRequests; migration 00080), under row-level security: every statement
+-- sees the transaction's organization only, but the claim and the requeue, which run 00080's
 -- definers in no organization.
 
 -- name: InsertDraftRequest :one
@@ -20,7 +20,7 @@ ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(max_rows);
 
 -- name: ClaimDraftRequest :one
--- The oldest queued request in any live organization, leased under a new holder (00078), in no
+-- The oldest queued request in any live organization, leased under a new holder (00080), in no
 -- organization: the caller binds the transaction to the one returned.
 SELECT c.org_id::uuid AS org_id, c.id::uuid AS id, c.lease_holder::uuid AS lease_holder
 FROM goal_claim_draft_request(sqlc.arg(now)::timestamptz, sqlc.arg(until)::timestamptz) c;
@@ -40,5 +40,5 @@ SET status = sqlc.arg(status), summary = sqlc.arg(summary), changed_paths = sqlc
 WHERE id = sqlc.arg(id) AND lease_holder = sqlc.arg(lease_holder)::uuid AND status = 'running';
 
 -- name: RequeueDraftRequests :one
--- Every organization's running requests whose lease ended by now, queued again (00078).
+-- Every organization's running requests whose lease ended by now, queued again (00080).
 SELECT goal_requeue_draft_requests(sqlc.arg(now)::timestamptz)::integer AS requeued;

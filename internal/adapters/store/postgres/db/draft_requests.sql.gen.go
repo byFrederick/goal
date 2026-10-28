@@ -28,7 +28,7 @@ type ClaimDraftRequestRow struct {
 	LeaseHolder uuid.UUID
 }
 
-// The oldest queued request in any live organization, leased under a new holder (00078), in no
+// The oldest queued request in any live organization, leased under a new holder (00080), in no
 // organization: the caller binds the transaction to the one returned.
 func (q *Queries) ClaimDraftRequest(ctx context.Context, arg ClaimDraftRequestParams) (ClaimDraftRequestRow, error) {
 	row := q.db.QueryRow(ctx, claimDraftRequest, arg.Now, arg.Until)
@@ -198,8 +198,8 @@ type InsertDraftRequestParams struct {
 	Agent     *string
 }
 
-// Draft requests (ports.DraftRequests; migration 00078), under row-level security: every statement
-// sees the transaction's organization only, but the claim and the requeue, which run 00078's
+// Draft requests (ports.DraftRequests; migration 00080), under row-level security: every statement
+// sees the transaction's organization only, but the claim and the requeue, which run 00080's
 // definers in no organization.
 // org_id comes from its default, goal_org(); a second open request of the factory violates
 // draft_requests_one_open_idx.
@@ -238,7 +238,7 @@ const requeueDraftRequests = `-- name: RequeueDraftRequests :one
 SELECT goal_requeue_draft_requests($1::timestamptz)::integer AS requeued
 `
 
-// Every organization's running requests whose lease ended by now, queued again (00078).
+// Every organization's running requests whose lease ended by now, queued again (00080).
 func (q *Queries) RequeueDraftRequests(ctx context.Context, now time.Time) (int32, error) {
 	row := q.db.QueryRow(ctx, requeueDraftRequests, now)
 	var requeued int32
