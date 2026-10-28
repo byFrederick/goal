@@ -24,6 +24,13 @@ const (
 	modelExtra = "claude-fable-5-1"
 )
 
+// The agents of the bake-offs' line, and the engineer's station.
+const (
+	agentEngineer = "engineer"
+	agentReviewer = "reviewer"
+	stationBuild  = "build"
+)
+
 // The cases of the engineer the bake-offs run; the reviewer's review-step is left out.
 const (
 	leaseFix  = "lease-fix"
@@ -36,10 +43,12 @@ func bakeOffLine() domain.Line {
 	return domain.Line{
 		FactoryID: factory, VersionID: version, Runtime: domain.Runtime{Model: modelNow},
 		Stations: []domain.Station{
-			{ID: "inbox", Kind: domain.KindQueue}, {ID: "build", Kind: domain.KindAgent, Agent: "engineer"},
-			{ID: "review", Kind: domain.KindAgent, Agent: "reviewer"}, {ID: "done", Kind: domain.KindDone},
+			{ID: "inbox", Kind: domain.KindQueue},
+			{ID: stationBuild, Kind: domain.KindAgent, Agent: agentEngineer},
+			{ID: "review", Kind: domain.KindAgent, Agent: agentReviewer},
+			{ID: "done", Kind: domain.KindDone},
 		},
-		Agents: []domain.AgentSpec{{Name: "engineer"}, {Name: "reviewer", Model: modelSmall}},
+		Agents: []domain.AgentSpec{{Name: agentEngineer}, {Name: agentReviewer, Model: modelSmall}},
 	}
 }
 
@@ -48,7 +57,7 @@ func (w *evalWorld) bakeOffContent() jonah.BakeOffContent {
 	w.t.Helper()
 
 	reviewer := evalCase(reviewStep, 1)
-	reviewer.Agent = "reviewer"
+	reviewer.Agent = agentReviewer
 	cases := []domain.EvalCaseSpec{evalCase(leaseFix, 1), evalCase(mergeStep, 1), reviewer}
 
 	suite := make([]ports.EvalSuiteCase, 0, len(cases))
@@ -111,12 +120,15 @@ func armTry(clock *porttest.Clock, t ports.EvalTask) ports.EvalTry {
 	switch t.Model {
 	case modelNow:
 		out.CostUSD, out.Turns = 1, 5
+
 		clock.Advance(2 * time.Second)
 	case modelMid:
 		out.CostUSD, out.Turns = 0.4, 4
+
 		clock.Advance(3 * time.Second)
 	default:
 		out.CostUSD, out.Turns = 0.1, 2
+
 		clock.Advance(time.Second)
 
 		if t.Case.Name == mergeStep {
@@ -125,6 +137,49 @@ func armTry(clock *porttest.Clock, t ports.EvalTask) ports.EvalTry {
 	}
 
 	return out
+}
+
+// wantArmTasks wants tasks to be eval tasks of the engineer in bake-off id, tries of each of its
+// cases on each arm's model.
+func wantArmTasks(t *testing.T, tasks []ports.EvalTask, id domain.EvalRunID, tries int) {
+	t.Helper()
+
+	perModel := map[string]int{}
+
+	for _, task := range tasks {
+		if task.Kind != domain.TaskKindEval || task.Run.ID != id || task.Case.Agent != agentEngineer {
+			t.Errorf("task = %+v, want an eval task of the engineer in bake-off %s", task, id)
+		}
+
+		perModel[task.Model+" "+task.Case.Name]++
+	}
+
+	for _, m := range []string{modelNow, modelMid, modelSmall} {
+		for _, c := range []string{leaseFix, mergeStep} {
+			if perModel[m+" "+c] != tries {
+				t.Errorf("tries of %s on %s = %d, want %d (all: %v)", c, m, perModel[m+" "+c], tries, perModel)
+			}
+		}
+	}
+}
+
+// wantSummaries wants each arm of b to have the summary want gives its model.
+func wantSummaries(t *testing.T, b domain.BakeOff, want map[string]domain.ArmSummary) {
+	t.Helper()
+
+	for _, a := range b.Arms {
+		s, w := a.Summary, want[a.Model]
+		if s == nil {
+			t.Errorf("arm %d (%s) has no summary", a.Arm, a.Model)
+
+			continue
+		}
+
+		if s.Tries != w.Tries || s.Passed != w.Passed || s.Errors != w.Errors || math.Abs(s.CostPerItemUSD-w.CostPerItemUSD) > 1e-9 ||
+			s.TimePerItem != w.TimePerItem || s.MeanTurns != w.MeanTurns || !maps.Equal(s.PerCase, w.PerCase) {
+			t.Errorf("arm %d (%s) summary = %+v, want %+v", a.Arm, a.Model, *s, w)
+		}
+	}
 }
 
 func TestBakeOff_RunsEveryArmCaseAndTry(t *testing.T) {
@@ -137,36 +192,20 @@ func TestBakeOff_RunsEveryArmCaseAndTry(t *testing.T) {
 	})
 
 	b, _, err := w.loop.StartBakeOff(w.ctx(), w.bakeOffContent(), jonah.BakeOffRequest{
-		Agent: "engineer", Models: []string{modelNow, modelMid, modelSmall}, Trials: 2,
+		Agent: agentEngineer, Models: []string{modelNow, modelMid, modelSmall}, Trials: 2,
 	}, domain.LocalUser)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(b.Results) != 12 || b.Station != "build" || b.Agent != "engineer" || b.TriesPerCase != 2 {
+	if len(b.Results) != 12 || b.Station != stationBuild || b.Agent != agentEngineer || b.TriesPerCase != 2 {
 		t.Fatalf("bake-off = %d tries of %s at %s, %d per case; want 12 tries of the engineer at build, 2 per case",
 			len(b.Results), b.Agent, b.Station, b.TriesPerCase)
 	}
 
 	w.work(12)
 
-	perModel := map[string]int{}
-
-	for _, task := range w.runner.Tasks() {
-		if task.Kind != domain.TaskKindEval || task.Run.ID != b.ID || task.Case.Agent != "engineer" {
-			t.Errorf("task = %+v, want an eval task of the engineer in bake-off %s", task, b.ID)
-		}
-
-		perModel[task.Model+" "+task.Case.Name]++
-	}
-
-	for _, m := range []string{modelNow, modelMid, modelSmall} {
-		for _, c := range []string{leaseFix, mergeStep} {
-			if perModel[m+" "+c] != 2 {
-				t.Errorf("tries of %s on %s = %d, want 2 (all: %v)", c, m, perModel[m+" "+c], perModel)
-			}
-		}
-	}
+	wantArmTasks(t, w.runner.Tasks(), b.ID, 2)
 
 	got := w.bakeOff(b.ID)
 	if got.State != domain.EvalRunDone {
@@ -187,50 +226,51 @@ func TestBakeOff_RunsEveryArmCaseAndTry(t *testing.T) {
 		modelSmall: {Tries: 4, Passed: 2, CostPerItemUSD: 0.1, TimePerItem: time.Second, MeanTurns: 2, PerCase: map[string]int{leaseFix: 2, mergeStep: 0}},
 	}
 
-	for _, a := range got.Arms {
-		s, w := a.Summary, want[a.Model]
-		if s == nil {
-			t.Errorf("arm %d (%s) has no summary", a.Arm, a.Model)
-
-			continue
-		}
-
-		if s.Tries != w.Tries || s.Passed != w.Passed || s.Errors != w.Errors || math.Abs(s.CostPerItemUSD-w.CostPerItemUSD) > 1e-9 ||
-			s.TimePerItem != w.TimePerItem || s.MeanTurns != w.MeanTurns || !maps.Equal(s.PerCase, w.PerCase) {
-			t.Errorf("arm %d (%s) summary = %+v, want %+v", a.Arm, a.Model, *s, w)
-		}
-	}
+	wantSummaries(t, got, want)
 
 	if arm, ok := domain.RecommendBakeOffArm(got); !ok || got.Arms[arm-1].Model != modelMid {
 		t.Errorf("recommended arm = %d (%v), want the mid model's: the same pass rate at less cost", arm, ok)
 	}
 }
 
-func TestBakeOff_StartValidates(t *testing.T) {
-	t.Parallel()
+// pricedWorld is an eval world whose engineer's try is priced at 1, its bake-off content, and a
+// loop with the default models and a learning budget of left.
+func pricedWorld(t *testing.T, left float64) (*evalWorld, jonah.BakeOffContent, *jonah.Evals) {
+	t.Helper()
 
 	w := newEvalWorld(t, nil)
 	content := w.bakeOffContent()
-
-	// The engineer's finished runs cost 1: a try is priced at 1.
-	w.finishedRunCosting("engineer", t0, 1)
+	w.finishedRunCosting(agentEngineer, t0, 1)
 
 	defaults := []string{modelMid, modelNow, modelSmall, modelExtra, "claude-other-1"}
-	loop := w.loopWith(w.runner, func(d *jonah.EvalDeps) { d.BakeOffModels, d.Budget = defaults, budgetLeft(100) })
+	loop := w.loopWith(w.runner, func(d *jonah.EvalDeps) { d.BakeOffModels, d.Budget = defaults, budgetLeft(left) })
+
+	return w, content, loop
+}
+
+// armModels are b's arms' models in order.
+func armModels(b domain.BakeOff) []string {
+	out := make([]string, 0, len(b.Arms))
+	for _, a := range b.Arms {
+		out = append(out, a.Model)
+	}
+
+	return out
+}
+
+func TestBakeOff_StartValidates(t *testing.T) {
+	t.Parallel()
+
+	w, content, loop := pricedWorld(t, 100)
 
 	// No models: the current model, then the defaults without it, cut at four arms; 3 tries.
-	b, est, err := loop.StartBakeOff(w.ctx(), content, jonah.BakeOffRequest{Agent: "engineer"}, domain.LocalUser)
+	b, est, err := loop.StartBakeOff(w.ctx(), content, jonah.BakeOffRequest{Agent: agentEngineer}, domain.LocalUser)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	arms := make([]string, 0, len(b.Arms))
-	for _, a := range b.Arms {
-		arms = append(arms, a.Model)
-	}
-
-	if want := []string{modelNow, modelMid, modelSmall, modelExtra}; !slices.Equal(arms, want) || !b.Arms[0].Current || b.Arms[1].Current {
-		t.Errorf("default arms = %v (%+v), want %v with the first current", arms, b.Arms, want)
+	if want := []string{modelNow, modelMid, modelSmall, modelExtra}; !slices.Equal(armModels(b), want) || !b.Arms[0].Current || b.Arms[1].Current {
+		t.Errorf("default arms = %+v, want %v with the first current", b.Arms, want)
 	}
 
 	// 2 cases × 3 tries × 4 arms at 1 a try.
@@ -243,13 +283,13 @@ func TestBakeOff_StartValidates(t *testing.T) {
 		loop *jonah.Evals
 		req  jonah.BakeOffRequest
 	}{
-		{"one arm", w.loop, jonah.BakeOffRequest{Agent: "engineer"}},
-		{"one model named", loop, jonah.BakeOffRequest{Agent: "engineer", Models: []string{modelNow}}},
-		{"a model twice", loop, jonah.BakeOffRequest{Agent: "engineer", Models: []string{modelNow, modelMid, modelMid}}},
-		{"five arms", loop, jonah.BakeOffRequest{Agent: "engineer", Models: []string{modelNow, modelMid, modelSmall, modelExtra, "claude-other-1"}}},
-		{"no current arm", loop, jonah.BakeOffRequest{Agent: "engineer", Models: []string{modelMid, modelSmall}}},
-		{"eleven tries", loop, jonah.BakeOffRequest{Agent: "engineer", Models: []string{modelNow, modelMid}, Trials: 11}},
-		{"negative tries", loop, jonah.BakeOffRequest{Agent: "engineer", Models: []string{modelNow, modelMid}, Trials: -1}},
+		{"one arm", w.loop, jonah.BakeOffRequest{Agent: agentEngineer}},
+		{"one model named", loop, jonah.BakeOffRequest{Agent: agentEngineer, Models: []string{modelNow}}},
+		{"a model twice", loop, jonah.BakeOffRequest{Agent: agentEngineer, Models: []string{modelNow, modelMid, modelMid}}},
+		{"five arms", loop, jonah.BakeOffRequest{Agent: agentEngineer, Models: []string{modelNow, modelMid, modelSmall, modelExtra, "claude-other-1"}}},
+		{"no current arm", loop, jonah.BakeOffRequest{Agent: agentEngineer, Models: []string{modelMid, modelSmall}}},
+		{"eleven tries", loop, jonah.BakeOffRequest{Agent: agentEngineer, Models: []string{modelNow, modelMid}, Trials: 11}},
+		{"negative tries", loop, jonah.BakeOffRequest{Agent: agentEngineer, Models: []string{modelNow, modelMid}, Trials: -1}},
 		{"unknown agent", loop, jonah.BakeOffRequest{Agent: "designer", Models: []string{modelNow, modelMid}}},
 	}
 
@@ -258,17 +298,31 @@ func TestBakeOff_StartValidates(t *testing.T) {
 			t.Errorf("%s: err = %v, want ErrInvalid", r.name, err)
 		}
 	}
+}
 
-	// Over the learning budget: refused with the estimate, and nothing queued.
-	poor := w.loopWith(w.runner, func(d *jonah.EvalDeps) { d.BakeOffModels, d.Budget = defaults, budgetLeft(5) })
+func TestBakeOff_StartRefusesOverTheLearningBudget(t *testing.T) {
+	t.Parallel()
 
-	_, est, err = poor.StartBakeOff(w.ctx(), content, jonah.BakeOffRequest{Agent: "engineer"}, domain.LocalUser)
+	w, content, poor := pricedWorld(t, 5)
+
+	_, est, err := poor.StartBakeOff(w.ctx(), content, jonah.BakeOffRequest{Agent: agentEngineer}, domain.LocalUser)
 	if !errors.Is(err, jonah.ErrLearningBudgetExhausted) || math.Abs(est.USD-24) > 1e-9 {
 		t.Errorf("over budget: estimate %v, err = %v; want 24 and ErrLearningBudgetExhausted", est.USD, err)
 	}
 
-	if list, err := w.evals.ListBakeOffs(w.ctx(), factory, 10); err != nil || len(list) != 1 {
-		t.Errorf("bake-offs = %d (%v), want only the first", len(list), err)
+	if list, err := w.evals.ListBakeOffs(w.ctx(), factory, 10); err != nil || len(list) != 0 {
+		t.Errorf("bake-offs = %d (%v), want none queued", len(list), err)
+	}
+}
+
+func TestBakeOff_RerunKeepsArmsAndTries(t *testing.T) {
+	t.Parallel()
+
+	w, content, loop := pricedWorld(t, 100)
+
+	b, _, err := loop.StartBakeOff(w.ctx(), content, jonah.BakeOffRequest{Agent: agentEngineer, Models: []string{modelMid, modelNow}, Trials: 2}, domain.LocalUser)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	// Run again: the same arms and tries on the content given, a newer version.
@@ -280,9 +334,13 @@ func TestBakeOff_StartValidates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if again.ID == b.ID || again.VersionID != newer.Line.VersionID || again.TriesPerCase != b.TriesPerCase || again.Agent != b.Agent ||
-		!slices.EqualFunc(again.Arms, b.Arms, func(x, y domain.BakeOffArm) bool { return x.Model == y.Model && x.Current == y.Current }) {
+	if again.ID == b.ID || again.VersionID != newer.Line.VersionID || again.TriesPerCase != 2 || again.Agent != agentEngineer ||
+		!slices.Equal(armModels(again), armModels(b)) || !again.Arms[1].Current {
 		t.Errorf("run again = %+v, want a new bake-off of %+v on the newer version", again, b)
+	}
+
+	if _, _, err := loop.RerunBakeOff(w.ctx(), "00000000-0000-4000-b000-000000000009", newer, domain.LocalUser); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("run again an unknown bake-off = %v, want ErrNotFound", err)
 	}
 }
 
@@ -293,7 +351,7 @@ func TestBakeOff_ResumesLeasedTriesAfterRestart(t *testing.T) {
 	content := w.bakeOffContent()
 
 	b, _, err := w.loop.StartBakeOff(w.ctx(), content, jonah.BakeOffRequest{
-		Agent: "engineer", Models: []string{modelNow, modelSmall}, Trials: 1,
+		Agent: agentEngineer, Models: []string{modelNow, modelSmall}, Trials: 1,
 	}, domain.LocalUser)
 	if err != nil {
 		t.Fatal(err)
@@ -347,7 +405,7 @@ func TestBakeOff_ApplyWritesTheArmModel(t *testing.T) {
 	loop := w.loopWith(w.runner, func(deps *jonah.EvalDeps) { deps.Drafts = d })
 
 	b, _, err := loop.StartBakeOff(w.ctx(), w.bakeOffContent(), jonah.BakeOffRequest{
-		Agent: "engineer", Models: []string{modelNow, modelMid}, Trials: 1,
+		Agent: agentEngineer, Models: []string{modelNow, modelMid}, Trials: 1,
 	}, domain.LocalUser)
 	if err != nil {
 		t.Fatal(err)

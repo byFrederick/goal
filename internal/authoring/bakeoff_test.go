@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/byFrederick/goal/internal/authoring"
+	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
@@ -14,6 +15,15 @@ const (
 	armModel   = "claude-haiku-5-5"
 	otherModel = "claude-sonnet-5-5"
 )
+
+// wantDraftModel wants the draft's factory.yaml to set model and not gone.
+func wantDraftModel(t *testing.T, h *harness, f domain.FactoryID, model, gone string) {
+	t.Helper()
+
+	if doc := h.draftFile(t, f, yamlFile); !strings.Contains(doc, "model: "+model) || strings.Contains(doc, gone) {
+		t.Errorf("draft's factory.yaml does not set only %s:\n%s", model, doc)
+	}
+}
 
 func TestService_SetAgentModel(t *testing.T) {
 	t.Parallel()
@@ -45,9 +55,7 @@ func TestService_SetAgentModel(t *testing.T) {
 		t.Fatalf("set another model on the open draft: %v", err)
 	}
 
-	if doc := h.draftFile(t, f, yamlFile); !strings.Contains(doc, "model: "+otherModel) || strings.Contains(doc, armModel) {
-		t.Errorf("draft's factory.yaml does not have only the second model:\n%s", doc)
-	}
+	wantDraftModel(t, h, f, otherModel, armModel)
 
 	// The agent's prompt changed in the draft since v1: a conflict, and the draft is left alone.
 	if _, err := h.svc.PutFile(h.ctx, f, authoring.FileWrite{Path: promptFile, Content: []byte("Build it twice.\n")}); err != nil {
@@ -59,9 +67,7 @@ func TestService_SetAgentModel(t *testing.T) {
 		t.Errorf("set the model after the agent changed = %v (code %q), want ErrConflict and draft-conflict", err, authoring.ProblemCode(err))
 	}
 
-	if doc := h.draftFile(t, f, yamlFile); !strings.Contains(doc, "model: "+otherModel) {
-		t.Errorf("a refused write changed the draft:\n%s", doc)
-	}
+	wantDraftModel(t, h, f, otherModel, armModel)
 
 	// An agent the version does not have is refused as a bad request.
 	if err := h.svc.SetAgentModel(h.ctx, f, v1.ID, "reviewer", armModel); !errors.Is(err, authoring.ErrInvalidRequest) {

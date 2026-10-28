@@ -59,7 +59,8 @@ func (s *Service) SetAgentModel(ctx context.Context, f domain.FactoryID, base do
 		entry := maps.Clone(got)
 		entry["model"] = model
 
-		list := slices.Clone(draft.Agents["agents"].([]any))
+		list, _ := draft.Agents["agents"].([]any)
+		list = slices.Clone(list)
 		list[i] = entry
 
 		section := maps.Clone(draft.Agents)
