@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccountRouteImport } from './routes/account'
 import { Route as DeviceRouteImport } from './routes/device'
+import { Route as GetStartedRouteImport } from './routes/get-started'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as FSplatRouteImport } from './routes/f.$'
 import { Route as InviteInvitationRouteImport } from './routes/invite.$invitation'
@@ -28,6 +29,7 @@ import { Route as OOrgOrgSettingsRouteImport } from './routes/o.$org._org.settin
 import { Route as OOrgOrgSpendRouteImport } from './routes/o.$org._org.spend'
 import { Route as OOrgFFactoryRouteImport } from './routes/o.$org.f.$factory'
 import { Route as OOrgNewStepRouteImport } from './routes/o.$org.new.$step'
+import { Route as OOrgGetStartedStepRouteImport } from './routes/o.$org_.get-started.$step'
 import { Route as OOrgOrgConnectionsIndexRouteImport } from './routes/o.$org._org.connections.index'
 import { Route as OOrgOrgConnectionsConnectionRouteImport } from './routes/o.$org._org.connections.$connection'
 import { Route as OOrgOrgConnectionsNewRouteImport } from './routes/o.$org._org.connections.new'
@@ -65,6 +67,11 @@ const AccountRoute = AccountRouteImport.update({
 const DeviceRoute = DeviceRouteImport.update({
   id: '/device',
   path: '/device',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GetStartedRoute = GetStartedRouteImport.update({
+  id: '/get-started',
+  path: '/get-started',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignInRoute = SignInRouteImport.update({
@@ -145,6 +152,11 @@ const OOrgNewStepRoute = OOrgNewStepRouteImport.update({
   id: '/new/$step',
   path: '/new/$step',
   getParentRoute: () => OOrgRoute,
+} as any)
+const OOrgGetStartedStepRoute = OOrgGetStartedStepRouteImport.update({
+  id: '/o/$org_/get-started/$step',
+  path: '/o/$org/get-started/$step',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const OOrgOrgConnectionsIndexRoute = OOrgOrgConnectionsIndexRouteImport.update({
   id: '/connections/',
@@ -271,6 +283,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/device': typeof DeviceRoute
+  '/get-started': typeof GetStartedRoute
   '/sign-in': typeof SignInRoute
   '/f/$': typeof FSplatRoute
   '/invite/$invitation': typeof InviteInvitationRoute
@@ -285,6 +298,7 @@ export interface FileRoutesByFullPath {
   '/o/$org/spend': typeof OOrgOrgSpendRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
   '/o/$org/new/$step': typeof OOrgNewStepRoute
+  '/o/$org/get-started/$step': typeof OOrgGetStartedStepRoute
   '/o/$org/': typeof OOrgOrgIndexRoute
   '/o/$org/connections/$connection': typeof OOrgOrgConnectionsConnectionRoute
   '/o/$org/connections/new': typeof OOrgOrgConnectionsNewRoute
@@ -314,6 +328,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/device': typeof DeviceRoute
+  '/get-started': typeof GetStartedRoute
   '/sign-in': typeof SignInRoute
   '/f/$': typeof FSplatRoute
   '/invite/$invitation': typeof InviteInvitationRoute
@@ -327,6 +342,7 @@ export interface FileRoutesByTo {
   '/o/$org/settings': typeof OOrgOrgSettingsRoute
   '/o/$org/spend': typeof OOrgOrgSpendRoute
   '/o/$org/new/$step': typeof OOrgNewStepRoute
+  '/o/$org/get-started/$step': typeof OOrgGetStartedStepRoute
   '/o/$org/connections/$connection': typeof OOrgOrgConnectionsConnectionRoute
   '/o/$org/connections/new': typeof OOrgOrgConnectionsNewRoute
   '/o/$org/credentials/new': typeof OOrgOrgCredentialsNewRoute
@@ -355,6 +371,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/device': typeof DeviceRoute
+  '/get-started': typeof GetStartedRoute
   '/sign-in': typeof SignInRoute
   '/f/$': typeof FSplatRoute
   '/invite/$invitation': typeof InviteInvitationRoute
@@ -370,6 +387,7 @@ export interface FileRoutesById {
   '/o/$org/_org/spend': typeof OOrgOrgSpendRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
   '/o/$org/new/$step': typeof OOrgNewStepRoute
+  '/o/$org_/get-started/$step': typeof OOrgGetStartedStepRoute
   '/o/$org/_org/': typeof OOrgOrgIndexRoute
   '/o/$org/_org/connections/$connection': typeof OOrgOrgConnectionsConnectionRoute
   '/o/$org/_org/connections/new': typeof OOrgOrgConnectionsNewRoute
@@ -401,6 +419,7 @@ export interface FileRouteTypes {
     | '/'
     | '/account'
     | '/device'
+    | '/get-started'
     | '/sign-in'
     | '/f/$'
     | '/invite/$invitation'
@@ -415,6 +434,7 @@ export interface FileRouteTypes {
     | '/o/$org/spend'
     | '/o/$org/f/$factory'
     | '/o/$org/new/$step'
+    | '/o/$org/get-started/$step'
     | '/o/$org/'
     | '/o/$org/connections/$connection'
     | '/o/$org/connections/new'
@@ -444,6 +464,7 @@ export interface FileRouteTypes {
     | '/'
     | '/account'
     | '/device'
+    | '/get-started'
     | '/sign-in'
     | '/f/$'
     | '/invite/$invitation'
@@ -457,6 +478,7 @@ export interface FileRouteTypes {
     | '/o/$org/settings'
     | '/o/$org/spend'
     | '/o/$org/new/$step'
+    | '/o/$org/get-started/$step'
     | '/o/$org/connections/$connection'
     | '/o/$org/connections/new'
     | '/o/$org/credentials/new'
@@ -484,6 +506,7 @@ export interface FileRouteTypes {
     | '/'
     | '/account'
     | '/device'
+    | '/get-started'
     | '/sign-in'
     | '/f/$'
     | '/invite/$invitation'
@@ -499,6 +522,7 @@ export interface FileRouteTypes {
     | '/o/$org/_org/spend'
     | '/o/$org/f/$factory'
     | '/o/$org/new/$step'
+    | '/o/$org_/get-started/$step'
     | '/o/$org/_org/'
     | '/o/$org/_org/connections/$connection'
     | '/o/$org/_org/connections/new'
@@ -529,11 +553,13 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountRoute: typeof AccountRoute
   DeviceRoute: typeof DeviceRoute
+  GetStartedRoute: typeof GetStartedRoute
   SignInRoute: typeof SignInRoute
   FSplatRoute: typeof FSplatRoute
   InviteInvitationRoute: typeof InviteInvitationRoute
   OOrgRoute: typeof OOrgRouteWithChildren
   SignInCodeRoute: typeof SignInCodeRoute
+  OOrgGetStartedStepRoute: typeof OOrgGetStartedStepRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -557,6 +583,13 @@ declare module '@tanstack/react-router' {
       path: '/device'
       fullPath: '/device'
       preLoaderRoute: typeof DeviceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/get-started': {
+      id: '/get-started'
+      path: '/get-started'
+      fullPath: '/get-started'
+      preLoaderRoute: typeof GetStartedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sign-in': {
@@ -670,6 +703,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/o/$org/new/$step'
       preLoaderRoute: typeof OOrgNewStepRouteImport
       parentRoute: typeof OOrgRoute
+    }
+    '/o/$org_/get-started/$step': {
+      id: '/o/$org_/get-started/$step'
+      path: '/o/$org/get-started/$step'
+      fullPath: '/o/$org/get-started/$step'
+      preLoaderRoute: typeof OOrgGetStartedStepRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/o/$org/_org/connections/': {
       id: '/o/$org/_org/connections/'
@@ -946,11 +986,13 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRoute,
   DeviceRoute: DeviceRoute,
+  GetStartedRoute: GetStartedRoute,
   SignInRoute: SignInRoute,
   FSplatRoute: FSplatRoute,
   InviteInvitationRoute: InviteInvitationRoute,
   OOrgRoute: OOrgRouteWithChildren,
   SignInCodeRoute: SignInCodeRoute,
+  OOrgGetStartedStepRoute: OOrgGetStartedStepRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
