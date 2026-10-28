@@ -22,7 +22,6 @@ import { cn } from '../../ui/cn';
 import { EmptyState } from '../../ui/empty-state';
 import { Field, Input, NativeSelect } from '../../ui/field';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../ui/menu';
-import { NotAvailable } from '../../ui/not-available';
 import { Monogram, Status } from './parts';
 import { ReplaceSecretDialog } from './replace-secret-dialog';
 import { useTestConnection } from './use-test';
@@ -171,12 +170,12 @@ export function ConnectionsPage() {
               <SummaryLabel>Need attention</SummaryLabel>
               <SummaryValue className="text-rework-ink">{all.filter(needsAttention).length}</SummaryValue>
             </div>
-            <NotAvailable label="Writes waiting for your OK">
-              <button type="button" className={cn(tileClass, 'justify-between')}>
-                <SummaryLabel>Writes waiting for your OK</SummaryLabel>
-                <SummaryValue>–</SummaryValue>
-              </button>
-            </NotAvailable>
+            <Link to="/o/$org/needs-you" params={{ org: org.slug }} className={cn(tileClass, 'justify-between')}>
+              <SummaryLabel>Writes waiting for your OK</SummaryLabel>
+              <SummaryValue className="text-you-ink">
+                {all.reduce((sum, c) => sum + c.waiting_approvals, 0)}
+              </SummaryValue>
+            </Link>
           </div>
 
           <div className="flex flex-col gap-3">

@@ -351,6 +351,27 @@ func (e ConnectionKindModes) Valid() bool {
 	}
 }
 
+// Defines values for ConnectionToolMode.
+const (
+	ConnectionToolModeAllow ConnectionToolMode = "allow"
+	ConnectionToolModeAsk   ConnectionToolMode = "ask"
+	ConnectionToolModeOff   ConnectionToolMode = "off"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionToolMode enum.
+func (e ConnectionToolMode) Valid() bool {
+	switch e {
+	case ConnectionToolModeAllow:
+		return true
+	case ConnectionToolModeAsk:
+		return true
+	case ConnectionToolModeOff:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ConstraintSource.
 const (
 	Configured ConstraintSource = "configured"
@@ -713,6 +734,7 @@ const (
 	InboxEntryKindExpedite      InboxEntryKind = "expedite"
 	InboxEntryKindQuestion      InboxEntryKind = "question"
 	InboxEntryKindReworkWarning InboxEntryKind = "rework_warning"
+	InboxEntryKindToolApproval  InboxEntryKind = "tool_approval"
 )
 
 // Valid indicates whether the value is a known member of the InboxEntryKind enum.
@@ -729,6 +751,8 @@ func (e InboxEntryKind) Valid() bool {
 	case InboxEntryKindQuestion:
 		return true
 	case InboxEntryKindReworkWarning:
+		return true
+	case InboxEntryKindToolApproval:
 		return true
 	default:
 		return false
@@ -1410,6 +1434,24 @@ const (
 func (e TemplateStartKind) Valid() bool {
 	switch e {
 	case TemplateStartKindTemplate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ToolDecisionDecision.
+const (
+	Approve ToolDecisionDecision = "approve"
+	Deny    ToolDecisionDecision = "deny"
+)
+
+// Valid indicates whether the value is a known member of the ToolDecisionDecision enum.
+func (e ToolDecisionDecision) Valid() bool {
+	switch e {
+	case Approve:
+		return true
+	case Deny:
 		return true
 	default:
 		return false
@@ -2272,7 +2314,10 @@ type Connection struct {
 	SecretsSet []string `json:"secrets_set"`
 
 	// Status missing-secret: a required secret field is not set (its kind gained one); else the last test's outcome, untested before any
-	Status    ConnectionStatus `json:"status"`
+	Status ConnectionStatus `json:"status"`
+
+	// Tools Its tools and their modes (ADR 0031 decisions 1 and 2), sorted by name: one entry for each tool the last test listed and each tool with a mode set, a tool without a mode being allow; empty for a connection never tested and without modes
+	Tools     []ConnectionTool `json:"tools"`
 	UpdatedAt time.Time        `json:"updated_at"`
 
 	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
@@ -2280,6 +2325,9 @@ type Connection struct {
 
 	// UsedBy What uses a connection, so it cannot be deleted or renamed meanwhile
 	UsedBy ConnectionUsers `json:"used_by"`
+
+	// WaitingApprovals The open tool approvals on this connection in the organization, by its current name; the connections list's "Writes waiting for your OK" is their sum
+	WaitingApprovals int `json:"waiting_approvals"`
 }
 
 // ConnectionStatus missing-secret: a required secret field is not set (its kind gained one); else the last test's outcome, untested before any
@@ -2389,6 +2437,9 @@ type ConnectionPatch struct {
 
 	// Secrets The secret fields to replace, by name; an empty value clears an optional one
 	Secrets *map[string]string `json:"secrets,omitempty"`
+
+	// Tools Every tool's mode: replaces them all, so send the full list (a tool left out goes back to allow). Only for a connection whose kind has an MCP server; a tool named twice is refused.
+	Tools *[]ConnectionTool `json:"tools,omitempty"`
 }
 
 // ConnectionTestResult defines model for ConnectionTestResult.
@@ -2402,6 +2453,18 @@ type ConnectionTestResult struct {
 	// Status The test request's HTTP status, when it got one
 	Status *int `json:"status,omitempty"`
 }
+
+// ConnectionTool defines model for ConnectionTool.
+type ConnectionTool struct {
+	// Mode What a run may do with one tool of the connection (ADR 0031 decision 1): allow runs the call, ask pauses it for a person, off refuses it
+	Mode ConnectionToolMode `json:"mode"`
+
+	// Name The tool's name as the MCP server lists it, without the connection prefix: 1 to 128 letters, digits, underscores, dots or dashes
+	Name string `json:"name"`
+}
+
+// ConnectionToolMode What a run may do with one tool of the connection (ADR 0031 decision 1): allow runs the call, ask pauses it for a person, off refuses it
+type ConnectionToolMode string
 
 // ConnectionUsers What uses a connection, so it cannot be deleted or renamed meanwhile
 type ConnectionUsers struct {
@@ -3085,7 +3148,7 @@ type Event struct {
 	Id     int64                  `json:"id"`
 	ItemId string                 `json:"item_id"`
 
-	// Kind What happened, as in submitted, moved, note or lease_taken. question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue
+	// Kind What happened, as in submitted, moved, note or lease_taken. question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue. tool_approval_requested: the item's agent asked to make a call of an Ask-first connection tool (data connection, tool, input, agent as the role name, run_id, always_allow_offered); the run ends and the item waits at its station. tool_approval_granted: a person approved it (data approval_id, always_allow; actor); tool_approval_denied: a person denied it (data approval_id, note when given; actor); either way the item goes back to its station's queue
 	Kind    string  `json:"kind"`
 	RunId   *string `json:"run_id,omitempty"`
 	Station *string `json:"station,omitempty"`
@@ -3389,13 +3452,13 @@ type InboxEntry struct {
 		Title *string `json:"title"`
 	} `json:"factory"`
 
-	// Id "<kind>:<id of what waits>": decision:, question:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>
+	// Id "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>
 	Id string `json:"id"`
 
 	// Item The item it is about, or null for an entry that is about no item
 	Item *ItemCard `json:"item"`
 
-	// Kind What waits; later phases add kinds, which clients that do not know them show as a generic row
+	// Kind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny
 	Kind InboxEntryKind `json:"kind"`
 
 	// Question A question entry's open question; absent or null for other kinds
@@ -3404,14 +3467,17 @@ type InboxEntry struct {
 	// Rework The gate tally of a rework warning; null for other kinds
 	Rework *ReworkWarning `json:"rework"`
 
-	// Since Since when it waits: the item's last change (decision, question, blocked), its creation (expedite), the pull (andon), now (rework_warning)
+	// Since Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning)
 	Since time.Time `json:"since"`
 
 	// Station The station where it waits
 	Station *string `json:"station"`
+
+	// ToolApproval A tool_approval entry's open tool approval; absent or null for other kinds
+	ToolApproval *ToolApproval `json:"tool_approval,omitempty"`
 }
 
-// InboxEntryKind What waits; later phases add kinds, which clients that do not know them show as a generic row
+// InboxEntryKind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny
 type InboxEntryKind string
 
 // Intake defines model for Intake.
@@ -3583,6 +3649,9 @@ type Item struct {
 	State   ItemState `json:"state"`
 	Station string    `json:"station"`
 	Title   string    `json:"title"`
+
+	// ToolApproval The tool call the item's agent asked to make that waits for a person's decision (ADR 0031); getItem and decideToolApproval only, absent or null when there is none
+	ToolApproval *ToolApproval `json:"tool_approval,omitempty"`
 
 	// Touches The item's human touches; getItem only
 	Touches   *ItemTouches `json:"touches,omitempty"`
@@ -5503,6 +5572,32 @@ type SpendDay struct {
 // SpendWindow defines model for SpendWindow.
 type SpendWindow string
 
+// StandingRule Lets one agent role call one tool of one organization connection without asking, in every factory of the organization (ADR 0031 decision 7)
+type StandingRule struct {
+	// Agent The agent's role, its name in the definition, as in architect
+	Agent string `json:"agent"`
+
+	// Connection The connection's name; null once the connection is deleted
+	Connection   *string   `json:"connection"`
+	ConnectionId string    `json:"connection_id"`
+	CreatedAt    time.Time `json:"created_at"`
+
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	CreatedBy Actor  `json:"created_by"`
+	Id        string `json:"id"`
+
+	// ItemId The item it was approved on
+	ItemId    string     `json:"item_id"`
+	RevokedAt *time.Time `json:"revoked_at"`
+	RevokedBy *Actor     `json:"revoked_by"`
+	Tool      string     `json:"tool"`
+}
+
+// StandingRuleList defines model for StandingRuleList.
+type StandingRuleList struct {
+	Rules []StandingRule `json:"rules"`
+}
+
 // Station defines model for Station.
 type Station struct {
 	// Action What goald does when a human acts at this human station (merge → POST /v1/orgs/{org}/items/{item}/merge)
@@ -5621,6 +5716,44 @@ type Throughput struct {
 	// PreviousPerDay The same over the previous window
 	PreviousPerDay float64 `json:"previous_per_day"`
 }
+
+// ToolApproval A run's call of an Ask-first connection tool that waits for a person, read from its tool_approval_requested event
+type ToolApproval struct {
+	// Agent The calling agent's role name, as in architect; never its copy number
+	Agent string `json:"agent"`
+
+	// AlwaysAllowOffered Whether a person may approve the call with always_allow: its ask comes from the organization connection's mode alone
+	AlwaysAllowOffered bool      `json:"always_allow_offered"`
+	AskedAt            time.Time `json:"asked_at"`
+
+	// Connection The organization connection's name
+	Connection string `json:"connection"`
+
+	// Id The approval's id
+	Id int64 `json:"id"`
+
+	// Input The call's input, any JSON value, as canonical JSON (keys sorted); at most 16 KiB
+	Input interface{} `json:"input"`
+
+	// RunId The run that asked; it ended when it asked
+	RunId string `json:"run_id"`
+
+	// Tool The tool's name as the connection's MCP server lists it, as in create_comment
+	Tool string `json:"tool"`
+}
+
+// ToolDecision A person's decision on an item's open tool approval
+type ToolDecision struct {
+	// AlwaysAllow With approve only: also let the agent role call this tool of this connection without asking from now on (a standing rule); needs connection:manage
+	AlwaysAllow *bool                `json:"always_allow,omitempty"`
+	Decision    ToolDecisionDecision `json:"decision"`
+
+	// Note With deny only, the person's reason, 1 to 2000 characters (surrounding space is trimmed)
+	Note *string `json:"note,omitempty"`
+}
+
+// ToolDecisionDecision defines model for ToolDecision.Decision.
+type ToolDecisionDecision string
 
 // ToolPolicy The tool policy defaults (ADR 0024 decision 2)
 type ToolPolicy struct {
@@ -6493,6 +6626,12 @@ type ExportSpendParams struct {
 	Window *SpendWindow `form:"window,omitempty" json:"window,omitempty"`
 }
 
+// ListStandingRulesParams defines parameters for ListStandingRules.
+type ListStandingRulesParams struct {
+	// Revoked Also list the revoked rules
+	Revoked *bool `form:"revoked,omitempty" json:"revoked,omitempty"`
+}
+
 // StreamEventsParams defines parameters for StreamEvents.
 type StreamEventsParams struct {
 	// Factory Only this factory's events (its metadata.id or metadata.name)
@@ -6631,6 +6770,9 @@ type PauseItemJSONRequestBody = PauseRequest
 
 // RejectItemJSONRequestBody defines body for RejectItem for application/json ContentType.
 type RejectItemJSONRequestBody = Rejection
+
+// DecideToolApprovalJSONRequestBody defines body for DecideToolApproval for application/json ContentType.
+type DecideToolApprovalJSONRequestBody = ToolDecision
 
 // SetTouchReasonJSONRequestBody defines body for SetTouchReason for application/json ContentType.
 type SetTouchReasonJSONRequestBody = TouchReasonChange
@@ -7182,18 +7324,18 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/connections/{connection} (the `GetConnection` operationId).
 	GetConnection(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// UpdateConnectionWithBody Rename a connection, or change its description, fields or secrets
+	// UpdateConnectionWithBody Rename a connection, or change its description, fields, secrets or tool modes
 	//
-	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
 	UpdateConnectionWithBody(ctx context.Context, org OrgRef, connection ConnectionRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// UpdateConnection Rename a connection, or change its description, fields or secrets
+	// UpdateConnection Rename a connection, or change its description, fields, secrets or tool modes
 	//
-	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -7994,6 +8136,8 @@ type ClientInterface interface {
 
 	// ApproveItem Approve an item waiting for a human; it moves to the next station
 	//
+	// 409 tool-approval-open while the item has an open tool approval (Item.tool_approval): the item waits for a decision on the call, decided with decideToolApproval, not on the item (ADR 0031 decision 9).
+	//
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/approve (the `ApproveItem` operationId).
 	ApproveItem(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -8189,6 +8333,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
 	ListItemRuns(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DecideToolApprovalWithBody Approve or deny the tool call an item's agent asked to make
+	//
+	// Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs connection:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without connection:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/tool-approval (the `DecideToolApproval` operationId).
+	DecideToolApprovalWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DecideToolApproval Approve or deny the tool call an item's agent asked to make
+	//
+	// Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs connection:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without connection:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/tool-approval (the `DecideToolApproval` operationId).
+	DecideToolApproval(ctx context.Context, org OrgRef, item ItemRef, body DecideToolApprovalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SetTouchReasonWithBody Say why a person had to act on an item
 	//
@@ -8532,6 +8694,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/spend/export (the `ExportSpend` operationId).
 	ExportSpend(ctx context.Context, org OrgRef, params *ExportSpendParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListStandingRules The organization's standing rules
+	//
+	// The rules Always allow created (ADR 0031 decision 7), oldest first: each lets one agent role call one tool of one organization connection without asking, in every factory of the organization. The active ones, and the revoked ones too with revoked=true.
+	//
+	// Corresponds with GET /v1/orgs/{org}/standing-rules (the `ListStandingRules` operationId).
+	ListStandingRules(ctx context.Context, org OrgRef, params *ListStandingRulesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RevokeStandingRule Revoke a standing rule
+	//
+	// The rule's agent role asks first again from its next run. A rule is never deleted: revoking sets revoked_at and revoked_by, audited as standing_rule.revoked. 404 for a rule that does not exist, 409 standing-rule-revoked for one revoked already. Needs a sign-in from the last 10 minutes.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/standing-rules/{rule} (the `RevokeStandingRule` operationId).
+	RevokeStandingRule(ctx context.Context, org OrgRef, rule string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	//
@@ -9098,9 +9274,9 @@ func (c *Client) GetConnection(ctx context.Context, org OrgRef, connection Conne
 	return c.Client.Do(req)
 }
 
-// UpdateConnectionWithBody Rename a connection, or change its description, fields or secrets
+// UpdateConnectionWithBody Rename a connection, or change its description, fields, secrets or tool modes
 //
-// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 //
 // Takes any type of body and a specified content type.
 //
@@ -9117,9 +9293,9 @@ func (c *Client) UpdateConnectionWithBody(ctx context.Context, org OrgRef, conne
 	return c.Client.Do(req)
 }
 
-// UpdateConnection Rename a connection, or change its description, fields or secrets
+// UpdateConnection Rename a connection, or change its description, fields, secrets or tool modes
 //
-// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -10950,6 +11126,8 @@ func (c *Client) AnswerItem(ctx context.Context, org OrgRef, item ItemRef, body 
 
 // ApproveItem Approve an item waiting for a human; it moves to the next station
 //
+// 409 tool-approval-open while the item has an open tool approval (Item.tool_approval): the item waits for a decision on the call, decided with decideToolApproval, not on the item (ADR 0031 decision 9).
+//
 // Corresponds with POST /v1/orgs/{org}/items/{item}/approve (the `ApproveItem` operationId).
 func (c *Client) ApproveItem(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewApproveItemRequest(c.Server, org, item)
@@ -11376,6 +11554,44 @@ func (c *Client) RetryItem(ctx context.Context, org OrgRef, item ItemRef, reqEdi
 // Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
 func (c *Client) ListItemRuns(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListItemRunsRequest(c.Server, org, item)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DecideToolApprovalWithBody Approve or deny the tool call an item's agent asked to make
+//
+// Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs connection:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without connection:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/tool-approval (the `DecideToolApproval` operationId).
+func (c *Client) DecideToolApprovalWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDecideToolApprovalRequestWithBody(c.Server, org, item, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DecideToolApproval Approve or deny the tool call an item's agent asked to make
+//
+// Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs connection:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without connection:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/tool-approval (the `DecideToolApproval` operationId).
+func (c *Client) DecideToolApproval(ctx context.Context, org OrgRef, item ItemRef, body DecideToolApprovalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDecideToolApprovalRequest(c.Server, org, item, body)
 	if err != nil {
 		return nil, err
 	}
@@ -12169,6 +12385,40 @@ func (c *Client) GetOrgSpend(ctx context.Context, org OrgRef, params *GetOrgSpen
 // Corresponds with GET /v1/orgs/{org}/spend/export (the `ExportSpend` operationId).
 func (c *Client) ExportSpend(ctx context.Context, org OrgRef, params *ExportSpendParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewExportSpendRequest(c.Server, org, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListStandingRules The organization's standing rules
+//
+// The rules Always allow created (ADR 0031 decision 7), oldest first: each lets one agent role call one tool of one organization connection without asking, in every factory of the organization. The active ones, and the revoked ones too with revoked=true.
+//
+// Corresponds with GET /v1/orgs/{org}/standing-rules (the `ListStandingRules` operationId).
+func (c *Client) ListStandingRules(ctx context.Context, org OrgRef, params *ListStandingRulesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListStandingRulesRequest(c.Server, org, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RevokeStandingRule Revoke a standing rule
+//
+// The rule's agent role asks first again from its next run. A rule is never deleted: revoking sets revoked_at and revoked_by, audited as standing_rule.revoked. 404 for a rule that does not exist, 409 standing-rule-revoked for one revoked already. Needs a sign-in from the last 10 minutes.
+//
+// Corresponds with DELETE /v1/orgs/{org}/standing-rules/{rule} (the `RevokeStandingRule` operationId).
+func (c *Client) RevokeStandingRule(ctx context.Context, org OrgRef, rule string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRevokeStandingRuleRequest(c.Server, org, rule)
 	if err != nil {
 		return nil, err
 	}
@@ -18648,6 +18898,60 @@ func NewListItemRunsRequest(server string, org OrgRef, item ItemRef) (*http.Requ
 	return req, nil
 }
 
+// NewDecideToolApprovalRequest calls the generic DecideToolApproval builder with application/json body
+func NewDecideToolApprovalRequest(server string, org OrgRef, item ItemRef, body DecideToolApprovalJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDecideToolApprovalRequestWithBody(server, org, item, "application/json", bodyReader)
+}
+
+// NewDecideToolApprovalRequestWithBody constructs an http.Request for the DecideToolApproval method, with any body, and a specified content type
+func NewDecideToolApprovalRequestWithBody(server string, org OrgRef, item ItemRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/tool-approval", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewSetTouchReasonRequest calls the generic SetTouchReason builder with application/json body
 func NewSetTouchReasonRequest(server string, org OrgRef, item ItemRef, event int64, body SetTouchReasonJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -20690,6 +20994,108 @@ func NewExportSpendRequest(server string, org OrgRef, params *ExportSpendParams)
 	return req, nil
 }
 
+// NewListStandingRulesRequest constructs an http.Request for the ListStandingRules method
+func NewListStandingRulesRequest(server string, org OrgRef, params *ListStandingRulesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/standing-rules", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Revoked != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "revoked", *params.Revoked, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRevokeStandingRuleRequest constructs an http.Request for the RevokeStandingRule method
+func NewRevokeStandingRuleRequest(server string, org OrgRef, rule string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "rule", rule, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/standing-rules/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewStreamEventsRequest constructs an http.Request for the StreamEvents method
 func NewStreamEventsRequest(server string, org OrgRef, params *StreamEventsParams) (*http.Request, error) {
 	var err error
@@ -21367,18 +21773,18 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/connections/{connection} (the `GetConnection` operationId).
 	GetConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*GetConnectionResponse, error)
 
-	// UpdateConnectionWithBodyWithResponse Rename a connection, or change its description, fields or secrets
+	// UpdateConnectionWithBodyWithResponse Rename a connection, or change its description, fields, secrets or tool modes
 	//
-	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
 	UpdateConnectionWithBodyWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateConnectionResponse, error)
 
-	// UpdateConnectionWithResponse Rename a connection, or change its description, fields or secrets
+	// UpdateConnectionWithResponse Rename a connection, or change its description, fields, secrets or tool modes
 	//
-	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -22283,6 +22689,8 @@ type ClientWithResponsesInterface interface {
 
 	// ApproveItemWithResponse Approve an item waiting for a human; it moves to the next station
 	//
+	// 409 tool-approval-open while the item has an open tool approval (Item.tool_approval): the item waits for a decision on the call, decided with decideToolApproval, not on the item (ADR 0031 decision 9).
+	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/orgs/{org}/items/{item}/approve (the `ApproveItem` operationId).
@@ -22490,6 +22898,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
 	ListItemRunsWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*ListItemRunsResponse, error)
+
+	// DecideToolApprovalWithBodyWithResponse Approve or deny the tool call an item's agent asked to make
+	//
+	// Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs connection:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without connection:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/tool-approval (the `DecideToolApproval` operationId).
+	DecideToolApprovalWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DecideToolApprovalResponse, error)
+
+	// DecideToolApprovalWithResponse Approve or deny the tool call an item's agent asked to make
+	//
+	// Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs connection:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without connection:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/tool-approval (the `DecideToolApproval` operationId).
+	DecideToolApprovalWithResponse(ctx context.Context, org OrgRef, item ItemRef, body DecideToolApprovalJSONRequestBody, reqEditors ...RequestEditorFn) (*DecideToolApprovalResponse, error)
 
 	// SetTouchReasonWithBodyWithResponse Say why a person had to act on an item
 	//
@@ -22889,6 +23315,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/spend/export (the `ExportSpend` operationId).
 	ExportSpendWithResponse(ctx context.Context, org OrgRef, params *ExportSpendParams, reqEditors ...RequestEditorFn) (*ExportSpendResponse, error)
+
+	// ListStandingRulesWithResponse The organization's standing rules
+	//
+	// The rules Always allow created (ADR 0031 decision 7), oldest first: each lets one agent role call one tool of one organization connection without asking, in every factory of the organization. The active ones, and the revoked ones too with revoked=true.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/standing-rules (the `ListStandingRules` operationId).
+	ListStandingRulesWithResponse(ctx context.Context, org OrgRef, params *ListStandingRulesParams, reqEditors ...RequestEditorFn) (*ListStandingRulesResponse, error)
+
+	// RevokeStandingRuleWithResponse Revoke a standing rule
+	//
+	// The rule's agent role asks first again from its next run. A rule is never deleted: revoking sets revoked_at and revoked_by, audited as standing_rule.revoked. 404 for a rule that does not exist, 409 standing-rule-revoked for one revoked already. Needs a sign-in from the last 10 minutes.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/standing-rules/{rule} (the `RevokeStandingRule` operationId).
+	RevokeStandingRuleWithResponse(ctx context.Context, org OrgRef, rule string, reqEditors ...RequestEditorFn) (*RevokeStandingRuleResponse, error)
 
 	// StreamEventsWithResponse The organization's events as they happen (Server-Sent Events)
 	//
@@ -28645,6 +29089,61 @@ func (r ListItemRunsResponse) ContentType() string {
 	return ""
 }
 
+type DecideToolApprovalResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Item
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Conflict
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r DecideToolApprovalResponse) GetJSON200() *Item {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r DecideToolApprovalResponse) GetApplicationproblemJSON409() *Conflict {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r DecideToolApprovalResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r DecideToolApprovalResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DecideToolApprovalResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DecideToolApprovalResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DecideToolApprovalResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type SetTouchReasonResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -30415,6 +30914,109 @@ func (r ExportSpendResponse) ContentType() string {
 	return ""
 }
 
+type ListStandingRulesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *StandingRuleList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListStandingRulesResponse) GetJSON200() *StandingRuleList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListStandingRulesResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListStandingRulesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListStandingRulesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListStandingRulesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListStandingRulesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RevokeStandingRuleResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *StandingRule
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Conflict
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RevokeStandingRuleResponse) GetJSON200() *StandingRule {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r RevokeStandingRuleResponse) GetApplicationproblemJSON409() *Conflict {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RevokeStandingRuleResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RevokeStandingRuleResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RevokeStandingRuleResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RevokeStandingRuleResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RevokeStandingRuleResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type StreamEventsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -31197,9 +31799,9 @@ func (c *ClientWithResponses) GetConnectionWithResponse(ctx context.Context, org
 	return ParseGetConnectionResponse(rsp)
 }
 
-// UpdateConnectionWithBodyWithResponse Rename a connection, or change its description, fields or secrets
+// UpdateConnectionWithBodyWithResponse Rename a connection, or change its description, fields, secrets or tool modes
 //
-// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -31212,9 +31814,9 @@ func (c *ClientWithResponses) UpdateConnectionWithBodyWithResponse(ctx context.C
 	return ParseUpdateConnectionResponse(rsp)
 }
 
-// UpdateConnectionWithResponse Rename a connection, or change its description, fields or secrets
+// UpdateConnectionWithResponse Rename a connection, or change its description, fields, secrets or tool modes
 //
-// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -32737,6 +33339,8 @@ func (c *ClientWithResponses) AnswerItemWithResponse(ctx context.Context, org Or
 
 // ApproveItemWithResponse Approve an item waiting for a human; it moves to the next station
 //
+// 409 tool-approval-open while the item has an open tool approval (Item.tool_approval): the item waits for a decision on the call, decided with decideToolApproval, not on the item (ADR 0031 decision 9).
+//
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/orgs/{org}/items/{item}/approve (the `ApproveItem` operationId).
@@ -33087,6 +33691,36 @@ func (c *ClientWithResponses) ListItemRunsWithResponse(ctx context.Context, org 
 		return nil, err
 	}
 	return ParseListItemRunsResponse(rsp)
+}
+
+// DecideToolApprovalWithBodyWithResponse Approve or deny the tool call an item's agent asked to make
+//
+// Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs connection:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without connection:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/tool-approval (the `DecideToolApproval` operationId).
+func (c *ClientWithResponses) DecideToolApprovalWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DecideToolApprovalResponse, error) {
+	rsp, err := c.DecideToolApprovalWithBody(ctx, org, item, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDecideToolApprovalResponse(rsp)
+}
+
+// DecideToolApprovalWithResponse Approve or deny the tool call an item's agent asked to make
+//
+// Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs connection:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without connection:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/tool-approval (the `DecideToolApproval` operationId).
+func (c *ClientWithResponses) DecideToolApprovalWithResponse(ctx context.Context, org OrgRef, item ItemRef, body DecideToolApprovalJSONRequestBody, reqEditors ...RequestEditorFn) (*DecideToolApprovalResponse, error) {
+	rsp, err := c.DecideToolApproval(ctx, org, item, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDecideToolApprovalResponse(rsp)
 }
 
 // SetTouchReasonWithBodyWithResponse Say why a person had to act on an item
@@ -33756,6 +34390,36 @@ func (c *ClientWithResponses) ExportSpendWithResponse(ctx context.Context, org O
 		return nil, err
 	}
 	return ParseExportSpendResponse(rsp)
+}
+
+// ListStandingRulesWithResponse The organization's standing rules
+//
+// The rules Always allow created (ADR 0031 decision 7), oldest first: each lets one agent role call one tool of one organization connection without asking, in every factory of the organization. The active ones, and the revoked ones too with revoked=true.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/standing-rules (the `ListStandingRules` operationId).
+func (c *ClientWithResponses) ListStandingRulesWithResponse(ctx context.Context, org OrgRef, params *ListStandingRulesParams, reqEditors ...RequestEditorFn) (*ListStandingRulesResponse, error) {
+	rsp, err := c.ListStandingRules(ctx, org, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListStandingRulesResponse(rsp)
+}
+
+// RevokeStandingRuleWithResponse Revoke a standing rule
+//
+// The rule's agent role asks first again from its next run. A rule is never deleted: revoking sets revoked_at and revoked_by, audited as standing_rule.revoked. 404 for a rule that does not exist, 409 standing-rule-revoked for one revoked already. Needs a sign-in from the last 10 minutes.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/standing-rules/{rule} (the `RevokeStandingRule` operationId).
+func (c *ClientWithResponses) RevokeStandingRuleWithResponse(ctx context.Context, org OrgRef, rule string, reqEditors ...RequestEditorFn) (*RevokeStandingRuleResponse, error) {
+	rsp, err := c.RevokeStandingRule(ctx, org, rule, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRevokeStandingRuleResponse(rsp)
 }
 
 // StreamEventsWithResponse The organization's events as they happen (Server-Sent Events)
@@ -37883,6 +38547,46 @@ func ParseListItemRunsResponse(rsp *http.Response) (*ListItemRunsResponse, error
 	return response, nil
 }
 
+// ParseDecideToolApprovalResponse parses an HTTP response from a DecideToolApprovalWithResponse call
+func ParseDecideToolApprovalResponse(rsp *http.Response) (*DecideToolApprovalResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DecideToolApprovalResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Item
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseSetTouchReasonResponse parses an HTTP response from a SetTouchReasonWithResponse call
 func ParseSetTouchReasonResponse(rsp *http.Response) (*SetTouchReasonResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -39161,6 +39865,79 @@ func ParseExportSpendResponse(rsp *http.Response) (*ExportSpendResponse, error) 
 	return response, nil
 }
 
+// ParseListStandingRulesResponse parses an HTTP response from a ListStandingRulesWithResponse call
+func ParseListStandingRulesResponse(rsp *http.Response) (*ListStandingRulesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListStandingRulesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest StandingRuleList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRevokeStandingRuleResponse parses an HTTP response from a RevokeStandingRuleWithResponse call
+func ParseRevokeStandingRuleResponse(rsp *http.Response) (*RevokeStandingRuleResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RevokeStandingRuleResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest StandingRule
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseStreamEventsResponse parses an HTTP response from a StreamEventsWithResponse call
 func ParseStreamEventsResponse(rsp *http.Response) (*StreamEventsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -39485,7 +40262,7 @@ type ServerInterface interface {
 	// GetConnection One connection, with the env names a run gets from it and its kind's docs
 	// (GET /v1/orgs/{org}/connections/{connection})
 	GetConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef)
-	// UpdateConnection Rename a connection, or change its description, fields or secrets
+	// UpdateConnection Rename a connection, or change its description, fields, secrets or tool modes
 	// (PATCH /v1/orgs/{org}/connections/{connection})
 	UpdateConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef)
 	// ListConnectionRepositories The owners and repositories a code host connection reaches
@@ -39767,6 +40544,9 @@ type ServerInterface interface {
 	// ListItemRuns An item's agent runs, oldest first (at most 200)
 	// (GET /v1/orgs/{org}/items/{item}/runs)
 	ListItemRuns(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
+	// DecideToolApproval Approve or deny the tool call an item's agent asked to make
+	// (POST /v1/orgs/{org}/items/{item}/tool-approval)
+	DecideToolApproval(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
 	// SetTouchReason Say why a person had to act on an item
 	// (PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason)
 	SetTouchReason(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef, event int64)
@@ -39878,6 +40658,12 @@ type ServerInterface interface {
 	// ExportSpend The organization's spend over a window as CSV, one row per factory, agent and model
 	// (GET /v1/orgs/{org}/spend/export)
 	ExportSpend(w http.ResponseWriter, r *http.Request, org OrgRef, params ExportSpendParams)
+	// ListStandingRules The organization's standing rules
+	// (GET /v1/orgs/{org}/standing-rules)
+	ListStandingRules(w http.ResponseWriter, r *http.Request, org OrgRef, params ListStandingRulesParams)
+	// RevokeStandingRule Revoke a standing rule
+	// (DELETE /v1/orgs/{org}/standing-rules/{rule})
+	RevokeStandingRule(w http.ResponseWriter, r *http.Request, org OrgRef, rule string)
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	// (GET /v1/orgs/{org}/stream)
 	StreamEvents(w http.ResponseWriter, r *http.Request, org OrgRef, params StreamEventsParams)
@@ -44822,6 +45608,41 @@ func (siw *ServerInterfaceWrapper) ListItemRuns(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// DecideToolApproval operation middleware
+func (siw *ServerInterfaceWrapper) DecideToolApproval(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item" -------------
+	var item ItemRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item", r.PathValue("item"), &item, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DecideToolApproval(w, r, org, item)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // SetTouchReason operation middleware
 func (siw *ServerInterfaceWrapper) SetTouchReason(w http.ResponseWriter, r *http.Request) {
 
@@ -46410,6 +47231,83 @@ func (siw *ServerInterfaceWrapper) ExportSpend(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// ListStandingRules operation middleware
+func (siw *ServerInterfaceWrapper) ListStandingRules(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListStandingRulesParams
+
+	// ------------- Optional query parameter "revoked" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "revoked", r.URL.Query(), &params.Revoked, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "revoked"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "revoked", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListStandingRules(w, r, org, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeStandingRule operation middleware
+func (siw *ServerInterfaceWrapper) RevokeStandingRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "rule" -------------
+	var rule string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "rule", r.PathValue("rule"), &rule, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "rule", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeStandingRule(w, r, org, rule)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // StreamEvents operation middleware
 func (siw *ServerInterfaceWrapper) StreamEvents(w http.ResponseWriter, r *http.Request) {
 
@@ -46909,6 +47807,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs/{run}/knowledge", wrapper.ListRunKnowledge)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/approve", wrapper.ApproveItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/answer", wrapper.AnswerItem)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/tool-approval", wrapper.DecideToolApproval)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/reject", wrapper.RejectItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/move", wrapper.MoveItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/lane", wrapper.SetItemLane)
@@ -46928,6 +47827,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}", wrapper.GetConnection)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}", wrapper.UpdateConnection)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}/test", wrapper.TestConnection)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/standing-rules", wrapper.ListStandingRules)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/standing-rules/{rule}", wrapper.RevokeStandingRule)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}/repositories", wrapper.ListConnectionRepositories)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/credentials", wrapper.ListCredentials)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/credentials", wrapper.CreateCredential)
@@ -51916,6 +52817,63 @@ func (response ListItemRunsdefaultApplicationProblemPlusJSONResponse) VisitListI
 	return err
 }
 
+type DecideToolApprovalRequestObject struct {
+	Org  OrgRef  `json:"org"`
+	Item ItemRef `json:"item"`
+	Body *DecideToolApprovalJSONRequestBody
+}
+
+type DecideToolApprovalResponseObject interface {
+	VisitDecideToolApprovalResponse(w http.ResponseWriter) error
+}
+
+type DecideToolApproval200JSONResponse Item
+
+func (response DecideToolApproval200JSONResponse) VisitDecideToolApprovalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DecideToolApproval409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response DecideToolApproval409ApplicationProblemPlusJSONResponse) VisitDecideToolApprovalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DecideToolApprovaldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DecideToolApprovaldefaultApplicationProblemPlusJSONResponse) VisitDecideToolApprovalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type SetTouchReasonRequestObject struct {
 	Org   OrgRef  `json:"org"`
 	Item  ItemRef `json:"item"`
@@ -53470,6 +54428,102 @@ func (response ExportSpenddefaultApplicationProblemPlusJSONResponse) VisitExport
 	return err
 }
 
+type ListStandingRulesRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params ListStandingRulesParams
+}
+
+type ListStandingRulesResponseObject interface {
+	VisitListStandingRulesResponse(w http.ResponseWriter) error
+}
+
+type ListStandingRules200JSONResponse StandingRuleList
+
+func (response ListStandingRules200JSONResponse) VisitListStandingRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListStandingRulesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListStandingRulesdefaultApplicationProblemPlusJSONResponse) VisitListStandingRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeStandingRuleRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Rule string `json:"rule"`
+}
+
+type RevokeStandingRuleResponseObject interface {
+	VisitRevokeStandingRuleResponse(w http.ResponseWriter) error
+}
+
+type RevokeStandingRule200JSONResponse StandingRule
+
+func (response RevokeStandingRule200JSONResponse) VisitRevokeStandingRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeStandingRule409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response RevokeStandingRule409ApplicationProblemPlusJSONResponse) VisitRevokeStandingRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeStandingRuledefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RevokeStandingRuledefaultApplicationProblemPlusJSONResponse) VisitRevokeStandingRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type StreamEventsRequestObject struct {
 	Org    OrgRef `json:"org"`
 	Params StreamEventsParams
@@ -53879,7 +54933,7 @@ type StrictServerInterface interface {
 	// GetConnection One connection, with the env names a run gets from it and its kind's docs
 	// (GET /v1/orgs/{org}/connections/{connection})
 	GetConnection(ctx context.Context, request GetConnectionRequestObject) (GetConnectionResponseObject, error)
-	// UpdateConnection Rename a connection, or change its description, fields or secrets
+	// UpdateConnection Rename a connection, or change its description, fields, secrets or tool modes
 	// (PATCH /v1/orgs/{org}/connections/{connection})
 	UpdateConnection(ctx context.Context, request UpdateConnectionRequestObject) (UpdateConnectionResponseObject, error)
 	// ListConnectionRepositories The owners and repositories a code host connection reaches
@@ -54161,6 +55215,9 @@ type StrictServerInterface interface {
 	// ListItemRuns An item's agent runs, oldest first (at most 200)
 	// (GET /v1/orgs/{org}/items/{item}/runs)
 	ListItemRuns(ctx context.Context, request ListItemRunsRequestObject) (ListItemRunsResponseObject, error)
+	// DecideToolApproval Approve or deny the tool call an item's agent asked to make
+	// (POST /v1/orgs/{org}/items/{item}/tool-approval)
+	DecideToolApproval(ctx context.Context, request DecideToolApprovalRequestObject) (DecideToolApprovalResponseObject, error)
 	// SetTouchReason Say why a person had to act on an item
 	// (PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason)
 	SetTouchReason(ctx context.Context, request SetTouchReasonRequestObject) (SetTouchReasonResponseObject, error)
@@ -54272,6 +55329,12 @@ type StrictServerInterface interface {
 	// ExportSpend The organization's spend over a window as CSV, one row per factory, agent and model
 	// (GET /v1/orgs/{org}/spend/export)
 	ExportSpend(ctx context.Context, request ExportSpendRequestObject) (ExportSpendResponseObject, error)
+	// ListStandingRules The organization's standing rules
+	// (GET /v1/orgs/{org}/standing-rules)
+	ListStandingRules(ctx context.Context, request ListStandingRulesRequestObject) (ListStandingRulesResponseObject, error)
+	// RevokeStandingRule Revoke a standing rule
+	// (DELETE /v1/orgs/{org}/standing-rules/{rule})
+	RevokeStandingRule(ctx context.Context, request RevokeStandingRuleRequestObject) (RevokeStandingRuleResponseObject, error)
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	// (GET /v1/orgs/{org}/stream)
 	StreamEvents(ctx context.Context, request StreamEventsRequestObject) (StreamEventsResponseObject, error)
@@ -57808,6 +58871,40 @@ func (sh *strictHandler) ListItemRuns(w http.ResponseWriter, r *http.Request, or
 	}
 }
 
+// DecideToolApproval operation middleware
+func (sh *strictHandler) DecideToolApproval(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
+	var request DecideToolApprovalRequestObject
+
+	request.Org = org
+	request.Item = item
+
+	var body DecideToolApprovalJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DecideToolApproval(ctx, request.(DecideToolApprovalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DecideToolApproval")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DecideToolApprovalResponseObject); ok {
+		if err := validResponse.VisitDecideToolApprovalResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // SetTouchReason operation middleware
 func (sh *strictHandler) SetTouchReason(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef, event int64) {
 	var request SetTouchReasonRequestObject
@@ -58860,6 +59957,60 @@ func (sh *strictHandler) ExportSpend(w http.ResponseWriter, r *http.Request, org
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ExportSpendResponseObject); ok {
 		if err := validResponse.VisitExportSpendResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListStandingRules operation middleware
+func (sh *strictHandler) ListStandingRules(w http.ResponseWriter, r *http.Request, org OrgRef, params ListStandingRulesParams) {
+	var request ListStandingRulesRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListStandingRules(ctx, request.(ListStandingRulesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListStandingRules")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListStandingRulesResponseObject); ok {
+		if err := validResponse.VisitListStandingRulesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeStandingRule operation middleware
+func (sh *strictHandler) RevokeStandingRule(w http.ResponseWriter, r *http.Request, org OrgRef, rule string) {
+	var request RevokeStandingRuleRequestObject
+
+	request.Org = org
+	request.Rule = rule
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeStandingRule(ctx, request.(RevokeStandingRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeStandingRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeStandingRuleResponseObject); ok {
+		if err := validResponse.VisitRevokeStandingRuleResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

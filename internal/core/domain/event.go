@@ -49,6 +49,11 @@ const (
 	// It is not a rejection: the item's rework count is unchanged. Data reason (the pull request,
 	// its base, the files and what to do) and pull_request.
 	EventMergeConflict EventKind = "merge_conflict"
+	// EventMergeDeferred is a gate's merge the engine put off because a pull request was not
+	// mergeable yet with no conflict (its mergeability still computing, checks not passed on its
+	// head, its head moved), sending the item back to the gate's queue so its agent runs again.
+	// Data reason, pull_request and deferrals (how many in a row, this one included).
+	EventMergeDeferred EventKind = "merge_deferred"
 	// EventEdgeAdded and EventEdgeRemoved are a dependency of the item added or removed: data
 	// needs (the item it needs), kind and actor (ref).
 	EventEdgeAdded   EventKind = "edge_added"
@@ -116,6 +121,19 @@ const (
 	// choice's text, or the person's words), choice_index only when a choice was picked, and
 	// actor (ref).
 	EventQuestionAnswered EventKind = "question_answered"
+	// EventToolApprovalRequested is a run's call of an Ask-first connection tool (ADR 0031
+	// decision 4): the run ends and the item waits for a person's decision at its station. Data
+	// connection (its name), tool, input (the call's JSON input), agent (the role), run_id and
+	// always_allow_offered.
+	EventToolApprovalRequested EventKind = "tool_approval_requested"
+	// EventToolApprovalGranted is a person's approval of the item's open tool approval: the item
+	// goes back to its station's arrival state and its next run may make that one call. Data
+	// approval_id (the request's event id), always_allow and actor (ref).
+	EventToolApprovalGranted EventKind = "tool_approval_granted"
+	// EventToolApprovalDenied is a person's denial of the item's open tool approval: the item
+	// goes back to its station's arrival state and its next run's brief carries the denial. Data
+	// approval_id, note (only when the person gave one) and actor (ref).
+	EventToolApprovalDenied EventKind = "tool_approval_denied"
 )
 
 // Audit of items.

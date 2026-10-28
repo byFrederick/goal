@@ -523,3 +523,173 @@ func TestConnectionRepositories_AMemberMayBrowse(t *testing.T) {
 		t.Errorf("another organization's owner listing = %d; want 404", res.status)
 	}
 }
+
+// githubTools are the tools the github connection's last test listed.
+var githubTools = []string{"list_issues", approvalTool}
+
+// testedGitHub creates the github connection and records a test that listed githubTools.
+func (h *harness) testedGitHub(t *testing.T) {
+	t.Helper()
+
+	h.createGitHub(t)
+
+	if err := h.conns.RecordTest(inOrg(t), kindGitHub, domain.ConnectionTest{At: t0, OK: true, Tools: githubTools}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// toolsOf are tools as name=mode, in their order.
+func toolsOf(tools []gen.ConnectionTool) []string {
+	out := []string{}
+	for _, tool := range tools {
+		out = append(out, tool.Name+"="+string(tool.Mode))
+	}
+
+	return out
+}
+
+// ADR 0031 decisions 1 and 2: a connection's tools are those its last test listed and those with
+// a mode, sorted by name, a tool without a mode being allow.
+func TestConnections_ToolsAndModes(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.createGitHub(t)
+
+	if got := decode[gen.Connection](t, h.request(t, http.MethodGet, githubPath, "", nil), http.StatusOK); got.Tools == nil || len(got.Tools) != 0 {
+		t.Errorf("an untested connection's tools = %v; want an empty list", got.Tools)
+	}
+
+	if err := h.conns.RecordTest(inOrg(t), kindGitHub, domain.ConnectionTest{At: t0, OK: true, Tools: githubTools}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	modes := map[string]domain.ConnectionToolMode{approvalTool: domain.ToolModeAsk, "delete_repo": domain.ToolModeOff}
+	if _, err := h.conns.Update(inOrg(t), kindGitHub, domain.ConnectionPatch{ToolModes: modes}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{"create_comment=ask", "delete_repo=off", "list_issues=allow"}
+
+	if got := decode[gen.Connection](t, h.request(t, http.MethodGet, githubPath, "", nil), http.StatusOK); !slices.Equal(toolsOf(got.Tools), want) {
+		t.Errorf("get's tools = %v; want %v", toolsOf(got.Tools), want)
+	}
+
+	list := decode[gen.ConnectionList](t, h.request(t, http.MethodGet, connectionsPath, "", nil), http.StatusOK)
+	if len(list.Connections) != 1 || !slices.Equal(toolsOf(list.Connections[0].Tools), want) {
+		t.Errorf("list = %+v; want github with the tools %v", list.Connections, want)
+	}
+}
+
+// PATCH with tools replaces every tool's mode; without them it leaves the modes as they are.
+func TestConnections_SetToolModes(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.testedGitHub(t)
+
+	got := decode[gen.Connection](t, h.request(t, http.MethodPatch, githubPath,
+		`{"tools":[{"name":"create_comment","mode":"ask"},{"name":"delete_repo","mode":"off"}]}`, nil), http.StatusOK)
+	if want := []string{"create_comment=ask", "delete_repo=off", "list_issues=allow"}; !slices.Equal(toolsOf(got.Tools), want) {
+		t.Errorf("patched tools = %v; want %v", toolsOf(got.Tools), want)
+	}
+
+	decode[gen.Connection](t, h.request(t, http.MethodPatch, githubPath, `{"description":"the repositories, reviewed"}`, nil), http.StatusOK)
+
+	stored := func() map[string]domain.ConnectionToolMode {
+		c, err := h.conns.Get(inOrg(t), kindGitHub)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return c.ToolModes
+	}
+
+	if want := map[string]domain.ConnectionToolMode{approvalTool: domain.ToolModeAsk, "delete_repo": domain.ToolModeOff}; !reflect.DeepEqual(stored(), want) {
+		t.Errorf("the modes after a patch without tools = %v; want %v", stored(), want)
+	}
+
+	got = decode[gen.Connection](t, h.request(t, http.MethodPatch, githubPath, `{"tools":[{"name":"list_issues","mode":"off"}]}`, nil), http.StatusOK)
+	if want := []string{"create_comment=allow", "list_issues=off"}; !slices.Equal(toolsOf(got.Tools), want) {
+		t.Errorf("the tools after a second patch = %v; want %v, every other mode cleared", toolsOf(got.Tools), want)
+	}
+}
+
+// Tool modes the rules refuse are 400 and change nothing; a member may not set them.
+func TestConnections_ToolModeRefusals(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.putAcmeAPI(t, "https://api.example.com", "test-key")
+	h.testedGitHub(t)
+
+	decode[gen.Connection](t, h.request(t, http.MethodPatch, githubPath, `{"tools":[{"name":"create_comment","mode":"ask"}]}`, nil), http.StatusOK)
+
+	for _, tt := range []struct{ name, path, body string }{
+		{"unknown mode", githubPath, `{"tools":[{"name":"create_comment","mode":"sometimes"}]}`},
+		{"malformed tool name", githubPath, `{"tools":[{"name":"create comment!","mode":"ask"}]}`},
+		{"tool named twice", githubPath, `{"tools":[{"name":"create_comment","mode":"ask"},{"name":"create_comment","mode":"off"}]}`},
+		{"kind without an MCP server", apiPath, `{"tools":[{"name":"ping","mode":"ask"}]}`},
+	} {
+		if r := h.request(t, http.MethodPatch, tt.path, tt.body, nil); r.status != http.StatusBadRequest {
+			t.Errorf("%s = %d %s; want 400", tt.name, r.status, r.body)
+		}
+	}
+
+	c, err := h.conns.Get(inOrg(t), kindGitHub)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if want := map[string]domain.ConnectionToolMode{approvalTool: domain.ToolModeAsk}; !reflect.DeepEqual(c.ToolModes, want) {
+		t.Errorf("the modes after the refusals = %v; want %v", c.ToolModes, want)
+	}
+
+	// A member holds connection:read, not connection:manage.
+	signed := newSignedIn(t)
+	if _, err := signed.conns.Create(inOrg(t), domain.NewConnection{
+		Name: kindGitHub, Kind: kindGitHub, Secrets: map[string]string{githubTokenField: githubToken},
+	}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	refused(t, "a member's patch", signed.as(t, viewerToken, http.MethodPatch, githubPath, `{"tools":[]}`), http.StatusForbidden, "forbidden")
+}
+
+// ADR 0031 decision 10: each connection answers the tool approvals waiting on it.
+func TestConnections_WaitingApprovals(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.withRepo(t)
+	h.createGitHub(t)
+	h.toolAsked(t, false)
+
+	waiting := func(cs []gen.Connection) map[string]int {
+		out := map[string]int{}
+		for _, c := range cs {
+			out[c.Name] = c.WaitingApprovals
+		}
+
+		return out
+	}
+
+	list := decode[gen.ConnectionList](t, h.request(t, http.MethodGet, connectionsPath, "", nil), http.StatusOK)
+	if want := map[string]int{approvalConnection: 1, kindGitHub: 0}; !reflect.DeepEqual(waiting(list.Connections), want) {
+		t.Errorf("list's waiting approvals = %v; want %v", waiting(list.Connections), want)
+	}
+
+	repoPath := connectionsPath + "/" + approvalConnection
+
+	if got := decode[gen.Connection](t, h.request(t, http.MethodGet, repoPath, "", nil), http.StatusOK); got.WaitingApprovals != 1 {
+		t.Errorf("get's waiting approvals = %d; want 1", got.WaitingApprovals)
+	}
+
+	if got := decode[gen.Connection](t, h.request(t, http.MethodPatch, repoPath, `{"description":"d"}`, nil), http.StatusOK); got.WaitingApprovals != 1 {
+		t.Errorf("patch's waiting approvals = %d; want 1", got.WaitingApprovals)
+	}
+
+	if got := decode[gen.Connection](t, h.request(t, http.MethodGet, githubPath, "", nil), http.StatusOK); got.WaitingApprovals != 0 {
+		t.Errorf("github's waiting approvals = %d; want 0", got.WaitingApprovals)
+	}
+}

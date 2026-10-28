@@ -520,6 +520,32 @@ createWebhookEndpoint pat-demoted      403 forbidden            404 org-not-foun
 createWebhookEndpoint pat-removed      401 unauthenticated      401 unauthenticated
 createWebhookEndpoint pat-platform     403 forbidden            404 org-not-found
 createWebhookEndpoint pat-deleted-org  401 unauthenticated      401 unauthenticated
+decideToolApproval   anonymous        401 unauthenticated      401 unauthenticated
+decideToolApproval   owner            200                      404 org-not-found
+decideToolApproval   admin            200                      404 org-not-found
+decideToolApproval   viewer           403 forbidden            404 org-not-found
+decideToolApproval   approver         200                      404 org-not-found
+decideToolApproval   editor           200                      404 org-not-found
+decideToolApproval   member-no-roles  404 item-not-found       404 org-not-found
+decideToolApproval   other-org-owner  404 org-not-found        200
+decideToolApproval   platform-admin   404 org-not-found        404 org-not-found
+decideToolApproval   stale-owner      200                      404 org-not-found
+decideToolApproval   key-scoped       200                      404 org-not-found
+decideToolApproval   key-restricted   404 item-not-found       404 org-not-found
+decideToolApproval   key-other-org    404 org-not-found        200
+decideToolApproval   key-expired      401 unauthenticated      401 unauthenticated
+decideToolApproval   key-revoked      401 unauthenticated      401 unauthenticated
+decideToolApproval   bearer-owner     200                      404 org-not-found
+decideToolApproval   pat-approver     403 forbidden            404 org-not-found
+decideToolApproval   pat-owner        200                      404 org-not-found
+decideToolApproval   pat-viewer       403 forbidden            404 org-not-found
+decideToolApproval   pat-other-org    404 org-not-found        200
+decideToolApproval   pat-expired      401 unauthenticated      401 unauthenticated
+decideToolApproval   pat-revoked      401 unauthenticated      401 unauthenticated
+decideToolApproval   pat-demoted      404 item-not-found       404 org-not-found
+decideToolApproval   pat-removed      401 unauthenticated      401 unauthenticated
+decideToolApproval   pat-platform     200                      404 org-not-found
+decideToolApproval   pat-deleted-org  401 unauthenticated      401 unauthenticated
 deleteConnection     anonymous        401 unauthenticated      401 unauthenticated
 deleteConnection     owner            200                      404 org-not-found
 deleteConnection     admin            200                      404 org-not-found
@@ -2834,6 +2860,32 @@ listSavedViews       pat-demoted      404 factory-not-found    404 org-not-found
 listSavedViews       pat-removed      401 unauthenticated      401 unauthenticated
 listSavedViews       pat-platform     200                      404 org-not-found
 listSavedViews       pat-deleted-org  401 unauthenticated      401 unauthenticated
+listStandingRules    anonymous        401 unauthenticated      401 unauthenticated
+listStandingRules    owner            200                      404 org-not-found
+listStandingRules    admin            200                      404 org-not-found
+listStandingRules    viewer           200                      404 org-not-found
+listStandingRules    approver         200                      404 org-not-found
+listStandingRules    editor           200                      404 org-not-found
+listStandingRules    member-no-roles  200                      404 org-not-found
+listStandingRules    other-org-owner  404 org-not-found        200
+listStandingRules    platform-admin   404 org-not-found        404 org-not-found
+listStandingRules    stale-owner      200                      404 org-not-found
+listStandingRules    key-scoped       403 forbidden            404 org-not-found
+listStandingRules    key-restricted   200                      404 org-not-found
+listStandingRules    key-other-org    404 org-not-found        200
+listStandingRules    key-expired      401 unauthenticated      401 unauthenticated
+listStandingRules    key-revoked      401 unauthenticated      401 unauthenticated
+listStandingRules    bearer-owner     200                      404 org-not-found
+listStandingRules    pat-approver     403 forbidden            404 org-not-found
+listStandingRules    pat-owner        200                      404 org-not-found
+listStandingRules    pat-viewer       200                      404 org-not-found
+listStandingRules    pat-other-org    404 org-not-found        200
+listStandingRules    pat-expired      401 unauthenticated      401 unauthenticated
+listStandingRules    pat-revoked      401 unauthenticated      401 unauthenticated
+listStandingRules    pat-demoted      200                      404 org-not-found
+listStandingRules    pat-removed      401 unauthenticated      401 unauthenticated
+listStandingRules    pat-platform     200                      404 org-not-found
+listStandingRules    pat-deleted-org  401 unauthenticated      401 unauthenticated
 listTemplates        anonymous        401 unauthenticated      401 unauthenticated
 listTemplates        owner            200                      404 org-not-found
 listTemplates        admin            200                      404 org-not-found
@@ -3588,6 +3640,32 @@ revokePersonalToken  pat-demoted      403 forbidden            404 org-not-found
 revokePersonalToken  pat-removed      401 unauthenticated      401 unauthenticated
 revokePersonalToken  pat-platform     403 forbidden            404 org-not-found
 revokePersonalToken  pat-deleted-org  401 unauthenticated      401 unauthenticated
+revokeStandingRule   anonymous        401 unauthenticated      401 unauthenticated
+revokeStandingRule   owner            200                      404 org-not-found
+revokeStandingRule   admin            200                      404 org-not-found
+revokeStandingRule   viewer           403 forbidden            404 org-not-found
+revokeStandingRule   approver         403 forbidden            404 org-not-found
+revokeStandingRule   editor           403 forbidden            404 org-not-found
+revokeStandingRule   member-no-roles  403 forbidden            404 org-not-found
+revokeStandingRule   other-org-owner  404 org-not-found        200
+revokeStandingRule   platform-admin   404 org-not-found        404 org-not-found
+revokeStandingRule   stale-owner      403 reauth-required      404 org-not-found
+revokeStandingRule   key-scoped       403 forbidden            404 org-not-found
+revokeStandingRule   key-restricted   403 forbidden            404 org-not-found
+revokeStandingRule   key-other-org    404 org-not-found        403 forbidden
+revokeStandingRule   key-expired      401 unauthenticated      401 unauthenticated
+revokeStandingRule   key-revoked      401 unauthenticated      401 unauthenticated
+revokeStandingRule   bearer-owner     200                      404 org-not-found
+revokeStandingRule   pat-approver     403 forbidden            404 org-not-found
+revokeStandingRule   pat-owner        403 forbidden            404 org-not-found
+revokeStandingRule   pat-viewer       403 forbidden            404 org-not-found
+revokeStandingRule   pat-other-org    404 org-not-found        403 forbidden
+revokeStandingRule   pat-expired      401 unauthenticated      401 unauthenticated
+revokeStandingRule   pat-revoked      401 unauthenticated      401 unauthenticated
+revokeStandingRule   pat-demoted      403 forbidden            404 org-not-found
+revokeStandingRule   pat-removed      401 unauthenticated      401 unauthenticated
+revokeStandingRule   pat-platform     403 forbidden            404 org-not-found
+revokeStandingRule   pat-deleted-org  401 unauthenticated      401 unauthenticated
 rotateWebhookSecret  anonymous        401 unauthenticated      401 unauthenticated
 rotateWebhookSecret  owner            200                      404 org-not-found
 rotateWebhookSecret  admin            200                      404 org-not-found

@@ -57,7 +57,7 @@ func (e *Engine) Merge(ctx context.Context, id domain.ItemID, by domain.Actor, m
 	now := e.clock.Now()
 	t := ports.Transition{ItemID: it.ID, From: it.Position(), At: now}
 
-	merged, err := e.mergeAll(ctx, l, it, by, method, now)
+	merged, err := e.mergeAll(ctx, l, it, by, method, now, nil)
 	if err != nil {
 		if e.conflictRework(l, it, err, &t) {
 			return e.decide(ctx, "merge", t)
@@ -87,8 +87,11 @@ const gateMergeTimeout = 2 * time.Minute
 // station, has action merge (spec 4 §4.7), and adds the merged events to t. It is Merge's merge
 // with the engine as actor: the connections are opened for the engine's use on the item, so it
 // is no person's touch. The pull requests are those of the item's outputs and of the gate's own
-// output, which only t holds yet. A refusal is returned, so the item blocks at the gate (or,
-// for a conflict, goes back to be built: conflictRework) and never moves on unmerged. A landing
+// output, which only t holds yet. Unlike a person's merge, it reads a pull request whose
+// mergeability is still being computed again for up to Config.MergeWait, heartbeating the lease.
+// A refusal is returned, so the item blocks at the gate, goes back to be built for a conflict
+// (conflictRework), or goes back to the gate's queue when the pull request is only not mergeable
+// yet (deferMerge); it never moves on unmerged. A landing
 // root whose gate output says pull_requests: [] (domain.NoPullRequests), and whose outputs name
 // none, moves on with nothing merged: its integration branch had nothing to land.
 func (e *Engine) mergeOnApproval(ctx context.Context, c claimed, l domain.Line, t *ports.Transition) error {
@@ -114,7 +117,7 @@ func (e *Engine) mergeOnApproval(ctx context.Context, c claimed, l domain.Line, 
 		return nil
 	}
 
-	merged, err := e.mergeAll(ctx, l, it, domain.EngineActor, MergeSquash, t.At)
+	merged, err := e.mergeAll(ctx, l, it, domain.EngineActor, MergeSquash, t.At, &c.lease)
 	if err != nil {
 		return fmt.Errorf("merge on the gate's approval: %w", err)
 	}
@@ -127,8 +130,11 @@ func (e *Engine) mergeOnApproval(ctx context.Context, c claimed, l domain.Line, 
 // mergeAll merges every pull request the item's outputs name (domain.Item.PullRequests) through
 // the line's code host connections, opened for by's merge of it, and returns one merged event
 // by that actor per pull request. It stops at the first refusal; the ones merged before it stay merged
-// and are skipped when asked again.
-func (e *Engine) mergeAll(ctx context.Context, l domain.Line, it domain.Item, by domain.Actor, method string, at time.Time) ([]domain.Event, error) {
+// and are skipped when asked again. With a lease (a gate's merge), a pull request whose
+// mergeability is pending is read again while the lease is heartbeated (settled).
+func (e *Engine) mergeAll(ctx context.Context, l domain.Line, it domain.Item, by domain.Actor, method string, at time.Time,
+	lease *domain.Lease,
+) ([]domain.Event, error) {
 	urls := it.PullRequests(l)
 	if len(urls) == 0 {
 		return nil, fmt.Errorf("no output names a pull_request or pull_requests: %w", ports.ErrNotMergeable)
@@ -142,7 +148,7 @@ func (e *Engine) mergeAll(ctx context.Context, l domain.Line, it domain.Item, by
 	events := make([]domain.Event, 0, len(targets))
 
 	for _, t := range targets {
-		data, err := e.mergeOne(ctx, it.ID, t, method)
+		data, err := e.mergeOne(ctx, it.ID, t, method, lease)
 		if err != nil {
 			return nil, err
 		}
@@ -267,8 +273,8 @@ func (e *Engine) codeHostConnections(ctx context.Context, l domain.Line) ([]code
 
 // mergeOne merges one pull request unless it already is, deletes its head branch, and returns
 // the data of its merged event.
-func (e *Engine) mergeOne(ctx context.Context, id domain.ItemID, t mergeTarget, method string) (map[string]any, error) {
-	pr, err := e.merge(ctx, t, method)
+func (e *Engine) mergeOne(ctx context.Context, id domain.ItemID, t mergeTarget, method string, lease *domain.Lease) (map[string]any, error) {
+	pr, err := e.merge(ctx, t, method, lease)
 	if err != nil {
 		return nil, err
 	}
@@ -290,8 +296,12 @@ func (e *Engine) mergeOne(ctx context.Context, id domain.ItemID, t mergeTarget, 
 
 // merge merges the pull request unless it already is, and returns it as merged. An open one's
 // branch is first brought up to date with its base at the head just read (ports.CodeHost.
-// UpdateBranch), and merged at the head the next read returns; a conflict is a *mergeConflictError.
-func (e *Engine) merge(ctx context.Context, t mergeTarget, method string) (ports.PullRequest, error) {
+// UpdateBranch), and merged at the head the next read returns (settled); a conflict is a
+// *mergeConflictError. A refusal of an open pull request with no conflict (the update or the
+// merge refused, its mergeability still pending, not mergeable after a clean update) is a
+// *notMergeableYetError: after a clean update the host knows of no conflict, and the port
+// cannot tell required checks that have not run yet on the new head from ones that fail.
+func (e *Engine) merge(ctx context.Context, t mergeTarget, method string, lease *domain.Lease) (ports.PullRequest, error) {
 	pr, err := t.host.PullRequest(ctx, t.conn, t.url)
 	if err != nil {
 		return ports.PullRequest{}, err
@@ -310,25 +320,25 @@ func (e *Engine) merge(ctx context.Context, t mergeTarget, method string) (ports
 			return ports.PullRequest{}, &mergeConflictError{url: t.url, base: pr.BaseBranch, files: mc.Files, err: err}
 		}
 
-		return ports.PullRequest{}, fmt.Errorf("update the branch of %s: %w", t.url, err)
+		return ports.PullRequest{}, yet(t.url, fmt.Errorf("update the branch of %s: %w", t.url, err))
 	}
 
-	// The read waits while the host computes the updated branch's mergeability.
-	if pr, err = t.host.PullRequest(ctx, t.conn, t.url); err != nil {
-		return ports.PullRequest{}, fmt.Errorf("read %s after updating its branch: %w", t.url, err)
+	if pr, err = e.settled(ctx, t, lease); err != nil {
+		return ports.PullRequest{}, err
 	}
 
 	if pr.MergeabilityPending {
-		return ports.PullRequest{}, fmt.Errorf("%s: the host is still computing whether it can be merged, try again shortly: %w",
-			t.url, ports.ErrNotMergeable)
+		return ports.PullRequest{}, yet(t.url, fmt.Errorf("%s: the host is still computing whether it can be merged, try again shortly: %w",
+			t.url, ports.ErrNotMergeable))
 	}
 
 	if !pr.Mergeable {
-		return ports.PullRequest{}, fmt.Errorf("%s has conflicts or failing required checks: %w", t.url, ports.ErrNotMergeable)
+		return ports.PullRequest{}, yet(t.url, fmt.Errorf("%s is not mergeable yet: the host reports conflicts or required checks not passed on its head: %w",
+			t.url, ports.ErrNotMergeable))
 	}
 
 	if _, err := t.host.Merge(ctx, t.conn, t.url, ports.Merge{Method: method, HeadSHA: pr.HeadSHA}); err != nil {
-		return ports.PullRequest{}, err
+		return ports.PullRequest{}, yet(t.url, err)
 	}
 
 	// Trust the host's record, not the merge call's answer.
@@ -341,6 +351,106 @@ func (e *Engine) merge(ctx context.Context, t mergeTarget, method string) (ports
 	}
 
 	return pr, nil
+}
+
+// mergePoll is the first wait before a gate's merge reads a pull request whose mergeability is
+// pending again; each wait after it is twice as long, up to what is left of Config.MergeWait.
+const mergePoll = 2 * time.Second
+
+// settled reads the pull request after its branch was updated. Without a lease (a person's
+// merge, an HTTP request) that is one read. With one, a pull request whose mergeability the host
+// is still computing is read again after a growing wait on the engine clock, heartbeating the
+// lease (backoff), until it is known or Config.MergeWait has passed.
+func (e *Engine) settled(ctx context.Context, t mergeTarget, lease *domain.Lease) (ports.PullRequest, error) {
+	pr, err := t.host.PullRequest(ctx, t.conn, t.url)
+
+	for waited, wait := time.Duration(0), mergePoll; err == nil && lease != nil && pr.MergeabilityPending && waited < e.cfg.MergeWait; wait *= 2 {
+		d := min(wait, e.cfg.MergeWait-waited)
+		if err := e.backoff(ctx, *lease, d); err != nil {
+			return ports.PullRequest{}, fmt.Errorf("wait for the mergeability of %s: %w", t.url, err)
+		}
+
+		waited += d
+		pr, err = t.host.PullRequest(ctx, t.conn, t.url)
+	}
+
+	if err != nil {
+		return ports.PullRequest{}, fmt.Errorf("read %s after updating its branch: %w", t.url, err)
+	}
+
+	return pr, nil
+}
+
+// notMergeableYetError is a refusal to merge an open pull request that is no conflict and may pass
+// with time alone: its mergeability still pending, required checks not yet passed on the head
+// its branch update made, its head moved meanwhile. A gate's merge refused for one goes back to
+// the gate's queue (deferMerge) instead of blocking.
+type notMergeableYetError struct {
+	url string
+	err error // wraps ports.ErrNotMergeable
+}
+
+func (n *notMergeableYetError) Error() string { return n.err.Error() }
+
+func (n *notMergeableYetError) Unwrap() error { return n.err }
+
+// yet marks err a *notMergeableYetError when it is a refusal (ports.ErrNotMergeable); any other
+// error, such as the host being unreachable, is returned as it is.
+func yet(url string, err error) error {
+	if !errors.Is(err, ports.ErrNotMergeable) {
+		return err
+	}
+
+	return &notMergeableYetError{url: url, err: err}
+}
+
+// deferMerge sends a claimed gate item whose merge was refused with a *notMergeableYetError
+// back to the gate's arrival state, so its agent runs again (waiting for the checks on the new
+// head) and approves again, with a merge_deferred event counting the deferrals in a row, and
+// returns nil.
+// Any other refusal, and the one after Config.MergeDeferrals deferrals in a row, is returned,
+// naming the count, for the item to block.
+func (e *Engine) deferMerge(ctx context.Context, log *slog.Logger, c claimed, err error, t *ports.Transition) error {
+	ny, ok := errors.AsType[*notMergeableYetError](err)
+	if !ok {
+		return err
+	}
+
+	events, rerr := e.itemEvents(ctx, c.item.ID)
+	if rerr != nil {
+		return fmt.Errorf("%w (its deferrals could not be counted: %w)", err, rerr)
+	}
+
+	n := deferralsInARow(events)
+	if n >= e.cfg.MergeDeferrals {
+		return fmt.Errorf("not merged after %d deferrals in a row: %w", n, err)
+	}
+
+	t.To, t.Outcome = domain.Position{Station: c.station.ID, State: c.station.Arrival()}, domain.LeaseReleased
+	t.Events = append(t.Events, event(c.item, domain.EventMergeDeferred, t.At, domain.ActorEngine,
+		map[string]any{keyReason: err.Error(), "pull_request": ny.url, "deferrals": n + 1}))
+
+	log.InfoContext(ctx, "merge deferred", slog.String("pull_request", ny.url), slog.Int("deferrals", n+1))
+
+	return nil
+}
+
+// deferralsInARow counts the merge_deferred events since the item's latest move or retry, so a
+// person's retry, and any move of the item, starts the count again.
+func deferralsInARow(events []domain.Event) int {
+	n := 0
+
+	for _, ev := range slices.Backward(events) {
+		if ev.Kind == domain.EventMoved || ev.Kind == domain.EventRetried {
+			return n
+		}
+
+		if ev.Kind == domain.EventMergeDeferred {
+			n++
+		}
+	}
+
+	return n
 }
 
 // mergeConflictError is a merge refused because a pull request's branch conflicts with its base. Its

@@ -79,7 +79,7 @@ Every Jonah screen is a **new feature** (phase 5, [ADR 0002](../../adr/0002-jona
 | `connections`: grouped by code hosts, apps, MCP servers and model providers | `/o/$org/connections` | restyle | writes waiting for approval |
 | `connection-add`: catalog and details, tool permissions, factories, test | `/o/$org/connections/new` | restyle | the per-tool "Ask first" setting |
 | `credentials`, `credential-new` | `/o/$org/credentials` | new feature: today secrets live in connection fields. The spec decides how credentials relate to connections. | encryption in the browser |
-| `knowledge` | `/o/$org/knowledge` | restyle | verdicts on whether knowledge helped or misled, "where it was used" |
+| `knowledge` | `/o/$org/knowledge` | restyle |  |
 
 ## Organization (`organization/`)
 

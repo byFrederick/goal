@@ -1,6 +1,6 @@
 import { realpath } from 'node:fs/promises';
 import { posix } from 'node:path';
-import type { CanUseTool, McpServerConfig, Options, Settings } from '@anthropic-ai/claude-agent-sdk';
+import type { CanUseTool, McpServerConfig, Options, PermissionResult, Settings } from '@anthropic-ai/claude-agent-sdk';
 import { type AgentFiles, type Connection, paths, type Rule, type TaskSpec } from './spec.js';
 
 /** goald's gateway as an MCP server: Goal's own tools, mcp__goal__<tool>. */
@@ -33,6 +33,7 @@ export function agentQuery(
   files: AgentFiles,
   env: NodeJS.ProcessEnv,
   abortController: AbortController,
+  fetch: typeof globalThis.fetch,
 ): AgentQuery {
   const options: Options = {
     cwd: paths.workspace,
@@ -42,7 +43,7 @@ export function agentQuery(
     // tools as the agent's rules say and denies the rest, since nobody is there to ask. (dontAsk
     // would deny those calls before canUseTool sees them.)
     permissionMode: 'default',
-    canUseTool: connectionPermission(spec),
+    canUseTool: connectionPermission(spec, { fetch, token: env.GOAL_GATEWAY_TOKEN }),
     // Only the definition's skills are listed to the model and accepted by the Skill tool. Claude
     // Code would otherwise also offer the skills bundled with it, skills and plugins synced from
     // the claude.ai account behind the token, and the checkout's .claude/skills.
@@ -132,12 +133,14 @@ function isConnectionRule(rule: string): boolean {
  * The permission check of calls nothing pre-approved. A tool of a connection's MCP server
  * (mcp__<connection>__<tool>) is allowed by the agent's rules for it, as the gateway applies them
  * to its tools: deny wins, a malformed deny pattern denies the connection's every tool, and a
- * connection with allow rules allows only the tools they match. A built-in write Claude Code
- * escalates is decided by guidanceWrite. Every other call is denied, as Claude Code's dontAsk
- * mode would.
+ * connection with allow rules allows only the tools they match. A tool whose mode is off is denied,
+ * and one whose mode is ask is not run: it waits for a person (askFirst), unless a grant the run
+ * carries allows that exact call once. A built-in write Claude Code escalates is decided by
+ * guidanceWrite. Every other call is denied, as Claude Code's dontAsk mode would.
  */
 export function connectionPermission(
-  spec: Pick<TaskSpec, 'tools_allow' | 'tools_deny' | 'connections'>,
+  spec: Pick<TaskSpec, 'tools_allow' | 'tools_deny' | 'connections' | 'gateway_url' | 'granted_calls'>,
+  reach: GatewayReach,
   workspace: string = paths.workspace,
 ): CanUseTool {
   const servers = new Set(spec.connections.filter((c) => c.mcp).map((c) => c.name));
@@ -145,6 +148,8 @@ export function connectionPermission(
     list
       .filter(isConnectionRule)
       .flatMap((rule) => (rule.startsWith(`${conn}__`) ? [rule.slice(conn.length + 2)] : []));
+  // Each grant allows one call, so it is taken out of this list when it matches (ADR 0031 decision 5).
+  const grants = (spec.granted_calls ?? []).map((g) => ({ ...g, key: canonicalJSON(g.input) }));
 
   return async (toolName, input) => {
     if (writeTools.has(toolName) || toolName === 'Bash') {
@@ -157,11 +162,80 @@ export function connectionPermission(
 
     const allow = rules(spec.tools_allow, conn);
     const denied = rules(spec.tools_deny, conn).some((p) => matches(p, tool) ?? true);
-    if (denied || (allow.length > 0 && !allow.some((p) => matches(p, tool) ?? false))) {
+    const mode = spec.connections.find((c) => c.name === conn)?.tool_modes?.[tool];
+    if (denied || mode === 'off' || (allow.length > 0 && !allow.some((p) => matches(p, tool) ?? false))) {
       return { behavior: 'deny', message: `The agent's tool rules do not let it call ${conn}__${tool}.` };
+    }
+    if (mode === 'ask') {
+      const key = canonicalJSON(input);
+      const grant = grants.findIndex((g) => g.connection === conn && g.tool === tool && g.key === key);
+      if (grant < 0) return askFirst(spec, reach, conn, tool, input);
+      grants.splice(grant, 1);
     }
     return { behavior: 'allow', updatedInput: input };
   };
+}
+
+/** How the worker reaches the gateway: fetch, and the run's task token (GOAL_GATEWAY_TOKEN). */
+export interface GatewayReach {
+  fetch: typeof globalThis.fetch;
+  token: string | undefined;
+}
+
+/** How long the report of an Ask-first call may take; past it the call is denied without interrupt. */
+const reportTimeoutMs = 30_000;
+
+/**
+ * Reports an Ask-first call to the gateway, which records it and ends the run (ADR 0031 decision 4),
+ * and denies the call here so it never runs. A 202 interrupts the agent: the item waits for a person.
+ * Any other answer, or no way to report, denies the call without interrupt and the run goes on. The
+ * report never names the input: stderr gets the connection, the tool and the status or error only.
+ */
+async function askFirst(
+  spec: Pick<TaskSpec, 'gateway_url'>,
+  reach: GatewayReach,
+  conn: string,
+  tool: string,
+  input: Record<string, unknown>,
+): Promise<PermissionResult> {
+  const name = `${conn}__${tool}`;
+  const refused = (why: string): PermissionResult => {
+    process.stderr.write(`goal-agent: tool approval for ${name} not requested: ${why}\n`);
+    return { behavior: 'deny', message: `The call ${name} could not be sent for approval, so it did not run.` };
+  };
+  if (!spec.gateway_url || !reach.token) return refused('the run has no gateway or task token');
+
+  let res: Response;
+  try {
+    res = await reach.fetch(new URL('/run/tool-approval', spec.gateway_url), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${reach.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ connection: conn, tool, input }),
+      signal: AbortSignal.timeout(reportTimeoutMs),
+    });
+  } catch (err) {
+    return refused(err instanceof Error ? err.message : String(err));
+  }
+  if (res.status === 202) {
+    return { behavior: 'deny', message: `The call ${name} waits for a person to approve it.`, interrupt: true };
+  }
+  return refused(`the gateway answered ${res.status}`);
+}
+
+/**
+ * The canonical JSON of a value, as domain.CanonicalJSON writes it: object keys sorted at every
+ * depth, no whitespace. A grant matches a call when both canonicalize alike.
+ */
+export function canonicalJSON(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJSON).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const object = value as Record<string, unknown>;
+    const members = Object.keys(object)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJSON(object[key])}`);
+    return `{${members.join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
 }
 
 /** Built-in tools that write the file named by their file_path. */
