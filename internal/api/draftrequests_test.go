@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -25,10 +26,7 @@ func TestAPI_DraftRequests(t *testing.T) {
 		t.Fatalf("create = %d, want 201", code)
 	}
 
-	if first.Id == "" || first.Text != "give review a 4th reviewer" || first.Agent != "" || first.Status != gen.DraftRequestStatusQueued ||
-		first.Requester.Id != domain.LocalUser.ID || !first.CreatedAt.Equal(t0) || first.StartedAt != nil || first.ChangedPaths == nil {
-		t.Errorf("created %+v, want the trimmed text queued by the local user at t0", first)
-	}
+	wantQueuedByLocalUser(t, first, "give review a 4th reviewer")
 
 	var got gen.DraftRequest
 	if code := h.call(t, http.MethodGet, acmeDraftRequests+"/"+first.Id, "", &got); code != http.StatusOK || got.Id != first.Id || got.Status != gen.DraftRequestStatusQueued {
@@ -43,19 +41,57 @@ func TestAPI_DraftRequests(t *testing.T) {
 		t.Fatalf("create for writer = %d %+v, want 201", code, second)
 	}
 
+	if list := wantDraftRequestList(t, h, "", second.Id, first.Id); list[1].Status != gen.DraftRequestStatusDone {
+		t.Errorf("list[1] = %+v, want the first request done", list[1])
+	}
+
+	wantDraftRequestList(t, h, "?limit=1", second.Id)
+}
+
+// wantDraftRequestList lists acme's requests with query and checks that they are ids, in order.
+func wantDraftRequestList(t *testing.T, h *harness, query string, ids ...string) []gen.DraftRequest {
+	t.Helper()
+
 	var list gen.DraftRequestList
-	if code := h.call(t, http.MethodGet, acmeDraftRequests, "", &list); code != http.StatusOK || len(list.Requests) != 2 ||
-		list.Requests[0].Id != second.Id || list.Requests[1].Id != first.Id || list.Requests[1].Status != gen.DraftRequestStatusDone {
-		t.Errorf("list = %d %+v, want the two requests newest first", code, list)
+	if code := h.call(t, http.MethodGet, acmeDraftRequests+query, "", &list); code != http.StatusOK {
+		t.Fatalf("list%s = %d, want 200", query, code)
 	}
 
-	if code := h.call(t, http.MethodGet, acmeDraftRequests+"?limit=1", "", &list); code != http.StatusOK || len(list.Requests) != 1 || list.Requests[0].Id != second.Id {
-		t.Errorf("list limit=1 = %d %+v, want the newest", code, list)
+	got := make([]string, 0, len(list.Requests))
+	for _, r := range list.Requests {
+		got = append(got, r.Id)
 	}
 
-	// Another factory has neither request.
-	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/draft/requests/"+first.Id, "", nil); code != http.StatusNotFound {
+	if !slices.Equal(got, ids) {
+		t.Fatalf("list%s = %v, want %v", query, got, ids)
+	}
+
+	return list.Requests
+}
+
+// Another factory of the organization has none of acme's requests.
+func TestAPI_DraftRequestOfAnotherFactory(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	var r gen.DraftRequest
+	if code := h.call(t, http.MethodPost, acmeDraftRequests, `{"text":"give review a 4th reviewer"}`, &r); code != http.StatusCreated {
+		t.Fatalf("create = %d, want 201", code)
+	}
+
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/draft/requests/"+r.Id, "", nil); code != http.StatusNotFound {
 		t.Errorf("get through line = %d, want 404", code)
+	}
+}
+
+// wantQueuedByLocalUser checks that r is a new request of text, queued by the local user at t0.
+func wantQueuedByLocalUser(t *testing.T, r gen.DraftRequest, text string) {
+	t.Helper()
+
+	if r.Id == "" || r.Text != text || r.Agent != "" || r.Status != gen.DraftRequestStatusQueued ||
+		r.Requester.Id != domain.LocalUser.ID || !r.CreatedAt.Equal(t0) || r.StartedAt != nil || r.ChangedPaths == nil {
+		t.Errorf("created %+v, want %q queued by the local user at t0", r, text)
 	}
 }
 

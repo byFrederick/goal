@@ -98,6 +98,7 @@ func (s *server) draftAgent(ctx context.Context, f domain.FactoryID, agent strin
 
 func (s *server) ListDraftRequests(ctx context.Context, req gen.ListDraftRequestsRequestObject) (gen.ListDraftRequestsResponseObject, error) {
 	limit := defaultDraftRequestList
+
 	if l := req.Params.Limit; l != nil {
 		if *l < 1 || *l > domain.MaxDraftRequestList {
 			return nil, fmt.Errorf("%w: limit %d is not 1 to %d", errInvalid, *l, domain.MaxDraftRequestList)

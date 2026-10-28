@@ -174,7 +174,7 @@ func TestFactoryAsk_ExplainsAnOpenRequest(t *testing.T) {
 	code := "draft-request-open"
 	detail := "the factory already has a queued or running draft request"
 	srv, _ := evalGoald(t, map[string]evalAnswer{
-		"POST " + webDraftRequests: {http.StatusConflict, gen.Problem{Status: http.StatusConflict, Title: "Conflict", Code: &code, Detail: &detail}},
+		"POST " + webDraftRequests: {http.StatusConflict, gen.Problem{Status: http.StatusConflict, Title: http.StatusText(http.StatusConflict), Code: &code, Detail: &detail}},
 	})
 
 	if got := goalAsk(t, srv.URL, searchFactory, "another"); !strings.HasPrefix(got, "exit 1") || !strings.Contains(got, "one request at a time") {
