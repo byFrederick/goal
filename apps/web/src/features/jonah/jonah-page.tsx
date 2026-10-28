@@ -28,7 +28,7 @@ import { proposalStates } from './jonah-search';
 import { ProposalCard } from './proposal-card';
 
 /** Loading shows the app background and an empty region for the screen reader, never a placeholder shape. */
-function Loading() {
+export function Loading() {
   return (
     <div aria-busy="true" className="min-h-40">
       <p className="sr-only">Loading</p>
@@ -53,7 +53,7 @@ export function reviewFailure(err: unknown): string {
 }
 
 /** The page's error state: a plain sentence and Try again. A goald without Jonah says so. */
-function JonahError({ error, retry }: { error: unknown; retry: () => void }) {
+export function JonahError({ error, retry }: { error: unknown; retry: () => void }) {
   const unavailable = error instanceof ApiError && error.code === 'jonah-unavailable';
   return (
     <EmptyState
