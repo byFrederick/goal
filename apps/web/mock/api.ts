@@ -78,6 +78,7 @@ import { intakeOf } from './intake.ts';
 import { createKeys } from './keys.ts';
 import { createKnowledge } from './knowledge.ts';
 import { membersFor, orgCanOf } from './people.ts';
+import { createPolicy } from './policy.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
 import { orgRunsOf } from './runs.ts';
 import { createSpend } from './spend.ts';
@@ -719,6 +720,9 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const last = state.andon[f.name]?.at(-1);
     return last && last.cleared_at === null ? last : null;
   };
+
+  // The policy answers: the install's models and box sizes, the acme facts and the revision (policy.ts).
+  const policy = createPolicy({ clock, factoriesOf: (org) => factoriesOf(org) });
 
   // The spend figures: the factories the organization has, with the andon pull that stops one (spend.ts).
   const spend = createSpend({
@@ -1397,6 +1401,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await spend.handle(org, rest, method, url, res)) return;
+    if (await policy.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await webhooks.handle(org.id, rest, method, req, res, () => readBody(req))) return;
 
     if (rest === '' && method === 'GET') return json(res, 200, forCaller(req, withCount(org)));

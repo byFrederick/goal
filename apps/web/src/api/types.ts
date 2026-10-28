@@ -186,6 +186,12 @@ type Schemas = components['schemas'];
 export type AgentSpend = Schemas['AgentSpend'];
 export type ModelSpend = Schemas['ModelSpend'];
 export type OrgSpend = Schemas['OrgSpend'];
+/** The organization's policy (ADR 0024): what it allows every factory, the facts about it, and its parts. */
+export type OrgPolicyInput = Schemas['OrgPolicyInput'];
+export type OrgPolicyView = Schemas['OrgPolicyView'];
+export type ToolPolicy = Schemas['ToolPolicy'];
+export type PolicyModel = Schemas['PolicyModel'];
+export type PolicyBoxSize = Schemas['PolicyBoxSize'];
 export type SpendBudget = Schemas['SpendBudget'];
 export type SpendBudgetState = Schemas['SpendBudgetState'];
 export type SpendDay = Schemas['SpendDay'];
