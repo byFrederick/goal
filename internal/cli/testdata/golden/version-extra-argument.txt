@@ -135,6 +135,15 @@ usage:
   goal knowledge search "<query>" [--source S]... [--limit N]
                                                   search as agents do: the best passages first, with
                                                   their document ids or links
+  goal knowledge usage [--source S] [--days N] [--json]
+                                                  each document's use over the window (default 7
+                                                  days, at most 90), of S or every source: runs,
+                                                  helped and misled, the people's share in brackets
+  goal knowledge uses <document> [--json]         the runs that used it, newest first: item, factory,
+                                                  search or read, first use
+  goal knowledge verdict <document> helped|misled [--run R] [--note TEXT] [--json]
+                                                  give your verdict on it, of a run that used it
+                                                  with --run
   goal search "<query>" [--limit N] [--json]      search the organization's items, agents, factories
                                                   and connections, by group, best first (--limit: per
                                                   group, 1 to 20, default 5; --json: goald's answer as
