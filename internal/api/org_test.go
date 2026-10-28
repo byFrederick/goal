@@ -365,7 +365,7 @@ var probes = map[string]probe{
 	"updateSavedView": {
 		method: http.MethodPatch, path: probeViews + "/" + noDocument, body: `{"name":"mine","filters":{}}`, org: testOrg, factory: acmeID,
 	},
-	"deleteSavedView": {method: http.MethodDelete, path: probeViews + "/" + noDocument, org: testOrg, factory: acmeID},
+	"deleteSavedView":      {method: http.MethodDelete, path: probeViews + "/" + noDocument, org: testOrg, factory: acmeID},
 	"listKnowledgeSources": {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/sources?factory=acme", org: testOrg, factory: acmeID},
 	"createKnowledgeSource": {
 		method: http.MethodPost, path: "/v1/orgs/acme/knowledge/sources", org: testOrg, body: `{"name":"notes","title":"Notes","kind":"upload"}`,

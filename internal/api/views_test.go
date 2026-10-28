@@ -22,6 +22,7 @@ const (
 	codeInvalid  = "invalid-view"
 	codeRefused  = "forbidden"
 	codeNoPerson = "person-required"
+	problemType  = "application/problem+json"
 )
 
 // saveView saves body as the person of session and returns the view.
@@ -64,7 +65,7 @@ func wantStatus(t *testing.T, what string, res response, status int, code string
 	}
 
 	if code != "" {
-		if got := deref(problem(t, res).Code); got != code || res.header.Get(contentType) != "application/problem+json" {
+		if got := deref(problem(t, res).Code); got != code || res.header.Get(contentType) != problemType {
 			t.Errorf("%s = %q (%s), want problem %q", what, got, res.header.Get(contentType), code)
 		}
 	}
@@ -95,7 +96,7 @@ func TestSavedViews_ListSharedAndOwn(t *testing.T) {
 	}{
 		{"viewer", cookie(viewerToken), []string{"Expedite bugs", "Mine*"}},
 		{"owner", cookie(ownerToken), []string{"Expedite bugs*", "Owner's*"}},
-		{"key", bearer(key.Secret), []string{"Expedite bugs"}},
+		{"API key", bearer(key.Secret), []string{"Expedite bugs"}},
 	} {
 		views := h.listViews(t, c.header)
 		if got := viewNames(views); !slices.Equal(got, c.want) {
@@ -154,7 +155,7 @@ func TestSavedViews_KeysCannotWrite(t *testing.T) {
 	key, _ := h.create(t, viewsKey)
 	token, _ := h.createToken(t, freshToken, `{"name":"laptop","scopes":["org:read","factory:read"]}`)
 
-	for who, header := range map[string]http.Header{"key": bearer(key.Secret), "personal token": bearer(token.Secret)} {
+	for who, header := range map[string]http.Header{"API key": bearer(key.Secret), "personal token": bearer(token.Secret)} {
 		for _, body := range []string{sharedBugs, viewerOwn} {
 			wantStatus(t, who+" saves "+body, h.request(t, http.MethodPost, viewsPath, body, header), http.StatusForbidden, codeNoPerson)
 		}
