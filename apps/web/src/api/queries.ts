@@ -26,6 +26,7 @@ import {
   getInbox,
   getItem,
   getItemParts,
+  getJonahOverview,
   getJudge,
   getLeadTime,
   getMe,
@@ -45,6 +46,7 @@ import {
   listMembers,
   listOrgRuns,
   listOrgs,
+  listProposals,
   type RunsFilter,
 } from './client';
 import {
@@ -83,7 +85,7 @@ import {
 import { getOrgPolicy } from './policy';
 import { type SearchQuery, searchOrg } from './search';
 import { getOrgSpend } from './spend';
-import type { Factory, ItemEvent, SpendWindow } from './types';
+import type { Factory, ItemEvent, ProposalState, SpendWindow } from './types';
 import { getWebhookDelivery, listWebhookDeliveries, listWebhookEndpoints } from './webhooks';
 
 /**
@@ -223,6 +225,8 @@ export const keys = {
   evals: (org: string, factory: string) => ['org', org, 'factory', factory, 'evals'] as const,
   /** The prefix of a factory's judges (Jonah's Judges). A `definition` event refreshes it. */
   judges: (org: string, factory: string) => ['org', org, 'factory', factory, 'judges'] as const,
+  /** The prefix of a factory's Jonah reads: the overview and the proposals. A `learning` or `definition` event refreshes it. */
+  jonah: (org: string, factory: string) => ['org', org, 'factory', factory, 'jonah'] as const,
   /** The factory's intake (sources and triggers); item and definition events refresh it. */
   intake: (org: string, factory: string) => ['org', org, 'factory', factory, 'intake'] as const,
 };
@@ -568,6 +572,20 @@ export const judgeQuery = (org: string, factory: string, judge: string) =>
   queryOptions({
     queryKey: [...keys.judges(org, factory), 'judge', judge] as const,
     queryFn: ({ signal }) => getJudge(org, factory, judge, signal),
+  });
+
+/** Jonah's overview: the policy, the proposals waiting, this month's cost and the week's observations (getJonahOverview). */
+export const jonahOverviewQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: [...keys.jonah(org, factory), 'overview'] as const,
+    queryFn: ({ signal }) => getJonahOverview(org, factory, signal),
+  });
+
+/** The factory's proposals, newest first, in one state or all of them (listProposals). */
+export const proposalsQuery = (org: string, factory: string, state?: ProposalState) =>
+  queryOptions({
+    queryKey: [...keys.jonah(org, factory), 'proposals', { state }] as const,
+    queryFn: ({ signal }) => listProposals(org, factory, { state }, signal),
   });
 
 /** What a run of every case would cost about (estimateEvalRun): a read, so it is asked again on each refresh. */

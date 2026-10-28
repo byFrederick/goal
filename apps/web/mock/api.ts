@@ -77,6 +77,7 @@ import {
 } from './fixtures.ts';
 import { constraintOf, type DayRange, type FlowInput, leadTimeOf, metricsOf, rangeOf, weeklyOf } from './flow.ts';
 import { intakeOf } from './intake.ts';
+import { createJonah } from './jonah.ts';
 import { createJudges } from './judges.ts';
 import { createKeys } from './keys.ts';
 import { createKnowledge } from './knowledge.ts';
@@ -240,6 +241,10 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   });
   const judges = createJudges({
     factory: (org, key) => findFactory(key, org),
+  });
+  const jonah = createJonah({
+    factory: (org, key) => findFactory(key, org),
+    clock,
   });
   const webhooks = createWebhooks({
     clock,
@@ -1397,6 +1402,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       knowledge.reset(clock());
       evals.reset();
       judges.reset();
+      jonah.reset();
       webhooks.reset();
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
       const cookie = auth.reset(authSettings(body.auth));
@@ -1492,6 +1498,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (rest === '/search' && method === 'GET') return searchOf(org, url, forCaller(req, org), res);
     if (await evals.handle(org, rest, method, res, () => readBody(req))) return;
     if (await judges.handle(org, rest, method, res, () => readBody(req))) return;
+    if (await jonah.handle(org, rest, method, url, res, () => readBody(req))) return;
     if (await spend.handle(org, rest, method, url, res)) return;
     if (await policy.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await webhooks.handle(org.id, rest, method, req, res, () => readBody(req))) return;

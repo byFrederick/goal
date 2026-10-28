@@ -14,12 +14,13 @@ import {
   attentionQuery,
   connectionsQuery,
   factoriesQuery,
+  jonahOverviewQuery,
   meQuery,
   orgQuery,
   orgsQuery,
   overviewQuery,
 } from '../api/queries';
-import type { Factory, FactoryOverviewList, Me, Org, OrgAttention, OrgSummary } from '../api/types';
+import type { Factory, FactoryOverviewList, JonahOverview, Me, Org, OrgAttention, OrgSummary } from '../api/types';
 import { TooltipProvider } from '../ui/tooltip';
 import { AccountProvider } from './account-menu';
 import { Sidebar } from './sidebar';
@@ -86,12 +87,22 @@ const me: Me = {
   user: { id: 'user-1', name: 'Freddy Cruz', email: 'freddy@example.com' },
 } as Me;
 
+/** Jonah's overview of each factory: nothing waiting by default, so a row with no count keeps its plain name. */
+const jonahWaiting = (waiting: number): JonahOverview => ({
+  policy: { enabled: true, propose_after: 5, weekly_usd: 20, approver_roles: ['owner'] },
+  waiting,
+  month_cost_usd: 0,
+  observations: [],
+});
+
 interface Setup {
   at?: string;
   can?: string[];
   list?: Factory[];
   attention?: OrgAttention | 'pending' | 'error';
   overview?: FactoryOverviewList | 'pending' | 'error';
+  /** Jonah's waiting proposals in each factory; 'error' is a goald without Jonah (503). */
+  jonah?: number | 'error';
 }
 
 /** The sidebar under the organization's route, at `at`; the factory's pages are plain placeholders. */
@@ -101,6 +112,7 @@ function renderSidebar({
   list = factories,
   attention: att = attention,
   overview: ov = spend(1400),
+  jonah = 0,
 }: Setup = {}) {
   const org: Org = { ...summary, created_at: '2026-09-01T00:00:00Z', can } as Org;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
@@ -115,6 +127,11 @@ function renderSidebar({
   if (ov === 'pending') vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(() => {}));
   else if (ov === 'error') vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
   else client.setQueryData(overviewQuery(org.id).queryKey, ov);
+  for (const f of list) {
+    if (jonah === 'error') continue;
+    client.setQueryData(jonahOverviewQuery(org.id, f.id).queryKey, jonahWaiting(jonah));
+  }
+  if (jonah === 'error') vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
 
   const rootRoute = createRootRoute();
   const orgRoute = createRoute({
@@ -211,9 +228,25 @@ describe('the sidebar', () => {
     const sidebar = await nav();
 
     expect(within(sidebar).getByRole('link', { name: 'Intake' }).getAttribute('href')).toBe('/o/acme/f/goal/intake');
-    expect(within(sidebar).getByRole('link', { name: 'Jonah' }).getAttribute('href')).toBe(
-      '/o/acme/f/goal/jonah/evals',
-    );
+    expect(within(sidebar).getByRole('link', { name: 'Jonah' }).getAttribute('href')).toBe('/o/acme/f/goal/jonah');
+  });
+
+  it('shows the waiting proposals on the open factory Jonah row', async () => {
+    renderSidebar({ at: '/o/acme/f/goal', jonah: 2 });
+    const jonah = within(await nav()).getByRole('link', { name: /Jonah.*2.*waiting for your review/ });
+
+    expect(jonah.textContent).toContain('2');
+  });
+
+  it('leaves the count out at zero, and when Jonah cannot be read', async () => {
+    renderSidebar({ at: '/o/acme/f/goal', jonah: 0 });
+    expect(within(await nav()).getByRole('link', { name: 'Jonah' })).toBeTruthy();
+    cleanup();
+
+    renderSidebar({ at: '/o/acme/f/goal', jonah: 'error' });
+    const sidebar = await nav();
+    expect(within(sidebar).getByRole('link', { name: 'Jonah' })).toBeTruthy();
+    expect(screen.queryByText(/waiting for your review/)).toBeNull();
   });
 
   it('keeps Jonah current on its Evals page', async () => {
