@@ -2026,6 +2026,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The factory's shared views and the caller's own
+         * @description The shared views first, then the caller's personal views, each by name (case ignored). Never another person's personal view; an API key or a personal token sees only the shared views.
+         */
+        get: operations["listSavedViews"];
+        put?: never;
+        /**
+         * Save a view
+         * @description A personal view of the caller, or a shared view of the factory, which also needs factory:manage (403 forbidden without it). 403 person-required for an API key, a personal token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60 characters, over 20 filters, over 20 values in one or a value over 200 characters; 409 view-name-taken for a name the caller's personal views (personal) or the factory's shared views (shared) already use, case ignored.
+         */
+        post: operations["createSavedView"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/views/{view}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The saved view's id */
+                view: components["parameters"]["SavedViewRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a view
+         * @description A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included).
+         */
+        delete: operations["deleteSavedView"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename a view and replace its filters
+         * @description Whether a view is shared is fixed when it is created. A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included); 400 invalid-view and 409 view-name-taken as createSavedView.
+         */
+        patch: operations["updateSavedView"];
+        trace?: never;
+    };
     "/v1/orgs/{org}/stream": {
         parameters: {
             query?: never;
@@ -6732,6 +6792,37 @@ export interface components {
             /** @enum {string} */
             status: "idle" | "syncing" | "failed";
         };
+        /** @description The Items page's URL search params, each key with its values in order: at most 20 keys, 20 values per key and 200 characters per value */
+        SavedViewFilters: {
+            [key: string]: string[];
+        };
+        NewSavedView: {
+            /** @description 1 to 60 characters, trimmed */
+            name: string;
+            /** @description Every reader of the factory sees it; false: only its owner */
+            shared: boolean;
+            filters: components["schemas"]["SavedViewFilters"];
+        };
+        SavedViewChange: {
+            /** @description 1 to 60 characters, trimmed */
+            name: string;
+            filters: components["schemas"]["SavedViewFilters"];
+        };
+        SavedView: {
+            id: string;
+            name: string;
+            shared: boolean;
+            filters: components["schemas"]["SavedViewFilters"];
+            /** @description The caller made it */
+            mine: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        SavedViewList: {
+            views: components["schemas"]["SavedView"][];
+        };
     };
     responses: {
         /** @description An error (RFC 9457 problem details) */
@@ -6754,6 +6845,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description The saved view's id */
+        SavedViewRef: string;
         /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
         WebhookEndpointRef: string;
         /** @description A person's user id */
@@ -9608,6 +9701,120 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WebhookDeliveryRequest"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listSavedViews: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The views */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedViewList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createSavedView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewSavedView"];
+            };
+        };
+        responses: {
+            /** @description The view */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteSavedView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The saved view's id */
+                view: components["parameters"]["SavedViewRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateSavedView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The saved view's id */
+                view: components["parameters"]["SavedViewRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedViewChange"];
+            };
+        };
+        responses: {
+            /** @description The view */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
                 };
             };
             default: components["responses"]["Problem"];
