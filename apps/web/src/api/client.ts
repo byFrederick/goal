@@ -642,6 +642,11 @@ export function pauseItem(org: string, item: string, reason?: string): Promise<I
   );
 }
 
+/** Sets an open item's lane. 400 lane-required or unknown-lane; 409 item-closed, item-in-progress, item-is-assembly or same-lane. */
+export function setItemLane(org: string, item: string, lane: string): Promise<Item> {
+  return unwrap(goal.POST(orgPath('/items/{item}/lane'), { params: { path: { org, item } }, body: { lane } }));
+}
+
 /** Closes an open item as cancelled; an assembly cancels its open parts too. 409 item-closed when it is done or cancelled. */
 export function cancelItem(org: string, item: string, reason?: string): Promise<Item> {
   return unwrap(

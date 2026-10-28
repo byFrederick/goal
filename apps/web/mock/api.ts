@@ -1908,7 +1908,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     }
 
     m = rest.match(
-      /^\/items\/([^/]+)(?:\/(events|runs|parts|notes|approve|reject|merge|retry|move|pause|cancel|answer))?$/,
+      /^\/items\/([^/]+)(?:\/(events|runs|parts|notes|approve|reject|merge|retry|move|pause|lane|cancel|answer))?$/,
     );
     if (!m) return problem(res, 404, 'Not found', path);
 
@@ -2040,6 +2040,24 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       it.state = 'blocked';
       it.question = null;
       emit(it, 'paused', by, { actor: 'user:local', ...(reason ? { reason } : {}) });
+      return json(res, 200, full(it));
+    }
+
+    if (action === 'lane') {
+      const lane = typeof body.lane === 'string' ? body.lane.trim() : '';
+      if (!lane) return problem(res, 400, 'Bad Request', 'a lane is required', 'lane-required');
+      if (closed) return problem(res, 409, 'Conflict', `${ref(it)} is ${it.state}`, 'item-closed');
+      if (it.state === 'assembly')
+        return problem(res, 409, 'Conflict', `${ref(it)} is an assembly; its parts carry their own lanes`, 'item-is-assembly');
+      if (it.state === 'in_progress')
+        return problem(res, 409, 'Conflict', `${ref(it)} is in progress; pause or move it first`, 'item-in-progress');
+      const factory = findFactory(it.factory);
+      const lanes = factory ? definitions.laneNames(factory) : [];
+      if (lanes.length > 0 && !lanes.includes(lane))
+        return problem(res, 400, 'Bad Request', `lane "${lane}" is not routed by any station`, 'unknown-lane');
+      if (it.lane === lane) return problem(res, 409, 'Conflict', `${ref(it)} is already in ${lane}`, 'same-lane');
+      emit(it, 'lane_set', by, { from: it.lane, to: lane, actor: 'user:local' });
+      it.lane = lane;
       return json(res, 200, full(it));
     }
 
