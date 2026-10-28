@@ -283,6 +283,21 @@ export function deleteDraftFile(org: string, factory: string, path: string, sha2
 }
 
 /** Validates the draft at its revision, with unsaved YAML (`overlay`) and the moves the publish will carry. */
+export function validateDraft(
+  org: string,
+  factory: string,
+  request: ValidateDraftRequest = {},
+  signal?: AbortSignal,
+): Promise<Validation> {
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/draft/validate'), {
+      params: { path: { org, factory } },
+      body: request,
+      ...cancel(signal),
+    }),
+  );
+}
+
 /** The factory's asked definition changes (ADR 0021), newest first. */
 export function listDraftRequests(org: string, factory: string, signal?: AbortSignal): Promise<DraftRequestList> {
   return unwrap(
@@ -319,21 +334,6 @@ export function getDraftRequest(
   return unwrap(
     goal.GET(orgPath('/factories/{factory}/draft/requests/{draft_request}'), {
       params: { path: { org, factory, draft_request: draftRequest } },
-      ...cancel(signal),
-    }),
-  );
-}
-
-export function validateDraft(
-  org: string,
-  factory: string,
-  request: ValidateDraftRequest = {},
-  signal?: AbortSignal,
-): Promise<Validation> {
-  return unwrap(
-    goal.POST(orgPath('/factories/{factory}/draft/validate'), {
-      params: { path: { org, factory } },
-      body: request,
       ...cancel(signal),
     }),
   );

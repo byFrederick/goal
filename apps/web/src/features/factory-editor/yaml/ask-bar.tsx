@@ -5,7 +5,7 @@
 // refuses another one). Nothing polls: a request's status moves on the stream's definition events, a
 // resync or a reload (frontend.md, "Asked definition changes").
 import { useQuery } from '@tanstack/react-query';
-import { useSearch } from '@tanstack/react-router';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { Sparkles } from 'lucide-react';
 import { type FormEvent, useId, useState } from 'react';
 import { draftRequestQuery, draftRequestsQuery } from '../../../api/queries';
@@ -47,6 +47,7 @@ export function AskBar() {
   const org = useOrg();
   const factory = useFactory();
   const { request: requestId } = useSearch({ strict: false });
+  const navigate = useNavigate();
   const inputId = useId();
   const statusId = useId();
   const [text, setText] = useState('');
@@ -60,7 +61,9 @@ export function AskBar() {
 
   const newest = list.data?.requests[0];
   const shown = requestId === undefined ? newest : named.data;
-  const busy = isOpenRequest(newest) || ask.isPending;
+  // Off while the newest request runs (goald refuses another) and while the request shown is still open,
+  // so the disabled input always has its status on screen.
+  const busy = isOpenRequest(newest) || isOpenRequest(shown) || ask.isPending;
   const loading = list.isPending || (requestId !== undefined && named.isPending);
   const readFailed = list.isError || (requestId !== undefined && named.isError);
 
@@ -68,7 +71,16 @@ export function AskBar() {
     event.preventDefault();
     const trimmed = text.trim();
     if (trimmed === '' || busy) return;
-    ask.mutate({ text: trimmed }, { onSuccess: () => setText('') });
+    // The bar then shows the request it just asked, not the one ?request= named before.
+    ask.mutate(
+      { text: trimmed },
+      {
+        onSuccess: (created) => {
+          setText('');
+          void navigate({ to: '.', search: (prev) => ({ ...prev, request: created.id }), replace: true });
+        },
+      },
+    );
   }
 
   return (

@@ -134,6 +134,21 @@ describe('the Ask bar, ready', () => {
     expect((input() as HTMLInputElement).disabled).toBe(true);
   });
 
+  it('after an ask from a finished request, shows the new request queued and not the finished one', async () => {
+    const named = request({ id: 'request-old', text: 'rename Build', status: 'done', summary: 'Renamed Build.' });
+    const created = request({ id: 'request-2', text: 'give Review a 4th reviewer', status: 'queued' });
+    vi.mocked(createDraftRequest).mockResolvedValue(created);
+    await renderBar({ requests: [named], current: named });
+    expect(await screen.findByText('Renamed Build.')).toBeTruthy();
+
+    fireEvent.change(input(), { target: { value: 'give Review a 4th reviewer' } });
+    fireEvent.click(ask());
+
+    expect(await screen.findByText('Queued')).toBeTruthy();
+    expect(screen.queryByText('Renamed Build.')).toBeNull();
+    expect((input() as HTMLInputElement).disabled).toBe(true);
+  });
+
   it('reads a draft request query without a refetch interval: the stream refreshes it', () => {
     expect('refetchInterval' in draftRequestsQuery(org.id, factory.id)).toBe(false);
     expect('refetchInterval' in draftRequestQuery(org.id, factory.id, 'request-1')).toBe(false);
