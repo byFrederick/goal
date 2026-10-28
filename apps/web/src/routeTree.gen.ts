@@ -24,6 +24,7 @@ import { Route as OOrgOrgMembersRouteImport } from './routes/o.$org._org.members
 import { Route as OOrgOrgNeedsYouRouteImport } from './routes/o.$org._org.needs-you'
 import { Route as OOrgOrgRunsRouteImport } from './routes/o.$org._org.runs'
 import { Route as OOrgOrgSettingsRouteImport } from './routes/o.$org._org.settings'
+import { Route as OOrgOrgSpendRouteImport } from './routes/o.$org._org.spend'
 import { Route as OOrgFFactoryRouteImport } from './routes/o.$org.f.$factory'
 import { Route as OOrgNewStepRouteImport } from './routes/o.$org.new.$step'
 import { Route as OOrgOrgConnectionsIndexRouteImport } from './routes/o.$org._org.connections.index'
@@ -116,6 +117,11 @@ const OOrgOrgRunsRoute = OOrgOrgRunsRouteImport.update({
 const OOrgOrgSettingsRoute = OOrgOrgSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => OOrgOrgRoute,
+} as any)
+const OOrgOrgSpendRoute = OOrgOrgSpendRouteImport.update({
+  id: '/spend',
+  path: '/spend',
   getParentRoute: () => OOrgOrgRoute,
 } as any)
 const OOrgFFactoryRoute = OOrgFFactoryRouteImport.update({
@@ -232,6 +238,7 @@ export interface FileRoutesByFullPath {
   '/o/$org/needs-you': typeof OOrgOrgNeedsYouRoute
   '/o/$org/runs': typeof OOrgOrgRunsRoute
   '/o/$org/settings': typeof OOrgOrgSettingsRoute
+  '/o/$org/spend': typeof OOrgOrgSpendRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
   '/o/$org/new/$step': typeof OOrgNewStepRoute
   '/o/$org/': typeof OOrgOrgIndexRoute
@@ -267,6 +274,7 @@ export interface FileRoutesByTo {
   '/o/$org/needs-you': typeof OOrgOrgNeedsYouRoute
   '/o/$org/runs': typeof OOrgOrgRunsRoute
   '/o/$org/settings': typeof OOrgOrgSettingsRoute
+  '/o/$org/spend': typeof OOrgOrgSpendRoute
   '/o/$org/new/$step': typeof OOrgNewStepRoute
   '/o/$org/connections/$connection': typeof OOrgOrgConnectionsConnectionRoute
   '/o/$org/connections/new': typeof OOrgOrgConnectionsNewRoute
@@ -301,6 +309,7 @@ export interface FileRoutesById {
   '/o/$org/_org/needs-you': typeof OOrgOrgNeedsYouRoute
   '/o/$org/_org/runs': typeof OOrgOrgRunsRoute
   '/o/$org/_org/settings': typeof OOrgOrgSettingsRoute
+  '/o/$org/_org/spend': typeof OOrgOrgSpendRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
   '/o/$org/new/$step': typeof OOrgNewStepRoute
   '/o/$org/_org/': typeof OOrgOrgIndexRoute
@@ -338,6 +347,7 @@ export interface FileRouteTypes {
     | '/o/$org/needs-you'
     | '/o/$org/runs'
     | '/o/$org/settings'
+    | '/o/$org/spend'
     | '/o/$org/f/$factory'
     | '/o/$org/new/$step'
     | '/o/$org/'
@@ -373,6 +383,7 @@ export interface FileRouteTypes {
     | '/o/$org/needs-you'
     | '/o/$org/runs'
     | '/o/$org/settings'
+    | '/o/$org/spend'
     | '/o/$org/new/$step'
     | '/o/$org/connections/$connection'
     | '/o/$org/connections/new'
@@ -406,6 +417,7 @@ export interface FileRouteTypes {
     | '/o/$org/_org/needs-you'
     | '/o/$org/_org/runs'
     | '/o/$org/_org/settings'
+    | '/o/$org/_org/spend'
     | '/o/$org/f/$factory'
     | '/o/$org/new/$step'
     | '/o/$org/_org/'
@@ -544,6 +556,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/o/$org/settings'
       preLoaderRoute: typeof OOrgOrgSettingsRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
+    '/o/$org/_org/spend': {
+      id: '/o/$org/_org/spend'
+      path: '/spend'
+      fullPath: '/o/$org/spend'
+      preLoaderRoute: typeof OOrgOrgSpendRouteImport
       parentRoute: typeof OOrgOrgRoute
     }
     '/o/$org/f/$factory': {
@@ -688,6 +707,7 @@ interface OOrgOrgRouteChildren {
   OOrgOrgNeedsYouRoute: typeof OOrgOrgNeedsYouRoute
   OOrgOrgRunsRoute: typeof OOrgOrgRunsRoute
   OOrgOrgSettingsRoute: typeof OOrgOrgSettingsRoute
+  OOrgOrgSpendRoute: typeof OOrgOrgSpendRoute
   OOrgOrgIndexRoute: typeof OOrgOrgIndexRoute
   OOrgOrgConnectionsConnectionRoute: typeof OOrgOrgConnectionsConnectionRoute
   OOrgOrgConnectionsNewRoute: typeof OOrgOrgConnectionsNewRoute
@@ -703,6 +723,7 @@ const OOrgOrgRouteChildren: OOrgOrgRouteChildren = {
   OOrgOrgNeedsYouRoute: OOrgOrgNeedsYouRoute,
   OOrgOrgRunsRoute: OOrgOrgRunsRoute,
   OOrgOrgSettingsRoute: OOrgOrgSettingsRoute,
+  OOrgOrgSpendRoute: OOrgOrgSpendRoute,
   OOrgOrgIndexRoute: OOrgOrgIndexRoute,
   OOrgOrgConnectionsConnectionRoute: OOrgOrgConnectionsConnectionRoute,
   OOrgOrgConnectionsNewRoute: OOrgOrgConnectionsNewRoute,
