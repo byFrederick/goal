@@ -17,6 +17,7 @@ import (
 	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
+	"github.com/byFrederick/goal/internal/jonah"
 )
 
 // The evals routes (ADR 0025): a factory's eval cases are its definition's evals/cases/<name>.yaml
@@ -24,12 +25,15 @@ import (
 // queues, prices and cancels runs. Adding a case writes its file into a draft the handler opens
 // and publishes it, through the same checks and eval gate as any publish (decision 5).
 
-// EvalDeps serve the evals routes. Runs reads eval runs (a ports.Evals satisfies it), Loop starts,
-// prices and cancels them (*jonah.Evals satisfies it) and Judges names the judges cases cite.
+// EvalDeps serve the evals and bake-off routes. Runs reads eval runs and bake-offs (a ports.Evals
+// satisfies it), Loop starts, prices and cancels them and applies bake-offs (*jonah.Evals
+// satisfies it), Judges names the judges cases and bake-offs cite, and Versions reads the line a
+// bake-off runs (*definitions.Cache satisfies it).
 type EvalDeps struct {
-	Runs   EvalRunReads
-	Loop   EvalLoop
-	Judges ports.Judges
+	Runs     EvalRunReads
+	Loop     EvalLoop
+	Judges   ports.Judges
+	Versions BakeOffVersions
 }
 
 // EvalRunReads are the reads of ports.Evals the evals routes make.
@@ -37,13 +41,19 @@ type EvalRunReads interface {
 	GetRun(ctx context.Context, id domain.EvalRunID) (domain.EvalRun, error)
 	CaseHistory(ctx context.Context, factory domain.FactoryID) ([]domain.EvalCaseHistory, error)
 	LatestRunForContent(ctx context.Context, factory domain.FactoryID, sha256 domain.BlobHash) (domain.EvalRun, error)
+	ListBakeOffs(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.BakeOff, error)
+	GetBakeOff(ctx context.Context, id domain.EvalRunID) (domain.BakeOff, error)
 }
 
-// EvalLoop starts, prices and cancels eval runs; *jonah.Evals satisfies it.
+// EvalLoop starts, prices and cancels eval runs, and starts, repeats and applies bake-offs;
+// *jonah.Evals satisfies it.
 type EvalLoop interface {
 	Start(ctx context.Context, n domain.NewEvalRun, cases []domain.EvalCaseSpec, by domain.Actor) (domain.EvalRun, domain.EvalEstimate, error)
 	Estimate(ctx context.Context, factory domain.FactoryID, cases []domain.EvalCaseSpec) (domain.EvalEstimate, error)
 	Cancel(ctx context.Context, id domain.EvalRunID) (domain.EvalRun, error)
+	StartBakeOff(ctx context.Context, c jonah.BakeOffContent, r jonah.BakeOffRequest, by domain.Actor) (domain.BakeOff, domain.EvalEstimate, error)
+	RerunBakeOff(ctx context.Context, id domain.EvalRunID, c jonah.BakeOffContent, by domain.Actor) (domain.BakeOff, domain.EvalEstimate, error)
+	ApplyBakeOff(ctx context.Context, id domain.EvalRunID, arm int) (domain.BakeOffArm, error)
 }
 
 // Limits of a case written from a past run, as evals.schema.json has them.
@@ -89,12 +99,21 @@ func evalProblem(err error) (gen.Problem, bool) {
 		status, code = http.StatusConflict, "eval-case-exists"
 	case errors.Is(err, errEvalDraftOpen):
 		status, code = http.StatusConflict, "draft-open"
+	case errors.Is(err, jonah.ErrLearningBudgetExhausted):
+		status, code = http.StatusConflict, "learning-budget-exhausted"
+	case errors.Is(err, errInvalidBakeOff):
+		status, code = http.StatusUnprocessableEntity, "invalid-bake-off"
 	default:
 		return gen.Problem{}, false
 	}
 
 	p := detailed(status, err)
 	p.Code = &code
+
+	if e, ok := errors.AsType[*bakeOffBudgetError](err); ok {
+		est := estimateOut(e.estimate)
+		p.Estimate = &est
+	}
 
 	return p, true
 }

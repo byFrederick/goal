@@ -1472,6 +1472,116 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/evals/bake-offs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The factory's bake-offs, newest first
+         * @description At most the 20 newest bake-offs (ADR 0029): eval runs of kind bake-off, each of one agent on two to four models. 503 evals-unavailable.
+         */
+        get: operations["listBakeOffs"];
+        put?: never;
+        /**
+         * Start a bake-off of one agent across models on the current version
+         * @description Queues a bake-off of the agent's eval cases in the current version, each run trials times (default 3) on every arm, and answers at once; goald's eval loop works the tries. Without models, the arms are the agent's model and goald's default models (GOAL_BAKEOFF_MODELS). The estimate is cases × trials × arms × the price of a try, as estimateEvalRun prices it. 404 version-not-found for a factory never published; 409 learning-budget-exhausted, with the estimate, when it exceeds what is left of the learning budget; 422 invalid-bake-off for an agent the version does not have or that works at no station, arms that are not 2 to 4 distinct model ids with the agent's model among them, trials outside 1 to 10 and an agent with no eval cases; 503 evals-unavailable.
+         */
+        post: operations["startBakeOff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The bake-off's id, the id of its eval run */
+                bake_off: components["parameters"]["BakeOffRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One bake-off with its arms, its tries passed per case and its recommendation
+         * @description 404 eval-run-not-found for a bake-off that is not the factory's and for an eval run that is not a bake-off; 503 evals-unavailable.
+         */
+        get: operations["getBakeOff"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/rerun": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The bake-off's id, the id of its eval run */
+                bake_off: components["parameters"]["BakeOffRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run a bake-off again on the current version
+         * @description Queues a new bake-off of the same agent with the same arms and trials, on the factory's current version, which may be newer than the original's (ADR 0029 decision 7). 404 eval-run-not-found; then the refusals of startBakeOff.
+         */
+        post: operations["rerunBakeOff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The bake-off's id, the id of its eval run */
+                bake_off: components["parameters"]["BakeOffRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Write an arm's model as the agent's model into the factory's draft
+         * @description Sets agents[].model of the bake-off's agent in the draft to the arm's model, opening a draft from the current version when none is open. It never publishes: the draft publishes as any other, through the eval gate (ADR 0029 decision 7). 404 eval-run-not-found; 412 draft-conflict when the agent changed since the bake-off's version; 422 invalid-bake-off for an arm the bake-off does not have; 503 evals-unavailable.
+         */
+        post: operations["applyBakeOff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/items": {
         parameters: {
             query?: never;
@@ -3102,7 +3212,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run has no use of the document). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run has no use of the document). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422). */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -3122,6 +3232,8 @@ export interface components {
             eval_run_id?: string;
             /** @description evals-failing only, the cases of that run with a try that did not pass */
             failing_cases?: string[];
+            /** @description learning-budget-exhausted only, the estimate of the bake-off it refused */
+            estimate?: components["schemas"]["EvalEstimate"];
         };
         EvalList: {
             summary: components["schemas"]["EvalSummary"];
@@ -3256,6 +3368,119 @@ export interface components {
             detail?: {
                 [key: string]: unknown;
             };
+        };
+        BakeOffRequest: {
+            /** @description The agent to bake off */
+            agent: string;
+            /** @description The arms' models, 2 to 4 distinct ids, the agent's model among them; absent, the agent's model and goald's default models */
+            models?: string[];
+            /**
+             * @description Tries per case on every arm
+             * @default 3
+             */
+            trials?: number;
+        };
+        BakeOffApply: {
+            /** @description The arm whose model to write */
+            arm: number;
+        };
+        BakeOffStarted: {
+            bake_off: components["schemas"]["BakeOff"];
+            estimate: components["schemas"]["EvalEstimate"];
+        };
+        BakeOffList: {
+            /** @description Newest first */
+            bake_offs: components["schemas"]["BakeOff"][];
+        };
+        BakeOff: {
+            /** @description The id of its eval run */
+            id: string;
+            /** @enum {string} */
+            state: "queued" | "running" | "done" | "failed" | "cancelled";
+            agent: string;
+            /** @description The first station the agent works at */
+            station: string;
+            /** @description The published version it runs */
+            version: number;
+            /** @description Tries per case on every arm */
+            trials: number;
+            /** @description How many of the agent's eval cases it runs */
+            cases: number;
+            /** Format: double */
+            estimate_usd: number;
+            /**
+             * Format: double
+             * @description What its recorded tries cost
+             */
+            cost_usd: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            finished_at?: string;
+            /** @description By arm number */
+            arms: components["schemas"]["BakeOffArm"][];
+            /** @description By case name, the tries passed of each arm so far, out of trials */
+            per_case: components["schemas"]["BakeOffCase"][];
+            /** @description The arm with the highest pass rate, then the lowest cost per item; null while the bake-off is not done or when an arm errored on every try (ADR 0029 decision 4) */
+            recommended_arm: number | null;
+        };
+        BakeOffArm: {
+            /** @description Its number */
+            arm: number;
+            model: string;
+            /** @description The agent's model in the bake-off's version */
+            is_current: boolean;
+            /** @description Its row of the report, null until the bake-off is done */
+            summary: components["schemas"]["BakeOffArmSummary"] | null;
+        };
+        BakeOffArmSummary: {
+            tries: number;
+            passed: number;
+            /** @description Tries that failed for an infrastructure reason; they count as not passed */
+            errors: number;
+            /**
+             * Format: double
+             * @description passed of tries
+             */
+            pass_rate: number;
+            /**
+             * Format: double
+             * @description The mean cost of a try
+             */
+            cost_per_item_usd: number;
+            /**
+             * Format: double
+             * @description The mean duration of a try
+             */
+            time_per_item_seconds: number;
+            /**
+             * Format: double
+             * @description The mean turns of a try
+             */
+            turns: number;
+            /** @description The advisory judge's share; null when no judge scores the agent */
+            judged: components["schemas"]["BakeOffJudged"] | null;
+        };
+        BakeOffJudged: {
+            /** @description The judge's slug */
+            judge: string;
+            /** @description The judge's title when the version has it */
+            title?: string;
+            /**
+             * Format: double
+             * @description The share of the arm's tries the judge passed
+             */
+            share: number;
+        };
+        BakeOffCase: {
+            case: string;
+            /** @description By arm number */
+            arms: components["schemas"]["BakeOffCaseArm"][];
+        };
+        BakeOffCaseArm: {
+            arm: number;
+            /** @description The case's tries on the arm that passed */
+            passed: number;
         };
         EvalCaseFromRun: {
             /** @description The past agent run whose agent and item the case replays */
@@ -6776,6 +7001,8 @@ export interface components {
         JudgeRef: string;
         /** @description The eval run's id */
         EvalRunRef: string;
+        /** @description The bake-off's id, the id of its eval run */
+        BakeOffRef: string;
         /** @description The first UTC day of the range; 6 days before `to` when absent */
         RangeFrom: string;
         /** @description The last UTC day of the range, included; today when absent */
@@ -8821,6 +9048,150 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Version"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listBakeOffs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The bake-offs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BakeOffList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    startBakeOff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BakeOffRequest"];
+            };
+        };
+        responses: {
+            /** @description The queued bake-off and its estimate */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BakeOffStarted"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getBakeOff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The bake-off's id, the id of its eval run */
+                bake_off: components["parameters"]["BakeOffRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The bake-off */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BakeOff"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    rerunBakeOff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The bake-off's id, the id of its eval run */
+                bake_off: components["parameters"]["BakeOffRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The new bake-off and its estimate */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BakeOffStarted"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    applyBakeOff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The bake-off's id, the id of its eval run */
+                bake_off: components["parameters"]["BakeOffRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BakeOffApply"];
+            };
+        };
+        responses: {
+            /** @description The draft with the model written */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Draft"];
                 };
             };
             default: components["responses"]["Problem"];

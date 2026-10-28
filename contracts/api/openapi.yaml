@@ -1764,6 +1764,121 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Version" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/evals/bake-offs:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: listBakeOffs
+      x-goal-scope: factory:read
+      tags: [evals]
+      summary: The factory's bake-offs, newest first
+      description: >-
+        At most the 20 newest bake-offs (ADR 0029): eval runs of kind bake-off, each of one agent
+        on two to four models. 503 evals-unavailable.
+      responses:
+        "200":
+          description: The bake-offs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BakeOffList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: startBakeOff
+      x-goal-scope: definition:edit
+      tags: [evals]
+      summary: Start a bake-off of one agent across models on the current version
+      description: >-
+        Queues a bake-off of the agent's eval cases in the current version, each run trials times
+        (default 3) on every arm, and answers at once; goald's eval loop works the tries. Without
+        models, the arms are the agent's model and goald's default models (GOAL_BAKEOFF_MODELS).
+        The estimate is cases × trials × arms × the price of a try, as estimateEvalRun prices it.
+        404 version-not-found for a factory never published; 409 learning-budget-exhausted, with
+        the estimate, when it exceeds what is left of the learning budget; 422 invalid-bake-off for
+        an agent the version does not have or that works at no station, arms that are not 2 to 4
+        distinct model ids with the agent's model among them, trials outside 1 to 10 and an agent
+        with no eval cases; 503 evals-unavailable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BakeOffRequest" }
+      responses:
+        "202":
+          description: The queued bake-off and its estimate
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BakeOffStarted" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/BakeOffRef"
+    get:
+      operationId: getBakeOff
+      x-goal-scope: factory:read
+      tags: [evals]
+      summary: One bake-off with its arms, its tries passed per case and its recommendation
+      description: >-
+        404 eval-run-not-found for a bake-off that is not the factory's and for an eval run that is
+        not a bake-off; 503 evals-unavailable.
+      responses:
+        "200":
+          description: The bake-off
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BakeOff" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/rerun:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/BakeOffRef"
+    post:
+      operationId: rerunBakeOff
+      x-goal-scope: definition:edit
+      tags: [evals]
+      summary: Run a bake-off again on the current version
+      description: >-
+        Queues a new bake-off of the same agent with the same arms and trials, on the factory's
+        current version, which may be newer than the original's (ADR 0029 decision 7). 404
+        eval-run-not-found; then the refusals of startBakeOff.
+      responses:
+        "202":
+          description: The new bake-off and its estimate
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BakeOffStarted" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/BakeOffRef"
+    post:
+      operationId: applyBakeOff
+      x-goal-scope: definition:edit
+      tags: [evals]
+      summary: Write an arm's model as the agent's model into the factory's draft
+      description: >-
+        Sets agents[].model of the bake-off's agent in the draft to the arm's model, opening a
+        draft from the current version when none is open. It never publishes: the draft publishes
+        as any other, through the eval gate (ADR 0029 decision 7). 404 eval-run-not-found; 412
+        draft-conflict when the agent changed since the bake-off's version; 422 invalid-bake-off
+        for an arm the bake-off does not have; 503 evals-unavailable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BakeOffApply" }
+      responses:
+        "200":
+          description: The draft with the model written
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Draft" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/items:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -3811,6 +3926,12 @@ components:
       required: true
       description: The eval run's id
       schema: { type: string }
+    BakeOffRef:
+      name: bake_off
+      in: path
+      required: true
+      description: The bake-off's id, the id of its eval run
+      schema: { type: string }
     RangeFrom:
       name: from
       in: query
@@ -3948,6 +4069,8 @@ components:
             (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409),
             and a publish's evals-pending (its eval run is queued or running, or it started one)
             and evals-failing (409, with eval_run_id and failing_cases); the draft stays open.
+            Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off
+            (422).
         problems:
           type: array
           description: definition-invalid only, every problem of the definition (errors block the publish)
@@ -3975,6 +4098,9 @@ components:
           type: array
           description: evals-failing only, the cases of that run with a try that did not pass
           items: { type: string }
+        estimate:
+          allOf: [{ $ref: "#/components/schemas/EvalEstimate" }]
+          description: learning-budget-exhausted only, the estimate of the bake-off it refused
     EvalList:
       type: object
       required: [summary, cases]
@@ -4097,6 +4223,115 @@ components:
           type: object
           additionalProperties: true
           description: What the check found (a reason, a contract problem, the judge's outcome and score, missing files)
+    BakeOffRequest:
+      type: object
+      required: [agent]
+      properties:
+        agent: { type: string, description: The agent to bake off, by its name in the current version }
+        models:
+          type: array
+          description: >-
+            The arms' models, 2 to 4 distinct ids, the agent's model among them; absent, the
+            agent's model and goald's default models
+          items: { type: string, pattern: "^claude-[a-z0-9-]+$" }
+        trials: { type: integer, minimum: 1, maximum: 10, default: 3, description: Tries per case on every arm }
+    BakeOffApply:
+      type: object
+      required: [arm]
+      properties:
+        arm: { type: integer, description: The arm whose model to write, its number in the bake-off }
+    BakeOffStarted:
+      type: object
+      required: [bake_off, estimate]
+      properties:
+        bake_off: { $ref: "#/components/schemas/BakeOff" }
+        estimate: { $ref: "#/components/schemas/EvalEstimate" }
+    BakeOffList:
+      type: object
+      required: [bake_offs]
+      properties:
+        bake_offs:
+          type: array
+          description: Newest first
+          items: { $ref: "#/components/schemas/BakeOff" }
+    BakeOff:
+      type: object
+      required:
+        [id, state, agent, station, version, trials, cases, estimate_usd, cost_usd, created_at, arms, per_case, recommended_arm]
+      properties:
+        id: { type: string, description: The id of its eval run }
+        state: { type: string, enum: [queued, running, done, failed, cancelled] }
+        agent: { type: string }
+        station: { type: string, description: The first station the agent works at }
+        version: { type: integer, description: The published version it runs }
+        trials: { type: integer, description: Tries per case on every arm }
+        cases: { type: integer, description: How many of the agent's eval cases it runs }
+        estimate_usd: { type: number, format: double }
+        cost_usd: { type: number, format: double, description: What its recorded tries cost }
+        created_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+        arms:
+          type: array
+          description: By arm number
+          items: { $ref: "#/components/schemas/BakeOffArm" }
+        per_case:
+          type: array
+          description: By case name, the tries passed of each arm so far, out of trials
+          items: { $ref: "#/components/schemas/BakeOffCase" }
+        recommended_arm:
+          type: integer
+          nullable: true
+          description: >-
+            The arm with the highest pass rate, then the lowest cost per item; null while the
+            bake-off is not done or when an arm errored on every try (ADR 0029 decision 4)
+    BakeOffArm:
+      type: object
+      required: [arm, model, is_current, summary]
+      properties:
+        arm: { type: integer, description: Its number, from 1 }
+        model: { type: string }
+        is_current: { type: boolean, description: The agent's model in the bake-off's version }
+        summary:
+          allOf: [{ $ref: "#/components/schemas/BakeOffArmSummary" }]
+          nullable: true
+          description: Its row of the report, null until the bake-off is done
+    BakeOffArmSummary:
+      type: object
+      required: [tries, passed, errors, pass_rate, cost_per_item_usd, time_per_item_seconds, turns, judged]
+      properties:
+        tries: { type: integer }
+        passed: { type: integer }
+        errors: { type: integer, description: Tries that failed for an infrastructure reason; they count as not passed }
+        pass_rate: { type: number, format: double, description: passed of tries, 0 to 1 }
+        cost_per_item_usd: { type: number, format: double, description: The mean cost of a try }
+        time_per_item_seconds: { type: number, format: double, description: The mean duration of a try }
+        turns: { type: number, format: double, description: The mean turns of a try }
+        judged:
+          allOf: [{ $ref: "#/components/schemas/BakeOffJudged" }]
+          nullable: true
+          description: The advisory judge's share; null when no judge scores the agent
+    BakeOffJudged:
+      type: object
+      required: [judge, share]
+      properties:
+        judge: { type: string, description: The judge's slug }
+        title: { type: string, description: The judge's title when the version has it, which names the column }
+        share: { type: number, format: double, description: The share of the arm's tries the judge passed, 0 to 1 }
+    BakeOffCase:
+      type: object
+      required: [case, arms]
+      properties:
+        case: { type: string }
+        arms:
+          type: array
+          description: By arm number
+          items: { $ref: "#/components/schemas/BakeOffCaseArm" }
+    BakeOffCaseArm:
+      type: object
+      required: [arm, passed]
+      properties:
+        arm: { type: integer }
+        passed: { type: integer, description: The case's tries on the arm that passed }
     EvalCaseFromRun:
       type: object
       required: [run, name]
