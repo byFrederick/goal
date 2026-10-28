@@ -12,7 +12,10 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
-var _ ports.DraftRequests = (*DraftRequests)(nil)
+var (
+	_ ports.DraftRequests    = (*DraftRequests)(nil)
+	_ ports.DefinitionRunner = (*DefinitionRunner)(nil)
+)
 
 // DraftRequests keeps draft requests in memory with the database's rules: one queued or running
 // request per factory, claims of the oldest queued request of a live organization (the tenancy's
@@ -265,4 +268,35 @@ func cutRunes(s string, n int) string {
 	}
 
 	return s
+}
+
+// DefinitionRunner answers draft request runs with a function a test sets, and keeps the tasks it
+// was given.
+type DefinitionRunner struct {
+	mu    sync.Mutex
+	run   func(ctx context.Context, call int, t ports.DefinitionTask) (ports.DefinitionResult, error)
+	tasks []ports.DefinitionTask
+}
+
+// NewDefinitionRunner answers each run with run, given the call's number from 1.
+func NewDefinitionRunner(run func(ctx context.Context, call int, t ports.DefinitionTask) (ports.DefinitionResult, error)) *DefinitionRunner {
+	return &DefinitionRunner{run: run}
+}
+
+// Tasks returns every task it was given, in order.
+func (d *DefinitionRunner) Tasks() []ports.DefinitionTask {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	return slices.Clone(d.tasks)
+}
+
+// RunDefinition implements ports.DefinitionRunner.
+func (d *DefinitionRunner) RunDefinition(ctx context.Context, t ports.DefinitionTask) (ports.DefinitionResult, error) {
+	d.mu.Lock()
+	d.tasks = append(d.tasks, t)
+	call := len(d.tasks)
+	d.mu.Unlock()
+
+	return d.run(ctx, call, t)
 }
