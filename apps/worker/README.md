@@ -89,21 +89,27 @@ After a rebase the local branch has diverged from `origin/<branch>`, so the agen
   "connections": [
     { "name": "github", "kind": "github", "title": "GitHub", "env": ["GH_HOST", "GH_TOKEN"],
       "mcp": { "url": "https://api.githubcopilot.com/mcp/", "headers": { "Authorization": "Bearer ${GH_TOKEN}" } },
-      "docs": "Use gh and git; GH_TOKEN is set." },
+      "docs": "Use gh and git; GH_TOKEN is set.",
+      "tool_modes": { "create_issue_comment": "ask", "delete_repository": "off" },
+      "always_allow_offered": ["create_issue_comment"] },
     { "name": "playwright", "kind": "mcp-server", "title": "MCP server", "env": [],
-      "mcp": { "command": ["sh", "-c", "npx -y @playwright/mcp@0.0.41"] } }
+      "mcp": { "command": ["sh", "-c", "npx -y @playwright/mcp@0.0.41"] },
+      "tool_modes": {}, "always_allow_offered": [] }
   ],
   "knowledge_sources": ["handbook"],
   "rules": [
     { "name": "go-errors", "sha256": "76c7…", "paths": ["**/*.go"],
       "content": "---\ndescription: Wrap errors.\npaths:\n    - '**/*.go'\n---\n\nWrap with %w.\n" }
   ],
+  "granted_calls": [
+    { "connection": "github", "tool": "create_issue_comment", "input": { "body": "Done", "issue_number": 7 } }
+  ],
   "base_conflicts": ["go.mod"],
   "base_branch": "goal/assembly-3-integration"
 }
 ```
 
-`connections` are the agent's organization connections its token grants (the model and repository connections are not among them unless the agent names them): the names of the variables each sets in `goal-agent run`'s env, never a value, its MCP server and its kind's docs. `rules` are the factory rules that apply to the run ([ADR 0014](../../docs/adr/0014-factory-rules.md)), from the definition version it started on: each rule's name, the sha256 of its rule file, its `paths` (omitted when it has none) and `content`, the markdown file to write to the agent's rules; prepare writes each to `$CLAUDE_CONFIG_DIR/rules/<name>.md` (step 2). `base_conflicts` (only after a conflict in prepare's step 4) names the files that conflict with the branch's base, and `base_branch` (only then, and only when the bundle's `repository.base` was set) names that base; without it the base is the default branch.
+`connections` are the agent's organization connections its token grants (the model and repository connections are not among them unless the agent names them): the names of the variables each sets in `goal-agent run`'s env, never a value, its MCP server and its kind's docs, `tool_modes`, the tools of its MCP server that ask first (`ask`) or are refused (`off`) for this run's agent, a tool not in the map being allowed, and `always_allow_offered`, the asking tools, sorted, a person may answer with Always allow ([ADR 0031](../../docs/adr/0031-tool-calls-ask-first-and-standing-rules.md) decision 3; goald's gateway already applied the organization's standing rules). A run reports a call that asks first with `POST /run/tool-approval {connection, tool, input}` on goald's gateway (`new URL('/run/tool-approval', gateway_url)`, `Authorization: Bearer $GOAL_GATEWAY_TOKEN`): 202 means the call waits for a person and the run has ended; 413 (an input over 16 KiB as canonical JSON) and 409 (the item already waits for a person, or its run has ended) mean the call is denied; 400 is a malformed report. `granted_calls` are the calls a person approved for this run (decision 5), each allowed once when its connection, tool and input match, the input compared as canonical JSON; `[]` when there are none. A goald from before tool modes sends none of the three. `rules` are the factory rules that apply to the run ([ADR 0014](../../docs/adr/0014-factory-rules.md)), from the definition version it started on: each rule's name, the sha256 of its rule file, its `paths` (omitted when it has none) and `content`, the markdown file to write to the agent's rules; prepare writes each to `$CLAUDE_CONFIG_DIR/rules/<name>.md` (step 2). `base_conflicts` (only after a conflict in prepare's step 4) names the files that conflict with the branch's base, and `base_branch` (only then, and only when the bundle's `repository.base` was set) names that base; without it the base is the default branch.
 
 ### Definition mode
 
