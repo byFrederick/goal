@@ -19,6 +19,7 @@ import { FactoryBadge } from './factory-badge';
 import {
   apiKeysScreen,
   connectionsScreen,
+  credentialsScreen,
   homeScreen,
   knowledgeScreen,
   membersScreen,
@@ -82,6 +83,8 @@ const orgRoutePages: Record<string, { label: string; to?: OrgPath }> = {
   '/o/$org/_org/connections/': connectionsScreen,
   '/o/$org/_org/connections/$connection': connectionsScreen,
   '/o/$org/_org/connections/new': connectionsScreen,
+  '/o/$org/_org/credentials/': credentialsScreen,
+  '/o/$org/_org/credentials/new': credentialsScreen,
   '/o/$org/_org/knowledge/': knowledgeScreen,
   '/o/$org/_org/knowledge/$source': knowledgeScreen,
   '/o/$org/_org/knowledge/new': knowledgeScreen,
