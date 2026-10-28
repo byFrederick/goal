@@ -40,7 +40,10 @@ for (const width of [375, 768, 1440]) {
       // Delete it after the person confirms.
       await nav(page).getByRole('button', { name: 'Actions for Waiting' }).click();
       await page.getByRole('menuitem', { name: 'Delete…' }).click();
-      await page.getByRole('dialog', { name: /^Delete/ }).getByRole('button', { name: 'Delete' }).click();
+      await page
+        .getByRole('dialog', { name: /^Delete/ })
+        .getByRole('button', { name: 'Delete' })
+        .click();
       await expect(nav(page).getByRole('link', { name: 'Waiting', exact: true })).toHaveCount(0);
 
       await expectAccessible(page);
