@@ -192,6 +192,20 @@ export function createSpend(options: SpendOptions) {
     return cents(days.reduce((n, d) => n + factorySpend(f, d), 0));
   }
 
+  /** The window as CSV (ADR 0020, decision 3): one row per factory, agent and model, each agent's cost split by the models' shares. */
+  function csvOf(org: string, window: SpendWindow): string {
+    const names = new Map(options.factoriesOf(org).map((f) => [f.id, f.name]));
+    const rows = build(org, window).by_agent.flatMap((a) =>
+      models.map(([model, share]) => [
+        names.get(a.factory_id) ?? a.factory_id,
+        a.agent,
+        model,
+        cents(a.usd * share).toFixed(2),
+      ]),
+    );
+    return `${['factory,agent,model,cost_usd', ...rows.map((row) => row.join(','))].join('\n')}\n`;
+  }
+
   async function handle(
     org: { id: string },
     rest: string,
@@ -199,7 +213,8 @@ export function createSpend(options: SpendOptions) {
     url: URL,
     res: ServerResponse,
   ): Promise<boolean> {
-    if (rest !== '/spend' || method !== 'GET') return false;
+    const exporting = rest === '/spend/export';
+    if ((rest !== '/spend' && !exporting) || method !== 'GET') return false;
     const window = url.searchParams.get('window') ?? 'week';
     if (!windows.includes(window as SpendWindow)) {
       res.statusCode = 400;
@@ -207,6 +222,14 @@ export function createSpend(options: SpendOptions) {
       res.end(
         JSON.stringify({ title: 'Bad Request', status: 400, detail: `window "${window}" is not week, month or 90d` }),
       );
+      return true;
+    }
+    if (exporting) {
+      const day = new Date(options.clock()).toISOString().slice(0, 10);
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="spend-${day}.csv"`);
+      res.end(csvOf(org.id, window as SpendWindow));
       return true;
     }
     res.statusCode = 200;

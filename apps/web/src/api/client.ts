@@ -12,6 +12,7 @@ import {
   subscribe,
   unwrap,
 } from '@goal/api-client';
+import { type CsvFile, csvFileOf } from './download';
 import { sessionHandlers, withSession } from './session';
 import type {
   Activity,
@@ -591,6 +592,20 @@ export function listOrgRuns(org: string, filter: RunsFilter, signal?: AbortSigna
       ...cancel(signal),
     }),
   );
+}
+
+/** The Runs filter without its page: the export takes every run the list would list (no limit, no cursor). */
+export type RunsExportFilter = Omit<RunsFilter, 'limit' | 'cursor'>;
+
+/** The organization's runs as CSV (GET /v1/orgs/{org}/runs/export), with the list's filters and no paging. */
+export async function exportOrgRuns(org: string, filter: RunsExportFilter, signal?: AbortSignal): Promise<CsvFile> {
+  const result = await goal.GET(orgPath('/runs/export'), {
+    params: { path: { org }, query: runsQuery(filter) },
+    parseAs: 'blob',
+    headers: { Accept: 'text/csv' },
+    ...cancel(signal),
+  });
+  return csvFileOf(result, 'runs.csv');
 }
 
 /** Leaves the local user's note for the agents working an item; the receipt says when one reads it. */

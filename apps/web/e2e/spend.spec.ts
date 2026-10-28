@@ -1,5 +1,5 @@
 // Spend and billing (organization/spend.html) against the mock, at 375, 768 and 1440 px: the window
-// control is kept in the URL, a budget row shows, Export CSV is not available yet, and the sidebar's
+// control is kept in the URL, a budget row shows, Export CSV downloads the window's CSV, and the sidebar's
 // "Spend this week" card links here. Not run in the box (no browser here): see the pull request.
 import { expect, type Page, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll, isPhone } from './support';
@@ -27,8 +27,8 @@ for (const width of [375, 768, 1440]) {
       await expect(budgets.getByText('Software', { exact: true })).toBeVisible();
       await expect(budgets.getByText('$150 a day, $800 a week')).toBeVisible();
 
-      // Not built yet: disabled with the tooltip's words, never a live link or button.
-      await expect(page.getByRole('button', { name: 'Export CSV' })).toHaveAttribute('aria-disabled', 'true');
+      // Export CSV is built; the router's Set up is not built yet: disabled, never a live link or button.
+      await expect(page.getByRole('button', { name: 'Export CSV' })).not.toHaveAttribute('aria-disabled', 'true');
       await expect(page.getByRole('button', { name: 'Set up' })).toHaveAttribute('aria-disabled', 'true');
 
       await expectAccessible(page);

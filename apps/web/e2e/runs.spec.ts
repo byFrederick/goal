@@ -33,12 +33,24 @@ test('reads the filters from the URL and writes the outcome back', async ({ page
   await expect(page).toHaveURL(/\/o\/acme\/runs\?factory=sre$/);
 });
 
-test('keeps the controls that are not built yet disabled', async ({ page }) => {
+test('downloads the runs CSV from Export CSV, and the page stays put', async ({ page }) => {
   await openRuns(page);
 
   const exportCsv = page.getByRole('button', { name: 'Export CSV' });
-  await expect(exportCsv).toHaveAttribute('aria-disabled', 'true');
+  await expect(exportCsv).not.toHaveAttribute('aria-disabled', 'true');
+  const download = page.waitForEvent('download');
   await exportCsv.click();
+  expect((await download).suggestedFilename()).toMatch(/^runs-\d{4}-\d{2}-\d{2}\.csv$/);
+  await expect(page).toHaveURL(/\/o\/acme\/runs$/);
+});
+
+test('keeps the controls that are not built yet disabled', async ({ page }) => {
+  await openRuns(page);
+
+  // Waiting on you is not built yet: disabled, and it does nothing.
+  const waiting = page.getByRole('button', { name: /Waiting on you/ }).first();
+  await expect(waiting).toHaveAttribute('aria-disabled', 'true');
+  await waiting.click();
   await expect(page).toHaveURL(/\/o\/acme\/runs$/);
 });
 

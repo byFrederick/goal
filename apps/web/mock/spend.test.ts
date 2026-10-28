@@ -14,9 +14,12 @@ const factories: SpendFactory[] = [
 
 /** A ServerResponse that keeps what the handler wrote. */
 function response() {
-  const out = { statusCode: 0, body: '' };
+  const out = { statusCode: 0, body: '', headers: {} as Record<string, string> };
   const res = {
-    setHeader: () => res,
+    setHeader: (name: string, value: string) => {
+      out.headers[name] = value;
+      return res;
+    },
     end: (body: string) => {
       out.body = body;
     },
@@ -79,5 +82,31 @@ describe('the mock spend answer', () => {
 
     const other = await answer('yesterday');
     expect(other.status).toBe(400);
+  });
+});
+
+describe('the mock spend export', () => {
+  async function exported(window: string) {
+    const url = new URL(`http://mock.test/v1/orgs/acme/spend/export?window=${window}`);
+    const { res, out } = response();
+    expect(await spend.handle({ id: 'org-1' }, '/spend/export', 'GET', url, res)).toBe(true);
+    return out;
+  }
+
+  it('answers the window as CSV with a filename for the day', async () => {
+    const out = await exported('week');
+
+    expect(out.statusCode).toBe(200);
+    expect(out.headers['Content-Type']).toBe('text/csv; charset=utf-8');
+    expect(out.headers['Content-Disposition']).toBe('attachment; filename="spend-2026-10-27.csv"');
+    const [header, ...rows] = out.body.trim().split('\n');
+    expect(header).toBe('factory,agent,model,cost_usd');
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0]?.split(',')).toHaveLength(4);
+  });
+
+  it('refuses another window with 400, as the spend answer does', async () => {
+    const out = await exported('year');
+    expect(out.statusCode).toBe(400);
   });
 });
