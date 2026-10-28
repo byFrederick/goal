@@ -180,9 +180,12 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return eng.SetLines(lines)
 	}, definitions.Config{CacheBytes: s.DefinitionCacheBytes}, log)
 
+	// A draft request's box (ADR 0021) gets its request and the factory's draft from the gateway's
+	// bundle; the engine's RunDefinition signs its token.
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Connections: connections, Events: store, Clock: clock, Logger: log,
 		Knowledge: kb.searcher, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng},
+		DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore,
 	}, gateway.Config{Key: []byte(key)})
 	if err != nil {
 		return err
