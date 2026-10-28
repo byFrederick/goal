@@ -1663,6 +1663,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         events: flaky
           ? [
               {
+                id: 'firing-1',
                 title: 'TestLeaseExpiry',
                 event: trigger.on,
                 at: '2026-10-27T14:05:00Z',
@@ -1671,6 +1672,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
                 reason: null,
               },
               {
+                id: 'firing-2',
                 title: 'TestBoardStream',
                 event: trigger.on,
                 at: '2026-10-26T18:20:00Z',
@@ -1679,6 +1681,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
                 reason: null,
               },
               {
+                id: 'firing-3',
                 title: 'TestLeaseExpiry',
                 event: trigger.on,
                 at: '2026-10-23T09:00:00Z',
@@ -1687,6 +1690,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
                 reason: 'once',
               },
               {
+                id: 'firing-4',
                 title: 'lint',
                 event: trigger.on,
                 at: '2026-10-22T11:00:00Z',
@@ -1695,6 +1699,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
                 reason: '#120 covers it',
               },
               {
+                id: 'firing-5',
                 title: 'TestOrgRLS',
                 event: trigger.on,
                 at: '2026-10-21T08:40:00Z',

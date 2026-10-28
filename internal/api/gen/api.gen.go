@@ -1518,6 +1518,78 @@ func (e TouchReason) Valid() bool {
 	}
 }
 
+// Defines values for TriggerTryOutcome.
+const (
+	TriggerTryOutcomeSkipped     TriggerTryOutcome = "skipped"
+	TriggerTryOutcomeWouldCreate TriggerTryOutcome = "would_create"
+)
+
+// Valid indicates whether the value is a known member of the TriggerTryOutcome enum.
+func (e TriggerTryOutcome) Valid() bool {
+	switch e {
+	case TriggerTryOutcomeSkipped:
+		return true
+	case TriggerTryOutcomeWouldCreate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TriggerTryStepOutcome.
+const (
+	TriggerTryStepOutcomeNotReached TriggerTryStepOutcome = "not_reached"
+	TriggerTryStepOutcomePassed     TriggerTryStepOutcome = "passed"
+	TriggerTryStepOutcomeSkipped    TriggerTryStepOutcome = "skipped"
+)
+
+// Valid indicates whether the value is a known member of the TriggerTryStepOutcome enum.
+func (e TriggerTryStepOutcome) Valid() bool {
+	switch e {
+	case TriggerTryStepOutcomeNotReached:
+		return true
+	case TriggerTryStepOutcomePassed:
+		return true
+	case TriggerTryStepOutcomeSkipped:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TriggerTryStepStep.
+const (
+	Create              TriggerTryStepStep = "create"
+	LimitsPauseOnBudget TriggerTryStepStep = "limits.pauseOnBudget"
+	LimitsPerDay        TriggerTryStepStep = "limits.perDay"
+	OnlyDedupe          TriggerTryStepStep = "only.dedupe"
+	OnlyFailuresInARow  TriggerTryStepStep = "only.failuresInARow"
+	OnlyModelAgrees     TriggerTryStepStep = "only.modelAgrees"
+	When                TriggerTryStepStep = "when"
+)
+
+// Valid indicates whether the value is a known member of the TriggerTryStepStep enum.
+func (e TriggerTryStepStep) Valid() bool {
+	switch e {
+	case Create:
+		return true
+	case LimitsPauseOnBudget:
+		return true
+	case LimitsPerDay:
+		return true
+	case OnlyDedupe:
+		return true
+	case OnlyFailuresInARow:
+		return true
+	case OnlyModelAgrees:
+		return true
+	case When:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for VersionSourceKind.
 const (
 	VersionSourceKindBlank    VersionSourceKind = "blank"
@@ -3445,6 +3517,9 @@ type IntakeEvent struct {
 
 	// Event The event key it matched
 	Event string `json:"event"`
+
+	// Id The firing's id
+	Id string `json:"id"`
 
 	// ItemNumber The item it created; null when it created none or that item is gone
 	ItemNumber *int64 `json:"item_number"`
@@ -5746,6 +5821,76 @@ type TransferRequest struct {
 	To string `json:"to"`
 }
 
+// TriggerTry What the trigger would do with the event now. Every string shaped by the event (the item's title and brief, the model's reason, a step's reason) is text to show as text, never markup.
+type TriggerTry struct {
+	// Firing The firing tried
+	Firing string `json:"firing"`
+
+	// Item The item it would create; null when the create step was not reached
+	Item *struct {
+		// Brief The item's body, create.brief rendered, then the event's fields marked as untrusted data
+		Brief    string  `json:"brief"`
+		Expedite bool    `json:"expedite"`
+		Lane     *string `json:"lane"`
+		Station  string  `json:"station"`
+
+		// Title create.title rendered with the event's fields
+		Title string `json:"title"`
+		Type  string `json:"type"`
+	} `json:"item"`
+
+	// Matched The event reached the trigger (its when step passed)
+	Matched bool `json:"matched"`
+
+	// ModelCheck The model check's answer; null when it did not run or gave no answer
+	ModelCheck *struct {
+		// CostUsd What the check cost
+		CostUsd      float64 `json:"cost_usd"`
+		InputTokens  int     `json:"input_tokens"`
+		Model        string  `json:"model"`
+		OutputTokens int     `json:"output_tokens"`
+
+		// Reason The model's one-line reason
+		Reason string `json:"reason"`
+
+		// Worth The model answered yes
+		Worth bool `json:"worth"`
+	} `json:"model_check"`
+
+	// Outcome would_create when no step skips the event; skipped otherwise
+	Outcome TriggerTryOutcome `json:"outcome"`
+
+	// Reason The reason a skipped firing would record (the step, a colon and why); null for would_create
+	Reason *string `json:"reason"`
+
+	// Steps In the order they run: when, each configured only condition (failuresInARow, dedupe, then modelAgrees), create, then each configured limit (perDay, pauseOnBudget). Steps after the one that skipped are not_reached.
+	Steps []TriggerTryStep `json:"steps"`
+}
+
+// TriggerTryOutcome would_create when no step skips the event; skipped otherwise
+type TriggerTryOutcome string
+
+// TriggerTryRequest defines model for TriggerTryRequest.
+type TriggerTryRequest struct {
+	// Firing The id of one of the trigger's 20 newest events
+	Firing string `json:"firing"`
+}
+
+// TriggerTryStep defines model for TriggerTryStep.
+type TriggerTryStep struct {
+	Outcome TriggerTryStepOutcome `json:"outcome"`
+
+	// Reason Why it passed or skipped; null when not reached or with nothing to say
+	Reason *string            `json:"reason"`
+	Step   TriggerTryStepStep `json:"step"`
+}
+
+// TriggerTryStepOutcome defines model for TriggerTryStep.Outcome.
+type TriggerTryStepOutcome string
+
+// TriggerTryStepStep defines model for TriggerTryStep.Step.
+type TriggerTryStepStep string
+
 // User defines model for User.
 type User struct {
 	Email string `json:"email"`
@@ -6503,6 +6648,9 @@ type EstimateEvalRunJSONRequestBody = EvalRunRequest
 
 // StartEvalRunJSONRequestBody defines body for StartEvalRun for application/json ContentType.
 type StartEvalRunJSONRequestBody = EvalRunRequest
+
+// TryIntakeTriggerJSONRequestBody defines body for TryIntakeTrigger for application/json ContentType.
+type TryIntakeTriggerJSONRequestBody = TriggerTryRequest
 
 // SubmitItemJSONRequestBody defines body for SubmitItem for application/json ContentType.
 type SubmitItemJSONRequestBody = NewItem
@@ -7593,6 +7741,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger} (the `GetIntakeTrigger` operationId).
 	GetIntakeTrigger(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TryIntakeTriggerWithBody Try the trigger with one of its past events, creating nothing
+	//
+	// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try (the `TryIntakeTrigger` operationId).
+	TryIntakeTriggerWithBody(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TryIntakeTrigger Try the trigger with one of its past events, creating nothing
+	//
+	// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try (the `TryIntakeTrigger` operationId).
+	TryIntakeTrigger(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, body TryIntakeTriggerJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListItems One page of a factory's items, newest first
 	//
@@ -10038,6 +10204,44 @@ func (c *Client) GetIntake(ctx context.Context, org OrgRef, factory FactoryRef, 
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger} (the `GetIntakeTrigger` operationId).
 func (c *Client) GetIntakeTrigger(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetIntakeTriggerRequest(c.Server, org, factory, trigger)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TryIntakeTriggerWithBody Try the trigger with one of its past events, creating nothing
+//
+// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try (the `TryIntakeTrigger` operationId).
+func (c *Client) TryIntakeTriggerWithBody(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTryIntakeTriggerRequestWithBody(c.Server, org, factory, trigger, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TryIntakeTrigger Try the trigger with one of its past events, creating nothing
+//
+// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try (the `TryIntakeTrigger` operationId).
+func (c *Client) TryIntakeTrigger(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, body TryIntakeTriggerJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTryIntakeTriggerRequest(c.Server, org, factory, trigger, body)
 	if err != nil {
 		return nil, err
 	}
@@ -15495,6 +15699,67 @@ func NewGetIntakeTriggerRequest(server string, org OrgRef, factory FactoryRef, t
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewTryIntakeTriggerRequest calls the generic TryIntakeTrigger builder with application/json body
+func NewTryIntakeTriggerRequest(server string, org OrgRef, factory FactoryRef, trigger string, body TryIntakeTriggerJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTryIntakeTriggerRequestWithBody(server, org, factory, trigger, "application/json", bodyReader)
+}
+
+// NewTryIntakeTriggerRequestWithBody constructs an http.Request for the TryIntakeTrigger method, with any body, and a specified content type
+func NewTryIntakeTriggerRequestWithBody(server string, org OrgRef, factory FactoryRef, trigger string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "trigger", trigger, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/intake/triggers/%s/try", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -21139,6 +21404,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger} (the `GetIntakeTrigger` operationId).
 	GetIntakeTriggerWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, reqEditors ...RequestEditorFn) (*GetIntakeTriggerResponse, error)
 
+	// TryIntakeTriggerWithBodyWithResponse Try the trigger with one of its past events, creating nothing
+	//
+	// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try (the `TryIntakeTrigger` operationId).
+	TryIntakeTriggerWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TryIntakeTriggerResponse, error)
+
+	// TryIntakeTriggerWithResponse Try the trigger with one of its past events, creating nothing
+	//
+	// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try (the `TryIntakeTrigger` operationId).
+	TryIntakeTriggerWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, body TryIntakeTriggerJSONRequestBody, reqEditors ...RequestEditorFn) (*TryIntakeTriggerResponse, error)
+
 	// ListItemsWithResponse One page of a factory's items, newest first
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -25355,6 +25638,54 @@ func (r GetIntakeTriggerResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetIntakeTriggerResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type TryIntakeTriggerResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *TriggerTry
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TryIntakeTriggerResponse) GetJSON200() *TriggerTry {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TryIntakeTriggerResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TryIntakeTriggerResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TryIntakeTriggerResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TryIntakeTriggerResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TryIntakeTriggerResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -30901,6 +31232,36 @@ func (c *ClientWithResponses) GetIntakeTriggerWithResponse(ctx context.Context, 
 	return ParseGetIntakeTriggerResponse(rsp)
 }
 
+// TryIntakeTriggerWithBodyWithResponse Try the trigger with one of its past events, creating nothing
+//
+// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try (the `TryIntakeTrigger` operationId).
+func (c *ClientWithResponses) TryIntakeTriggerWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TryIntakeTriggerResponse, error) {
+	rsp, err := c.TryIntakeTriggerWithBody(ctx, org, factory, trigger, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTryIntakeTriggerResponse(rsp)
+}
+
+// TryIntakeTriggerWithResponse Try the trigger with one of its past events, creating nothing
+//
+// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try (the `TryIntakeTrigger` operationId).
+func (c *ClientWithResponses) TryIntakeTriggerWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, body TryIntakeTriggerJSONRequestBody, reqEditors ...RequestEditorFn) (*TryIntakeTriggerResponse, error) {
+	rsp, err := c.TryIntakeTrigger(ctx, org, factory, trigger, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTryIntakeTriggerResponse(rsp)
+}
+
 // ListItemsWithResponse One page of a factory's items, newest first
 //
 // Returns a wrapper object for the known response body format(s).
@@ -34810,6 +35171,39 @@ func ParseGetIntakeTriggerResponse(rsp *http.Response) (*GetIntakeTriggerRespons
 	return response, nil
 }
 
+// ParseTryIntakeTriggerResponse parses an HTTP response from a TryIntakeTriggerWithResponse call
+func ParseTryIntakeTriggerResponse(rsp *http.Response) (*TryIntakeTriggerResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TryIntakeTriggerResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TriggerTry
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListItemsResponse parses an HTTP response from a ListItemsWithResponse call
 func ParseListItemsResponse(rsp *http.Response) (*ListItemsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -37992,6 +38386,9 @@ type ServerInterface interface {
 	// GetIntakeTrigger One trigger with this week's results and its recent events
 	// (GET /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger})
 	GetIntakeTrigger(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, trigger string)
+	// TryIntakeTrigger Try the trigger with one of its past events, creating nothing
+	// (POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try)
+	TryIntakeTrigger(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, trigger string)
 	// ListItems One page of a factory's items, newest first
 	// (GET /v1/orgs/{org}/factories/{factory}/items)
 	ListItems(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params ListItemsParams)
@@ -40932,6 +41329,50 @@ func (siw *ServerInterfaceWrapper) GetIntakeTrigger(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetIntakeTrigger(w, r, org, factory, trigger)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TryIntakeTrigger operation middleware
+func (siw *ServerInterfaceWrapper) TryIntakeTrigger(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "trigger" -------------
+	var trigger string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "trigger", r.PathValue("trigger"), &trigger, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "trigger", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TryIntakeTrigger(w, r, org, factory, trigger)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -44893,6 +45334,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/constraint", wrapper.GetConstraintReport)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/intake", wrapper.GetIntake)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}", wrapper.GetIntakeTrigger)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try", wrapper.TryIntakeTrigger)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/lead-time", wrapper.GetLeadTimeBridge)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/touches", wrapper.GetTouchMetrics)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/agents/{agent}/stats", wrapper.GetAgentStats)
@@ -47723,6 +48165,48 @@ type GetIntakeTriggerdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetIntakeTriggerdefaultApplicationProblemPlusJSONResponse) VisitGetIntakeTriggerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TryIntakeTriggerRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Trigger string     `json:"trigger"`
+	Body    *TryIntakeTriggerJSONRequestBody
+}
+
+type TryIntakeTriggerResponseObject interface {
+	VisitTryIntakeTriggerResponse(w http.ResponseWriter) error
+}
+
+type TryIntakeTrigger200JSONResponse TriggerTry
+
+func (response TryIntakeTrigger200JSONResponse) VisitTryIntakeTriggerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TryIntakeTriggerdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response TryIntakeTriggerdefaultApplicationProblemPlusJSONResponse) VisitTryIntakeTriggerResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -51678,6 +52162,9 @@ type StrictServerInterface interface {
 	// GetIntakeTrigger One trigger with this week's results and its recent events
 	// (GET /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger})
 	GetIntakeTrigger(ctx context.Context, request GetIntakeTriggerRequestObject) (GetIntakeTriggerResponseObject, error)
+	// TryIntakeTrigger Try the trigger with one of its past events, creating nothing
+	// (POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try)
+	TryIntakeTrigger(ctx context.Context, request TryIntakeTriggerRequestObject) (TryIntakeTriggerResponseObject, error)
 	// ListItems One page of a factory's items, newest first
 	// (GET /v1/orgs/{org}/factories/{factory}/items)
 	ListItems(ctx context.Context, request ListItemsRequestObject) (ListItemsResponseObject, error)
@@ -53970,6 +54457,41 @@ func (sh *strictHandler) GetIntakeTrigger(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetIntakeTriggerResponseObject); ok {
 		if err := validResponse.VisitGetIntakeTriggerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TryIntakeTrigger operation middleware
+func (sh *strictHandler) TryIntakeTrigger(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, trigger string) {
+	var request TryIntakeTriggerRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Trigger = trigger
+
+	var body TryIntakeTriggerJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TryIntakeTrigger(ctx, request.(TryIntakeTriggerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TryIntakeTrigger")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TryIntakeTriggerResponseObject); ok {
+		if err := validResponse.VisitTryIntakeTriggerResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
