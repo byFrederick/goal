@@ -50,6 +50,7 @@ export function renderFactoryPage({
   seed = [],
   station,
   search,
+  topBar = false,
 }: {
   page: () => ReactNode;
   /** The page's route under the factory: 'board', 'items/', 'items/$ref' or '/' (the Floor). */
@@ -64,13 +65,15 @@ export function renderFactoryPage({
   station?: string | undefined;
   /** Further search params the page is at (a filter's choice, a grouping), beside `station`. */
   search?: Record<string, string> | undefined;
+  /** Draw the shell's top bar above the page, for a page whose crumbs or actions live there (TopBarSlot). */
+  topBar?: boolean;
 }) {
   polyfillLayout();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   queryClient.setQueryData(factoriesQuery(org.id).queryKey, factories);
   for (const [key, data] of seed) queryClient.setQueryData(key, data);
 
-  const rootRoute = createRootRoute();
+  const rootRoute = createRootRoute(topBar ? { component: TopBarFrame } : {});
   const orgRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/o/$org',

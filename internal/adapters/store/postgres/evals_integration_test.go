@@ -165,7 +165,7 @@ func TestEvals_CreateQueuesPendingTries(t *testing.T) {
 	run := d.newRun(t, evalContent, evalCase(evalReview, 1), evalCase(evalMerge, 3))
 
 	want := domain.EvalRun{
-		ID: run.ID, FactoryID: d.factory, VersionID: d.version, ContentSHA256: evalContent, Trigger: domain.EvalManual,
+		ID: run.ID, Kind: domain.EvalKindEval, FactoryID: d.factory, VersionID: d.version, ContentSHA256: evalContent, Trigger: domain.EvalManual,
 		State: domain.EvalRunQueued, EstimateUSD: 1.25, CreatedBy: domain.LocalUser, CreatedAt: run.CreatedAt,
 	}
 
@@ -482,14 +482,16 @@ func TestEvals_RLSAndGrants(t *testing.T) {
 	d.newRun(t, evalContent, evalCase(evalMerge, 1))
 	labs := newOrgID(t, d.store)
 
-	for _, table := range []string{"eval_runs", "eval_results"} {
+	d.newBakeOff(t)
+
+	for table, column := range map[string]string{"eval_runs": "state", "eval_results": "state", "eval_run_arms": "tries"} {
 		err := inOrgTx(t, d.store.pool, labs, func(tx pgx.Tx) error {
 			var n int
 			if err := tx.QueryRow(t.Context(), `SELECT count(*) FROM `+table).Scan(&n); err != nil || n != 0 {
 				t.Errorf("labs sees %d rows of %s, %v; want none", n, table, err)
 			}
 
-			tag, err := tx.Exec(t.Context(), `UPDATE `+table+` SET state = state WHERE true`)
+			tag, err := tx.Exec(t.Context(), `UPDATE `+table+` SET `+column+` = `+column+` WHERE true`)
 			if err != nil || tag.RowsAffected() != 0 {
 				t.Errorf("labs updates %d rows of %s, %v; want none", tag.RowsAffected(), table, err)
 			}
@@ -506,6 +508,12 @@ func TestEvals_RLSAndGrants(t *testing.T) {
 		`UPDATE eval_runs SET content_sha256 = repeat('0', 64)`,
 		`UPDATE eval_runs SET org_id = '` + string(labs) + `'`,
 		`UPDATE eval_results SET case_name = 'other-case'`,
+		`UPDATE eval_runs SET kind = 'eval'`,
+		`UPDATE eval_runs SET agent = 'other-agent'`,
+		`UPDATE eval_results SET arm = 0`,
+		`UPDATE eval_run_arms SET model = 'claude-test-other-2'`,
+		`UPDATE eval_run_arms SET is_current = false`,
+		`DELETE FROM eval_run_arms`,
 		`DELETE FROM eval_results`,
 		`DELETE FROM eval_runs`,
 	} {
@@ -523,6 +531,7 @@ func TestPurgeOrg_RemovesEvals(t *testing.T) {
 
 	d := newEvalsDB(t)
 	d.newRun(t, evalContent, evalCase(evalMerge, 1))
+	d.newBakeOff(t)
 
 	r := d.claim(t, time.Now())
 	if err := d.evals.RecordResult(d.in(t), r, domain.EvalOutcome{State: domain.EvalPass, RunID: d.agentRun(t)}); err != nil {
@@ -539,7 +548,7 @@ func TestPurgeOrg_RemovesEvals(t *testing.T) {
 	}
 
 	var n int
-	if err := d.admin.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM eval_runs) + (SELECT count(*) FROM eval_results)`).Scan(&n); err != nil || n != 0 {
+	if err := d.admin.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM eval_runs) + (SELECT count(*) FROM eval_results) + (SELECT count(*) FROM eval_run_arms)`).Scan(&n); err != nil || n != 0 {
 		t.Errorf("%d eval rows left, %v; want none", n, err)
 	}
 }

@@ -1,0 +1,15 @@
+exit 0
+--- stdout
+bake-off bo1 of frontend-engineer (ship) on v3: running, 2 cases, 3 tries each, $1.10 of about $4.50
+no recommendation yet: it is running
+
+MODEL              PASS RATE  COST/ITEM  TIME/ITEM  TURNS
+claude-opus-5-5    -          -          -          -      Now
+claude-sonnet-5-5  -          -          -          -
+claude-haiku-5-5   -          -          -          -
+
+tries passed per case, out of 3
+CASE         claude-opus-5-5  claude-sonnet-5-5  claude-haiku-5-5
+lease-fix    2/3              1/3                0/3
+review-step  1/3              0/3                1/3
+--- stderr
