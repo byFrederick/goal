@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -37,33 +36,9 @@ func (d *Digests) userTx(ctx context.Context, fn func(q *db.Queries) error) erro
 const digestLock = "SELECT pg_try_advisory_lock(hashtext('goal.notify.digest.' || current_schema()))"
 
 // WithDigestLock implements ports.Digests. As Intake.WithScheduleLock, the lock is a session
-// advisory lock on a connection of its own, straight to PostgreSQL and not from the pool, so a
-// pooler cannot drop it; closing that connection frees it, even if goald dies while fn runs.
-func (d *Digests) WithDigestLock(ctx context.Context, fn func(ctx context.Context) error) (ran bool, err error) {
-	conn, err := pgx.ConnectConfig(ctx, d.s.pool.Config().ConnConfig.Copy())
-	if err != nil {
-		return false, fmt.Errorf("digest lock: connect: %w", err)
-	}
-
-	defer func() {
-		closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), closeTimeout)
-		defer cancel()
-
-		if cerr := conn.Close(closeCtx); cerr != nil {
-			err = errors.Join(err, fmt.Errorf("digest lock: close: %w", cerr))
-		}
-	}()
-
-	var held bool
-	if err := conn.QueryRow(ctx, digestLock).Scan(&held); err != nil {
-		return false, fmt.Errorf("digest lock: %w", err)
-	}
-
-	if !held {
-		return false, nil
-	}
-
-	return true, fn(ctx)
+// advisory lock on a connection of its own (withSessionLock), so a pooler cannot drop it.
+func (d *Digests) WithDigestLock(ctx context.Context, fn func(ctx context.Context) error) (bool, error) {
+	return withSessionLock(ctx, d.s, digestLock, "digest lock", fn)
 }
 
 // DigestRecipients implements ports.Digests.
@@ -192,31 +167,13 @@ func (d *Digests) ClaimDigests(ctx context.Context, channel string, now time.Tim
 
 // FinishDigest implements ports.Digests.
 func (d *Digests) FinishDigest(ctx context.Context, id int64, attempts int, o ports.NotificationOutcome) (bool, error) {
-	p := db.FinishDigestParams{State: o.State, ID: id, Attempts: int32(attempts)} //nolint:gosec // attempts come from a claim's int32
-
-	switch o.State {
-	case ports.NotificationSent:
-		at := o.At
-		p.SentAt = &at
-	case ports.NotificationPending:
-		at := o.RetryAt
-		p.NextAttemptAt = &at
+	c := outcomeColumnsOf(o)
+	p := db.FinishDigestParams{
+		State: o.State, ID: id, Attempts: int32(attempts), //nolint:gosec // attempts come from a claim's int32
+		SentAt: c.sentAt, NextAttemptAt: c.nextAttemptAt, LastError: c.lastError,
 	}
 
-	if o.Reason != "" {
-		reason := o.Reason
-		p.LastError = &reason
-	}
-
-	var n int64
-
-	err := d.userTx(ctx, func(q *db.Queries) error {
-		var err error
-
-		n, err = q.FinishDigest(ctx, p)
-
-		return err
-	})
+	n, err := fetch(ctx, d.userTx, func(q *db.Queries) (int64, error) { return q.FinishDigest(ctx, p) })
 	if err != nil {
 		return false, fmt.Errorf("finish digest %d: %w", id, err)
 	}

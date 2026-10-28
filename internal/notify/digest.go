@@ -141,28 +141,12 @@ func (j *DigestJob) queue(ctx context.Context) (int, error) {
 			break
 		}
 
-		rs, err := j.d.Digests.DigestRecipients(domain.WithOrg(ctx, org))
+		due, err := j.dueIn(ctx, org, now, email)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("digest recipients of org %s: %w", org, err))
-
-			continue
+			errs = append(errs, err)
 		}
 
-		for _, r := range rs {
-			date, due := localDate(now, r.TimeZone)
-			if !due {
-				continue
-			}
-
-			if r.Email && j.d.Mailer != nil && !email[r.UserID] {
-				email[r.UserID] = true
-				ds = append(ds, ports.NewDigest{UserID: r.UserID, LocalDate: date, Channel: ports.ChannelEmail})
-			}
-
-			if r.Slack && j.d.Slack != nil && j.d.Connections != nil {
-				ds = append(ds, ports.NewDigest{UserID: r.UserID, LocalDate: date, Channel: ports.ChannelSlack, OrgID: org})
-			}
-		}
+		ds = append(ds, due...)
 	}
 
 	n, err := j.d.Digests.QueueDigests(ctx, ds, now)
@@ -171,6 +155,37 @@ func (j *DigestJob) queue(ctx context.Context) (int, error) {
 	}
 
 	return n, errors.Join(errs...)
+}
+
+// dueIn are the digests due at now of org's recipients: the email digest of each one not in
+// email yet, whom it adds, and their Slack digest of org.
+func (j *DigestJob) dueIn(ctx context.Context, org domain.OrgID, now time.Time, email map[domain.UserID]bool) ([]ports.NewDigest, error) {
+	rs, err := j.d.Digests.DigestRecipients(domain.WithOrg(ctx, org))
+	if err != nil {
+		return nil, fmt.Errorf("digest recipients of org %s: %w", org, err)
+	}
+
+	mail, chat := j.d.Mailer != nil, j.d.Slack != nil && j.d.Connections != nil
+
+	var ds []ports.NewDigest
+
+	for _, r := range rs {
+		date, due := localDate(now, r.TimeZone)
+		if !due {
+			continue
+		}
+
+		if r.Email && mail && !email[r.UserID] {
+			email[r.UserID] = true
+			ds = append(ds, ports.NewDigest{UserID: r.UserID, LocalDate: date, Channel: ports.ChannelEmail})
+		}
+
+		if r.Slack && chat {
+			ds = append(ds, ports.NewDigest{UserID: r.UserID, LocalDate: date, Channel: ports.ChannelSlack, OrgID: org})
+		}
+	}
+
+	return ds, nil
 }
 
 // localDate is the date at now in the IANA zone tz, UTC when tz is blank or one Go cannot load,
@@ -276,34 +291,14 @@ func (j *DigestJob) release(ctx context.Context, rows []ports.Digest) error {
 // it has something to report, and says how it ends. An error is the store's: the digest stays
 // claimed until its lease ends.
 func (j *DigestJob) deliver(ctx context.Context, g ports.Digest, token *tokenOnce) (ports.NotificationOutcome, error) {
-	prefs, err := j.d.Preferences.NotificationPreferences(ctx, g.UserID)
+	on, err := j.channelOn(ctx, g)
+	if err != nil || !on {
+		return ports.NotificationOutcome{State: ports.NotificationSkipped, Reason: reasonNotQualified}, err
+	}
+
+	sums, err := j.summaries(ctx, g)
 	if err != nil {
-		return ports.NotificationOutcome{}, fmt.Errorf("preferences: %w", err)
-	}
-
-	on := prefs.Events[domain.NotifyDigest]
-	if (g.Channel == ports.ChannelEmail && !on.Email) || (g.Channel == ports.ChannelSlack && !on.Slack) {
-		return ports.NotificationOutcome{State: ports.NotificationSkipped, Reason: reasonNotQualified}, nil
-	}
-
-	orgs := []domain.OrgID{g.OrgID}
-	if g.Channel == ports.ChannelEmail {
-		if orgs, err = j.d.Orgs.ActiveOrgs(ctx); err != nil {
-			return ports.NotificationOutcome{}, fmt.Errorf("list organizations: %w", err)
-		}
-	}
-
-	var sums []ports.DigestSummary
-
-	for _, org := range orgs {
-		s, err := j.d.Digests.DigestSummary(domain.WithOrg(ctx, org), g.UserID, g.PeriodStart, g.PeriodEnd)
-		if err != nil {
-			return ports.NotificationOutcome{}, fmt.Errorf("summary of org %s: %w", org, err)
-		}
-
-		if s.Member && s.Address != "" {
-			sums = append(sums, s)
-		}
+		return ports.NotificationOutcome{}, err
 	}
 
 	if len(sums) == 0 {
@@ -325,6 +320,49 @@ func (j *DigestJob) deliver(ctx context.Context, g ports.Digest, token *tokenOnc
 	cancel()
 
 	return sendOutcome(g.Channel, g.Attempts, err, j.d.Clock.Now()), nil
+}
+
+// channelOn reports whether g's person still has the digest on for g's channel.
+func (j *DigestJob) channelOn(ctx context.Context, g ports.Digest) (bool, error) {
+	prefs, err := j.d.Preferences.NotificationPreferences(ctx, g.UserID)
+	if err != nil {
+		return false, fmt.Errorf("preferences: %w", err)
+	}
+
+	on := prefs.Events[domain.NotifyDigest]
+	if g.Channel == ports.ChannelSlack {
+		return on.Slack, nil
+	}
+
+	return on.Email, nil
+}
+
+// summaries are the lines of g's organizations where its person is still a member with an
+// address: every live organization for email, g's own for Slack.
+func (j *DigestJob) summaries(ctx context.Context, g ports.Digest) ([]ports.DigestSummary, error) {
+	orgs := []domain.OrgID{g.OrgID}
+
+	if g.Channel == ports.ChannelEmail {
+		var err error
+		if orgs, err = j.d.Orgs.ActiveOrgs(ctx); err != nil {
+			return nil, fmt.Errorf("list organizations: %w", err)
+		}
+	}
+
+	var sums []ports.DigestSummary
+
+	for _, org := range orgs {
+		s, err := j.d.Digests.DigestSummary(domain.WithOrg(ctx, org), g.UserID, g.PeriodStart, g.PeriodEnd)
+		if err != nil {
+			return nil, fmt.Errorf("summary of org %s: %w", org, err)
+		}
+
+		if s.Member && s.Address != "" {
+			sums = append(sums, s)
+		}
+	}
+
+	return sums, nil
 }
 
 // sendSlack sends m's text to m.To as a direct message with the token of the organization in

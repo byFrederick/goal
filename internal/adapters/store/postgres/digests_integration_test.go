@@ -4,6 +4,7 @@ package postgres
 
 import (
 	"context"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -12,45 +13,36 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
+// digestRecipients are the recipients of o, by user.
+func digestRecipients(t *testing.T, dg *Digests, o outboxOrg) map[domain.UserID]ports.DigestRecipient {
+	t.Helper()
+
+	rs, err := dg.DigestRecipients(o.ctx(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out := map[domain.UserID]ports.DigestRecipient{}
+	for _, r := range rs {
+		out[r.UserID] = r
+	}
+
+	return out
+}
+
 // The digest recipients are the members with the digest on, with their time zone (UTC without a
-// saved one) and Slack only while the organization has a Slack connection; a digest is queued
-// once per person, local date, channel and organization whatever the calls, and the next one
-// covers the time since the last sent one.
-func TestDigests_QueueOncePerLocalDate(t *testing.T) {
+// saved one), and Slack only while the organization has a Slack connection.
+func TestDigests_Recipients(t *testing.T) {
 	t.Parallel()
 
 	o := newOutboxOrg(t)
 	dg := NewDigests(o.d.s)
-	ctx := o.ctx(t)
 
 	// The viewer turns the digest off; the approver lives in Berlin and wants it on Slack too.
 	o.prefer(t, o.viewer, domain.NotifyDigest, domain.NotificationChannels{})
+	berlinOnSlack(t, o)
 
-	berlin := domain.DefaultNotificationPreferences()
-	berlin.TimeZone = "Europe/Berlin"
-	berlin.Events[domain.NotifyDigest] = domain.NotificationChannels{Email: true, Slack: true}
-
-	if err := NewNotificationPreferences(o.d.s).SetNotificationPreferences(t.Context(), domain.UserID(o.approver), berlin); err != nil {
-		t.Fatal(err)
-	}
-
-	recipients := func() map[domain.UserID]ports.DigestRecipient {
-		t.Helper()
-
-		rs, err := dg.DigestRecipients(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		out := map[domain.UserID]ports.DigestRecipient{}
-		for _, r := range rs {
-			out[r.UserID] = r
-		}
-
-		return out
-	}
-
-	rs := recipients()
+	rs := digestRecipients(t, dg, o)
 	if _, ok := rs[domain.UserID(o.viewer)]; ok || len(rs) != 6 {
 		t.Fatalf("recipients = %+v; want the six members with the digest on, not the viewer", rs)
 	}
@@ -65,61 +57,94 @@ func TestDigests_QueueOncePerLocalDate(t *testing.T) {
 
 	o.slackConnection(t)
 
-	if r := recipients()[domain.UserID(o.approver)]; !r.Slack {
+	if r := digestRecipients(t, dg, o)[domain.UserID(o.approver)]; !r.Slack {
 		t.Errorf("approver with a Slack connection = %+v; want Slack", r)
 	}
+}
+
+// berlinOnSlack has o's approver live in Berlin with the digest on for email and Slack.
+func berlinOnSlack(t *testing.T, o outboxOrg) {
+	t.Helper()
+
+	p := domain.DefaultNotificationPreferences()
+	p.TimeZone = "Europe/Berlin"
+	p.Events[domain.NotifyDigest] = domain.NotificationChannels{Email: true, Slack: true}
+
+	if err := NewNotificationPreferences(o.d.s).SetNotificationPreferences(t.Context(), domain.UserID(o.approver), p); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// queueDigests queues ds, due at the given time, and fails unless it queued want of them.
+func queueDigests(t *testing.T, dg *Digests, at time.Time, want int, ds ...ports.NewDigest) {
+	t.Helper()
+
+	if n, err := dg.QueueDigests(t.Context(), ds, at); err != nil || n != want {
+		t.Fatalf("QueueDigests at %v = %d, %v; want %d", at, n, err, want)
+	}
+}
+
+// claimDigests claims the due digests of channel at now and fails unless there are want.
+func claimDigests(t *testing.T, dg *Digests, channel string, now time.Time, want int) []ports.Digest {
+	t.Helper()
+
+	got, err := dg.ClaimDigests(t.Context(), channel, now, time.Minute, 10)
+	if err != nil || len(got) != want {
+		t.Fatalf("ClaimDigests of %s at %v = %+v, %v; want %d", channel, now, got, err, want)
+	}
+
+	return got
+}
+
+// finishDigest marks digest id sent at the given time under attempt attempts and fails unless the finish
+// reports want.
+func finishDigest(t *testing.T, dg *Digests, id int64, attempts int, at time.Time, want bool) {
+	t.Helper()
+
+	ok, err := dg.FinishDigest(t.Context(), id, attempts, ports.NotificationOutcome{State: ports.NotificationSent, At: at})
+	if err != nil || ok != want {
+		t.Fatalf("FinishDigest(%d, attempt %d) = %v, %v; want %v", id, attempts, ok, err, want)
+	}
+}
+
+// A digest is queued once per person, local date, channel and organization whatever the calls,
+// claimed under a lease and finished under its claim's attempt, and the next one covers the time
+// since the last sent one.
+func TestDigests_QueueOncePerLocalDate(t *testing.T) {
+	t.Parallel()
+
+	o := newOutboxOrg(t)
+	dg := NewDigests(o.d.s)
 
 	at := time.Date(2026, 10, 28, 7, 0, 0, 0, time.UTC)
 	email := ports.NewDigest{UserID: domain.UserID(o.approver), LocalDate: "2026-10-28", Channel: ports.ChannelEmail}
 	slack := ports.NewDigest{UserID: domain.UserID(o.approver), LocalDate: "2026-10-28", Channel: ports.ChannelSlack, OrgID: o.org}
 
-	if n, err := dg.QueueDigests(t.Context(), []ports.NewDigest{email, slack, email}, at); err != nil || n != 2 {
-		t.Fatalf("QueueDigests = %d, %v; want the email and the Slack digest", n, err)
-	}
+	queueDigests(t, dg, at, 2, email, slack, email)
+	queueDigests(t, dg, at.Add(5*time.Minute), 0, email, slack)
 
-	if n, err := dg.QueueDigests(t.Context(), []ports.NewDigest{email, slack}, at.Add(5*time.Minute)); err != nil || n != 0 {
-		t.Fatalf("QueueDigests again = %d, %v; want nothing", n, err)
-	}
-
-	claimed, err := dg.ClaimDigests(t.Context(), ports.ChannelEmail, at, time.Minute, 10)
-	if err != nil || len(claimed) != 1 {
-		t.Fatalf("ClaimDigests = %+v, %v; want the email digest", claimed, err)
-	}
-
-	g := claimed[0]
-	if g.UserID != email.UserID || g.LocalDate != "2026-10-28" || g.OrgID != "" || g.Attempts != 1 ||
+	g := claimDigests(t, dg, ports.ChannelEmail, at, 1)[0]
+	if g.UserID != email.UserID || g.LocalDate != email.LocalDate || g.OrgID != "" || g.Attempts != 1 ||
 		!g.PeriodStart.Equal(at.Add(-24*time.Hour)) || !g.PeriodEnd.Equal(at) {
 		t.Fatalf("claimed %+v; want the approver's first email digest, covering the 24 hours before it", g)
 	}
 
-	if again, err := dg.ClaimDigests(t.Context(), ports.ChannelEmail, at, time.Minute, 10); err != nil || len(again) != 0 {
-		t.Fatalf("ClaimDigests while leased = %+v, %v; want none", again, err)
-	}
+	claimDigests(t, dg, ports.ChannelEmail, at, 0) // leased
 
-	if ok, err := dg.FinishDigest(t.Context(), g.ID, 2, ports.NotificationOutcome{State: ports.NotificationSent, At: at}); err != nil || ok {
-		t.Fatalf("FinishDigest under another attempt = %v, %v; want false", ok, err)
-	}
+	finishDigest(t, dg, g.ID, 2, at, false) // another attempt's
+	finishDigest(t, dg, g.ID, 1, at, true)
 
-	if ok, err := dg.FinishDigest(t.Context(), g.ID, 1, ports.NotificationOutcome{State: ports.NotificationSent, At: at}); err != nil || !ok {
-		t.Fatalf("FinishDigest = %v, %v; want true", ok, err)
-	}
-
-	slackRows, err := dg.ClaimDigests(t.Context(), ports.ChannelSlack, at, time.Minute, 10)
-	if err != nil || len(slackRows) != 1 || slackRows[0].OrgID != o.org {
-		t.Fatalf("ClaimDigests of Slack = %+v, %v; want acme's", slackRows, err)
+	if s := claimDigests(t, dg, ports.ChannelSlack, at, 1)[0]; s.OrgID != o.org {
+		t.Fatalf("claimed Slack digest %+v; want acme's", s)
 	}
 
 	// The next day's digest covers the time since the sent one.
 	next := at.Add(24 * time.Hour)
 	email.LocalDate = "2026-10-29"
+	queueDigests(t, dg, next, 1, email)
 
-	if n, err := dg.QueueDigests(t.Context(), []ports.NewDigest{email}, next); err != nil || n != 1 {
-		t.Fatalf("QueueDigests the next day = %d, %v; want one", n, err)
-	}
-
-	claimed, err = dg.ClaimDigests(t.Context(), ports.ChannelEmail, next, time.Minute, 10)
-	if err != nil || len(claimed) != 1 || !claimed[0].PeriodStart.Equal(at) || !claimed[0].PeriodEnd.Equal(next) {
-		t.Fatalf("claimed the next day %+v, %v; want it to cover [%v, %v)", claimed, err, at, next)
+	if g := claimDigests(t, dg, ports.ChannelEmail, next, 1)[0]; !g.PeriodStart.Equal(at) || !g.PeriodEnd.Equal(next) {
+		t.Fatalf("claimed the next day %+v; want it to cover [%v, %v)", g, at, next)
 	}
 
 	if _, err := dg.QueueDigests(t.Context(), []ports.NewDigest{{UserID: email.UserID, LocalDate: "28/10/2026", Channel: "email"}}, at); err == nil {
@@ -152,8 +177,11 @@ func TestDigests_SummaryNeedsYou(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if !s.Member || s.Address == "" || s.OrgSlug == "" || s.NeedsYouDecisions != c.decisions || s.Done != 0 || len(s.Spend) != 0 {
-			t.Errorf("summary of %s = %+v; want a member with %d decisions", c.user, s, c.decisions)
+		want := ports.DigestSummary{
+			Member: true, OrgRole: s.OrgRole, Address: s.Address, OrgSlug: s.OrgSlug, OrgName: s.OrgName, NeedsYouDecisions: c.decisions,
+		}
+		if !reflect.DeepEqual(s, want) || s.Address == "" || s.OrgSlug == "" {
+			t.Errorf("summary of %s = %+v; want a member with %d decisions and nothing else", c.user, s, c.decisions)
 		}
 	}
 

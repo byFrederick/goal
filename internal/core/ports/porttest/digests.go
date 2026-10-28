@@ -122,25 +122,11 @@ func (d *Digests) QueueDigests(_ context.Context, ds []ports.NewDigest, at time.
 			continue
 		}
 
-		var last time.Time
-
-		for _, r := range d.rows {
-			if r.UserID == n.UserID && r.Channel == n.Channel && r.OrgID == n.OrgID && r.State == ports.NotificationSent &&
-				r.PeriodEnd.Before(at) && r.PeriodEnd.After(last) {
-				last = r.PeriodEnd
-			}
-		}
-
-		start := last
-		if start.IsZero() {
-			start = at.Add(-24 * time.Hour)
-		}
-
 		d.nextID++
 		d.rows = append(d.rows, &DigestRow{
 			Digest: ports.Digest{
 				ID: d.nextID, UserID: n.UserID, LocalDate: n.LocalDate, Channel: n.Channel, OrgID: n.OrgID,
-				PeriodStart: start, PeriodEnd: at, DueAt: at,
+				PeriodStart: d.periodStart(n, at), PeriodEnd: at, DueAt: at,
 			},
 			State: ports.NotificationPending, NextAttemptAt: at,
 		})
@@ -148,6 +134,25 @@ func (d *Digests) QueueDigests(_ context.Context, ds []ports.NewDigest, at time.
 	}
 
 	return queued, nil
+}
+
+// periodStart is where n's period starts when queued at at: the end of the person's last sent
+// digest of its channel and organization before at, or 24 hours before at. d.mu is held.
+func (d *Digests) periodStart(n ports.NewDigest, at time.Time) time.Time {
+	var last time.Time
+
+	for _, r := range d.rows {
+		if r.UserID == n.UserID && r.Channel == n.Channel && r.OrgID == n.OrgID && r.State == ports.NotificationSent &&
+			r.PeriodEnd.Before(at) && r.PeriodEnd.After(last) {
+			last = r.PeriodEnd
+		}
+	}
+
+	if last.IsZero() {
+		return at.Add(-24 * time.Hour)
+	}
+
+	return last
 }
 
 // ClaimDigests implements ports.Digests.

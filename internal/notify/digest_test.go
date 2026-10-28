@@ -17,7 +17,15 @@ import (
 const (
 	ann domain.UserID = "user-ann"
 	bob domain.UserID = "user-bob"
+
+	annAddress = "ann@example.com"
+	bobAddress = "bob@example.com"
+	digestDate = "2026-10-28"
+	refused    = "smtp-rcpt-550"
 )
+
+// digestOrgs are the harness's organizations, by slug and name.
+var digestOrgs = [2]struct{ slug, name string }{{"acme", "Acme"}, {"labs", "Labs"}}
 
 type digestHarness struct {
 	orgs    orgList
@@ -42,8 +50,8 @@ func newDigestJob(t *testing.T, now time.Time) digestHarness {
 
 	var orgs orgList
 
-	for _, slug := range []string{"acme", "labs"} {
-		o, err := tenancy.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: slug, Name: strings.ToUpper(slug[:1]) + slug[1:]})
+	for _, o := range digestOrgs {
+		o, err := tenancy.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: o.slug, Name: o.name})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -89,12 +97,53 @@ func (h digestHarness) round(t *testing.T) DigestRound {
 	return r
 }
 
-// member makes user a member of org with something to report there.
-func (h digestHarness) member(org domain.OrgID, user domain.UserID, address string) {
-	h.digests.SetSummary(org, user, ports.DigestSummary{
-		Address: address, OrgSlug: map[domain.OrgID]string{h.orgs[0]: "acme", h.orgs[1]: "labs"}[org],
-		OrgName: map[domain.OrgID]string{h.orgs[0]: "Acme", h.orgs[1]: "Labs"}[org], NeedsYouDecisions: 1,
+// member makes user a member of the i-th organization with something to report there.
+func (h digestHarness) member(i int, user domain.UserID, address string) {
+	h.digests.SetSummary(h.orgs[i], user, ports.DigestSummary{
+		Address: address, OrgSlug: digestOrgs[i].slug, OrgName: digestOrgs[i].name, NeedsYouDecisions: 1,
 	})
+}
+
+// wantRound runs a round and fails unless it ran and queued and finished as many digests as
+// wanted.
+func (h digestHarness) wantRound(t *testing.T, label string, queued, finished int) {
+	t.Helper()
+
+	if r := h.round(t); !r.Ran || r.Queued != queued || r.Finished != finished {
+		t.Fatalf("%s = %+v; want %d queued and %d finished", label, r, queued, finished)
+	}
+}
+
+// connectSlack gives the i-th organization a Slack connection whose token is token.
+func (h digestHarness) connectSlack(t *testing.T, i int, token string) {
+	t.Helper()
+
+	ctx := domain.WithOrg(t.Context(), h.orgs[i])
+	if _, err := h.conns.Create(ctx, domain.NewConnection{Name: "slack", Kind: "slack", Secrets: map[string]string{"token": token}}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// wantText fails for each of wants text lacks.
+func wantText(t *testing.T, label, text string, wants ...string) {
+	t.Helper()
+
+	for _, w := range wants {
+		if !strings.Contains(text, w) {
+			t.Errorf("%s lacks %q:\n%s", label, w, text)
+		}
+	}
+}
+
+// wantNoText fails for each of unwanted text holds.
+func wantNoText(t *testing.T, label, text string, unwanted ...string) {
+	t.Helper()
+
+	for _, w := range unwanted {
+		if strings.Contains(text, w) {
+			t.Errorf("%s holds %q:\n%s", label, w, text)
+		}
+	}
 }
 
 func emailRecipient(user domain.UserID, tz string) ports.DigestRecipient {
@@ -125,11 +174,11 @@ func TestDigest_DueAtEightLocal(t *testing.T) {
 		before   time.Time // 07:59 local
 		date     string
 	}{
-		{"berlin", "Europe/Berlin", time.Date(2026, 10, 28, 6, 59, 0, 0, time.UTC), "2026-10-28"},
-		{"los angeles", "America/Los_Angeles", time.Date(2026, 10, 28, 14, 59, 0, 0, time.UTC), "2026-10-28"},
-		{"utc", "UTC", time.Date(2026, 10, 28, 7, 59, 0, 0, time.UTC), "2026-10-28"},
-		{"unset", "", time.Date(2026, 10, 28, 7, 59, 0, 0, time.UTC), "2026-10-28"},
-		{"unknown zone", "Mars/Olympus", time.Date(2026, 10, 28, 7, 59, 0, 0, time.UTC), "2026-10-28"},
+		{"berlin", "Europe/Berlin", time.Date(2026, 10, 28, 6, 59, 0, 0, time.UTC), digestDate},
+		{"los angeles", "America/Los_Angeles", time.Date(2026, 10, 28, 14, 59, 0, 0, time.UTC), digestDate},
+		{"utc", "UTC", time.Date(2026, 10, 28, 7, 59, 0, 0, time.UTC), digestDate},
+		{"unset", "", time.Date(2026, 10, 28, 7, 59, 0, 0, time.UTC), digestDate},
+		{"unknown zone", "Mars/Olympus", time.Date(2026, 10, 28, 7, 59, 0, 0, time.UTC), digestDate},
 		{"auckland, a day ahead of utc", "Pacific/Auckland", time.Date(2026, 10, 28, 18, 59, 0, 0, time.UTC), "2026-10-29"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -137,24 +186,20 @@ func TestDigest_DueAtEightLocal(t *testing.T) {
 
 			h := newDigestJob(t, c.before)
 			h.digests.SetRecipients(h.orgs[0], emailRecipient(ann, c.tz))
-			h.member(h.orgs[0], ann, "ann@example.com")
+			h.member(0, ann, annAddress)
 
-			if r := h.round(t); !r.Ran || r.Queued != 0 || len(h.mailer.Sent()) != 0 {
-				t.Fatalf("round at 07:59 local = %+v, sent %d; want nothing queued", r, len(h.mailer.Sent()))
-			}
+			h.wantRound(t, "round at 07:59 local", 0, 0)
 
 			h.clock.Advance(time.Minute)
 
-			if r := h.round(t); r.Queued != 1 || r.Finished != 1 {
-				t.Fatalf("round at 08:00 local = %+v; want one digest queued and sent", r)
-			}
+			h.wantRound(t, "round at 08:00 local", 1, 1)
 
 			rows := h.emailDigests()
 			if len(rows) != 1 || rows[0].LocalDate != c.date || rows[0].State != ports.NotificationSent {
 				t.Fatalf("digests = %+v; want one sent, dated %s", rows, c.date)
 			}
 
-			if sent := h.mailer.Sent(); len(sent) != 1 || sent[0].To != "ann@example.com" || !strings.Contains(sent[0].Subject, c.date) {
+			if sent := h.mailer.Sent(); len(sent) != 1 || sent[0].To != annAddress || !strings.Contains(sent[0].Subject, c.date) {
 				t.Fatalf("sent %+v; want ann's digest of %s", sent, c.date)
 			}
 		})
@@ -169,24 +214,16 @@ func TestDigest_OncePerLocalDate(t *testing.T) {
 	eight := time.Date(2026, 10, 28, 8, 0, 0, 0, time.UTC)
 	h := newDigestJob(t, eight)
 	h.digests.SetRecipients(h.orgs[0], emailRecipient(ann, "UTC"))
-	h.member(h.orgs[0], ann, "ann@example.com")
+	h.member(0, ann, annAddress)
 
-	if r := h.round(t); r.Queued != 1 || r.Finished != 1 {
-		t.Fatalf("first round = %+v; want one digest", r)
-	}
+	h.wantRound(t, "first round", 1, 1)
 
 	h.clock.Advance(5 * time.Minute)
-
-	if r := h.round(t); r.Queued != 0 || r.Finished != 0 {
-		t.Fatalf("second round = %+v; want nothing", r)
-	}
+	h.wantRound(t, "second round", 0, 0)
 
 	h.clock.Advance(10 * time.Hour)
 	h.job = h.newJob() // a restart: the job keeps nothing of its own
-
-	if r := h.round(t); r.Queued != 0 || r.Finished != 0 {
-		t.Fatalf("round after a restart = %+v; want nothing", r)
-	}
+	h.wantRound(t, "round after a restart", 0, 0)
 
 	if n := len(h.mailer.Sent()); n != 1 {
 		t.Fatalf("sent %d digests on one date; want 1", n)
@@ -194,16 +231,10 @@ func TestDigest_OncePerLocalDate(t *testing.T) {
 
 	// The next day, before and at 08:00.
 	h.clock.Advance(eight.Add(24*time.Hour - time.Minute).Sub(h.clock.Now()))
-
-	if r := h.round(t); r.Queued != 0 {
-		t.Fatalf("round at 07:59 the next day = %+v; want nothing", r)
-	}
+	h.wantRound(t, "round at 07:59 the next day", 0, 0)
 
 	h.clock.Advance(time.Minute)
-
-	if r := h.round(t); r.Queued != 1 || r.Finished != 1 {
-		t.Fatalf("round at 08:00 the next day = %+v; want one digest", r)
-	}
+	h.wantRound(t, "round at 08:00 the next day", 1, 1)
 
 	rows := h.emailDigests()
 	if len(rows) != 2 || rows[1].LocalDate != "2026-10-29" || !rows[1].PeriodStart.Equal(rows[0].PeriodEnd) {
@@ -223,9 +254,9 @@ func TestDigest_TwoInstancesRace(t *testing.T) {
 	h := newDigestJob(t, time.Date(2026, 10, 28, 8, 0, 0, 0, time.UTC))
 	h.digests.SetRecipients(h.orgs[0], emailRecipient(ann, "UTC"), emailRecipient(bob, "UTC"))
 	h.digests.SetRecipients(h.orgs[1], emailRecipient(ann, "UTC"))
-	h.member(h.orgs[0], ann, "ann@example.com")
-	h.member(h.orgs[0], bob, "bob@example.com")
-	h.member(h.orgs[1], ann, "ann@example.com")
+	h.member(0, ann, annAddress)
+	h.member(0, bob, bobAddress)
+	h.member(1, ann, annAddress)
 
 	other := h.newJob()
 
@@ -242,18 +273,32 @@ func TestDigest_TwoInstancesRace(t *testing.T) {
 		return nil
 	}
 
-	if r := h.round(t); !r.Ran || r.Queued != 2 || r.Finished != 2 {
-		t.Fatalf("round = %+v; want ann's and bob's digests", r)
-	}
+	h.wantRound(t, "round", 2, 2)
 
 	if err != nil || skipped.Ran || skipped.Queued != 0 || skipped.Finished != 0 {
 		t.Fatalf("the other instance's round during it = %+v, %v; want it skipped", skipped, err)
 	}
 
 	// Both instances racing, round after round, send nothing more.
+	race(t, h.job, other)
+
+	to := map[string]int{}
+	for _, m := range h.mailer.Sent() {
+		to[m.To]++
+	}
+
+	if len(to) != 2 || to[annAddress] != 1 || to[bobAddress] != 1 {
+		t.Fatalf("sent %v; want one digest to each", to)
+	}
+}
+
+// race runs rounds of every job at once, round after round.
+func race(t *testing.T, jobs ...*DigestJob) {
+	t.Helper()
+
 	var wg sync.WaitGroup
 
-	for _, j := range []*DigestJob{h.job, other} {
+	for _, j := range jobs {
 		wg.Go(func() {
 			for range 20 {
 				if _, err := j.Round(t.Context()); err != nil {
@@ -264,15 +309,6 @@ func TestDigest_TwoInstancesRace(t *testing.T) {
 	}
 
 	wg.Wait()
-
-	to := map[string]int{}
-	for _, m := range h.mailer.Sent() {
-		to[m.To]++
-	}
-
-	if len(to) != 2 || to["ann@example.com"] != 1 || to["bob@example.com"] != 1 {
-		t.Fatalf("sent %v; want one digest to each", to)
-	}
 }
 
 // The email digest is one message across the person's organizations, with each one's counts and
@@ -288,65 +324,51 @@ func TestDigest_RenderLinksAndCounts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx := domain.WithOrg(t.Context(), acme)
-	if _, err := h.conns.Create(ctx, domain.NewConnection{Name: "slack", Kind: "slack", Secrets: map[string]string{"token": "xoxb-test-token"}}, domain.LocalUser); err != nil {
-		t.Fatal(err)
-	}
-
+	h.connectSlack(t, 0, "xoxb-test-token")
 	h.digests.SetRecipients(acme, ports.DigestRecipient{UserID: ann, TimeZone: "UTC", Email: true, Slack: true})
 	h.digests.SetRecipients(labs, emailRecipient(ann, "UTC"))
 	h.digests.SetSummary(acme, ann, ports.DigestSummary{
-		Address: "ann@example.com", OrgSlug: "acme", OrgName: "Acme", NeedsYouDecisions: 2, NeedsYouAndons: 1, Done: 5, AndonsPulled: 1,
+		Address: annAddress, OrgSlug: digestOrgs[0].slug, OrgName: digestOrgs[0].name,
+		NeedsYouDecisions: 2, NeedsYouAndons: 1, Done: 5, AndonsPulled: 1,
 		Spend: []ports.FactorySpend{{FactoryName: "docs", FactoryTitle: "Docs <site>", USD: 10}, {FactoryName: "web", FactoryTitle: "Web", USD: 2.3}},
 	})
-	h.digests.SetSummary(labs, ann, ports.DigestSummary{Address: "ann@example.com", OrgSlug: "labs", OrgName: "Labs", Done: 3})
+	h.digests.SetSummary(labs, ann, ports.DigestSummary{Address: annAddress, OrgSlug: digestOrgs[1].slug, OrgName: digestOrgs[1].name, Done: 3})
 
-	if r := h.round(t); r.Queued != 2 || r.Finished != 2 {
-		t.Fatalf("round = %+v; want ann's email and acme's Slack digest", r)
-	}
+	h.wantRound(t, "round", 2, 2)
 
 	sent := h.mailer.Sent()
-	if len(sent) != 1 {
-		t.Fatalf("sent %d emails; want 1", len(sent))
+	if len(sent) != 1 || sent[0].To != annAddress {
+		t.Fatalf("sent %+v; want one email to ann", sent)
 	}
 
-	m := sent[0]
-	for _, want := range []string{
-		"Your Goal digest for 2026-10-28",
+	wantText(t, "email text", sent[0].Text,
+		"Your Goal digest for "+digestDate,
 		"Acme\n",
-		"- Needs you: 2 decisions and 1 andon. " + publicURL + "/o/acme/needs-you",
-		"- Items done: 5. " + publicURL + "/o/acme",
+		"- Needs you: 2 decisions and 1 andon. "+publicURL+"/o/acme/needs-you",
+		"- Items done: 5. "+publicURL+"/o/acme",
 		"- Andons pulled: 1.",
-		"- Spend: $12.30 (Docs <site> $10.00, Web $2.30). " + publicURL + "/o/acme/spend",
+		"- Spend: $12.30 (Docs <site> $10.00, Web $2.30). "+publicURL+"/o/acme/spend",
 		"Labs\n",
-		"- Items done: 3. " + publicURL + "/o/labs",
-		"Change them at " + publicURL + "/account",
-	} {
-		if !strings.Contains(m.Text, want) {
-			t.Errorf("email text lacks %q:\n%s", want, m.Text)
-		}
-	}
-
-	if m.To != "ann@example.com" || !strings.Contains(m.HTML, "Docs &lt;site&gt;") || strings.Contains(m.HTML, "<site>") ||
-		!strings.Contains(m.HTML, `href="`+publicURL+`/o/labs"`) {
-		t.Errorf("email = %+v; want it to ann with the names escaped in the HTML and the links", m)
-	}
+		"- Items done: 3. "+publicURL+"/o/labs",
+		"Change them at "+publicURL+"/account")
+	wantText(t, "email HTML", sent[0].HTML, "Docs &lt;site&gt;", `href="`+publicURL+`/o/labs"`)
+	wantNoText(t, "email HTML", sent[0].HTML, "<site>")
 
 	dms := h.slack.Sent()
-	if len(dms) != 1 || dms[0].Token != "xoxb-test-token" || dms[0].Message.To != "ann@example.com" {
+	if len(dms) != 1 || dms[0].Token != "xoxb-test-token" || dms[0].Message.To != annAddress {
 		t.Fatalf("direct messages %+v; want acme's digest to ann with acme's token", dms)
 	}
 
-	if text := dms[0].Message.Text; !strings.Contains(text, publicURL+"/o/acme/needs-you") || strings.Contains(text, "Labs") ||
-		!strings.Contains(text, "You get this message") {
-		t.Errorf("Slack digest = %q; want acme's lines only", text)
-	}
+	wantText(t, "Slack digest", dms[0].Message.Text, publicURL+"/o/acme/needs-you", "You get this message")
+	wantNoText(t, "Slack digest", dms[0].Message.Text, "Labs")
 
 	logs := h.logs.String()
-	if strings.Count(logs, `"msg":"notify.sent"`) != 2 || !strings.Contains(logs, `"event":"digest"`) ||
-		strings.Contains(logs, "ann@example.com") || strings.Contains(logs, "xoxb-") || strings.Contains(logs, "Needs you") {
-		t.Errorf("logs = %s; want two notify.sent digest lines naming no address, token or body", logs)
+	if strings.Count(logs, `"msg":"notify.sent"`) != 2 {
+		t.Errorf("logs = %s; want two notify.sent lines", logs)
 	}
+
+	wantText(t, "logs", logs, `"event":"digest"`)
+	wantNoText(t, "logs", logs, annAddress, "xoxb-", "Needs you")
 }
 
 func slackDigestOn() domain.NotificationPreferences {
@@ -369,10 +391,11 @@ func TestDigest_NothingToReportIsSkipped(t *testing.T) {
 		reason string
 	}{
 		{"nothing to report", func(_ *testing.T, h digestHarness) {
-			h.digests.SetSummary(h.orgs[0], ann, ports.DigestSummary{Address: "ann@example.com", OrgSlug: "acme", OrgName: "Acme"})
+			h.digests.SetSummary(h.orgs[0], ann, ports.DigestSummary{Address: annAddress, OrgSlug: digestOrgs[0].slug, OrgName: digestOrgs[0].name})
 		}, reasonNothingToReport},
 		{"digest turned off", func(t *testing.T, h digestHarness) {
-			h.member(h.orgs[0], ann, "ann@example.com")
+			t.Helper()
+			h.member(0, ann, annAddress)
 
 			p := domain.DefaultNotificationPreferences()
 			d := p.Events[domain.NotifyDigest]
@@ -392,9 +415,7 @@ func TestDigest_NothingToReportIsSkipped(t *testing.T) {
 			h.digests.SetRecipients(h.orgs[0], emailRecipient(ann, "UTC"))
 			c.setup(t, h)
 
-			if r := h.round(t); r.Queued != 1 || r.Finished != 1 {
-				t.Fatalf("round = %+v; want one digest queued and finished", r)
-			}
+			h.wantRound(t, "round", 1, 1)
 
 			if rows := h.emailDigests(); len(rows) != 1 || rows[0].State != ports.NotificationSkipped || rows[0].LastError != c.reason {
 				t.Fatalf("digests = %+v; want one skipped with %s", rows, c.reason)
@@ -414,13 +435,13 @@ func TestDigest_RetriesLikeTheOutbox(t *testing.T) {
 
 	h := newDigestJob(t, time.Date(2026, 10, 28, 8, 0, 0, 0, time.UTC))
 	h.digests.SetRecipients(h.orgs[0], emailRecipient(ann, "UTC"), emailRecipient(bob, "UTC"))
-	h.member(h.orgs[0], ann, "ann@example.com")
-	h.member(h.orgs[0], bob, "bob@example.com")
+	h.member(0, ann, annAddress)
+	h.member(0, bob, bobAddress)
 
 	fails := 1
 	h.mailer.Fail = func(m ports.Message) error {
-		if m.To == "bob@example.com" {
-			return &ports.MailError{Code: "smtp-rcpt-550", Permanent: true}
+		if m.To == bobAddress {
+			return &ports.MailError{Code: refused, Permanent: true}
 		}
 
 		if fails > 0 {
@@ -436,7 +457,7 @@ func TestDigest_RetriesLikeTheOutbox(t *testing.T) {
 
 	rows := h.emailDigests()
 	if len(rows) != 2 || rows[0].State != ports.NotificationPending || !rows[0].NextAttemptAt.Equal(h.clock.Now().Add(time.Minute)) ||
-		rows[1].State != ports.NotificationFailed || rows[1].LastError != "smtp-rcpt-550" {
+		rows[1].State != ports.NotificationFailed || rows[1].LastError != refused {
 		t.Fatalf("digests = %+v; want ann's back in a minute and bob's failed", rows)
 	}
 
