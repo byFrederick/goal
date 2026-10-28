@@ -12,7 +12,7 @@ import (
 )
 
 // ReviewDefinitions reads the lines and files the review loop works on, for the organization in
-// ctx; cmd/goald adapts definitions.Cache to it.
+// ctx; *definitions.Cache satisfies it.
 type ReviewDefinitions interface {
 	// CurrentLines are the current versions' lines of the organization's factories.
 	CurrentLines(ctx context.Context) ([]domain.Line, error)
@@ -75,12 +75,6 @@ func NewReviews(d ReviewDeps, c ReviewConfig) *Reviews {
 	}
 
 	return &Reviews{d: d, c: c, log: log}
-}
-
-// Run sweeps and works the queue at once and then each time every passes, until ctx ends;
-// failures are logged and retried on the next round.
-func (r *Reviews) Run(ctx context.Context, every time.Duration) {
-	rounds(ctx, r.d.Clock, every, r.log, "jonah review", r.Sweep, r.Work)
 }
 
 // Sweep queues a threshold review of each factory of every live organization whose

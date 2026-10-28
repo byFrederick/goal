@@ -945,11 +945,11 @@ func TestReads_SeeOnlyTheOrgInTheirContext(t *testing.T) {
 func TestCurrentLines_AreTheOrgsCurrentLines(t *testing.T) {
 	t.Parallel()
 
+	const betaID domain.FactoryID = "5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a02"
+
 	h := newHarness(t)
 	h.publish(t, org, acme(acmeName, noteContract))
 	v2 := h.publish(t, org, acme(acmeName, bodyContract))
-	const betaID domain.FactoryID = "5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a02"
-
 	h.publish(t, org, withID(acme("beta", noteContract), betaID)) // archived below
 	h.publish(t, other, withID(acme(acmeName, noteContract), otherID))
 	h.archive(t, org, betaID)
