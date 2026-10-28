@@ -14,6 +14,7 @@ import {
   invalidationsFor,
   isOverviewKey,
   knowledgeInvalidations,
+  learningInvalidations,
   resyncInvalidations,
 } from './invalidation';
 import { browserPage, followPresence } from './stream-presence';
@@ -25,15 +26,16 @@ export function useStreamStatus(): StreamStatus {
 }
 
 /**
- * The queries other event names invalidate, by name: B's `definition` and phase 4's `connection`
- * and `knowledge`; names nobody registered are ignored, so new events never break an older
- * client. E's `factory` events arrive typed through
+ * The queries other event names invalidate, by name: B's `definition`, phase 4's `connection`
+ * and `knowledge`, and Jonah's `learning`; names nobody registered are ignored, so new events never
+ * break an older client. E's `factory` events arrive typed through
  * the client's `onFactory` (factoryInvalidations).
  */
 export const streamHandlers: Readonly<Record<string, (org: string, data: unknown) => QueryKey[]>> = {
   definition: definitionInvalidations,
   connection: connectionInvalidations,
   knowledge: knowledgeInvalidations,
+  learning: learningInvalidations,
 };
 
 const batchMs = 300;
