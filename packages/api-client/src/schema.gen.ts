@@ -1749,6 +1749,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/judges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The judges of the factory's current version, each with its last 30 days
+         * @description One entry per evals/judges/<slug>.md of the current version, by slug, each with its production scores of the last 30 days (runs scored, pass rate, cost and a daily pass-rate series by UTC day; tries never count). judge_cost_usd is what every judge run of the factory cost in those 30 days. Empty, with version null, before the first publish. 503 judges-unavailable when this goald does not serve judges.
+         */
+        get: operations["listJudges"];
+        put?: never;
+        /**
+         * Add a judge and publish it as the factory's next version
+         * @description Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version). When the factory has eval cases and the eval gate refuses (evals-pending, evals-failing), the draft stays open, so it publishes once its run passes. 503 judges-unavailable.
+         */
+        post: operations["createJudge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/judges/{judge}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The judge's slug: its file name in evals/judges without .md */
+                judge: components["parameters"]["JudgeRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One judge of the current version, its last 30 days, its recent scores and where it runs
+         * @description Everything in its file, its 30-day summary, its newest production scores (every state, newest first) and runs_on: the box and connections of the factory's defaults it inherits. 404 judge-not-found; 503 judges-unavailable.
+         */
+        get: operations["getJudge"];
+        /**
+         * Replace a judge's file and publish it as the factory's next version
+         * @description As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers, and the same eval gate.
+         */
+        put: operations["updateJudge"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/judges/{judge}/try": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The judge's slug: its file name in evals/judges without .md */
+                judge: components["parameters"]["JudgeRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue the judge on the 10 newest finished runs of its agents
+         * @description Each try names the run's item and is scored like any other score, but never counts in the judge's 30-day figures. Tries cost model spend, so only those who may publish queue them. 404 judge-not-found; 503 judges-unavailable.
+         */
+        post: operations["tryJudge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/andon": {
         parameters: {
             query?: never;
@@ -4468,6 +4555,158 @@ export interface components {
             /** @description Lead time of each expedite item */
             expedite_lead_time_minutes: number | null;
         };
+        JudgeOutcome: {
+            /** Format: double */
+            score: number;
+            label: string;
+            meaning: string;
+        };
+        /** @description A judge's file as evals.schema.json has its front matter, with the Markdown rubric that follows it. Validated when it is published, as every definition file is. */
+        JudgeWrite: {
+            title: string;
+            /** @description What it checks */
+            criterion: string;
+            /** @description The agents whose runs it scores; empty or absent, every agent */
+            agents?: string[];
+            outcomes: components["schemas"]["JudgeOutcome"][];
+            /**
+             * Format: double
+             * @description The lowest score that passes
+             */
+            pass_mark: number;
+            /**
+             * Format: double
+             * @description The share of the agents' finished runs it scores
+             */
+            sample: number;
+            /** @description The judge run's model; absent, the factory's runtime.model */
+            model?: string;
+            /** @default true */
+            enabled?: boolean;
+            /** @description The file's Markdown body */
+            rubric: string;
+            /** @description The version the caller saw running; the publish is refused (draft-base-moved) when another one runs */
+            expected_current_version_id?: string;
+        };
+        CreateJudgeRequest: {
+            /** @description The judge's file name without .md: 3 to 40 lowercase letters, digits and hyphens, starting with a letter */
+            slug: string;
+        } & components["schemas"]["JudgeWrite"];
+        JudgeDay: {
+            /**
+             * Format: date
+             * @description The UTC day
+             */
+            day: string;
+            scored: number;
+            passed: number;
+            /** Format: double */
+            pass_rate: number;
+        };
+        /** @description A judge's production scores over the last 30 days; tries never count */
+        JudgeSummary: {
+            /** @description The runs scored */
+            scored: number;
+            passed: number;
+            /**
+             * Format: double
+             * @description Passed over scored
+             */
+            pass_rate: number;
+            /**
+             * Format: double
+             * @description What its judge runs cost
+             */
+            cost_usd: number;
+            /** @description One point per UTC day with a scored run, oldest first */
+            days: components["schemas"]["JudgeDay"][];
+        };
+        JudgeListEntry: {
+            slug: string;
+            title: string;
+            criterion: string;
+            /** @description Empty means every agent */
+            agents: string[];
+            /** Format: double */
+            sample: number;
+            /** Format: double */
+            pass_mark: number;
+            enabled: boolean;
+            summary: components["schemas"]["JudgeSummary"];
+        };
+        JudgeList: {
+            /** @description The number of the version the judges are read from; null before the first publish */
+            version: number | null;
+            /** @description By slug */
+            judges: components["schemas"]["JudgeListEntry"][];
+            /**
+             * Format: double
+             * @description What the factory's judge runs cost over the last 30 days
+             */
+            judge_cost_usd: number;
+        };
+        /** @enum {string} */
+        JudgeScoreState: "queued" | "running" | "scored" | "error";
+        /** @description One production score of a judge; outcome, score and passed once it is scored */
+        JudgeScore: {
+            id: string;
+            state: components["schemas"]["JudgeScoreState"];
+            /** @description <factory name>#<number> */
+            item_ref: string;
+            item_title: string;
+            /** @description The label of the outcome the judge gave */
+            outcome?: string;
+            /** Format: double */
+            score?: number;
+            passed?: boolean;
+            /** @description The judge's one sentence */
+            reason?: string;
+            /** Format: date-time */
+            scored_at?: string;
+        };
+        /** @description Where the judge's runs run; a judge inherits the factory's defaults */
+        JudgeRunsOn: {
+            /** @description The box: the factory's runtime.size, medium when it says none */
+            size: string;
+            /** @description The connections of the factory's current version, read only */
+            connections: string[];
+            /** @description What a judge run reads of the run it scores */
+            sees: ("events" | "spec" | "pull_request")[];
+            /** @description True while these are the factory's defaults */
+            inherited: boolean;
+        };
+        Judge: {
+            slug: string;
+            title: string;
+            criterion: string;
+            /** @description Empty means every agent */
+            agents: string[];
+            outcomes: components["schemas"]["JudgeOutcome"][];
+            /** Format: double */
+            pass_mark: number;
+            /** Format: double */
+            sample: number;
+            /** @description Absent: the factory's runtime.model */
+            model?: string;
+            enabled: boolean;
+            rubric: string;
+            /** @description The number of the version the judge is read from */
+            version: number;
+            summary: components["schemas"]["JudgeSummary"];
+            /** @description The newest production scores, newest first */
+            recent: components["schemas"]["JudgeScore"][];
+            runs_on: components["schemas"]["JudgeRunsOn"];
+        };
+        JudgeTry: {
+            id: string;
+            state: components["schemas"]["JudgeScoreState"];
+            /** @description <factory name>#<number> */
+            item_ref: string;
+            item_title: string;
+        };
+        JudgeTries: {
+            tries: components["schemas"]["JudgeTry"][];
+        };
         AgentStats: {
             agent: string;
             /** Format: date */
@@ -6533,6 +6772,8 @@ export interface components {
         KindRef: string;
         /** @description The factory's metadata.id or metadata.name */
         FactoryRef: string;
+        /** @description The judge's slug: its file name in evals/judges without .md */
+        JudgeRef: string;
         /** @description The eval run's id */
         EvalRunRef: string;
         /** @description The first UTC day of the range; 6 days before `to` when absent */
@@ -8960,6 +9201,150 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentStats"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listJudges: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The judges */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgeList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createJudge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateJudgeRequest"];
+            };
+        };
+        responses: {
+            /** @description The judge as the new version has it */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Judge"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getJudge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The judge's slug: its file name in evals/judges without .md */
+                judge: components["parameters"]["JudgeRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The judge */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Judge"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateJudge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The judge's slug: its file name in evals/judges without .md */
+                judge: components["parameters"]["JudgeRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JudgeWrite"];
+            };
+        };
+        responses: {
+            /** @description The judge as the new version has it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Judge"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    tryJudge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The judge's slug: its file name in evals/judges without .md */
+                judge: components["parameters"]["JudgeRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The queued tries, newest run first */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgeTries"];
                 };
             };
             default: components["responses"]["Problem"];
