@@ -289,28 +289,27 @@ func TestJonah_QueueReview(t *testing.T) {
 
 	h := newHarness(t)
 
-	var got gen.JonahReview
-	if code := h.call(t, http.MethodPost, acmeJonah+"/reviews", "", &got); code != http.StatusAccepted {
-		t.Fatalf("queue review = %d, want 202", code)
-	}
-
-	if got.State != gen.JonahReviewStatePending || got.Trigger != gen.JonahReviewTriggerManual {
-		t.Errorf("review = %+v, want pending and manual", got)
-	}
-
-	if n := h.audited(t, domain.AuditReviewQueued); n != 1 {
-		t.Errorf("%d %s entries, want 1", n, domain.AuditReviewQueued)
-	}
-
+	// No review loop runs yet, so a review is refused before any row is written; the
+	// review-in-flight and budget refusals are TestDecide_QueueReview's in internal/jonah.
 	code, p := problemOfCall(t, h, http.MethodPost, acmeJonah+"/reviews", "")
-	wantProblem(t, "a second review", code, p, http.StatusConflict, "review-in-flight")
+	wantProblem(t, "a review", code, p, http.StatusConflict, "review-loop-not-running")
 
-	// A factory whose review runs cost the weekly budget (default $10) over the last 7 days.
-	h = newHarness(t)
-	h.jonahRun(t, 10)
+	if p.Detail == nil || *p.Detail != "Reviews start when Jonah's review loop ships" {
+		t.Errorf("detail = %v, want the review loop sentence", p.Detail)
+	}
 
-	code, p = problemOfCall(t, h, http.MethodPost, acmeJonah+"/reviews", "")
-	wantProblem(t, "a review over budget", code, p, http.StatusConflict, "learning-budget-exhausted")
+	reviews, err := h.store.JonahReviews(inOrg(t), acmeID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(reviews) != 0 {
+		t.Errorf("%d reviews stored, want none", len(reviews))
+	}
+
+	if n := h.audited(t, domain.AuditReviewQueued); n != 0 {
+		t.Errorf("%d %s entries, want 0", n, domain.AuditReviewQueued)
+	}
 }
 
 // jonahRun records a finished review run of acme that cost usd, started an hour ago.

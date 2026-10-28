@@ -8594,7 +8594,7 @@ type ClientInterface interface {
 
 	// QueueJonahReview Queue a manual review of the factory's sent-back runs (decision 2)
 	//
-	// The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+	// The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. Until the review loop ships, every call answers 409 review-loop-not-running ("Reviews start when Jonah's review loop ships") and queues nothing. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/reviews (the `QueueJonahReview` operationId).
 	QueueJonahReview(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -11487,7 +11487,7 @@ func (c *Client) RejectProposal(ctx context.Context, org OrgRef, factory Factory
 
 // QueueJonahReview Queue a manual review of the factory's sent-back runs (decision 2)
 //
-// The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+// The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. Until the review loop ships, every call answers 409 review-loop-not-running ("Reviews start when Jonah's review loop ships") and queues nothing. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
 //
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/reviews (the `QueueJonahReview` operationId).
 func (c *Client) QueueJonahReview(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -24241,7 +24241,7 @@ type ClientWithResponsesInterface interface {
 
 	// QueueJonahReviewWithResponse Queue a manual review of the factory's sent-back runs (decision 2)
 	//
-	// The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+	// The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. Until the review loop ships, every call answers 409 review-loop-not-running ("Reviews start when Jonah's review loop ships") and queues nothing. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -35528,7 +35528,7 @@ func (c *ClientWithResponses) RejectProposalWithResponse(ctx context.Context, or
 
 // QueueJonahReviewWithResponse Queue a manual review of the factory's sent-back runs (decision 2)
 //
-// The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+// The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. Until the review loop ships, every call answers 409 review-loop-not-running ("Reviews start when Jonah's review loop ships") and queues nothing. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
 //
 // Returns a wrapper object for the known response body format(s).
 //
