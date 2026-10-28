@@ -11,9 +11,9 @@ test.beforeEach(async ({ page, request }) => {
   await recordToasts(page);
 });
 
-const reviewLink = (page: Page) => page.getByRole('link', { name: 'Review and publish', exact: true });
+const reviewLink = (page: Page) => page.getByRole('link', { name: 'Review changes', exact: true }).first();
 const publishButton = (page: Page) => page.getByRole('button', { name: /^Publish v\d+$/ });
-const history = (page: Page) => page.getByRole('region', { name: 'Version history' });
+const history = (page: Page) => page.getByRole('region', { name: 'Versions' });
 const versionRow = (page: Page, n: number) =>
   history(page)
     .getByRole('listitem')
@@ -27,13 +27,16 @@ async function openReview(page: Page, search = '') {
 test('Review is accessible and fits the screen; the copy says runs finish on v8', async ({ page }) => {
   await openReview(page);
   await expect(page.getByRole('region', { name: 'Checks' })).toContainText('passed, 1 problem');
-  await expect(page.getByRole('region', { name: 'Changes from v8' })).toContainText('3 changes in 2 sections');
+  await expect(page.getByRole('heading', { name: 'Publish v9' })).toBeVisible();
+  await expect(page.getByText('3 changes', { exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Changes to factory.yaml' })).toContainText('@@ Line: build station');
   await expect(publishButton(page)).toHaveText('Publish v9');
+  await expect(page.getByRole('button', { name: 'Evals before publish' })).toHaveAttribute('aria-disabled', 'true');
   await expect(page.getByRole('region', { name: 'Publish' })).toContainText(
-    'v8 keeps running until you publish. Runs already started finish on v8; new runs start on v9.',
+    'You can roll back to any earlier version later.',
   );
-  await expect(versionRow(page, 8)).toContainText('Running');
+  await expect(page.getByText('What happens to work in progress')).toBeVisible();
+  await expect(versionRow(page, 8)).toContainText('Live');
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
@@ -55,20 +58,20 @@ test('a problem blocks Publish until it is fixed; then v9 runs (flow 3)', async 
   await expectAccessible(page);
 
   // The fix button in YAML puts the agent back.
-  await page.getByRole('navigation', { name: 'Editor view' }).getByRole('link', { name: 'YAML' }).click();
+  await page.getByRole('group', { name: 'Editor view' }).getByRole('button', { name: 'YAML' }).click();
   await problems(page).getByRole('button', { name: 'Set agent to spec-writer' }).click();
   await expect(problems(page)).not.toContainText('ghost');
 
   await reviewLink(page).click();
   await expect(alert).toHaveCount(0);
   await expect(publishButton(page)).not.toHaveAttribute('aria-disabled');
-  await page.getByRole('textbox', { name: 'Describe this version' }).fill('Build also runs pnpm test');
+  await page.getByRole('textbox', { name: 'What changed, in one line' }).fill('Build also runs pnpm test');
   await publishButton(page).click();
 
   await expectToast(page, 'goal v9 published');
   await expect(page.getByRole('region', { name: 'Publish' })).toContainText('No draft. v9 is running.');
   await expect(versionRow(page, 9)).toContainText('Build also runs pnpm test');
-  await expect(versionRow(page, 9)).toContainText('Running');
+  await expect(versionRow(page, 9)).toContainText('Live');
   await expect(status(page)).toContainText('v9 runs now.');
 });
 
@@ -111,20 +114,21 @@ test('Compare v7, Restore v7, then discard the draft (flow 5)', async ({ page })
   await dialog.getByRole('button', { name: 'Restore v7' }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByText('v7 is running', { exact: true })).toBeVisible();
-  await expect(versionRow(page, 7)).toContainText('Running');
+  await expect(versionRow(page, 7)).toContainText('Live');
   await expect(status(page)).toContainText('Based on v8; v7 is running.');
 
-  await page.getByRole('button', { name: 'Discard draft…' }).click();
+  await page.getByRole('button', { name: 'Discard draft', exact: true }).click();
   const discard = page.getByRole('dialog', { name: 'Discard the draft of v9?' });
   await discard.getByRole('button', { name: 'Discard draft' }).click();
   await expect(status(page)).toContainText('v7 runs now. Your first change opens a draft.');
   await expect(page.getByRole('region', { name: 'Publish' })).toContainText('No draft. v7 is running.');
 
   // Versions lists every version; Compare without a draft is the version before it.
-  await page.getByRole('link', { name: 'All versions' }).click();
+  await page.getByRole('link', { name: /^All \d+ versions$/ }).click();
   await expect(page.getByRole('heading', { level: 2, name: 'Versions' })).toBeFocused();
   await page.getByRole('button', { name: 'Compare v8' }).click();
-  await expect(page.getByRole('region', { name: 'Changes from v7 to v8' })).toContainText('1 change');
+  const v8Changes = page.getByRole('region', { name: 'Changes from v7 to v8' });
+  await expect(v8Changes.getByRole('listitem').first()).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });

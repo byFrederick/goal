@@ -102,11 +102,16 @@ func (e *Engine) Ask(ctx context.Context, id domain.ItemID, run domain.RunID, ag
 // Answer records a person's answer to an item's open question, picked from its choices
 // (choiceIndex) or in their own words, and puts the item back in its station's arrival state
 // with its rework count unchanged: an answer is no rework. The next run's brief carries the
-// question and the answer (answersSection).
+// question and the answer (answersSection). A done or cancelled item is refused with
+// ErrItemClosed; the audit entry item.answered records the answer's length, never its text.
 func (e *Engine) Answer(ctx context.Context, id domain.ItemID, by domain.Actor, answer string, choiceIndex *int) (domain.Item, error) {
 	it, l, err := e.itemAndLine(ctx, id)
 	if err != nil {
 		return domain.Item{}, fmt.Errorf("answer on item %s: %w", id, err)
+	}
+
+	if closed(it) {
+		return domain.Item{}, fmt.Errorf("answer on item %s: %w", id, ErrItemClosed)
 	}
 
 	events, err := e.itemEvents(ctx, id)
@@ -119,17 +124,14 @@ func (e *Engine) Answer(ctx context.Context, id domain.ItemID, by domain.Actor, 
 		return domain.Item{}, fmt.Errorf("answer on item %s: %w", id, ErrNoOpenQuestion)
 	}
 
-	data := map[string]any{}
+	answer, err = validAnswer(q, answer, choiceIndex)
+	if err != nil {
+		return domain.Item{}, fmt.Errorf("answer on item %s: %w", id, err)
+	}
 
-	switch answer = strings.TrimSpace(answer); {
-	case choiceIndex != nil && (*choiceIndex < 0 || *choiceIndex >= len(q.Choices)):
-		return domain.Item{}, fmt.Errorf("answer on item %s: %w: choice %d of %d", id, ErrBadAnswer, *choiceIndex, len(q.Choices))
-	case choiceIndex != nil:
-		data[domain.KeyAnswer], data[domain.KeyChoiceIndex] = q.Choices[*choiceIndex], *choiceIndex
-	case answer == "" || utf8.RuneCountInString(answer) > MaxAnswerRunes:
-		return domain.Item{}, fmt.Errorf("answer on item %s: %w: 1 to %d characters", id, ErrBadAnswer, MaxAnswerRunes)
-	default:
-		data[domain.KeyAnswer] = answer
+	data, audit := map[string]any{domain.KeyAnswer: answer}, map[string]any{"length": utf8.RuneCountInString(answer)}
+	if choiceIndex != nil {
+		data[domain.KeyChoiceIndex], audit[domain.KeyChoiceIndex] = *choiceIndex, *choiceIndex
 	}
 
 	st, ok := l.Station(it.Station)
@@ -142,6 +144,7 @@ func (e *Engine) Answer(ctx context.Context, id domain.ItemID, by domain.Actor, 
 	got, err := e.store.Transition(ctx, ports.Transition{
 		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: st.ID, State: st.Arrival()}, At: now,
 		Events: []domain.Event{decision(it, domain.EventQuestionAnswered, now, by, data)},
+		Audit:  itemAudit(it, now, by, domain.AuditItemAnswered, audit),
 	})
 	if errors.Is(err, ports.ErrConflict) {
 		return domain.Item{}, fmt.Errorf("answer on item %s: %w", id, errors.Join(ErrItemChanged, err))
@@ -155,6 +158,21 @@ func (e *Engine) Answer(ctx context.Context, id domain.ItemID, by domain.Actor, 
 		slog.Int64("question", q.EventID), slog.Bool("choice", choiceIndex != nil), slog.String("by", by.Ref()))
 
 	return got, nil
+}
+
+// validAnswer is the answer to q: the text of the picked choice, or the person's own words
+// trimmed, each checked against the limits.
+func validAnswer(q domain.Question, answer string, choiceIndex *int) (string, error) {
+	switch answer = strings.TrimSpace(answer); {
+	case choiceIndex != nil && (*choiceIndex < 0 || *choiceIndex >= len(q.Choices)):
+		return "", fmt.Errorf("%w: choice %d of %d", ErrBadAnswer, *choiceIndex, len(q.Choices))
+	case choiceIndex != nil:
+		return q.Choices[*choiceIndex], nil
+	case answer == "" || utf8.RuneCountInString(answer) > MaxAnswerRunes:
+		return "", fmt.Errorf("%w: 1 to %d characters", ErrBadAnswer, MaxAnswerRunes)
+	default:
+		return answer, nil
+	}
 }
 
 // validQuestion trims a question and its choices and checks them against the limits; no choices

@@ -47,6 +47,7 @@ func TestAPI_AttentionCountsEveryDecisionOfTheOrg(t *testing.T) {
 	h.seed(t, stMerge, domain.StateWaitingHuman, t0)
 	h.seed(t, stBuild, domain.StateBlocked, t0)
 	h.seed(t, stBuild, domain.StateQueued, t0)
+	h.asked(t, "Organization", "Factory") // a question waits on a person as a decision does
 	h.pullAndon(t)
 
 	tests := []struct {
@@ -55,8 +56,8 @@ func TestAPI_AttentionCountsEveryDecisionOfTheOrg(t *testing.T) {
 	}{
 		{
 			org: "acme",
-			want: "3 waiting; " + acmeID + ": 1 waiting, 0 blocked, andon " + andonReason + " by user:local at " + t0.Format(time.RFC3339) +
-				", 0 connections; " + lineID + ": 2 waiting, 1 blocked, no andon, 0 connections",
+			want: "4 waiting; " + acmeID + ": 1 waiting, 0 blocked, andon " + andonReason + " by user:local at " + t0.Format(time.RFC3339) +
+				", 0 connections; " + lineID + ": 3 waiting, 1 blocked, no andon, 0 connections",
 		},
 		{org: "example-labs", want: "0 waiting"},
 	}

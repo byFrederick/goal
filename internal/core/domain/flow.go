@@ -66,6 +66,22 @@ func (it Item) PullRequests(l Line) []string {
 	return out
 }
 
+// NoPullRequests reports whether output says, with an explicit empty pull_requests array, that
+// there is no pull request to merge: a landing whose integration branch has no commits beyond the
+// default branch (ADR 0033). An output without the key does not say so.
+func NoPullRequests(output json.RawMessage) bool {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(output, &fields) != nil {
+		return false
+	}
+
+	var many []any
+
+	raw, ok := fields[pullRequestsKey]
+
+	return ok && json.Unmarshal(raw, &many) == nil && many != nil && len(many) == 0
+}
+
 // Summary returns what the item's outputs say was done: the summary field, trimmed, of the
 // output of the latest station on the line that has a non-blank one, or "" when none does.
 func (it Item) Summary(l Line) string {

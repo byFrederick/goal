@@ -1,6 +1,6 @@
 // Definition (D §10.1): /o/$org/f/$factory/definition/$section. The layout opens the factory's
 // draft session and draws the frame once; each section route renders its view from
-// `section-views.tsx` inside it (or LaterSection), with a skeleton until the draft (or the
+// `section-views.tsx` inside it (or LaterSection), with the app background until the draft (or the
 // running version) has loaded and an error with Try again when it can't. Without
 // definition:edit the whole editor is view only (canvas Define-View): the session changes
 // nothing, the controls only show their values, and Review and publish says who publishes.
@@ -15,6 +15,7 @@ import { holds, reasons } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { ReadOnly } from '../../ui/read-only';
 import { DraftSessionProvider, useDraft, useDraftOpen, useDraftSession, useSection } from './draft/use-draft';
+import { DraftFailed, DraftLoading } from './frame/draft-states';
 import { DefinitionFrame } from './frame/editor-frame';
 import { LaterSection } from './frame/section-shell';
 import { type SectionViewProps, sectionViews, yamlView } from './section-views';
@@ -60,26 +61,13 @@ export function SectionView({
 
   if (!ready && failed) {
     return (
-      <div
-        role="alert"
-        className="flex max-w-xl flex-col gap-3 rounded-card border border-rework-tint bg-rework-tint p-5"
-      >
-        <h2 className="m-0 text-xl font-medium text-rework-ink">The draft could not load</h2>
-        <p className="m-0 text-[15px] leading-relaxed">
-          {failed instanceof ApiError ? (failed.detail ?? failed.title) : 'goald is not answering.'}
-        </p>
-        <div>
-          <Button
-            variant="primary"
-            onClick={() => void client.invalidateQueries({ queryKey: defKeys.draft(session.org, session.factory) })}
-          >
-            Try again
-          </Button>
-        </div>
-      </div>
+      <DraftFailed
+        detail={failed instanceof ApiError ? (failed.detail ?? failed.title) : 'goald is not answering.'}
+        onRetry={() => void client.invalidateQueries({ queryKey: defKeys.draft(session.org, session.factory) })}
+      />
     );
   }
-  if (!ready) return <SectionSkeleton />;
+  if (!ready) return <DraftLoading />;
 
   const View = (search.mode === 'yaml' ? yamlView : null) ?? sectionViews[section];
   if (parseError && View !== yamlView && section !== 'versions') {
@@ -88,7 +76,7 @@ export function SectionView({
   if (session.readOnly && section === 'review' && View !== yamlView) return <ViewOnlyReview />;
   return View ? (
     <ReadOnly when={session.readOnly}>
-      <Suspense fallback={<SectionSkeleton />}>
+      <Suspense fallback={<DraftLoading />}>
         <View place={place} search={search} />
       </Suspense>
     </ReadOnly>
@@ -102,26 +90,10 @@ function ViewOnlyReview() {
   const name = useSection('basics').name ?? 'this factory';
   return (
     <div className="flex max-w-xl flex-col gap-3 rounded-card border border-line bg-card p-5">
-      <h2 data-route-focus="" tabIndex={-1} className="m-0 text-xl font-medium outline-none">
+      <h2 data-route-focus="" tabIndex={-1} className="m-0 text-heading font-control outline-none">
         Review and publish
       </h2>
-      <p className="m-0 text-[15px] leading-relaxed">{reasons.publish(name)}</p>
-    </div>
-  );
-}
-
-/** A section while the draft (or the section's code) loads. */
-function SectionSkeleton() {
-  return (
-    <div aria-busy="true" className="flex flex-col gap-4 rounded-card border border-line bg-card p-5">
-      <span className="sr-only">Loading the draft</span>
-      <div className="h-6 w-40 rounded-chip bg-panel" />
-      <div className="h-4 w-full max-w-[520px] rounded-chip bg-panel/70" />
-      <div className="grid gap-4 @[640px]:grid-cols-2">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="h-16 rounded-control bg-panel/60" />
-        ))}
-      </div>
+      <p className="m-0 text-body leading-relaxed">{reasons.publish(name)}</p>
     </div>
   );
 }
@@ -133,10 +105,10 @@ function ParseErrorState({ line }: { line: number }) {
       role="alert"
       className="flex max-w-xl flex-col gap-3 rounded-card border border-rework-tint bg-rework-tint p-5"
     >
-      <h2 data-route-focus="" tabIndex={-1} className="m-0 text-xl font-medium text-rework-ink outline-none">
+      <h2 data-route-focus="" tabIndex={-1} className="m-0 text-heading font-control text-rework-ink outline-none">
         factory.yaml doesn’t parse
       </h2>
-      <p className="m-0 text-[15px] leading-relaxed">
+      <p className="m-0 text-body leading-relaxed">
         factory.yaml has a syntax error{line > 0 ? ` on line ${line}` : ''}. Visual opens again when it parses.
       </p>
       <div>

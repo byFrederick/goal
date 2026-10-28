@@ -18,7 +18,9 @@ const reservedSlugs = new Set([
   'default',
 ]);
 
-const slugMax = 40;
+/** goald's limits (domain.CheckOrgName, CheckSlug). */
+export const orgNameMax = 80;
+export const orgSlugMax = 40;
 
 /** The address a new organization's name suggests: "Acme Two" → "acme-two". */
 export function slugFromName(name: string): string {
@@ -28,7 +30,7 @@ export function slugFromName(name: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+/, '')
-    .slice(0, slugMax)
+    .slice(0, orgSlugMax)
     .replace(/-+$/, '');
 }
 

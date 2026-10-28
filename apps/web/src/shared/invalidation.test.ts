@@ -92,9 +92,29 @@ describe('invalidationsFor an item event', () => {
       ]),
     );
     expect(stale).not.toContainEqual(keys.board(acme, sre));
+    expect(stale).not.toContainEqual(keys.webhooks(acme, sre));
+    // A created delivery makes an item, so the factory's webhooks (and their deliveries) refetch with it.
+    expect(invalidationsFor(acme, event('approved'))).toContainEqual(keys.webhooks(acme, goal));
     expect(stale).not.toContainEqual(keys.item(acme, 'goal#7'));
     expect(stale).not.toContainEqual(keys.factories(acme));
     expect(stale.filter((k) => k[1] === labs)).toEqual([]);
+  });
+
+  test.each(['tool_call', 'tool_result', 'agent_message', 'approved'])(
+    'refreshes the organization runs page on a %s event, run progress included',
+    async (kind) => {
+      const client = cache();
+      client.setQueryData(keys.runs(acme, { status: 'running' }), {});
+      client.setQueryData(keys.runs(labs, {}), {});
+      const stale = await staleAfter(client, invalidationsFor(acme, event(kind)));
+
+      expect(stale).toContainEqual(keys.runs(acme, { status: 'running' }));
+      expect(stale.filter((k) => k[1] === labs)).toEqual([]);
+    },
+  );
+  test("a milestone event re-reads the factory's activity, and a tool call does not (its feed lists no run events)", async () => {
+    expect(invalidationsFor(acme, event('moved'))).toContainEqual(keys.activity(acme, goal));
+    expect(invalidationsFor(acme, event('tool_call'))).not.toContainEqual(keys.activity(acme, goal));
   });
 
   test("never re-reads the factory's whole prefix", async () => {
@@ -245,6 +265,18 @@ describe('definitionInvalidations', () => {
   test('ignores data that is no definition event', () => {
     expect(definitionInvalidations(acme, { kind: 'draft' })).toEqual([]);
     expect(definitionInvalidations(acme, null)).toEqual([]);
+  });
+});
+
+describe('the intake', () => {
+  test('an item event and a publish of the running definition re-read the factory intake, and a draft save does not', () => {
+    expect(invalidationsFor(acme, event('approved'))).toContainEqual(keys.intake(acme, goal));
+    expect(definitionInvalidations(acme, definition({ kind: 'current', number: 9 }))).toContainEqual(
+      keys.intake(acme, goal),
+    );
+    expect(definitionInvalidations(acme, definition({ kind: 'draft', number: 2 }))).not.toContainEqual(
+      keys.intake(acme, goal),
+    );
   });
 });
 

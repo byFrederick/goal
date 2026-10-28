@@ -1,0 +1,16 @@
+✓ policy saved at revision 4
+policy at revision 4, saved 2026-10-23 09:00 UTC
+models (* the default):
+    claude-opus-5-5      Claude Opus 5.5      allowed      used by support's responder; web's backend, frontend
+  * claude-sonnet-5-5    Claude Sonnet 5.5    allowed      not used yet
+    claude-haiku-5-5     Claude Haiku 5.5     not allowed  not used yet
+denied commands:
+  Bash(git push --force:*)
+  Bash(rm -rf /:*)
+tools: write outside the item's branch off, merge pull requests review_approval, read the web ask, use credentials attached_only
+box time limit: 90 minutes
+box sizes:
+  small   1 vCPU, 2 GiB  not used yet
+  medium  2 vCPU, 4 GiB  used by support
+  large   4 vCPU, 8 GiB  used by web
+egress addresses: 203.0.113.0/24

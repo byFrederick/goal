@@ -170,6 +170,59 @@ func (q *Queries) ItemSourceTally(ctx context.Context, arg ItemSourceTallyParams
 	return items, nil
 }
 
+const lastItemSources = `-- name: LastItemSources :many
+WITH last AS (
+  SELECT source, created_at FROM work_items
+  WHERE factory_id = $1
+  ORDER BY created_at DESC, id DESC
+  LIMIT $2
+)
+SELECT coalesce(source, '')::text AS source, count(*) AS items, min(created_at)::timestamptz AS first_at,
+       max(created_at)::timestamptz AS last_at
+FROM last
+GROUP BY 1
+ORDER BY 1
+`
+
+type LastItemSourcesParams struct {
+	FactoryID uuid.UUID
+	MaxItems  int32
+}
+
+type LastItemSourcesRow struct {
+	Source  string
+	Items   int64
+	FirstAt time.Time
+	LastAt  time.Time
+}
+
+// The factory's newest items (created_at, then id) by source, with each source's first and last
+// instants.
+func (q *Queries) LastItemSources(ctx context.Context, arg LastItemSourcesParams) ([]LastItemSourcesRow, error) {
+	rows, err := q.db.Query(ctx, lastItemSources, arg.FactoryID, arg.MaxItems)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LastItemSourcesRow
+	for rows.Next() {
+		var i LastItemSourcesRow
+		if err := rows.Scan(
+			&i.Source,
+			&i.Items,
+			&i.FirstAt,
+			&i.LastAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const openItemByDedupe = `-- name: OpenItemByDedupe :one
 SELECT f.item_id::uuid AS item_id FROM trigger_firings f
 JOIN work_items w ON w.id = f.item_id
@@ -352,6 +405,46 @@ func (q *Queries) TriggerCreatedSince(ctx context.Context, arg TriggerCreatedSin
 	return count, err
 }
 
+const triggerDays = `-- name: TriggerDays :many
+SELECT trigger, (date_trunc('day', at AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')::timestamptz AS day, count(*) AS created
+FROM trigger_firings
+WHERE factory_id = $1 AND outcome = 'created' AND at >= $2
+GROUP BY 1, 2
+ORDER BY 1, 2
+`
+
+type TriggerDaysParams struct {
+	FactoryID uuid.UUID
+	Since     time.Time
+}
+
+type TriggerDaysRow struct {
+	Trigger string
+	Day     time.Time
+	Created int64
+}
+
+// The factory's firings that created an item, per trigger and UTC day.
+func (q *Queries) TriggerDays(ctx context.Context, arg TriggerDaysParams) ([]TriggerDaysRow, error) {
+	rows, err := q.db.Query(ctx, triggerDays, arg.FactoryID, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TriggerDaysRow
+	for rows.Next() {
+		var i TriggerDaysRow
+		if err := rows.Scan(&i.Trigger, &i.Day, &i.Created); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const triggerFailureStreak = `-- name: TriggerFailureStreak :one
 WITH last_created AS (
   SELECT at, id FROM trigger_firings
@@ -421,6 +514,74 @@ func (q *Queries) TriggerFiringByKey(ctx context.Context, arg TriggerFiringByKey
 		&i.At,
 	)
 	return i, err
+}
+
+const triggerFirings = `-- name: TriggerFirings :many
+SELECT f.id, f.factory_id, f.trigger, f.source, f.event_key, f.idempotency_key, f.dedupe, f.outcome, f.reason, f.item_id, f.at,
+       coalesce(w.number, 0)::bigint AS item_number,
+       EXISTS (SELECT 1 FROM item_events e WHERE e.item_id = f.item_id AND e.kind = 'merged') AS merged
+FROM trigger_firings f
+LEFT JOIN work_items w ON w.id = f.item_id
+WHERE f.factory_id = $1 AND f.trigger = $2
+ORDER BY f.at DESC, f.id DESC
+LIMIT $3
+`
+
+type TriggerFiringsParams struct {
+	FactoryID uuid.UUID
+	Trigger   string
+	MaxRows   int32
+}
+
+type TriggerFiringsRow struct {
+	ID             uuid.UUID
+	FactoryID      uuid.UUID
+	Trigger        string
+	Source         string
+	EventKey       string
+	IdempotencyKey string
+	Dedupe         string
+	Outcome        string
+	Reason         string
+	ItemID         *uuid.UUID
+	At             time.Time
+	ItemNumber     int64
+	Merged         bool
+}
+
+// The trigger's firings newest first, with their items' numbers (0 for none) and merged events.
+func (q *Queries) TriggerFirings(ctx context.Context, arg TriggerFiringsParams) ([]TriggerFiringsRow, error) {
+	rows, err := q.db.Query(ctx, triggerFirings, arg.FactoryID, arg.Trigger, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TriggerFiringsRow
+	for rows.Next() {
+		var i TriggerFiringsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.FactoryID,
+			&i.Trigger,
+			&i.Source,
+			&i.EventKey,
+			&i.IdempotencyKey,
+			&i.Dedupe,
+			&i.Outcome,
+			&i.Reason,
+			&i.ItemID,
+			&i.At,
+			&i.ItemNumber,
+			&i.Merged,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const triggerStats = `-- name: TriggerStats :many
@@ -521,6 +682,93 @@ func (q *Queries) WebhookDeliveries(ctx context.Context, arg WebhookDeliveriesPa
 			&i.Outcome,
 			&i.Reason,
 			&i.ItemID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const webhookDelivery = `-- name: WebhookDelivery :one
+SELECT id, endpoint_id, received_at, headers, body, outcome, reason, item_id FROM webhook_deliveries
+WHERE endpoint_id = $1 AND id = $2
+`
+
+type WebhookDeliveryParams struct {
+	EndpointID uuid.UUID
+	ID         uuid.UUID
+}
+
+type WebhookDeliveryRow struct {
+	ID         uuid.UUID
+	EndpointID uuid.UUID
+	ReceivedAt time.Time
+	Headers    []byte
+	Body       []byte
+	Outcome    string
+	Reason     string
+	ItemID     *uuid.UUID
+}
+
+func (q *Queries) WebhookDelivery(ctx context.Context, arg WebhookDeliveryParams) (WebhookDeliveryRow, error) {
+	row := q.db.QueryRow(ctx, webhookDelivery, arg.EndpointID, arg.ID)
+	var i WebhookDeliveryRow
+	err := row.Scan(
+		&i.ID,
+		&i.EndpointID,
+		&i.ReceivedAt,
+		&i.Headers,
+		&i.Body,
+		&i.Outcome,
+		&i.Reason,
+		&i.ItemID,
+	)
+	return i, err
+}
+
+const webhookDeliveryDays = `-- name: WebhookDeliveryDays :many
+SELECT d.endpoint_id, date_trunc('day', d.received_at, 'UTC')::timestamptz AS day,
+       count(*) FILTER (WHERE d.outcome <> 'refused') AS delivered,
+       count(*) FILTER (WHERE d.outcome = 'refused') AS refused
+FROM webhook_endpoints e
+JOIN webhook_deliveries d ON d.endpoint_id = e.id AND d.received_at >= $1
+WHERE e.factory_id = $2
+GROUP BY 1, 2
+ORDER BY 1, 2
+`
+
+type WebhookDeliveryDaysParams struct {
+	Since     time.Time
+	FactoryID uuid.UUID
+}
+
+type WebhookDeliveryDaysRow struct {
+	EndpointID uuid.UUID
+	Day        time.Time
+	Delivered  int64
+	Refused    int64
+}
+
+// The factory's endpoints' deliveries since the instant, per endpoint and UTC day; each endpoint's
+// rows come from webhook_deliveries_endpoint_idx (endpoint_id, received_at).
+func (q *Queries) WebhookDeliveryDays(ctx context.Context, arg WebhookDeliveryDaysParams) ([]WebhookDeliveryDaysRow, error) {
+	rows, err := q.db.Query(ctx, webhookDeliveryDays, arg.Since, arg.FactoryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WebhookDeliveryDaysRow
+	for rows.Next() {
+		var i WebhookDeliveryDaysRow
+		if err := rows.Scan(
+			&i.EndpointID,
+			&i.Day,
+			&i.Delivered,
+			&i.Refused,
 		); err != nil {
 			return nil, err
 		}

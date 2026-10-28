@@ -7,7 +7,7 @@ description: Turn a change into a pull request on the item's branch, with work i
 
 One item, one branch, one small pull request (AGENTS.md, "Changes"). What a change must also touch, and the tasks it must pass, are in the [change map](../../../docs/engineering/change-map.md). The checks the pre-push hook and CI run are AGENTS.md's "Done means verified".
 
-1. **Work on the item's branch**, `goal/<number>-<slug>`, made from `main`. On a rework, or a run after one that failed, start from what is already pushed:
+1. **Work on the item's branch**, `goal/<number>-<slug>`, made from the base your workspace note names: `main`, or an assembly's integration branch for a part of one. On a rework, or a run after one that failed, start from what is already pushed:
    ```sh
    git fetch origin && git log --oneline origin/main..HEAD
    ```
@@ -20,7 +20,7 @@ One item, one branch, one small pull request (AGENTS.md, "Changes"). What a chan
    Never push to `main` or to another branch, and never with `--force`. Never push with `--no-verify` unless the pull request says that you did and why.
 4. **Open a draft pull request on the first push:**
    ```sh
-   gh pr create --draft --base main --title "<the item's title>" --body-file <file>
+   gh pr create --draft --base <the base your workspace note names> --title "<the item's title>" --body-file <file>
    ```
    After that, keep the body current with `gh pr edit <number> --body-file <file>`. The body holds:
    - every acceptance criterion, whether it is met and its evidence: the test, the command and its result, or the file and line that shows it;

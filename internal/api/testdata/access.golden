@@ -78,6 +78,32 @@ addPlatformAdmin     pat-demoted      install: 403 forbidden
 addPlatformAdmin     pat-removed      install: 401 unauthenticated
 addPlatformAdmin     pat-platform     install: 403 forbidden
 addPlatformAdmin     pat-deleted-org  install: 401 unauthenticated
+answerItem           anonymous        401 unauthenticated      401 unauthenticated
+answerItem           owner            200                      404 org-not-found
+answerItem           admin            200                      404 org-not-found
+answerItem           viewer           403 forbidden            404 org-not-found
+answerItem           approver         200                      404 org-not-found
+answerItem           editor           200                      404 org-not-found
+answerItem           member-no-roles  404 item-not-found       404 org-not-found
+answerItem           other-org-owner  404 org-not-found        200
+answerItem           platform-admin   404 org-not-found        404 org-not-found
+answerItem           stale-owner      200                      404 org-not-found
+answerItem           key-scoped       200                      404 org-not-found
+answerItem           key-restricted   404 item-not-found       404 org-not-found
+answerItem           key-other-org    404 org-not-found        200
+answerItem           key-expired      401 unauthenticated      401 unauthenticated
+answerItem           key-revoked      401 unauthenticated      401 unauthenticated
+answerItem           bearer-owner     200                      404 org-not-found
+answerItem           pat-approver     403 forbidden            404 org-not-found
+answerItem           pat-owner        200                      404 org-not-found
+answerItem           pat-viewer       403 forbidden            404 org-not-found
+answerItem           pat-other-org    404 org-not-found        200
+answerItem           pat-expired      401 unauthenticated      401 unauthenticated
+answerItem           pat-revoked      401 unauthenticated      401 unauthenticated
+answerItem           pat-demoted      404 item-not-found       404 org-not-found
+answerItem           pat-removed      401 unauthenticated      401 unauthenticated
+answerItem           pat-platform     200                      404 org-not-found
+answerItem           pat-deleted-org  401 unauthenticated      401 unauthenticated
 approveItem          anonymous        401 unauthenticated      401 unauthenticated
 approveItem          owner            200                      404 org-not-found
 approveItem          admin            200                      404 org-not-found
@@ -416,6 +442,32 @@ createPersonalToken  pat-demoted      403 forbidden            404 org-not-found
 createPersonalToken  pat-removed      401 unauthenticated      401 unauthenticated
 createPersonalToken  pat-platform     403 forbidden            404 org-not-found
 createPersonalToken  pat-deleted-org  401 unauthenticated      401 unauthenticated
+createWebhookEndpoint anonymous        401 unauthenticated      401 unauthenticated
+createWebhookEndpoint owner            200                      404 org-not-found
+createWebhookEndpoint admin            200                      404 org-not-found
+createWebhookEndpoint viewer           403 forbidden            404 org-not-found
+createWebhookEndpoint approver         403 forbidden            404 org-not-found
+createWebhookEndpoint editor           200                      404 org-not-found
+createWebhookEndpoint member-no-roles  404 factory-not-found    404 org-not-found
+createWebhookEndpoint other-org-owner  404 org-not-found        200
+createWebhookEndpoint platform-admin   404 org-not-found        404 org-not-found
+createWebhookEndpoint stale-owner      403 reauth-required      404 org-not-found
+createWebhookEndpoint key-scoped       403 forbidden            404 org-not-found
+createWebhookEndpoint key-restricted   404 factory-not-found    404 org-not-found
+createWebhookEndpoint key-other-org    404 org-not-found        403 forbidden
+createWebhookEndpoint key-expired      401 unauthenticated      401 unauthenticated
+createWebhookEndpoint key-revoked      401 unauthenticated      401 unauthenticated
+createWebhookEndpoint bearer-owner     200                      404 org-not-found
+createWebhookEndpoint pat-approver     403 forbidden            404 org-not-found
+createWebhookEndpoint pat-owner        403 forbidden            404 org-not-found
+createWebhookEndpoint pat-viewer       403 forbidden            404 org-not-found
+createWebhookEndpoint pat-other-org    404 org-not-found        403 forbidden
+createWebhookEndpoint pat-expired      401 unauthenticated      401 unauthenticated
+createWebhookEndpoint pat-revoked      401 unauthenticated      401 unauthenticated
+createWebhookEndpoint pat-demoted      403 forbidden            404 org-not-found
+createWebhookEndpoint pat-removed      401 unauthenticated      401 unauthenticated
+createWebhookEndpoint pat-platform     403 forbidden            404 org-not-found
+createWebhookEndpoint pat-deleted-org  401 unauthenticated      401 unauthenticated
 deleteConnection     anonymous        401 unauthenticated      401 unauthenticated
 deleteConnection     owner            200                      404 org-not-found
 deleteConnection     admin            200                      404 org-not-found
@@ -624,6 +676,32 @@ deleteOrg            pat-demoted      403 forbidden            404 org-not-found
 deleteOrg            pat-removed      401 unauthenticated      401 unauthenticated
 deleteOrg            pat-platform     403 forbidden            404 org-not-found
 deleteOrg            pat-deleted-org  401 unauthenticated      401 unauthenticated
+deleteWebhookEndpoint anonymous        401 unauthenticated      401 unauthenticated
+deleteWebhookEndpoint owner            200                      404 org-not-found
+deleteWebhookEndpoint admin            200                      404 org-not-found
+deleteWebhookEndpoint viewer           403 forbidden            404 org-not-found
+deleteWebhookEndpoint approver         403 forbidden            404 org-not-found
+deleteWebhookEndpoint editor           200                      404 org-not-found
+deleteWebhookEndpoint member-no-roles  404 factory-not-found    404 org-not-found
+deleteWebhookEndpoint other-org-owner  404 org-not-found        200
+deleteWebhookEndpoint platform-admin   404 org-not-found        404 org-not-found
+deleteWebhookEndpoint stale-owner      403 reauth-required      404 org-not-found
+deleteWebhookEndpoint key-scoped       403 forbidden            404 org-not-found
+deleteWebhookEndpoint key-restricted   404 factory-not-found    404 org-not-found
+deleteWebhookEndpoint key-other-org    404 org-not-found        403 forbidden
+deleteWebhookEndpoint key-expired      401 unauthenticated      401 unauthenticated
+deleteWebhookEndpoint key-revoked      401 unauthenticated      401 unauthenticated
+deleteWebhookEndpoint bearer-owner     200                      404 org-not-found
+deleteWebhookEndpoint pat-approver     403 forbidden            404 org-not-found
+deleteWebhookEndpoint pat-owner        403 forbidden            404 org-not-found
+deleteWebhookEndpoint pat-viewer       403 forbidden            404 org-not-found
+deleteWebhookEndpoint pat-other-org    404 org-not-found        403 forbidden
+deleteWebhookEndpoint pat-expired      401 unauthenticated      401 unauthenticated
+deleteWebhookEndpoint pat-revoked      401 unauthenticated      401 unauthenticated
+deleteWebhookEndpoint pat-demoted      403 forbidden            404 org-not-found
+deleteWebhookEndpoint pat-removed      401 unauthenticated      401 unauthenticated
+deleteWebhookEndpoint pat-platform     403 forbidden            404 org-not-found
+deleteWebhookEndpoint pat-deleted-org  401 unauthenticated      401 unauthenticated
 discardDraft         anonymous        401 unauthenticated      401 unauthenticated
 discardDraft         owner            200                      404 org-not-found
 discardDraft         admin            200                      404 org-not-found
@@ -1144,6 +1222,58 @@ getInbox             pat-demoted      404 factory-not-found    404 org-not-found
 getInbox             pat-removed      401 unauthenticated      401 unauthenticated
 getInbox             pat-platform     200                      404 org-not-found
 getInbox             pat-deleted-org  401 unauthenticated      401 unauthenticated
+getIntake            anonymous        401 unauthenticated      401 unauthenticated
+getIntake            owner            200                      404 org-not-found
+getIntake            admin            200                      404 org-not-found
+getIntake            viewer           200                      404 org-not-found
+getIntake            approver         200                      404 org-not-found
+getIntake            editor           200                      404 org-not-found
+getIntake            member-no-roles  404 factory-not-found    404 org-not-found
+getIntake            other-org-owner  404 org-not-found        200
+getIntake            platform-admin   404 org-not-found        404 org-not-found
+getIntake            stale-owner      200                      404 org-not-found
+getIntake            key-scoped       403 forbidden            404 org-not-found
+getIntake            key-restricted   404 factory-not-found    404 org-not-found
+getIntake            key-other-org    404 org-not-found        200
+getIntake            key-expired      401 unauthenticated      401 unauthenticated
+getIntake            key-revoked      401 unauthenticated      401 unauthenticated
+getIntake            bearer-owner     200                      404 org-not-found
+getIntake            pat-approver     403 forbidden            404 org-not-found
+getIntake            pat-owner        200                      404 org-not-found
+getIntake            pat-viewer       200                      404 org-not-found
+getIntake            pat-other-org    404 org-not-found        200
+getIntake            pat-expired      401 unauthenticated      401 unauthenticated
+getIntake            pat-revoked      401 unauthenticated      401 unauthenticated
+getIntake            pat-demoted      404 factory-not-found    404 org-not-found
+getIntake            pat-removed      401 unauthenticated      401 unauthenticated
+getIntake            pat-platform     200                      404 org-not-found
+getIntake            pat-deleted-org  401 unauthenticated      401 unauthenticated
+getIntakeTrigger     anonymous        401 unauthenticated      401 unauthenticated
+getIntakeTrigger     owner            200                      404 org-not-found
+getIntakeTrigger     admin            200                      404 org-not-found
+getIntakeTrigger     viewer           200                      404 org-not-found
+getIntakeTrigger     approver         200                      404 org-not-found
+getIntakeTrigger     editor           200                      404 org-not-found
+getIntakeTrigger     member-no-roles  404 factory-not-found    404 org-not-found
+getIntakeTrigger     other-org-owner  404 org-not-found        200
+getIntakeTrigger     platform-admin   404 org-not-found        404 org-not-found
+getIntakeTrigger     stale-owner      200                      404 org-not-found
+getIntakeTrigger     key-scoped       403 forbidden            404 org-not-found
+getIntakeTrigger     key-restricted   404 factory-not-found    404 org-not-found
+getIntakeTrigger     key-other-org    404 org-not-found        200
+getIntakeTrigger     key-expired      401 unauthenticated      401 unauthenticated
+getIntakeTrigger     key-revoked      401 unauthenticated      401 unauthenticated
+getIntakeTrigger     bearer-owner     200                      404 org-not-found
+getIntakeTrigger     pat-approver     403 forbidden            404 org-not-found
+getIntakeTrigger     pat-owner        200                      404 org-not-found
+getIntakeTrigger     pat-viewer       200                      404 org-not-found
+getIntakeTrigger     pat-other-org    404 org-not-found        200
+getIntakeTrigger     pat-expired      401 unauthenticated      401 unauthenticated
+getIntakeTrigger     pat-revoked      401 unauthenticated      401 unauthenticated
+getIntakeTrigger     pat-demoted      404 factory-not-found    404 org-not-found
+getIntakeTrigger     pat-removed      401 unauthenticated      401 unauthenticated
+getIntakeTrigger     pat-platform     200                      404 org-not-found
+getIntakeTrigger     pat-deleted-org  401 unauthenticated      401 unauthenticated
 getItem              anonymous        401 unauthenticated      401 unauthenticated
 getItem              owner            200                      404 org-not-found
 getItem              admin            200                      404 org-not-found
@@ -1404,6 +1534,32 @@ getOrgAttention      pat-demoted      200                      404 org-not-found
 getOrgAttention      pat-removed      401 unauthenticated      401 unauthenticated
 getOrgAttention      pat-platform     200                      404 org-not-found
 getOrgAttention      pat-deleted-org  401 unauthenticated      401 unauthenticated
+getOrgPolicy         anonymous        401 unauthenticated      401 unauthenticated
+getOrgPolicy         owner            200                      404 org-not-found
+getOrgPolicy         admin            200                      404 org-not-found
+getOrgPolicy         viewer           200                      404 org-not-found
+getOrgPolicy         approver         200                      404 org-not-found
+getOrgPolicy         editor           200                      404 org-not-found
+getOrgPolicy         member-no-roles  200                      404 org-not-found
+getOrgPolicy         other-org-owner  404 org-not-found        200
+getOrgPolicy         platform-admin   404 org-not-found        404 org-not-found
+getOrgPolicy         stale-owner      200                      404 org-not-found
+getOrgPolicy         key-scoped       200                      404 org-not-found
+getOrgPolicy         key-restricted   200                      404 org-not-found
+getOrgPolicy         key-other-org    404 org-not-found        200
+getOrgPolicy         key-expired      401 unauthenticated      401 unauthenticated
+getOrgPolicy         key-revoked      401 unauthenticated      401 unauthenticated
+getOrgPolicy         bearer-owner     200                      404 org-not-found
+getOrgPolicy         pat-approver     403 forbidden            404 org-not-found
+getOrgPolicy         pat-owner        200                      404 org-not-found
+getOrgPolicy         pat-viewer       200                      404 org-not-found
+getOrgPolicy         pat-other-org    404 org-not-found        200
+getOrgPolicy         pat-expired      401 unauthenticated      401 unauthenticated
+getOrgPolicy         pat-revoked      401 unauthenticated      401 unauthenticated
+getOrgPolicy         pat-demoted      200                      404 org-not-found
+getOrgPolicy         pat-removed      401 unauthenticated      401 unauthenticated
+getOrgPolicy         pat-platform     200                      404 org-not-found
+getOrgPolicy         pat-deleted-org  401 unauthenticated      401 unauthenticated
 getOrgSettings       anonymous        401 unauthenticated      401 unauthenticated
 getOrgSettings       owner            200                      404 org-not-found
 getOrgSettings       admin            200                      404 org-not-found
@@ -1664,6 +1820,32 @@ getVersionModel      pat-demoted      404 factory-not-found    404 org-not-found
 getVersionModel      pat-removed      401 unauthenticated      401 unauthenticated
 getVersionModel      pat-platform     200                      404 org-not-found
 getVersionModel      pat-deleted-org  401 unauthenticated      401 unauthenticated
+getWebhookDelivery   anonymous        401 unauthenticated      401 unauthenticated
+getWebhookDelivery   owner            200                      404 org-not-found
+getWebhookDelivery   admin            200                      404 org-not-found
+getWebhookDelivery   viewer           200                      404 org-not-found
+getWebhookDelivery   approver         200                      404 org-not-found
+getWebhookDelivery   editor           200                      404 org-not-found
+getWebhookDelivery   member-no-roles  404 factory-not-found    404 org-not-found
+getWebhookDelivery   other-org-owner  404 org-not-found        200
+getWebhookDelivery   platform-admin   404 org-not-found        404 org-not-found
+getWebhookDelivery   stale-owner      200                      404 org-not-found
+getWebhookDelivery   key-scoped       200                      404 org-not-found
+getWebhookDelivery   key-restricted   404 factory-not-found    404 org-not-found
+getWebhookDelivery   key-other-org    404 org-not-found        200
+getWebhookDelivery   key-expired      401 unauthenticated      401 unauthenticated
+getWebhookDelivery   key-revoked      401 unauthenticated      401 unauthenticated
+getWebhookDelivery   bearer-owner     200                      404 org-not-found
+getWebhookDelivery   pat-approver     200                      404 org-not-found
+getWebhookDelivery   pat-owner        200                      404 org-not-found
+getWebhookDelivery   pat-viewer       200                      404 org-not-found
+getWebhookDelivery   pat-other-org    404 org-not-found        200
+getWebhookDelivery   pat-expired      401 unauthenticated      401 unauthenticated
+getWebhookDelivery   pat-revoked      401 unauthenticated      401 unauthenticated
+getWebhookDelivery   pat-demoted      404 factory-not-found    404 org-not-found
+getWebhookDelivery   pat-removed      401 unauthenticated      401 unauthenticated
+getWebhookDelivery   pat-platform     200                      404 org-not-found
+getWebhookDelivery   pat-deleted-org  401 unauthenticated      401 unauthenticated
 getWeeklyThroughput  anonymous        401 unauthenticated      401 unauthenticated
 getWeeklyThroughput  owner            200                      404 org-not-found
 getWeeklyThroughput  admin            200                      404 org-not-found
@@ -2496,6 +2678,58 @@ listVersions         pat-demoted      404 factory-not-found    404 org-not-found
 listVersions         pat-removed      401 unauthenticated      401 unauthenticated
 listVersions         pat-platform     200                      404 org-not-found
 listVersions         pat-deleted-org  401 unauthenticated      401 unauthenticated
+listWebhookDeliveries anonymous        401 unauthenticated      401 unauthenticated
+listWebhookDeliveries owner            200                      404 org-not-found
+listWebhookDeliveries admin            200                      404 org-not-found
+listWebhookDeliveries viewer           200                      404 org-not-found
+listWebhookDeliveries approver         200                      404 org-not-found
+listWebhookDeliveries editor           200                      404 org-not-found
+listWebhookDeliveries member-no-roles  404 factory-not-found    404 org-not-found
+listWebhookDeliveries other-org-owner  404 org-not-found        200
+listWebhookDeliveries platform-admin   404 org-not-found        404 org-not-found
+listWebhookDeliveries stale-owner      200                      404 org-not-found
+listWebhookDeliveries key-scoped       200                      404 org-not-found
+listWebhookDeliveries key-restricted   404 factory-not-found    404 org-not-found
+listWebhookDeliveries key-other-org    404 org-not-found        200
+listWebhookDeliveries key-expired      401 unauthenticated      401 unauthenticated
+listWebhookDeliveries key-revoked      401 unauthenticated      401 unauthenticated
+listWebhookDeliveries bearer-owner     200                      404 org-not-found
+listWebhookDeliveries pat-approver     200                      404 org-not-found
+listWebhookDeliveries pat-owner        200                      404 org-not-found
+listWebhookDeliveries pat-viewer       200                      404 org-not-found
+listWebhookDeliveries pat-other-org    404 org-not-found        200
+listWebhookDeliveries pat-expired      401 unauthenticated      401 unauthenticated
+listWebhookDeliveries pat-revoked      401 unauthenticated      401 unauthenticated
+listWebhookDeliveries pat-demoted      404 factory-not-found    404 org-not-found
+listWebhookDeliveries pat-removed      401 unauthenticated      401 unauthenticated
+listWebhookDeliveries pat-platform     200                      404 org-not-found
+listWebhookDeliveries pat-deleted-org  401 unauthenticated      401 unauthenticated
+listWebhookEndpoints anonymous        401 unauthenticated      401 unauthenticated
+listWebhookEndpoints owner            200                      404 org-not-found
+listWebhookEndpoints admin            200                      404 org-not-found
+listWebhookEndpoints viewer           200                      404 org-not-found
+listWebhookEndpoints approver         200                      404 org-not-found
+listWebhookEndpoints editor           200                      404 org-not-found
+listWebhookEndpoints member-no-roles  404 factory-not-found    404 org-not-found
+listWebhookEndpoints other-org-owner  404 org-not-found        200
+listWebhookEndpoints platform-admin   404 org-not-found        404 org-not-found
+listWebhookEndpoints stale-owner      200                      404 org-not-found
+listWebhookEndpoints key-scoped       200                      404 org-not-found
+listWebhookEndpoints key-restricted   404 factory-not-found    404 org-not-found
+listWebhookEndpoints key-other-org    404 org-not-found        200
+listWebhookEndpoints key-expired      401 unauthenticated      401 unauthenticated
+listWebhookEndpoints key-revoked      401 unauthenticated      401 unauthenticated
+listWebhookEndpoints bearer-owner     200                      404 org-not-found
+listWebhookEndpoints pat-approver     200                      404 org-not-found
+listWebhookEndpoints pat-owner        200                      404 org-not-found
+listWebhookEndpoints pat-viewer       200                      404 org-not-found
+listWebhookEndpoints pat-other-org    404 org-not-found        200
+listWebhookEndpoints pat-expired      401 unauthenticated      401 unauthenticated
+listWebhookEndpoints pat-revoked      401 unauthenticated      401 unauthenticated
+listWebhookEndpoints pat-demoted      404 factory-not-found    404 org-not-found
+listWebhookEndpoints pat-removed      401 unauthenticated      401 unauthenticated
+listWebhookEndpoints pat-platform     200                      404 org-not-found
+listWebhookEndpoints pat-deleted-org  401 unauthenticated      401 unauthenticated
 mergeItem            anonymous        401 unauthenticated      401 unauthenticated
 mergeItem            owner            200                      404 org-not-found
 mergeItem            admin            200                      404 org-not-found
@@ -2808,6 +3042,32 @@ putDraftFile         pat-demoted      404 factory-not-found    404 org-not-found
 putDraftFile         pat-removed      401 unauthenticated      401 unauthenticated
 putDraftFile         pat-platform     200                      404 org-not-found
 putDraftFile         pat-deleted-org  401 unauthenticated      401 unauthenticated
+putOrgPolicy         anonymous        401 unauthenticated      401 unauthenticated
+putOrgPolicy         owner            200                      404 org-not-found
+putOrgPolicy         admin            200                      404 org-not-found
+putOrgPolicy         viewer           403 forbidden            404 org-not-found
+putOrgPolicy         approver         403 forbidden            404 org-not-found
+putOrgPolicy         editor           403 forbidden            404 org-not-found
+putOrgPolicy         member-no-roles  403 forbidden            404 org-not-found
+putOrgPolicy         other-org-owner  404 org-not-found        200
+putOrgPolicy         platform-admin   404 org-not-found        404 org-not-found
+putOrgPolicy         stale-owner      200                      404 org-not-found
+putOrgPolicy         key-scoped       403 forbidden            404 org-not-found
+putOrgPolicy         key-restricted   403 forbidden            404 org-not-found
+putOrgPolicy         key-other-org    404 org-not-found        403 forbidden
+putOrgPolicy         key-expired      401 unauthenticated      401 unauthenticated
+putOrgPolicy         key-revoked      401 unauthenticated      401 unauthenticated
+putOrgPolicy         bearer-owner     200                      404 org-not-found
+putOrgPolicy         pat-approver     403 forbidden            404 org-not-found
+putOrgPolicy         pat-owner        403 forbidden            404 org-not-found
+putOrgPolicy         pat-viewer       403 forbidden            404 org-not-found
+putOrgPolicy         pat-other-org    404 org-not-found        403 forbidden
+putOrgPolicy         pat-expired      401 unauthenticated      401 unauthenticated
+putOrgPolicy         pat-revoked      401 unauthenticated      401 unauthenticated
+putOrgPolicy         pat-demoted      403 forbidden            404 org-not-found
+putOrgPolicy         pat-removed      401 unauthenticated      401 unauthenticated
+putOrgPolicy         pat-platform     403 forbidden            404 org-not-found
+putOrgPolicy         pat-deleted-org  401 unauthenticated      401 unauthenticated
 rejectItem           anonymous        401 unauthenticated      401 unauthenticated
 rejectItem           owner            200                      404 org-not-found
 rejectItem           admin            200                      404 org-not-found
@@ -3120,6 +3380,32 @@ revokePersonalToken  pat-demoted      403 forbidden            404 org-not-found
 revokePersonalToken  pat-removed      401 unauthenticated      401 unauthenticated
 revokePersonalToken  pat-platform     403 forbidden            404 org-not-found
 revokePersonalToken  pat-deleted-org  401 unauthenticated      401 unauthenticated
+rotateWebhookSecret  anonymous        401 unauthenticated      401 unauthenticated
+rotateWebhookSecret  owner            200                      404 org-not-found
+rotateWebhookSecret  admin            200                      404 org-not-found
+rotateWebhookSecret  viewer           403 forbidden            404 org-not-found
+rotateWebhookSecret  approver         403 forbidden            404 org-not-found
+rotateWebhookSecret  editor           200                      404 org-not-found
+rotateWebhookSecret  member-no-roles  404 factory-not-found    404 org-not-found
+rotateWebhookSecret  other-org-owner  404 org-not-found        200
+rotateWebhookSecret  platform-admin   404 org-not-found        404 org-not-found
+rotateWebhookSecret  stale-owner      403 reauth-required      404 org-not-found
+rotateWebhookSecret  key-scoped       403 forbidden            404 org-not-found
+rotateWebhookSecret  key-restricted   404 factory-not-found    404 org-not-found
+rotateWebhookSecret  key-other-org    404 org-not-found        403 forbidden
+rotateWebhookSecret  key-expired      401 unauthenticated      401 unauthenticated
+rotateWebhookSecret  key-revoked      401 unauthenticated      401 unauthenticated
+rotateWebhookSecret  bearer-owner     200                      404 org-not-found
+rotateWebhookSecret  pat-approver     403 forbidden            404 org-not-found
+rotateWebhookSecret  pat-owner        403 forbidden            404 org-not-found
+rotateWebhookSecret  pat-viewer       403 forbidden            404 org-not-found
+rotateWebhookSecret  pat-other-org    404 org-not-found        403 forbidden
+rotateWebhookSecret  pat-expired      401 unauthenticated      401 unauthenticated
+rotateWebhookSecret  pat-revoked      401 unauthenticated      401 unauthenticated
+rotateWebhookSecret  pat-demoted      403 forbidden            404 org-not-found
+rotateWebhookSecret  pat-removed      401 unauthenticated      401 unauthenticated
+rotateWebhookSecret  pat-platform     403 forbidden            404 org-not-found
+rotateWebhookSecret  pat-deleted-org  401 unauthenticated      401 unauthenticated
 saveDraftSection     anonymous        401 unauthenticated      401 unauthenticated
 saveDraftSection     owner            200                      404 org-not-found
 saveDraftSection     admin            200                      404 org-not-found

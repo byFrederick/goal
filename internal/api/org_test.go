@@ -233,6 +233,8 @@ type probe struct {
 const (
 	submitFix  = `{"title":"t","type":"fix"}`
 	noDocument = "00000000-0000-7000-8000-fffffffffffd"
+	// probeHooks are acme's webhook endpoints.
+	probeHooks = "/v1/orgs/acme/factories/acme/webhooks"
 )
 
 var probes = map[string]probe{
@@ -258,6 +260,8 @@ var probes = map[string]probe{
 	"removeFactoryRole":   {method: http.MethodDelete, path: "/v1/orgs/acme/members/x/factory-roles/acme", org: testOrg, factory: acmeID},
 	"transferOwnership":   {method: http.MethodPost, path: "/v1/orgs/acme/transfer", body: `{"to":"x","confirm":"nope"}`, org: testOrg},
 	"updateOrgSettings":   {method: http.MethodPatch, path: "/v1/orgs/acme/settings", body: `{"mark":"AC"}`, org: testOrg},
+	"getOrgPolicy":        {method: http.MethodGet, path: "/v1/orgs/acme/policy", org: testOrg},
+	"putOrgPolicy":        {method: http.MethodPut, path: "/v1/orgs/acme/policy", body: `{}`, org: testOrg, header: staleMatch},
 	"listAudit":           {method: http.MethodGet, path: "/v1/orgs/acme/audit?factory=acme", org: testOrg, factory: acmeID},
 	"listFactories":       {method: http.MethodGet, path: "/v1/orgs/acme/factories", org: testOrg},
 	"getOrgAttention":     {method: http.MethodGet, path: "/v1/orgs/acme/attention", org: testOrg},
@@ -275,6 +279,8 @@ var probes = map[string]probe{
 	"getLeadTimeBridge":   {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/metrics/lead-time", org: testOrg, factory: acmeID},
 	"getWeeklyThroughput": {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/metrics/weekly", org: testOrg, factory: acmeID},
 	"getTouchMetrics":     {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/metrics/touches", org: testOrg, factory: acmeID},
+	"getIntake":           {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/intake", org: testOrg, factory: acmeID},
+	"getIntakeTrigger":    {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/intake/triggers/nightly-audit", org: testOrg, factory: acmeID},
 	"getOrgTouchMetrics":  {method: http.MethodGet, path: "/v1/orgs/acme/metrics/touches", org: testOrg},
 	"setTouchReason": {
 		method: http.MethodPut, path: "/v1/orgs/acme/items/acme%231/touches/1/reason", body: `{"reason":"other"}`, org: testOrg, factory: acmeID,
@@ -285,6 +291,7 @@ var probes = map[string]probe{
 	"listItemParts":   {method: http.MethodGet, path: "/v1/orgs/acme/items/acme%231/parts", org: testOrg, factory: acmeID},
 	"addItemPart":     {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/parts", body: `{"title":"a","brief":"b"}`, org: testOrg, factory: acmeID},
 	"approveItem":     {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/approve", org: testOrg, factory: acmeID},
+	"answerItem":      {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/answer", body: `{"choice":0}`, org: testOrg, factory: acmeID},
 	"rejectItem":      {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/reject", body: `{"reason":"no"}`, org: testOrg, factory: acmeID},
 	"retryItem":       {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/retry", org: testOrg, factory: acmeID},
 	"moveItem":        {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/move", body: `{"to":"approve"}`, org: testOrg, factory: acmeID},
@@ -334,6 +341,16 @@ var probes = map[string]probe{
 	"deleteCredential":  {method: http.MethodDelete, path: "/v1/orgs/acme/credentials/acme-token", org: testOrg},
 	"importCredentials": {method: http.MethodPost, path: "/v1/orgs/acme/credentials/import", body: `{"format":"env","text":"A_B=c","dry_run":true}`, org: testOrg},
 
+	"listWebhookEndpoints": {method: http.MethodGet, path: probeHooks, org: testOrg, factory: acmeID},
+	"createWebhookEndpoint": {
+		method: http.MethodPost, path: probeHooks, body: `{"name":"ci-hooks","kind":"generic"}`, org: testOrg, factory: acmeID,
+	},
+	"rotateWebhookSecret":   {method: http.MethodPost, path: probeHooks + "/" + noDocument + "/rotate", org: testOrg, factory: acmeID},
+	"deleteWebhookEndpoint": {method: http.MethodDelete, path: probeHooks + "/" + noDocument, org: testOrg, factory: acmeID},
+	"listWebhookDeliveries": {method: http.MethodGet, path: probeHooks + "/" + noDocument + "/deliveries", org: testOrg, factory: acmeID},
+	"getWebhookDelivery": {
+		method: http.MethodGet, path: probeHooks + "/" + noDocument + "/deliveries/" + noDocument, org: testOrg, factory: acmeID,
+	},
 	"listKnowledgeSources": {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/sources?factory=acme", org: testOrg, factory: acmeID},
 	"createKnowledgeSource": {
 		method: http.MethodPost, path: "/v1/orgs/acme/knowledge/sources", org: testOrg, body: `{"name":"notes","title":"Notes","kind":"upload"}`,

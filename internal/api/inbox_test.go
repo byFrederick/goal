@@ -34,10 +34,10 @@ func (h *harness) inbox(t *testing.T, query string) gen.Inbox {
 	return decode[gen.Inbox](t, h.request(t, http.MethodGet, "/v1/orgs/acme/inbox"+query, "", nil), http.StatusOK)
 }
 
-// inboxItems seeds one item of each kind of the line factory: a decision with a brief, a blocked
-// item, a paused one and an expedite one.
+// inboxItems seeds one item of each kind of the line factory: a decision with a brief, a question,
+// a blocked item, a paused one and an expedite one.
 type inboxItems struct {
-	decision, blocked, paused, expedite domain.Item
+	decision, question, blocked, paused, expedite domain.Item
 }
 
 func (h *harness) seedInboxItems(t *testing.T) inboxItems {
@@ -50,6 +50,7 @@ func (h *harness) seedInboxItems(t *testing.T) inboxItems {
 			tr.OutputStation, tr.Output = stBuild, json.RawMessage(`{"summary": "Adds the flag.", "risk": "Low",
 				"pull_request": "https://github.com/acme/app/pull/3", "tests": 12}`)
 		})
+	s.question = h.asked(t, "Organization", "Factory")
 	s.blocked = h.seed(t, stBuild, domain.StateBlocked, t0.Add(-2*time.Hour))
 	h.blockedBy(t, s.blocked, domain.EventBlocked, "checks failed")
 	s.paused = h.seed(t, stBuild, domain.StateBlocked, t0.Add(-time.Hour))
@@ -88,7 +89,7 @@ func TestAPI_InboxEntriesOfEveryKind(t *testing.T) {
 		kinds = append(kinds, string(e.Kind)+" "+e.Factory.Name)
 	}
 
-	want := []string{"decision line", "andon acme", "rework_warning review", "blocked line", "blocked line", "expedite line"}
+	want := []string{"decision line", "question line", "andon acme", "rework_warning review", "blocked line", "blocked line", "expedite line"}
 	if !reflect.DeepEqual(kinds, want) {
 		t.Fatalf("entries = %v; want %v", kinds, want)
 	}
@@ -127,6 +128,8 @@ func checkItemEntries(t *testing.T, got gen.Inbox, seeded inboxItems) {
 		t.Errorf("decision brief = %+v; want %+v", got, brief)
 	}
 
+	checkQuestionEntry(t, entryOf(got, seeded.question.ID), seeded.question)
+
 	if b := entryOf(got, seeded.blocked.ID).Blocked; b == nil || deref(b.Reason) != "checks failed" || b.Paused {
 		t.Errorf("blocked entry = %+v; want its failure", b)
 	}
@@ -137,6 +140,16 @@ func checkItemEntries(t *testing.T, got gen.Inbox, seeded inboxItems) {
 
 	if e := entryOf(got, seeded.expedite.ID); e.Kind != gen.InboxEntryKindExpedite || !e.Since.Equal(seeded.expedite.CreatedAt) {
 		t.Errorf("expedite entry = %+v; want the hotfix since it was created", e)
+	}
+}
+
+// checkQuestionEntry checks the entry of an item whose agent asked: its question, without a brief.
+func checkQuestionEntry(t *testing.T, e gen.InboxEntry, it domain.Item) {
+	t.Helper()
+
+	if e.Kind != gen.InboxEntryKindQuestion || e.Id != "question:"+string(it.ID) || e.Question == nil ||
+		e.Question.Text != question || e.Question.Agent != agBackend || e.Approval != nil || e.Action != nil {
+		t.Errorf("question entry = %+v; want the open question without a brief", e)
 	}
 }
 
@@ -154,7 +167,7 @@ func checkLineEntries(t *testing.T, got gen.Inbox) {
 			if e.Rework == nil || !reflect.DeepEqual(*e.Rework, want) {
 				t.Errorf("rework warning = %+v; want %+v", e.Rework, want)
 			}
-		case gen.InboxEntryKindDecision, gen.InboxEntryKindBlocked, gen.InboxEntryKindExpedite:
+		case gen.InboxEntryKindDecision, gen.InboxEntryKindQuestion, gen.InboxEntryKindBlocked, gen.InboxEntryKindExpedite:
 		}
 	}
 }

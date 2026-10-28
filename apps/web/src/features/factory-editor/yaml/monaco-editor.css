@@ -11,7 +11,7 @@
   padding-left: 4px;
   color: var(--color-ok-ink);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--text-secondary);
 }
 
 .goal-line-problem {

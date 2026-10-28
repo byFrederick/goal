@@ -143,7 +143,7 @@ export function BoardCard({
               {prLink}
               {touches}
             </div>
-            {onMove ? <MoveButton item={item} onMove={onMove} className="-mr-1 -mb-1" /> : null}
+            {onMove ? <MoveButton item={item} onMove={onMove} size="lg" className="-mr-1 -mb-1 md:size-8" /> : null}
           </div>
         </>
       )}

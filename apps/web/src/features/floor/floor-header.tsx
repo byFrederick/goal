@@ -1,7 +1,7 @@
 import { useNavigate } from '@tanstack/react-router';
 import type { Board, Factory, Metrics } from '../../api/types';
 import { AndonButton, LineStatus } from '../../shared/andon';
-import { InboxButton } from '../../shared/inbox-drawer';
+import { NeedsYouLink } from '../../shared/needs-you-link';
 import { NewItemButton } from '../../shared/new-item';
 import { Chip } from '../../ui/chip';
 import { SegmentedControl } from '../../ui/segmented-control';
@@ -61,7 +61,7 @@ export function FloorHeader({ factory, board, metrics }: { factory: Factory; boa
             })
           }
         />
-        <InboxButton factory={factory} />
+        <NeedsYouLink factory={factory} />
         <AndonButton factory={factory} andon={andon} />
         <NewItemButton factory={factory} />
       </div>

@@ -220,6 +220,33 @@ export interface paths {
         patch: operations["updateOrgSettings"];
         trace?: never;
     };
+    "/v1/orgs/{org}/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's model and tool policy, with the install's models, box sizes and egress addresses
+         * @description The policy (ADR 0024) is a ceiling over every factory definition: the default policy of the install's models at revision 0 until someone saves one. The answer also carries read-only facts computed now from the published definitions the caller sees, never stored: which factories and agents use each model and each box size. The ETag is the policy's revision, quoted, the If-Match of putOrgPolicy.
+         */
+        get: operations["getOrgPolicy"];
+        /**
+         * Replace the organization's policy
+         * @description If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+         */
+        put: operations["putOrgPolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/audit": {
         parameters: {
             query?: never;
@@ -616,7 +643,7 @@ export interface paths {
         };
         /**
          * What waits for a person across the organization's factories
-         * @description The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (decision, then blocked, then expedite). Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision, andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+         * @description The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
          */
         get: operations["getInbox"];
         put?: never;
@@ -1593,6 +1620,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/intake": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Where the factory's newest items came from, and its triggers
+         * @description The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
+         */
+        get: operations["getIntake"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One trigger with this week's results and its recent events
+         * @description The trigger as getIntake shows it, what the items it created in the weekly budget's window (the last 7×24 hours) came to, and its 20 newest events. Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
+         */
+        get: operations["getIntakeTrigger"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/metrics/lead-time": {
         parameters: {
             query?: never;
@@ -1715,6 +1794,145 @@ export interface paths {
          * @description Clears the open pull with an optional note (at most 2000 characters). A line that is also paused, or over its weekly budget, stays stopped by that. A line that is not stopped is 409 andon-not-pulled.
          */
         post: operations["clearAndon"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The factory's webhook endpoints
+         * @description By name, each with its address, kind, the label of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret.
+         */
+        get: operations["listWebhookEndpoints"];
+        put?: never;
+        /**
+         * Create a webhook endpoint
+         * @description An endpoint with a new signing secret, answered here once and never again: copy it to the sender. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+         */
+        post: operations["createWebhookEndpoint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
+                endpoint: components["parameters"]["WebhookEndpointRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a webhook endpoint and its deliveries
+         * @description Its address stops accepting requests. 404 webhook-not-found for an endpoint the factory does not have. Needs a sign-in from the last 10 minutes.
+         */
+        delete: operations["deleteWebhookEndpoint"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
+                endpoint: components["parameters"]["WebhookEndpointRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replace an endpoint's signing secret
+         * @description A new signing secret, answered here once and never again; the old one stops opening at once, so the sender's requests are refused until it has the new one. 404 webhook-not-found; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+         */
+        post: operations["rotateWebhookSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
+                endpoint: components["parameters"]["WebhookEndpointRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One page of an endpoint's deliveries, newest first
+         * @description What the endpoint received in the last 30 days, each with its outcome, without its headers and body (getWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
+         */
+        get: operations["listWebhookDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries/{delivery}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
+                endpoint: components["parameters"]["WebhookEndpointRef"];
+                /** @description The delivery's id */
+                delivery: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One delivery with its request
+         * @description The request as received: its headers (names lower-cased, never a signature header) and its body. 404 webhook-delivery-not-found for a delivery the endpoint does not have.
+         */
+        get: operations["getWebhookDelivery"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2029,6 +2247,31 @@ export interface paths {
         put?: never;
         /** Approve an item waiting for a human; it moves to the next station */
         post: operations["approveItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/items/{item}/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Answer the question an item's agent asked
+         * @description Answers the item's open question (Item.question) with one of its choices or in the caller's own words, as ADR 0018 decides. The engine records question_answered and puts the item back in its station's arrival state, rework_count unchanged; its next run's brief carries the question and the answer. Audited as item.answered with the answer's length and the choice index, never its text. 400 when the body has both answer and choice or neither, or the answer is not 1 to 2000 characters; 400 bad-choice for a choice outside the question's choices; 409 no-open-question when the item has none (none was asked, it was answered, or a move, pause or rejection withdrew it), item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+         */
+        post: operations["answerItem"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3283,6 +3526,83 @@ export interface components {
             name: string;
             max: number | null;
         };
+        /** @description What an organization allows every factory definition (ADR 0024). The revision is the If-Match header, never a field. */
+        OrgPolicyInput: {
+            /** @description The model ids agents may use, a non-empty subset of the install's models */
+            allowed_models: string[];
+            /** @description One of allowed_models, the model of an agent that names none */
+            default_model: string;
+            /** @description Claude Code Bash permission patterns no agent may run, such as Bash(terraform apply:*) */
+            denied_commands: string[];
+            tools: components["schemas"]["ToolPolicy"];
+            /** @description How long a box may run before it is stopped */
+            box_time_limit_minutes: number;
+        };
+        /** @description The tool policy defaults (ADR 0024 decision 2) */
+        ToolPolicy: {
+            /**
+             * @description Comments, issues, tickets and messages outside the item's branch
+             * @enum {string}
+             */
+            write_outside_branch: "off" | "ask" | "allowed";
+            /** @enum {string} */
+            merge_pull_request: "off" | "review_approval";
+            /**
+             * @description Search, fetch and documentation tools
+             * @enum {string}
+             */
+            read_web: "off" | "ask" | "allowed";
+            /** @enum {string} */
+            use_credentials: "off" | "attached_only";
+        };
+        OrgPolicyView: {
+            policy: components["schemas"]["OrgPolicyInput"];
+            /**
+             * Format: int64
+             * @description The policy's revision, 0 until a save; the ETag
+             */
+            revision: number;
+            /**
+             * Format: date-time
+             * @description When the policy was last saved; absent at revision 0
+             */
+            updated_at?: string;
+            /** @description The install's models (GOAL_MODELS), in its order */
+            models: components["schemas"]["PolicyModel"][];
+            /** @description small, medium and large, as the install's sandbox backend sizes them */
+            box_sizes: components["schemas"]["PolicyBoxSize"][];
+            /** @description The addresses agents' traffic leaves from, as CIDRs (GOAL_EGRESS_ADDRESSES); empty when not set */
+            egress_addresses: string[];
+        };
+        PolicyModel: {
+            id: string;
+            label: string;
+            /** @description The factories whose agents use the model now, by name; empty when none does. An agent uses its own model, else its factory's runtime.model, else the policy's default model. */
+            used_by: components["schemas"]["ModelUse"][];
+        };
+        ModelUse: {
+            factory_id: string;
+            name: string;
+            /** @description The names of the factory's agents that use the model */
+            agents: string[];
+        };
+        PolicyBoxSize: {
+            /** @enum {string} */
+            size: "small" | "medium" | "large";
+            /**
+             * Format: double
+             * @description The virtual CPUs a box of this size gets
+             */
+            vcpu: number;
+            /** Format: int64 */
+            memory_bytes: number;
+            /** @description The factories whose runtime.size is this size (medium when they name none), by name */
+            factories: components["schemas"]["SizeUse"][];
+        };
+        SizeUse: {
+            factory_id: string;
+            name: string;
+        };
         OrgSettingsPatch: {
             name?: string;
             slug?: string;
@@ -3469,6 +3789,28 @@ export interface components {
             dependents?: components["schemas"]["ItemLink"][];
             /** @description Why the item is not claimed yet; getItem only, absent unless it is queued or ready with an open need */
             waiting?: components["schemas"]["ItemWaiting"];
+            /** @description The question the item's agent asked a person and nobody has answered yet (ADR 0018); getItem and answerItem only, absent or null when there is none */
+            question?: components["schemas"]["ItemQuestion"] | null;
+        };
+        /** @description An agent's open question about an item, read from its question_asked event */
+        ItemQuestion: {
+            /** @description The question */
+            text: string;
+            /** @description The quick answers the agent offered, 0 to 4; empty for a free answer only */
+            choices: string[];
+            /** Format: date-time */
+            asked_at: string;
+            /** @description The asking agent's role name, as in frontend-engineer; never its copy number */
+            agent: string;
+            /** @description The run that asked; it ended when it asked */
+            run_id: string;
+        };
+        /** @description A person's answer to an item's open question; exactly one of answer and choice */
+        ItemAnswer: {
+            /** @description The answer in the person's own words, 1 to 2000 characters (surrounding space is trimmed) */
+            answer?: string;
+            /** @description The index of the picked choice in Item.question.choices */
+            choice?: number;
         };
         /** @description Why a queued or ready item is not claimed yet, derived from its open needs (those neither done nor cancelled) on every read and never stored. Planned and linked needs win over overlap ones */
         ItemWaiting: {
@@ -4211,6 +4553,91 @@ export interface components {
                 per_day: number;
             }[];
         };
+        Intake: {
+            /** @description How many items the sources count */
+            items: number;
+            /**
+             * Format: date
+             * @description The UTC day the oldest of them was created; null without items
+             */
+            from: string | null;
+            /**
+             * Format: date
+             * @description The UTC day the newest of them was created; null without items
+             */
+            to: string | null;
+            /** @description How many of the items came from each source, zero included. Items whose creator recorded no source count in items only. */
+            sources: {
+                people: number;
+                cli: number;
+                api: number;
+                schedule: number;
+                webhook: number;
+                github: number;
+            };
+            /** @description The current definition's board.triggers, in definition order */
+            triggers: components["schemas"]["IntakeTrigger"][];
+        };
+        IntakeTrigger: {
+            name: string;
+            enabled: boolean;
+            /** @enum {string} */
+            source: "schedule" | "webhook" | "github";
+            /** @description The trigger's event key, as in the definition (schedule, github.check_run.failed, webhook.<endpoint>[.<event>]) */
+            on: string;
+            /** @description A plain summary of when it fires: the cron and its time zone for a schedule ("0 8 * * MON-FRI, Europe/Berlin"), the event key otherwise */
+            when: string;
+            create: {
+                type: string;
+                station: string;
+                lane: string | null;
+                expedite: boolean;
+            };
+            /** @description The items it created on each of the last 7 UTC days, oldest first, ending today */
+            days: number[];
+            /** @description Why it may not be creating items. missing_connection: it listens on a webhook endpoint the factory does not have (no endpoint of its name for webhook.<name>, none of kind github for github.*). refused_deliveries: its endpoints refused deliveries in the last 7 days, counted over each endpoint's 100 newest deliveries. */
+            problem: {
+                /** @enum {string} */
+                kind: "missing_connection" | "refused_deliveries";
+                message: string;
+            } | null;
+        };
+        IntakeTriggerDetail: {
+            trigger: components["schemas"]["IntakeTrigger"];
+            /** @description The items it created in the weekly budget's window (the last 7×24 hours) */
+            week: {
+                created: number;
+                /** @description How many of them have been merged */
+                merged: number;
+                /**
+                 * Format: double
+                 * @description What their agent runs cost
+                 */
+                spend_usd: number;
+            };
+            /** @description Its 20 newest events, newest first */
+            events: components["schemas"]["IntakeEvent"][];
+        };
+        IntakeEvent: {
+            /** @description The event's value of the trigger's only.dedupe field, or its event key without one */
+            title: string;
+            /** @description The event key it matched */
+            event: string;
+            /** Format: date-time */
+            at: string;
+            /**
+             * @description created an item; merged once that item has been merged; skipped with the reason
+             * @enum {string}
+             */
+            outcome: "created" | "merged" | "skipped";
+            /**
+             * Format: int64
+             * @description The item it created; null when it created none or that item is gone
+             */
+            item_number: number | null;
+            /** @description Why it was skipped; null otherwise */
+            reason: string | null;
+        };
         LeadTimeBridge: {
             /** Format: date */
             from: string;
@@ -4372,6 +4799,7 @@ export interface components {
             run_id?: string;
             /** Format: date-time */
             at: string;
+            /** @description What happened, as in submitted, moved, note or lease_taken. question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue */
             kind: string;
             station?: string;
             actor: string;
@@ -4841,9 +5269,9 @@ export interface components {
          * @description What waits; later phases add kinds, which clients that do not know them show as a generic row
          * @enum {string}
          */
-        InboxEntryKind: "decision" | "andon" | "rework_warning" | "blocked" | "expedite";
+        InboxEntryKind: "decision" | "question" | "andon" | "rework_warning" | "blocked" | "expedite";
         InboxEntry: {
-            /** @description "<kind>:<id of what waits>": decision:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station> */
+            /** @description "<kind>:<id of what waits>": decision:, question:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station> */
             id: string;
             kind: components["schemas"]["InboxEntryKind"];
             factory: {
@@ -4853,7 +5281,7 @@ export interface components {
             };
             /**
              * Format: date-time
-             * @description Since when it waits: the item's last change (decision, blocked), its creation (expedite), the pull (andon), now (rework_warning)
+             * @description Since when it waits: the item's last change (decision, question, blocked), its creation (expedite), the pull (andon), now (rework_warning)
              */
             since: string;
             /** @description The item it is about, or null for an entry that is about no item */
@@ -4866,6 +5294,8 @@ export interface components {
             approval: components["schemas"]["ApprovalBrief"] | null;
             /** @description Why a blocked item is blocked; null for other kinds */
             blocked: components["schemas"]["InboxBlocked"] | null;
+            /** @description A question entry's open question; absent or null for other kinds */
+            question?: components["schemas"]["ItemQuestion"] | null;
             /** @description The open pull of an andon entry; null for other kinds */
             andon: components["schemas"]["AndonPull"] | null;
             /** @description The gate tally of a rework warning; null for other kinds */
@@ -5614,6 +6044,93 @@ export interface components {
         CredentialAgents: {
             [key: string]: string[];
         };
+        /**
+         * @description How requests are signed and name their event. generic: X-Goal-Signature: sha256=<hex HMAC-SHA256 of the body> and the event in the body's event field; github: GitHub's X-Hub-Signature-256 and X-GitHub-Event.
+         * @enum {string}
+         */
+        WebhookKind: "generic" | "github";
+        NewWebhookEndpoint: {
+            /** @description A slug unique within the factory, the one a trigger's on: webhook.<name> names */
+            name: string;
+            kind: components["schemas"]["WebhookKind"];
+        };
+        WebhookEndpointList: {
+            endpoints: components["schemas"]["WebhookEndpoint"][];
+        };
+        /** @description A factory's webhook endpoint, never its signing secret */
+        WebhookEndpoint: {
+            id: string;
+            name: string;
+            kind: components["schemas"]["WebhookKind"];
+            /** @description The path senders post to, /hooks/{id}, on goald's public origin */
+            address: string;
+            /** @description The label the screens show for its signing secret, <name>-hook-secret. The secret is sealed on the endpoint, not a credential, so no credential has this name. */
+            secret_name: string;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description When its secret was last replaced; null when it never was
+             */
+            rotated_at: string | null;
+            /** @description The names of the current definition's triggers it feeds, in definition order */
+            triggers: string[];
+            /** @description The last 7 UTC days, oldest first, today last, each zero-filled */
+            days: components["schemas"]["WebhookDeliveryDay"][];
+        };
+        WebhookDeliveryDay: {
+            /**
+             * Format: date
+             * @description The UTC day
+             */
+            day: string;
+            /** @description Deliveries accepted */
+            delivered: number;
+            refused: number;
+        };
+        /** @description An endpoint with its signing secret, answered only by createWebhookEndpoint and rotateWebhookSecret and never readable again. */
+        CreatedWebhookEndpoint: components["schemas"]["WebhookEndpoint"] & {
+            /** @description The signing secret: 32 random bytes as 64 lower-case hex characters. Senders give this string as the HMAC-SHA256 key (its ASCII bytes), as GitHub's webhook secret field takes it. */
+            secret: string;
+        };
+        /**
+         * @description refused, with its reason; accepted, with no trigger matched; created, an item
+         * @enum {string}
+         */
+        WebhookDeliveryOutcome: "refused" | "accepted" | "created";
+        WebhookDelivery: {
+            id: string;
+            /** Format: date-time */
+            received_at: string;
+            outcome: components["schemas"]["WebhookDeliveryOutcome"];
+            /** @description Why it was refused, such as signature did not match; empty otherwise */
+            reason: string;
+            /** @description The item it created; null for another outcome or once that item is gone */
+            item: components["schemas"]["WebhookDeliveryItem"] | null;
+        };
+        WebhookDeliveryItem: {
+            id: string;
+            /** Format: int64 */
+            number: number;
+        };
+        WebhookDeliveryPage: {
+            deliveries: components["schemas"]["WebhookDelivery"][];
+            /** @description Pass as `after` for the next page; null on the last page */
+            next_after: string | null;
+        };
+        WebhookDeliveryRequest: components["schemas"]["WebhookDelivery"] & {
+            /** @description The request's headers, names lower-cased, without X-Goal-Signature, X-Hub-Signature-256 or X-Hub-Signature */
+            headers: {
+                [key: string]: string;
+            };
+            /** @description The body as received */
+            body: string;
+            /**
+             * @description text: the body is valid UTF-8 and given as is; base64: it is not, and is given in standard base64
+             * @enum {string}
+             */
+            body_encoding: "text" | "base64";
+        };
         CredentialList: {
             credentials: components["schemas"]["Credential"][];
         };
@@ -5988,6 +6505,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
+        WebhookEndpointRef: string;
         /** @description A person's user id */
         UserRef: string;
         /** @description The organization's slug or id */
@@ -6356,6 +6875,65 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrgSettings"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getOrgPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The policy and the facts */
+            200: {
+                headers: {
+                    /** @description The policy's revision, quoted ("3"), the If-Match of putOrgPolicy */
+                    ETag: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgPolicyView"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    putOrgPolicy: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The entity tag the write is based on, quoted ("<etag>"); writes without it are 428 */
+                "If-Match"?: components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrgPolicyInput"];
+            };
+        };
+        responses: {
+            /** @description The policy after the save, at its next revision */
+            200: {
+                headers: {
+                    /** @description The policy's new revision, quoted */
+                    ETag: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgPolicyView"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -8219,6 +8797,63 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    getIntake: {
+        parameters: {
+            query?: {
+                /** @description How many of the newest items the sources count (default 48) */
+                items?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The factory's intake */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Intake"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getIntakeTrigger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The trigger */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntakeTriggerDetail"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     getLeadTimeBridge: {
         parameters: {
             query?: {
@@ -8408,6 +9043,178 @@ export interface operations {
                 };
             };
             409: components["responses"]["Conflict"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listWebhookEndpoints: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The endpoints */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookEndpointList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createWebhookEndpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewWebhookEndpoint"];
+            };
+        };
+        responses: {
+            /** @description The endpoint with its signing secret */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedWebhookEndpoint"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteWebhookEndpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
+                endpoint: components["parameters"]["WebhookEndpointRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    rotateWebhookSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
+                endpoint: components["parameters"]["WebhookEndpointRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The endpoint with its new signing secret */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedWebhookEndpoint"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listWebhookDeliveries: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description The next_after of the previous page; deliveries received before it */
+                after?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
+                endpoint: components["parameters"]["WebhookEndpointRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deliveries, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookDeliveryPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getWebhookDelivery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
+                endpoint: components["parameters"]["WebhookEndpointRef"];
+                /** @description The delivery's id */
+                delivery: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The delivery */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookDeliveryRequest"];
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
@@ -8802,6 +9609,37 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description The item after the decision */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    answerItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ItemAnswer"];
+            };
+        };
+        responses: {
+            /** @description The item after the answer */
             200: {
                 headers: {
                     [name: string]: unknown;
