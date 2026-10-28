@@ -64,6 +64,7 @@ import {
   listVersions,
   validateDraft,
 } from './definitions';
+import { getIntake } from './intake';
 import { listApiKeys, listMemberTokens, listPersonalTokens } from './keys';
 import {
   getKnowledgeDocument,
@@ -74,7 +75,9 @@ import {
   listKnowledgeSources,
   searchKnowledge,
 } from './knowledge';
-import type { ItemEvent } from './types';
+import { getOrgSpend } from './spend';
+import type { ItemEvent, SpendWindow } from './types';
+import { getWebhookDelivery, listWebhookDeliveries, listWebhookEndpoints } from './webhooks';
 
 /**
  * The one way route loaders load (loaders.test.ts keeps it so): an ensureQueryData that survives
@@ -154,6 +157,8 @@ export const keys = {
    * all of it but the searches (shared/invalidation.ts).
    */
   knowledge: (org: string) => ['org', org, 'knowledge'] as const,
+  /** The spend over one window (week, month or 90d) with the factories' budgets. */
+  spend: (org: string, window: SpendWindow) => ['org', org, 'spend', window] as const,
   knowledgeSources: (org: string, filter: KnowledgeSourceFilter) =>
     ['org', org, 'knowledge', 'sources', filter] as const,
   knowledgeSource: (org: string, name: string) => ['org', org, 'knowledge', 'source', name] as const,
@@ -168,6 +173,12 @@ export const keys = {
   inbox: (org: string, factory?: string) => ['org', org, 'inbox', factory ?? 'all'] as const,
   factory: (org: string, factory: string) => ['org', org, 'factory', factory] as const,
   board: (org: string, factory: string) => ['org', org, 'factory', factory, 'board'] as const,
+  /** The factory's webhook endpoints; their deliveries sit under it, so one prefix refreshes both. */
+  webhooks: (org: string, factory: string) => ['org', org, 'factory', factory, 'webhooks'] as const,
+  webhookDeliveries: (org: string, factory: string, endpoint: string) =>
+    ['org', org, 'factory', factory, 'webhooks', endpoint, 'deliveries'] as const,
+  webhookDelivery: (org: string, factory: string, endpoint: string, delivery: string) =>
+    ['org', org, 'factory', factory, 'webhooks', endpoint, 'deliveries', delivery] as const,
   /** The mutation key of moving an item of the factory (the Move menu): the stream waits for it. */
   move: (org: string, factory: string) => ['org', org, 'factory', factory, 'move'] as const,
   metrics: (org: string, factory: string, range: FlowRange) =>
@@ -195,7 +206,16 @@ export const keys = {
   runs: (org: string, filter?: RunsFilter) =>
     filter ? (['org', org, 'runs', filter] as const) : (['org', org, 'runs'] as const),
   parts: (org: string, item: string) => ['org', org, 'item', item, 'parts'] as const,
+  /** The factory's intake (sources and triggers); item and definition events refresh it. */
+  intake: (org: string, factory: string) => ['org', org, 'factory', factory, 'intake'] as const,
 };
+
+export const intakeQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: keys.intake(org, factory),
+    queryFn: ({ signal }) => getIntake(org, factory, undefined, signal),
+    staleTime: 10_000,
+  });
 
 /** Fixed while the app runs: goald's GOAL_AUTH changes only with a restart. */
 export const authConfigQuery = queryOptions({
@@ -236,6 +256,14 @@ export const overviewQuery = (org: string, window = '7d') =>
   queryOptions({
     queryKey: keys.overview(org, window),
     queryFn: ({ signal }) => getFactoryOverview(org, window, signal),
+    staleTime: 30_000,
+  });
+
+/** The organization's spend over a window, with its factories' budgets (the spend screen). */
+export const spendQuery = (org: string, window: SpendWindow) =>
+  queryOptions({
+    queryKey: keys.spend(org, window),
+    queryFn: ({ signal }) => getOrgSpend(org, window, signal),
     staleTime: 30_000,
   });
 
@@ -381,6 +409,27 @@ export const archivedFactoriesQuery = (org: string) =>
 
 export const boardQuery = (org: string, factory: string) =>
   queryOptions({ queryKey: keys.board(org, factory), queryFn: ({ signal }) => getBoard(org, factory, signal) });
+
+/** The Webhooks screen's first page of deliveries per endpoint: the newest five. */
+export const webhookDeliveryLimit = 5;
+
+export const webhooksQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: keys.webhooks(org, factory),
+    queryFn: ({ signal }) => listWebhookEndpoints(org, factory, signal),
+  });
+
+export const webhookDeliveriesQuery = (org: string, factory: string, endpoint: string) =>
+  queryOptions({
+    queryKey: keys.webhookDeliveries(org, factory, endpoint),
+    queryFn: ({ signal }) => listWebhookDeliveries(org, factory, endpoint, webhookDeliveryLimit, signal),
+  });
+
+export const webhookDeliveryQuery = (org: string, factory: string, endpoint: string, delivery: string) =>
+  queryOptions({
+    queryKey: keys.webhookDelivery(org, factory, endpoint, delivery),
+    queryFn: ({ signal }) => getWebhookDelivery(org, factory, endpoint, delivery, signal),
+  });
 
 /**
  * A factory's flow over a range, with the range before it. Flow statistics refetch at most every

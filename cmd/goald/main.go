@@ -229,7 +229,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 			Mode: api.AuthMode(s.Auth), EmailCodes: s.EmailCodes, Google: s.Google, SecureCookies: s.strictTransport(),
 		},
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
-		Connections: connections, Credentials: credentials, ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
+		Connections: connections, Credentials: credentials, Intake: intake, ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes,
 		Clock: clock, Logger: log,
 	})

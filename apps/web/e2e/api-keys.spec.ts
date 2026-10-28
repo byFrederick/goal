@@ -12,7 +12,9 @@ test.beforeEach(async ({ page, request }) => {
 const heading = (page: Page) => page.getByRole('heading', { level: 1, name: 'API keys' });
 const newKey = (page: Page) => page.getByRole('button', { name: 'New key' }).first();
 const dialog = (page: Page) => page.getByRole('dialog', { name: 'New key' });
-const created = (page: Page) => page.getByRole('dialog', { name: 'Key created' });
+const created = (page: Page) => page.getByRole('dialog', { name: /^Key created/ });
+/** The Keys card's heading; its count chip sits beside it. */
+const keysHeading = (page: Page) => page.getByRole('heading', { name: 'Keys', exact: true });
 
 /** The key's row (≥ 960 px of content) or its card (narrower). */
 const keyEntry = (page: Page, name: string) =>
@@ -22,22 +24,19 @@ test('the keys are listed with what each can do, and the page fits the screen', 
   await page.goto('/o/acme/api-keys');
   await expect(heading(page)).toBeVisible();
   await expect(page).toHaveTitle('API keys · Acme · Goal');
-  await expect(page.getByRole('heading', { name: '3 active keys' })).toBeVisible();
+  await expect(keysHeading(page)).toBeVisible();
 
-  const ci = keyEntry(page, 'ci-deploy');
+  const ci = keyEntry(page, 'ci-items');
   await expect(ci.getByText('goal_sk_Ab3x…')).toBeVisible();
   await expect(ci.getByText('Submit items')).toBeVisible();
-  await expect(ci.getByText('+1 more')).toBeVisible();
-  await expect(keyEntry(page, 'nightly-evals').getByText('in 9 days')).toBeVisible();
-  await expect(keyEntry(page, 'definitions-sync').getByText(/never/i)).toBeVisible();
-
-  // Revoked keys: greyed in the table, counted on narrow screens.
-  if (await page.getByRole('table', { name: 'API keys of Acme' }).isVisible()) {
-    await expect(keyEntry(page, 'support-bot').getByText(/Revoked .* by F\. Cruz/)).toBeVisible();
-  } else {
-    await expect(page.getByText('1 revoked key is hidden. Revoked keys stay listed for 30 days.')).toBeVisible();
-  }
-  await expect(page.getByText('What a key can never do')).toBeVisible();
+  await expect(keyEntry(page, 'grafana-metrics').getByText('Viewer')).toBeVisible();
+  await expect(keyEntry(page, 'deploy-bot').getByText('Move and pause items')).toBeVisible();
+  await expect(keyEntry(page, 'deploy-bot').getByText(/never/i)).toBeVisible();
+  await expect(
+    page.getByText('For scripts and services that use Goal’s API as the organization, not as a person.'),
+  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'From your terminal' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Copy' })).toHaveAttribute('aria-disabled', 'true');
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
@@ -70,19 +69,19 @@ test('a new key shows its secret once, then lists only its hint', async ({ page 
   await d.getByRole('button', { name: 'Create key' }).click();
 
   const shown = created(page);
-  await expect(shown.getByText('Copy your key now. You won’t see it again.')).toBeVisible();
+  await expect(
+    shown.getByText('Copy it now. Goal stores only a hash, so this is the only time you can see it.'),
+  ).toBeVisible();
   const secret = (await shown.locator('code').textContent()) ?? '';
   expect(secret).toMatch(/^goal_sk_[A-Za-z0-9_-]{43}$/);
-  const done = shown.getByRole('button', { name: 'Done' });
-  await expect(done).toBeDisabled();
+  const copied = shown.getByRole('button', { name: 'I copied it' });
   await page.keyboard.press('Escape');
   await expect(shown).toBeVisible();
   await expectAccessible(page);
-  await shown.getByLabel('I’ve stored it somewhere safe').check();
-  await done.click();
+  await copied.click();
   await expect(shown).toBeHidden();
 
-  await expect(page.getByRole('heading', { name: '4 active keys' })).toBeVisible();
+  await expect(keysHeading(page)).toBeVisible();
   await expect(keyEntry(page, 'release-pipeline').getByText(`${secret.slice(0, 12)}…`)).toBeVisible();
   await expect(page.getByText(secret)).toHaveCount(0);
 });
@@ -104,18 +103,18 @@ test('a key needs a name and something to do, and a live key’s name is taken',
 
 test('revoking asks first, then the key is gone at once', async ({ page }) => {
   await page.goto('/o/acme/api-keys');
-  await keyEntry(page, 'ci-deploy').getByRole('button', { name: 'Revoke ci-deploy…' }).click();
-  const confirm = page.getByRole('dialog', { name: 'Revoke ci-deploy?' });
+  await keyEntry(page, 'ci-items').getByRole('button', { name: 'Revoke ci-items' }).click();
+  const confirm = page.getByRole('dialog', { name: 'Revoke ci-items?' });
   await expect(confirm.getByText('Anything using it stops working at once.')).toBeVisible();
   await expect(confirm.getByRole('button', { name: 'Cancel' })).toBeFocused();
   await confirm.getByRole('button', { name: 'Revoke key' }).click();
 
-  await expectToast(page, 'Revoked ci-deploy');
-  await expect(page.getByRole('heading', { name: '2 active keys' })).toBeVisible();
+  await expectToast(page, 'Revoked ci-items');
+  await expect(keysHeading(page)).toBeVisible();
   if (await page.getByRole('table', { name: 'API keys of Acme' }).isVisible()) {
-    await expect(keyEntry(page, 'ci-deploy').getByText(/Revoked .* by Local user/)).toBeVisible();
+    await expect(keyEntry(page, 'ci-items').getByText(/Revoked .* by Local user/)).toBeVisible();
   } else {
-    await expect(page.getByText('2 revoked keys are hidden.', { exact: false })).toBeVisible();
+    await expect(page.getByText('1 revoked key is hidden.', { exact: false })).toBeVisible();
   }
 });
 
@@ -130,7 +129,7 @@ test('a list that fails to load keeps the page and offers to try again', async (
   });
   await request.delete('/__mock/fail');
   await page.getByRole('button', { name: 'Try again' }).click();
-  await expect(page.getByRole('heading', { name: '3 active keys' })).toBeVisible();
+  await expect(keysHeading(page)).toBeVisible();
 });
 
 test('an organization without keys says so', async ({ page }) => {

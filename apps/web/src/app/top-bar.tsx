@@ -73,6 +73,7 @@ const factoryRoutePages: Record<string, string> = {
 /** The organization page each organization route shows, by route id. */
 const orgRoutePages: Record<string, { label: string; to?: OrgPath }> = {
   '/o/$org/_org/': homeScreen,
+  '/account': { label: 'Your account' },
   '/o/$org/_org/api-keys': apiKeysScreen,
   '/o/$org/_org/members': membersScreen,
   '/o/$org/_org/runs': runsScreen,

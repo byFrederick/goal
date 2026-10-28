@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AccountRouteImport } from './routes/account'
 import { Route as DeviceRouteImport } from './routes/device'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as FSplatRouteImport } from './routes/f.$'
@@ -23,6 +24,7 @@ import { Route as OOrgOrgMembersRouteImport } from './routes/o.$org._org.members
 import { Route as OOrgOrgNeedsYouRouteImport } from './routes/o.$org._org.needs-you'
 import { Route as OOrgOrgRunsRouteImport } from './routes/o.$org._org.runs'
 import { Route as OOrgOrgSettingsRouteImport } from './routes/o.$org._org.settings'
+import { Route as OOrgOrgSpendRouteImport } from './routes/o.$org._org.spend'
 import { Route as OOrgFFactoryRouteImport } from './routes/o.$org.f.$factory'
 import { Route as OOrgNewStepRouteImport } from './routes/o.$org.new.$step'
 import { Route as OOrgOrgConnectionsIndexRouteImport } from './routes/o.$org._org.connections.index'
@@ -39,12 +41,20 @@ import { Route as OOrgFFactoryAgentsIndexRouteImport } from './routes/o.$org.f.$
 import { Route as OOrgFFactoryAgentsAgentRouteImport } from './routes/o.$org.f.$factory.agents.$agent'
 import { Route as OOrgFFactoryDefinitionIndexRouteImport } from './routes/o.$org.f.$factory.definition.index'
 import { Route as OOrgFFactoryDefinitionSectionRouteImport } from './routes/o.$org.f.$factory.definition.$section'
+import { Route as OOrgFFactoryIntakeIndexRouteImport } from './routes/o.$org.f.$factory.intake.index'
+import { Route as OOrgFFactoryIntakeNewRouteImport } from './routes/o.$org.f.$factory.intake.new'
+import { Route as OOrgFFactoryIntakeWebhooksRouteImport } from './routes/o.$org.f.$factory.intake.webhooks'
 import { Route as OOrgFFactoryItemsIndexRouteImport } from './routes/o.$org.f.$factory.items.index'
 import { Route as OOrgFFactoryItemsRefRouteImport } from './routes/o.$org.f.$factory.items.$ref'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DeviceRoute = DeviceRouteImport.update({
@@ -109,6 +119,11 @@ const OOrgOrgRunsRoute = OOrgOrgRunsRouteImport.update({
 const OOrgOrgSettingsRoute = OOrgOrgSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => OOrgOrgRoute,
+} as any)
+const OOrgOrgSpendRoute = OOrgOrgSpendRouteImport.update({
+  id: '/spend',
+  path: '/spend',
   getParentRoute: () => OOrgOrgRoute,
 } as any)
 const OOrgFFactoryRoute = OOrgFFactoryRouteImport.update({
@@ -194,6 +209,22 @@ const OOrgFFactoryDefinitionSectionRoute =
     path: '/$section',
     getParentRoute: () => OOrgFFactoryDefinitionRoute,
   } as any)
+const OOrgFFactoryIntakeIndexRoute = OOrgFFactoryIntakeIndexRouteImport.update({
+  id: '/intake/',
+  path: '/intake/',
+  getParentRoute: () => OOrgFFactoryRoute,
+} as any)
+const OOrgFFactoryIntakeNewRoute = OOrgFFactoryIntakeNewRouteImport.update({
+  id: '/intake/new',
+  path: '/intake/new',
+  getParentRoute: () => OOrgFFactoryRoute,
+} as any)
+const OOrgFFactoryIntakeWebhooksRoute =
+  OOrgFFactoryIntakeWebhooksRouteImport.update({
+    id: '/intake/webhooks',
+    path: '/intake/webhooks',
+    getParentRoute: () => OOrgFFactoryRoute,
+  } as any)
 const OOrgFFactoryItemsIndexRoute = OOrgFFactoryItemsIndexRouteImport.update({
   id: '/items/',
   path: '/items/',
@@ -207,6 +238,7 @@ const OOrgFFactoryItemsRefRoute = OOrgFFactoryItemsRefRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/device': typeof DeviceRoute
   '/sign-in': typeof SignInRoute
   '/f/$': typeof FSplatRoute
@@ -218,6 +250,7 @@ export interface FileRoutesByFullPath {
   '/o/$org/needs-you': typeof OOrgOrgNeedsYouRoute
   '/o/$org/runs': typeof OOrgOrgRunsRoute
   '/o/$org/settings': typeof OOrgOrgSettingsRoute
+  '/o/$org/spend': typeof OOrgOrgSpendRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
   '/o/$org/new/$step': typeof OOrgNewStepRoute
   '/o/$org/': typeof OOrgOrgIndexRoute
@@ -233,13 +266,17 @@ export interface FileRoutesByFullPath {
   '/o/$org/f/$factory/': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
+  '/o/$org/f/$factory/intake/new': typeof OOrgFFactoryIntakeNewRoute
+  '/o/$org/f/$factory/intake/webhooks': typeof OOrgFFactoryIntakeWebhooksRoute
   '/o/$org/f/$factory/items/$ref': typeof OOrgFFactoryItemsRefRoute
   '/o/$org/f/$factory/agents/': typeof OOrgFFactoryAgentsIndexRoute
   '/o/$org/f/$factory/definition/': typeof OOrgFFactoryDefinitionIndexRoute
+  '/o/$org/f/$factory/intake/': typeof OOrgFFactoryIntakeIndexRoute
   '/o/$org/f/$factory/items/': typeof OOrgFFactoryItemsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/device': typeof DeviceRoute
   '/sign-in': typeof SignInRoute
   '/f/$': typeof FSplatRoute
@@ -251,6 +288,7 @@ export interface FileRoutesByTo {
   '/o/$org/needs-you': typeof OOrgOrgNeedsYouRoute
   '/o/$org/runs': typeof OOrgOrgRunsRoute
   '/o/$org/settings': typeof OOrgOrgSettingsRoute
+  '/o/$org/spend': typeof OOrgOrgSpendRoute
   '/o/$org/new/$step': typeof OOrgNewStepRoute
   '/o/$org/connections/$connection': typeof OOrgOrgConnectionsConnectionRoute
   '/o/$org/connections/new': typeof OOrgOrgConnectionsNewRoute
@@ -263,14 +301,18 @@ export interface FileRoutesByTo {
   '/o/$org/f/$factory': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
+  '/o/$org/f/$factory/intake/new': typeof OOrgFFactoryIntakeNewRoute
+  '/o/$org/f/$factory/intake/webhooks': typeof OOrgFFactoryIntakeWebhooksRoute
   '/o/$org/f/$factory/items/$ref': typeof OOrgFFactoryItemsRefRoute
   '/o/$org/f/$factory/agents': typeof OOrgFFactoryAgentsIndexRoute
   '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionIndexRoute
+  '/o/$org/f/$factory/intake': typeof OOrgFFactoryIntakeIndexRoute
   '/o/$org/f/$factory/items': typeof OOrgFFactoryItemsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/device': typeof DeviceRoute
   '/sign-in': typeof SignInRoute
   '/f/$': typeof FSplatRoute
@@ -283,6 +325,7 @@ export interface FileRoutesById {
   '/o/$org/_org/needs-you': typeof OOrgOrgNeedsYouRoute
   '/o/$org/_org/runs': typeof OOrgOrgRunsRoute
   '/o/$org/_org/settings': typeof OOrgOrgSettingsRoute
+  '/o/$org/_org/spend': typeof OOrgOrgSpendRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryRouteWithChildren
   '/o/$org/new/$step': typeof OOrgNewStepRoute
   '/o/$org/_org/': typeof OOrgOrgIndexRoute
@@ -298,15 +341,19 @@ export interface FileRoutesById {
   '/o/$org/f/$factory/': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
+  '/o/$org/f/$factory/intake/new': typeof OOrgFFactoryIntakeNewRoute
+  '/o/$org/f/$factory/intake/webhooks': typeof OOrgFFactoryIntakeWebhooksRoute
   '/o/$org/f/$factory/items/$ref': typeof OOrgFFactoryItemsRefRoute
   '/o/$org/f/$factory/agents/': typeof OOrgFFactoryAgentsIndexRoute
   '/o/$org/f/$factory/definition/': typeof OOrgFFactoryDefinitionIndexRoute
+  '/o/$org/f/$factory/intake/': typeof OOrgFFactoryIntakeIndexRoute
   '/o/$org/f/$factory/items/': typeof OOrgFFactoryItemsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/account'
     | '/device'
     | '/sign-in'
     | '/f/$'
@@ -318,6 +365,7 @@ export interface FileRouteTypes {
     | '/o/$org/needs-you'
     | '/o/$org/runs'
     | '/o/$org/settings'
+    | '/o/$org/spend'
     | '/o/$org/f/$factory'
     | '/o/$org/new/$step'
     | '/o/$org/'
@@ -333,13 +381,17 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
+    | '/o/$org/f/$factory/intake/new'
+    | '/o/$org/f/$factory/intake/webhooks'
     | '/o/$org/f/$factory/items/$ref'
     | '/o/$org/f/$factory/agents/'
     | '/o/$org/f/$factory/definition/'
+    | '/o/$org/f/$factory/intake/'
     | '/o/$org/f/$factory/items/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/account'
     | '/device'
     | '/sign-in'
     | '/f/$'
@@ -351,6 +403,7 @@ export interface FileRouteTypes {
     | '/o/$org/needs-you'
     | '/o/$org/runs'
     | '/o/$org/settings'
+    | '/o/$org/spend'
     | '/o/$org/new/$step'
     | '/o/$org/connections/$connection'
     | '/o/$org/connections/new'
@@ -363,13 +416,17 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
+    | '/o/$org/f/$factory/intake/new'
+    | '/o/$org/f/$factory/intake/webhooks'
     | '/o/$org/f/$factory/items/$ref'
     | '/o/$org/f/$factory/agents'
     | '/o/$org/f/$factory/definition'
+    | '/o/$org/f/$factory/intake'
     | '/o/$org/f/$factory/items'
   id:
     | '__root__'
     | '/'
+    | '/account'
     | '/device'
     | '/sign-in'
     | '/f/$'
@@ -382,6 +439,7 @@ export interface FileRouteTypes {
     | '/o/$org/_org/needs-you'
     | '/o/$org/_org/runs'
     | '/o/$org/_org/settings'
+    | '/o/$org/_org/spend'
     | '/o/$org/f/$factory'
     | '/o/$org/new/$step'
     | '/o/$org/_org/'
@@ -397,14 +455,18 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
+    | '/o/$org/f/$factory/intake/new'
+    | '/o/$org/f/$factory/intake/webhooks'
     | '/o/$org/f/$factory/items/$ref'
     | '/o/$org/f/$factory/agents/'
     | '/o/$org/f/$factory/definition/'
+    | '/o/$org/f/$factory/intake/'
     | '/o/$org/f/$factory/items/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountRoute: typeof AccountRoute
   DeviceRoute: typeof DeviceRoute
   SignInRoute: typeof SignInRoute
   FSplatRoute: typeof FSplatRoute
@@ -420,6 +482,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/device': {
@@ -511,6 +580,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/o/$org/settings'
       preLoaderRoute: typeof OOrgOrgSettingsRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
+    '/o/$org/_org/spend': {
+      id: '/o/$org/_org/spend'
+      path: '/spend'
+      fullPath: '/o/$org/spend'
+      preLoaderRoute: typeof OOrgOrgSpendRouteImport
       parentRoute: typeof OOrgOrgRoute
     }
     '/o/$org/f/$factory': {
@@ -625,6 +701,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OOrgFFactoryDefinitionSectionRouteImport
       parentRoute: typeof OOrgFFactoryDefinitionRoute
     }
+    '/o/$org/f/$factory/intake/': {
+      id: '/o/$org/f/$factory/intake/'
+      path: '/intake'
+      fullPath: '/o/$org/f/$factory/intake/'
+      preLoaderRoute: typeof OOrgFFactoryIntakeIndexRouteImport
+      parentRoute: typeof OOrgFFactoryRoute
+    }
+    '/o/$org/f/$factory/intake/new': {
+      id: '/o/$org/f/$factory/intake/new'
+      path: '/intake/new'
+      fullPath: '/o/$org/f/$factory/intake/new'
+      preLoaderRoute: typeof OOrgFFactoryIntakeNewRouteImport
+      parentRoute: typeof OOrgFFactoryRoute
+    }
+    '/o/$org/f/$factory/intake/webhooks': {
+      id: '/o/$org/f/$factory/intake/webhooks'
+      path: '/intake/webhooks'
+      fullPath: '/o/$org/f/$factory/intake/webhooks'
+      preLoaderRoute: typeof OOrgFFactoryIntakeWebhooksRouteImport
+      parentRoute: typeof OOrgFFactoryRoute
+    }
     '/o/$org/f/$factory/items/': {
       id: '/o/$org/f/$factory/items/'
       path: '/items'
@@ -648,6 +745,7 @@ interface OOrgOrgRouteChildren {
   OOrgOrgNeedsYouRoute: typeof OOrgOrgNeedsYouRoute
   OOrgOrgRunsRoute: typeof OOrgOrgRunsRoute
   OOrgOrgSettingsRoute: typeof OOrgOrgSettingsRoute
+  OOrgOrgSpendRoute: typeof OOrgOrgSpendRoute
   OOrgOrgIndexRoute: typeof OOrgOrgIndexRoute
   OOrgOrgConnectionsConnectionRoute: typeof OOrgOrgConnectionsConnectionRoute
   OOrgOrgConnectionsNewRoute: typeof OOrgOrgConnectionsNewRoute
@@ -663,6 +761,7 @@ const OOrgOrgRouteChildren: OOrgOrgRouteChildren = {
   OOrgOrgNeedsYouRoute: OOrgOrgNeedsYouRoute,
   OOrgOrgRunsRoute: OOrgOrgRunsRoute,
   OOrgOrgSettingsRoute: OOrgOrgSettingsRoute,
+  OOrgOrgSpendRoute: OOrgOrgSpendRoute,
   OOrgOrgIndexRoute: OOrgOrgIndexRoute,
   OOrgOrgConnectionsConnectionRoute: OOrgOrgConnectionsConnectionRoute,
   OOrgOrgConnectionsNewRoute: OOrgOrgConnectionsNewRoute,
@@ -697,8 +796,11 @@ interface OOrgFFactoryRouteChildren {
   OOrgFFactorySettingsRoute: typeof OOrgFFactorySettingsRoute
   OOrgFFactoryIndexRoute: typeof OOrgFFactoryIndexRoute
   OOrgFFactoryAgentsAgentRoute: typeof OOrgFFactoryAgentsAgentRoute
+  OOrgFFactoryIntakeNewRoute: typeof OOrgFFactoryIntakeNewRoute
+  OOrgFFactoryIntakeWebhooksRoute: typeof OOrgFFactoryIntakeWebhooksRoute
   OOrgFFactoryItemsRefRoute: typeof OOrgFFactoryItemsRefRoute
   OOrgFFactoryAgentsIndexRoute: typeof OOrgFFactoryAgentsIndexRoute
+  OOrgFFactoryIntakeIndexRoute: typeof OOrgFFactoryIntakeIndexRoute
   OOrgFFactoryItemsIndexRoute: typeof OOrgFFactoryItemsIndexRoute
 }
 
@@ -708,8 +810,11 @@ const OOrgFFactoryRouteChildren: OOrgFFactoryRouteChildren = {
   OOrgFFactorySettingsRoute: OOrgFFactorySettingsRoute,
   OOrgFFactoryIndexRoute: OOrgFFactoryIndexRoute,
   OOrgFFactoryAgentsAgentRoute: OOrgFFactoryAgentsAgentRoute,
+  OOrgFFactoryIntakeNewRoute: OOrgFFactoryIntakeNewRoute,
+  OOrgFFactoryIntakeWebhooksRoute: OOrgFFactoryIntakeWebhooksRoute,
   OOrgFFactoryItemsRefRoute: OOrgFFactoryItemsRefRoute,
   OOrgFFactoryAgentsIndexRoute: OOrgFFactoryAgentsIndexRoute,
+  OOrgFFactoryIntakeIndexRoute: OOrgFFactoryIntakeIndexRoute,
   OOrgFFactoryItemsIndexRoute: OOrgFFactoryItemsIndexRoute,
 }
 
@@ -733,6 +838,7 @@ const OOrgRouteWithChildren = OOrgRoute._addFileChildren(OOrgRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountRoute: AccountRoute,
   DeviceRoute: DeviceRoute,
   SignInRoute: SignInRoute,
   FSplatRoute: FSplatRoute,
