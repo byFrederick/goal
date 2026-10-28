@@ -83,7 +83,7 @@ import { createKnowledge } from './knowledge.ts';
 import { directory, membersFor, orgCanOf } from './people.ts';
 import { createPolicy } from './policy.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
-import { orgRunsOf } from './runs.ts';
+import { orgRunsOf, runsCsvOf } from './runs.ts';
 import { type SearchSource, search } from './search.ts';
 import { createSpend } from './spend.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
@@ -1566,6 +1566,19 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (rest === '/runs' && method === 'GET') {
       const result = orgRunsOf(state, org.id, url.searchParams);
       return 'body' in result ? json(res, 200, result.body) : problem(res, result.status, result.title, result.detail);
+    }
+
+    // GET …/runs/export: the list's filters as CSV (ADR 0020, decision 3), with the file's name in Content-Disposition.
+    if (rest === '/runs/export' && method === 'GET') {
+      const result = runsCsvOf(state, org.id, url.searchParams);
+      if (!('csv' in result)) return problem(res, result.status, result.title, result.detail);
+      const day = new Date().toISOString().slice(0, 10);
+      res.writeHead(200, {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="runs-${day}.csv"`,
+      });
+      res.end(result.csv);
+      return;
     }
 
     if (rest === '/attention' && method === 'GET') {
