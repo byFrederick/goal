@@ -65,6 +65,16 @@ func TestRunDefinition_ModelConnectionOnly(t *testing.T) {
 		t.Errorf("result = %+v, want %+v", got, want)
 	}
 
+	checkDefinitionBox(t, h, req)
+	checkDefinitionToken(t, h, req)
+	assertBoxDeleted(t, h, req)
+}
+
+// checkDefinitionBox checks that the request ran in one box of its own, with no item and no
+// station, and that prepare got only the gateway's env and run only the model connection's.
+func checkDefinitionBox(t *testing.T, h *harness, req domain.DraftRequest) {
+	t.Helper()
+
 	prepares, runs := h.worker.Prepares(), h.worker.Runs()
 	if len(prepares) != 1 || len(runs) != 1 {
 		t.Fatalf("%d prepares and %d runs, want one of each", len(prepares), len(runs))
@@ -87,8 +97,14 @@ func TestRunDefinition_ModelConnectionOnly(t *testing.T) {
 	if runs[0].Env[envModelKey] != modelKey {
 		t.Errorf("run env %s is not the model connection's key", envModelKey)
 	}
+}
 
-	claims, err := domain.VerifyTaskToken([]byte("k3y"), prepares[0].Env["GOAL_GATEWAY_TOKEN"], h.clock.Now())
+// checkDefinitionToken checks that prepare's task token names the request at revision 5 and
+// nothing of an item.
+func checkDefinitionToken(t *testing.T, h *harness, req domain.DraftRequest) {
+	t.Helper()
+
+	claims, err := domain.VerifyTaskToken([]byte("k3y"), h.worker.Prepares()[0].Env["GOAL_GATEWAY_TOKEN"], h.clock.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,6 +113,10 @@ func TestRunDefinition_ModelConnectionOnly(t *testing.T) {
 		claims.VersionID != v1 || claims.ItemID != "" || claims.Station != "" || len(claims.Connections) != 0 {
 		t.Errorf("token claims = %+v, want draft request %s at revision 5 of version %s", claims, req.ID, v1)
 	}
+}
+
+func assertBoxDeleted(t *testing.T, h *harness, req domain.DraftRequest) {
+	t.Helper()
 
 	if h.sandboxes.Has(domain.RunID(req.ID)) {
 		t.Error("the request's sandbox was not deleted")
@@ -125,94 +145,98 @@ func TestRunDefinition_RefusesExhaustedBudget(t *testing.T) {
 func TestRunDefinition_WorkerErrorDeletesTheBox(t *testing.T) {
 	t.Parallel()
 
+	t.Run("prepare fails", testDefinitionPrepareFails)
+	t.Run("the draft moved", testDefinitionDraftMoved)
+	t.Run("the worker finishes failed", testDefinitionWorkerFailed)
+	t.Run("the worker crashes", testDefinitionWorkerCrashed)
+	t.Run("a changed file holds a secret", testDefinitionFileHoldsSecret)
+}
+
+func testDefinitionPrepareFails(t *testing.T) {
+	t.Parallel()
+
 	req := draftRequest()
+	h := newHarness(t, definitionLine(), porttest.Succeed(definitionOutput))
+	h.worker.FailPrepare(1, "GET /run: 503 gateway unavailable "+modelKey)
 
-	t.Run("prepare fails", func(t *testing.T) {
-		t.Parallel()
+	_, err := h.e.RunDefinition(inOrg(t), ports.DefinitionTask{Request: req, Revision: 1})
+	if err == nil || strings.Contains(err.Error(), modelKey) || errors.Is(err, ports.ErrConflict) {
+		t.Errorf("err = %v, want a scrubbed prepare error that is no conflict", err)
+	}
 
-		h := newHarness(t, definitionLine(), porttest.Succeed(definitionOutput))
-		h.worker.FailPrepare(1, "GET /run: 503 gateway unavailable "+modelKey)
+	if len(h.worker.Runs()) != 0 {
+		t.Error("the agent ran after prepare failed")
+	}
 
-		_, err := h.e.RunDefinition(inOrg(t), ports.DefinitionTask{Request: req, Revision: 1})
-		if err == nil || strings.Contains(err.Error(), modelKey) || errors.Is(err, ports.ErrConflict) {
-			t.Errorf("err = %v, want a scrubbed prepare error that is no conflict", err)
-		}
+	assertBoxDeleted(t, h, req)
+}
 
-		if len(h.worker.Runs()) != 0 || h.sandboxes.Has(domain.RunID(req.ID)) {
-			t.Error("the agent ran or the sandbox was left after prepare failed")
-		}
+func testDefinitionDraftMoved(t *testing.T) {
+	t.Parallel()
+
+	req := draftRequest()
+	h := newHarness(t, definitionLine(), porttest.Succeed(definitionOutput))
+	h.worker.FailPrepare(1, "GET /run: 409 the draft moved past revision 1")
+
+	_, err := h.e.RunDefinition(inOrg(t), ports.DefinitionTask{Request: req, Revision: 1})
+	if !errors.Is(err, ports.ErrConflict) {
+		t.Errorf("err = %v, want ErrConflict", err)
+	}
+
+	assertBoxDeleted(t, h, req)
+}
+
+func testDefinitionWorkerFailed(t *testing.T) {
+	t.Parallel()
+
+	req := draftRequest()
+	h := newHarness(t, definitionLine(), func(context.Context, porttest.ExecCall, io.Writer) domain.RunResult {
+		return domain.RunResult{Status: domain.RunFailed, Error: "rejected evals/review.yaml with key " + modelKey, CostUSD: 0.1, Turns: 2}
 	})
 
-	t.Run("the draft moved", func(t *testing.T) {
-		t.Parallel()
+	got, err := h.e.RunDefinition(inOrg(t), ports.DefinitionTask{Request: req, Revision: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		h := newHarness(t, definitionLine(), porttest.Succeed(definitionOutput))
-		h.worker.FailPrepare(1, "GET /run: 409 the draft moved past revision 1")
+	if got.Status != domain.RunFailed || !strings.Contains(got.Error, "evals/review.yaml") || strings.Contains(got.Error, modelKey) ||
+		got.CostUSD != 0.1 || got.Turns != 2 || len(got.Changed) != 0 {
+		t.Errorf("result = %+v, want a failed, scrubbed result with its cost", got)
+	}
 
-		_, err := h.e.RunDefinition(inOrg(t), ports.DefinitionTask{Request: req, Revision: 1})
-		if !errors.Is(err, ports.ErrConflict) {
-			t.Errorf("err = %v, want ErrConflict", err)
-		}
+	assertBoxDeleted(t, h, req)
+}
 
-		if h.sandboxes.Has(domain.RunID(req.ID)) {
-			t.Error("the sandbox was left after the draft moved")
-		}
+func testDefinitionWorkerCrashed(t *testing.T) {
+	t.Parallel()
+
+	req := draftRequest()
+	h := newHarness(t, definitionLine(), func(context.Context, porttest.ExecCall, io.Writer) domain.RunResult {
+		return domain.RunResult{}
 	})
 
-	t.Run("the worker finishes failed", func(t *testing.T) {
-		t.Parallel()
+	if _, err := h.e.RunDefinition(inOrg(t), ports.DefinitionTask{Request: req, Revision: 1}); err == nil {
+		t.Error("a worker without a result is no error")
+	}
 
-		h := newHarness(t, definitionLine(), func(context.Context, porttest.ExecCall, io.Writer) domain.RunResult {
-			return domain.RunResult{Status: domain.RunFailed, Error: "rejected evals/review.yaml with key " + modelKey, CostUSD: 0.1, Turns: 2}
-		})
+	assertBoxDeleted(t, h, req)
+}
 
-		got, err := h.e.RunDefinition(inOrg(t), ports.DefinitionTask{Request: req, Revision: 1})
-		if err != nil {
-			t.Fatal(err)
-		}
+func testDefinitionFileHoldsSecret(t *testing.T) {
+	t.Parallel()
 
-		if got.Status != domain.RunFailed || !strings.Contains(got.Error, "evals/review.yaml") || strings.Contains(got.Error, modelKey) ||
-			got.CostUSD != 0.1 || got.Turns != 2 || len(got.Changed) != 0 {
-			t.Errorf("result = %+v, want a failed, scrubbed result with its cost", got)
-		}
+	out := `{"summary":"done","changed":[{"path":"rules/key.md","sha256":"cd34","content":"` +
+		b64(modelKey) + `"}],"deleted":[],"rejected":[]}`
+	h := newHarness(t, definitionLine(), porttest.Succeed(out))
 
-		if h.sandboxes.Has(domain.RunID(req.ID)) {
-			t.Error("the sandbox was left after the worker failed")
-		}
-	})
+	got, err := h.e.RunDefinition(inOrg(t), ports.DefinitionTask{Request: draftRequest(), Revision: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	t.Run("the worker crashes", func(t *testing.T) {
-		t.Parallel()
-
-		h := newHarness(t, definitionLine(), func(context.Context, porttest.ExecCall, io.Writer) domain.RunResult {
-			return domain.RunResult{}
-		})
-
-		if _, err := h.e.RunDefinition(inOrg(t), ports.DefinitionTask{Request: req, Revision: 1}); err == nil {
-			t.Error("a worker without a result is no error")
-		}
-
-		if h.sandboxes.Has(domain.RunID(req.ID)) {
-			t.Error("the sandbox was left after the worker crashed")
-		}
-	})
-
-	t.Run("a changed file holds a secret", func(t *testing.T) {
-		t.Parallel()
-
-		out := `{"summary":"done","changed":[{"path":"rules/key.md","sha256":"cd34","content":"` +
-			b64(modelKey) + `"}],"deleted":[],"rejected":[]}`
-		h := newHarness(t, definitionLine(), porttest.Succeed(out))
-
-		got, err := h.e.RunDefinition(inOrg(t), ports.DefinitionTask{Request: req, Revision: 1})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if got.Status != domain.RunFailed || len(got.Changed) != 0 || strings.Contains(got.Error, modelKey) {
-			t.Errorf("result = %+v, want a failed result without the file", got)
-		}
-	})
+	if got.Status != domain.RunFailed || len(got.Changed) != 0 || strings.Contains(got.Error, modelKey) {
+		t.Errorf("result = %+v, want a failed result without the file", got)
+	}
 }
 
 func TestRunDefinition_OtherOrganizationsFactoryIsNotFound(t *testing.T) {

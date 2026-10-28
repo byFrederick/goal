@@ -869,11 +869,14 @@ func TestBundle_GrantedCallsOfTheRun(t *testing.T) {
 	}
 }
 
+// engineerFile is the engineer agent's file in the test factory's draft.
+const engineerFile = "agents/engineer.md"
+
 // draftFiles are the test factory's draft files.
 var draftFiles = map[string][]byte{
-	"factory.yaml":       []byte(factoryYAML),
-	"agents/engineer.md": []byte("# engineer\n"),
-	"rules/evidence.md":  {0xff, 0x00, 'b'},
+	"factory.yaml":      []byte(factoryYAML),
+	engineerFile:        []byte("# engineer\n"),
+	"rules/evidence.md": {0xff, 0x00, 'b'},
 }
 
 // openDraft opens the test factory's draft with draftFiles and queues a draft request on factory
@@ -924,6 +927,19 @@ func TestServeRun_DraftRequestBundle(t *testing.T) {
 		t.Fatalf("status = %d, want 200 (%s)", status, body)
 	}
 
+	checkDraftBundleHasNoAccess(t, body)
+	checkDraftBundle(t, body, r)
+
+	if strings.Contains(string(body), modelAPIKey) || strings.Contains(string(body), cloneToken) {
+		t.Error("the bundle holds a secret value")
+	}
+}
+
+// checkDraftBundleHasNoAccess checks that a draft request's bundle has no repository, no git
+// login and no tool.
+func checkDraftBundleHasNoAccess(t *testing.T, body []byte) {
+	t.Helper()
+
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(body, &raw); err != nil {
 		t.Fatal(err)
@@ -932,6 +948,12 @@ func TestServeRun_DraftRequestBundle(t *testing.T) {
 	if _, ok := raw["repository"]; ok || string(raw["git_credentials"]) != "[]" || string(raw["tools"]) != "[]" {
 		t.Errorf("repository %s, git_credentials %s, tools %s; want none, [] and []", raw["repository"], raw["git_credentials"], raw["tools"])
 	}
+}
+
+// checkDraftBundle checks that the bundle's spec names the request r and no item, and that its
+// definition holds every draft file.
+func checkDraftBundle(t *testing.T, body []byte, r domain.DraftRequest) {
+	t.Helper()
 
 	var got runBundle
 	if err := json.Unmarshal(body, &got); err != nil {
@@ -948,18 +970,21 @@ func TestServeRun_DraftRequestBundle(t *testing.T) {
 		t.Errorf("draft_request = %+v, want %s", s.DraftRequest, r.ID)
 	}
 
-	if got.Definition == nil || len(got.Definition.Files) != len(draftFiles) {
-		t.Fatalf("definition = %+v, want the %d draft files", got.Definition, len(draftFiles))
+	checkDraftDefinition(t, got.Definition)
+}
+
+// checkDraftDefinition checks that a bundle's definition holds every draft file.
+func checkDraftDefinition(t *testing.T, d *bundleDefinition) {
+	t.Helper()
+
+	if d == nil || len(d.Files) != len(draftFiles) {
+		t.Fatalf("definition = %+v, want the %d draft files", d, len(draftFiles))
 	}
 
 	for p, want := range draftFiles {
-		if !bytes.Equal(got.Definition.Files[p], want) {
-			t.Errorf("definition file %s = %q, want %q", p, got.Definition.Files[p], want)
+		if !bytes.Equal(d.Files[p], want) {
+			t.Errorf("definition file %s = %q, want %q", p, d.Files[p], want)
 		}
-	}
-
-	if strings.Contains(string(body), modelAPIKey) || strings.Contains(string(body), cloneToken) {
-		t.Error("the bundle holds a secret value")
 	}
 }
 
@@ -973,7 +998,7 @@ func TestServeRun_DraftRequestStaleRevision(t *testing.T) {
 	r, rev := h.openDraft(t, factoryID)
 	ctx := domain.WithOrg(t.Context(), h.org)
 
-	m, err := h.drafts.PutBlobs(ctx, map[string][]byte{"agents/engineer.md": []byte("# engineer, edited\n")})
+	m, err := h.drafts.PutBlobs(ctx, map[string][]byte{engineerFile: []byte("# engineer, edited\n")})
 	if err != nil {
 		t.Fatal(err)
 	}

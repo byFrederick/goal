@@ -251,8 +251,10 @@ func TestTaskToken_DraftRequest(t *testing.T) {
 	}
 
 	// Only a draft request's token names a draft request.
-	other := TaskClaims{OrgID: "o1", FactoryID: "f1", VersionID: "v1", ItemID: "i1", Station: stationBuild, Agent: "backend", RunID: "r1",
-		DraftRequest: "d1", ExpiresAt: now.Add(time.Hour).Unix()}
+	other := TaskClaims{
+		OrgID: "o1", FactoryID: "f1", VersionID: "v1", ItemID: "i1", Station: stationBuild, Agent: testAgent, RunID: "r1",
+		DraftRequest: "d1", ExpiresAt: now.Add(time.Hour).Unix(),
+	}
 	if _, err := VerifyTaskToken(key, sign(other), now); !errors.Is(err, ErrBadTaskToken) {
 		t.Errorf("verifying a production token that names a draft request: err = %v, want ErrBadTaskToken", err)
 	}
