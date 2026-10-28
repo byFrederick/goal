@@ -52,6 +52,7 @@ import { Route as OOrgFFactoryIntakeNewRouteImport } from './routes/o.$org.f.$fa
 import { Route as OOrgFFactoryIntakeWebhooksRouteImport } from './routes/o.$org.f.$factory.intake.webhooks'
 import { Route as OOrgFFactoryItemsIndexRouteImport } from './routes/o.$org.f.$factory.items.index'
 import { Route as OOrgFFactoryItemsRefRouteImport } from './routes/o.$org.f.$factory.items.$ref'
+import { Route as OOrgFFactoryJonahEvalsRouteImport } from './routes/o.$org.f.$factory.jonah.evals'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -272,6 +273,11 @@ const OOrgFFactoryItemsRefRoute = OOrgFFactoryItemsRefRouteImport.update({
   path: '/items/$ref',
   getParentRoute: () => OOrgFFactoryRoute,
 } as any)
+const OOrgFFactoryJonahEvalsRoute = OOrgFFactoryJonahEvalsRouteImport.update({
+  id: '/jonah/evals',
+  path: '/jonah/evals',
+  getParentRoute: () => OOrgFFactoryRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -312,6 +318,7 @@ export interface FileRoutesByFullPath {
   '/o/$org/f/$factory/intake/new': typeof OOrgFFactoryIntakeNewRoute
   '/o/$org/f/$factory/intake/webhooks': typeof OOrgFFactoryIntakeWebhooksRoute
   '/o/$org/f/$factory/items/$ref': typeof OOrgFFactoryItemsRefRoute
+  '/o/$org/f/$factory/jonah/evals': typeof OOrgFFactoryJonahEvalsRoute
   '/o/$org/f/$factory/agents/': typeof OOrgFFactoryAgentsIndexRoute
   '/o/$org/f/$factory/definition/': typeof OOrgFFactoryDefinitionIndexRoute
   '/o/$org/f/$factory/intake/': typeof OOrgFFactoryIntakeIndexRoute
@@ -353,6 +360,7 @@ export interface FileRoutesByTo {
   '/o/$org/f/$factory/intake/new': typeof OOrgFFactoryIntakeNewRoute
   '/o/$org/f/$factory/intake/webhooks': typeof OOrgFFactoryIntakeWebhooksRoute
   '/o/$org/f/$factory/items/$ref': typeof OOrgFFactoryItemsRefRoute
+  '/o/$org/f/$factory/jonah/evals': typeof OOrgFFactoryJonahEvalsRoute
   '/o/$org/f/$factory/agents': typeof OOrgFFactoryAgentsIndexRoute
   '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionIndexRoute
   '/o/$org/f/$factory/intake': typeof OOrgFFactoryIntakeIndexRoute
@@ -399,6 +407,7 @@ export interface FileRoutesById {
   '/o/$org/f/$factory/intake/new': typeof OOrgFFactoryIntakeNewRoute
   '/o/$org/f/$factory/intake/webhooks': typeof OOrgFFactoryIntakeWebhooksRoute
   '/o/$org/f/$factory/items/$ref': typeof OOrgFFactoryItemsRefRoute
+  '/o/$org/f/$factory/jonah/evals': typeof OOrgFFactoryJonahEvalsRoute
   '/o/$org/f/$factory/agents/': typeof OOrgFFactoryAgentsIndexRoute
   '/o/$org/f/$factory/definition/': typeof OOrgFFactoryDefinitionIndexRoute
   '/o/$org/f/$factory/intake/': typeof OOrgFFactoryIntakeIndexRoute
@@ -445,6 +454,7 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/intake/new'
     | '/o/$org/f/$factory/intake/webhooks'
     | '/o/$org/f/$factory/items/$ref'
+    | '/o/$org/f/$factory/jonah/evals'
     | '/o/$org/f/$factory/agents/'
     | '/o/$org/f/$factory/definition/'
     | '/o/$org/f/$factory/intake/'
@@ -486,6 +496,7 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/intake/new'
     | '/o/$org/f/$factory/intake/webhooks'
     | '/o/$org/f/$factory/items/$ref'
+    | '/o/$org/f/$factory/jonah/evals'
     | '/o/$org/f/$factory/agents'
     | '/o/$org/f/$factory/definition'
     | '/o/$org/f/$factory/intake'
@@ -531,6 +542,7 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/intake/new'
     | '/o/$org/f/$factory/intake/webhooks'
     | '/o/$org/f/$factory/items/$ref'
+    | '/o/$org/f/$factory/jonah/evals'
     | '/o/$org/f/$factory/agents/'
     | '/o/$org/f/$factory/definition/'
     | '/o/$org/f/$factory/intake/'
@@ -853,6 +865,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OOrgFFactoryItemsRefRouteImport
       parentRoute: typeof OOrgFFactoryRoute
     }
+    '/o/$org/f/$factory/jonah/evals': {
+      id: '/o/$org/f/$factory/jonah/evals'
+      path: '/jonah/evals'
+      fullPath: '/o/$org/f/$factory/jonah/evals'
+      preLoaderRoute: typeof OOrgFFactoryJonahEvalsRouteImport
+      parentRoute: typeof OOrgFFactoryRoute
+    }
   }
 }
 
@@ -923,6 +942,7 @@ interface OOrgFFactoryRouteChildren {
   OOrgFFactoryIntakeNewRoute: typeof OOrgFFactoryIntakeNewRoute
   OOrgFFactoryIntakeWebhooksRoute: typeof OOrgFFactoryIntakeWebhooksRoute
   OOrgFFactoryItemsRefRoute: typeof OOrgFFactoryItemsRefRoute
+  OOrgFFactoryJonahEvalsRoute: typeof OOrgFFactoryJonahEvalsRoute
   OOrgFFactoryAgentsIndexRoute: typeof OOrgFFactoryAgentsIndexRoute
   OOrgFFactoryIntakeIndexRoute: typeof OOrgFFactoryIntakeIndexRoute
   OOrgFFactoryItemsIndexRoute: typeof OOrgFFactoryItemsIndexRoute
@@ -938,6 +958,7 @@ const OOrgFFactoryRouteChildren: OOrgFFactoryRouteChildren = {
   OOrgFFactoryIntakeNewRoute: OOrgFFactoryIntakeNewRoute,
   OOrgFFactoryIntakeWebhooksRoute: OOrgFFactoryIntakeWebhooksRoute,
   OOrgFFactoryItemsRefRoute: OOrgFFactoryItemsRefRoute,
+  OOrgFFactoryJonahEvalsRoute: OOrgFFactoryJonahEvalsRoute,
   OOrgFFactoryAgentsIndexRoute: OOrgFFactoryAgentsIndexRoute,
   OOrgFFactoryIntakeIndexRoute: OOrgFFactoryIntakeIndexRoute,
   OOrgFFactoryItemsIndexRoute: OOrgFFactoryItemsIndexRoute,
