@@ -50,9 +50,18 @@ const (
 	overviewProposals    = 1000
 )
 
+// reviewLoopRunning gates manual reviews: no review loop claims a queued review yet, so
+// QueueJonahReview refuses with review-loop-not-running instead of queueing one nothing runs.
+// software#344, which builds the loop, deletes this switch.
+const reviewLoopRunning = false
+
+// reviewLoopNotRunning is the refusal's detail, the same sentence the CLI prints.
+const reviewLoopNotRunning = "Reviews start when Jonah's review loop ships"
+
 var (
-	errJonahUnavailable = errors.New("this goald serves no Jonah store")
-	errProposalNotFound = errors.New("no such proposal")
+	errJonahUnavailable     = errors.New("this goald serves no Jonah store")
+	errProposalNotFound     = errors.New("no such proposal")
+	errReviewLoopNotRunning = errors.New("no Jonah review loop runs yet")
 )
 
 // jonahProblem answers the Jonah routes' own errors.
@@ -78,12 +87,19 @@ func jonahProblem(err error) (gen.Problem, bool) {
 		status, code = http.StatusConflict, "review-in-flight"
 	case errors.Is(err, domain.ErrLearningBudgetExhausted):
 		status, code = http.StatusConflict, "learning-budget-exhausted"
+	case errors.Is(err, errReviewLoopNotRunning):
+		status, code = http.StatusConflict, "review-loop-not-running"
 	default:
 		return gen.Problem{}, false
 	}
 
 	p := detailed(status, err)
 	p.Code = &code
+
+	if code == "review-loop-not-running" {
+		detail := reviewLoopNotRunning
+		p.Detail = &detail
+	}
 
 	return p, true
 }
@@ -408,6 +424,10 @@ func (s *server) QueueJonahReview(ctx context.Context, req gen.QueueJonahReviewR
 	rec, err := s.jonahWrite(ctx, req.Factory)
 	if err != nil {
 		return nil, err
+	}
+
+	if !reviewLoopRunning {
+		return nil, errReviewLoopNotRunning
 	}
 
 	if rec.Current == nil {

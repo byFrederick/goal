@@ -35,6 +35,10 @@ const (
 	jonahLookCmd = "look"
 )
 
+// reviewLoopNotRunning is goal jonah look's refusal until Jonah's review loop ships
+// (software#344), and the message of goald's 409 review-loop-not-running.
+const reviewLoopNotRunning = "Reviews start when Jonah's review loop ships"
+
 // jonahConflicts are the one-line messages of the 409 codes the Jonah operations document.
 var jonahConflicts = map[string]string{
 	"draft-open":                "the factory has an open draft: publish or discard it, then approve again, or use goal jonah edit",
@@ -43,6 +47,7 @@ var jonahConflicts = map[string]string{
 	"proposal-decided":          "the proposal was already decided: goal jonah show %d says how",
 	"review-in-flight":          "a review is already pending or running: wait for it to finish",
 	"learning-budget-exhausted": "Jonah's runs reached the factory's weekly budget (learning.jonah.weeklyUsd): try again when the last 7 days cost less",
+	"review-loop-not-running":   reviewLoopNotRunning,
 }
 
 // jonahProblem is goald's refusal of a Jonah operation on proposal number (0 for none): a
@@ -262,38 +267,18 @@ func jonahDecide(ctx context.Context, out *printer, getenv func(string) string, 
 	return nil
 }
 
-// jonahLook is goal jonah look [--factory F]: queue a manual review of the sent-back runs.
-func jonahLook(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+// jonahLook is goal jonah look [--factory F]: a manual review of the sent-back runs, which it
+// refuses without asking goald until Jonah's review loop ships (software#344 restores the call).
+func jonahLook(_ context.Context, _ *printer, _ func(string) string, args []string) error {
 	fs := newFlags("jonah look")
-	orgFlag := addOrgFlag(fs)
-	factory := fs.String("factory", "", "the factory (name or id); default the organization's only one")
+	addOrgFlag(fs)
+	fs.String("factory", "", "the factory (name or id); default the organization's only one")
 
 	if pos, err := parseInterspersed(fs, args); err != nil || len(pos) != 0 {
 		return errUsage
 	}
 
-	c, err := connect(ctx, getenv, *orgFlag)
-	if err != nil {
-		return err
-	}
-
-	f, err := commandFactory(ctx, c, *factory)
-	if err != nil {
-		return err
-	}
-
-	res, err := c.QueueJonahReviewWithResponse(ctx, c.org, f)
-	if err != nil {
-		return apiDown(err)
-	}
-
-	if res.JSON202 == nil {
-		return jonahProblem(res.HTTPResponse, res.ApplicationproblemJSONDefault, 0)
-	}
-
-	out.printf("queued Jonah review %s\n", res.JSON202.Id)
-
-	return nil
+	return errors.New(jonahConflicts["review-loop-not-running"])
 }
 
 // jonahProposalArgs parses <number> [--factory F] [--org O] and the flags extra declares (its
