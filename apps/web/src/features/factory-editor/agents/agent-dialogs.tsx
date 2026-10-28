@@ -134,10 +134,41 @@ function NameDialog({
 
 const listButton = 'h-11 w-full justify-center md:h-10';
 
-/** Add agent: the agent with `prompt: ./agents/<name>.md` and that file, then its detail. */
-export function AddAgentButton() {
+/**
+ * Add agent: the name dialog for the draft's agents, shared by the definition's agents list and the Agents
+ * screen. The agent with `prompt: ./agents/<name>.md` and that file go into the draft in one edit; `onAdded`
+ * then moves on. Renders inside DraftSessionProvider.
+ */
+export function AddAgentDialog({
+  open,
+  onOpenChange,
+  onAdded,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onAdded: (name: string) => void | Promise<void>;
+}) {
   const session = useDraftSession();
   const agents = useSection('agents');
+  return (
+    <NameDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Add agent"
+      description="It gets a prompt file, agents/<name>.md, to write next."
+      submitLabel="Add agent"
+      initial=""
+      taken={(agents.agents ?? []).map((a) => a.name)}
+      onSubmit={async (name) => {
+        session.edit(addAgent(agents, name));
+        await onAdded(name);
+      }}
+    />
+  );
+}
+
+/** Add agent, from the definition's agents list: the new agent's detail opens in the definition. */
+export function AddAgentButton() {
   const setSearch = useSetSearch();
   const [open, setOpen] = useState(false);
   return (
@@ -146,18 +177,10 @@ export function AddAgentButton() {
         <Plus size={16} strokeWidth={1.5} aria-hidden="true" />
         Add agent
       </Button>
-      <NameDialog
+      <AddAgentDialog
         open={open}
         onOpenChange={setOpen}
-        title="Add agent"
-        description="It gets a prompt file, agents/<name>.md, to write next."
-        submitLabel="Add agent"
-        initial=""
-        taken={(agents.agents ?? []).map((a) => a.name)}
-        onSubmit={async (name) => {
-          session.edit(addAgent(agents, name));
-          setSearch({ agent: name, add: undefined });
-        }}
+        onAdded={(name) => setSearch({ agent: name, add: undefined })}
       />
     </>
   );
@@ -241,7 +264,7 @@ export function RemoveAgentDialog({
           title={`${agent.name} can’t be removed yet`}
           description="Stations still use it. Give them another agent in Line first."
         >
-          <ul className="m-0 flex list-none flex-col gap-1 p-0 text-[15px]">
+          <ul className="m-0 flex list-none flex-col gap-1 p-0 text-body">
             {using.map((s) => (
               <li key={s.id}>
                 <SectionLink
@@ -417,14 +440,14 @@ export function CopyAgentButton() {
                   <span className="text-muted"> · {picked.model ?? 'the factory’s default model'}</span>
                 </p>
                 {firstLines ? (
-                  <pre className="m-0 max-h-40 overflow-auto font-mono text-[13px] leading-[1.6] whitespace-pre-wrap text-ink">
+                  <pre className="m-0 max-h-40 overflow-auto font-mono text-secondary leading-[1.6] whitespace-pre-wrap text-ink">
                     {firstLines}
                   </pre>
                 ) : null}
               </div>
             ) : null}
             {error ? (
-              <p role="alert" className="m-0 text-[13px] text-rework-ink">
+              <p role="alert" className="m-0 text-secondary text-rework-ink">
                 {error}
               </p>
             ) : null}
