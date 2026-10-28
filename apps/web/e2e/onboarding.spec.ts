@@ -119,3 +119,24 @@ test('step 4 without a factory links back to step 3', async ({ page }) => {
   await page.getByRole('link', { name: 'Back' }).click();
   await expect(page).toHaveURL(/\/o\/goal\/get-started\/factory/);
 });
+
+test('step 4 continues to step 5, which publishes the factory and reaches step 6', async ({ page }) => {
+  await signIn(page.request);
+  await page.goto('/o/goal/get-started/code');
+  await page.locator('label', { hasText: 'acme/goal' }).first().getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Continue with 1 repository' }).click();
+  await page.getByRole('button', { name: /^Use / }).click();
+  await expect(page).toHaveURL(/\/o\/goal\/get-started\/line\?.*factory=/);
+
+  await page.getByRole('link', { name: 'Continue' }).click();
+  await expect(page).toHaveURL(/\/o\/goal\/get-started\/budget\?.*factory=/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Set budgets and targets' })).toBeVisible();
+  await expect(page.getByRole('slider', { name: 'A day' })).toHaveValue('150');
+  await expect(page.getByText('fits about 48 items')).toBeVisible();
+  await expect(page.getByRole('radio', { name: /Finish what's started/ })).toBeChecked();
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page).toHaveURL(/\/o\/goal\/get-started\/intake\?.*factory=/);
+});
