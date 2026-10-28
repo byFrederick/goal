@@ -122,15 +122,7 @@ func (h *harness) expectAsked(t *testing.T, id domain.ItemID, run domain.RunID) 
 		t.Errorf("open question %+v, %v; want the one asked", open, ok)
 	}
 
-	// One lease_taken and waiting_human; the ended run moves the item no further.
-	for k, want := range map[domain.EventKind]int{
-		domain.EventLeaseTaken: 1, domain.EventWaitingHuman: 1,
-		domain.EventReleased: 0, domain.EventAgentCancelled: 0, domain.EventBlocked: 0,
-	} {
-		if n := len(h.eventsOf(id, k)); n != want {
-			t.Errorf("events %v; want %d %s", h.kinds(id), want, k)
-		}
-	}
+	h.expectEndedForAPerson(t, id)
 }
 
 func TestAsk_Refusals(t *testing.T) {
@@ -301,11 +293,10 @@ func TestApprove_RefusedWhileAQuestionIsOpen(t *testing.T) {
 	}
 }
 
-// Move, Pause, Reject and Cancel withdraw the open question: nothing is left to answer.
-func TestQuestion_WithdrawnByAPersonsControl(t *testing.T) {
-	t.Parallel()
-
-	for name, act := range map[string]control{
+// withdrawingControls are a person's controls that withdraw an item's open question or tool
+// approval, by name: Move, Pause, Reject (with reason) and Cancel.
+func withdrawingControls(reason string) map[string]control {
+	return map[string]control{
 		"move": func(e *engine.Engine, ctx context.Context, id domain.ItemID) (domain.Item, error) {
 			return e.Move(ctx, id, stApprove, human, "")
 		},
@@ -313,12 +304,19 @@ func TestQuestion_WithdrawnByAPersonsControl(t *testing.T) {
 			return e.Pause(ctx, id, human, "")
 		},
 		"send back": func(e *engine.Engine, ctx context.Context, id domain.ItemID) (domain.Item, error) {
-			return e.Reject(ctx, id, human, "wrong question")
+			return e.Reject(ctx, id, human, reason)
 		},
 		"cancel": func(e *engine.Engine, ctx context.Context, id domain.ItemID) (domain.Item, error) {
 			return e.Cancel(ctx, id, human, "")
 		},
-	} {
+	}
+}
+
+// Move, Pause, Reject and Cancel withdraw the open question: nothing is left to answer.
+func TestQuestion_WithdrawnByAPersonsControl(t *testing.T) {
+	t.Parallel()
+
+	for name, act := range withdrawingControls("wrong question") {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 

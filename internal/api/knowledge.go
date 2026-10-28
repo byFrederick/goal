@@ -83,7 +83,9 @@ func knowledgeProblem(err error) (gen.Problem, bool) {
 		{errUploadTooLarge, http.StatusRequestEntityTooLarge, "upload-too-large"},
 		{domain.ErrUnsupportedDocument, http.StatusUnsupportedMediaType, "unsupported-document-type"},
 		{domain.ErrConnectionCannotSync, http.StatusBadRequest, "connection-cannot-sync"},
+		{errDocumentNotUsed, http.StatusUnprocessableEntity, "knowledge-document-not-used"},
 		{errSourceInvalid, http.StatusBadRequest, ""},
+		{errVerdictInvalid, http.StatusBadRequest, ""},
 	}
 
 	for _, a := range answers {

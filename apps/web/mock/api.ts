@@ -62,6 +62,7 @@ import { authSettings, createMockAuth } from './auth.ts';
 import { createConnections } from './connections.ts';
 import { createCredentials } from './credentials.ts';
 import { createDefinitions } from './definitions.ts';
+import { createEvals } from './evals.ts';
 import { parseFault, sleep, takeFault } from './faults.ts';
 import {
   acmeOrg,
@@ -76,13 +77,16 @@ import {
 } from './fixtures.ts';
 import { constraintOf, type DayRange, type FlowInput, leadTimeOf, metricsOf, rangeOf, weeklyOf } from './flow.ts';
 import { intakeOf } from './intake.ts';
+import { createJudges } from './judges.ts';
 import { createKeys } from './keys.ts';
 import { createKnowledge } from './knowledge.ts';
 import { membersFor, orgCanOf } from './people.ts';
 import { createPolicy } from './policy.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
 import { orgRunsOf } from './runs.ts';
+import { type SearchSource, search } from './search.ts';
 import { createSpend } from './spend.ts';
+import { starterItem } from './starter.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
 import { createWebhooks } from './webhooks.ts';
 
@@ -231,6 +235,13 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     acme: acmeOrg,
   });
 
+  const evals = createEvals({
+    clock,
+    factory: (org, key) => findFactory(key, org),
+  });
+  const judges = createJudges({
+    factory: (org, key) => findFactory(key, org),
+  });
   const webhooks = createWebhooks({
     clock,
     factories: (org) => state.factories.filter((f) => f.org_id === org),
@@ -720,6 +731,53 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
 
   const stationsOf = (it: MockItem) => findFactory(it.factory)?.stations ?? [];
 
+  /** GET …/search (openapi.yaml searchOrg): the organization's items, agents, factories and connections. */
+  function searchOf(org: Org, url: URL, caller: Org, res: ServerResponse) {
+    const q = (url.searchParams.get('q') ?? '').trim();
+    if (q.length < 1 || q.length > 200)
+      return problem(res, 400, 'Bad Request', 'q is 1 to 200 characters once trimmed');
+    const limit = Number(url.searchParams.get('limit') ?? 5);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20)
+      return problem(res, 400, 'Bad Request', 'limit is 1 to 20');
+    const factories = factoriesOf(org.id).filter((f) => !f.archived_at);
+    const source: SearchSource = {
+      items: state.items.flatMap((it) => {
+        const f = factories.find((x) => x.name === it.factory);
+        if (!f) return [];
+        return [
+          {
+            id: it.id,
+            number: it.number,
+            factory_id: f.id,
+            factory_name: f.name,
+            title: it.title,
+            state: it.state,
+            station: it.station,
+          },
+        ];
+      }),
+      // An agent is named by its role: its copies (builder-1, builder-2) are one agent, at each station it works at.
+      agents: factories.flatMap((f) => {
+        const config = state.stations[f.name] ?? {};
+        const at = new Map<string, string[]>();
+        for (const s of f.stations) {
+          for (const copy of config[s.id]?.agents ?? []) {
+            const name = copy.replace(/-\d+$/, '');
+            const stations = at.get(name) ?? [];
+            if (!stations.includes(s.id)) stations.push(s.id);
+            at.set(name, stations);
+          }
+        }
+        return [...at].map(([name, stations]) => ({ name, stations, factory_id: f.id, factory_name: f.name }));
+      }),
+      factories: factories.map((f) => ({ id: f.id, name: f.name, title: f.title || f.name })),
+      connections: caller.can?.includes('connection:read')
+        ? connections.outlines(org.id).map((c) => ({ name: c.name, kind: c.kind }))
+        : [],
+    };
+    return json(res, 200, search(source, q, limit));
+  }
+
   /** The organization's factories by name, as goald lists them. */
   const factoriesOf = (org: string) =>
     state.factories.filter((f) => f.org_id === org).sort((a, b) => a.name.localeCompare(b.name));
@@ -958,8 +1016,23 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
               id: `question:${it.id}`,
               kind: 'question',
               since: it.question.asked_at,
-              action: f.stations.find((s) => s.id === it.station)?.action ?? null,
-              approval: { summary: it.question.text, facts: [], pull_request: it.pr_url, spend_usd: it.cost_usd },
+              action: null,
+              approval: null,
+              question: it.question,
+            },
+          ];
+        }
+        if (it.tool_approval) {
+          if (!decides) return [];
+          return [
+            {
+              ...base,
+              id: `tool_approval:${it.id}`,
+              kind: 'tool_approval',
+              since: it.tool_approval.asked_at,
+              action: null,
+              approval: null,
+              tool_approval: it.tool_approval,
             },
           ];
         }
@@ -1008,7 +1081,15 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     return [...items, ...warnings];
   };
 
-  const kindOrder: InboxEntry['kind'][] = ['decision', 'question', 'andon', 'rework_warning', 'blocked', 'expedite'];
+  const kindOrder: InboxEntry['kind'][] = [
+    'decision',
+    'question',
+    'tool_approval',
+    'andon',
+    'rework_warning',
+    'blocked',
+    'expedite',
+  ];
 
   /**
    * A board station's statistics: the seeded busy and send-back shares and queue trend, how long
@@ -1337,6 +1418,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       connections.reset(clock());
       credentials.reset(clock());
       knowledge.reset(clock());
+      evals.reset();
+      judges.reset();
       webhooks.reset();
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
       const cookie = auth.reset(authSettings(body.auth));
@@ -1429,6 +1512,9 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await credentials.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
+    if (rest === '/search' && method === 'GET') return searchOf(org, url, forCaller(req, org), res);
+    if (await evals.handle(org, rest, method, res, () => readBody(req))) return;
+    if (await judges.handle(org, rest, method, res, () => readBody(req))) return;
     if (await spend.handle(org, rest, method, url, res)) return;
     if (await policy.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await webhooks.handle(org.id, rest, method, req, res, () => readBody(req))) return;
@@ -1794,7 +1880,22 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
           spans: [],
         };
         state.items.push(it);
-        emit(it, 'created', 'engine');
+        if (title === starterItem.title) {
+          // The mock runs no agent, so the starter item is shown as far along as the picture has it: created nine
+          // minutes ago, its spec accepted, moved to Build, with $0.84 spent. Seconds from its creation.
+          const at = (s: number) => new Date(clock() - (540 - s) * 1000).toISOString();
+          it.created_at = at(0);
+          emit(it, 'created', 'engine', {}, at(0));
+          it.station = 'spec';
+          emit(it, 'moved', 'engine', { from: 'inbox', to: 'spec' }, at(12));
+          emit(it, 'approved', 'user:local', {}, at(270));
+          it.station = 'build';
+          emit(it, 'moved', 'engine', { from: 'spec', to: 'build' }, at(302));
+          it.state = 'in_progress';
+          it.cost_usd = 0.84;
+        } else {
+          emit(it, 'created', 'engine');
+        }
         return json(res, 201, full(it));
       }
       return problem(res, 405, 'Method not allowed');
@@ -1839,7 +1940,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     }
 
     m = rest.match(
-      /^\/items\/([^/]+)(?:\/(events|runs|parts|notes|approve|reject|merge|retry|move|pause|cancel|answer))?$/,
+      /^\/items\/([^/]+)(?:\/(events|runs|parts|notes|approve|reject|merge|retry|move|pause|cancel|answer|tool-approval))?$/,
     );
     if (!m) return problem(res, 404, 'Not found', path);
 
@@ -1944,6 +2045,44 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       emit(it, 'lease_taken', by, { action: verb, actor: 'user:local' });
       it.agent = null;
     };
+
+    if (action === 'tool-approval') {
+      // goald checks the body first, then whether the item is still open, then the open approval (ADR 0031).
+      const decision = body.decision;
+      const alwaysAllow = body.always_allow === true;
+      const hasNote = body.note !== undefined;
+      const note = typeof body.note === 'string' ? body.note.trim() : '';
+      if (decision !== 'approve' && decision !== 'deny') {
+        return problem(res, 400, 'Bad Request', 'decision is approve or deny');
+      }
+      if (alwaysAllow && decision === 'deny') {
+        return problem(res, 400, 'Bad Request', 'always_allow goes with approve, not deny');
+      }
+      if (decision === 'approve' && hasNote) {
+        return problem(res, 400, 'Bad Request', 'an approval takes no note');
+      }
+      if (decision === 'deny' && (!note || [...note].length > 2000)) {
+        return problem(res, 400, 'Bad Request', 'a note is 1 to 2000 characters');
+      }
+      if (closed) return problem(res, 409, 'Conflict', `${ref(it)} is ${it.state}`, 'item-closed');
+      const call = it.tool_approval;
+      if (!call) {
+        return problem(res, 409, 'Conflict', `${ref(it)} has no open tool approval`, 'no-open-tool-approval');
+      }
+      if (alwaysAllow && !call.always_allow_offered) {
+        return problem(res, 409, 'Conflict', 'the approval does not offer always allow', 'always-allow-not-offered');
+      }
+      emit(it, decision === 'approve' ? 'tool_approval_granted' : 'tool_approval_denied', by, {
+        approval_id: call.id,
+        actor: 'user:local',
+        ...(decision === 'approve' ? { always_allow: alwaysAllow } : { note }),
+      });
+      // The run's next one carries the decision; the item goes back to its station's arrival state.
+      it.tool_approval = null;
+      it.state = 'queued';
+      it.agent = null;
+      return json(res, 200, full(it));
+    }
 
     if (action === 'move') {
       const to = typeof body.to === 'string' ? body.to.trim() : '';

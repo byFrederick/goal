@@ -3,8 +3,10 @@ import type { Member } from '../../api/types';
 import {
   byRole,
   countTitle,
+  factoryRolesOf,
   factorySummary,
   invitationLine,
+  inviteRequestsOf,
   lastActive,
   matches,
   parseEmails,
@@ -140,5 +142,45 @@ describe('the rest of the page', () => {
     expect(matches(member({}), 'J.LINDQVIST@')).toBe(true);
     expect(matches(member({}), 'okafor')).toBe(false);
     expect(matches(member({}), '  ')).toBe(true);
+  });
+});
+
+describe('inviteRequestsOf', () => {
+  it('makes one request per address, each with the role and the factory grants of a member', () => {
+    const requests = inviteRequestsOf({
+      orgId: 'org-1',
+      emails: ['alex@example.com', 'sam@example.com'],
+      role: 'member',
+      grants: { 'f-goal': 'editor', 'f-sre': '' },
+    });
+    expect(requests).toEqual([
+      {
+        organizationId: 'org-1',
+        email: 'alex@example.com',
+        role: 'member',
+        factoryRoles: [{ factoryId: 'f-goal', role: 'editor' }],
+      },
+      {
+        organizationId: 'org-1',
+        email: 'sam@example.com',
+        role: 'member',
+        factoryRoles: [{ factoryId: 'f-goal', role: 'editor' }],
+      },
+    ]);
+  });
+
+  it('sends no factory grants with an owner or an admin, who hold every factory role already', () => {
+    const [request] = inviteRequestsOf({
+      orgId: 'org-1',
+      emails: ['ada@example.com'],
+      role: 'admin',
+      grants: { 'f-goal': 'viewer' },
+    });
+    expect(request?.factoryRoles).toEqual([]);
+    expect(request?.role).toBe('admin');
+  });
+
+  it('leaves out the factories with no role', () => {
+    expect(factoryRolesOf({ 'f-goal': '', 'f-sre': 'approver' })).toEqual([{ factoryId: 'f-sre', role: 'approver' }]);
   });
 });

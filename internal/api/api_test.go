@@ -187,6 +187,10 @@ type harness struct {
 	evals      *porttest.Evals
 	evalJudges *porttest.Judges
 	evalLoop   *jonah.Evals
+	// judges are the versions' judges as tests set them, judgeScores their scores; tries are
+	// queued by a jonah loop over them and the store's finished runs.
+	judges      *porttest.Judges
+	judgeScores *porttest.JudgeScores
 }
 
 // acme's one prompt and its path.
@@ -424,7 +428,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		Store: h.store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
 		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock,
 		CodeHosts:   map[string]ports.CodeHost{"github": h.codehost},
-		Connections: engineConnections(t, newTenancy(t)),
+		Connections: sharedRules{Connections: engineConnections(t, newTenancy(t)), h: h},
 		Credentials: porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), tenancy, nil),
 	}, engine.Config{Image: "ghcr.io/acme/goal-agent:1", GatewayURL: "http://gateway.example.com/mcp", GatewayKeyRef: "env:GOAL_GATEWAY_KEY"})
 	if err != nil {
@@ -482,6 +486,8 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		deps.Auth = api.AuthConfig{Mode: api.AuthSession, EmailCodes: !in.noEmailCodes, Google: in.google}
 	}
 
+	deps.Judges = h.judgeDeps(tenancy)
+
 	handler, err := api.New(h.withEvals(deps, tenancy, opts))
 	if err != nil {
 		t.Fatal(err)
@@ -534,6 +540,39 @@ func (h *harness) startFeed(t *testing.T, in *signIn) (*api.Feed, func()) {
 			t.Error(err)
 		}
 	}
+}
+
+// judgeDeps are h's judges and their scores, with a jonah loop over them and the store's finished
+// runs for tries.
+func (h *harness) judgeDeps(tenancy *porttest.Tenancy) *api.JudgeDeps {
+	h.judges, h.judgeScores = porttest.NewJudges(), porttest.NewJudgeScores(h.store)
+
+	return &api.JudgeDeps{
+		Judges: h.judges, Scores: h.judgeScores,
+		Tries: jonah.New(jonah.Deps{
+			Orgs: tenancy, Runs: h.store, Finished: porttest.NewFinishedRuns(h.store), Judges: h.judges, Scores: h.judgeScores,
+			Runner: porttest.NewJudgeRunner(nil), Clock: h.clock,
+		}, jonah.Config{}),
+	}
+}
+
+// sharedRules are the engine's connections with the standing rules kept in the API's (h.conns),
+// as goald's one store keeps both: a rule Always allow creates is one the API lists and revokes.
+type sharedRules struct {
+	*porttest.Connections
+	h *harness
+}
+
+func (c sharedRules) StandingRules(ctx context.Context, includeRevoked bool) ([]domain.StandingRule, error) {
+	return c.h.conns.StandingRules(ctx, includeRevoked)
+}
+
+func (c sharedRules) CreateStandingRule(ctx context.Context, n domain.NewStandingRule, by domain.Actor) (domain.StandingRule, error) {
+	return c.h.conns.CreateStandingRule(ctx, n, by)
+}
+
+func (c sharedRules) RevokeStandingRule(ctx context.Context, id domain.StandingRuleID, by domain.Actor) (domain.StandingRule, error) {
+	return c.h.conns.RevokeStandingRule(ctx, id, by)
 }
 
 // engineConnections are the connections the engine's runs and merges get: acme's model connection

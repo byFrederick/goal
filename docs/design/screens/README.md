@@ -19,7 +19,7 @@ How to use them:
 
 | Screen | Route | Status | Not built yet |
 |---|---|---|---|
-| `shell`: sidebar expanded and collapsed, search, organization menu, account menu | the layout of every page (`/o/$org`) | restyle (replaces the rail and the factory sidebar) | search results for pages and actions |
+| `shell`: sidebar expanded and collapsed, search, organization menu, account menu | the layout of every page (`/o/$org`) | restyle (replaces the rail and the factory sidebar) |  |
 | `account`: profile, theme, notifications, tokens, connected apps, sessions | `/account` (new route; today in the account menu) | new | Notification routing for Slack and email, the daily digest, the email for notifications, connected apps (no endpoint yet), the session list with per-session sign-out (goald's /api/auth does not forward list-sessions or revoke-session) |
 | `consent`: allow an app (OAuth), approve a CLI sign-in | `/device`, `/oauth/consent` | restyle (device), new feature (OAuth consent, phase 6) | |
 
@@ -42,11 +42,11 @@ How to use them:
 | Screen | Route | Status | Not built yet |
 |---|---|---|---|
 | `home`: every factory as a mini line, needs you, spend | `/o/$org` | restyle of the factories home | |
-| `floor`: the andon panel, six KPI tiles, needs you, where work waits, throughput, activity | `/o/$org/f/$factory` | restyle | Add a build agent (the what-if), Hands-off rate until it is computed |
+| `floor`: the andon panel, six KPI tiles, needs you, where work waits, throughput, activity | `/o/$org/f/$factory` | restyle |  |
 | `board`: columns with WIP meters, expedite lane, Ready and In progress, assembly lines | `…/board` | restyle | |
 | `item`: stepper, the agent's question with quick answers, run timeline, note composer, details, cost, overlaps, rules | `…/items/$ref` | restyle | Watch live, Trace, Teardown |
 | `items`: saved views, filters, grouped by assembly, bulk actions | `…/items` | restyle | Save view, Set lane |
-| `needs-you`: list across factories by type, detail with Approve, Deny, "Edit, then approve" | `/o/$org/needs-you` (new page; replaces the inbox drawer) | new | Questions until agents can ask; Always allow |
+| `needs-you`: list across factories by type, detail with Approve, Deny, "Edit, then approve" | `/o/$org/needs-you` (new page; replaces the inbox drawer) | new | Always allow |
 | `runs`: every run across factories | `/o/$org/runs` | new (runs exist in the API) | Export CSV, Send to Jonah |
 
 ## Intake (`intake/`)
@@ -79,7 +79,7 @@ Every Jonah screen is a **new feature** (phase 5, [ADR 0002](../../adr/0002-jona
 | `connections`: grouped by code hosts, apps, MCP servers and model providers | `/o/$org/connections` | restyle | writes waiting for approval |
 | `connection-add`: catalog and details, tool permissions, factories, test | `/o/$org/connections/new` | restyle | the per-tool "Ask first" setting |
 | `credentials`, `credential-new` | `/o/$org/credentials` | new feature: today secrets live in connection fields. The spec decides how credentials relate to connections. | encryption in the browser |
-| `knowledge` | `/o/$org/knowledge` | restyle | verdicts on whether knowledge helped or misled, "where it was used" |
+| `knowledge` | `/o/$org/knowledge` | restyle |  |
 
 ## Organization (`organization/`)
 

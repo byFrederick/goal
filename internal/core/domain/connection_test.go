@@ -549,3 +549,30 @@ func TestConnectionSecrets(t *testing.T) {
 
 // credRef is a secret value that refers to credential name.
 func credRef(name string) string { return "{{" + name + "}}" }
+
+// A connection.used row names the connection and what it was opened for, and only that.
+func TestConnectionUse_AuditData(t *testing.T) {
+	t.Parallel()
+
+	const conn = "acme-model"
+
+	for _, tt := range []struct {
+		use  ConnectionUse
+		want map[string]any // besides the connection's name
+	}{
+		{use: ConnectionUse{Run: "run-9"}, want: map[string]any{"run_id": "run-9"}},
+		{use: ConnectionUse{Source: "docs"}, want: map[string]any{"source": "docs"}},
+		{use: ConnectionUse{Trigger: "red-main", Event: "check-run-1"}, want: map[string]any{"trigger": "red-main", "event": "check-run-1"}},
+	} {
+		want := maps.Clone(tt.want)
+		want["name"] = conn
+
+		if got := tt.use.AuditData(conn); !reflect.DeepEqual(got, want) {
+			t.Errorf("AuditData of %+v = %v, want %v", tt.use, got, want)
+		}
+
+		if got := tt.use.Actor(); got != EngineActor {
+			t.Errorf("Actor of %+v = %+v, want the engine", tt.use, got)
+		}
+	}
+}

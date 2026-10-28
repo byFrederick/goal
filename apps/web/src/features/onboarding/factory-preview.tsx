@@ -5,6 +5,7 @@
 import type { ReactNode } from 'react';
 import type { OrgSummary } from '../../api/types';
 import type { StationKind } from '../../shared/definition/model';
+import { formatUsd } from '../../shared/format';
 import { cn } from '../../ui/cn';
 import { GitHubMark } from '../../ui/github-mark';
 import { StationNode, type StationNodeTone } from '../../ui/station-node';
@@ -68,15 +69,17 @@ export function FactoryInitial({ name, className }: { name: string; className?: 
   );
 }
 
-/** The factory card: its initial, name and purpose, then the line. */
+/** The factory card: its initial, name and purpose, then the line. `item` marks the station the first item is at. */
 export function FactoryCard({
   name,
   purpose,
   stations,
+  item,
 }: {
   name: string;
   purpose: string;
   stations: readonly PreviewStation[];
+  item?: { station: string; number: number } | undefined;
 }) {
   return (
     <section
@@ -90,13 +93,19 @@ export function FactoryCard({
           {purpose ? <span className="text-secondary break-words text-andon-text">{purpose}</span> : null}
         </div>
       </div>
-      <FactoryLine stations={stations} />
+      <FactoryLine stations={stations} item={item} />
     </section>
   );
 }
 
 /** The stations in order, joined by a rule. The last station with kind `done` shows a check. */
-function FactoryLine({ stations }: { stations: readonly PreviewStation[] }) {
+function FactoryLine({
+  stations,
+  item,
+}: {
+  stations: readonly PreviewStation[];
+  item: { station: string; number: number } | undefined;
+}) {
   if (stations.length === 0) {
     return <p className="m-0 text-secondary text-andon-text">The stations appear here as you add them.</p>;
   }
@@ -110,7 +119,17 @@ function FactoryLine({ stations }: { stations: readonly PreviewStation[] }) {
           <li key={s.id} className="flex min-w-0 flex-1 flex-col items-center gap-2">
             <div className="flex w-full items-center">
               <span aria-hidden="true" className={cn('h-0.5 flex-1', first ? 'bg-transparent' : 'bg-run')} />
-              <StationNode tone={tone} size="compact" className="size-9 border-2 md:size-11" />
+              <span className="relative flex">
+                <StationNode tone={tone} size="compact" className="size-9 border-2 md:size-11" />
+                {item?.station === s.id ? (
+                  <span
+                    aria-hidden="true"
+                    className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-chip bg-amber px-1 text-meta font-control text-ink"
+                  >
+                    {item.number}
+                  </span>
+                ) : null}
+              </span>
               <span aria-hidden="true" className={cn('h-0.5 flex-1', last ? 'bg-transparent' : 'bg-run')} />
             </div>
             <span className="max-w-full truncate text-secondary text-andon-text">{s.label}</span>
@@ -133,5 +152,41 @@ function WipSlots({ wip, label }: { wip: number | undefined; label: string }) {
         <span key={slot} aria-hidden="true" className="size-2 rounded-xs border border-andon-line" />
       ))}
     </span>
+  );
+}
+
+/** The running item under the panel's cards (step 8): its number, its title, and where it is and what it has cost. */
+export function RunningItemCard({
+  number,
+  title,
+  station,
+  minutes,
+  cost,
+}: {
+  number: number;
+  title: string;
+  station: string;
+  /** Minutes since the item was created. */
+  minutes: number;
+  cost: number;
+}) {
+  return (
+    <section
+      aria-label="Your first item"
+      className="flex min-w-0 items-center gap-3 rounded-card border border-run-soft bg-andon-raised p-4 ring-4 ring-run-soft/25"
+    >
+      <span
+        aria-hidden="true"
+        className="flex size-7 flex-none items-center justify-center rounded-control bg-amber font-control text-secondary text-ink"
+      >
+        {number}
+      </span>
+      <div className="flex min-w-0 flex-col">
+        <span className="font-control text-body break-words text-white">{title}</span>
+        <span className="text-secondary break-words text-andon-text">
+          {`At ${station}, ${minutes} min in, ${formatUsd(cost)} so far`}
+        </span>
+      </div>
+    </section>
   );
 }

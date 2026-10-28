@@ -20,6 +20,10 @@ const field =
 interface NewItemProps {
   factory: Factory;
   compact?: boolean;
+  /** Replaces the default button that opens the composer (the knowledge card's "Make an item to fix it"). */
+  trigger?: ReactNode;
+  /** The title the composer starts with each time it opens. */
+  title?: string;
 }
 
 /**
@@ -30,15 +34,17 @@ export function NewItemButton(props: NewItemProps) {
   return holds(props.factory, 'item:create') ? <NewItem {...props} /> : null;
 }
 
-function NewItem({ factory, compact }: NewItemProps) {
+function NewItem({ factory, compact, trigger, title }: NewItemProps) {
   const [open, setOpen] = useState(false);
   return (
     <Composer
       open={open}
       onOpenChange={setOpen}
       factory={factory}
+      initialTitle={title}
       trigger={
-        compact ? (
+        trigger ??
+        (compact ? (
           <Button variant="primary" size="icon" className="size-11" aria-label="New item">
             <Plus size={18} strokeWidth={1.75} aria-hidden="true" />
           </Button>
@@ -47,7 +53,7 @@ function NewItem({ factory, compact }: NewItemProps) {
             <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
             New item
           </Button>
-        )
+        ))
       }
     />
   );
@@ -60,7 +66,16 @@ function NewItem({ factory, compact }: NewItemProps) {
  * With `button` false it only listens for C and renders the composer: the collapsed rail has no
  * New item button yet, but C must still open the composer there and on phones.
  */
-export function NewItemFromSidebar({ button = true }: { button?: boolean }) {
+export function NewItemFromSidebar({
+  button = true,
+  openWith,
+  onOpened,
+}: {
+  button?: boolean;
+  /** A request to open the composer with a title, from the sidebar's search; `onOpened` clears it. */
+  openWith?: { title: string } | null;
+  onOpened?: () => void;
+}) {
   const org = useOrg();
   const factories = useQuery(factoriesQuery(org.id));
   const current = useMatch({ from: '/o/$org/f/$factory', shouldThrow: false });
@@ -73,6 +88,13 @@ export function NewItemFromSidebar({ button = true }: { button?: boolean }) {
     .toSorted((a, b) => a.name.localeCompare(b.name));
   const startAt = current ? (findFactory(choices, current.params.factory)?.id ?? '') : '';
   const shown = status !== 'ready' || choices.length > 0;
+
+  useEffect(() => {
+    if (!openWith) return;
+    setPicked(startAt);
+    setOpen(true);
+    onOpened?.();
+  }, [openWith, startAt, onOpened]);
 
   useEffect(() => {
     if (!shown) return;
@@ -97,6 +119,7 @@ export function NewItemFromSidebar({ button = true }: { button?: boolean }) {
         if (next) setPicked(startAt);
         setOpen(next);
       }}
+      initialTitle={openWith?.title}
       picker={{
         status,
         factories: choices,
@@ -152,15 +175,22 @@ interface ComposerProps {
   picker?: Picker;
   /** Opens the dialog; without one the dialog opens only by the shortcut, or stays open to show its state. */
   trigger?: ReactNode;
+  /** The title each opening starts with, when it is not empty. Read on mount and again on each opening. */
+  initialTitle?: string | undefined;
 }
 
 /** The "New item" dialog: the title, the factory (with a picker), the work type and the details. */
-function Composer({ open, onOpenChange, factory, picker, trigger }: ComposerProps) {
+function Composer({ open, onOpenChange, factory, picker, trigger, initialTitle }: ComposerProps) {
   const id = useId();
   const client = useQueryClient();
   const org = useOrg();
   const navigate = useNavigate();
-  const [title, setTitle] = useState('');
+  // The sidebar's search unmounts the sidebar's New item while it is open, so this mounts with the title it opens with.
+  // The knowledge page's "Make an item" keeps the composer mounted, so each opening re-applies the title too.
+  const [title, setTitle] = useState(initialTitle ?? '');
+  useEffect(() => {
+    if (open && initialTitle) setTitle(initialTitle);
+  }, [open, initialTitle]);
   const [type, setType] = useState('');
   const [body, setBody] = useState('');
   const [touched, setTouched] = useState(false);

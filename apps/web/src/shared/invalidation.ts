@@ -94,10 +94,11 @@ function isDefinitionEvent(data: unknown): data is DefinitionEvent {
  * The queries one `definition` event touches (B §10):
  * - `draft`, a draft opened, saved, discarded or published: the draft, its model and files, the
  *   factory (its draft chip) and the factory list; nothing when this tab saved that revision of
- *   that draft itself (the event is its echo), and the versions too once the version is published;
+ *   that draft itself (the event is its echo), and the versions too once the version is published,
+ *   with the eval cases (a publish starts an eval run);
  * - `current`, the version that runs moved or the factory was paused or resumed: the factory and
  *   the list, its versions, draft (based on, running), comparisons, board, overviews, the
- *   connections and the knowledge sources (what uses each);
+ *   connections, the knowledge sources (what uses each) and the eval cases;
  * - `factory`, a factory created or deleted: the factory and the list, attention and overviews.
  */
 export function definitionInvalidations(org: string, data: unknown): QueryKey[] {
@@ -112,6 +113,9 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
       return [
         ...factory,
         defKeys.draft(org, f),
+        ...(data.number !== undefined
+          ? [defKeys.versions(org, f), defKeys.versionsOf(org, f), keys.evals(org, f), keys.judges(org, f)]
+          : []),
         ...(data.number !== undefined ? [defKeys.versions(org, f), defKeys.versionsOf(org, f)] : []),
         ...(data.number !== undefined ? [intakeKeys.triggers(org, f)] : []),
       ];
@@ -123,12 +127,14 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
         defKeys.draft(org, f),
         defKeys.compares(org, f),
         keys.board(org, f),
+        keys.judges(org, f),
         keys.overviews(org),
         // The triggers of the running definition (what the intake shows).
         keys.intake(org, f),
         // What uses a connection or a knowledge source is read from the current versions.
         keys.connections(org),
         keys.knowledge(org),
+        keys.evals(org, f),
         // A trigger's rules and its results read from the current definition.
         intakeKeys.triggers(org, f),
       ];
@@ -152,8 +158,9 @@ export function connectionInvalidations(org: string): QueryKey[] {
 
 /**
  * The queries one `knowledge` event touches (spec 4 §8.3): a source's sync started or ended, so
- * the source lists, each source with its documents and each document's text may have changed.
- * Not a search: one open on Knowledge is an embedding call on goald, run again when asked.
+ * the source lists, each source with its documents and each document's text may have changed, and
+ * the usage of the sources (the runs that opened each document). The documents' uses sit under the
+ * 'document' prefix. Not a search: one open on Knowledge is an embedding call on goald, run again when asked.
  */
 export function knowledgeInvalidations(org: string): QueryKey[] {
   const knowledge = keys.knowledge(org);
@@ -161,6 +168,7 @@ export function knowledgeInvalidations(org: string): QueryKey[] {
     [...knowledge, 'sources'],
     [...knowledge, 'source'],
     [...knowledge, 'document'],
+    [...knowledge, 'usage'],
   ];
 }
 

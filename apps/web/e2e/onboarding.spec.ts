@@ -120,7 +120,7 @@ test('step 4 without a factory links back to step 3', async ({ page }) => {
   await expect(page).toHaveURL(/\/o\/goal\/get-started\/factory/);
 });
 
-test('step 4 continues to step 5, which publishes the factory, and step 6 turns on a trigger and reaches step 7', async ({
+test('step 4 continues to step 5, which publishes the factory, step 6 turns on a trigger, step 7 invites people and step 8 watches the first item', async ({
   page,
 }) => {
   await signIn(page.request);
@@ -152,4 +152,23 @@ test('step 4 continues to step 5, which publishes the factory, and step 6 turns 
   await page.getByRole('switch', { name: 'weekly-dependency-audit' }).click();
   await page.getByRole('button', { name: 'Turn on 1 trigger' }).click();
   await expect(page).toHaveURL(/\/o\/goal\/get-started\/people\?.*factory=/);
+
+  // Step 7: a Builder is added and sent; the People card lists the invitation.
+  await expect(page.getByRole('heading', { level: 1, name: 'Invite people' })).toBeVisible();
+  await page.getByLabel('Email').fill('alex@example.com');
+  await page.getByRole('button', { name: 'Add' }).click();
+  await expect(page.getByRole('list', { name: 'People to invite' }).getByText('alex@example.com')).toBeVisible();
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+  await page.getByRole('button', { name: 'Send 1 invite' }).click();
+  await expect(page).toHaveURL(/\/o\/goal\/get-started\/first-item\?.*factory=/);
+
+  // Step 8: the starter item is submitted once and its card shows where it is.
+  await expect(page.getByRole('heading', { level: 1, name: 'Watch your first item' })).toBeVisible();
+  await expect(page.getByText('Created from the setup')).toBeVisible();
+  await expect(page.getByText('Cost so far')).toBeVisible();
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+  await page.getByRole('link', { name: 'Go to the Floor' }).click();
+  await expect(page).toHaveURL(/\/o\/goal\/f\//);
 });

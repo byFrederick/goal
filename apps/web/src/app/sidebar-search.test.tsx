@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+
+import { ApiError, type Problem } from '@goal/api-client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   createMemoryHistory,
@@ -10,44 +12,57 @@ import {
 } from '@tanstack/react-router';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { listItems } from '../api/client';
-import {
-  attentionQuery,
-  factoriesQuery,
-  itemsQuery,
-  meQuery,
-  orgQuery,
-  orgsQuery,
-  overviewQuery,
-} from '../api/queries';
-import type { Factory, FactoryOverviewList, ItemCard, Me, Org, OrgAttention, OrgSummary } from '../api/types';
+import { approveItem, pauseFactory } from '../api/client';
+import { attentionQuery, factoriesQuery, meQuery, orgQuery, orgsQuery, overviewQuery } from '../api/queries';
+import { searchOrg } from '../api/search';
+import type {
+  Factory,
+  FactoryOverviewList,
+  Item,
+  Me,
+  Org,
+  OrgAttention,
+  OrgSearch,
+  OrgSummary,
+  SearchItem,
+} from '../api/types';
 import { TooltipProvider } from '../ui/tooltip';
 import { AccountProvider } from './account-menu';
 import { Sidebar } from './sidebar';
 
-// The items the search fetches, per factory: pending, failing, or answering with the seeded cards.
+// The organization's search answers, per query: the tests set what the service returns.
+vi.mock('../api/search', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/search')>()),
+  searchOrg: vi.fn(),
+}));
+
+// The actions the search runs: the tests check which one is called, with what.
 vi.mock('../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/client')>()),
-  listItems: vi.fn(),
+  approveItem: vi.fn(),
+  pauseFactory: vi.fn(),
+  resumeFactory: vi.fn(),
 }));
 
 const summary: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'Ac', factory_count: 3, role: 'owner' };
 
-const factory = (name: string): Factory => ({
-  id: `${name}-id`,
-  org_id: 'org-1',
-  name,
-  work_types: [],
-  stations: [],
-  current: null,
-  draft: null,
-  paused: false,
-  created_at: '2026-10-01T00:00:00Z',
-  role: 'editor',
-  can: [],
-});
+const factory = (name: string, title?: string): Factory =>
+  ({
+    id: `${name}-id`,
+    org_id: 'org-1',
+    name,
+    title,
+    work_types: [],
+    stations: [],
+    current: null,
+    draft: null,
+    paused: false,
+    created_at: '2026-10-01T00:00:00Z',
+    role: 'editor',
+    can: [],
+  }) as Factory;
 
-const factories = [factory('goal'), factory('sre'), factory('support')];
+const factories = [factory('goal', 'Software'), factory('sre'), factory('support')];
 
 const quiet = { waiting_on_you: 0, blocked_items: 0, andon: null, connections_blocked: 0 };
 const attention: OrgAttention = {
@@ -72,46 +87,46 @@ const me = {
   user: { id: 'user-1', name: 'Freddy Cruz', email: 'freddy@example.com' },
 } as Me;
 
-/** An item card as listItems returns it; only what the search shows matters here. */
-const card = (number: number, title: string, station: string, ref: string): ItemCard =>
-  ({ id: `item-${number}`, ref, number, title, station, state: 'in_progress' }) as ItemCard;
+const item = (number: number, title: string, station: string, factoryName = 'goal'): SearchItem => ({
+  id: `item-${factoryName}-${number}`,
+  number,
+  factory_id: `${factoryName}-id`,
+  factory_name: factoryName,
+  title,
+  state: 'in_progress',
+  station,
+});
 
-const itemsByFactory: Record<string, ItemCard[]> = {
-  'goal-id': [
-    card(147, "Show this week's spend", 'build', 'goal#147'),
-    card(145, 'Check the spend against the budget', 'build', 'goal#145'),
-    card(146, 'Upgrade the tests', 'review', 'goal#146'),
+/** What the service answers for "spend" in acme: the three spend items, an agent, a connection and a factory. */
+const spend: OrgSearch = {
+  items: [
+    item(147, "Show this week's spend", 'build'),
+    item(145, 'Check the spend against the budget', 'build'),
+    item(9, 'S3 spend up 22% month over month', 'investigate', 'sre'),
   ],
-  'sre-id': [card(9, 'S3 spend up 22% month over month', 'investigate', 'sre#9')],
-  'support-id': [],
+  agents: [{ name: 'builder', stations: ['build'], factory_id: 'goal-id', factory_name: 'goal' }],
+  factories: [],
+  connections: [{ name: 'acme-spend-warehouse', kind: 'github' }],
 };
 
+const empty: OrgSearch = { items: [], agents: [], factories: [], connections: [] };
+
 interface Setup {
-  items?: 'ready' | 'pending' | 'error';
+  path?: string;
+  /** The organization's factories, with the permissions a test grants (the default: `factories`). */
+  list?: Factory[];
 }
 
-/** The sidebar under the organization's route; the item page is a plain placeholder. */
-function renderSidebar({ items = 'ready' }: Setup = {}) {
+/** The sidebar under the organization's route; the item, the Floor and the other pages are plain placeholders. */
+function renderSidebar({ path = '/o/acme', list = factories }: Setup = {}) {
   const org: Org = { ...summary, created_at: '2026-09-01T00:00:00Z', can: [] } as Org;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   client.setQueryData(orgQuery(org.id).queryKey, org);
-  client.setQueryData(factoriesQuery(org.id).queryKey, factories);
+  client.setQueryData(factoriesQuery(org.id).queryKey, list);
   client.setQueryData(meQuery.queryKey, me);
   client.setQueryData(orgsQuery.queryKey, [org]);
   client.setQueryData(attentionQuery(org.id).queryKey, attention);
   client.setQueryData(overviewQuery(org.id).queryKey, overview);
-  if (items === 'ready') {
-    for (const f of factories) {
-      client.setQueryData(itemsQuery(org.id, f.id, { limit: 200 }).queryKey, {
-        items: itemsByFactory[f.id] ?? [],
-        next_after: null,
-      });
-    }
-  } else if (items === 'pending') {
-    vi.mocked(listItems).mockImplementation(() => new Promise(() => {}));
-  } else {
-    vi.mocked(listItems).mockRejectedValue(new TypeError('Failed to fetch'));
-  }
 
   const rootRoute = createRootRoute();
   const orgRoute = createRoute({
@@ -126,6 +141,7 @@ function renderSidebar({ items = 'ready' }: Setup = {}) {
     ),
   });
   const home = createRoute({ getParentRoute: () => orgRoute, path: '/', component: () => <p>Home page</p> });
+  const members = createRoute({ getParentRoute: () => orgRoute, path: '/members', component: () => <p>Members</p> });
   const factoryRoute = createRoute({ getParentRoute: () => orgRoute, path: '/f/$factory', component: Outlet });
   const floor = createRoute({ getParentRoute: () => factoryRoute, path: '/', component: () => <p>Floor page</p> });
   const item = createRoute({
@@ -134,8 +150,8 @@ function renderSidebar({ items = 'ready' }: Setup = {}) {
     component: () => <p>Item page</p>,
   });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([orgRoute.addChildren([home, factoryRoute.addChildren([floor, item])])]),
-    history: createMemoryHistory({ initialEntries: ['/o/acme'] }),
+    routeTree: rootRoute.addChildren([orgRoute.addChildren([home, members, factoryRoute.addChildren([floor, item])])]),
+    history: createMemoryHistory({ initialEntries: [path] }),
   });
 
   render(
@@ -156,11 +172,20 @@ function pressCommandK(platform: 'MacIntel' | '' = 'MacIntel') {
   fireEvent.keyDown(window, { key: 'k', metaKey: platform === 'MacIntel', ctrlKey: platform === '' });
 }
 
+/** Types into the search input and waits for the debounced search to be sent. */
+async function type(value: string) {
+  fireEvent.change(screen.getByRole('combobox', { name: 'Search' }), { target: { value } });
+  await waitFor(() =>
+    expect(vi.mocked(searchOrg)).toHaveBeenLastCalledWith('org-1', { q: value.trim(), limit: 5 }, expect.anything()),
+  );
+  await waitFor(() => expect(screen.queryByText('Loading')).toBeNull());
+}
+
 const platformDescriptor = Object.getOwnPropertyDescriptor(navigator, 'platform');
 
 afterEach(() => {
   cleanup();
-  vi.restoreAllMocks();
+  vi.resetAllMocks();
   if (platformDescriptor) Object.defineProperty(navigator, 'platform', platformDescriptor);
 });
 
@@ -202,14 +227,43 @@ describe('search from the sidebar', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Search' }));
   });
 
-  it('moves the highlighted row with the arrow keys and opens it with Enter', async () => {
+  it('closes from Close search and returns focus to the Search icon', async () => {
+    renderSidebar();
+    await nav();
+    pressCommandK();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close search' }));
+
+    expect(screen.queryByRole('combobox', { name: 'Search' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Search' }));
+  });
+
+  it('sends one search for a pause in typing, and none for a blank query', async () => {
+    vi.mocked(searchOrg).mockResolvedValue(spend);
+    renderSidebar();
+    await nav();
+    pressCommandK();
+
+    const input = screen.getByRole('combobox', { name: 'Search' });
+    fireEvent.change(input, { target: { value: 's' } });
+    fireEvent.change(input, { target: { value: 'spend' } });
+    await waitFor(() => expect(searchOrg).toHaveBeenCalledTimes(1));
+    expect(searchOrg).toHaveBeenCalledWith('org-1', { q: 'spend', limit: 5 }, expect.anything());
+
+    fireEvent.change(input, { target: { value: '   ' } });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(searchOrg).toHaveBeenCalledTimes(1);
+  });
+
+  it('moves the highlighted row across the groups with the arrow keys and opens it with Enter', async () => {
+    vi.mocked(searchOrg).mockResolvedValue(spend);
     const { router } = renderSidebar();
     await nav();
     pressCommandK();
     const input = screen.getByRole('combobox', { name: 'Search' });
+    await type('spend');
 
-    fireEvent.change(input, { target: { value: 'spend' } });
-    const [first, second, third] = screen.getAllByRole('option');
+    const [first, second, third, fourth] = screen.getAllByRole('option');
     expect(first?.getAttribute('aria-selected')).toBe('true');
     expect(input.getAttribute('aria-activedescendant')).toBe(first?.id);
 
@@ -223,9 +277,12 @@ describe('search from the sidebar', () => {
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     expect(third?.getAttribute('aria-selected')).toBe('true');
+    // The agent and the connection come after the items, so the highlight moves into the next group.
     fireEvent.keyDown(input, { key: 'ArrowDown' });
-    expect(third?.getAttribute('aria-selected')).toBe('true');
+    expect(fourth?.getAttribute('aria-selected')).toBe('true');
+    expect(within(screen.getByRole('group', { name: 'Agents' })).getByRole('option')).toBe(fourth);
 
+    fireEvent.keyDown(input, { key: 'ArrowUp' });
     fireEvent.keyDown(input, { key: 'ArrowUp' });
     fireEvent.keyDown(input, { key: 'ArrowUp' });
     fireEvent.keyDown(input, { key: 'ArrowUp' });
@@ -234,80 +291,232 @@ describe('search from the sidebar', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/f/goal/items/147'));
   });
 
-  it('groups results as Items, Pages and Actions, and matches items by title or #number', async () => {
+  it('groups results as Items, Pages, Agents, Connections and Factories, and leaves out an empty group', async () => {
+    vi.mocked(searchOrg).mockResolvedValue({ ...spend, factories: [{ id: 'sre-id', name: 'sre', title: 'SRE' }] });
     renderSidebar();
     await nav();
     pressCommandK();
+    await type('spend');
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Search' }), { target: { value: 'spend' } });
-    const options = screen.getAllByRole('option');
-    expect(options.map((o) => o.textContent)).toEqual([
+    const headings = screen.getAllByRole('group').map((g) => g.querySelector('legend')?.textContent);
+    expect(headings).toEqual(['Items', 'Agents', 'Connections', 'Factories']);
+    expect(screen.queryByRole('group', { name: 'Pages' })).toBeNull();
+
+    const items = within(screen.getByRole('group', { name: 'Items' })).getAllByRole('option');
+    expect(items.map((o) => o.textContent)).toEqual([
       expect.stringContaining("#147 Show this week's spend"),
       expect.stringContaining('#145 Check the spend against the budget'),
       expect.stringContaining('#9 S3 spend up 22% month over month'),
     ]);
-    expect(options[0]?.textContent).toContain('Build');
-    for (const group of ['Items', 'Pages', 'Actions']) {
-      expect(screen.getByRole('region', { name: group })).toBeTruthy();
-    }
-
-    fireEvent.change(screen.getByRole('combobox', { name: 'Search' }), { target: { value: '#146' } });
-    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
-      expect.stringContaining('#146 Upgrade the tests'),
-    ]);
+    // Each item shows its factory letter and the station it is at, on the right.
+    expect(items[0]?.textContent).toMatch(/^G#147/);
+    expect(items[0]?.textContent).toContain('Build');
+    expect(screen.getByRole('option', { name: 'builder, goal' }).textContent).toContain('goal');
+    expect(screen.getByRole('option', { name: /acme-spend-warehouse/ })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'SRE' })).toBeTruthy();
   });
 
-  it('shows the Pages and Actions rows as not available that never navigate', async () => {
+  it('matches the pages of the registry on the client, with the context each one shows', async () => {
+    vi.mocked(searchOrg).mockResolvedValue(empty);
     const { router } = renderSidebar();
+    await nav();
+    pressCommandK();
+    await type('members');
+
+    const pages = screen.getByRole('group', { name: 'Pages' });
+    const page = within(pages).getByRole('option', { name: 'Members and roles' });
+    expect(page.textContent).toContain('Organization');
+
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search' }), { key: 'Enter' });
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/members'));
+  });
+
+  it("shows the open factory's Settings as Settings, and its other pages by the factory's title", async () => {
+    vi.mocked(searchOrg).mockResolvedValue(empty);
+    renderSidebar({ path: '/o/acme/f/goal' });
+    await nav();
+    pressCommandK();
+    await type('settings');
+
+    const pages = within(screen.getByRole('group', { name: 'Pages' }));
+    expect(pages.getAllByRole('option', { name: 'Settings' })).toHaveLength(2);
+    expect(pages.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      expect.stringContaining('Organization'),
+      expect.stringContaining('Settings'),
+    ]);
+
+    await type('floor');
+    expect(screen.getByRole('option', { name: 'Floor' }).textContent).toContain('Software');
+  });
+
+  it('opens an agent on the Floor of its factory, since the agent page is not built yet', async () => {
+    vi.mocked(searchOrg).mockResolvedValue({ ...empty, agents: spend.agents });
+    const { router } = renderSidebar();
+    await nav();
+    pressCommandK();
+    await type('builder');
+
+    fireEvent.mouseDown(screen.getByRole('option', { name: 'builder, goal' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/f/goal'));
+  });
+
+  it('opens a factory on its Floor', async () => {
+    vi.mocked(searchOrg).mockResolvedValue({ ...empty, factories: [{ id: 'sre-id', name: 'sre', title: 'SRE' }] });
+    const { router } = renderSidebar();
+    await nav();
+    pressCommandK();
+    await type('sre');
+
+    fireEvent.mouseDown(screen.getByRole('option', { name: 'SRE' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/f/sre'));
+  });
+
+  it('says nothing matches, in the query’s own words, and lists no group', async () => {
+    vi.mocked(searchOrg).mockResolvedValue(empty);
+    renderSidebar();
+    await nav();
+    pressCommandK();
+    await type('zzz');
+
+    expect(screen.getByText('Nothing matches "zzz".')).toBeTruthy();
+    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    expect(screen.queryByRole('listbox')).toBeNull();
+  });
+
+  it('is busy and says Loading while the search is sent', async () => {
+    vi.mocked(searchOrg).mockReturnValue(new Promise(() => {}));
+    renderSidebar();
     await nav();
     pressCommandK();
     fireEvent.change(screen.getByRole('combobox', { name: 'Search' }), { target: { value: 'spend' } });
 
-    const page = screen.getByRole('button', { name: /Spend and usage/ });
-    expect(page.getAttribute('aria-disabled')).toBe('true');
-    expect(page.tabIndex).not.toBe(-1);
-    fireEvent.click(page);
-    expect(router.state.location.pathname).toBe('/o/acme');
-    expect(screen.getByRole('button', { name: /New item about "spend"/ }).getAttribute('aria-disabled')).toBe('true');
+    await waitFor(() => expect(screen.getByText('Loading')).toBeTruthy());
+    const region = screen.getByText('Loading').closest('[aria-busy]');
+    expect(region?.getAttribute('aria-busy')).toBe('true');
+    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    expect(screen.queryByText(/Nothing matches/)).toBeNull();
   });
 
-  it('says no items match, in the query’s own words', async () => {
+  it('says the search failed, and Retry sends it again', async () => {
+    // A 4xx answer is not retried by the query, so the error shows at once.
+    vi.mocked(searchOrg).mockRejectedValueOnce(new ApiError({ title: 'Bad Request', status: 400 } as Problem));
+    renderSidebar();
+    await nav();
+    pressCommandK();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Search' }), { target: { value: 'spend' } });
+    expect(await screen.findByText('Could not search.')).toBeTruthy();
+
+    // The service answers now: Retry sends the search again, and its matches appear.
+    vi.mocked(searchOrg).mockResolvedValue(spend);
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findAllByRole('option')).toHaveLength(5);
+    expect(screen.queryByText('Could not search.')).toBeNull();
+  });
+
+  it('shows the footer hint for the keys', async () => {
     renderSidebar();
     await nav();
     pressCommandK();
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Search' }), { target: { value: 'zzz' } });
+    expect(
+      screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === '↑ ↓ to move, ↵ to open'),
+    ).toBeTruthy();
+  });
+});
 
-    expect(screen.getByText('No items match "zzz".')).toBeTruthy();
-    expect(screen.queryAllByRole('option')).toHaveLength(0);
+/** The organization's factories with the permissions a test grants; `goal` takes the stations, the others none. */
+const granting = (can: string[], stations: Factory['stations'] = []): Factory[] =>
+  factories.map((f) => ({ ...f, can, stations: f.name === 'goal' ? stations : [] }));
+
+/** Presses ArrowDown until the named row is the highlighted one, as a person reaches a row with the keys. */
+function highlight(name: string) {
+  const input = screen.getByRole('combobox', { name: 'Search' });
+  for (let i = 0; i < 20; i++) {
+    if (screen.queryByRole('option', { name })?.getAttribute('aria-selected') === 'true') return;
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+  }
+  throw new Error(`"${name}" is never the highlighted row`);
+}
+
+describe('the Actions group of search', () => {
+  it('New item opens the composer with the query as its title, when Enter runs it', async () => {
+    vi.mocked(searchOrg).mockResolvedValue(spend);
+    renderSidebar({ path: '/o/acme/f/goal', list: granting(['item:create']) });
+    const sidebar = await nav();
+    fireEvent.click(within(sidebar).getByRole('button', { name: 'Search' }));
+
+    await type('spend');
+    highlight('New item about "spend"');
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search' }), { key: 'Enter' });
+
+    const dialog = await screen.findByRole('dialog', { name: 'New item' });
+    expect(within(dialog).getByLabelText('Title')).toHaveProperty('value', 'spend');
+    expect(screen.queryByRole('combobox', { name: 'Search' })).toBeNull();
   });
 
-  it('is busy and says Loading while the items load', async () => {
-    renderSidebar({ items: 'pending' });
+  it('New item is hidden without item:create', async () => {
+    vi.mocked(searchOrg).mockResolvedValue(spend);
+    renderSidebar({ path: '/o/acme/f/goal', list: granting(['item:decide']) });
     await nav();
-    pressCommandK();
-    fireEvent.change(screen.getByRole('combobox', { name: 'Search' }), { target: { value: 'spend' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
-    const region = screen.getByText('Loading').closest('[aria-busy]');
-    expect(region?.getAttribute('aria-busy')).toBe('true');
-    expect(screen.queryByText(/No items match/)).toBeNull();
+    await type('spend');
+    expect(screen.getByRole('option', { name: "goal #147, Show this week's spend" })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: 'New item about "spend"' })).toBeNull();
   });
 
-  it('says the items did not load, and Retry fetches them again', async () => {
-    renderSidebar({ items: 'error' });
+  it('Pause the line calls pauseFactory for the open factory', async () => {
+    vi.mocked(searchOrg).mockResolvedValue(empty);
+    vi.mocked(pauseFactory).mockResolvedValue({ ...factories[0], paused: true } as Factory);
+    renderSidebar({ path: '/o/acme/f/goal', list: granting(['factory:manage']) });
+    const sidebar = await nav();
+    fireEvent.click(within(sidebar).getByRole('button', { name: 'Search' }));
+
+    await type('pause');
+    highlight('Pause the line');
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search' }), { key: 'Enter' });
+
+    await waitFor(() => expect(pauseFactory).toHaveBeenCalledWith('org-1', 'goal-id'));
+  });
+
+  it('Pause the line is hidden without factory:manage', async () => {
+    vi.mocked(searchOrg).mockResolvedValue(empty);
+    renderSidebar({ path: '/o/acme/f/goal', list: granting(['item:create']) });
     await nav();
-    pressCommandK();
-    fireEvent.change(screen.getByRole('combobox', { name: 'Search' }), { target: { value: 'spend' } });
-    expect(await screen.findByText('Could not load items.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
-    // The service answers now: Retry loads the items, and the matches appear.
-    vi.mocked(listItems).mockImplementation(async (_org, factory) => ({
-      items: itemsByFactory[`${factory}`] ?? [],
-      next_after: null,
-    }));
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await type('pause');
+    expect(screen.queryByRole('option', { name: 'Pause the line' })).toBeNull();
+  });
 
-    expect(await screen.findAllByRole('option')).toHaveLength(3);
-    expect(screen.queryByText('Could not load items.')).toBeNull();
+  it('Approve calls approveItem for an item waiting on the caller', async () => {
+    const waiting = { ...item(12, 'Ship the report', 'review'), state: 'waiting_human' as const };
+    vi.mocked(searchOrg).mockResolvedValue({ ...empty, items: [waiting] });
+    vi.mocked(approveItem).mockResolvedValue({ state: 'done' } as Item);
+    renderSidebar({
+      path: '/o/acme',
+      list: granting(['item:decide'], [{ id: 'review', kind: 'human' }]),
+    });
+    const sidebar = await nav();
+    fireEvent.click(within(sidebar).getByRole('button', { name: 'Search' }));
+
+    await type('ship');
+    highlight('Approve #12');
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search' }), { key: 'Enter' });
+
+    await waitFor(() => expect(approveItem).toHaveBeenCalledWith('org-1', 'item-goal-12'));
+  });
+
+  it('Approve is hidden without item:decide', async () => {
+    const waiting = { ...item(12, 'Ship the report', 'review'), state: 'waiting_human' as const };
+    vi.mocked(searchOrg).mockResolvedValue({ ...empty, items: [waiting] });
+    renderSidebar({ path: '/o/acme', list: granting(['item:create'], [{ id: 'review', kind: 'human' }]) });
+    await nav();
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    await type('ship');
+    expect(screen.getByRole('option', { name: 'goal #12, Ship the report' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: 'Approve #12' })).toBeNull();
   });
 });
