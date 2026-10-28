@@ -182,6 +182,8 @@ function definitionCache() {
   client.setQueryData(defKeys.factory(acme, goal), {});
   client.setQueryData(defKeys.draft(acme, goal), {});
   client.setQueryData(defKeys.draftModel(acme, goal), {});
+  client.setQueryData(defKeys.draftRequests(acme, goal), {});
+  client.setQueryData(defKeys.draftRequest(acme, goal, 'request-1'), {});
   client.setQueryData(defKeys.draftFile(acme, goal, 'factory.yaml'), {});
   client.setQueryData(defKeys.validation(acme, goal, 4), {});
   client.setQueryData(defKeys.versions(acme, goal), {});
@@ -279,6 +281,17 @@ describe('definitionInvalidations', () => {
       expect.arrayContaining([keys.factories(acme), keys.attention(acme), keys.overview(acme, '7d')]),
     );
     expect(stale).not.toContainEqual(defKeys.draft(acme, goal));
+  });
+
+  test("a draft event re-reads the factory's draft requests, which sit under the draft and never poll", async () => {
+    const stale = await staleAfter(
+      definitionCache(),
+      definitionInvalidations(acme, definition({ revision: saved.revision + 1, by: 'user:local' })),
+    );
+
+    expect(stale).toEqual(
+      expect.arrayContaining([defKeys.draftRequests(acme, goal), defKeys.draftRequest(acme, goal, 'request-1')]),
+    );
   });
 
   test('ignores data that is no definition event', () => {

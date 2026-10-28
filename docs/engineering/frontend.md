@@ -381,6 +381,25 @@ Differences from `docs/design/screens/build/agents.jpg`, each for a reason:
 - The mock seed gives `goal` an owner, an admin (M. Okafor, kept for the Members e2e expectations), an approver (J. Lindqvist) and a viewer (A. Ortiz). The People with access list therefore shows the admin row the picture does not have.
 - The Factory defaults' connections read the mock seed (github, playwright), not the picture's (github, cloudflare, context7): the seed has no cloudflare or context7 connection.
 
+### Asked definition changes (ADR 0021)
+
+Two controls ask goald for a change to the factory's definition: the Ask bar on the Definition screen (`features/factory-editor/yaml/ask-bar.tsx`, in the frame under the header) and "Ask Jonah for a fix" on the Agent page (`features/agents/ask-jonah-button.tsx`). Both ask through `useAskFactory` (`features/factory-editor/draft-requests.ts`), which calls `createDraftRequest` and shows the request at once from the answer.
+
+- **Keys**: `defKeys.draftRequests(org, f)` and `defKeys.draftRequest(org, f, id)` sit under the draft's key, so every `definition` draft event, a resync and the screen's own mutations refetch them with the draft and its Problems. Neither query sets a `refetchInterval`.
+- **Which request the bar shows**: the one the `request` search param names (`?request=<id>`, validated in `sections.ts`), else the newest in the list. The input and Ask are disabled while the newest request is queued or running, because goald refuses another (409 `draft-request-open`); a request named in the URL still shows while another one runs. After an ask from the bar, the bar points `?request=` at the request it just made, so the new request's status shows at once.
+- **States**: loading is an sr-only "Loading" with `aria-busy` and the input off; a failed read says so; queued and running show a status chip (running pulses, reduced motion turns it off); done shows the request's summary; failed shows its error in a rework callout. A refused ask shows "A request is already running" for 409 `draft-request-open` and goald's detail for every other refusal, so a 409 `yaml-invalid` (the factory.yaml does not parse) shows its own parse problem, not the running one.
+- **Ask Jonah for a fix** is built from the reasons "Why review sent work back" shows (`fixRequestText`, at most 2000 characters once trimmed; the reasons that do not fit are counted in a closing line). It sends `agent` with the text and then opens the Definition's Agents section on `?agent=<name>&request=<id>`, where the Ask bar shows the request. With no reasons it stays "Not available yet". Without `definition:edit` both controls are disabled and say why.
+- **The stream gap**: goald sends a `definition` event only when a draft is saved, so a request's move from queued to running, a failed request (it writes nothing, ADR 0021 decision 2) and a request that ends done without changing the draft have no event. Until the next definition event, a resync or a reload, the bar keeps the status it last read: a request that is still shown as queued or running keeps the input off. This is the same gap as the evals page's queued runs. The backend follow-up is a `draft_request` stream event for each status change; the screen then needs no other change.
+
+The mock (`apps/web/mock/definitions.ts`) keeps the requests per definition: a request runs at 300 ms and is done at 1.5 s (a text with the word "fail" fails instead), and a done request emits a draft event. The Playwright flows are in `e2e/definition.spec.ts` and `e2e/agent.spec.ts`; they cannot run in the box.
+
+Differences from `docs/design/screens/build/definition.jpg` and `agent.jpg`, each for a reason:
+
+- The bar has a status row under the input while a request is shown. The picture has no request state (it is the screen before a request), and the status is the only place a person sees that the request is queued, running, done or failed.
+- Ask is disabled while the input is empty. The picture shows it enabled; an empty ask is refused by goald (422), so the control says so before the call.
+- The sr-only label reads "Ask the factory to change its definition" as the picture does, with the input's accessible name the same.
+- The Ask Jonah button keeps the picture's place and style (secondary, small) and adds a rework callout under it for a refused ask; the picture has no error state.
+
 ### The intake trigger page
 
 `…/f/$factory/intake/$trigger` (`features/intake/`, ADR 0016's `trigger` screen) shows one trigger of the

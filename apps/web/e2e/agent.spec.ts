@@ -69,10 +69,13 @@ test('the agent page reads as pictured: the prompt, settings and the Not availab
     }
   }
 
+  // Ask Jonah for a fix asks about this agent and opens the definition on that request (ADR 0021).
   const askJonah = page.getByRole('button', { name: 'Ask Jonah for a fix' });
-  await expect(askJonah).toHaveAttribute('aria-disabled', 'true');
+  await expect(askJonah).toBeEnabled();
   await askJonah.click();
-  await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/agents\/frontend-engineer$/);
+  await expect(page).toHaveURL(/\/o\/acme\/f\/sre\/definition\/agents\?.*request=/);
+  await expect(page.getByRole('textbox', { name: 'Ask the factory to change its definition' })).toBeDisabled();
+  await expect(page.getByText('Done')).toBeVisible({ timeout: 10_000 });
 
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);

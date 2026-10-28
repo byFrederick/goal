@@ -3,6 +3,7 @@ import type { Problem } from '@goal/api-client';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, startBakeOff } from '../../api/client';
+import { createDraftRequest } from '../../api/definitions';
 import {
   agentStatsQuery,
   builderMetaQuery,
@@ -14,11 +15,17 @@ import type { AgentStats, Factory, OrgSummary } from '../../api/types';
 import { renderFactoryPage, type Seed } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
 import { AgentPage } from './agent-page';
+import { fixRequestText } from './ask-jonah-button';
 import type { AgentView } from './views';
 
 vi.mock('../../api/client', async (original) => ({
   ...(await original<typeof import('../../api/client')>()),
   startBakeOff: vi.fn(),
+}));
+
+vi.mock('../../api/definitions', async (original) => ({
+  ...(await original<typeof import('../../api/definitions')>()),
+  createDraftRequest: vi.fn(),
 }));
 
 afterEach(cleanup);
@@ -199,22 +206,60 @@ describe('the Agent page, ready', () => {
   });
 });
 
-describe('the controls that are not built yet', () => {
-  it('Ask Jonah for a fix is aria-disabled and does nothing', async () => {
-    const name = 'Ask Jonah for a fix';
-    const { router } = await renderPage();
+describe('Ask Jonah for a fix', () => {
+  const editor = ['item:create', 'factory:manage', 'definition:edit'];
+  const button = () => screen.getByRole('button', { name: 'Ask Jonah for a fix' });
+
+  it('asks for a fix about this agent, built from its reasons, and opens the request on the definition', async () => {
+    vi.mocked(createDraftRequest).mockResolvedValue({ id: 'request-7', status: 'queued' } as never);
+    const { router } = await renderPage('overview', { can: editor });
+
+    fireEvent.click(button());
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/f/goal/definition/agents'));
+    expect(router.state.location.search).toMatchObject({ agent: 'frontend-engineer', request: 'request-7' });
+    expect(createDraftRequest).toHaveBeenCalledWith('org-1', 'factory-1', {
+      text: fixRequestText(stats),
+      agent: 'frontend-engineer',
+    });
+  });
+
+  it('says a request is already running when goald refuses with 409 draft-request-open', async () => {
+    vi.mocked(createDraftRequest).mockRejectedValue(
+      new ApiError({ title: 'Conflict', status: 409, code: 'draft-request-open' } as unknown as Problem),
+    );
+    const { router } = await renderPage('overview', { can: editor });
+
+    fireEvent.click(button());
+
+    expect(await screen.findByText(/A request is already running/)).toBeTruthy();
+    expect(router.state.location.pathname).toBe('/o/acme/f/goal/agents/frontend-engineer');
+  });
+
+  it('is off without definition:edit, and says why', async () => {
+    await renderPage();
+    expect((button() as HTMLButtonElement).disabled).toBe(true);
+    expect(button().getAttribute('aria-describedby')).toBeTruthy();
+    fireEvent.click(button());
+    expect(createDraftRequest).not.toHaveBeenCalled();
+  });
+
+  it('stays "Not available yet" when review sent nothing back', async () => {
+    const { router } = await renderPage('overview', { reasons: false, can: editor });
     const before = router.state.location.href;
-    const control = screen.getByRole('button', { name });
+    const control = button();
     expect(control.getAttribute('aria-disabled')).toBe('true');
 
     fireEvent.click(control);
     fireEvent.keyDown(control, { key: 'Enter' });
-    fireEvent.keyDown(control, { key: ' ' });
+    expect(createDraftRequest).not.toHaveBeenCalled();
     expect(router.state.location.href).toBe(before);
   });
+});
 
-  it('shows "Not available yet" when a control takes focus', async () => {
-    await renderPage();
+describe('the controls that are not built yet', () => {
+  it('shows "Not available yet" when Ask Jonah for a fix takes focus without reasons', async () => {
+    await renderPage('overview', { reasons: false });
     screen.getByRole('button', { name: 'Ask Jonah for a fix' }).focus();
     expect((await screen.findAllByText('Not available yet')).length).toBeGreaterThan(0);
   });
@@ -292,7 +337,9 @@ describe('Bake off this agent', () => {
     await renderPage('overview');
 
     expect((button() as HTMLButtonElement).disabled).toBe(true);
-    const reason = screen.getByText('View only. Editors of goal change its definition.');
+    const reason = screen.getByText('View only. Editors of goal change its definition.', {
+      selector: `#${button().getAttribute('aria-describedby')}`,
+    });
     expect(button().getAttribute('aria-describedby')).toBe(reason.id);
 
     fireEvent.click(button());

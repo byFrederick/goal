@@ -20,6 +20,7 @@ import type {
   DefinitionProblem,
   Draft,
   DraftModel,
+  DraftRequest,
   Factory,
   FactoryModel,
   FileChange,
@@ -857,6 +858,36 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
   const emit = (f: Factory, data: Omit<DefinitionEvent, 'org_id' | 'factory_id'>) =>
     deps.broadcast(f.org_id, 'definition', { org_id: f.org_id, factory_id: f.id, ...data } satisfies DefinitionEvent);
 
+  /** The asked definition changes of each definition, oldest first (ADR 0021). Kept on the definition, so a reset drops them. */
+  const requestsByDef = new WeakMap<MockDefinition, DraftRequest[]>();
+  const requestsOf = (def: MockDefinition): DraftRequest[] => requestsByDef.get(def) ?? [];
+
+  /** Moves a mock request on: running, then done (its summary, a draft event) or failed when its text says "fail". */
+  const settleRequest = (def: MockDefinition, f: Factory, id: string, step: 'running' | 'done') => {
+    const list = requestsOf(def);
+    const at = list.findIndex((r) => r.id === id);
+    const r = list[at];
+    if (!r || r.status === 'done' || r.status === 'failed') return;
+    if (step === 'running') {
+      list[at] = { ...r, status: 'running', started_at: now() };
+      return;
+    }
+    const failed = /fail/i.test(r.text);
+    const finished: DraftRequest = failed
+      ? { ...r, status: 'failed', error: 'The agent stopped before it changed the draft.', finished_at: now() }
+      : {
+          ...r,
+          status: 'done',
+          summary: r.agent ? `Changed ${r.agent} in the draft, as asked.` : 'Changed the draft, as asked.',
+          changed_paths: ['factory.yaml'],
+          turns: 3,
+          cost_usd: 0.42,
+          finished_at: now(),
+        };
+    list[at] = finished;
+    if (!failed) emit(f, { kind: 'draft' });
+  };
+
   /** The stations of a tree's line; empty when factory.yaml does not parse. */
   const stationIds = (t: Tree) => {
     const r = modelOf(t);
@@ -1383,7 +1414,7 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
     if (!m) return false;
     const sub = m[2] ?? '';
     const known =
-      /^(|\/pause|\/resume|\/draft(\/model(\/[a-z]+(\/revert)?)?|\/files(\/[^/]+)?|\/tree|\/validate|\/publish)?|\/versions(\/[^/]+(\/model|\/files\/[^/]+|\/restore)?)?|\/compare)$/;
+      /^(|\/pause|\/resume|\/draft(\/model(\/[a-z]+(\/revert)?)?|\/files(\/[^/]+)?|\/requests(\/[^/]+)?|\/tree|\/validate|\/publish)?|\/versions(\/[^/]+(\/model|\/files\/[^/]+|\/restore)?)?|\/compare)$/;
     if (!known.test(sub) || (sub === '' && method !== 'GET' && method !== 'DELETE')) return false;
     const f = factoryOf(org, decodeURIComponent(m[1] ?? ''));
     const def = defOf(f);
@@ -1646,6 +1677,78 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
       send(res, 200, { ...validation, revision: d.revision });
       return true;
     }
+    // Asked definition changes (ADR 0021). The mock runs a request in two steps: running at 300 ms, then
+    // done at 1.5 s (a text with the word "fail" fails instead). A done request emits a draft event, as the
+    // box's write of the draft does; the mock keeps the draft as it was.
+    if (sub === '/draft/requests' && method === 'GET') {
+      const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? 20), 1), 100);
+      send(res, 200, { requests: requestsOf(def).slice().reverse().slice(0, limit) });
+      return true;
+    }
+    if (sub === '/draft/requests' && method === 'POST') {
+      const body = await readJson(req);
+      const text = typeof body.text === 'string' ? body.text.trim() : '';
+      if (text === '' || text.length > 2000) {
+        refuse(
+          422,
+          'Unprocessable Content',
+          'draft-request-text-invalid',
+          {},
+          'the text is 1 to 2000 characters once trimmed',
+        );
+      }
+      const agent = typeof body.agent === 'string' ? body.agent : '';
+      if (agent !== '') {
+        // The agent of the open draft, or of the current version when no draft is open.
+        const tree = def.draft?.files ?? byId(def, def.current)?.files ?? new Map<string, Uint8Array>();
+        const read = modelOf(tree);
+        if (read instanceof ParseError) {
+          refuse(
+            409,
+            'Conflict',
+            'yaml-invalid',
+            {
+              parse_error: { line: read.line, column: read.column, message: read.message },
+            },
+            read.message,
+          );
+        }
+        const parsed = read instanceof ParseError ? undefined : read;
+        const agents = list(((parsed?.model.agents ?? {}) as Json).agents).map((a) => String(a.name));
+        if (!agents.includes(agent)) {
+          refuse(404, 'Not Found', 'agent-not-found', {}, `the definition has no agent ${agent}`);
+        }
+      }
+      if (requestsOf(def).some((r) => r.status === 'queued' || r.status === 'running')) {
+        refuse(409, 'Conflict', 'draft-request-open', {}, 'a request of this factory is queued or running');
+      }
+      const created: DraftRequest = {
+        id: randomUUID(),
+        text,
+        agent,
+        status: 'queued',
+        summary: '',
+        changed_paths: [],
+        cost_usd: 0,
+        turns: 0,
+        error: '',
+        requester: { kind: 'user', id: 'local', name: 'Local user' },
+        created_at: now(),
+      };
+      requestsByDef.set(def, [...requestsOf(def), created]);
+      setTimeout(() => settleRequest(def, f, created.id, 'running'), 300);
+      setTimeout(() => settleRequest(def, f, created.id, 'done'), 1500);
+      send(res, 201, created);
+      return true;
+    }
+    m = sub.match(/^\/draft\/requests\/([^/]+)$/);
+    if (m && method === 'GET') {
+      const r = requestsOf(def).find((x) => x.id === m?.[1]);
+      if (!r) refuse(404, 'Not Found', 'draft-request-not-found', {}, 'the factory has no such draft request');
+      send(res, 200, r);
+      return true;
+    }
+
     if (sub === '/draft/publish' && method === 'POST') {
       const body = await readJson(req);
       const d = draftOf(def);
