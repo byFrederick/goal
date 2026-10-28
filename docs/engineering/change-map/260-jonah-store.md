@@ -1,6 +1,6 @@
 ## When you change
 
-Jonah's store: `db/migrations/00075_jonah.sql` (or a later migration of `jonah_reviews`, `jonah_proposals`, `jonah_observations` or `agent_runs.kind`), `db/queries/jonah.sql`, `ports.JonahStore` in `internal/core/ports/jonah.go`, the domain types in `internal/core/domain/jonah.go`, `internal/adapters/store/postgres/jonah.go` or the fake in `internal/core/ports/porttest/jonahstore.go`
+Jonah's store: `db/migrations/00078_jonah.sql` (or a later migration of `jonah_reviews`, `jonah_proposals`, `jonah_observations` or `agent_runs.kind`), `db/queries/jonah.sql`, `ports.JonahStore` in `internal/core/ports/jonah.go`, the domain types in `internal/core/domain/jonah.go`, `internal/adapters/store/postgres/jonah.go` or the fake in `internal/core/ports/porttest/jonahstore.go`
 
 ## Also change
 
