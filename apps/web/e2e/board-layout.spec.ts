@@ -7,29 +7,37 @@ test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
 });
 
-/** The top edge of each column's first body element (a card, or the Empty text), and its header's height. */
+/**
+ * The top edge of each column's first body element (a card, or the Empty text), and its header's height.
+ * All boxes are read in one page.evaluate, so they come from one layout pass: reading them one await at a
+ * time lets the board move between reads (the mock's latency shifts it once the columns have loaded).
+ */
 async function columnEdges(page: import('@playwright/test').Page) {
-  const columns = page.getByRole('region', { name: 'Stations' }).locator(':scope > div > section');
-  const count = await columns.count();
-  const tops: { name: string; top: number }[] = [];
-  const heights: { name: string; height: number }[] = [];
-  for (let i = 0; i < count; i++) {
-    const column = columns.nth(i);
-    const name = (await column.getAttribute('aria-label')) ?? `column ${i}`;
-    const header = await column.locator(':scope > header').boundingBox();
-    const zone = column.locator(':scope > div').last();
-    const first = await zone.locator(':scope > article, :scope > p').first().boundingBox();
-    if (!header || !first) throw new Error(`${name}: no header or first body element is laid out`);
-    tops.push({ name, top: first.y });
-    heights.push({ name, height: header.height });
-  }
-  return { tops, heights };
+  return page.evaluate(() => {
+    const columns = Array.from(
+      document.querySelectorAll<HTMLElement>('[role="region"][aria-label="Stations"] > div > section'),
+    );
+    const tops: { name: string; top: number }[] = [];
+    const heights: { name: string; height: number }[] = [];
+    for (const column of columns) {
+      const name = column.getAttribute('aria-label') ?? 'column';
+      const header = column.querySelector<HTMLElement>(':scope > header');
+      const zone = column.querySelector<HTMLElement>(':scope > div:last-of-type');
+      const first = zone?.querySelector<HTMLElement>(':scope > article, :scope > p');
+      if (!header || !first) throw new Error(`${name}: no header or first body element is laid out`);
+      tops.push({ name, top: first.getBoundingClientRect().top });
+      heights.push({ name, height: header.getBoundingClientRect().height });
+    }
+    return { tops, heights };
+  });
 }
 
 test('the first card or Empty text of every desktop column is level, and the headers match', async ({ page }) => {
   test.skip(isPhone(page), 'the stations are side by side from 768 px');
   await page.goto('/o/acme/f/goal/board');
   await expect(page.getByRole('region', { name: 'Stations' })).toBeVisible();
+  // Let the board finish loading before measuring: its first render is shifted by the mock's latency.
+  await page.waitForLoadState('networkidle');
 
   const { tops, heights } = await columnEdges(page);
   expect(tops.length).toBeGreaterThan(1);
