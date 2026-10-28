@@ -271,7 +271,7 @@ func TestEvals_Unavailable(t *testing.T) {
 		{http.MethodPost, acmeEvals + "/bake-offs", `{"agent":"writer"}`},
 		{http.MethodGet, acmeEvals + "/bake-offs/b1", ""},
 		{http.MethodPost, acmeEvals + "/bake-offs/b1/rerun", ""},
-		{http.MethodPost, acmeEvals + "/bake-offs/b1/apply", `{"arm":1}`},
+		{http.MethodPost, acmeEvals + "/bake-offs/b1/apply", applyArmOne},
 	} {
 		code, p := evalCall(t, h, c.method, c.path, c.body, nil)
 		wantEvalProblem(t, c.method+" "+c.path, code, p, http.StatusServiceUnavailable, "evals-unavailable")

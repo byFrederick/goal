@@ -296,32 +296,9 @@ func bakeOffOut(ctx context.Context, numbers *versionNumbers, b domain.BakeOff, 
 
 // bakeOffCases are b's cases by name, each with the tries passed on every arm.
 func bakeOffCases(b domain.BakeOff) []gen.BakeOffCase {
-	passed := map[string]map[int]int{}
-
+	passed := passedFromSummaries(b.Arms)
 	if len(b.Results) > 0 {
-		for _, r := range b.Results {
-			if passed[r.Case] == nil {
-				passed[r.Case] = map[int]int{}
-			}
-
-			if r.State == domain.EvalPass {
-				passed[r.Case][r.Arm]++
-			}
-		}
-	} else {
-		for _, a := range b.Arms {
-			if a.Summary == nil {
-				continue
-			}
-
-			for c, n := range a.Summary.PerCase {
-				if passed[c] == nil {
-					passed[c] = map[int]int{}
-				}
-
-				passed[c][a.Arm] = n
-			}
-		}
+		passed = passedFromResults(b.Results)
 	}
 
 	out := make([]gen.BakeOffCase, 0, len(passed))
@@ -336,6 +313,44 @@ func bakeOffCases(b domain.BakeOff) []gen.BakeOffCase {
 	}
 
 	return out
+}
+
+// passedFromResults counts the tries passed per case and arm in a bake-off's results.
+func passedFromResults(results []domain.EvalResult) map[string]map[int]int {
+	passed := map[string]map[int]int{}
+
+	for _, r := range results {
+		if passed[r.Case] == nil {
+			passed[r.Case] = map[int]int{}
+		}
+
+		if r.State == domain.EvalPass {
+			passed[r.Case][r.Arm]++
+		}
+	}
+
+	return passed
+}
+
+// passedFromSummaries is the tries passed per case and arm that the arms' summaries record.
+func passedFromSummaries(arms []domain.BakeOffArm) map[string]map[int]int {
+	passed := map[string]map[int]int{}
+
+	for _, a := range arms {
+		if a.Summary == nil {
+			continue
+		}
+
+		for c, n := range a.Summary.PerCase {
+			if passed[c] == nil {
+				passed[c] = map[int]int{}
+			}
+
+			passed[c][a.Arm] = n
+		}
+	}
+
+	return passed
 }
 
 // armSummaryOut is an arm's row of the report, nil until it is recorded.

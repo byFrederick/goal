@@ -25,6 +25,7 @@ const (
 	bakeOffOther  = "claude-haiku-5-5"
 	bakeOffArms   = `"models":["` + bakeOffNow + `","` + bakeOffOther + `"]`
 	bakeOffStart  = `{"agent":"` + bakeOffAgent + `",` + bakeOffArms + `,"trials":2}`
+	applyArmOne   = `{"arm":1}`
 	caseLease     = "fixes-the-lease"
 	caseFlag      = "adds-a-flag"
 	bakeOffPrompt = "agents/backend.md"
@@ -193,6 +194,21 @@ func TestBakeOffs_StartAndGet(t *testing.T) {
 	h.publishBakeOffCases(t)
 
 	started := startBakeOff(t, h, bakeOffStart)
+	checkStartedBakeOff(t, started)
+
+	h.workBakeOff(t, started.BakeOff.Id)
+
+	var got gen.BakeOff
+	if code, _ := evalCall(t, h, http.MethodGet, lineBakeOffs+"/"+started.BakeOff.Id, "", &got); code != http.StatusOK {
+		t.Fatalf("get = %d, want 200", code)
+	}
+
+	checkDoneBakeOff(t, got)
+}
+
+// checkStartedBakeOff checks a bake-off of bakeOffStart as its start answers it.
+func checkStartedBakeOff(t *testing.T, started gen.BakeOffStarted) {
+	t.Helper()
 
 	b := started.BakeOff
 	if b.State != gen.BakeOffState(domain.EvalRunQueued) || b.Agent != bakeOffAgent || b.Station != "build" || b.Version != 2 ||
@@ -208,26 +224,17 @@ func TestBakeOffs_StartAndGet(t *testing.T) {
 	if started.Estimate.Unpriced == nil {
 		t.Error("the estimate has no unpriced list")
 	}
+}
 
-	h.workBakeOff(t, b.Id)
-
-	var got gen.BakeOff
-	if code, _ := evalCall(t, h, http.MethodGet, lineBakeOffs+"/"+b.Id, "", &got); code != http.StatusOK {
-		t.Fatalf("get = %d, want 200", code)
-	}
+// checkDoneBakeOff checks a bake-off of bakeOffStart, worked by workBakeOff, as get answers it.
+func checkDoneBakeOff(t *testing.T, got gen.BakeOff) {
+	t.Helper()
 
 	if got.State != gen.BakeOffState(domain.EvalRunDone) || got.FinishedAt == nil || got.RecommendedArm == nil || *got.RecommendedArm != 2 {
 		t.Errorf("done = %+v, want done and arm 2 recommended", got)
 	}
 
-	s := got.Arms[1].Summary
-	if s == nil || s.PassRate != 1 || s.CostPerItemUsd != 0.1 || s.Turns != 4 || s.TimePerItemSeconds != 60 || s.Tries != 4 {
-		t.Fatalf("arm 2's summary = %+v, want all 4 tries passed at 0.1, 4 turns, a minute", s)
-	}
-
-	if s.Judged == nil || s.Judged.Judge != evalJudge || deref(s.Judged.Title) != evalJudgeTitle || s.Judged.Share != 0.5 {
-		t.Errorf("arm 2 judged = %+v, want %s titled %q at 0.5", s.Judged, evalJudge, evalJudgeTitle)
-	}
+	checkWinningArmSummary(t, got.Arms[1].Summary)
 
 	want := []gen.BakeOffCase{
 		{Case: caseFlag, Arms: []gen.BakeOffCaseArm{{Arm: 1, Passed: 0}, {Arm: 2, Passed: 2}}},
@@ -235,6 +242,19 @@ func TestBakeOffs_StartAndGet(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got.PerCase, want) {
 		t.Errorf("per case = %+v, want %+v", got.PerCase, want)
+	}
+}
+
+// checkWinningArmSummary checks arm 2's summary of a worked bake-off, named by the judge's title.
+func checkWinningArmSummary(t *testing.T, s *gen.BakeOffArmSummary) {
+	t.Helper()
+
+	if s == nil || s.PassRate != 1 || s.CostPerItemUsd != 0.1 || s.Turns != 4 || s.TimePerItemSeconds != 60 || s.Tries != 4 {
+		t.Fatalf("arm 2's summary = %+v, want all 4 tries passed at 0.1, 4 turns, a minute", s)
+	}
+
+	if s.Judged == nil || s.Judged.Judge != evalJudge || deref(s.Judged.Title) != evalJudgeTitle || s.Judged.Share != 0.5 {
+		t.Errorf("arm 2 judged = %+v, want %s titled %q at 0.5", s.Judged, evalJudge, evalJudgeTitle)
 	}
 }
 
@@ -452,7 +472,7 @@ func TestBakeOffs_NotFound(t *testing.T) {
 		for _, call := range []struct{ method, suffix, body string }{
 			{http.MethodGet, "", ""},
 			{http.MethodPost, "/rerun", ""},
-			{http.MethodPost, "/apply", `{"arm":1}`},
+			{http.MethodPost, "/apply", applyArmOne},
 		} {
 			code, p := evalCall(t, h, call.method, c.path+call.suffix, call.body, nil)
 			wantEvalProblem(t, call.method+" "+c.what+call.suffix, code, p, http.StatusNotFound, "eval-run-not-found")
@@ -479,7 +499,7 @@ func TestBakeOffs_ViewerMayReadButNotStartRerunOrApply(t *testing.T) {
 	for _, c := range []struct{ path, body string }{
 		{lineBakeOffs, bakeOffStart},
 		{lineBakeOffs + "/" + b.Id + "/rerun", ""},
-		{lineBakeOffs + "/" + b.Id + "/apply", `{"arm":1}`},
+		{lineBakeOffs + "/" + b.Id + "/apply", applyArmOne},
 	} {
 		code, p := evalCall(t, h, http.MethodPost, c.path, c.body, nil)
 		wantEvalProblem(t, "viewer POST "+c.path, code, p, http.StatusForbidden, "forbidden")
