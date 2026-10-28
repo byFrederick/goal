@@ -241,8 +241,9 @@ linters:
             - github.com/byFrederick/goal/internal/core/domain
             - github.com/byFrederick/goal/internal/core/ports
         notify:
-          # The notification sender reaches the outbox and the mail server through ports only
-          # (ADR 0023 decisions 3 and 4); cmd/goald wires the SMTP adapter.
+          # The notification sender reaches the outbox, the mail server, Slack (ports.DirectMessenger)
+          # and the Slack connections through ports only (ADR 0023 decisions 3, 4 and 5); cmd/goald
+          # wires the SMTP and Slack adapters.
           list-mode: strict
           files: ["**/internal/notify/**", "!$test"]
           allow:

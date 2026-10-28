@@ -1,14 +1,18 @@
-// Package notify sends the notification outbox's email rows (ADR 0023, decisions 3 and 4): every
-// goald instance runs one Sender, which claims due rows of each live organization under a lease,
-// renders each event's message and sends it through ports.Mailer. It keeps no state of its own,
-// so a row whose sender died returns to the queue when its lease ends.
+// Package notify sends the notification outbox's email and Slack rows (ADR 0023, decisions 3, 4
+// and 5): every goald instance runs one Sender, which claims due rows of each live organization
+// under a lease, renders each event's message and sends it through ports.Mailer, or as a direct
+// message through ports.DirectMessenger with the token of the organization's oldest Slack
+// connection. It keeps no state of its own, so a row whose sender died returns to the queue when
+// its lease ends.
 package notify
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -32,11 +36,28 @@ const (
 	maxBackoff = time.Hour
 )
 
-// The reasons a row ends with, besides a ports.MailError's code. None names an address.
+// The reasons a row ends with, besides a ports.MailError's or ports.DMError's code. None names an
+// address.
 const (
 	reasonNotQualified = "recipient-not-qualified"
 	reasonUnknownEvent = "unknown-event"
 	reasonMailError    = "mail-error"
+	reasonSlackError   = "slack-error"
+)
+
+// The connection kind whose connections send Slack rows (internal/connkind/kinds/slack.yaml), and
+// the field that holds its bot token.
+const (
+	slackKind  = "slack"
+	slackToken = "token"
+)
+
+// The Slack outcomes that come from the organization's connections, not from Slack. Neither is
+// retried: an admin must add or change a connection first.
+var (
+	errNoSlackConnection = &ports.DMError{Code: "slack-no-connection", Permanent: true}
+	errSlackToken        = &ports.DMError{Code: "slack-token-unavailable", Permanent: true}
+	errSlackConnection   = &ports.DMError{Code: "slack-connection-error"}
 )
 
 // Orgs lists the live organizations; ports.Tenancy satisfies it.
@@ -44,22 +65,34 @@ type Orgs interface {
 	ActiveOrgs(ctx context.Context) ([]domain.OrgID, error)
 }
 
-// Deps are what a Sender works through.
+// SlackConnections finds and opens the organization's Slack connection; ports.Connections
+// satisfies it.
+type SlackConnections interface {
+	List(ctx context.Context) ([]domain.Connection, error)
+	Open(ctx context.Context, name string) (domain.ResolvedConnection, error)
+}
+
+// Deps are what a Sender works through. Email rows are claimed only with a Mailer, and Slack rows
+// only with Slack and Connections; a channel without them stays pending for an instance that has
+// them.
 type Deps struct {
-	Orgs   Orgs
-	Outbox ports.NotificationDeliveries
-	Mailer ports.Mailer
-	Clock  ports.Clock
+	Orgs        Orgs
+	Outbox      ports.NotificationDeliveries
+	Mailer      ports.Mailer
+	Slack       ports.DirectMessenger
+	Connections SlackConnections
+	Clock       ports.Clock
 	// PublicURL is the origin every link starts with (GOAL_PUBLIC_URL).
 	PublicURL string
 	// Log may be nil.
 	Log *slog.Logger
 }
 
-// Sender is the email sender job.
+// Sender is the notification sender job.
 type Sender struct {
-	d   Deps
-	log *slog.Logger
+	d        Deps
+	log      *slog.Logger
+	channels []string
 }
 
 // New returns a sender over d.
@@ -69,7 +102,16 @@ func New(d Deps) *Sender {
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	return &Sender{d: d, log: log}
+	var channels []string
+	if d.Mailer != nil {
+		channels = append(channels, ports.ChannelEmail)
+	}
+
+	if d.Slack != nil && d.Connections != nil {
+		channels = append(channels, ports.ChannelSlack)
+	}
+
+	return &Sender{d: d, log: log, channels: channels}
 }
 
 // Run works the outbox at once and then each time every passes, until ctx ends; failures are
@@ -91,8 +133,9 @@ func (s *Sender) Run(ctx context.Context, every time.Duration) {
 	}
 }
 
-// Work claims one batch of due email rows of every live organization and finishes each, and
-// returns how many it finished. An organization that fails does not hold up the others.
+// Work claims one batch of due rows of each channel it can send, of every live organization, and
+// finishes each, and returns how many it finished. An organization that fails does not hold up
+// the others.
 func (s *Sender) Work(ctx context.Context) (int, error) {
 	orgs, err := s.d.Orgs.ActiveOrgs(ctx)
 	if err != nil {
@@ -109,30 +152,33 @@ func (s *Sender) Work(ctx context.Context) (int, error) {
 			break
 		}
 
-		n, err := s.workOrg(domain.WithOrg(ctx, org))
-		done += n
+		for _, channel := range s.channels {
+			n, err := s.workOrg(domain.WithOrg(ctx, org), channel)
+			done += n
 
-		if err != nil {
-			errs = append(errs, fmt.Errorf("notify work of org %s: %w", org, err))
+			if err != nil {
+				errs = append(errs, fmt.Errorf("notify work of org %s, channel %s: %w", org, channel, err))
+			}
 		}
 	}
 
 	return done, errors.Join(errs...)
 }
 
-// workOrg claims and finishes one batch of the organization in ctx. It starts a row only when its
+// workOrg claims and finishes one batch of channel of the organization in ctx. It starts a row only when its
 // send and finish fit inside the claim's lease, so no other instance can claim a row while this
 // one may still be mailing it; the rows it does not reach go back to the queue at once.
-func (s *Sender) workOrg(ctx context.Context) (int, error) {
+func (s *Sender) workOrg(ctx context.Context, channel string) (int, error) {
 	claimed := s.d.Clock.Now()
 	leaseEnd := claimed.Add(Lease)
 
-	rows, err := s.d.Outbox.ClaimNotifications(ctx, ports.ChannelEmail, claimed, Lease, BatchSize)
+	rows, err := s.d.Outbox.ClaimNotifications(ctx, channel, claimed, Lease, BatchSize)
 	if err != nil {
 		return 0, fmt.Errorf("claim: %w", err)
 	}
 
 	done := 0
+	token := &tokenOnce{}
 
 	for i, n := range rows {
 		if err := ctx.Err(); err != nil {
@@ -144,7 +190,7 @@ func (s *Sender) workOrg(ctx context.Context) (int, error) {
 			return done, s.release(ctx, rows[i:])
 		}
 
-		finished, ferr := s.finish(ctx, n)
+		finished, ferr := s.finish(ctx, n, token)
 		if ferr != nil {
 			return done, ferr
 		}
@@ -174,8 +220,8 @@ func (s *Sender) release(ctx context.Context, rows []ports.Notification) error {
 
 // finish delivers n and ends its claim, and reports whether the claim was still its own: a
 // later claim that took the row after this lease ran out reports it instead.
-func (s *Sender) finish(ctx context.Context, n ports.Notification) (bool, error) {
-	o := s.deliver(ctx, n)
+func (s *Sender) finish(ctx context.Context, n ports.Notification, token *tokenOnce) (bool, error) {
+	o := s.deliver(ctx, n, token)
 
 	finished, err := s.d.Outbox.FinishNotification(ctx, n.ID, n.Attempts, o)
 	if err != nil {
@@ -190,7 +236,7 @@ func (s *Sender) finish(ctx context.Context, n ports.Notification) (bool, error)
 }
 
 // deliver sends n when its recipient still qualifies and says how its row ends.
-func (s *Sender) deliver(ctx context.Context, n ports.Notification) ports.NotificationOutcome {
+func (s *Sender) deliver(ctx context.Context, n ports.Notification, token *tokenOnce) ports.NotificationOutcome {
 	if !n.Qualifies || n.Address == "" {
 		return ports.NotificationOutcome{State: ports.NotificationSkipped, Reason: reasonNotQualified}
 	}
@@ -201,7 +247,11 @@ func (s *Sender) deliver(ctx context.Context, n ports.Notification) ports.Notifi
 	}
 
 	sendCtx, cancel := context.WithTimeout(ctx, SendTimeout)
-	err = s.d.Mailer.Send(sendCtx, m)
+	if n.Channel == ports.ChannelSlack {
+		err = s.sendSlack(sendCtx, m, token)
+	} else {
+		err = s.d.Mailer.Send(sendCtx, m)
+	}
 
 	cancel()
 
@@ -210,11 +260,71 @@ func (s *Sender) deliver(ctx context.Context, n ports.Notification) ports.Notifi
 	switch {
 	case err == nil:
 		return ports.NotificationOutcome{State: ports.NotificationSent, At: now}
-	case errors.Is(err, ports.ErrMailPermanent) || n.Attempts >= MaxAttempts:
-		return ports.NotificationOutcome{State: ports.NotificationFailed, Reason: reason(err)}
+	case errors.Is(err, ports.ErrMailPermanent) || errors.Is(err, ports.ErrDMPermanent) || n.Attempts >= MaxAttempts:
+		return ports.NotificationOutcome{State: ports.NotificationFailed, Reason: reason(n.Channel, err)}
 	default:
-		return ports.NotificationOutcome{State: ports.NotificationPending, RetryAt: now.Add(backoff(n.Attempts)), Reason: reason(err)}
+		return ports.NotificationOutcome{State: ports.NotificationPending, RetryAt: now.Add(backoff(n.Attempts)), Reason: reason(n.Channel, err)}
 	}
+}
+
+// sendSlack sends m's text to m.To as a direct message with the organization's Slack token.
+func (s *Sender) sendSlack(ctx context.Context, m ports.Message, token *tokenOnce) error {
+	t, err := token.get(ctx, s.d.Connections)
+	if err != nil {
+		return err
+	}
+
+	return s.d.Slack.Send(ctx, t, ports.DirectMessage{To: m.To, Text: m.Text})
+}
+
+// tokenOnce is the Slack token of one claimed batch, looked up at its first Slack row.
+type tokenOnce struct {
+	done  bool
+	token string
+	err   error
+}
+
+func (o *tokenOnce) get(ctx context.Context, conns SlackConnections) (string, error) {
+	if !o.done {
+		o.token, o.err = slackTokenOf(ctx, conns)
+		// A failed lookup is tried again at the next row; a missing connection is not.
+		o.done = o.err == nil || errors.Is(o.err, ports.ErrDMPermanent)
+	}
+
+	return o.token, o.err
+}
+
+// slackTokenOf is the bot token of the organization's oldest Slack connection (ADR 0023,
+// decision 5). A token that refers to a credential is not opened here: the row fails.
+func slackTokenOf(ctx context.Context, conns SlackConnections) (string, error) {
+	all, err := conns.List(ctx)
+	if err != nil {
+		return "", errSlackConnection
+	}
+
+	all = slices.DeleteFunc(all, func(c domain.Connection) bool { return c.Kind != slackKind })
+	if len(all) == 0 {
+		return "", errNoSlackConnection
+	}
+
+	oldest := slices.MinFunc(all, func(a, b domain.Connection) int {
+		return cmp.Or(a.CreatedAt.Compare(b.CreatedAt), cmp.Compare(a.ID, b.ID))
+	})
+
+	if _, ref := oldest.SecretRefs[slackToken]; ref {
+		return "", errSlackToken
+	}
+
+	c, err := conns.Open(ctx, oldest.Name)
+	if err != nil {
+		return "", errSlackConnection
+	}
+
+	if _, ref := c.SecretRefs[slackToken]; ref || c.Values[slackToken] == "" {
+		return "", errSlackToken
+	}
+
+	return c.Values[slackToken], nil
 }
 
 // logOutcome logs a sent or failed row by its id, event and channel only: never an address, a
@@ -231,10 +341,18 @@ func (s *Sender) logOutcome(ctx context.Context, n ports.Notification, o ports.N
 	}
 }
 
-// reason is err's short code: a MailError's, else a fixed one.
-func reason(err error) string {
+// reason is err's short code: a MailError's or a DMError's, else the channel's fixed one.
+func reason(channel string, err error) string {
 	if me, ok := errors.AsType[*ports.MailError](err); ok && me.Code != "" {
 		return me.Code
+	}
+
+	if de, ok := errors.AsType[*ports.DMError](err); ok && de.Code != "" {
+		return de.Code
+	}
+
+	if channel == ports.ChannelSlack {
+		return reasonSlackError
 	}
 
 	return reasonMailError

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
@@ -45,6 +46,7 @@ type senderHarness struct {
 	orgs   orgList
 	outbox *porttest.NotificationDeliveries
 	mailer *porttest.Mailer
+	slack  *porttest.DirectMessenger
 	clock  *porttest.Clock
 	logs   *syncBuffer
 	sender *Sender
@@ -391,5 +393,257 @@ func TestBackoff_DoublesUpToAnHour(t *testing.T) {
 		if got := backoff(attempt); got != want {
 			t.Errorf("backoff(%d) = %v; want %v", attempt, got, want)
 		}
+	}
+}
+
+// slackHarness is a sender whose organization is a real one of a tenancy, so it can hold
+// connections, and whose rows go to Slack.
+type slackHarness struct {
+	senderHarness
+	org   domain.OrgID
+	conns *porttest.Connections
+}
+
+func newSlackSender(t *testing.T, mailer bool) slackHarness {
+	t.Helper()
+
+	clock := porttest.NewClock(start)
+	tenancy := porttest.NewTenancy(clock.Now)
+	conns := porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy)
+
+	o, err := tenancy.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: "acme", Name: "Acme"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	kinds, err := connkind.Platform()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := conns.SyncPlatformKinds(t.Context(), kinds); err != nil {
+		t.Fatal(err)
+	}
+
+	h := slackHarness{
+		senderHarness: senderHarness{
+			orgs: orgList{o.ID}, outbox: porttest.NewNotificationDeliveries(), mailer: porttest.NewMailer(),
+			slack: porttest.NewDirectMessenger(), clock: clock, logs: &syncBuffer{},
+		},
+		org: o.ID, conns: conns,
+	}
+
+	d := Deps{
+		Orgs: h.orgs, Outbox: h.outbox, Slack: h.slack, Connections: conns, Clock: clock, PublicURL: publicURL,
+		Log: slog.New(slog.NewJSONHandler(h.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
+	}
+	if mailer {
+		d.Mailer = h.mailer
+	}
+
+	h.sender = New(d)
+
+	return h
+}
+
+// connect adds a Slack connection whose token is token, or a reference to a credential.
+func (h slackHarness) connect(t *testing.T, name, kind, token string) {
+	t.Helper()
+
+	ctx := domain.WithOrg(t.Context(), h.org)
+	if _, err := h.conns.Create(ctx, domain.NewConnection{Name: name, Kind: kind, Secrets: map[string]string{"token": token}}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func slackNotification(event domain.NotificationEvent) ports.Notification {
+	n := itemNotification(event)
+	n.Channel = ports.ChannelSlack
+
+	return n
+}
+
+// A Slack row is sent to its recipient's email as a direct message, with the token of the
+// organization's Slack connection and the email's text, and marked sent; the log names no
+// address, no text and no token.
+func TestSender_SlackSendsDirectMessage(t *testing.T) {
+	t.Parallel()
+
+	h := newSlackSender(t, false)
+	h.connect(t, "slack", "slack", "xoxb-test-token")
+
+	n := slackNotification(domain.NotifyApproval)
+	id := h.queue(h.org, n)
+
+	if done := h.work(t); done != 1 {
+		t.Fatalf("work finished %d rows; want 1", done)
+	}
+
+	sent := h.slack.Sent()
+	if len(sent) != 1 || sent[0].Token != "xoxb-test-token" || sent[0].Message.To != n.Address ||
+		!strings.Contains(sent[0].Message.Text, "needs your OK") || !strings.Contains(sent[0].Message.Text, publicURL+"/o/acme/f/web-app/items/12") {
+		t.Fatalf("sent %+v; want the approval to ann@example.com with the connection's token", sent)
+	}
+
+	if r := h.row(t, id); r.State != ports.NotificationSent || !r.SentAt.Equal(start) {
+		t.Fatalf("row = %+v; want sent", r)
+	}
+
+	logs := h.logs.String()
+	assertLogged(t, logs, `"msg":"notify.sent"`, `"channel":"slack"`)
+	assertNothingPrivate(t, logs)
+
+	if strings.Contains(logs, "xoxb-test-token") {
+		t.Fatalf("logs hold the token:\n%s", logs)
+	}
+}
+
+// Without a Slack connection, or with one whose token is a credential reference, a Slack row
+// fails at once with a fixed reason and sends nothing.
+func TestSender_SlackWithoutConnectionFails(t *testing.T) {
+	t.Parallel()
+
+	for _, c := range []struct {
+		name    string
+		connect func(t *testing.T, h slackHarness)
+		reason  string
+	}{
+		{"no connection", func(t *testing.T, h slackHarness) {
+			t.Helper()
+			h.connect(t, "pager", "pagerduty", "pd-token")
+		}, "slack-no-connection"},
+		{"a credential reference", func(t *testing.T, h slackHarness) {
+			t.Helper()
+			h.connect(t, "slack", "slack", "{{slack-bot}}")
+		}, "slack-token-unavailable"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := newSlackSender(t, false)
+			c.connect(t, h)
+			id := h.queue(h.org, slackNotification(domain.NotifyAndon))
+
+			h.work(t)
+
+			if r := h.row(t, id); r.State != ports.NotificationFailed || r.Attempts != 1 || r.LastError != c.reason {
+				t.Fatalf("row = %+v; want failed after one attempt with %s", r, c.reason)
+			}
+
+			if len(h.slack.Sent()) != 0 {
+				t.Fatal("a message was sent")
+			}
+
+			h.clock.Advance(maxBackoff)
+
+			if n := h.work(t); n != 0 {
+				t.Fatalf("a failed row was retried")
+			}
+		})
+	}
+}
+
+// A person Slack does not find fails the row after one attempt, and it is not retried.
+func TestSender_SlackUserNotFoundFailsOnce(t *testing.T) {
+	t.Parallel()
+
+	h := newSlackSender(t, false)
+	h.connect(t, "slack", "slack", "xoxb-test-token")
+
+	var tries int
+
+	h.slack.Fail = func(string, ports.DirectMessage) error {
+		tries++
+
+		return &ports.DMError{Code: "slack-user-not-found", NotFound: true}
+	}
+	id := h.queue(h.org, slackNotification(domain.NotifyQuestion))
+
+	h.work(t)
+	h.clock.Advance(maxBackoff)
+	h.work(t)
+
+	if r := h.row(t, id); r.State != ports.NotificationFailed || r.Attempts != 1 || r.LastError != "slack-user-not-found" || tries != 1 {
+		t.Fatalf("row = %+v after %d tries; want failed once with slack-user-not-found", r, tries)
+	}
+
+	assertNothingPrivate(t, h.logs.String())
+}
+
+// A temporary Slack error backs off as email does, storing its code; an error that is no
+// DMError stores a fixed reason.
+func TestSender_SlackTemporaryErrorsBackOff(t *testing.T) {
+	t.Parallel()
+
+	h := newSlackSender(t, false)
+	h.connect(t, "slack", "slack", "xoxb-test-token")
+	h.slack.Fail = func(string, ports.DirectMessage) error { return &ports.DMError{Code: "slack-rate-limited"} }
+	id := h.queue(h.org, slackNotification(domain.NotifyBudget))
+
+	h.work(t)
+
+	if r := h.row(t, id); r.State != ports.NotificationPending || r.LastError != "slack-rate-limited" || !r.NextAttemptAt.Equal(start.Add(time.Minute)) {
+		t.Fatalf("row = %+v; want pending a minute with slack-rate-limited", r)
+	}
+
+	h.slack.Fail = func(string, ports.DirectMessage) error { return errors.New("xoxb-test-token ann@example.com") }
+	h.clock.Advance(time.Minute)
+	h.work(t)
+
+	if r := h.row(t, id); r.State != ports.NotificationPending || r.LastError != "slack-error" {
+		t.Fatalf("row = %+v; want pending with slack-error", r)
+	}
+}
+
+// With more than one Slack connection, the oldest one's token is used, whatever the names.
+func TestSender_SlackUsesTheOldestConnection(t *testing.T) {
+	t.Parallel()
+
+	h := newSlackSender(t, false)
+	h.connect(t, "zz-first", "slack", "xoxb-oldest")
+	h.connect(t, "aa-second", "slack", "xoxb-newer")
+	h.queue(h.org, slackNotification(domain.NotifyApproval))
+
+	h.work(t)
+
+	if sent := h.slack.Sent(); len(sent) != 1 || sent[0].Token != "xoxb-oldest" {
+		t.Fatalf("sent %+v; want one message with the oldest connection's token", sent)
+	}
+}
+
+// Without a Mailer the sender claims no email rows: they stay pending for an instance that can
+// send them, and Slack rows still go out.
+func TestSender_EmailWaitsWithoutAMailer(t *testing.T) {
+	t.Parallel()
+
+	h := newSlackSender(t, false)
+	h.connect(t, "slack", "slack", "xoxb-test-token")
+	email := h.queue(h.org, itemNotification(domain.NotifyApproval))
+	slackRow := h.queue(h.org, slackNotification(domain.NotifyApproval))
+
+	if n := h.work(t); n != 1 {
+		t.Fatalf("work finished %d rows; want only the Slack one", n)
+	}
+
+	if r := h.row(t, email); r.State != ports.NotificationPending || r.Attempts != 0 {
+		t.Fatalf("email row = %+v; want pending and never claimed", r)
+	}
+
+	if r := h.row(t, slackRow); r.State != ports.NotificationSent {
+		t.Fatalf("slack row = %+v; want sent", r)
+	}
+}
+
+// With both channels each row goes out on its own.
+func TestSender_SendsBothChannels(t *testing.T) {
+	t.Parallel()
+
+	h := newSlackSender(t, true)
+	h.connect(t, "slack", "slack", "xoxb-test-token")
+	h.queue(h.org, itemNotification(domain.NotifyApproval))
+	h.queue(h.org, slackNotification(domain.NotifyApproval))
+
+	if n := h.work(t); n != 2 || len(h.mailer.Sent()) != 1 || len(h.slack.Sent()) != 1 {
+		t.Fatalf("finished %d rows, %d emails, %d Slack messages; want 2, 1 and 1", n, len(h.mailer.Sent()), len(h.slack.Sent()))
 	}
 }

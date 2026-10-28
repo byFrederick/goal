@@ -15,7 +15,7 @@ import (
 // ErrUnknownEvent is the render of an event this sender has no message for.
 var ErrUnknownEvent = fmt.Errorf("no message for the event: %w", domain.ErrInvalid)
 
-// Render returns the email of n, to n.Address: one sentence that says what happened, a link to
+// Render returns the email of n, to n.Address, whose Text is also n's Slack message: one sentence that says what happened, a link to
 // the page that shows it and a link to the account's notification settings. Every link is
 // publicURL plus a path of escaped segments; the HTML copy escapes every name and loads nothing.
 func Render(n ports.Notification, publicURL string) (ports.Message, error) {
@@ -59,7 +59,11 @@ func Render(n ports.Notification, publicURL string) (ports.Message, error) {
 	}
 
 	account := base + "/account"
+
 	footer := "You get this email because of your notification settings."
+	if n.Channel == ports.ChannelSlack {
+		footer = "You get this message because of your notification settings."
+	}
 
 	text := says + "\n\nOpen it in Goal: " + link + "\n\n-- \n" + footer + " Change them at " + account + "\n"
 	body := "<!doctype html>\n<html><body>\n" +

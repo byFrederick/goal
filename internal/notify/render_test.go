@@ -139,3 +139,20 @@ func hrefs(html string) []string {
 		out = append(out, rest[:strings.IndexByte(rest, '"')])
 	}
 }
+
+// A Slack row's text says it is a message, not an email.
+func TestRender_SlackSaysMessage(t *testing.T) {
+	t.Parallel()
+
+	n := itemNotification(domain.NotifyApproval)
+	n.Channel = ports.ChannelSlack
+
+	m, err := Render(n, publicURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(m.Text, "You get this message because") || strings.Contains(m.Text, "email") {
+		t.Fatalf("text = %q; want it to say message, not email", m.Text)
+	}
+}

@@ -36,6 +36,7 @@ import (
 
 	"github.com/byFrederick/goal/apps/web"
 	"github.com/byFrederick/goal/internal/adapters/clock/sys"
+	"github.com/byFrederick/goal/internal/adapters/directmessage/slack"
 	"github.com/byFrederick/goal/internal/adapters/embedder/openai"
 	"github.com/byFrederick/goal/internal/adapters/mailer/smtp"
 	"github.com/byFrederick/goal/internal/adapters/masterkey/masterkey"
@@ -75,7 +76,7 @@ const purgeEvery = time.Hour
 // webhook deliveries; one instance at a time does, under the schedule lock.
 const scheduleEvery = time.Minute
 
-// notifyEvery is how often each goald claims due notification email; every instance does, the
+// notifyEvery is how often each goald claims due notifications; every instance does, the
 // claims' leases keeping them apart.
 const notifyEvery = 10 * time.Second
 
@@ -251,7 +252,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	servers := httpServers(s, proxySecret, apiHandler, gatewayHandler(gw), web.Handler(web.Options{StrictTransport: s.strictTransport()}), log)
 
-	j, err := newJobs(s, store, objects, platform, clock, kb.ingestor, log)
+	j, err := newJobs(s, store, connections, objects, platform, clock, kb.ingestor, log)
 	if err != nil {
 		return err
 	}
@@ -260,10 +261,10 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 }
 
 // newJobs builds goald's scheduled jobs.
-func newJobs(s settings, store *postgres.Store, objects ports.ObjectStore, platform ports.Platform, clock ports.Clock,
-	ingestor *knowledge.Ingestor, log *slog.Logger,
+func newJobs(s settings, store *postgres.Store, connections *postgres.Connections, objects ports.ObjectStore, platform ports.Platform,
+	clock ports.Clock, ingestor *knowledge.Ingestor, log *slog.Logger,
 ) (jobs, error) {
-	sender, err := emailSender(s, store, clock, log)
+	sender, err := notificationSender(s, store, connections, clock, log)
 	if err != nil {
 		return jobs{}, err
 	}
@@ -271,23 +272,31 @@ func newJobs(s settings, store *postgres.Store, objects ports.ObjectStore, platf
 	return jobs{
 		// Deleted organizations go, rows and bucket objects, once their retention has passed.
 		purger:   retention.New(store, objects, clock, s.OrgRetention, log),
-		platform: platform, clock: clock, identity: newIdentityWatch(s, store), ingestor: ingestor, email: sender,
+		platform: platform, clock: clock, identity: newIdentityWatch(s, store), ingestor: ingestor, notify: sender,
 	}, nil
 }
 
-// emailSender is the job that sends the notification outbox's email rows through the SMTP
-// server of GOAL_SMTP_URL (ADR 0023, decision 4); nil without one, and no email goes out.
-func emailSender(s settings, store *postgres.Store, clock ports.Clock, log *slog.Logger) (*notify.Sender, error) {
-	if s.SMTP == nil {
-		return nil, nil
+// notificationSender is the job that sends the notification outbox's rows (ADR 0023, decisions 4
+// and 5): Slack rows as direct messages with each organization's Slack connection, always, over
+// a transport that dials public addresses only; email rows through the SMTP server of
+// GOAL_SMTP_URL, and without one no email goes out and email rows stay queued.
+func notificationSender(s settings, store *postgres.Store, connections *postgres.Connections, clock ports.Clock, log *slog.Logger,
+) (*notify.Sender, error) {
+	d := notify.Deps{
+		Orgs: store, Outbox: store, Clock: clock, PublicURL: s.PublicURL, Log: log,
+		Slack: slack.New(slack.Config{Transport: connectionTransport(false)}), Connections: connections,
 	}
 
-	mailer, err := smtp.New(smtp.Config{URL: s.SMTP.URL, From: s.SMTP.From, Plaintext: s.SMTP.Plaintext})
-	if err != nil {
-		return nil, fmt.Errorf("mailer: %w", err)
+	if s.SMTP != nil {
+		mailer, err := smtp.New(smtp.Config{URL: s.SMTP.URL, From: s.SMTP.From, Plaintext: s.SMTP.Plaintext})
+		if err != nil {
+			return nil, fmt.Errorf("mailer: %w", err)
+		}
+
+		d.Mailer = mailer
 	}
 
-	return notify.New(notify.Deps{Orgs: store, Outbox: store, Mailer: mailer, Clock: clock, PublicURL: s.PublicURL, Log: log}), nil
+	return notify.New(d), nil
 }
 
 // knowledgeBase is the knowledge base as goald wires it (spec 4 §4.8): its sources and documents
@@ -561,14 +570,14 @@ func (a engineToolApprovals) RequestToolApproval(ctx context.Context, c gateway.
 
 // jobs are goald's scheduled jobs: the purge of deleted organizations, the sign-in clean-up, the
 // knowledge base's ingestion, under GOAL_AUTH=session the startup watch of the identity service
-// and with GOAL_SMTP_URL the email sender.
+// and the notification sender (email only with GOAL_SMTP_URL).
 type jobs struct {
 	purger   *retention.Purger
 	platform ports.Platform
 	clock    ports.Clock
 	identity *identityWatch
 	ingestor *knowledge.Ingestor
-	email    *notify.Sender
+	notify   *notify.Sender
 }
 
 // serve runs the HTTP servers, the engine, the stream feed, the definitions reloads and the
@@ -627,8 +636,8 @@ func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Se
 		wg.Go(func() { j.identity.run(ctx, log) })
 	}
 
-	if j.email != nil {
-		wg.Go(func() { j.email.Run(ctx, notifyEvery) })
+	if j.notify != nil {
+		wg.Go(func() { j.notify.Run(ctx, notifyEvery) })
 	}
 
 	wg.Go(func() {
