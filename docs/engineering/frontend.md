@@ -79,10 +79,12 @@ routes/       file-based route files (TanStack Router plugin; routeTree.gen.ts i
                     /o/$org/spend               → Spend and billing (spec 4 §11): ?window=week|month|90d (week by default, any other value falls back to week); the figures of getOrgSpend
                     /o/$org/models              → Models and policies (ADR 0024): the install's models, the tool policy, the denied commands, the box sizes and the egress addresses, from getOrgPolicy; Save changes sends putOrgPolicy
                     /o/$org/connections         → Connections (spec 4 §10; connection:read): ?factory= (a factory's name: what its
-                                                  current version names), ?kind=, ?q=
+                                                  current version names), ?kind=, ?q=. "Writes waiting for your OK" is the sum of
+                                                  each listed connection's waiting_approvals and links to Needs you
                     /o/$org/connections/new     → Add connection (?kind=): catalog and details, Define a kind…, the kind's fields
-                    /o/$org/connections/$connection → One connection (?created after a create): fields, Test, Replace secret,
-                                                  Delete, what a run gets, used by, recent use (audit:read)
+                    /o/$org/connections/$connection → One connection (?created after a create): fields, Tools agents may use
+                                                  (MCP kinds only: tools-card.tsx), Test, Replace secret, Delete, what a run gets,
+                                                  used by, recent use (audit:read)
                     /o/$org/knowledge           → Knowledge (spec 4 §10; knowledge:read): ?factory= (a factory's name: the sources its
                                                   current version lists), ?source= (whose documents show beside the list), ?q= and
                                                   ?as= (Try a search, as a factory)
