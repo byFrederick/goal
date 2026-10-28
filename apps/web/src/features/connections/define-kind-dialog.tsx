@@ -104,7 +104,7 @@ export function DefineKindDialog({
               spellCheck={false}
               autoCapitalize="off"
               translate="no"
-              className="font-mono text-[13px] leading-relaxed md:text-[13px]"
+              className="font-mono text-secondary leading-relaxed"
             />
           </Field>
           {problem ? (

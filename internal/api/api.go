@@ -5,7 +5,7 @@
 // validation, publishing, versions, templates), a Server-Sent Events stream of the
 // organization's events, the factory editor's metadata and skills catalog (builder.go), and the
 // organization's connections (connections.go), credentials (credentials.go) and knowledge base
-// (knowledge.go).
+// (knowledge.go), and each factory's webhook endpoints and their delivery log (webhooks.go).
 //
 // The handlers implement the strict server interface generated into internal/api/gen
 // (`task api:gen`). They reach the engine, the store, the organizations and the factory
@@ -176,6 +176,9 @@ type Deps struct {
 	// Credentials are the organization's credentials (ADR 0017), which connections refer to as
 	// {{name}}.
 	Credentials ports.Credentials
+	// Intake keeps the factories' webhook endpoints, with their signing secrets, and the
+	// deliveries they received (ADR 0026).
+	Intake ports.Intake
 	// Knowledge is the organization's knowledge base (spec 4 §4.8); KnowledgeUploads keeps its
 	// uploaded files, of at most UploadMaxBytes each (GOAL_UPLOAD_MAX_BYTES); KnowledgeSearch
 	// searches it as the gateway's knowledge__search does.
@@ -204,7 +207,7 @@ func (d Deps) complete() bool {
 	missing := []bool{
 		d.Engine == nil, d.Items == nil, d.Factories == nil, d.Definitions == nil, d.Versions == nil, d.Orgs == nil,
 		d.Audit == nil, d.Access == nil, d.Authorizer == nil, d.Platform == nil, d.Feed == nil, d.Builder == nil, d.Clock == nil,
-		d.Connections == nil, d.Credentials == nil, d.ParseKind == nil, d.ConnectionTransport == nil, d.OrgRetention <= 0,
+		d.Connections == nil, d.Credentials == nil, d.Intake == nil, d.ParseKind == nil, d.ConnectionTransport == nil, d.OrgRetention <= 0,
 		d.Knowledge == nil, d.KnowledgeUploads == nil, d.KnowledgeSearch == nil, d.UploadMaxBytes <= 0,
 		d.OrgPolicies == nil, len(d.BoxSizes) == 0,
 		d.Evals != nil && (d.Evals.Runs == nil || d.Evals.Loop == nil || d.Evals.Judges == nil),
@@ -249,7 +252,7 @@ var errInvalid = errors.New("invalid request")
 func New(d Deps) (http.Handler, error) {
 	if !d.complete() {
 		return nil, errors.New("api: Engine, Items, Factories, Definitions, Versions, Orgs, Audit, Access, Authorizer, Platform, Feed, Builder, Clock, " +
-			"Connections, Credentials, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeSearch, OrgPolicies, BoxSizes, " +
+			"Connections, Credentials, Intake, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeSearch, OrgPolicies, BoxSizes, " +
 			"a positive UploadMaxBytes and a positive OrgRetention are required, and Evals, when set, needs Runs, Loop and Judges")
 	}
 
@@ -265,7 +268,7 @@ func New(d Deps) (http.Handler, error) {
 	s := &server{
 		engine: d.Engine, items: d.Items, factories: d.Factories, defs: d.Definitions, versions: d.Versions, orgs: d.Orgs, audit: d.Audit,
 		retention: d.OrgRetention, authz: d.Authorizer, auth: d.Auth, identity: d.Identity, access: d.Access, platform: d.Platform, feed: d.Feed,
-		builder: d.Builder, connections: d.Connections, credentials: d.Credentials, parseKind: d.ParseKind, codehosts: d.CodeHosts,
+		builder: d.Builder, connections: d.Connections, credentials: d.Credentials, intake: d.Intake, parseKind: d.ParseKind, codehosts: d.CodeHosts,
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
 		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, search: d.KnowledgeSearch, uploadMax: d.UploadMaxBytes,
 		policies: d.OrgPolicies, boxSizes: slices.Clone(d.BoxSizes), egress: slices.Clone(d.EgressAddresses),
@@ -390,6 +393,8 @@ type server struct {
 	codehosts map[string]ports.CodeHost
 	// credentials serve the credential routes.
 	credentials ports.Credentials
+	// intake serves the webhook routes and Intake's reads.
+	intake ports.Intake
 	// knowledge, uploads and search serve the knowledge routes; uploadMax bounds an uploaded file.
 	knowledge ports.Knowledge
 	uploads   KnowledgeUploads
@@ -618,7 +623,7 @@ func problemOf(err error) gen.Problem {
 	// wrap ports.ErrNameTaken); the credentials' before the connections' (both wrap
 	// ports.ErrNoMasterKey).
 	for _, answer := range []func(error) (gen.Problem, bool){
-		fixedProblem, policyProblem, edgeProblem, partProblem, credentialProblem, connectionProblem, knowledgeProblem, evalProblem, definitionProblem, controlProblem, agentProblem, apiKeyProblem, personalTokenProblem,
+		fixedProblem, policyProblem, edgeProblem, partProblem, credentialProblem, webhookProblem, connectionProblem, knowledgeProblem, evalProblem, definitionProblem, controlProblem, agentProblem, triggerProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {
 			return p

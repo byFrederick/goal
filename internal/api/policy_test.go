@@ -69,7 +69,7 @@ func TestGetOrgPolicy_UsageAndSizes(t *testing.T) {
 	// acme's writer names no model and acme no runtime.model: the default, opus. line's backend
 	// takes line's runtime.model (claude-fable-5-1, not one of the install's), its frontend haiku.
 	wantModels := []gen.PolicyModel{
-		{Id: modelOpus, Label: "Claude Opus 5.5", UsedBy: []gen.ModelUse{{FactoryId: acmeID, Name: acmeSlug, Agents: []string{"writer"}}}},
+		{Id: modelOpus, Label: "Claude Opus 5.5", UsedBy: []gen.ModelUse{{FactoryId: acmeID, Name: acmeSlug, Agents: []string{evalAgent}}}},
 		{Id: modelHaiku, Label: "Claude Haiku 5.5", UsedBy: []gen.ModelUse{{FactoryId: lineID, Name: lineSlug, Agents: []string{agentFrontend}}}},
 	}
 
@@ -98,7 +98,7 @@ func TestGetOrgPolicy_UsageAndSizes(t *testing.T) {
 		t.Errorf("opus after haiku became the default is used by %+v; want nobody", after.Models[0].UsedBy)
 	}
 
-	wantHaiku := []gen.ModelUse{{FactoryId: acmeID, Name: acmeSlug, Agents: []string{"writer"}}, {FactoryId: lineID, Name: lineSlug, Agents: []string{agentFrontend}}}
+	wantHaiku := []gen.ModelUse{{FactoryId: acmeID, Name: acmeSlug, Agents: []string{evalAgent}}, {FactoryId: lineID, Name: lineSlug, Agents: []string{agentFrontend}}}
 	if !slices.EqualFunc(after.Models[1].UsedBy, wantHaiku, equalUse) {
 		t.Errorf("haiku is used by %+v; want %+v", after.Models[1].UsedBy, wantHaiku)
 	}

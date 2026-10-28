@@ -1,21 +1,25 @@
 // D12: the definition's cards on the Agent page (Agent and Mobile-Agent boards), read from the
 // version that runs. sre's investigator has three skills and legacy tool rules; goal's reviewer
 // has neither and gets the worker's read-only tools.
-import { expect, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll, isPhone } from './support';
+import { expect, type Page, test } from '@playwright/test';
+import { expectAccessible, expectNoHorizontalScroll } from './support';
+
+/** The page's tab for the definition's cards (?view=tools). */
+const toolsTab = (page: Page) =>
+  page.getByRole('navigation', { name: 'Agent views' }).getByRole('link', { name: 'Tools and access' });
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
 });
 
-test('skills, tool policy and Edit in Definition come from the version that runs', async ({ page }) => {
+test('skills, tool policy and Open prompt file come from the version that runs', async ({ page }) => {
   await page.goto('/o/acme/f/sre/agents/investigator');
   await expect(page.getByRole('heading', { level: 1, name: 'investigator' })).toBeVisible();
-  // The role from the definition leads the sentence beside the sidebar; phones keep it short.
-  const role = page.getByText('Gathers evidence from AWS and the repository and proposes a diagnosis.');
-  if (isPhone(page)) await expect(role).toBeHidden();
-  else await expect(role).toBeVisible();
+  // The role from the definition sits under the name, on every width.
+  await expect(page.getByText('Gathers evidence from AWS and the repository and proposes a diagnosis.')).toBeVisible();
 
+  await toolsTab(page).click();
+  await expect(page).toHaveURL(/\?view=tools$/);
   const skills = page.getByRole('region', { name: 'Skills' });
   await expect(skills).toContainText('Copied into this agent’s container only');
   const rows = skills.getByRole('listitem');
@@ -41,7 +45,7 @@ test('skills, tool policy and Edit in Definition come from the version that runs
   await expect(tools.getByText('Blocked this week: 2 calls, both aws ssm put-parameter.')).toBeVisible();
   await expect(page.getByText(/^Blocked this week/)).toHaveCount(1);
 
-  await expect(page.getByRole('link', { name: 'Edit in Definition' })).toHaveAttribute(
+  await expect(page.getByRole('link', { name: 'Open prompt file' })).toHaveAttribute(
     'href',
     '/o/acme/f/sre/definition/agents?agent=investigator',
   );
@@ -50,7 +54,7 @@ test('skills, tool policy and Edit in Definition come from the version that runs
 });
 
 test('“Add a skill from skills.sh” opens Definition › Agents with the picker focused (flow 8)', async ({ page }) => {
-  await page.goto('/o/acme/f/sre/agents/investigator');
+  await page.goto('/o/acme/f/sre/agents/investigator?view=tools');
   await page.getByRole('region', { name: 'Skills' }).getByRole('link', { name: 'Add a skill from skills.sh' }).click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/sre\/definition\/agents\?agent=investigator&add=skill$/);
   await expect(page.getByRole('heading', { level: 3, name: 'investigator' })).toBeVisible();
@@ -64,7 +68,7 @@ test('cards that cannot read the running version say so, and Try again reads it'
   await request.post('/__mock/fail', {
     data: { path: '/versions/current/model', method: 'GET', status: 404, code: 'version-not-found', times: 0 },
   });
-  await page.goto('/o/acme/f/sre/agents/investigator');
+  await page.goto('/o/acme/f/sre/agents/investigator?view=tools');
   // The statistics never wait for the definition.
   await expect(page.getByRole('heading', { level: 1, name: 'investigator' })).toBeVisible();
   const skills = page.getByRole('region', { name: 'Skills' });
@@ -80,6 +84,7 @@ test('cards that cannot read the running version say so, and Try again reads it'
 
 test('an agent without settings reads; a draft that changes it says so and links to Review', async ({ page }) => {
   await page.goto('/o/acme/f/goal/agents/reviewer');
+  await toolsTab(page).click();
   const skills = page.getByRole('region', { name: 'Skills' });
   await expect(skills.getByText('No skills. The agent works from its prompt alone.')).toBeVisible();
   const tools = page.getByRole('region', { name: 'Tool policy' });
@@ -89,7 +94,7 @@ test('an agent without settings reads; a draft that changes it says so and links
   await expect(page.getByText('The draft changes this agent.', { exact: false })).toBeHidden();
 
   // Give it a skill in the draft: the page still shows what runs, and points at Review.
-  await page.getByRole('link', { name: 'Edit in Definition' }).click();
+  await page.getByRole('link', { name: 'Open prompt file' }).click();
   await expect(page).toHaveURL(/\/definition\/agents\?agent=reviewer$/);
   await page.getByRole('combobox', { name: 'Add a skill from the catalog' }).click();
   await page.getByRole('option', { name: 'acme-conventions' }).click();
@@ -98,6 +103,7 @@ test('an agent without settings reads; a draft that changes it says so and links
 
   await page.getByRole('link', { name: 'Open agent page' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'reviewer' })).toBeVisible();
+  await toolsTab(page).click();
   await expect(page.getByText('The draft changes this agent.', { exact: false })).toBeVisible();
   await expect(skills.getByText('No skills. The agent works from its prompt alone.')).toBeVisible();
   await expectAccessible(page);

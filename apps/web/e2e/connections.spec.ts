@@ -1,5 +1,5 @@
 // Connections (spec 4 §10) against the mock: acme's connections (pagerduty's test fails until its
-// key is replaced, status-api misses its secret, gitlab-infra was never tested), New connection,
+// key is replaced, status-api misses its secret, gitlab-infra was never tested), Add connection,
 // a connection's page, and the builder's Basics runtime and Connections and knowledge, where goal
 // names github and playwright, claude gives its model and github clones its repository.
 import { expect, type Page, test } from '@playwright/test';
@@ -28,16 +28,12 @@ test.describe('the Connections page', () => {
     await expect(page.getByRole('heading', { level: 2, name: '8 connections' })).toBeVisible();
 
     // A table where main is wide, cards where it is not: whichever shows.
-    const list = page
-      .getByRole('row')
-      .or(page.getByRole('list', { name: 'Connections of Acme' }).getByRole('listitem'));
+    const list = page.getByRole('row').or(page.getByRole('listitem'));
     await expect(list.filter({ hasText: 'pagerduty' })).toContainText('Test failed: 401');
     await expect(list.filter({ hasText: 'status-api' })).toContainText('Missing secret');
     await expect(list.filter({ hasText: 'gitlab-infra' })).toContainText('Never tested');
     if (await page.getByRole('table').isVisible()) {
       await expect(list.filter({ hasText: 'claude' })).toContainText('goalsresupport');
-      await expect(list.filter({ hasText: 'claude' })).toContainText('Model access');
-      await expect(list.filter({ hasText: 'aws-prod' })).toContainText('Short-lived per run');
     }
     // The secrets themselves are never on the page.
     await expect(page.getByText(/ghp_|sk-ant/)).toHaveCount(0);
@@ -102,7 +98,7 @@ test.describe('the Connections page', () => {
     await page.request.post('/__mock/reset', { data: { role: 'member' } });
     await page.goto('/o/acme/connections');
     await expect(page.getByRole('heading', { level: 2, name: '8 connections' })).toBeVisible();
-    await expect(page.getByRole('link', { name: /New connection/ })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /Add connection/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Replace secret…' })).toHaveCount(0);
     // The audit log is for owners and admins.
     await expect(page.getByRole('region', { name: 'Recent activity' })).toHaveCount(0);
@@ -115,13 +111,13 @@ test.describe('the Connections page', () => {
   });
 });
 
-test.describe('New connection', () => {
+test.describe('Add connection', () => {
   test('choose a kind, fill its fields, create, then test it on its page', async ({ page }) => {
     await page.goto('/o/acme/connections');
-    await page.getByRole('link', { name: /New connection/ }).click();
+    await page.getByRole('link', { name: /Add connection/ }).click();
     await expect(page).toHaveURL(/\/o\/acme\/connections\/new$/);
-    await page.getByRole('searchbox', { name: 'Find a kind' }).fill('git');
-    await page.getByRole('radio', { name: /^GitHub/ }).check();
+    await page.getByRole('searchbox', { name: 'Search the catalog' }).fill('git');
+    await page.getByRole('button', { name: /^GitHub/ }).click();
     await expect(page).toHaveURL(/kind=github/);
 
     const form = page.getByRole('form', { name: 'GitHub details' });
@@ -134,9 +130,8 @@ test.describe('New connection', () => {
     await expect(token).toHaveAttribute('type', 'password');
     await token.fill(secretValue);
     await form.getByLabel('Description (optional)').fill('Pushes and pull requests on acme/infra');
-    await expect(page.getByRole('region', { name: 'What a run gets' })).toContainText('GH_TOKEN');
     await fits(page);
-    await form.getByRole('button', { name: 'Create connection' }).click();
+    await form.getByRole('button', { name: /^Add / }).click();
 
     await expect(page).toHaveURL(/\/o\/acme\/connections\/github-infra$/);
     await expect(page.getByText('github-infra is created. Test it to check what you entered works.')).toBeVisible();
@@ -156,19 +151,19 @@ test.describe('New connection', () => {
     await form.getByLabel('Name').fill('github-ghe');
     await form.getByLabel('Token').fill(secretValue);
     await form.getByLabel('Host (optional)').fill('ghe.example.com');
-    await form.getByRole('button', { name: 'Create connection' }).click();
+    await form.getByRole('button', { name: /^Add / }).click();
     await expect(page.getByRole('alert')).toContainText(
       'test.url (from api_url) is on api.github.com, not on ghe.example.com or api.ghe.example.com',
     );
     await form.getByLabel('API URL (optional)').fill('https://ghe.example.com/api/v3');
-    await form.getByRole('button', { name: 'Create connection' }).click();
+    await form.getByRole('button', { name: /^Add / }).click();
     await expect(page).toHaveURL(/\/o\/acme\/connections\/github-ghe$/);
   });
 
   test('a required field is asked for before anything is sent', async ({ page }) => {
     await page.goto('/o/acme/connections/new?kind=jira');
     const form = page.getByRole('form', { name: 'Jira details' });
-    await form.getByRole('button', { name: 'Create connection' }).click();
+    await form.getByRole('button', { name: /^Add / }).click();
     await expect(form.getByText('Site is required.')).toBeVisible();
     await expect(form.getByText('API token is required.')).toBeVisible();
     await expect(page).toHaveURL(/\/connections\/new\?kind=jira$/);
@@ -181,7 +176,7 @@ test.describe('New connection', () => {
     await page.goto('/o/acme/connections/new?kind=pagerduty');
     const form = page.getByRole('form', { name: 'PagerDuty details' });
     await form.getByLabel('API key').fill('a-key');
-    await form.getByRole('button', { name: 'Create connection' }).click();
+    await form.getByRole('button', { name: /^Add / }).click();
     await expect(form.getByRole('alert')).toContainText('goald has no master key');
     await expect(form.getByRole('alert')).toContainText('GOAL_MASTER_KEYS');
     await fits(page);
@@ -192,7 +187,7 @@ test.describe('New connection', () => {
     await page.goto('/o/acme/connections/new?kind=pagerduty');
     const form = page.getByRole('form', { name: 'PagerDuty details' });
     await form.getByLabel('API key').fill('a-key');
-    await form.getByRole('button', { name: 'Create connection' }).click();
+    await form.getByRole('button', { name: /^Add / }).click();
     const reauth = page.getByRole('dialog', { name: 'Confirm it’s you' });
     await reauth.getByRole('button', { name: 'Email me a code' }).click();
     await reauth.getByLabel('Code').fill('000000');
@@ -209,8 +204,7 @@ test.describe('New connection', () => {
     await dialog.getByRole('button', { name: 'Save kind' }).click();
     await expect(dialog).toBeHidden();
     await expect(page).toHaveURL(/kind=slack/);
-    await expect(page.getByRole('radio', { name: /^Slack/ })).toBeChecked();
-    await expect(page.getByText('12 platform kinds, 1 of Acme’s')).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Slack/ })).toHaveAttribute('aria-current', 'true');
     await expect(page.getByRole('form', { name: 'Slack details' }).getByLabel('Bot token')).toBeVisible();
   });
 });

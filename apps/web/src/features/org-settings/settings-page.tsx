@@ -1,45 +1,58 @@
-// Organization settings (C §10.9, canvas "Org-Settings"): one form for General (name, short
-// mark, address) and the slot limits, saved by "Save changes" with only what changed; Model
-// access names the organization's model connections (spec 4) and Secrets points at Connections,
-// which hold them; the Danger zone deletes the organization.
-// Leaving with unsaved changes asks first. A new address moves the page to it: links with the
-// old one stop working (review decision 2). What the caller may do comes from the organization's
-// `can` (spec 3 §10.2): without org:manage the form is shown read-only, with who changes it; the
-// Danger zone shows only to owners: Transfer ownership (org:transfer, with sign-in on) and Delete
-// (org:delete).
-import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
-import { Link, useBlocker, useNavigate, useRouter } from '@tanstack/react-router';
-import { TriangleAlert } from 'lucide-react';
-import { type FormEvent, useRef, useState } from 'react';
+// Organization settings (canvas "Org-Settings", docs/design/screens/organization/org-settings): General
+// (name, address, factories), Slots (the caps goald enforces), Sign-in, Data, and the Danger zone for
+// owners. One form saves General and Slots with "Save changes", sending only what changed. The
+// controls the picture shows that the API does not have yet render disabled ("Not available yet").
+// Leaving with unsaved changes asks first. A new address moves the page to it: links with the old one
+// stop working (review decision 2). What the caller may do comes from the organization's `can`
+// (spec 3 §10.2): without org:manage the form is shown read-only, with who changes it; the Danger
+// zone shows only to owners: Transfer ownership (org:transfer, with sign-in on) and Delete (org:delete).
+import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
+import { useBlocker, useNavigate, useRouter } from '@tanstack/react-router';
+import { ChevronDown, TriangleAlert } from 'lucide-react';
+import { type FormEvent, type ReactNode, Suspense, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError, patchOrgSettings } from '../../api/client';
-import { authConfigQuery, connectionKindsQuery, connectionsQuery, keys, settingsQuery } from '../../api/queries';
+import { authConfigQuery, keys, settingsQuery } from '../../api/queries';
 import type { OrgSettings, OrgSettingsPatch, OrgSummary } from '../../api/types';
-import { namesText, usedByText } from '../../shared/connections';
-import { plural } from '../../shared/format';
+import { factoryMark } from '../../shared/marks';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { reasons } from '../../shared/permissions';
 import { Button } from '../../ui/button';
+import { Chip } from '../../ui/chip';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
-import { Field, Input } from '../../ui/field';
+import { Input } from '../../ui/field';
+import { NotAvailable } from '../../ui/not-available';
 import { ReadOnly } from '../../ui/read-only';
+import { Switch } from '../../ui/switch';
 import { ViewOnlyBanner } from '../../ui/view-only-banner';
+import { describedBy, SettingsRow, SettingsSection } from './card';
 import { DangerZone } from './danger-zone';
 import { changedFields, type FieldErrors, formOf, type SettingsForm, slotNote, validate } from './form';
-import { SettingsSection } from './section';
 
 const formId = 'org-settings';
 
 export function OrgSettingsPage() {
+  return (
+    <Suspense fallback={<SettingsLoading />}>
+      <SettingsLoaded />
+    </Suspense>
+  );
+}
+
+/** While the settings load: the title, with the page busy and "Loading" for a screen reader. */
+function SettingsLoading() {
+  return (
+    <div aria-busy="true" className="flex flex-col gap-5">
+      <h1 className="m-0 text-page-title tracking-display">Organization settings</h1>
+      <span className="sr-only">Loading</span>
+    </div>
+  );
+}
+
+function SettingsLoaded() {
   const org = useOrg();
   const { data } = useSuspenseQuery(settingsQuery(org.id));
   return <SettingsScreen key={org.id} org={org} settings={data} />;
-}
-
-function subtitle(name: string, factories: number): string {
-  if (factories === 0) return `Settings for ${name}.`;
-  if (factories === 1) return `Settings for ${name} and its factory.`;
-  return `Settings for ${name} and all ${factories} of its factories.`;
 }
 
 /** Why a save failed, in the form's words; a taken address is the address field's error instead. */
@@ -48,6 +61,14 @@ function saveError(err: Error): string {
   return `Not saved: ${err.detail ?? err.title}`;
 }
 
+/** The "On this page" links, in the order of the sections. Danger zone is listed only when it shows. */
+const sections = [
+  ['general', 'General'],
+  ['slots', 'Slots'],
+  ['signin', 'Sign-in'],
+  ['data', 'Data'],
+] as const;
+
 function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSettings }) {
   const client = useQueryClient();
   const router = useRouter();
@@ -55,8 +76,8 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
   const mayManage = useOrgHolds('org:manage');
   const mayDelete = useOrgHolds('org:delete');
   // Ownership goes from one signed-in person to another: nobody owns anything with sign-in off.
-  const signIn = useSuspenseQuery(authConfigQuery).data.mode === 'session';
-  const mayTransfer = useOrgHolds('org:transfer') && signIn;
+  const auth = useSuspenseQuery(authConfigQuery).data;
+  const mayTransfer = useOrgHolds('org:transfer') && auth.mode === 'session';
 
   // The settings as goald last answered them, and the form over them.
   const [saved, setSaved] = useState(settings);
@@ -106,7 +127,7 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
     },
   });
 
-  const set = (key: 'name' | 'mark' | 'slug' | 'max') => (e: { target: { value: string } }) =>
+  const set = (key: 'name' | 'slug' | 'max') => (e: { target: { value: string } }) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
   const setCap = (factory: string) => (e: { target: { value: string } }) =>
     setForm((f) => ({ ...f, factories: { ...f.factories, [factory]: e.target.value } }));
@@ -125,177 +146,260 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
   const slug = form.slug.trim();
   const note = slotNote(form);
   const failed = save.error && !(save.error instanceof ApiError && save.error.code === 'slug-taken');
-  const capRow =
-    'grid grid-cols-[minmax(0,1fr)_96px] items-center gap-x-4 gap-y-1.5 @[480px]:grid-cols-[minmax(0,1fr)_120px] [&>label]:text-[15px] [&>label]:font-normal';
+  const factories = saved.slots.factories;
+  const inSignIn = (method: 'email_code' | 'google') => auth.methods.includes(method);
 
   return (
     <>
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex min-w-0 flex-col gap-2">
-          <p className="m-0 text-[13px] text-muted md:hidden">{saved.name}</p>
-          <h1 className="m-0 text-[34px] leading-[1.05] font-normal tracking-display md:text-5xl">
-            Organization settings
-          </h1>
-          <p className="m-0 text-[15px] text-muted">{subtitle(saved.name, org.factory_count)}</p>
-        </div>
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="m-0 text-page-title tracking-display">Organization settings</h1>
         {mayManage ? (
-          <Button
-            type="submit"
-            form={formId}
-            variant="primary"
-            className="h-11 md:h-10"
-            disabled={!dirty || save.isPending}
-          >
+          <Button type="submit" form={formId} variant="primary" disabled={!dirty || save.isPending}>
             {save.isPending ? 'Saving…' : 'Save changes'}
           </Button>
         ) : null}
       </header>
 
-      {mayManage ? null : <ViewOnlyBanner className="max-w-[980px]">{reasons.settings(saved.name)}</ViewOnlyBanner>}
+      {mayManage ? null : <ViewOnlyBanner>{reasons.settings(saved.name)}</ViewOnlyBanner>}
 
       {failed ? (
-        <p
-          role="alert"
-          className="m-0 max-w-[980px] rounded-control border border-rework-tint bg-rework-tint px-4 py-3 text-sm"
-        >
+        <p role="alert" className="m-0 rounded-control border border-rework-tint bg-rework-tint px-4 py-3 text-sm">
           {saveError(save.error)}
         </p>
       ) : null}
 
-      <div className="flex max-w-[980px] flex-col">
-        <ReadOnly when={!mayManage}>
-          <form id={formId} onSubmit={onSubmit} noValidate className="flex flex-col">
-            <SettingsSection
-              title="General"
-              lede="The name people see in the sidebar, the short mark on phones, and the address in links."
-            >
-              <div className="grid grid-cols-[repeat(auto-fit,minmax(min(240px,100%),1fr))] gap-3.5">
-                <Field label="Name" error={shown('name')}>
+      <div className="grid gap-10 xl:grid-cols-[minmax(0,1fr)_200px] xl:items-start">
+        <div className="flex min-w-0 flex-col gap-4 xl:max-w-205">
+          <ReadOnly when={!mayManage}>
+            <form id={formId} onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
+              <SettingsSection id="general" title="General">
+                <SettingsRow id="oname" label="Name" help="Shown in the sidebar and in emails" error={shown('name')}>
                   <Input
+                    id="oname"
                     value={form.name}
                     name="name"
                     onChange={set('name')}
                     onBlur={blur('name')}
                     maxLength={80}
                     autoComplete="organization"
+                    aria-invalid={shown('name') ? true : undefined}
+                    aria-describedby={describedBy('oname', { help: true, error: shown('name') })}
                   />
-                </Field>
-                <Field
-                  label="Short mark"
-                  help="Two letters, shown at the top of the screen on phones"
-                  error={shown('mark')}
-                >
-                  <Input
-                    value={form.mark}
-                    name="mark"
-                    onChange={set('mark')}
-                    onBlur={blur('mark')}
-                    maxLength={2}
-                    autoComplete="off"
-                    spellCheck={false}
-                  />
-                </Field>
-                <Field
-                  label="Address"
-                  error={shown('slug')}
-                  help={
-                    <>
-                      <span className="break-all">
-                        {window.location.host}/o/{slug || '…'}
-                      </span>
-                      <span role="status" className="block">
-                        {slug !== saved.slug ? (
-                          <span className="mt-1 flex items-center gap-1.5 text-ink">
-                            <TriangleAlert size={14} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
-                            Links with the old address stop working.
-                          </span>
-                        ) : null}
-                      </span>
-                    </>
-                  }
-                >
-                  <Input
-                    value={form.slug}
-                    name="slug"
-                    onChange={set('slug')}
-                    onBlur={blur('slug')}
-                    maxLength={40}
-                    autoComplete="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    className="font-mono md:text-sm"
-                  />
-                </Field>
-              </div>
-            </SettingsSection>
+                </SettingsRow>
+                <SettingsRow id="oslug" label="Address" help="Changing it breaks old links" error={shown('slug')}>
+                  <div className="flex h-11 items-stretch overflow-hidden rounded-control border border-rule bg-card md:h-10">
+                    <span
+                      aria-hidden="true"
+                      className="flex min-w-0 items-center border-r border-rule bg-panel px-3 text-secondary text-muted"
+                    >
+                      {window.location.host}/o/
+                    </span>
+                    <Input
+                      id="oslug"
+                      value={form.slug}
+                      name="slug"
+                      onChange={set('slug')}
+                      onBlur={blur('slug')}
+                      maxLength={40}
+                      autoComplete="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      className="h-full border-0 font-mono hover:border-0 md:text-sm"
+                      aria-invalid={shown('slug') ? true : undefined}
+                      aria-describedby={describedBy('oslug', { help: true, error: shown('slug') })}
+                    />
+                  </div>
+                  {slug !== saved.slug ? (
+                    <p role="status" className="m-0 flex items-center gap-2 text-secondary text-ink">
+                      <TriangleAlert size={14} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+                      Links with the old address stop working.
+                    </p>
+                  ) : null}
+                </SettingsRow>
+                <SettingsRow label="Factories" help="Each has its own letter">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {factories.map((f) => (
+                      <Chip key={f.factory_id} tone="plain">
+                        <span
+                          aria-hidden="true"
+                          className="grid size-4 place-items-center rounded-chip border border-rule bg-card text-meta font-semibold"
+                        >
+                          {factoryMark(f, factories)}
+                        </span>
+                        {f.name}
+                      </Chip>
+                    ))}
+                  </div>
+                </SettingsRow>
+              </SettingsSection>
 
-            <SettingsSection
-              title="Model access"
-              lede={`How ${saved.name}’s agents reach the model: a connection of a model kind. Slots are how many agents can run at once across all factories.`}
-            >
-              <ModelConnections org={org} />
-              <div className="flex flex-col gap-3 rounded-card border border-line bg-card p-4">
-                <Field
+              <SettingsSection id="slots" title="Slots">
+                <SettingsRow
+                  id="slots-max"
                   label="Slots shared by every factory"
                   help="Blank for no limit."
                   error={shown('max')}
-                  className={capRow}
                 >
                   <Input
+                    id="slots-max"
                     value={form.max}
                     name="max"
                     onChange={set('max')}
                     onBlur={blur('max')}
                     inputMode="numeric"
                     autoComplete="off"
+                    className="w-24 md:w-30"
+                    aria-invalid={shown('max') ? true : undefined}
+                    aria-describedby={describedBy('slots-max', { help: true, error: shown('max') })}
                   />
-                </Field>
-                {saved.slots.factories.length > 0 ? (
-                  <fieldset className="m-0 flex min-w-0 flex-col gap-2.5 border-0 border-t border-line p-0 pt-3">
-                    <legend className="float-left mb-1 w-full p-0 text-[15px] font-medium">
+                </SettingsRow>
+                {factories.length > 0 ? (
+                  <fieldset className="m-0 flex min-w-0 flex-col border-0 p-0">
+                    <legend className="w-full px-5 pt-4 pb-1 text-body font-semibold">
                       Most slots each factory may use
                     </legend>
-                    {saved.slots.factories.map((f) => {
+                    {factories.map((f) => {
                       const key = `factory:${f.factory_id}` as const;
+                      const id = `slots-${f.factory_id}`;
                       return (
-                        <Field key={f.factory_id} label={f.name} error={shown(key)} className={capRow}>
+                        <SettingsRow key={f.factory_id} id={id} label={f.name} error={shown(key)}>
                           <Input
+                            id={id}
                             value={form.factories[f.factory_id] ?? ''}
                             name={`slots-${f.name}`}
                             onChange={setCap(f.factory_id)}
                             onBlur={blur(key)}
                             inputMode="numeric"
                             autoComplete="off"
+                            className="w-24 md:w-30"
+                            aria-invalid={shown(key) ? true : undefined}
+                            aria-describedby={describedBy(id, { error: shown(key) })}
                           />
-                        </Field>
+                        </SettingsRow>
                       );
                     })}
                   </fieldset>
                 ) : null}
-                {note ? <p className="m-0 text-[13px] leading-snug text-muted">{note}</p> : null}
+                {note ? <p className="m-0 px-5 pt-1 pb-4 text-secondary text-muted">{note}</p> : null}
+              </SettingsSection>
+            </form>
+          </ReadOnly>
+
+          <SettingsSection id="signin" title="Sign-in">
+            <SettingsRow label="Ways to sign in" help={`For members of ${saved.name}`}>
+              <div className="flex flex-col">
+                <SignInMethod name="GitHub">
+                  <NotAvailable label="GitHub sign-in">
+                    <Switch checked={false} onCheckedChange={() => undefined} aria-label="GitHub sign-in" />
+                  </NotAvailable>
+                </SignInMethod>
+                <SignInMethod name="Email code">
+                  <NotAvailable label="Email code sign-in">
+                    <Switch
+                      checked={inSignIn('email_code')}
+                      onCheckedChange={() => undefined}
+                      aria-label="Email code sign-in"
+                    />
+                  </NotAvailable>
+                </SignInMethod>
+                <SignInMethod name="Google">
+                  <NotAvailable label="Google sign-in">
+                    <Switch
+                      checked={inSignIn('google')}
+                      onCheckedChange={() => undefined}
+                      aria-label="Google sign-in"
+                    />
+                  </NotAvailable>
+                </SignInMethod>
+                <SignInMethod name="Single sign-on, SAML or OIDC">
+                  <NotAvailable label="Single sign-on">
+                    <Button type="button" size="sm">
+                      Set up
+                    </Button>
+                  </NotAvailable>
+                </SignInMethod>
               </div>
-            </SettingsSection>
+            </SettingsRow>
+            <SettingsRow label="Sessions" help="Sign in again after">
+              <NotAvailable label="Sessions">
+                <Button type="button" size="md">
+                  30 days
+                  <ChevronDown size={12} strokeWidth={1.75} aria-hidden="true" />
+                </Button>
+              </NotAvailable>
+            </SettingsRow>
+          </SettingsSection>
 
-            <SettingsSection
-              title="Secrets"
-              lede={`Connections hold ${saved.name}’s secrets. Each run gets the values of the connections its factory uses.`}
+          <SettingsSection id="data" title="Data">
+            <SettingsRow label="Definitions and knowledge" help="Versioned files, one folder per factory">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="text-secondary">Goal’s storage, Cloudflare R2</span>
+                <NotAvailable label="Use your own bucket">
+                  <Button type="button" size="sm">
+                    Use your own bucket
+                  </Button>
+                </NotAvailable>
+              </div>
+            </SettingsRow>
+            <SettingsRow label="Run logs" help="Events and tool calls of each run">
+              <div className="flex items-center gap-2">
+                <span className="text-secondary text-ink-soft">Keep for</span>
+                <NotAvailable label="Keep run logs for">
+                  <Button type="button" size="md">
+                    90 days
+                    <ChevronDown size={12} strokeWidth={1.75} aria-hidden="true" />
+                  </Button>
+                </NotAvailable>
+              </div>
+            </SettingsRow>
+            <SettingsRow label="Audit log" help="Who changed what, kept for a year">
+              <div className="flex flex-wrap gap-2">
+                <NotAvailable label="Open audit log">
+                  <Button type="button" size="sm">
+                    Open audit log
+                  </Button>
+                </NotAvailable>
+                <NotAvailable label="Export audit log">
+                  <Button type="button" size="sm">
+                    Export
+                  </Button>
+                </NotAvailable>
+              </div>
+            </SettingsRow>
+          </SettingsSection>
+
+          {mayDelete || mayTransfer ? (
+            <DangerZone
+              org={org}
+              name={saved.name}
+              deletes={mayDelete}
+              transfers={mayTransfer}
+              onLeave={() => {
+                leaving.current = true;
+              }}
+            />
+          ) : null}
+        </div>
+
+        <nav
+          aria-label="On this page"
+          className="hidden xl:sticky xl:top-5 xl:flex xl:flex-col xl:gap-1 text-secondary"
+        >
+          {sections.map(([id, label]) => (
+            <a
+              key={id}
+              href={`#${id}`}
+              className="rounded-control px-3 py-1 text-ink-soft hover:bg-hover hover:text-ink"
             >
-              <ConnectionsCount org={org} />
-            </SettingsSection>
-          </form>
-        </ReadOnly>
-
-        {mayDelete || mayTransfer ? (
-          <DangerZone
-            org={org}
-            name={saved.name}
-            deletes={mayDelete}
-            transfers={mayTransfer}
-            onLeave={() => {
-              leaving.current = true;
-            }}
-          />
-        ) : null}
+              {label}
+            </a>
+          ))}
+          {mayDelete || mayTransfer ? (
+            <a href="#danger" className="rounded-control px-3 py-1 text-ink-soft hover:bg-hover hover:text-ink">
+              Danger zone
+            </a>
+          ) : null}
+        </nav>
       </div>
 
       <ConfirmDialog
@@ -314,70 +418,12 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
   );
 }
 
-/** The organization's model connections and what uses each, with New model connection. */
-function ModelConnections({ org }: { org: OrgSummary }) {
-  const read = useOrgHolds('connection:read');
-  const manage = useOrgHolds('connection:manage');
-  const connections = useQuery({ ...connectionsQuery(org.id), enabled: read }).data ?? [];
-  const kinds = useQuery({ ...connectionKindsQuery(org.id), enabled: read }).data ?? [];
-  const models = connections.filter((c) => kinds.some((k) => k.name === c.kind && k.model));
-  const title = (kind: string) => kinds.find((k) => k.name === kind)?.title ?? kind;
+/** One way to sign in, in the Sign-in row: its name, and its switch or button at the right. */
+function SignInMethod({ name, children }: { name: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col items-start gap-3 rounded-control border border-line bg-card px-4 py-3.5 text-sm leading-normal">
-      <p className="m-0">
-        Each factory picks a model connection in its Basics.{' '}
-        {models.length === 0
-          ? `${org.name} has none yet.`
-          : `${org.name} has ${models.length === 1 ? 'one' : models.length}: `}
-        {models.map((c, i) => (
-          <span key={c.id}>
-            {i > 0 ? '; ' : ''}
-            <span translate="no" className="font-mono">
-              {c.name}
-            </span>
-            , {title(c.kind)}
-            {c.used_by.factories.length > 0 ? `, used by ${usedByText(c)}` : ''}
-          </span>
-        ))}
-        {models.length > 0 ? '.' : ''}
-      </p>
-      {manage ? (
-        <Link
-          to="/o/$org/connections/new"
-          params={{ org: org.slug }}
-          className="text-ink underline underline-offset-3 hover:text-run"
-        >
-          New model connection
-        </Link>
-      ) : null}
-    </div>
-  );
-}
-
-/** How many connections hold secrets, and Open Connections. */
-function ConnectionsCount({ org }: { org: OrgSummary }) {
-  const read = useOrgHolds('connection:read');
-  const connections = useQuery({ ...connectionsQuery(org.id), enabled: read }).data;
-  const failing = connections?.filter((c) => c.status === 'failing').map((c) => c.name) ?? [];
-  return (
-    <div className="flex flex-col items-start gap-3 rounded-control border border-line bg-card px-4 py-3.5 text-sm leading-normal">
-      <p className="m-0">
-        {connections ? `${plural(connections.length, 'connection')}. ` : ''}
-        Their secrets are encrypted in Goal’s database and are write-only: owners and admins replace them, nobody reads
-        them back.
-        {failing.length > 0
-          ? ` ${namesText(failing)} failed ${failing.length === 1 ? 'its test' : 'their tests'}.`
-          : ''}
-      </p>
-      {read ? (
-        <Link
-          to="/o/$org/connections"
-          params={{ org: org.slug }}
-          className="text-ink underline underline-offset-3 hover:text-run"
-        >
-          Open Connections
-        </Link>
-      ) : null}
+    <div className="flex min-h-11 items-center gap-3 border-t border-rule py-2 first:border-t-0 first:pt-0 md:min-h-10">
+      <span className="flex-1 text-body">{name}</span>
+      {children}
     </div>
   );
 }

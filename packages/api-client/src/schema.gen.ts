@@ -1620,6 +1620,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/intake": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Where the factory's newest items came from, and its triggers
+         * @description The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
+         */
+        get: operations["getIntake"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One trigger with this week's results and its recent events
+         * @description The trigger as getIntake shows it, what the items it created in the weekly budget's window (the last 7×24 hours) came to, and its 20 newest events. Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
+         */
+        get: operations["getIntakeTrigger"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/metrics/lead-time": {
         parameters: {
             query?: never;
@@ -1742,6 +1794,145 @@ export interface paths {
          * @description Clears the open pull with an optional note (at most 2000 characters). A line that is also paused, or over its weekly budget, stays stopped by that. A line that is not stopped is 409 andon-not-pulled.
          */
         post: operations["clearAndon"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The factory's webhook endpoints
+         * @description By name, each with its address, kind, the label of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret.
+         */
+        get: operations["listWebhookEndpoints"];
+        put?: never;
+        /**
+         * Create a webhook endpoint
+         * @description An endpoint with a new signing secret, answered here once and never again: copy it to the sender. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+         */
+        post: operations["createWebhookEndpoint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
+                endpoint: components["parameters"]["WebhookEndpointRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a webhook endpoint and its deliveries
+         * @description Its address stops accepting requests. 404 webhook-not-found for an endpoint the factory does not have. Needs a sign-in from the last 10 minutes.
+         */
+        delete: operations["deleteWebhookEndpoint"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
+                endpoint: components["parameters"]["WebhookEndpointRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replace an endpoint's signing secret
+         * @description A new signing secret, answered here once and never again; the old one stops opening at once, so the sender's requests are refused until it has the new one. 404 webhook-not-found; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+         */
+        post: operations["rotateWebhookSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
+                endpoint: components["parameters"]["WebhookEndpointRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One page of an endpoint's deliveries, newest first
+         * @description What the endpoint received in the last 30 days, each with its outcome, without its headers and body (getWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
+         */
+        get: operations["listWebhookDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries/{delivery}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
+                endpoint: components["parameters"]["WebhookEndpointRef"];
+                /** @description The delivery's id */
+                delivery: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One delivery with its request
+         * @description The request as received: its headers (names lower-cased, never a signature header) and its body. 404 webhook-delivery-not-found for a delivery the endpoint does not have.
+         */
+        get: operations["getWebhookDelivery"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4217,6 +4408,91 @@ export interface components {
                 per_day: number;
             }[];
         };
+        Intake: {
+            /** @description How many items the sources count */
+            items: number;
+            /**
+             * Format: date
+             * @description The UTC day the oldest of them was created; null without items
+             */
+            from: string | null;
+            /**
+             * Format: date
+             * @description The UTC day the newest of them was created; null without items
+             */
+            to: string | null;
+            /** @description How many of the items came from each source, zero included. Items whose creator recorded no source count in items only. */
+            sources: {
+                people: number;
+                cli: number;
+                api: number;
+                schedule: number;
+                webhook: number;
+                github: number;
+            };
+            /** @description The current definition's board.triggers, in definition order */
+            triggers: components["schemas"]["IntakeTrigger"][];
+        };
+        IntakeTrigger: {
+            name: string;
+            enabled: boolean;
+            /** @enum {string} */
+            source: "schedule" | "webhook" | "github";
+            /** @description The trigger's event key, as in the definition (schedule, github.check_run.failed, webhook.<endpoint>[.<event>]) */
+            on: string;
+            /** @description A plain summary of when it fires: the cron and its time zone for a schedule ("0 8 * * MON-FRI, Europe/Berlin"), the event key otherwise */
+            when: string;
+            create: {
+                type: string;
+                station: string;
+                lane: string | null;
+                expedite: boolean;
+            };
+            /** @description The items it created on each of the last 7 UTC days, oldest first, ending today */
+            days: number[];
+            /** @description Why it may not be creating items. missing_connection: it listens on a webhook endpoint the factory does not have (no endpoint of its name for webhook.<name>, none of kind github for github.*). refused_deliveries: its endpoints refused deliveries in the last 7 days, counted over each endpoint's 100 newest deliveries. */
+            problem: {
+                /** @enum {string} */
+                kind: "missing_connection" | "refused_deliveries";
+                message: string;
+            } | null;
+        };
+        IntakeTriggerDetail: {
+            trigger: components["schemas"]["IntakeTrigger"];
+            /** @description The items it created in the weekly budget's window (the last 7×24 hours) */
+            week: {
+                created: number;
+                /** @description How many of them have been merged */
+                merged: number;
+                /**
+                 * Format: double
+                 * @description What their agent runs cost
+                 */
+                spend_usd: number;
+            };
+            /** @description Its 20 newest events, newest first */
+            events: components["schemas"]["IntakeEvent"][];
+        };
+        IntakeEvent: {
+            /** @description The event's value of the trigger's only.dedupe field, or its event key without one */
+            title: string;
+            /** @description The event key it matched */
+            event: string;
+            /** Format: date-time */
+            at: string;
+            /**
+             * @description created an item; merged once that item has been merged; skipped with the reason
+             * @enum {string}
+             */
+            outcome: "created" | "merged" | "skipped";
+            /**
+             * Format: int64
+             * @description The item it created; null when it created none or that item is gone
+             */
+            item_number: number | null;
+            /** @description Why it was skipped; null otherwise */
+            reason: string | null;
+        };
         LeadTimeBridge: {
             /** Format: date */
             from: string;
@@ -5620,6 +5896,93 @@ export interface components {
         CredentialAgents: {
             [key: string]: string[];
         };
+        /**
+         * @description How requests are signed and name their event. generic: X-Goal-Signature: sha256=<hex HMAC-SHA256 of the body> and the event in the body's event field; github: GitHub's X-Hub-Signature-256 and X-GitHub-Event.
+         * @enum {string}
+         */
+        WebhookKind: "generic" | "github";
+        NewWebhookEndpoint: {
+            /** @description A slug unique within the factory, the one a trigger's on: webhook.<name> names */
+            name: string;
+            kind: components["schemas"]["WebhookKind"];
+        };
+        WebhookEndpointList: {
+            endpoints: components["schemas"]["WebhookEndpoint"][];
+        };
+        /** @description A factory's webhook endpoint, never its signing secret */
+        WebhookEndpoint: {
+            id: string;
+            name: string;
+            kind: components["schemas"]["WebhookKind"];
+            /** @description The path senders post to, /hooks/{id}, on goald's public origin */
+            address: string;
+            /** @description The label the screens show for its signing secret, <name>-hook-secret. The secret is sealed on the endpoint, not a credential, so no credential has this name. */
+            secret_name: string;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description When its secret was last replaced; null when it never was
+             */
+            rotated_at: string | null;
+            /** @description The names of the current definition's triggers it feeds, in definition order */
+            triggers: string[];
+            /** @description The last 7 UTC days, oldest first, today last, each zero-filled */
+            days: components["schemas"]["WebhookDeliveryDay"][];
+        };
+        WebhookDeliveryDay: {
+            /**
+             * Format: date
+             * @description The UTC day
+             */
+            day: string;
+            /** @description Deliveries accepted */
+            delivered: number;
+            refused: number;
+        };
+        /** @description An endpoint with its signing secret, answered only by createWebhookEndpoint and rotateWebhookSecret and never readable again. */
+        CreatedWebhookEndpoint: components["schemas"]["WebhookEndpoint"] & {
+            /** @description The signing secret: 32 random bytes as 64 lower-case hex characters. Senders give this string as the HMAC-SHA256 key (its ASCII bytes), as GitHub's webhook secret field takes it. */
+            secret: string;
+        };
+        /**
+         * @description refused, with its reason; accepted, with no trigger matched; created, an item
+         * @enum {string}
+         */
+        WebhookDeliveryOutcome: "refused" | "accepted" | "created";
+        WebhookDelivery: {
+            id: string;
+            /** Format: date-time */
+            received_at: string;
+            outcome: components["schemas"]["WebhookDeliveryOutcome"];
+            /** @description Why it was refused, such as signature did not match; empty otherwise */
+            reason: string;
+            /** @description The item it created; null for another outcome or once that item is gone */
+            item: components["schemas"]["WebhookDeliveryItem"] | null;
+        };
+        WebhookDeliveryItem: {
+            id: string;
+            /** Format: int64 */
+            number: number;
+        };
+        WebhookDeliveryPage: {
+            deliveries: components["schemas"]["WebhookDelivery"][];
+            /** @description Pass as `after` for the next page; null on the last page */
+            next_after: string | null;
+        };
+        WebhookDeliveryRequest: components["schemas"]["WebhookDelivery"] & {
+            /** @description The request's headers, names lower-cased, without X-Goal-Signature, X-Hub-Signature-256 or X-Hub-Signature */
+            headers: {
+                [key: string]: string;
+            };
+            /** @description The body as received */
+            body: string;
+            /**
+             * @description text: the body is valid UTF-8 and given as is; base64: it is not, and is given in standard base64
+             * @enum {string}
+             */
+            body_encoding: "text" | "base64";
+        };
         CredentialList: {
             credentials: components["schemas"]["Credential"][];
         };
@@ -5913,6 +6276,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
+        WebhookEndpointRef: string;
         /** @description A person's user id */
         UserRef: string;
         /** @description The organization's slug or id */
@@ -8203,6 +8568,63 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    getIntake: {
+        parameters: {
+            query?: {
+                /** @description How many of the newest items the sources count (default 48) */
+                items?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The factory's intake */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Intake"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getIntakeTrigger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The trigger */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntakeTriggerDetail"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     getLeadTimeBridge: {
         parameters: {
             query?: {
@@ -8392,6 +8814,178 @@ export interface operations {
                 };
             };
             409: components["responses"]["Conflict"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listWebhookEndpoints: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The endpoints */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookEndpointList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createWebhookEndpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewWebhookEndpoint"];
+            };
+        };
+        responses: {
+            /** @description The endpoint with its signing secret */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedWebhookEndpoint"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteWebhookEndpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
+                endpoint: components["parameters"]["WebhookEndpointRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    rotateWebhookSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
+                endpoint: components["parameters"]["WebhookEndpointRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The endpoint with its new signing secret */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedWebhookEndpoint"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listWebhookDeliveries: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description The next_after of the previous page; deliveries received before it */
+                after?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
+                endpoint: components["parameters"]["WebhookEndpointRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deliveries, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookDeliveryPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getWebhookDelivery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
+                endpoint: components["parameters"]["WebhookEndpointRef"];
+                /** @description The delivery's id */
+                delivery: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The delivery */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookDeliveryRequest"];
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
