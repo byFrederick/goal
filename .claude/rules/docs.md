@@ -32,4 +32,11 @@ Docs describe the code as built. How the repository lays out its docs: [ADR 0013
 
 ## Skills
 
-Vendored skills for this area: architecture-decision-records.
+Vendored skills for this area:
+
+- technical-writing for any prose: docs, specs, READMEs, pull request descriptions and UI copy.
+- reviewing-technical-prose as the last check before delivering a document.
+- documenting-contracts for the API and CLI pages.
+- writing-changelogs for the changelog.
+- astro for the docs site in `apps/docs`.
+- architecture-decision-records and documentation-and-adrs for ADRs.
