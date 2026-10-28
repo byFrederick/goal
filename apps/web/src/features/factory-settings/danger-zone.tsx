@@ -1,21 +1,20 @@
-// Danger zone of a factory (canvas "Org-Settings", as the organization's): Archive, or Restore once
-// archived, and Delete for good, which needs an archived factory and the typed name. Archive needs
-// the factory paused and idle: a running factory offers "Pause first", which pauses, then archives.
-// Shown only to people with factory:archive on the organization (its `can`); Delete only with
-// factory:delete. Archive and restore keep the history; delete takes the factory's items, runs,
-// events and versions.
+// The Archive, Restore and Delete rows of a factory's Danger zone. Archive needs the factory paused and
+// idle: a running factory offers "Pause first", which pauses, then archives. Each row shows on its own
+// permission, both organization-level (the organization's `can`): Archive or Restore on factory:archive,
+// Delete on factory:delete. Delete needs an archived factory and the typed name. Archive and restore keep
+// the history; delete takes the factory's items, runs, events and versions.
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { type ReactNode, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError, archiveFactory, pauseFactory, purgeFactory } from '../../api/client';
 import { defKeys, keys } from '../../api/queries';
 import type { Factory, OrgSummary } from '../../api/types';
 import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
-import { SettingsSection } from '../org-settings/section';
 import { refreshFactory } from './refresh';
 import { useRestoreFactory } from './restore';
+import { ZoneRow } from './zone-row';
 
 /** Why an action failed, in the zone's words: goald's detail ("2 items are being worked") when it gives one. */
 function actionError(err: Error): string {
@@ -23,48 +22,17 @@ function actionError(err: Error): string {
   return err.detail ?? err.title;
 }
 
-function ZoneRow({
-  title,
-  description,
-  descriptionId,
-  action,
-  error,
-}: {
-  title: string;
-  description: ReactNode;
-  descriptionId?: string;
-  action: ReactNode;
-  error?: string | null;
-}) {
-  return (
-    <div className="flex flex-col gap-3 rounded-card border border-line bg-card p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="m-0 flex min-w-0 flex-col">
-          <span className="text-[15px] font-medium">{title}</span>
-          <span id={descriptionId} className="text-sm text-muted">
-            {description}
-          </span>
-        </p>
-        {action}
-      </div>
-      {error ? (
-        <p role="alert" className="m-0 text-sm text-rework-ink">
-          {error}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
 interface DangerZoneProps {
   org: OrgSummary;
   /** The factory as goald last answered it: paused and archived_at are what the zone reads. */
   factory: Factory;
+  /** The caller may archive and restore it (factory:archive, org level). */
+  archives: boolean;
   /** The caller may delete it (factory:delete, org level). */
   deletes: boolean;
 }
 
-export function DangerZone({ org, factory, deletes }: DangerZoneProps) {
+export function DangerZone({ org, factory, archives, deletes }: DangerZoneProps) {
   const client = useQueryClient();
   const navigate = useNavigate();
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -107,48 +75,41 @@ export function DangerZone({ org, factory, deletes }: DangerZoneProps) {
   const needsPause = !factory.paused || (archive.error instanceof ApiError && archive.error.code === 'factory-running');
 
   return (
-    <SettingsSection
-      title="Danger zone"
-      lede="Archiving can be undone with Restore. Deleting can’t be undone from here."
-    >
-      {archived ? (
-        <ZoneRow
-          title={`Restore ${factory.name}`}
-          description="Lists it in the sidebar and the Factories home again. It stays paused until you resume it."
-          error={restore.error ? actionError(restore.error) : null}
-          action={
-            <Button
-              variant="raised"
-              className="h-11 border border-line shadow-none md:h-10"
-              disabled={restore.isPending}
-              onClick={() => restore.mutate()}
-            >
-              {restore.isPending ? 'Restoring…' : 'Restore factory'}
-            </Button>
-          }
-        />
-      ) : (
-        <ZoneRow
-          title={`Archive ${factory.name}`}
-          description="Stops its work and takes it off the sidebar and the Factories home. It stays readable, with its items and versions."
-          action={
-            <Button
-              variant="raised"
-              className="h-11 border border-line shadow-none md:h-10"
-              onClick={() => {
-                archive.reset();
-                setArchiveOpen(true);
-              }}
-            >
-              Archive factory…
-            </Button>
-          }
-        />
-      )}
+    <>
+      {archives ? (
+        archived ? (
+          <ZoneRow
+            title="Restore"
+            description="Lists it in the sidebar and the Factories home again. It stays paused until you resume it."
+            error={restore.error ? actionError(restore.error) : null}
+            action={
+              <Button variant="secondary" disabled={restore.isPending} onClick={() => restore.mutate()}>
+                {restore.isPending ? 'Restoring…' : 'Restore'}
+              </Button>
+            }
+          />
+        ) : (
+          <ZoneRow
+            title="Archive"
+            description="Hides it from the sidebar and keeps its history. You can restore it."
+            action={
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  archive.reset();
+                  setArchiveOpen(true);
+                }}
+              >
+                Archive
+              </Button>
+            }
+          />
+        )
+      ) : null}
 
       {deletes ? (
         <ZoneRow
-          title={`Delete ${factory.name}`}
+          title="Delete"
           descriptionId={reasonId}
           description={
             archived
@@ -158,8 +119,7 @@ export function DangerZone({ org, factory, deletes }: DangerZoneProps) {
           error={purge.error ? actionError(purge.error) : null}
           action={
             <Button
-              variant="raised"
-              className="h-11 border border-line shadow-none md:h-10"
+              variant="danger"
               disabled={!archived}
               aria-describedby={reasonId}
               onClick={() => {
@@ -167,7 +127,7 @@ export function DangerZone({ org, factory, deletes }: DangerZoneProps) {
                 setDeleteOpen(true);
               }}
             >
-              Delete factory…
+              Delete
             </Button>
           }
         />
@@ -188,7 +148,7 @@ export function DangerZone({ org, factory, deletes }: DangerZoneProps) {
         onConfirm={() => archive.mutate({ pauseFirst: needsPause })}
       >
         {archive.error ? (
-          <p role="alert" className="m-0 text-sm text-rework-ink">
+          <p role="alert" className="m-0 text-secondary text-rework-ink">
             {actionError(archive.error)}
           </p>
         ) : null}
@@ -207,11 +167,11 @@ export function DangerZone({ org, factory, deletes }: DangerZoneProps) {
         onConfirm={() => purge.mutate()}
       >
         {purge.error ? (
-          <p role="alert" className="m-0 text-sm text-rework-ink">
+          <p role="alert" className="m-0 text-secondary text-rework-ink">
             {actionError(purge.error)}
           </p>
         ) : null}
       </ConfirmDialog>
-    </SettingsSection>
+    </>
   );
 }

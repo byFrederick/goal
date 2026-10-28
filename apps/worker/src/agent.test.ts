@@ -341,4 +341,18 @@ describe('taskPrompt', () => {
     expect(prompt).toContain('- web/src/app.tsx\n\nAdd a health endpoint\n\nRejected: the tests fail.');
     expect(taskPrompt(parseSpec(JSON.stringify({ ...base, base_conflicts: [] })))).toMatch(/^Add a health endpoint/);
   });
+
+  it('names the base branch in the conflicts heading when one is set', () => {
+    const spec = parseSpec(
+      JSON.stringify({ ...base, base_conflicts: ['go.mod'], base_branch: 'goal/assembly-330-integration' }),
+    );
+    const prompt = taskPrompt(spec);
+
+    expect(prompt).toMatch(/^## First: conflicts with goal\/assembly-330-integration\n\n/);
+    expect(prompt).toContain('(origin/goal/assembly-330-integration)');
+    expect(prompt).toContain('rebase or merge origin/goal/assembly-330-integration');
+    expect(prompt).not.toContain('default branch');
+    expect(prompt).not.toContain('origin/HEAD');
+    expect(prompt).toContain('- go.mod\n\nAdd a health endpoint');
+  });
 });

@@ -168,6 +168,57 @@ export interface ReviewSection {
   budget?: Budget;
 }
 
+/**
+ * One intake trigger as factory.schema.json's `$defs/trigger` writes it in `spec.board.triggers`
+ * (ADR 0026). Keys are the schema's camelCase keys, unlike the model above: the trigger is read and
+ * written in the file, not through the section API. A trigger has one `on` event key, so "+ Add
+ * another event" has nothing to add to yet.
+ */
+export interface Trigger {
+  name: string;
+  enabled?: boolean | undefined;
+  /** The event key: github.check_run.failed, github.issues.labeled, schedule or webhook.<endpoint>[.<event>]. */
+  on: string;
+  /** Five cron fields; only when `on` is schedule. */
+  cron?: string | undefined;
+  timeZone?: string | undefined;
+  filter?: TriggerFilter | undefined;
+  only?: TriggerOnly | undefined;
+  create: TriggerCreate;
+  limits?: TriggerLimits | undefined;
+}
+
+export interface TriggerFilter {
+  branch?: string | undefined;
+  repo?: string | undefined;
+  label?: string | undefined;
+  paths?: string[] | undefined;
+  authors?: string[] | undefined;
+  skipBots?: boolean | undefined;
+}
+
+export interface TriggerOnly {
+  failuresInARow?: number | undefined;
+  /** A dotted event field, such as check.name. */
+  dedupe?: string | undefined;
+}
+
+export interface TriggerCreate {
+  type: string;
+  station: string;
+  lane?: string | undefined;
+  expedite?: boolean | undefined;
+  /** Text with {{field}} placeholders filled from the event. */
+  title?: string | undefined;
+  /** Text with {{field}} placeholders; the event's values reach agents as untrusted data only. */
+  brief?: string | undefined;
+}
+
+export interface TriggerLimits {
+  perDay?: number | undefined;
+  pauseOnBudget?: boolean | undefined;
+}
+
 /** Each section's value, by section. */
 export interface SectionValues {
   basics: BasicsSection;

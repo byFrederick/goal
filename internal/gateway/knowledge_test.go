@@ -140,7 +140,7 @@ func newKBHarnessWith(t *testing.T, wrap func(*knowledge.Searcher) Knowledge) *k
 	h.gw, err = New(Deps{
 		Definitions: definitions{version: loadYAML(t, knowledgeYAML), otherVersion: loadYAML(t, plainYAML)},
 		Items:       h.store, Connections: conns, Events: h.store, Clock: h.clock,
-		Knowledge: wrap(knowledge.NewSearcher(kb, nil, nil)), Logger: slog.New(slog.NewTextHandler(&lockedWriter{mu: &h.logMu, w: &h.log}, nil)),
+		Questions: &fakeQuestions{}, Knowledge: wrap(knowledge.NewSearcher(kb, nil, nil)), Logger: slog.New(slog.NewTextHandler(&lockedWriter{mu: &h.logMu, w: &h.log}, nil)),
 	}, Config{Key: h.key})
 	if err != nil {
 		t.Fatal(err)
@@ -287,8 +287,8 @@ func TestGateway_KnowledgeSearchOnlyTheFactorysSources(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got := toolNames(list); !slices.Equal(got, []string{readTool, searchTool, verdictTool}) {
-		t.Fatalf("tools = %v; want the knowledge tools", got)
+	if got := toolNames(list); !slices.Equal(got, []string{readTool, searchTool, verdictTool, questionTool}) {
+		t.Fatalf("tools = %v; want the knowledge tools and the question tool", got)
 	}
 
 	text, isErr := knowledgeCall(t, cs, searchTool, map[string]any{argQuery: kbQuery})
@@ -337,7 +337,7 @@ func TestGateway_KnowledgeReadOnlyTheFactorysSources(t *testing.T) {
 	}
 }
 
-// A run whose factory lists no knowledge source has no knowledge tools.
+// A run whose factory lists no knowledge source has no knowledge tools, only the question tool.
 func TestGateway_NoKnowledgeToolsWithoutSources(t *testing.T) {
 	t.Parallel()
 
@@ -349,8 +349,8 @@ func TestGateway_NoKnowledgeToolsWithoutSources(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(list.Tools) != 0 {
-		t.Errorf("tools = %v; want none", toolNames(list))
+	if got := toolNames(list); !slices.Equal(got, []string{questionTool}) {
+		t.Errorf("tools = %v; want only %s", got, questionTool)
 	}
 
 	for _, tool := range []string{searchTool, verdictTool} {

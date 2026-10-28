@@ -1,25 +1,26 @@
-// Danger zone (C §10.9): Delete {Org}, confirmed by typing its name. goald answers 202 and the
-// organization 404s at once; its data is purged after purge_after. The UI then opens `/`, which
-// goes to the next organization or says there is none. Transfer ownership (spec 3, transfer.tsx)
-// sits above it. Owners only: the page leaves out what the caller may not do.
+// Danger zone (canvas "Org-Settings"): Transfer ownership (transfer.tsx) and Delete, both inline.
+// Delete is enabled by typing the organization's saved name. goald answers 202 and the organization
+// 404s at once; its data is purged after purge_after. The UI then opens `/`, which goes to the next
+// organization or says there is none. Owners only: the page leaves out what the caller may not do.
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { useState } from 'react';
+import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError, deleteOrg } from '../../api/client';
 import { keys } from '../../api/queries';
 import type { OrgSummary } from '../../api/types';
 import { formatDay } from '../../shared/format';
 import { Button } from '../../ui/button';
-import { ConfirmDialog } from '../../ui/confirm-dialog';
-import { SettingsSection } from './section';
+import { Input } from '../../ui/field';
+import { SettingsRow, SettingsSection } from './card';
 import { TransferOwnership } from './transfer';
 
-/** What deleting takes with it: "Deletes 3 factories and their history". */
+/** What deleting takes with it, as the row says it: "Stops all 3 factories and deletes …". */
 export function deletesText(factories: number): string {
-  if (factories === 0) return 'Deletes the organization and its history';
-  if (factories === 1) return 'Deletes 1 factory and its history';
-  return `Deletes ${factories} factories and their history`;
+  const what = 'deletes their definitions, items and logs. This can’t be undone.';
+  if (factories === 0) return 'Deletes its definitions, items and logs. This can’t be undone.';
+  if (factories === 1) return `Stops the factory and ${what}`;
+  return `Stops all ${factories} factories and ${what}`;
 }
 
 interface DangerZoneProps {
@@ -35,10 +36,18 @@ interface DangerZoneProps {
 }
 
 export function DangerZone({ org, name, onLeave, deletes: mayDelete, transfers }: DangerZoneProps) {
+  return (
+    <SettingsSection id="danger" title="Danger zone" tone="danger">
+      {transfers ? <TransferOwnership org={org} name={name} /> : null}
+      {mayDelete ? <DeleteOrganization org={org} name={name} onLeave={onLeave} /> : null}
+    </SettingsSection>
+  );
+}
+
+function DeleteOrganization({ org, name, onLeave }: { org: OrgSummary; name: string; onLeave: () => void }) {
   const client = useQueryClient();
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
-  const deletes = deletesText(org.factory_count);
+  const [typed, setTyped] = useState('');
 
   const remove = useMutation({
     mutationFn: () => deleteOrg(org.id, name),
@@ -58,45 +67,38 @@ export function DangerZone({ org, name, onLeave, deletes: mayDelete, transfers }
       : 'goald is not answering. Try again once it is running.'
     : null;
 
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (typed === name && !remove.isPending) remove.mutate();
+  };
+
   return (
-    <SettingsSection title="Danger zone" lede="These can’t be undone from here.">
-      {transfers ? <TransferOwnership org={org} name={name} /> : null}
-      {mayDelete ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-card p-4">
-          <p className="m-0 flex min-w-0 flex-col">
-            <span className="text-[15px] font-medium">Delete {name}</span>
-            <span className="text-sm text-muted">{deletes}. You type the name to confirm.</span>
-          </p>
-          <Button
-            variant="raised"
-            className="h-11 border border-line shadow-none md:h-10"
-            onClick={() => {
-              remove.reset();
-              setOpen(true);
-            }}
-          >
-            Delete organization…
+    <SettingsRow label={`Delete ${name}`} help={deletesText(org.factory_count)}>
+      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-2">
+        <label htmlFor="delete-confirm" className="text-secondary text-muted">
+          Type <b className="font-mono font-semibold text-ink">{name}</b> to confirm
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <Input
+            id="delete-confirm"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder={name}
+            autoComplete="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            className="max-w-65"
+          />
+          <Button type="submit" variant="danger-fill" disabled={typed !== name || remove.isPending}>
+            {remove.isPending ? 'Deleting…' : 'Delete organization'}
           </Button>
         </div>
-      ) : null}
-      <ConfirmDialog
-        open={open}
-        onOpenChange={setOpen}
-        title={`Delete ${name}?`}
-        description={`${deletes}. Its address stops working at once.`}
-        confirmLabel="Delete organization"
-        pendingLabel="Deleting…"
-        tone="danger"
-        confirmText={name}
-        pending={remove.isPending}
-        onConfirm={() => remove.mutate()}
-      >
         {error ? (
-          <p role="alert" className="m-0 text-sm text-rework-ink">
+          <p role="alert" className="m-0 text-secondary text-rework-ink">
             {error}
           </p>
         ) : null}
-      </ConfirmDialog>
-    </SettingsSection>
+      </form>
+    </SettingsRow>
   );
 }

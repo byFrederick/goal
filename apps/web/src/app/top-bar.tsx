@@ -19,6 +19,7 @@ import { FactoryBadge } from './factory-badge';
 import {
   apiKeysScreen,
   connectionsScreen,
+  credentialsScreen,
   homeScreen,
   knowledgeScreen,
   membersScreen,
@@ -29,10 +30,14 @@ import {
   sidebarFactoryPages,
 } from './screens';
 
-/** What a page sets: its last crumb (undefined shows the page's name) and its actions. */
+/**
+ * What a page sets: its last crumb (undefined shows the page's name) and its actions. `back` is the
+ * phone's Back link, shown after the Goal mark; the desktop bar has no use for it and leaves it out.
+ */
 export interface TopBarState {
   crumb?: string | undefined;
   actions?: ReactNode | undefined;
+  back?: ReactNode | undefined;
 }
 
 type SetTopBar = Dispatch<SetStateAction<TopBarState | null>>;
@@ -44,12 +49,12 @@ export const TopBarSetContext = createContext<SetTopBar | null>(null);
  * Sets the top bar's last crumb and actions while the page is mounted, and clears them when it
  * unmounts. Renders nothing itself.
  */
-export function TopBarSlot({ crumb, actions }: TopBarState) {
+export function TopBarSlot({ crumb, actions, back }: TopBarState) {
   const set = useContext(TopBarSetContext);
   useLayoutEffect(() => {
-    set?.({ crumb, actions });
+    set?.({ crumb, actions, back });
     return () => set?.(null);
-  }, [set, crumb, actions]);
+  }, [set, crumb, actions, back]);
   return null;
 }
 
@@ -63,12 +68,14 @@ const factoryRoutePages: Record<string, string> = {
   '/o/$org/f/$factory/agents/$agent': 'agents',
   '/o/$org/f/$factory/definition/': 'definition',
   '/o/$org/f/$factory/definition/$section': 'definition',
+  '/o/$org/f/$factory/intake/$trigger': 'intake',
   '/o/$org/f/$factory/settings': 'settings',
 };
 
 /** The organization page each organization route shows, by route id. */
 const orgRoutePages: Record<string, { label: string; to?: OrgPath }> = {
   '/o/$org/_org/': homeScreen,
+  '/account': { label: 'Your account' },
   '/o/$org/_org/api-keys': apiKeysScreen,
   '/o/$org/_org/members': membersScreen,
   '/o/$org/_org/runs': runsScreen,
@@ -76,6 +83,8 @@ const orgRoutePages: Record<string, { label: string; to?: OrgPath }> = {
   '/o/$org/_org/connections/': connectionsScreen,
   '/o/$org/_org/connections/$connection': connectionsScreen,
   '/o/$org/_org/connections/new': connectionsScreen,
+  '/o/$org/_org/credentials/': credentialsScreen,
+  '/o/$org/_org/credentials/new': credentialsScreen,
   '/o/$org/_org/knowledge/': knowledgeScreen,
   '/o/$org/_org/knowledge/$source': knowledgeScreen,
   '/o/$org/_org/knowledge/new': knowledgeScreen,

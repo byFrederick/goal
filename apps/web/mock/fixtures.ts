@@ -13,6 +13,7 @@ import type {
   Factory,
   GateTally,
   ItemEvent,
+  ItemQuestion,
   ItemSpan,
   ItemState,
   Org,
@@ -58,6 +59,8 @@ export interface MockItem {
   paths?: string[];
   /** The open need it waits for while queued or ready (Item.waiting). Not on Item. */
   waitsOn?: MockWaitsOn;
+  /** The agent's open question (Item.question), null once answered or withdrawn by a move, pause or send back. */
+  question?: ItemQuestion | null;
   /** The assembly it is a part of (the assembly's item id) and its place among the parts, 1-based. */
   partOf?: { id: string; part: number };
 }
@@ -208,6 +211,8 @@ type Step =
   | { gate: 'approve' | 'reject'; agent: string; reason?: string }
   | { human: 'approved' | 'rejected'; by: string; reason?: string }
   | { waiting: true; reason?: string }
+  /** The agent asks a person a question: the run ends and the item waits (ADR 0018). */
+  | { ask: { text: string; choices: string[]; agent: string } }
   | { blocked: string }
   | { done: true };
 
@@ -1614,6 +1619,13 @@ const softwareSeeds: Seed[] = [
       { check: 'task check:changed', exit: 1, ms: 190_000 },
       { note: 'Use the weekly budget, not the daily one.', by: 'Freddy Cruz' },
       { check: 'task check:changed', exit: 0, ms: 220_000 },
+      {
+        ask: {
+          text: "Should the sidebar show this week's spend for the whole organization, or only for the factory you are in?",
+          choices: ['The whole organization', 'Only this factory'],
+          agent: 'frontend-engineer',
+        },
+      },
       { waiting: true },
     ],
   },
@@ -1787,6 +1799,22 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
         push(step.human, step.by, step.reason ? { reason: step.reason } : {});
       } else if ('waiting' in step) {
         push('waiting_human', 'engine', step.reason ? { reason: step.reason } : {});
+      } else if ('ask' in step) {
+        const run = `${id.slice(-6)}-run-${runs}`;
+        const asked_at = new Date(Math.round(at)).toISOString();
+        push('question_asked', step.ask.agent, {
+          question: step.ask.text,
+          choices: step.ask.choices,
+          agent: step.ask.agent,
+          run_id: run,
+        });
+        item.question = {
+          text: step.ask.text,
+          choices: step.ask.choices,
+          asked_at,
+          agent: step.ask.agent,
+          run_id: run,
+        };
       } else if ('blocked' in step) {
         push('blocked', 'engine', { reason: step.blocked });
       } else {
@@ -2016,17 +2044,6 @@ export function seed(now = Date.now()): MockState {
           reasons: [],
           denied_tool_calls: { count: 0, tools: [] },
         },
-        'frontend-engineer': {
-          model: 'claude-haiku-5-5',
-          tasks_finished: 17,
-          sent_back: { count: 3, ratio: 0.18 },
-          median_turns: 22,
-          spend_per_task_usd: 1.1,
-          task_time_p85_minutes: 40,
-          spend_usd: 18.7,
-          reasons: [],
-          denied_tool_calls: { count: 0, tools: [] },
-        },
         reviewer: {
           model: 'claude-opus-5-5',
           tasks_finished: 28,
@@ -2049,6 +2066,22 @@ export function seed(now = Date.now()): MockState {
           reasons: [
             { label: 'Bars rely on colour alone for today; add a text label.', count: 1 },
             { label: 'no test for the reconnect', count: 1 },
+          ],
+          denied_tool_calls: { count: 0, tools: [] },
+        },
+        'frontend-engineer': {
+          model: 'claude-haiku-5-5',
+          tasks_finished: 41,
+          sent_back: { count: 9, ratio: 0.22 },
+          median_turns: 46,
+          spend_per_task_usd: 1.9,
+          task_time_p85_minutes: 38,
+          spend_usd: 77.9,
+          reasons: [
+            { label: 'No test for a new empty or error state', count: 4 },
+            { label: 'Raw colour instead of a design token', count: 2 },
+            { label: 'Copy not in plain language', count: 2 },
+            { label: 'Icon button without a label', count: 1 },
           ],
           denied_tool_calls: { count: 0, tools: [] },
         },

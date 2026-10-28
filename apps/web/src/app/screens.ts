@@ -17,6 +17,7 @@ import {
   Plus,
   SearchCheck,
   Settings,
+  Shield,
   SquareTerminal,
   TextAlignStart,
   Users,
@@ -34,6 +35,7 @@ export type FactoryPath =
   | '/o/$org/f/$factory/board'
   | '/o/$org/f/$factory/items'
   | '/o/$org/f/$factory/agents'
+  | '/o/$org/f/$factory/intake'
   | '/o/$org/f/$factory/definition'
   | '/o/$org/f/$factory/settings';
 /** Paths of the organization's screens; their only param is its slug. */
@@ -42,7 +44,9 @@ export type OrgPath =
   | '/o/$org/members'
   | '/o/$org/settings'
   | '/o/$org/api-keys'
+  | '/o/$org/models'
   | '/o/$org/connections'
+  | '/o/$org/credentials'
   | '/o/$org/knowledge'
   | '/o/$org/runs'
   | '/o/$org/needs-you';
@@ -155,6 +159,14 @@ export const connectionsScreen: OrgScreen = {
   to: '/o/$org/connections',
   permissions: ['connection:read'],
 };
+/** The organization's credentials (ADR 0017): every member reads their names; owners and admins change them. */
+export const credentialsScreen: OrgScreen = {
+  id: 'credentials',
+  label: 'Credentials',
+  icon: KeyRound,
+  to: '/o/$org/credentials',
+  permissions: ['credential:read'],
+};
 /** The organization's knowledge base (spec 4 §10): every member reads and searches it; owners and admins change it. */
 export const knowledgeScreen: OrgScreen = {
   id: 'knowledge',
@@ -169,6 +181,13 @@ export const runsScreen: OrgScreen = {
   label: 'Runs',
   icon: Activity,
   to: '/o/$org/runs',
+};
+/** The organization's model and tool policy (ADR 0024): every member reads it; owners and admins change it. */
+export const modelsScreen: OrgScreen = {
+  id: 'models',
+  label: 'Models and policies',
+  icon: Shield,
+  to: '/o/$org/models',
 };
 export const settingsScreen: OrgScreen = {
   id: 'settings',
@@ -198,7 +217,7 @@ export const sidebarOrgScreens: readonly Listed<OrgPath>[] = [
   { ...needsYouScreen, available: true },
   { ...runsScreen, available: true },
   { ...connectionsScreen, available: true },
-  { id: 'credentials', label: 'Credentials', icon: KeyRound, available: false },
+  { ...credentialsScreen, available: true },
   { ...knowledgeScreen, available: true },
 ];
 
@@ -208,7 +227,7 @@ export const sidebarFactoryPages: readonly Listed<FactoryPath>[] = [
   { id: 'board', label: 'Board', available: true, to: '/o/$org/f/$factory/board' },
   { id: 'items', label: 'Items', available: true, to: '/o/$org/f/$factory/items' },
   { id: 'agents', label: 'Agents', available: true, to: '/o/$org/f/$factory/agents' },
-  { id: 'intake', label: 'Intake', available: false },
+  { id: 'intake', label: 'Intake', available: true, to: '/o/$org/f/$factory/intake' },
   { id: 'jonah', label: 'Jonah', available: false },
   { id: 'definition', label: 'Definition', available: true, to: '/o/$org/f/$factory/definition' },
   { id: 'settings', label: 'Settings', available: true, to: '/o/$org/f/$factory/settings' },

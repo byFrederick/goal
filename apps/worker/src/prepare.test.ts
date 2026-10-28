@@ -68,10 +68,11 @@ function git(cwd: string, ...args: string[]): string {
 /**
  * A bare repository with a commit on main and, when given, one on branch writing changed (path to content).
  * moved, when given, is committed to main after the branch was pushed: path to content.
+ * base, when given, is a branch of its own from main's first commit, with one commit writing base.txt.
  */
 async function origin(
   branch?: string,
-  opts: { changed?: Record<string, string>; moved?: Record<string, string> } = {},
+  opts: { changed?: Record<string, string>; moved?: Record<string, string>; base?: string } = {},
 ): Promise<string> {
   const bare = join(root, 'origin.git');
   const work = join(root, 'seed');
@@ -94,6 +95,13 @@ async function origin(
     git(work, 'add', '--all');
     git(work, 'commit', '--quiet', '-m', 'main moved on');
     git(work, 'push', '--quiet', 'origin', 'main');
+  }
+  if (opts.base) {
+    git(work, 'checkout', '--quiet', '-b', opts.base, git(work, 'rev-list', '--max-parents=0', 'main'));
+    await writeFile(join(work, 'base.txt'), 'from the base\n');
+    git(work, 'add', '--all');
+    git(work, 'commit', '--quiet', '-m', 'on the base');
+    git(work, 'push', '--quiet', 'origin', opts.base);
   }
   return `file://${bare}`;
 }
@@ -333,6 +341,157 @@ describe('prepare', () => {
       });
     });
   }
+
+  describe('with a base branch', () => {
+    const base = 'goal/assembly-330';
+    const bare = () => join(root, 'origin.git');
+    const spec_ = async () => JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8'));
+
+    it('starts the branch from the base branch when one is set', async () => {
+      const url = await origin(undefined, { moved: { 'main.txt': 'from main\n' }, base });
+      const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch: 'goal/20-part', base } });
+      const { exec, calls } = recorder();
+
+      const prepared = await prepare(depsWith(fake, exec));
+
+      expect(prepared).toMatchObject({ branch: 'goal/20-part', branch_existed: false });
+      expect(calls).toContainEqual({
+        command: 'git',
+        args: ['checkout', '--quiet', '-b', 'goal/20-part', `origin/${base}`],
+        cwd: dirs.workspace,
+      });
+      expect(calls.some((c) => c.args[0] === 'push')).toBe(false);
+      const ws = dirs.workspace;
+      expect(git(ws, 'branch', '--show-current')).toBe('goal/20-part');
+      expect(git(ws, 'merge-base', '--is-ancestor', `origin/${base}`, 'HEAD')).toBe('');
+      expect(() => git(ws, 'merge-base', '--is-ancestor', 'origin/main', 'HEAD')).toThrow();
+    });
+
+    it('rebases an existing branch on the base branch', async () => {
+      const branch = 'goal/21-rebase';
+      const url = await origin(branch, { moved: { 'main.txt': 'from main\n' }, base });
+      const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch, base } });
+      const { exec, calls } = recorder();
+
+      const prepared = await prepare(depsWith(fake, exec));
+
+      expect(prepared).toMatchObject({ branch, branch_existed: true, fresh_base: 'rebase' });
+      expect(calls).toContainEqual({
+        command: 'git',
+        args: ['rebase', '--quiet', `origin/${base}`],
+        cwd: dirs.workspace,
+      });
+      const ws = dirs.workspace;
+      expect(git(ws, 'merge-base', '--is-ancestor', `origin/${base}`, 'HEAD')).toBe('');
+      expect(() => git(ws, 'merge-base', '--is-ancestor', 'origin/main', 'HEAD')).toThrow();
+      expect(git(ws, 'log', '--format=%s', `origin/${base}..HEAD`)).toBe('earlier run');
+      expect(await spec_()).not.toHaveProperty('base_branch');
+    });
+
+    it('merges the base branch into an existing branch when fresh_base is merge', async () => {
+      const branch = 'goal/22-merge';
+      const url = await origin(branch, { moved: { 'main.txt': 'from main\n' }, base });
+      const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch, base, fresh_base: 'merge' } });
+      const { exec } = recorder();
+
+      await prepare(depsWith(fake, exec));
+
+      const ws = dirs.workspace;
+      const [, ...parents] = git(ws, 'rev-list', '--parents', '-1', 'HEAD').split(' ');
+      expect(parents).toEqual([git(ws, 'rev-parse', `origin/${branch}`), git(ws, 'rev-parse', `origin/${base}`)]);
+      expect(() => git(ws, 'merge-base', '--is-ancestor', 'origin/main', 'HEAD')).toThrow();
+    });
+
+    it('names the base branch next to the conflicting files', async () => {
+      const branch = 'goal/23-conflict';
+      const url = await origin(branch, { changed: { 'base.txt': 'from the branch\n' }, base });
+      const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch, base } });
+
+      const prepared = await prepare(depsWith(fake, recorder().exec));
+
+      expect(prepared).toMatchObject({ conflicts: ['base.txt'] });
+      expect(await spec_()).toMatchObject({ base_conflicts: ['base.txt'], base_branch: base });
+    });
+
+    it('creates a missing base branch from the default branch and pushes it', async () => {
+      const url = await origin(undefined, { moved: { 'main.txt': 'from main\n' } });
+      const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch: 'goal/24-first', base } });
+      const { exec, calls } = recorder();
+
+      const prepared = await prepare(depsWith(fake, exec));
+
+      expect(prepared).toMatchObject({ branch: 'goal/24-first', branch_existed: false });
+      const pushes = calls.filter((c) => c.args[0] === 'push');
+      expect(pushes).toEqual([{ command: 'git', args: ['push', '--quiet', 'origin', base], cwd: dirs.workspace }]);
+      const main = git(bare(), 'rev-parse', 'main');
+      expect(git(bare(), 'rev-parse', base)).toBe(main);
+      expect(git(dirs.workspace, 'rev-parse', 'HEAD')).toBe(main);
+    });
+
+    it('uses the base branch another run pushed first', async () => {
+      const url = await origin();
+      const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch: 'goal/25-second', base } });
+      const { exec: real, calls } = recorder();
+      // Another run pushes the base between prepare's check and its push, so prepare's push is rejected.
+      let theirs = '';
+      const exec: Exec = (command, args, opts) => {
+        if (args[0] === 'push' && !theirs) {
+          const work = join(root, 'seed');
+          git(work, 'checkout', '--quiet', '-b', base, 'main');
+          git(work, 'commit', '--quiet', '--allow-empty', '-m', 'the other run');
+          git(work, 'push', '--quiet', 'origin', base);
+          theirs = git(work, 'rev-parse', 'HEAD');
+        }
+        return real(command, args, opts);
+      };
+
+      const prepared = await prepare(depsWith(fake, exec));
+
+      expect(prepared).toMatchObject({ branch: 'goal/25-second', branch_existed: false });
+      expect(calls.filter((c) => c.args[0] === 'push')).toHaveLength(1);
+      expect(git(bare(), 'rev-parse', base)).toBe(theirs);
+      expect(git(dirs.workspace, 'rev-parse', 'HEAD')).toBe(theirs);
+      expect(git(dirs.workspace, 'rev-parse', base)).toBe(theirs);
+    });
+
+    it('fails when pushing a missing base fails and the remote still has none', async () => {
+      const url = await origin();
+      const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch: 'goal/26-x', base } });
+      const { exec: real } = recorder();
+      const exec: Exec = (command, args, opts) =>
+        args[0] === 'push' ? Promise.resolve(128) : real(command, args, opts);
+
+      await expect(prepare(depsWith(fake, exec))).rejects.toThrow('git push exited 128');
+    });
+
+    it('treats an empty base as the default branch', async () => {
+      const url = await origin();
+      const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch: 'goal/27-x', base: '' } });
+      const { exec, calls } = recorder();
+
+      await prepare(depsWith(fake, exec));
+
+      expect(calls).toContainEqual({
+        command: 'git',
+        args: ['checkout', '--quiet', '-b', 'goal/27-x'],
+        cwd: dirs.workspace,
+      });
+      expect(calls.filter((c) => c.args[0] === 'check-ref-format')).toHaveLength(1);
+    });
+
+    it('refuses a base that is not a branch name before cloning', async () => {
+      const url = await origin();
+      const { fake } = gatewayServing({
+        spec,
+        files: {},
+        repository: { url, branch: 'goal/28-x', base: '--upload-pack=sh' },
+      });
+      const { exec, calls } = recorder();
+
+      await expect(prepare(depsWith(fake, exec))).rejects.toThrow('git check-ref-format exited');
+      expect(calls.some((c) => c.args[0] === 'clone')).toBe(false);
+    });
+  });
 
   it('fails when bringing the branch up to date fails for another reason than a conflict', async () => {
     const branch = 'goal/13-fails';

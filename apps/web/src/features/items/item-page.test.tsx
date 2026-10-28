@@ -2,8 +2,8 @@
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { type ReactNode, useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { inboxQuery, keys } from '../../api/queries';
-import type { Factory, InboxEntry, Item, ItemEvent, OrgSummary } from '../../api/types';
+import { keys } from '../../api/queries';
+import type { Factory, Item, ItemEvent, OrgSummary } from '../../api/types';
 import { TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { itemKey } from '../../shared/factory';
 import { renderFactoryPage, type Seed } from '../../test/route';
@@ -109,6 +109,7 @@ function TopBarHarness({ children }: { children: ReactNode }) {
     <TooltipProvider>
       <TopBarSetContext.Provider value={setTop}>
         <section aria-label="Top bar">
+          {top?.back}
           {top?.crumb}
           {top?.actions}
         </section>
@@ -210,13 +211,66 @@ describe('the item decisions at each width', () => {
     expect(within(screen.getByLabelText('Top bar')).getByRole('button', { name: 'Send back to Spec' })).toBeTruthy();
   });
 
-  it('shows Send back once on a phone, in its card under the title', async () => {
+  it('keeps Send back out of the phone card and in the More actions menu of the top bar', async () => {
+    stubWidth(true);
+    renderPage(item());
+
+    const bar = await screen.findByLabelText('Top bar');
+    expect(within(bar).queryByRole('button', { name: 'Send back to Spec' })).toBeNull();
+    fireEvent.keyDown(await within(bar).findByRole('button', { name: 'More actions' }), { key: 'Enter' });
+    expect(await screen.findByRole('menuitem', { name: 'Send back to Spec' })).toBeTruthy();
+    expect(screen.getAllByRole('menuitem', { name: 'Send back to Spec' })).toHaveLength(1);
+  });
+
+  it('puts Back to Board, the ref and the More actions menu in the phone top bar, with no board link in the page', async () => {
+    stubWidth(true);
+    renderPage(item());
+
+    const bar = await screen.findByLabelText('Top bar');
+    const back = within(bar).getByRole('link', { name: 'Back to Board' });
+    expect(back.getAttribute('href')).toBe('/o/acme/f/goal/board');
+    expect(within(bar).getByText('#147')).toBeTruthy();
+    expect(within(bar).getByRole('button', { name: 'More actions' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Goal board' })).toBeNull();
+  });
+
+  it('shows the summary line under the stepper, with the time at the station and in the line', async () => {
     stubWidth(true);
     renderPage(item());
 
     await screen.findByRole('heading', { level: 1 });
-    expect(screen.getAllByRole('button', { name: 'Send back to Spec' })).toHaveLength(1);
-    expect(within(screen.getByLabelText('Top bar')).queryByRole('button', { name: 'Send back to Spec' })).toBeNull();
+    expect(screen.getByText(/ in Build, .* in the line/)).toBeTruthy();
+  });
+
+  it('shows Latest in this run with All N events, which opens the full timeline', async () => {
+    stubWidth(true);
+    renderPage(item());
+
+    const latest = await screen.findByRole('heading', { name: 'Latest in this run' });
+    const section = latest.closest('section') as HTMLElement;
+    fireEvent.click(within(section).getByRole('button', { name: /^All \d+ events$/ }));
+    expect(await screen.findByRole('region', { name: 'Timeline' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Latest in this run' })).toBeNull();
+  });
+
+  it('shows one Details card on a phone and no separate Cost card', async () => {
+    stubWidth(true);
+    renderPage(item());
+
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.getByRole('heading', { name: 'Details' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Cost' })).toBeNull();
+    expect(screen.getByText('Cost')).toBeTruthy();
+    expect(screen.queryByText('Station')).toBeNull();
+  });
+
+  it('shows the phone note field as a labelled pill with a round Send note button', async () => {
+    stubWidth(true);
+    renderPage(item());
+
+    const field = await screen.findAllByRole('textbox', { name: 'Note for the agent' });
+    expect(field.length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Send note' }).length).toBeGreaterThan(0);
   });
 });
 
@@ -237,27 +291,20 @@ describe('the stepper', () => {
   });
 });
 
-/** The open decision on the item: the question card's source. */
+/** The agent's open question, which the item carries (Item.question). */
 const question = {
-  id: 'decision:item-147',
-  kind: 'decision',
-  factory: { id: factory.id, name: factory.name, title: null },
-  since: new Date(Date.now() - 12 * 60_000).toISOString(),
-  item: { id: 'item-147' },
-  station: 'build',
-  action: null,
-  approval: { summary: 'Should the sidebar show the whole organization?', facts: [], pull_request: null, spend_usd: 2 },
-  blocked: null,
-  andon: null,
-  rework: null,
-} as unknown as InboxEntry;
+  text: 'Should the sidebar show the whole organization?',
+  choices: ['The whole organization', 'Only this factory'],
+  asked_at: new Date(Date.now() - 12 * 60_000).toISOString(),
+  agent: 'frontend-engineer',
+  run_id: 'run-147',
+};
 
-function renderTab(location: string, it: Item, inbox: InboxEntry[] = [question]) {
+function renderTab(location: string, it: Item) {
   const seed: Seed[] = [
     [keys.item(org.id, key), it],
     [keys.events(org.id, key), [approval]],
     [keys.itemRuns(org.id, key), { runs: [] }],
-    [inboxQuery(org.id, factory.id).queryKey, { entries: inbox }],
   ];
   return renderFactoryPage({
     page: () => (
@@ -274,14 +321,15 @@ function renderTab(location: string, it: Item, inbox: InboxEntry[] = [question])
 }
 
 describe('the question, the tabs and the spec', () => {
-  it('asks the question from the open decision on the Timeline tab', async () => {
-    renderTab('items/147', item());
+  it('asks the item’s open question on the Timeline tab, with its quick answers', async () => {
+    renderTab('items/147', item({ question }));
 
     expect(await screen.findByText('Should the sidebar show the whole organization?')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'The whole organization' })).toBeTruthy();
   });
 
-  it('shows no question card without an open decision', async () => {
-    renderTab('items/147', item(), []);
+  it('shows no question card when the item has no open question', async () => {
+    renderTab('items/147', item({ question: null }));
 
     expect(
       await screen.findByRole('heading', { level: 1, name: "Show this week's spend in the sidebar" }),
@@ -289,14 +337,12 @@ describe('the question, the tabs and the spec', () => {
     expect(screen.queryByText('Should the sidebar show the whole organization?')).toBeNull();
   });
 
-  it('focuses the note field from Write an answer', async () => {
-    renderTab('items/147', item());
+  it('opens the answer field from Write an answer on the card, not the note field', async () => {
+    renderTab('items/147', item({ question }));
 
     fireEvent.click(await screen.findByRole('button', { name: 'Write an answer' }));
 
-    // Both composers (the wide one and the phone one) carry the same field name; the focus lands in one of them.
-    const fields = screen.getAllByRole('textbox', { name: 'Note for the agent' });
-    expect(fields).toContain(document.activeElement);
+    expect(screen.getByRole('textbox', { name: 'Your answer' })).toBeTruthy();
   });
 
   it('lists the spec acceptance criteria on the Spec tab', async () => {

@@ -128,3 +128,52 @@ func TestStation_Humanize(t *testing.T) {
 		}
 	}
 }
+
+// The landing station is integration.landAt when set, else the first merge station after the
+// planning station.
+func TestLine_LandingStation(t *testing.T) {
+	t.Parallel()
+
+	gate := &Gate{OnReject: stationBuild}
+	stations := []Station{
+		{ID: "backlog", Kind: KindQueue},
+		{ID: "early-merge", Kind: KindAgent, Gate: gate, Action: ActionMerge},
+		{ID: "planning", Kind: KindAgent},
+		{ID: stationBuild, Kind: KindAgent},
+		{ID: "gatekeep", Kind: KindAgent, Gate: gate},
+		{ID: "ship", Kind: KindAgent, Gate: gate, Action: ActionMerge},
+		{ID: "ship-again", Kind: KindAgent, Gate: gate, Action: ActionMerge},
+		{ID: "finished", Kind: KindDone},
+	}
+	early, planning, ship, shipAgain := stations[1].ID, stations[2].ID, stations[5].ID, stations[6].ID
+
+	tests := []struct {
+		name, landAt, plan, want string
+		ok                       bool
+	}{
+		{name: "landAt", landAt: shipAgain, plan: planning, want: shipAgain, ok: true},
+		{name: "first merge after the plan", plan: planning, want: ship, ok: true},
+		{name: "merge before the plan skipped", plan: stationBuild, want: ship, ok: true},
+		{name: "plan at a merge station", plan: early, want: ship, ok: true},
+		{name: "no merge station after the plan", plan: shipAgain},
+		{name: "plan not on the line", plan: "nowhere"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			l := Line{Stations: stations}
+			l.Flow.Assemblies.Integration.LandAt = tt.landAt
+
+			s, ok := l.LandingStation(tt.plan)
+			if ok != tt.ok || s.ID != tt.want {
+				t.Errorf("LandingStation(%q) = %q, %v; want %q, %v", tt.plan, s.ID, ok, tt.want, tt.ok)
+			}
+		})
+	}
+
+	if s, ok := (Line{Stations: []Station{stations[2], stations[7]}}).LandingStation(planning); ok {
+		t.Errorf("LandingStation on a line with no merge station = %q, want none", s.ID)
+	}
+}

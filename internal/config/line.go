@@ -123,15 +123,18 @@ func flowPolicy(fl Flow) domain.FlowPolicy {
 }
 
 // assemblyPolicy maps board.flow.assemblies; unset settings are rebase, rework, serialize,
-// materialize and no changedSince.
+// materialize, no changedSince and integration trunk.
 func assemblyPolicy(a *Assemblies) domain.AssemblyPolicy {
 	p := domain.AssemblyPolicy{
 		FreshBase: domain.FreshBaseRebase, OnConflict: domain.ConflictRework,
 		Overlap: domain.OverlapSerialize, Materialize: true,
 	}
 	if a == nil {
+		p.Integration = integrationPolicy(nil)
 		return p
 	}
+
+	p.Integration = integrationPolicy(a.Integration)
 
 	if a.FreshBase != "" {
 		p.FreshBase = domain.FreshBase(a.FreshBase)
@@ -150,6 +153,27 @@ func assemblyPolicy(a *Assemblies) domain.AssemblyPolicy {
 	}
 
 	p.ChangedSince = a.ChangedSince
+
+	return p
+}
+
+// integrationPolicy maps board.flow.assemblies.integration; unset settings are trunk, onLand,
+// no minimum and no landAt.
+func integrationPolicy(in *Integration) domain.IntegrationPolicy {
+	p := domain.IntegrationPolicy{Mode: domain.IntegrationModeTrunk, Refresh: domain.RefreshOnLand}
+	if in == nil {
+		return p
+	}
+
+	if in.Mode != "" {
+		p.Mode = domain.IntegrationMode(in.Mode)
+	}
+
+	if in.Refresh != "" {
+		p.Refresh = domain.IntegrationRefresh(in.Refresh)
+	}
+
+	p.MinParts, p.LandAt = in.MinParts, in.LandAt
 
 	return p
 }

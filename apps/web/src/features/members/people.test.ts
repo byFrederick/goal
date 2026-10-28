@@ -110,9 +110,9 @@ describe('parseEmails', () => {
 
 describe('the rest of the page', () => {
   it('counts members and invitations', () => {
-    expect(countTitle(6, 1)).toBe('6 members, 1 invite');
+    expect(countTitle(6, 1)).toBe('6 members, 1 invite waiting');
     expect(countTitle(1, 0)).toBe('1 member');
-    expect(countTitle(2, 3)).toBe('2 members, 3 invites');
+    expect(countTitle(2, 3)).toBe('2 members, 3 invites waiting');
   });
 
   it('describes an invitation by when, who and until when', () => {

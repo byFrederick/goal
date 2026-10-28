@@ -35,8 +35,8 @@ export function DraftRow({ label, detail }: { label: string; detail: string }) {
         Draft
       </Chip>
       <div className="min-w-0">
-        <p className="m-0 text-[15px] font-medium">{label}</p>
-        <p className="m-0 text-[13px] text-muted">{detail}</p>
+        <p className="m-0 text-body font-medium">{label}</p>
+        <p className="m-0 text-secondary text-muted">{detail}</p>
       </div>
     </li>
   );
@@ -71,13 +71,11 @@ export function VersionRow({
       </Chip>
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="min-w-0">
-          <p className="m-0 flex flex-wrap items-center gap-2 text-[15px] font-medium">
-            <span className="min-w-0 break-words">{version.message || 'No note'}</span>
-            {version.current ? <Chip tone="ok">Running</Chip> : null}
-          </p>
-          <p className="m-0 text-[13px] text-muted">{publishedLine(version.published_at, version.published_by)}</p>
+          <p className="m-0 min-w-0 break-words text-body font-medium">{version.message || 'No note'}</p>
+          <p className="m-0 text-meta text-muted">{publishedLine(version.published_at, version.published_by)}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {version.current ? <Chip tone="ok">Live</Chip> : null}
           {pair ? (
             <Button
               size="sm"
@@ -182,12 +180,12 @@ export function RestoreDialog({ version, onClose }: { version: Version | null; o
       onConfirm={() => void restore()}
     >
       {error ? (
-        <p role="alert" className="m-0 text-sm text-rework-ink">
+        <p role="alert" className="m-0 text-body text-rework-ink">
           {error}
         </p>
       ) : null}
       {stuck(items).length > 0 ? (
-        <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-sm">
+        <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-body">
           {stuck(items).map((i) => (
             <li key={i.id}>
               #{i.number} is being worked at {i.station}: let its run finish or stop it first.
@@ -197,7 +195,7 @@ export function RestoreDialog({ version, onClose }: { version: Version | null; o
       ) : null}
       {unmapped.length > 0 ? (
         <fieldset className="m-0 flex flex-col gap-3 border-0 p-0">
-          <legend className="mb-2 text-sm font-medium">Where do these items go?</legend>
+          <legend className="mb-2 text-body font-medium">Where do these items go?</legend>
           {unmapped.map((station) => (
             <Field key={station} label={`Items at ${station}`}>
               <NativeSelect

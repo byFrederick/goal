@@ -35,6 +35,8 @@ interface PhoneTopBarProps {
   title: string | undefined;
   /** The page's actions, from its TopBarSlot. */
   actions: ReactNode | undefined;
+  /** The page's Back link, from its TopBarSlot: after the Goal mark, before the title. */
+  back?: ReactNode | undefined;
   /** Opens the drawer (the sidebar's content). */
   onMenu: () => void;
   drawerOpen: boolean;
@@ -43,7 +45,7 @@ interface PhoneTopBarProps {
 }
 
 /** The top bar: the Goal mark (opens the drawer), the page title and the page's actions. */
-export function PhoneTopBar({ title, actions, onMenu, drawerOpen, menuRef }: PhoneTopBarProps) {
+export function PhoneTopBar({ title, actions, back, onMenu, drawerOpen, menuRef }: PhoneTopBarProps) {
   return (
     <header className="sticky top-0 z-20 flex min-h-14 flex-none items-center gap-1 border-b border-rule bg-shell pt-[env(safe-area-inset-top)] px-1 md:hidden">
       <button
@@ -57,6 +59,7 @@ export function PhoneTopBar({ title, actions, onMenu, drawerOpen, menuRef }: Pho
       >
         <GoalMark size="shell" />
       </button>
+      {back ? <div className="flex-none">{back}</div> : null}
       <p className="m-0 min-w-0 flex-1 truncate text-heading text-ink">{title}</p>
       {actions ? <div className="flex min-w-0 flex-none items-center gap-2">{actions}</div> : null}
     </header>

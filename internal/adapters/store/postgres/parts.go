@@ -543,8 +543,10 @@ func partsFrom(rows []db.WorkItem) (domain.Parts, error) {
 // part: cancelled when cancel is set (a person cancelled the assembly), else done when any part
 // is done, cancelled otherwise. Done, it moves to the station of its most recently done part, the
 // line's done station, where a finished single item lands; cancelled, it keeps its own, as a
-// cancelled single item does. The assembly's row is locked after the part's, so of two last
-// parts closing at once the second sees the first committed and closes it.
+// cancelled single item does. An assembly with an integration branch that would close done
+// lands instead: it moves to its integration_land_at station, queued, with an assembly_landing
+// event, for that station to merge the branch. The assembly's row is locked after the part's,
+// so of two last parts closing at once the second sees the first committed and closes it.
 func closeAssembly(ctx context.Context, q *db.Queries, row db.WorkItem, at time.Time, cancel bool) error {
 	state := domain.ItemState(row.State)
 	if row.PartKey == nil || row.ParentID == nil || (state != domain.StateDone && state != domain.StateCancelled) {
@@ -569,10 +571,22 @@ func closeAssembly(ctx context.Context, q *db.Queries, row db.WorkItem, at time.
 		return nil
 	}
 
+	if c.Done > 0 && !cancel && parent.IntegrationBranch != nil {
+		return landAssembly(ctx, q, parent, c, at)
+	}
+
+	return finishAssembly(ctx, q, parent, c, at, cancel)
+}
+
+// finishAssembly closes parent, an assembly whose last part closed with c.Done parts done:
+// done at its last done part's station when a part is done and cancel is not set, else
+// cancelled at its own station, with an assembly_done event.
+func finishAssembly(ctx context.Context, q *db.Queries, parent db.WorkItem, c db.PartCountsRow, at time.Time, cancel bool) error {
 	closed, station := domain.StateCancelled, parent.Station
 	if c.Done > 0 && !cancel {
 		closed = domain.StateDone
 
+		var err error
 		if station, err = q.LastDonePartStation(ctx, parent.ID); err != nil {
 			return fmt.Errorf("done station of the assembly: %w", err)
 		}
@@ -590,4 +604,63 @@ func closeAssembly(ctx context.Context, q *db.Queries, row db.WorkItem, at time.
 		Kind: domain.EventAssemblyDone, Station: station, Actor: domain.ActorEngine,
 		Data: map[string]any{"state": string(closed), "parts_done": c.Done, "parts": c.Total},
 	}})
+}
+
+// landAssembly moves parent, an assembly with an integration branch whose last part closed with
+// c.Done parts done, to its landing station, queued, with an assembly_landing event.
+func landAssembly(ctx context.Context, q *db.Queries, parent db.WorkItem, c db.PartCountsRow, at time.Time) error {
+	station := deref(parent.IntegrationLandAt)
+
+	if _, err := q.MoveItem(ctx, db.MoveItemParams{
+		ID: parent.ID, Station: station, State: string(domain.StateQueued), UpdatedAt: at,
+	}); err != nil {
+		return fmt.Errorf("land assembly: %w", err)
+	}
+
+	return appendEvents(ctx, q, []domain.Event{{
+		FactoryID: domain.FactoryID(parent.FactoryID.String()), ItemID: domain.ItemID(parent.ID.String()), At: at,
+		Kind: domain.EventAssemblyLanding, Station: station, Actor: domain.ActorEngine,
+		Data: map[string]any{"parts_done": c.Done, "parts": c.Total, "branch": *parent.IntegrationBranch},
+	}})
+}
+
+// SetIntegrationBranch implements ports.Store.
+func (s *Store) SetIntegrationBranch(ctx context.Context, root domain.ItemID, branch, landAt string, at time.Time) (bool, error) {
+	id, err := parseID("item", string(root))
+	if err != nil {
+		return false, fmt.Errorf("integration branch of %s: %w", root, err)
+	}
+
+	if branch == "" || landAt == "" {
+		return false, fmt.Errorf("integration branch of %s: a branch and a landing station are required: %w", root, domain.ErrInvalid)
+	}
+
+	var set bool
+
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		n, err := q.SetIntegrationBranch(ctx, db.SetIntegrationBranchParams{
+			ID: id, IntegrationBranch: branch, IntegrationLandAt: landAt, UpdatedAt: at,
+		})
+		if err != nil {
+			return err
+		}
+
+		if set = n > 0; set {
+			return nil
+		}
+
+		// No row changed: the item has a branch already, or there is none.
+		if _, err := q.GetItem(ctx, id); notFound(err) {
+			return ports.ErrNotFound
+		} else if err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return false, fmt.Errorf("integration branch of %s: %w", root, err)
+	}
+
+	return set, nil
 }

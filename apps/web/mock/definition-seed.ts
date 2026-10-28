@@ -138,9 +138,11 @@ ${goalRules.map(([name]) => `    - { name: ${name}, source: ./rules/${name}.md }
       skills: [acme-conventions]
       builtins: { read: allowed, edit: allowed, run: { mode: allowed, commands: [go, task, git] } }
     - name: frontend-engineer
-      description: Builds web changes from the spec.
+      description: The React UI in apps/web and the TypeScript packages, following the design system exactly.
       prompt: ./agents/frontend-engineer.md
       model: claude-haiku-5-5
+      maxTurns: 250
+      perItemUsd: 20
       skills: [${goalSkills.join(', ')}]
       connections: [playwright]
       builtins: { read: allowed, edit: allowed, run: { mode: allowed, commands: [pnpm, git] }, web: ${o.draft ? 'ask' : 'off'} }
@@ -201,16 +203,24 @@ Name the lane (backend or frontend) that builds it.
 Build the change the spec describes in Go. Keep the hexagonal boundaries, add tests that fail without
 the change, and run task check before you open the pull request.
 `,
-    'agents/frontend-engineer.md': `# frontend-engineer
+    'agents/frontend-engineer.md': `# You build Goal's web app
 
-Build the change the spec describes in web/. Follow the design system, keep every action reachable by
-keyboard, and run pnpm test before you open the pull request.
+You work in apps/web and the TypeScript packages. The design system in design-system/goal/MASTER.md is the
+source of truth for colour, type, spacing and components.
+
+- Read the spec's acceptance criteria before you open a file.
+- Every new state gets a test: loading, empty, error and success.
+- Use tokens, never raw colours. Check both themes.
+- Run task check:changed and attach the output as evidence.
 `,
     'agents/reviewer.md': `# reviewer
 
 Review the pull request against the spec's acceptance criteria. Approve it, or send it back with the
 criteria it misses.
 `,
+    'contracts/spec.md': '# Spec\n\nThe item, the change and the acceptance criteria a reviewer checks.\n',
+    'contracts/review.md': '# Review\n\nThe checks a change passes before it merges.\n',
+    'contracts/handoff.md': '# Handoff\n\nWhat the next station needs from this one.\n',
     'skills/acme-conventions/SKILL.md': `---
 name: acme-conventions
 description: How acme names things, writes commits and structures pull requests.
@@ -238,7 +248,7 @@ spec:
     modelConnection: claude
     budget: { weeklyUsd: 400, onExhausted: stop }
   connections: [aws-prod, datadog, pagerduty]
-  knowledge: { sources: [handbook] }
+  knowledge: { sources: [dashboards] }
   skills:
     - { name: aws-investigation, source: ./skills/aws-investigation }
     - { name: incident-triage, source: ./skills/incident-triage }
@@ -260,6 +270,9 @@ spec:
       tools:
         allow: [Read, Grep, Glob, Bash, WebFetch]
         deny: ["Bash(aws * delete*)", "Bash(aws * put*)", "Bash(terraform apply*)", "Bash(kubectl delete*)"]
+    - name: fixer
+      description: Makes an approved change and says how to roll it back.
+      prompt: ./agents/fixer.md
   board:
     workTypes: [incident, change, toil]
     stations:
@@ -276,6 +289,7 @@ const sreFiles = () =>
     'agents/triager.md': '# triager\n\nSort the alert: incident, change or toil, and how urgent it is.\n',
     'agents/investigator.md':
       '# investigator\n\nFind the cause. Propose the smallest safe change and how to roll it back.\n',
+    'agents/fixer.md': '# fixer\n\nMake the approved change. Say how to roll it back.\n',
     'skills/aws-investigation/SKILL.md':
       '---\nname: aws-investigation\ndescription: Read-only playbook for ECS, RDS, ALB, Lambda\n---\n\n# AWS investigation\n\nDescribe before you change: logs, metrics, recent deploys.\n',
     'skills/incident-triage/SKILL.md':
@@ -438,8 +452,75 @@ export function seedDefinitions(): Record<string, MockDefinition> {
     '0b7d9e21-58a4-4f0e-b6c3-2a9d8e7f6a51': sre,
     '5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a01': support,
     '9e8d7c6b-5a49-4382-9172-6a5b4c3d2e1f': research,
+    '0c3e8f42-7a19-4d6b-9e25-5b1f0a7c3d88': software,
   };
 }
+
+// The Software factory (the Floor's fixtures): its intake triggers, the flaky-test trigger of the
+// intake page (trigger.jpg). Version 2 is the one that runs; version 1 has no trigger yet.
+const softwareYaml = (
+  triggers: string,
+) => `# Software: turns intake requests into reviewed pull requests for the product repositories.
+apiVersion: goal/v1
+kind: Factory
+metadata:
+  id: 0c3e8f42-7a19-4d6b-9e25-5b1f0a7c3d88
+  name: software
+  title: Software
+spec:
+  agents:
+    - name: architect
+      description: Writes the spec for an item.
+    - name: backend-engineer
+      description: Builds Go changes from the spec.
+    - name: frontend-engineer
+      description: Builds the React UI, following the design system.
+    - name: infra-engineer
+      description: Changes Terraform and the deploy scripts.
+    - name: reviewer
+      description: Reviews the pull request against the spec.
+  board:
+    workTypes: [feature, fix, refactor]
+    stations:
+      - { id: intake, name: Intake, kind: queue }
+      - { id: spec, name: Spec, kind: agent, agent: spec-writer, wip: 2 }
+      - { id: build, name: Build, kind: agent, agent: builder, wip: 2 }
+      - { id: review, name: Review, kind: agent, agent: reviewer, wip: 1 }
+      - { id: done, name: Done, kind: done }
+    flow:
+      constraint: build
+${triggers}`;
+
+const flakyTrigger = `    triggers:
+      - name: flaky-test-on-main
+        on: github.check_run.failed
+        filter: { branch: main, repo: byFrederick/goal }
+        only: { failuresInARow: 2, dedupe: check.name }
+        create:
+          type: fix
+          station: build
+          expedite: true
+          title: "Fix flaky {{check.name}} on main"
+          brief: "{{check.name}} failed twice in a row on main. Find the cause in {{check.logs_url}}, make the test deterministic, and say in the pull request why it was flaky. Do not skip or retry the test to make it pass."
+        limits: { perDay: 3, pauseOnBudget: true }
+`;
+
+const software = definition({
+  versions: [
+    {
+      id: '019a1c00-0000-7000-8000-0000000000f0',
+      message: 'First version',
+      at: day(10, '09:00'),
+      files: tree({ 'factory.yaml': softwareYaml('') }),
+    },
+    {
+      id: '019a1c00-0000-7000-8000-0000000000f1',
+      message: 'Add the flaky-test trigger',
+      at: day(20, '09:00'),
+      files: tree({ 'factory.yaml': softwareYaml(flakyTrigger) }),
+    },
+  ],
+});
 
 // Templates: the catalog's latest versions, "5 in the bucket".
 

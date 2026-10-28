@@ -71,7 +71,13 @@ type Item struct {
 	// finished the item, or its assembly's for a part; empty when none was recorded (ADR 0015
 	// decision 5).
 	BaseCommit string
-	Type       string
+	// IntegrationBranch is an assembly's integration branch, the branch its parts build on, and
+	// IntegrationLandAt the station where the finished assembly lands to merge it; both empty
+	// unless set, once, by ports.Store SetIntegrationBranch (flow.assemblies.integration.mode
+	// branch).
+	IntegrationBranch string
+	IntegrationLandAt string
+	Type              string
 	// Lane picks the agent at stations that route by lane. Empty until intake or an output sets it.
 	Lane     string
 	Title    string
@@ -114,6 +120,45 @@ const maxSlug = 40
 // only on the item's number and title, so every run of the item, rework included, works on
 // the same branch.
 func (it Item) Branch() string {
+	return branchName("goal/", it)
+}
+
+// IntegrationBranch is the git branch an assembly's parts merge into in integration mode branch:
+// goal/a<root number>-<root title slug>, with the slug of Item.Branch (ADR 0033).
+func IntegrationBranch(root Item) string {
+	return branchName("goal/a", root)
+}
+
+// Landing reports whether it is a landing root: an assembly with an integration branch, which
+// the store sets only on an assembly's root while its parts run, so the root's next claims are its
+// landing at the landing station and the reworks the landing gate sends back (ADR 0033).
+func (it Item) Landing() bool {
+	return it.ParentID == "" && it.IntegrationBranch != ""
+}
+
+// RunBase is the branch a run of it works on, it.Branch() but for a landing root, and the base that branch is cut
+// from and its pull request goes into, decided once at run start (ADR 0033). A landing root
+// (Landing) works on its own integration branch, with the default branch as its base, at every
+// station: its landing, and a rework of it the landing gate sent back. A part whose root
+// has an integration branch builds on it, unless the part's pull request was opened against
+// another base (prBase, empty while it names none), such as one opened against the default
+// branch before the switch. Every other item gets an empty base: the default branch.
+func RunBase(it, root Item, prBase string) (branch, base string) {
+	if it.Landing() {
+		return it.IntegrationBranch, ""
+	}
+
+	if it.ParentID == "" || root.IntegrationBranch == "" || (prBase != "" && prBase != root.IntegrationBranch) {
+		return it.Branch(), ""
+	}
+
+	return it.Branch(), root.IntegrationBranch
+}
+
+// branchName is prefix, the item's number and, when its title has one, a dash and the title's
+// slug: lowercase ASCII letters and digits, each other run of characters one dash, cut near
+// maxSlug.
+func branchName(prefix string, it Item) string {
 	var b strings.Builder
 
 	dash := false
@@ -139,10 +184,10 @@ func (it Item) Branch() string {
 
 	slug := strings.TrimRight(b.String(), "-")
 	if slug == "" {
-		return fmt.Sprintf("goal/%d", it.Number)
+		return fmt.Sprintf("%s%d", prefix, it.Number)
 	}
 
-	return fmt.Sprintf("goal/%d-%s", it.Number, slug)
+	return fmt.Sprintf("%s%d-%s", prefix, it.Number, slug)
 }
 
 // NewItem is what intake supplies to create an item. The engine fills Station, State and Class.

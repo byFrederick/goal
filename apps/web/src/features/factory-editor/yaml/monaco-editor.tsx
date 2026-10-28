@@ -73,29 +73,62 @@ configureMonacoYaml(yamlMonaco as never, {
   ],
 });
 
-monaco.editor.defineTheme('goal', {
-  base: 'vs',
-  inherit: true,
-  rules: [
-    { token: 'keyword', foreground: '185A71', fontStyle: 'bold' },
-    { token: 'type', foreground: '185A71' },
-    { token: 'string', foreground: '24563E' },
-    { token: 'comment', foreground: '556270' },
-    { token: 'variable', foreground: '4A3C9E' },
-  ],
-  colors: {
-    'editor.background': '#FFFFFF',
-    'editor.foreground': '#1D2733',
-    'editorLineNumber.foreground': '#5F6B67',
-    'editorLineNumber.activeForeground': '#1D2733',
-    'editorCursor.foreground': '#1F6F8B',
-    'editor.selectionBackground': '#BFE0EA',
-    'editor.lineHighlightBackground': '#F6F7F5',
-    'editorIndentGuide.background1': '#E3E7E5',
-    'editorError.foreground': '#B4441C',
-    'editorWarning.foreground': '#B4441C',
-  },
-});
+/** A design token's value as the page has it now: the light or the dark one, by data-theme. */
+const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
+/** Monaco's token rules take the hex digits without the '#'. */
+const hex = (name: string) => token(name).replace('#', '');
+
+/**
+ * The editor's theme from the design tokens (MASTER.md), read from the page so the dark theme
+ * needs no copy of the colours here. Syntax takes the status and identity tokens.
+ */
+function goalTheme(): monaco.editor.IStandaloneThemeData {
+  return {
+    base: 'vs',
+    inherit: true,
+    rules: [
+      { token: 'keyword', foreground: hex('run-ink') },
+      { token: 'type', foreground: hex('run-ink') },
+      { token: 'string', foreground: hex('ok-ink') },
+      { token: 'number', foreground: hex('amber-ink') },
+      { token: 'comment', foreground: hex('muted'), fontStyle: 'italic' },
+      { token: 'variable', foreground: hex('you-ink') },
+    ],
+    colors: {
+      'editor.background': token('shell'),
+      'editor.foreground': token('ink'),
+      'editorLineNumber.foreground': token('muted'),
+      'editorLineNumber.activeForeground': token('ink'),
+      'editorCursor.foreground': token('run'),
+      'editor.selectionBackground': token('run-tint'),
+      'editor.lineHighlightBackground': token('panel'),
+      'editorIndentGuide.background1': token('line'),
+      'editorError.foreground': token('rework'),
+      'editorWarning.foreground': token('rework'),
+    },
+  };
+}
+
+/** Defines the theme again and applies it: on load, and whenever the page switches theme. */
+function applyGoalTheme() {
+  monaco.editor.defineTheme('goal', goalTheme());
+  monaco.editor.setTheme('goal');
+}
+
+let watching = false;
+/** The page's theme changes by data-theme (a choice) or by the system (no choice): both re-theme the editor. */
+function watchTheme() {
+  if (watching || typeof MutationObserver === 'undefined') return;
+  watching = true;
+  new MutationObserver(applyGoalTheme).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme'],
+  });
+  window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener('change', applyGoalTheme);
+}
+
+applyGoalTheme();
+watchTheme();
 
 const lineHeight = 23;
 

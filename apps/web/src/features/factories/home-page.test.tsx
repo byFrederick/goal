@@ -328,6 +328,13 @@ describe('Home: the ready state', () => {
     expect(screen.queryByText('Question')).toBeNull();
   });
 
+  it('leads Open all from Needs you first to the Needs you page', async () => {
+    await renderReady();
+
+    const needs = screen.getByRole('region', { name: 'Needs you first' });
+    expect(within(needs).getByRole('link', { name: 'Open all' }).getAttribute('href')).toBe('/o/acme/needs-you');
+  });
+
   it('approves an approval in place, through the item decision', async () => {
     await renderReady();
 

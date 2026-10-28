@@ -8,8 +8,9 @@
 // The mock indexes at once: a sync, or an upload, makes its source's pending documents indexed,
 // broadcasting `event: knowledge` as syncing, then idle; its end moves updated_at, as goald's
 // does. Its search ranks documents by how often they hold the query's words. A source's used_by is the factories whose current version lists it
-// (knowledge.sources). acme starts with two upload sources, handbook (which sre lists) and
-// postmortems, and two synced through github: goal-docs and runbooks, whose last sync failed.
+// (knowledge.sources). acme starts with three sources synced through github, as the knowledge
+// picture shows them: dashboards, whose last sync failed (it shows Retry now), goal-docs, and
+// support-macros, synced daily. Upload sources are created by the flows that upload to them.
 import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
@@ -153,37 +154,28 @@ function seed(now: number, by: Actor): MockSource[] {
   const blob = (repo: string, path: string) => `https://github.com/acme/${repo}/blob/main/${path}`;
   return [
     {
-      source: source(1, { name: 'handbook', title: 'Handbook', kind: 'upload' }),
+      source: source(1, {
+        name: 'dashboards',
+        title: 'Dashboards',
+        kind: 'synced',
+        connection: 'github',
+        config: { repository: 'https://github.com/acme/dashboards', include: '**/*.md' },
+        status: 'failed',
+        last_error: 'the server refused the token',
+        last_synced_at: at(-1 * hourMs),
+        next_sync_at: at(hourMs),
+      }),
       docs: [
-        doc('handbook', 'deploy.md', '# Deploy\n\nDeploys go out on Tuesdays after the release review.'),
-        doc('handbook', 'oncall.md', '# On call\n\nThe on-call engineer acknowledges a page within 15 minutes.'),
+        doc(
+          'dashboards',
+          'api-latency.md',
+          '# API latency\n\nP95 latency per route, with the panel notes. Read the notes before you act on a spike.',
+          { url: blob('dashboards', 'api-latency.md'), indexed_at: at(-1 * hourMs) },
+        ),
       ],
     },
     {
       source: source(2, {
-        name: 'postmortems',
-        title: 'Postmortems',
-        kind: 'upload',
-        last_synced_at: at(-5 * dayMs),
-      }),
-      docs: [
-        doc(
-          'postmortems',
-          '2026-09-14 checkout workers out of memory.md',
-          '# Checkout workers out of memory\n\nRoot cause: the image resize step loaded whole files into memory. ECS restarted 31 tasks in 40 minutes; the alert fired after the fifth.',
-          { indexed_at: at(-5 * dayMs) },
-        ),
-        doc('postmortems', 'timeline.html', '', {
-          mime: 'text/html',
-          bytes: 412,
-          status: 'skipped',
-          error: 'it has no text',
-          indexed_at: null,
-        }),
-      ],
-    },
-    {
-      source: source(3, {
         name: 'goal-docs',
         title: 'goal docs',
         kind: 'synced',
@@ -209,30 +201,23 @@ function seed(now: number, by: Actor): MockSource[] {
       ],
     },
     {
-      source: source(4, {
-        name: 'runbooks',
-        title: 'Runbooks',
+      source: source(3, {
+        name: 'support-macros',
+        title: 'Support macros',
         kind: 'synced',
         connection: 'github',
-        config: { repository: 'https://github.com/acme/runbooks', include: '**/*.md' },
-        status: 'failed',
-        last_error: 'GET https://api.github.com/repos/acme/runbooks/git/trees/main answered 429',
-        last_synced_at: at(-2 * dayMs),
-        next_sync_at: at(2 * hourMs),
+        config: { repository: 'https://github.com/acme/support-macros', include: '**/*.md' },
+        sync_every_seconds: 86_400,
+        last_synced_at: at(-6 * hourMs),
+        next_sync_at: at(18 * hourMs),
       }),
       docs: [
         doc(
-          'runbooks',
-          'ecs-task-out-of-memory.md',
-          '# ECS task out of memory\n\nWhen a task stops with OutOfMemoryError, compare the container memory reservation with its hard limit before you raise either.',
-          { url: blob('runbooks', 'ecs-task-out-of-memory.md'), indexed_at: at(-2 * dayMs) },
+          'support-macros',
+          'refund-policy.md',
+          '# Refund policy\n\nRefunds within 30 days go back to the original payment method. Say so before you offer a credit.',
+          { url: blob('support-macros', 'refund-policy.md'), indexed_at: at(-6 * hourMs) },
         ),
-        doc('runbooks', 'paging-policy.md', '', {
-          url: blob('runbooks', 'paging-policy.md'),
-          status: 'failed',
-          error: 'GitHub answered 429; the next sync tries again',
-          indexed_at: null,
-        }),
       ],
     },
   ];

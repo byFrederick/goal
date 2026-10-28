@@ -407,13 +407,12 @@ function renderFloor({
 }
 
 describe('FloorPage', () => {
-  it('the Inbox button opens the drawer with what waits on this factory', async () => {
+  it('the header Needs you link counts what waits on this factory and leads to its page', async () => {
     renderFloor({ entries: [ship] });
 
-    fireEvent.click(await screen.findByRole('button', { name: /^Inbox/ }));
-    const drawer = await screen.findByRole('dialog', { name: 'Inbox' });
-    expect(within(drawer).getByText('Ready to merge')).toBeTruthy();
-    expect(within(drawer).getByRole('button', { name: 'Merge sre#3' })).toBeTruthy();
+    const link = await screen.findByRole('link', { name: /^Needs you/ });
+    expect(link.getAttribute('href')).toBe('/o/acme/needs-you?factory=sre');
+    expect(link.textContent).toContain('1');
   });
 
   it('shows Needs you, Where work waits, Throughput by week and Activity below the figures, in that order', async () => {
@@ -557,6 +556,17 @@ describe('the cards below the figures', () => {
     const card = await screen.findByRole('region', { name: 'Needs you' });
     expect(within(card).getByRole('link', { name: 'Decide' }).getAttribute('href')).toContain('/items/sre%233');
     expect(within(card).queryByRole('button', { name: 'Approve sre#3' })).toBeNull();
+  });
+
+  it('Needs you links Open all to the Needs you page filtered to this factory', async () => {
+    renderFloor({ entries: [deciding] });
+
+    const card = await screen.findByRole('region', { name: 'Needs you' });
+    expect(
+      within(card)
+        .getByRole('link', { name: /Open all|See all/ })
+        .getAttribute('href'),
+    ).toBe('/o/acme/needs-you?factory=sre');
   });
 
   it('Needs you says when nothing waits on the person', async () => {
