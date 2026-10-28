@@ -16,8 +16,9 @@ import { cn } from '../../ui/cn';
 import { Field, NativeSelect } from '../../ui/field';
 import { GitHubMark } from '../../ui/github-mark';
 import { NotAvailable } from '../../ui/not-available';
-import type { CodeSearch } from './code-search';
-import { OnboardingLayout, PreviewCard } from './onboarding-layout';
+import type { OnboardingSearch } from './code-search';
+import { codeCard, organizationCard } from './factory-preview';
+import { OnboardingLayout } from './onboarding-layout';
 
 const day = 86_400_000;
 
@@ -34,7 +35,7 @@ function updatedLabel(updatedAt: string, now = Date.now()): string {
 }
 
 /** `search` is the URL's choice (code-search.ts): the route passes it, so the step reads it the same way in a test. */
-export function CodeStep({ org, search }: { org: OrgSummary; search: CodeSearch }) {
+export function CodeStep({ org, search }: { org: OrgSummary; search: OnboardingSearch }) {
   const navigate = useNavigate();
   const [text, setText] = useState('');
   /** This browser's host, the start of the address the organization gets (as step 1 shows it). */
@@ -107,19 +108,7 @@ export function CodeStep({ org, search }: { org: OrgSummary; search: CodeSearch 
           {`Continue with ${count} ${count === 1 ? 'repository' : 'repositories'}`}
         </Button>
       }
-      preview={{
-        organization: <PreviewCard label="Organization" value={org.name} detail={`${host}/o/${org.slug}`} />,
-        second:
-          chosen[0] !== undefined ? (
-            <PreviewCard
-              active
-              label="Code"
-              value={chosen[0]}
-              icon={<GitHubMark className="shrink-0" />}
-              detail="GitHub, read and pull requests"
-            />
-          ) : undefined,
-      }}
+      preview={{ organization: organizationCard(org, host), second: codeCard(chosen[0]) }}
     >
       <div className="flex flex-col gap-2">
         <h1 className="m-0 font-numeral text-kpi tracking-display">Connect your code</h1>
