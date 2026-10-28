@@ -2,13 +2,6 @@
 // meter and what the station says), then the expedite zone and the standard zone of cards. The
 // constraint's column is amber-edged; the drum's column splits its standard zone into the buffer's
 // Ready cards, "Next in" first, and the In progress cards. The phone keeps its station tabs (board-page).
-//
-// Every column's body starts at the same height. Each column spans the same rows of the stations grid
-// with CSS subgrid: the header row, then the expedite row (when drawn). So the header cards share one
-// height and the zones share one top edge. Each standard zone opens with a sub-header slot, one meta
-// line tall (its height is the label's own line height, not a pixel offset): the drum's labels sit in
-// it, and the other columns keep it empty, so their first cards line up. The slot and the rows are
-// desktop only (md and up); the phone's tabs show one column at a time, and it keeps its own layout.
 import type { Board, BoardStation, ItemCard, PartsSummary } from '../../api/types';
 import { formatDuration, humanize, plural } from '../../shared/format';
 import { waitingOnYou } from '../../shared/item-state';
@@ -125,11 +118,6 @@ function ZoneLabel({ children, aside }: { children: string; aside?: string | und
   );
 }
 
-/** The sub-header slot a standard zone opens with on the desktop: empty and hidden from the screen readers, one line tall. */
-function SubHeaderSlot() {
-  return <div aria-hidden="true" className="hidden min-h-[1lh] px-1 text-meta md:block" />;
-}
-
 export interface StationColumnProps {
   board: Board;
   station: BoardStation;
@@ -174,37 +162,24 @@ export function StationColumn({
     board.line.release.buffer !== null ? ` of ${board.line.release.buffer}` : ''
   }`;
 
-  // The column takes the header row and the expedite row (if drawn) and the zone row of the stations grid.
-  const rows = showExpedite ? 3 : 2;
   return (
-    <DropColumn
-      station={station}
-      className="flex min-w-0 flex-col gap-2 md:grid md:grid-rows-subgrid"
-      style={{ gridRow: `span ${rows} / span ${rows}` }}
-    >
+    <DropColumn station={station} className="flex min-w-0 flex-col gap-2">
       <ColumnHeader station={station} constraint={constraint} decides={decides} finishedThisWeek={finishedThisWeek} />
       {showExpedite ? (
-        <div
-          className={cn(
-            'flex min-h-10 flex-col gap-2 rounded-cell p-2 md:self-start',
-            expedite.length > 0 && 'bg-amber-tint',
-          )}
-        >
+        <div className={cn('flex min-h-10 flex-col gap-2 rounded-cell p-2', expedite.length > 0 && 'bg-amber-tint')}>
           {expedite.map(card)}
         </div>
       ) : null}
-      <div className="flex min-h-10 flex-col gap-2 rounded-cell bg-panel p-2 md:self-start">
+      <div className="flex min-h-10 flex-col gap-2 rounded-cell bg-panel p-2">
         {isDrum ? (
           <>
             <ZoneLabel aside="Next in">{bufferLabel}</ZoneLabel>
             {ready.map(card)}
             <ZoneLabel>In progress</ZoneLabel>
           </>
-        ) : (
-          <SubHeaderSlot />
-        )}
+        ) : null}
         {working.map(card)}
-        {station.items.length === 0 ? <p className="m-0 px-1 py-2 text-meta text-muted md:py-0">Empty</p> : null}
+        {station.items.length === 0 ? <p className="m-0 px-1 py-2 text-meta text-muted">Empty</p> : null}
       </div>
     </DropColumn>
   );
