@@ -1,6 +1,7 @@
 package knowledgetest
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -61,6 +62,15 @@ func (f *fixture) runUses(org domain.OrgID, run domain.RunID) []domain.Knowledge
 	f.t.Helper()
 
 	got, err := f.Knowledge.RunUses(f.in(org), run)
+	f.must(err)
+
+	return got
+}
+
+func (f *fixture) runVerdicts(org domain.OrgID, run domain.RunID) []domain.KnowledgeVerdict {
+	f.t.Helper()
+
+	got, err := f.Knowledge.RunVerdicts(f.in(org), run)
 	f.must(err)
 
 	return got
@@ -198,6 +208,29 @@ func testVerdictsReplace(f *fixture) {
 	f.want("a verdict without a time is the store's now", now.At,
 		now.At.After(time.Now().Add(-time.Minute)), now.At.Before(time.Now().Add(time.Minute)))
 
+	ofRun := f.runVerdicts(f.org, r.run)
+	f.want("RunVerdicts: the run's one verdict, the later", ofRun, len(ofRun) == 1,
+		len(ofRun) == 1 && ofRun[0].Verdict == domain.KnowledgeMisled && ofRun[0].Note == "names the old port" &&
+			ofRun[0].Document == a.ID && ofRun[0].Source == src.ID && ofRun[0].Item == r.item &&
+			ofRun[0].By.Ref() == investigator.Ref() && ofRun[0].At.Equal(t0.Add(time.Minute)))
+
+	none := f.runVerdicts(f.org, newRun().run)
+	f.want("RunVerdicts of a run with none", none, len(none) == 0)
+
+	given := f.audit(f.org, domain.AuditKnowledgeVerdictGiven)
+	f.want("knowledge_verdict.given for each of the five verdicts", len(given), len(given) == 5)
+
+	for _, e := range given {
+		f.want("a verdict's audit entry, without its note", e, e.TargetKind == domain.AuditTargetKnowledgeDocument,
+			e.TargetID == string(a.ID), e.Data["verdict"] != nil, !strings.Contains(fmt.Sprint(e.Data), "old port"))
+	}
+
+	if len(given) == 5 {
+		e := given[len(given)-1] // the first, the agent's helped of r
+		f.want("the first verdict's audit entry", e, e.Actor.Ref() == investigator.Ref(),
+			fmt.Sprint(e.Data["verdict"]) == string(domain.KnowledgeHelped), fmt.Sprint(e.Data["run"]) == string(r.run))
+	}
+
 	got := f.usage(f.org, runbooks, domain.DefaultUsageDays)
 	f.want("SourceUsage: one document, the agent's two runs and the person's one verdict", got, len(got) == 1)
 
@@ -290,6 +323,7 @@ func testUsesIsolation(f *fixture) {
 
 	none := f.runUses(other, r.run)
 	f.want("RunUses in another org", none, len(none) == 0)
+	f.want("RunVerdicts in another org", f.runVerdicts(other, r.run), len(f.runVerdicts(other, r.run)) == 0)
 
 	_, err := f.Knowledge.DocumentUses(in, a.ID, "", 10)
 	f.refused("DocumentUses of another org's document", err, ports.ErrNotFound)

@@ -184,19 +184,7 @@ func (e *Engine) resolve(ctx context.Context, names []string, use domain.Credent
 		return nil, nil, err
 	}
 
-	values := make(map[string]string, len(opened))
-	for _, rc := range opened {
-		values[rc.Credential.Name] = rc.Value
-	}
-
-	for _, r := range resolved {
-		if len(r.SecretRefs) > 0 {
-			r.Values = maps.Clone(r.Values)
-			for field, cred := range r.SecretRefs {
-				r.Values[field] = values[cred]
-			}
-		}
-
+	for _, r := range fillRefs(resolved, opened) {
 		rc := runConnection{name: r.Connection.Name, kind: r.Kind, secrets: r.SecretValues()}
 
 		minted, err := e.mint(ctx, r, use.Run, &rc)
@@ -214,6 +202,30 @@ func (e *Engine) resolve(ctx context.Context, names []string, use domain.Credent
 	}
 
 	return out, opened, nil
+}
+
+// fillRefs is resolved with each secret field that refers to a credential holding the value of
+// the one opened (ADR 0017 decision 5); the values are copied, never changed in place.
+func fillRefs(resolved []domain.ResolvedConnection, opened []domain.ResolvedCredential) []domain.ResolvedConnection {
+	values := make(map[string]string, len(opened))
+	for _, rc := range opened {
+		values[rc.Credential.Name] = rc.Value
+	}
+
+	out := slices.Clone(resolved)
+
+	for i, r := range out {
+		if len(r.SecretRefs) == 0 {
+			continue
+		}
+
+		out[i].Values = maps.Clone(r.Values)
+		for field, cred := range r.SecretRefs {
+			out[i].Values[field] = values[cred]
+		}
+	}
+
+	return out
 }
 
 // openCredentials opens, once each, the credentials resolved's connections refer to and the ones

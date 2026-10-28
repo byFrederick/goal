@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -106,6 +107,8 @@ func TestKnowledgeProblem_Codes(t *testing.T) {
 		{documentError(ports.ErrNotFound, "d"), http.StatusNotFound, "knowledge-document-not-found"},
 		{uploadError(ports.ErrTooLarge), http.StatusRequestEntityTooLarge, "upload-too-large"},
 		{uploadError(domain.ErrUnsupportedDocument), http.StatusUnsupportedMediaType, "unsupported-document-type"},
+		{fmt.Errorf("%w: run r", errDocumentNotUsed), http.StatusUnprocessableEntity, "knowledge-document-not-used"},
+		{fmt.Errorf("%w: note", errVerdictInvalid), http.StatusBadRequest, ""},
 	}
 
 	for _, tt := range tests {

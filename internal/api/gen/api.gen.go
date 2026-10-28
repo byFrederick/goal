@@ -711,6 +711,7 @@ const (
 	InboxEntryKindBlocked       InboxEntryKind = "blocked"
 	InboxEntryKindDecision      InboxEntryKind = "decision"
 	InboxEntryKindExpedite      InboxEntryKind = "expedite"
+	InboxEntryKindQuestion      InboxEntryKind = "question"
 	InboxEntryKindReworkWarning InboxEntryKind = "rework_warning"
 )
 
@@ -724,6 +725,8 @@ func (e InboxEntryKind) Valid() bool {
 	case InboxEntryKindDecision:
 		return true
 	case InboxEntryKindExpedite:
+		return true
+	case InboxEntryKindQuestion:
 		return true
 	case InboxEntryKindReworkWarning:
 		return true
@@ -867,6 +870,51 @@ func (e ItemWaitingKind) Valid() bool {
 	}
 }
 
+// Defines values for JudgeRunsOnSees.
+const (
+	Events      JudgeRunsOnSees = "events"
+	PullRequest JudgeRunsOnSees = "pull_request"
+	Spec        JudgeRunsOnSees = "spec"
+)
+
+// Valid indicates whether the value is a known member of the JudgeRunsOnSees enum.
+func (e JudgeRunsOnSees) Valid() bool {
+	switch e {
+	case Events:
+		return true
+	case PullRequest:
+		return true
+	case Spec:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for JudgeScoreState.
+const (
+	JudgeScoreStateError   JudgeScoreState = "error"
+	JudgeScoreStateQueued  JudgeScoreState = "queued"
+	JudgeScoreStateRunning JudgeScoreState = "running"
+	JudgeScoreStateScored  JudgeScoreState = "scored"
+)
+
+// Valid indicates whether the value is a known member of the JudgeScoreState enum.
+func (e JudgeScoreState) Valid() bool {
+	switch e {
+	case JudgeScoreStateError:
+		return true
+	case JudgeScoreStateQueued:
+		return true
+	case JudgeScoreStateRunning:
+		return true
+	case JudgeScoreStateScored:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for KnowledgeDocumentStatus.
 const (
 	KnowledgeDocumentStatusFailed  KnowledgeDocumentStatus = "failed"
@@ -948,6 +996,60 @@ func (e KnowledgeSourceKind) Valid() bool {
 	case KnowledgeSourceKindSynced:
 		return true
 	case KnowledgeSourceKindUpload:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for KnowledgeUseKind.
+const (
+	Read   KnowledgeUseKind = "read"
+	Search KnowledgeUseKind = "search"
+)
+
+// Valid indicates whether the value is a known member of the KnowledgeUseKind enum.
+func (e KnowledgeUseKind) Valid() bool {
+	switch e {
+	case Read:
+		return true
+	case Search:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for KnowledgeVerdictVerdict.
+const (
+	KnowledgeVerdictVerdictHelped KnowledgeVerdictVerdict = "helped"
+	KnowledgeVerdictVerdictMisled KnowledgeVerdictVerdict = "misled"
+)
+
+// Valid indicates whether the value is a known member of the KnowledgeVerdictVerdict enum.
+func (e KnowledgeVerdictVerdict) Valid() bool {
+	switch e {
+	case KnowledgeVerdictVerdictHelped:
+		return true
+	case KnowledgeVerdictVerdictMisled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for KnowledgeVerdictInputVerdict.
+const (
+	KnowledgeVerdictInputVerdictHelped KnowledgeVerdictInputVerdict = "helped"
+	KnowledgeVerdictInputVerdictMisled KnowledgeVerdictInputVerdict = "misled"
+)
+
+// Valid indicates whether the value is a known member of the KnowledgeVerdictInputVerdict enum.
+func (e KnowledgeVerdictInputVerdict) Valid() bool {
+	switch e {
+	case KnowledgeVerdictInputVerdictHelped:
+		return true
+	case KnowledgeVerdictInputVerdictMisled:
 		return true
 	default:
 		return false
@@ -2368,6 +2470,36 @@ type ConstraintSummary struct {
 	Station string   `json:"station"`
 }
 
+// CreateJudgeRequest defines model for CreateJudgeRequest.
+type CreateJudgeRequest struct {
+	// Agents The agents whose runs it scores; empty or absent, every agent
+	Agents *[]string `json:"agents,omitempty"`
+
+	// Criterion What it checks
+	Criterion string `json:"criterion"`
+	Enabled   *bool  `json:"enabled,omitempty"`
+
+	// ExpectedCurrentVersionId The version the caller saw running; the publish is refused (draft-base-moved) when another one runs
+	ExpectedCurrentVersionId *string `json:"expected_current_version_id,omitempty"`
+
+	// Model The judge run's model; absent, the factory's runtime.model
+	Model    *string        `json:"model,omitempty"`
+	Outcomes []JudgeOutcome `json:"outcomes"`
+
+	// PassMark The lowest score that passes
+	PassMark float64 `json:"pass_mark"`
+
+	// Rubric The file's Markdown body
+	Rubric string `json:"rubric"`
+
+	// Sample The share of the agents' finished runs it scores
+	Sample float64 `json:"sample"`
+
+	// Slug The judge's file name without .md: 3 to 40 lowercase letters, digits and hyphens, starting with a letter
+	Slug  string `json:"slug"`
+	Title string `json:"title"`
+}
+
 // CreatedApiKey defines model for CreatedApiKey.
 type CreatedApiKey struct {
 	// Key An organization's API key, never its secret
@@ -2947,14 +3079,16 @@ type EvalSummary struct {
 
 // Event defines model for Event.
 type Event struct {
-	Actor   string                 `json:"actor"`
-	At      time.Time              `json:"at"`
-	Data    map[string]interface{} `json:"data"`
-	Id      int64                  `json:"id"`
-	ItemId  string                 `json:"item_id"`
-	Kind    string                 `json:"kind"`
-	RunId   *string                `json:"run_id,omitempty"`
-	Station *string                `json:"station,omitempty"`
+	Actor  string                 `json:"actor"`
+	At     time.Time              `json:"at"`
+	Data   map[string]interface{} `json:"data"`
+	Id     int64                  `json:"id"`
+	ItemId string                 `json:"item_id"`
+
+	// Kind What happened, as in submitted, moved, note or lease_taken. question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue
+	Kind    string  `json:"kind"`
+	RunId   *string `json:"run_id,omitempty"`
+	Station *string `json:"station,omitempty"`
 }
 
 // EventPage defines model for EventPage.
@@ -3255,7 +3389,7 @@ type InboxEntry struct {
 		Title *string `json:"title"`
 	} `json:"factory"`
 
-	// Id "<kind>:<id of what waits>": decision:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>
+	// Id "<kind>:<id of what waits>": decision:, question:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>
 	Id string `json:"id"`
 
 	// Item The item it is about, or null for an entry that is about no item
@@ -3264,10 +3398,13 @@ type InboxEntry struct {
 	// Kind What waits; later phases add kinds, which clients that do not know them show as a generic row
 	Kind InboxEntryKind `json:"kind"`
 
+	// Question A question entry's open question; absent or null for other kinds
+	Question *ItemQuestion `json:"question,omitempty"`
+
 	// Rework The gate tally of a rework warning; null for other kinds
 	Rework *ReworkWarning `json:"rework"`
 
-	// Since Since when it waits: the item's last change (decision, blocked), its creation (expedite), the pull (andon), now (rework_warning)
+	// Since Since when it waits: the item's last change (decision, question, blocked), its creation (expedite), the pull (andon), now (rework_warning)
 	Since time.Time `json:"since"`
 
 	// Station The station where it waits
@@ -3435,6 +3572,9 @@ type Item struct {
 	PartPaths *[]string `json:"part_paths,omitempty"`
 	Priority  int       `json:"priority"`
 
+	// Question The question the item's agent asked a person and nobody has answered yet (ADR 0018); getItem and answerItem only, absent or null when there is none
+	Question *ItemQuestion `json:"question,omitempty"`
+
 	// Ref <factory name>#<number>, as in goal#2
 	Ref         string `json:"ref"`
 	ReworkCount int    `json:"rework_count"`
@@ -3451,6 +3591,15 @@ type Item struct {
 
 	// Waiting Why the item is not claimed yet; getItem only, absent unless it is queued or ready with an open need
 	Waiting *ItemWaiting `json:"waiting,omitempty"`
+}
+
+// ItemAnswer A person's answer to an item's open question; exactly one of answer and choice
+type ItemAnswer struct {
+	// Answer The answer in the person's own words, 1 to 2000 characters (surrounding space is trimmed)
+	Answer *string `json:"answer,omitempty"`
+
+	// Choice The index of the picked choice in Item.question.choices
+	Choice *int `json:"choice,omitempty"`
 }
 
 // ItemAt defines model for ItemAt.
@@ -3587,6 +3736,22 @@ type ItemPage struct {
 	NextAfter *int64 `json:"next_after"`
 }
 
+// ItemQuestion An agent's open question about an item, read from its question_asked event
+type ItemQuestion struct {
+	// Agent The asking agent's role name, as in frontend-engineer; never its copy number
+	Agent   string    `json:"agent"`
+	AskedAt time.Time `json:"asked_at"`
+
+	// Choices The quick answers the agent offered, 0 to 4; empty for a free answer only
+	Choices []string `json:"choices"`
+
+	// RunId The run that asked; it ended when it asked
+	RunId string `json:"run_id"`
+
+	// Text The question
+	Text string `json:"text"`
+}
+
 // ItemSpan A stretch of time the item spent at one station in one state and rework round
 type ItemSpan struct {
 	EnteredAt time.Time `json:"entered_at"`
@@ -3659,6 +3824,176 @@ type ItemsAtRemovedStations struct {
 	Unmapped []ItemAt `json:"unmapped"`
 }
 
+// Judge defines model for Judge.
+type Judge struct {
+	// Agents Empty means every agent
+	Agents    []string `json:"agents"`
+	Criterion string   `json:"criterion"`
+	Enabled   bool     `json:"enabled"`
+
+	// Model Absent: the factory's runtime.model
+	Model    *string        `json:"model,omitempty"`
+	Outcomes []JudgeOutcome `json:"outcomes"`
+	PassMark float64        `json:"pass_mark"`
+
+	// Recent The newest production scores, newest first
+	Recent []JudgeScore `json:"recent"`
+	Rubric string       `json:"rubric"`
+
+	// RunsOn Where the judge's runs run; a judge inherits the factory's defaults
+	RunsOn JudgeRunsOn `json:"runs_on"`
+	Sample float64     `json:"sample"`
+	Slug   string      `json:"slug"`
+
+	// Summary A judge's production scores over the last 30 days; tries never count
+	Summary JudgeSummary `json:"summary"`
+	Title   string       `json:"title"`
+
+	// Version The number of the version the judge is read from
+	Version int `json:"version"`
+}
+
+// JudgeDay defines model for JudgeDay.
+type JudgeDay struct {
+	// Day The UTC day
+	Day      openapi_types.Date `json:"day"`
+	PassRate float64            `json:"pass_rate"`
+	Passed   int                `json:"passed"`
+	Scored   int                `json:"scored"`
+}
+
+// JudgeList defines model for JudgeList.
+type JudgeList struct {
+	// JudgeCostUsd What the factory's judge runs cost over the last 30 days
+	JudgeCostUsd float64 `json:"judge_cost_usd"`
+
+	// Judges By slug
+	Judges []JudgeListEntry `json:"judges"`
+
+	// Version The number of the version the judges are read from; null before the first publish
+	Version *int `json:"version"`
+}
+
+// JudgeListEntry defines model for JudgeListEntry.
+type JudgeListEntry struct {
+	// Agents Empty means every agent
+	Agents    []string `json:"agents"`
+	Criterion string   `json:"criterion"`
+	Enabled   bool     `json:"enabled"`
+	PassMark  float64  `json:"pass_mark"`
+	Sample    float64  `json:"sample"`
+	Slug      string   `json:"slug"`
+
+	// Summary A judge's production scores over the last 30 days; tries never count
+	Summary JudgeSummary `json:"summary"`
+	Title   string       `json:"title"`
+}
+
+// JudgeOutcome defines model for JudgeOutcome.
+type JudgeOutcome struct {
+	Label   string  `json:"label"`
+	Meaning string  `json:"meaning"`
+	Score   float64 `json:"score"`
+}
+
+// JudgeRunsOn Where the judge's runs run; a judge inherits the factory's defaults
+type JudgeRunsOn struct {
+	// Connections The connections of the factory's current version, read only
+	Connections []string `json:"connections"`
+
+	// Inherited True while these are the factory's defaults
+	Inherited bool `json:"inherited"`
+
+	// Sees What a judge run reads of the run it scores
+	Sees []JudgeRunsOnSees `json:"sees"`
+
+	// Size The box: the factory's runtime.size, medium when it says none
+	Size string `json:"size"`
+}
+
+// JudgeRunsOnSees defines model for JudgeRunsOn.Sees.
+type JudgeRunsOnSees string
+
+// JudgeScore One production score of a judge; outcome, score and passed once it is scored
+type JudgeScore struct {
+	Id string `json:"id"`
+
+	// ItemRef <factory name>#<number>
+	ItemRef   string `json:"item_ref"`
+	ItemTitle string `json:"item_title"`
+
+	// Outcome The label of the outcome the judge gave
+	Outcome *string `json:"outcome,omitempty"`
+	Passed  *bool   `json:"passed,omitempty"`
+
+	// Reason The judge's one sentence
+	Reason   *string         `json:"reason,omitempty"`
+	Score    *float64        `json:"score,omitempty"`
+	ScoredAt *time.Time      `json:"scored_at,omitempty"`
+	State    JudgeScoreState `json:"state"`
+}
+
+// JudgeScoreState defines model for JudgeScoreState.
+type JudgeScoreState string
+
+// JudgeSummary A judge's production scores over the last 30 days; tries never count
+type JudgeSummary struct {
+	// CostUsd What its judge runs cost
+	CostUsd float64 `json:"cost_usd"`
+
+	// Days One point per UTC day with a scored run, oldest first
+	Days []JudgeDay `json:"days"`
+
+	// PassRate Passed over scored
+	PassRate float64 `json:"pass_rate"`
+	Passed   int     `json:"passed"`
+
+	// Scored The runs scored
+	Scored int `json:"scored"`
+}
+
+// JudgeTries defines model for JudgeTries.
+type JudgeTries struct {
+	Tries []JudgeTry `json:"tries"`
+}
+
+// JudgeTry defines model for JudgeTry.
+type JudgeTry struct {
+	Id string `json:"id"`
+
+	// ItemRef <factory name>#<number>
+	ItemRef   string          `json:"item_ref"`
+	ItemTitle string          `json:"item_title"`
+	State     JudgeScoreState `json:"state"`
+}
+
+// JudgeWrite A judge's file as evals.schema.json has its front matter, with the Markdown rubric that follows it. Validated when it is published, as every definition file is.
+type JudgeWrite struct {
+	// Agents The agents whose runs it scores; empty or absent, every agent
+	Agents *[]string `json:"agents,omitempty"`
+
+	// Criterion What it checks
+	Criterion string `json:"criterion"`
+	Enabled   *bool  `json:"enabled,omitempty"`
+
+	// ExpectedCurrentVersionId The version the caller saw running; the publish is refused (draft-base-moved) when another one runs
+	ExpectedCurrentVersionId *string `json:"expected_current_version_id,omitempty"`
+
+	// Model The judge run's model; absent, the factory's runtime.model
+	Model    *string        `json:"model,omitempty"`
+	Outcomes []JudgeOutcome `json:"outcomes"`
+
+	// PassMark The lowest score that passes
+	PassMark float64 `json:"pass_mark"`
+
+	// Rubric The file's Markdown body
+	Rubric string `json:"rubric"`
+
+	// Sample The share of the agents' finished runs it scores
+	Sample float64 `json:"sample"`
+	Title  string  `json:"title"`
+}
+
 // KnowledgeDocument defines model for KnowledgeDocument.
 type KnowledgeDocument struct {
 	Bytes     int64      `json:"bytes"`
@@ -3700,6 +4035,41 @@ type KnowledgeDocumentText struct {
 
 	// Text Its indexed text: its chunks joined in order, empty until it is indexed
 	Text string `json:"text"`
+}
+
+// KnowledgeDocumentUsage One document's use over the window; getKnowledgeDocument has its url
+type KnowledgeDocumentUsage struct {
+	AgentsHelped int `json:"agents_helped"`
+	AgentsMisled int `json:"agents_misled"`
+
+	// Id The document's id
+	Id           string `json:"id"`
+	PeopleHelped int    `json:"people_helped"`
+	PeopleMisled int    `json:"people_misled"`
+
+	// Runs The distinct runs that used it
+	Runs int `json:"runs"`
+
+	// Source Its source's name
+	Source string `json:"source"`
+	Title  string `json:"title"`
+}
+
+// KnowledgeDocumentUse One run that used a document
+type KnowledgeDocumentUse struct {
+	// At The run's first use of the document
+	At      time.Time          `json:"at"`
+	Factory FactoryHit         `json:"factory"`
+	Item    RunItem            `json:"item"`
+	Kinds   []KnowledgeUseKind `json:"kinds"`
+	RunId   string             `json:"run_id"`
+}
+
+// KnowledgeDocumentUsePage defines model for KnowledgeDocumentUsePage.
+type KnowledgeDocumentUsePage struct {
+	// NextAfter The after of the next page; absent on the last
+	NextAfter *string                `json:"next_after,omitempty"`
+	Uses      []KnowledgeDocumentUse `json:"uses"`
 }
 
 // KnowledgeEvent The data of one `event: knowledge` on /v1/orgs/{org}/stream: a source's sync started or ended
@@ -3802,6 +4172,54 @@ type KnowledgeSourceUsers struct {
 	// Factories The factories whose current version may search it (those the caller sees)
 	Factories []ConnectionFactory `json:"factories"`
 }
+
+// KnowledgeUsage defines model for KnowledgeUsage.
+type KnowledgeUsage struct {
+	// Days The window in days
+	Days      int                      `json:"days"`
+	Documents []KnowledgeDocumentUsage `json:"documents"`
+
+	// Source The source's name
+	Source string `json:"source"`
+}
+
+// KnowledgeUseKind search when knowledge__search returned some of its chunks, read when knowledge__read opened it
+type KnowledgeUseKind string
+
+// KnowledgeVerdict defines model for KnowledgeVerdict.
+type KnowledgeVerdict struct {
+	At time.Time `json:"at"`
+
+	// By Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	By Actor `json:"by"`
+
+	// Document The document's id
+	Document string `json:"document"`
+
+	// ItemId The run's item
+	ItemId *string `json:"item_id,omitempty"`
+	Note   *string `json:"note,omitempty"`
+	RunId  *string `json:"run_id,omitempty"`
+
+	// Source Its source's name
+	Source  string                  `json:"source"`
+	Verdict KnowledgeVerdictVerdict `json:"verdict"`
+}
+
+// KnowledgeVerdictVerdict defines model for KnowledgeVerdict.Verdict.
+type KnowledgeVerdictVerdict string
+
+// KnowledgeVerdictInput defines model for KnowledgeVerdictInput.
+type KnowledgeVerdictInput struct {
+	Note *string `json:"note,omitempty"`
+
+	// RunId A run of the organization that used the document
+	RunId   *string                      `json:"run_id,omitempty"`
+	Verdict KnowledgeVerdictInputVerdict `json:"verdict"`
+}
+
+// KnowledgeVerdictInputVerdict defines model for KnowledgeVerdictInput.Verdict.
+type KnowledgeVerdictInputVerdict string
 
 // LeadTimeBridge defines model for LeadTimeBridge.
 type LeadTimeBridge struct {
@@ -4632,7 +5050,7 @@ type PolicyModel struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open.
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run has no use of the document). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open.
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 
@@ -4816,6 +5234,31 @@ type RunItem struct {
 	// Ref <factory>#<number>, as in goal#147
 	Ref   string `json:"ref"`
 	Title string `json:"title"`
+}
+
+// RunKnowledge defines model for RunKnowledge.
+type RunKnowledge struct {
+	Uses []RunKnowledgeUse `json:"uses"`
+
+	// Verdicts The verdicts given for the run, by time
+	Verdicts []KnowledgeVerdict `json:"verdicts"`
+}
+
+// RunKnowledgeUse defines model for RunKnowledgeUse.
+type RunKnowledgeUse struct {
+	At time.Time `json:"at"`
+
+	// Chunks The chunk ids a search returned; none for a read
+	Chunks []int64 `json:"chunks"`
+
+	// Document The document's id
+	Document string `json:"document"`
+
+	// Kind search when knowledge__search returned some of its chunks, read when knowledge__read opened it
+	Kind KnowledgeUseKind `json:"kind"`
+
+	// Source Its source's name
+	Source string `json:"source"`
 }
 
 // RunList defines model for RunList.
@@ -5618,6 +6061,9 @@ type IfNoneMatch = string
 // ItemRef defines model for ItemRef.
 type ItemRef = string
 
+// JudgeRef defines model for JudgeRef.
+type JudgeRef = string
+
 // KindRef defines model for KindRef.
 type KindRef = string
 
@@ -5877,6 +6323,13 @@ type ListItemEventsParams struct {
 	Limit *int   `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// ListKnowledgeDocumentUsesParams defines parameters for ListKnowledgeDocumentUses.
+type ListKnowledgeDocumentUsesParams struct {
+	// After The last run id of the previous page
+	After *string `form:"after,omitempty" json:"after,omitempty"`
+	Limit *int    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // SearchKnowledgeParams defines parameters for SearchKnowledge.
 type SearchKnowledgeParams struct {
 	Q string `form:"q" json:"q"`
@@ -5902,6 +6355,13 @@ type ListKnowledgeDocumentsParams struct {
 // UploadKnowledgeDocumentsMultipartBody defines parameters for UploadKnowledgeDocuments.
 type UploadKnowledgeDocumentsMultipartBody struct {
 	Files []openapi_types.File `json:"files"`
+}
+
+// GetKnowledgeUsageParams defines parameters for GetKnowledgeUsage.
+type GetKnowledgeUsageParams struct {
+	// Source The source's name
+	Source string `form:"source" json:"source"`
+	Days   *int   `form:"days,omitempty" json:"days,omitempty"`
 }
 
 // GetOrgTouchMetricsParams defines parameters for GetOrgTouchMetrics.
@@ -6053,11 +6513,20 @@ type StartEvalRunJSONRequestBody = EvalRunRequest
 // SubmitItemJSONRequestBody defines body for SubmitItem for application/json ContentType.
 type SubmitItemJSONRequestBody = NewItem
 
+// CreateJudgeJSONRequestBody defines body for CreateJudge for application/json ContentType.
+type CreateJudgeJSONRequestBody = CreateJudgeRequest
+
+// UpdateJudgeJSONRequestBody defines body for UpdateJudge for application/json ContentType.
+type UpdateJudgeJSONRequestBody = JudgeWrite
+
 // RestoreVersionJSONRequestBody defines body for RestoreVersion for application/json ContentType.
 type RestoreVersionJSONRequestBody = RestoreRequest
 
 // CreateWebhookEndpointJSONRequestBody defines body for CreateWebhookEndpoint for application/json ContentType.
 type CreateWebhookEndpointJSONRequestBody = NewWebhookEndpoint
+
+// AnswerItemJSONRequestBody defines body for AnswerItem for application/json ContentType.
+type AnswerItemJSONRequestBody = ItemAnswer
 
 // CancelItemJSONRequestBody defines body for CancelItem for application/json ContentType.
 type CancelItemJSONRequestBody = CancelRequest
@@ -6088,6 +6557,9 @@ type RejectItemJSONRequestBody = Rejection
 
 // SetTouchReasonJSONRequestBody defines body for SetTouchReason for application/json ContentType.
 type SetTouchReasonJSONRequestBody = TouchReasonChange
+
+// GiveKnowledgeVerdictJSONRequestBody defines body for GiveKnowledgeVerdict for application/json ContentType.
+type GiveKnowledgeVerdictJSONRequestBody = KnowledgeVerdictInput
 
 // CreateKnowledgeSourceJSONRequestBody defines body for CreateKnowledgeSource for application/json ContentType.
 type CreateKnowledgeSourceJSONRequestBody = NewKnowledgeSource
@@ -7150,6 +7622,63 @@ type ClientInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
 	SubmitItem(ctx context.Context, org OrgRef, factory FactoryRef, body SubmitItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListJudges The judges of the factory's current version, each with its last 30 days
+	//
+	// One entry per evals/judges/<slug>.md of the current version, by slug, each with its production scores of the last 30 days (runs scored, pass rate, cost and a daily pass-rate series by UTC day; tries never count). judge_cost_usd is what every judge run of the factory cost in those 30 days. Empty, with version null, before the first publish. 503 judges-unavailable when this goald does not serve judges.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/judges (the `ListJudges` operationId).
+	ListJudges(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateJudgeWithBody Add a judge and publish it as the factory's next version
+	//
+	// Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version). When the factory has eval cases and the eval gate refuses (evals-pending, evals-failing), the draft stays open, so it publishes once its run passes. 503 judges-unavailable.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges (the `CreateJudge` operationId).
+	CreateJudgeWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateJudge Add a judge and publish it as the factory's next version
+	//
+	// Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version). When the factory has eval cases and the eval gate refuses (evals-pending, evals-failing), the draft stays open, so it publishes once its run passes. 503 judges-unavailable.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges (the `CreateJudge` operationId).
+	CreateJudge(ctx context.Context, org OrgRef, factory FactoryRef, body CreateJudgeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetJudge One judge of the current version, its last 30 days, its recent scores and where it runs
+	//
+	// Everything in its file, its 30-day summary, its newest production scores (every state, newest first) and runs_on: the box and connections of the factory's defaults it inherits. 404 judge-not-found; 503 judges-unavailable.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `GetJudge` operationId).
+	GetJudge(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateJudgeWithBody Replace a judge's file and publish it as the factory's next version
+	//
+	// As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers, and the same eval gate.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `UpdateJudge` operationId).
+	UpdateJudgeWithBody(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateJudge Replace a judge's file and publish it as the factory's next version
+	//
+	// As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers, and the same eval gate.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `UpdateJudge` operationId).
+	UpdateJudge(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, body UpdateJudgeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TryJudge Queue the judge on the 10 newest finished runs of its agents
+	//
+	// Each try names the run's item and is scored like any other score, but never counts in the judge's 30-day figures. Tries cost model spend, so only those who may publish queue them. 404 judge-not-found; 503 judges-unavailable.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges/{judge}/try (the `TryJudge` operationId).
+	TryJudge(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetMetrics The factory's flow over a range of UTC days
 	//
 	// Items count when they reached done in the range; spend counts agent runs started in it; wip is the line now. The range is from to to, both included, at most 90 days, to not after today; without one it is the last 7 days. 400 for a bad range, both a window and a range, or a type the factory does not declare.
@@ -7301,7 +7830,7 @@ type ClientInterface interface {
 
 	// GetInbox What waits for a person across the organization's factories
 	//
-	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (decision, then blocked, then expedite). Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision, andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
 	//
 	// Corresponds with GET /v1/orgs/{org}/inbox (the `GetInbox` operationId).
 	GetInbox(ctx context.Context, org OrgRef, params *GetInboxParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -7317,6 +7846,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/items/{item} (the `GetItem` operationId).
 	GetItem(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AnswerItemWithBody Answer the question an item's agent asked
+	//
+	// Answers the item's open question (Item.question) with one of its choices or in the caller's own words, as ADR 0018 decides. The engine records question_answered and puts the item back in its station's arrival state, rework_count unchanged; its next run's brief carries the question and the answer. Audited as item.answered with the answer's length and the choice index, never its text. 400 when the body has both answer and choice or neither, or the answer is not 1 to 2000 characters; 400 bad-choice for a choice outside the question's choices; 409 no-open-question when the item has none (none was asked, it was answered, or a move, pause or rejection withdrew it), item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/answer (the `AnswerItem` operationId).
+	AnswerItemWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AnswerItem Answer the question an item's agent asked
+	//
+	// Answers the item's open question (Item.question) with one of its choices or in the caller's own words, as ADR 0018 decides. The engine records question_answered and puts the item back in its station's arrival state, rework_count unchanged; its next run's brief carries the question and the answer. Audited as item.answered with the answer's length and the choice index, never its text. 400 when the body has both answer and choice or neither, or the answer is not 1 to 2000 characters; 400 bad-choice for a choice outside the question's choices; 409 no-open-question when the item has none (none was asked, it was answered, or a move, pause or rejection withdrew it), item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/answer (the `AnswerItem` operationId).
+	AnswerItem(ctx context.Context, org OrgRef, item ItemRef, body AnswerItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ApproveItem Approve an item waiting for a human; it moves to the next station
 	//
@@ -7555,6 +8102,31 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/knowledge/documents/{document}/content (the `GetKnowledgeDocumentContent` operationId).
 	GetKnowledgeDocumentContent(ctx context.Context, org OrgRef, document DocumentRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListKnowledgeDocumentUses One page of the runs that used a document
+	//
+	// Newest first use first (ADR 0027), after the run id after; next_after, when set, is the after of the next page. Each names its run, item and factory, so a client links to them; a run of a factory the caller may not see is left out. 404 knowledge-document-not-found.
+	//
+	// Corresponds with GET /v1/orgs/{org}/knowledge/documents/{document}/uses (the `ListKnowledgeDocumentUses` operationId).
+	ListKnowledgeDocumentUses(ctx context.Context, org OrgRef, document DocumentRef, params *ListKnowledgeDocumentUsesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GiveKnowledgeVerdictWithBody Say whether a document helped or misled
+	//
+	// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
+	GiveKnowledgeVerdictWithBody(ctx context.Context, org OrgRef, document DocumentRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GiveKnowledgeVerdict Say whether a document helped or misled
+	//
+	// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
+	GiveKnowledgeVerdict(ctx context.Context, org OrgRef, document DocumentRef, body GiveKnowledgeVerdictJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// SearchKnowledge Search the knowledge base as agents do
 	//
 	// What the gateway's knowledge__search tool returns: chunks ranked by keywords and, with an embedding model, nearest neighbours too, fused by reciprocal rank; over every source, or the named ones (404 knowledge-source-not-found for a name the organization has not).
@@ -7641,6 +8213,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/sync (the `SyncKnowledgeSource` operationId).
 	SyncKnowledgeSource(ctx context.Context, org OrgRef, source SourceRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetKnowledgeUsage Where a source's documents were used
+	//
+	// Per document of the source with a use or a verdict in the last days days (ADR 0027, decision 3): the distinct runs that used it and the verdicts given, agents' and people's apart; at most 500, the most used first, then by id. 404 knowledge-source-not-found.
+	//
+	// Corresponds with GET /v1/orgs/{org}/knowledge/usage (the `GetKnowledgeUsage` operationId).
+	GetKnowledgeUsage(ctx context.Context, org OrgRef, params *GetKnowledgeUsageParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListMemberTokens Every member's personal tokens in the organization
 	//
@@ -7768,6 +8347,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/runs/{run} (the `GetRun` operationId).
 	GetRun(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListRunKnowledge The knowledge documents a run used, with the verdicts given on them for it
+	//
+	// Its uses by time, document and kind, and the verdicts agents and people gave for the run (ADR 0027). 404 for a run of another organization.
+	//
+	// Corresponds with GET /v1/orgs/{org}/runs/{run}/knowledge (the `ListRunKnowledge` operationId).
+	ListRunKnowledge(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SearchOrg Find the organization's items, agents, factories and connections, for the shell's search box
 	//
@@ -9538,6 +10124,133 @@ func (c *Client) SubmitItem(ctx context.Context, org OrgRef, factory FactoryRef,
 	return c.Client.Do(req)
 }
 
+// ListJudges The judges of the factory's current version, each with its last 30 days
+//
+// One entry per evals/judges/<slug>.md of the current version, by slug, each with its production scores of the last 30 days (runs scored, pass rate, cost and a daily pass-rate series by UTC day; tries never count). judge_cost_usd is what every judge run of the factory cost in those 30 days. Empty, with version null, before the first publish. 503 judges-unavailable when this goald does not serve judges.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/judges (the `ListJudges` operationId).
+func (c *Client) ListJudges(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListJudgesRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateJudgeWithBody Add a judge and publish it as the factory's next version
+//
+// Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version). When the factory has eval cases and the eval gate refuses (evals-pending, evals-failing), the draft stays open, so it publishes once its run passes. 503 judges-unavailable.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges (the `CreateJudge` operationId).
+func (c *Client) CreateJudgeWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateJudgeRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateJudge Add a judge and publish it as the factory's next version
+//
+// Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version). When the factory has eval cases and the eval gate refuses (evals-pending, evals-failing), the draft stays open, so it publishes once its run passes. 503 judges-unavailable.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges (the `CreateJudge` operationId).
+func (c *Client) CreateJudge(ctx context.Context, org OrgRef, factory FactoryRef, body CreateJudgeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateJudgeRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetJudge One judge of the current version, its last 30 days, its recent scores and where it runs
+//
+// Everything in its file, its 30-day summary, its newest production scores (every state, newest first) and runs_on: the box and connections of the factory's defaults it inherits. 404 judge-not-found; 503 judges-unavailable.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `GetJudge` operationId).
+func (c *Client) GetJudge(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetJudgeRequest(c.Server, org, factory, judge)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateJudgeWithBody Replace a judge's file and publish it as the factory's next version
+//
+// As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers, and the same eval gate.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `UpdateJudge` operationId).
+func (c *Client) UpdateJudgeWithBody(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateJudgeRequestWithBody(c.Server, org, factory, judge, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateJudge Replace a judge's file and publish it as the factory's next version
+//
+// As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers, and the same eval gate.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `UpdateJudge` operationId).
+func (c *Client) UpdateJudge(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, body UpdateJudgeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateJudgeRequest(c.Server, org, factory, judge, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TryJudge Queue the judge on the 10 newest finished runs of its agents
+//
+// Each try names the run's item and is scored like any other score, but never counts in the judge's 30-day figures. Tries cost model spend, so only those who may publish queue them. 404 judge-not-found; 503 judges-unavailable.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges/{judge}/try (the `TryJudge` operationId).
+func (c *Client) TryJudge(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTryJudgeRequest(c.Server, org, factory, judge)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetMetrics The factory's flow over a range of UTC days
 //
 // Items count when they reached done in the range; spend counts agent runs started in it; wip is the line now. The range is from to to, both included, at most 90 days, to not after today; without one it is the last 7 days. 400 for a bad range, both a window and a range, or a type the factory does not declare.
@@ -9899,7 +10612,7 @@ func (c *Client) RotateWebhookSecret(ctx context.Context, org OrgRef, factory Fa
 
 // GetInbox What waits for a person across the organization's factories
 //
-// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (decision, then blocked, then expedite). Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision, andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
 //
 // Corresponds with GET /v1/orgs/{org}/inbox (the `GetInbox` operationId).
 func (c *Client) GetInbox(ctx context.Context, org OrgRef, params *GetInboxParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -9936,6 +10649,44 @@ func (c *Client) ListInvitations(ctx context.Context, org OrgRef, reqEditors ...
 // Corresponds with GET /v1/orgs/{org}/items/{item} (the `GetItem` operationId).
 func (c *Client) GetItem(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetItemRequest(c.Server, org, item)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AnswerItemWithBody Answer the question an item's agent asked
+//
+// Answers the item's open question (Item.question) with one of its choices or in the caller's own words, as ADR 0018 decides. The engine records question_answered and puts the item back in its station's arrival state, rework_count unchanged; its next run's brief carries the question and the answer. Audited as item.answered with the answer's length and the choice index, never its text. 400 when the body has both answer and choice or neither, or the answer is not 1 to 2000 characters; 400 bad-choice for a choice outside the question's choices; 409 no-open-question when the item has none (none was asked, it was answered, or a move, pause or rejection withdrew it), item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/answer (the `AnswerItem` operationId).
+func (c *Client) AnswerItemWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAnswerItemRequestWithBody(c.Server, org, item, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AnswerItem Answer the question an item's agent asked
+//
+// Answers the item's open question (Item.question) with one of its choices or in the caller's own words, as ADR 0018 decides. The engine records question_answered and puts the item back in its station's arrival state, rework_count unchanged; its next run's brief carries the question and the answer. Audited as item.answered with the answer's length and the choice index, never its text. 400 when the body has both answer and choice or neither, or the answer is not 1 to 2000 characters; 400 bad-choice for a choice outside the question's choices; 409 no-open-question when the item has none (none was asked, it was answered, or a move, pause or rejection withdrew it), item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/answer (the `AnswerItem` operationId).
+func (c *Client) AnswerItem(ctx context.Context, org OrgRef, item ItemRef, body AnswerItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAnswerItemRequest(c.Server, org, item, body)
 	if err != nil {
 		return nil, err
 	}
@@ -10473,6 +11224,61 @@ func (c *Client) GetKnowledgeDocumentContent(ctx context.Context, org OrgRef, do
 	return c.Client.Do(req)
 }
 
+// ListKnowledgeDocumentUses One page of the runs that used a document
+//
+// Newest first use first (ADR 0027), after the run id after; next_after, when set, is the after of the next page. Each names its run, item and factory, so a client links to them; a run of a factory the caller may not see is left out. 404 knowledge-document-not-found.
+//
+// Corresponds with GET /v1/orgs/{org}/knowledge/documents/{document}/uses (the `ListKnowledgeDocumentUses` operationId).
+func (c *Client) ListKnowledgeDocumentUses(ctx context.Context, org OrgRef, document DocumentRef, params *ListKnowledgeDocumentUsesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListKnowledgeDocumentUsesRequest(c.Server, org, document, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GiveKnowledgeVerdictWithBody Say whether a document helped or misled
+//
+// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
+func (c *Client) GiveKnowledgeVerdictWithBody(ctx context.Context, org OrgRef, document DocumentRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGiveKnowledgeVerdictRequestWithBody(c.Server, org, document, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GiveKnowledgeVerdict Say whether a document helped or misled
+//
+// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
+func (c *Client) GiveKnowledgeVerdict(ctx context.Context, org OrgRef, document DocumentRef, body GiveKnowledgeVerdictJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGiveKnowledgeVerdictRequest(c.Server, org, document, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // SearchKnowledge Search the knowledge base as agents do
 //
 // What the gateway's knowledge__search tool returns: chunks ranked by keywords and, with an embedding model, nearest neighbours too, fused by reciprocal rank; over every source, or the named ones (404 knowledge-source-not-found for a name the organization has not).
@@ -10660,6 +11466,23 @@ func (c *Client) UploadKnowledgeDocumentsWithBody(ctx context.Context, org OrgRe
 // Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/sync (the `SyncKnowledgeSource` operationId).
 func (c *Client) SyncKnowledgeSource(ctx context.Context, org OrgRef, source SourceRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSyncKnowledgeSourceRequest(c.Server, org, source)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetKnowledgeUsage Where a source's documents were used
+//
+// Per document of the source with a use or a verdict in the last days days (ADR 0027, decision 3): the distinct runs that used it and the verdicts given, agents' and people's apart; at most 500, the most used first, then by id. 404 knowledge-source-not-found.
+//
+// Corresponds with GET /v1/orgs/{org}/knowledge/usage (the `GetKnowledgeUsage` operationId).
+func (c *Client) GetKnowledgeUsage(ctx context.Context, org OrgRef, params *GetKnowledgeUsageParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetKnowledgeUsageRequest(c.Server, org, params)
 	if err != nil {
 		return nil, err
 	}
@@ -10957,6 +11780,23 @@ func (c *Client) ListRuns(ctx context.Context, org OrgRef, params *ListRunsParam
 // Corresponds with GET /v1/orgs/{org}/runs/{run} (the `GetRun` operationId).
 func (c *Client) GetRun(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetRunRequest(c.Server, org, run)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListRunKnowledge The knowledge documents a run used, with the verdicts given on them for it
+//
+// Its uses by time, document and kind, and the verdicts agents and people gave for the run (ADR 0027). 404 for a run of another organization.
+//
+// Corresponds with GET /v1/orgs/{org}/runs/{run}/knowledge (the `ListRunKnowledge` operationId).
+func (c *Client) ListRunKnowledge(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListRunKnowledgeRequest(c.Server, org, run)
 	if err != nil {
 		return nil, err
 	}
@@ -14882,6 +15722,258 @@ func NewSubmitItemRequestWithBody(server string, org OrgRef, factory FactoryRef,
 	return req, nil
 }
 
+// NewListJudgesRequest constructs an http.Request for the ListJudges method
+func NewListJudgesRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/judges", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateJudgeRequest calls the generic CreateJudge builder with application/json body
+func NewCreateJudgeRequest(server string, org OrgRef, factory FactoryRef, body CreateJudgeJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateJudgeRequestWithBody(server, org, factory, "application/json", bodyReader)
+}
+
+// NewCreateJudgeRequestWithBody constructs an http.Request for the CreateJudge method, with any body, and a specified content type
+func NewCreateJudgeRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/judges", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetJudgeRequest constructs an http.Request for the GetJudge method
+func NewGetJudgeRequest(server string, org OrgRef, factory FactoryRef, judge JudgeRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "judge", judge, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/judges/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateJudgeRequest calls the generic UpdateJudge builder with application/json body
+func NewUpdateJudgeRequest(server string, org OrgRef, factory FactoryRef, judge JudgeRef, body UpdateJudgeJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateJudgeRequestWithBody(server, org, factory, judge, "application/json", bodyReader)
+}
+
+// NewUpdateJudgeRequestWithBody constructs an http.Request for the UpdateJudge method, with any body, and a specified content type
+func NewUpdateJudgeRequestWithBody(server string, org OrgRef, factory FactoryRef, judge JudgeRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "judge", judge, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/judges/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewTryJudgeRequest constructs an http.Request for the TryJudge method
+func NewTryJudgeRequest(server string, org OrgRef, factory FactoryRef, judge JudgeRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "judge", judge, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/judges/%s/try", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetMetricsRequest constructs an http.Request for the GetMetrics method
 func NewGetMetricsRequest(server string, org OrgRef, factory FactoryRef, params *GetMetricsParams) (*http.Request, error) {
 	var err error
@@ -16235,6 +17327,60 @@ func NewGetItemRequest(server string, org OrgRef, item ItemRef) (*http.Request, 
 	return req, nil
 }
 
+// NewAnswerItemRequest calls the generic AnswerItem builder with application/json body
+func NewAnswerItemRequest(server string, org OrgRef, item ItemRef, body AnswerItemJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAnswerItemRequestWithBody(server, org, item, "application/json", bodyReader)
+}
+
+// NewAnswerItemRequestWithBody constructs an http.Request for the AnswerItem method, with any body, and a specified content type
+func NewAnswerItemRequestWithBody(server string, org OrgRef, item ItemRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/answer", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewApproveItemRequest constructs an http.Request for the ApproveItem method
 func NewApproveItemRequest(server string, org OrgRef, item ItemRef) (*http.Request, error) {
 	var err error
@@ -17197,6 +18343,140 @@ func NewGetKnowledgeDocumentContentRequest(server string, org OrgRef, document D
 	return req, nil
 }
 
+// NewListKnowledgeDocumentUsesRequest constructs an http.Request for the ListKnowledgeDocumentUses method
+func NewListKnowledgeDocumentUsesRequest(server string, org OrgRef, document DocumentRef, params *ListKnowledgeDocumentUsesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "document", document, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/documents/%s/uses", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.After != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGiveKnowledgeVerdictRequest calls the generic GiveKnowledgeVerdict builder with application/json body
+func NewGiveKnowledgeVerdictRequest(server string, org OrgRef, document DocumentRef, body GiveKnowledgeVerdictJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewGiveKnowledgeVerdictRequestWithBody(server, org, document, "application/json", bodyReader)
+}
+
+// NewGiveKnowledgeVerdictRequestWithBody constructs an http.Request for the GiveKnowledgeVerdict method, with any body, and a specified content type
+func NewGiveKnowledgeVerdictRequestWithBody(server string, org OrgRef, document DocumentRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "document", document, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/documents/%s/verdict", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewSearchKnowledgeRequest constructs an http.Request for the SearchKnowledge method
 func NewSearchKnowledgeRequest(server string, org OrgRef, params *SearchKnowledgeParams) (*http.Request, error) {
 	var err error
@@ -17679,6 +18959,75 @@ func NewSyncKnowledgeSourceRequest(server string, org OrgRef, source SourceRef) 
 	}
 
 	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetKnowledgeUsageRequest constructs an http.Request for the GetKnowledgeUsage method
+func NewGetKnowledgeUsageRequest(server string, org OrgRef, params *GetKnowledgeUsageParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/usage", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "source", params.Source, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Days != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "days", *params.Days, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -18413,6 +19762,47 @@ func NewGetRunRequest(server string, org OrgRef, run string) (*http.Request, err
 	}
 
 	operationPath := fmt.Sprintf("/v1/orgs/%s/runs/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListRunKnowledgeRequest constructs an http.Request for the ListRunKnowledge method
+func NewListRunKnowledgeRequest(server string, org OrgRef, run string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "run", run, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/runs/%s/knowledge", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -19889,6 +21279,69 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
 	SubmitItemWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body SubmitItemJSONRequestBody, reqEditors ...RequestEditorFn) (*SubmitItemResponse, error)
 
+	// ListJudgesWithResponse The judges of the factory's current version, each with its last 30 days
+	//
+	// One entry per evals/judges/<slug>.md of the current version, by slug, each with its production scores of the last 30 days (runs scored, pass rate, cost and a daily pass-rate series by UTC day; tries never count). judge_cost_usd is what every judge run of the factory cost in those 30 days. Empty, with version null, before the first publish. 503 judges-unavailable when this goald does not serve judges.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/judges (the `ListJudges` operationId).
+	ListJudgesWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListJudgesResponse, error)
+
+	// CreateJudgeWithBodyWithResponse Add a judge and publish it as the factory's next version
+	//
+	// Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version). When the factory has eval cases and the eval gate refuses (evals-pending, evals-failing), the draft stays open, so it publishes once its run passes. 503 judges-unavailable.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges (the `CreateJudge` operationId).
+	CreateJudgeWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateJudgeResponse, error)
+
+	// CreateJudgeWithResponse Add a judge and publish it as the factory's next version
+	//
+	// Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version). When the factory has eval cases and the eval gate refuses (evals-pending, evals-failing), the draft stays open, so it publishes once its run passes. 503 judges-unavailable.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges (the `CreateJudge` operationId).
+	CreateJudgeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body CreateJudgeJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateJudgeResponse, error)
+
+	// GetJudgeWithResponse One judge of the current version, its last 30 days, its recent scores and where it runs
+	//
+	// Everything in its file, its 30-day summary, its newest production scores (every state, newest first) and runs_on: the box and connections of the factory's defaults it inherits. 404 judge-not-found; 503 judges-unavailable.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `GetJudge` operationId).
+	GetJudgeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, reqEditors ...RequestEditorFn) (*GetJudgeResponse, error)
+
+	// UpdateJudgeWithBodyWithResponse Replace a judge's file and publish it as the factory's next version
+	//
+	// As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers, and the same eval gate.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `UpdateJudge` operationId).
+	UpdateJudgeWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateJudgeResponse, error)
+
+	// UpdateJudgeWithResponse Replace a judge's file and publish it as the factory's next version
+	//
+	// As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers, and the same eval gate.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `UpdateJudge` operationId).
+	UpdateJudgeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, body UpdateJudgeJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateJudgeResponse, error)
+
+	// TryJudgeWithResponse Queue the judge on the 10 newest finished runs of its agents
+	//
+	// Each try names the run's item and is scored like any other score, but never counts in the judge's 30-day figures. Tries cost model spend, so only those who may publish queue them. 404 judge-not-found; 503 judges-unavailable.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges/{judge}/try (the `TryJudge` operationId).
+	TryJudgeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, reqEditors ...RequestEditorFn) (*TryJudgeResponse, error)
+
 	// GetMetricsWithResponse The factory's flow over a range of UTC days
 	//
 	// Items count when they reached done in the range; spend counts agent runs started in it; wip is the line now. The range is from to to, both included, at most 90 days, to not after today; without one it is the last 7 days. 400 for a bad range, both a window and a range, or a type the factory does not declare.
@@ -20074,7 +21527,7 @@ type ClientWithResponsesInterface interface {
 
 	// GetInboxWithResponse What waits for a person across the organization's factories
 	//
-	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (decision, then blocked, then expedite). Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision, andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -20096,6 +21549,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/items/{item} (the `GetItem` operationId).
 	GetItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*GetItemResponse, error)
+
+	// AnswerItemWithBodyWithResponse Answer the question an item's agent asked
+	//
+	// Answers the item's open question (Item.question) with one of its choices or in the caller's own words, as ADR 0018 decides. The engine records question_answered and puts the item back in its station's arrival state, rework_count unchanged; its next run's brief carries the question and the answer. Audited as item.answered with the answer's length and the choice index, never its text. 400 when the body has both answer and choice or neither, or the answer is not 1 to 2000 characters; 400 bad-choice for a choice outside the question's choices; 409 no-open-question when the item has none (none was asked, it was answered, or a move, pause or rejection withdrew it), item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/answer (the `AnswerItem` operationId).
+	AnswerItemWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AnswerItemResponse, error)
+
+	// AnswerItemWithResponse Answer the question an item's agent asked
+	//
+	// Answers the item's open question (Item.question) with one of its choices or in the caller's own words, as ADR 0018 decides. The engine records question_answered and puts the item back in its station's arrival state, rework_count unchanged; its next run's brief carries the question and the answer. Audited as item.answered with the answer's length and the choice index, never its text. 400 when the body has both answer and choice or neither, or the answer is not 1 to 2000 characters; 400 bad-choice for a choice outside the question's choices; 409 no-open-question when the item has none (none was asked, it was answered, or a move, pause or rejection withdrew it), item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/answer (the `AnswerItem` operationId).
+	AnswerItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body AnswerItemJSONRequestBody, reqEditors ...RequestEditorFn) (*AnswerItemResponse, error)
 
 	// ApproveItemWithResponse Approve an item waiting for a human; it moves to the next station
 	//
@@ -20352,6 +21823,33 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/knowledge/documents/{document}/content (the `GetKnowledgeDocumentContent` operationId).
 	GetKnowledgeDocumentContentWithResponse(ctx context.Context, org OrgRef, document DocumentRef, reqEditors ...RequestEditorFn) (*GetKnowledgeDocumentContentResponse, error)
 
+	// ListKnowledgeDocumentUsesWithResponse One page of the runs that used a document
+	//
+	// Newest first use first (ADR 0027), after the run id after; next_after, when set, is the after of the next page. Each names its run, item and factory, so a client links to them; a run of a factory the caller may not see is left out. 404 knowledge-document-not-found.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/knowledge/documents/{document}/uses (the `ListKnowledgeDocumentUses` operationId).
+	ListKnowledgeDocumentUsesWithResponse(ctx context.Context, org OrgRef, document DocumentRef, params *ListKnowledgeDocumentUsesParams, reqEditors ...RequestEditorFn) (*ListKnowledgeDocumentUsesResponse, error)
+
+	// GiveKnowledgeVerdictWithBodyWithResponse Say whether a document helped or misled
+	//
+	// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
+	GiveKnowledgeVerdictWithBodyWithResponse(ctx context.Context, org OrgRef, document DocumentRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GiveKnowledgeVerdictResponse, error)
+
+	// GiveKnowledgeVerdictWithResponse Say whether a document helped or misled
+	//
+	// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
+	GiveKnowledgeVerdictWithResponse(ctx context.Context, org OrgRef, document DocumentRef, body GiveKnowledgeVerdictJSONRequestBody, reqEditors ...RequestEditorFn) (*GiveKnowledgeVerdictResponse, error)
+
 	// SearchKnowledgeWithResponse Search the knowledge base as agents do
 	//
 	// What the gateway's knowledge__search tool returns: chunks ranked by keywords and, with an embedding model, nearest neighbours too, fused by reciprocal rank; over every source, or the named ones (404 knowledge-source-not-found for a name the organization has not).
@@ -20450,6 +21948,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/sync (the `SyncKnowledgeSource` operationId).
 	SyncKnowledgeSourceWithResponse(ctx context.Context, org OrgRef, source SourceRef, reqEditors ...RequestEditorFn) (*SyncKnowledgeSourceResponse, error)
+
+	// GetKnowledgeUsageWithResponse Where a source's documents were used
+	//
+	// Per document of the source with a use or a verdict in the last days days (ADR 0027, decision 3): the distinct runs that used it and the verdicts given, agents' and people's apart; at most 500, the most used first, then by id. 404 knowledge-source-not-found.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/knowledge/usage (the `GetKnowledgeUsage` operationId).
+	GetKnowledgeUsageWithResponse(ctx context.Context, org OrgRef, params *GetKnowledgeUsageParams, reqEditors ...RequestEditorFn) (*GetKnowledgeUsageResponse, error)
 
 	// ListMemberTokensWithResponse Every member's personal tokens in the organization
 	//
@@ -20599,6 +22106,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/runs/{run} (the `GetRun` operationId).
 	GetRunWithResponse(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*GetRunResponse, error)
+
+	// ListRunKnowledgeWithResponse The knowledge documents a run used, with the verdicts given on them for it
+	//
+	// Its uses by time, document and kind, and the verdicts agents and people gave for the run (ADR 0027). 404 for a run of another organization.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/runs/{run}/knowledge (the `ListRunKnowledge` operationId).
+	ListRunKnowledgeWithResponse(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*ListRunKnowledgeResponse, error)
 
 	// SearchOrgWithResponse Find the organization's items, agents, factories and connections, for the shell's search box
 	//
@@ -24085,6 +25601,246 @@ func (r SubmitItemResponse) ContentType() string {
 	return ""
 }
 
+type ListJudgesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *JudgeList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListJudgesResponse) GetJSON200() *JudgeList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListJudgesResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListJudgesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListJudgesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListJudgesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListJudgesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateJudgeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Judge
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateJudgeResponse) GetJSON201() *Judge {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateJudgeResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateJudgeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateJudgeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateJudgeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateJudgeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetJudgeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Judge
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetJudgeResponse) GetJSON200() *Judge {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetJudgeResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetJudgeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetJudgeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetJudgeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetJudgeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateJudgeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Judge
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UpdateJudgeResponse) GetJSON200() *Judge {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r UpdateJudgeResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateJudgeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateJudgeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateJudgeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateJudgeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type TryJudgeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *JudgeTries
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r TryJudgeResponse) GetJSON202() *JudgeTries {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TryJudgeResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TryJudgeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TryJudgeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TryJudgeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TryJudgeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetMetricsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -25121,6 +26877,61 @@ func (r GetItemResponse) ContentType() string {
 	return ""
 }
 
+type AnswerItemResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Item
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Conflict
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AnswerItemResponse) GetJSON200() *Item {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r AnswerItemResponse) GetApplicationproblemJSON409() *Conflict {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r AnswerItemResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r AnswerItemResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AnswerItemResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AnswerItemResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AnswerItemResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ApproveItemResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -26104,6 +27915,102 @@ func (r GetKnowledgeDocumentContentResponse) ContentType() string {
 	return ""
 }
 
+type ListKnowledgeDocumentUsesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *KnowledgeDocumentUsePage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListKnowledgeDocumentUsesResponse) GetJSON200() *KnowledgeDocumentUsePage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListKnowledgeDocumentUsesResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListKnowledgeDocumentUsesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListKnowledgeDocumentUsesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListKnowledgeDocumentUsesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListKnowledgeDocumentUsesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GiveKnowledgeVerdictResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *KnowledgeVerdict
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GiveKnowledgeVerdictResponse) GetJSON200() *KnowledgeVerdict {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GiveKnowledgeVerdictResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GiveKnowledgeVerdictResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GiveKnowledgeVerdictResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GiveKnowledgeVerdictResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GiveKnowledgeVerdictResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type SearchKnowledgeResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -26516,6 +28423,54 @@ func (r SyncKnowledgeSourceResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r SyncKnowledgeSourceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetKnowledgeUsageResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *KnowledgeUsage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetKnowledgeUsageResponse) GetJSON200() *KnowledgeUsage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetKnowledgeUsageResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetKnowledgeUsageResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetKnowledgeUsageResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetKnowledgeUsageResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetKnowledgeUsageResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -27188,6 +29143,54 @@ func (r GetRunResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetRunResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListRunKnowledgeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *RunKnowledge
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListRunKnowledgeResponse) GetJSON200() *RunKnowledge {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListRunKnowledgeResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListRunKnowledgeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListRunKnowledgeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListRunKnowledgeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListRunKnowledgeResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -29129,6 +31132,111 @@ func (c *ClientWithResponses) SubmitItemWithResponse(ctx context.Context, org Or
 	return ParseSubmitItemResponse(rsp)
 }
 
+// ListJudgesWithResponse The judges of the factory's current version, each with its last 30 days
+//
+// One entry per evals/judges/<slug>.md of the current version, by slug, each with its production scores of the last 30 days (runs scored, pass rate, cost and a daily pass-rate series by UTC day; tries never count). judge_cost_usd is what every judge run of the factory cost in those 30 days. Empty, with version null, before the first publish. 503 judges-unavailable when this goald does not serve judges.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/judges (the `ListJudges` operationId).
+func (c *ClientWithResponses) ListJudgesWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListJudgesResponse, error) {
+	rsp, err := c.ListJudges(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListJudgesResponse(rsp)
+}
+
+// CreateJudgeWithBodyWithResponse Add a judge and publish it as the factory's next version
+//
+// Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version). When the factory has eval cases and the eval gate refuses (evals-pending, evals-failing), the draft stays open, so it publishes once its run passes. 503 judges-unavailable.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges (the `CreateJudge` operationId).
+func (c *ClientWithResponses) CreateJudgeWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateJudgeResponse, error) {
+	rsp, err := c.CreateJudgeWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateJudgeResponse(rsp)
+}
+
+// CreateJudgeWithResponse Add a judge and publish it as the factory's next version
+//
+// Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version). When the factory has eval cases and the eval gate refuses (evals-pending, evals-failing), the draft stays open, so it publishes once its run passes. 503 judges-unavailable.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges (the `CreateJudge` operationId).
+func (c *ClientWithResponses) CreateJudgeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body CreateJudgeJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateJudgeResponse, error) {
+	rsp, err := c.CreateJudge(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateJudgeResponse(rsp)
+}
+
+// GetJudgeWithResponse One judge of the current version, its last 30 days, its recent scores and where it runs
+//
+// Everything in its file, its 30-day summary, its newest production scores (every state, newest first) and runs_on: the box and connections of the factory's defaults it inherits. 404 judge-not-found; 503 judges-unavailable.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `GetJudge` operationId).
+func (c *ClientWithResponses) GetJudgeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, reqEditors ...RequestEditorFn) (*GetJudgeResponse, error) {
+	rsp, err := c.GetJudge(ctx, org, factory, judge, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetJudgeResponse(rsp)
+}
+
+// UpdateJudgeWithBodyWithResponse Replace a judge's file and publish it as the factory's next version
+//
+// As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers, and the same eval gate.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `UpdateJudge` operationId).
+func (c *ClientWithResponses) UpdateJudgeWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateJudgeResponse, error) {
+	rsp, err := c.UpdateJudgeWithBody(ctx, org, factory, judge, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateJudgeResponse(rsp)
+}
+
+// UpdateJudgeWithResponse Replace a judge's file and publish it as the factory's next version
+//
+// As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers, and the same eval gate.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/judges/{judge} (the `UpdateJudge` operationId).
+func (c *ClientWithResponses) UpdateJudgeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, body UpdateJudgeJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateJudgeResponse, error) {
+	rsp, err := c.UpdateJudge(ctx, org, factory, judge, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateJudgeResponse(rsp)
+}
+
+// TryJudgeWithResponse Queue the judge on the 10 newest finished runs of its agents
+//
+// Each try names the run's item and is scored like any other score, but never counts in the judge's 30-day figures. Tries cost model spend, so only those who may publish queue them. 404 judge-not-found; 503 judges-unavailable.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/judges/{judge}/try (the `TryJudge` operationId).
+func (c *ClientWithResponses) TryJudgeWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, judge JudgeRef, reqEditors ...RequestEditorFn) (*TryJudgeResponse, error) {
+	rsp, err := c.TryJudge(ctx, org, factory, judge, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTryJudgeResponse(rsp)
+}
+
 // GetMetricsWithResponse The factory's flow over a range of UTC days
 //
 // Items count when they reached done in the range; spend counts agent runs started in it; wip is the line now. The range is from to to, both included, at most 90 days, to not after today; without one it is the last 7 days. 400 for a bad range, both a window and a range, or a type the factory does not declare.
@@ -29440,7 +31548,7 @@ func (c *ClientWithResponses) RotateWebhookSecretWithResponse(ctx context.Contex
 
 // GetInboxWithResponse What waits for a person across the organization's factories
 //
-// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (decision, then blocked, then expedite). Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision, andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -29479,6 +31587,36 @@ func (c *ClientWithResponses) GetItemWithResponse(ctx context.Context, org OrgRe
 		return nil, err
 	}
 	return ParseGetItemResponse(rsp)
+}
+
+// AnswerItemWithBodyWithResponse Answer the question an item's agent asked
+//
+// Answers the item's open question (Item.question) with one of its choices or in the caller's own words, as ADR 0018 decides. The engine records question_answered and puts the item back in its station's arrival state, rework_count unchanged; its next run's brief carries the question and the answer. Audited as item.answered with the answer's length and the choice index, never its text. 400 when the body has both answer and choice or neither, or the answer is not 1 to 2000 characters; 400 bad-choice for a choice outside the question's choices; 409 no-open-question when the item has none (none was asked, it was answered, or a move, pause or rejection withdrew it), item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/answer (the `AnswerItem` operationId).
+func (c *ClientWithResponses) AnswerItemWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AnswerItemResponse, error) {
+	rsp, err := c.AnswerItemWithBody(ctx, org, item, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAnswerItemResponse(rsp)
+}
+
+// AnswerItemWithResponse Answer the question an item's agent asked
+//
+// Answers the item's open question (Item.question) with one of its choices or in the caller's own words, as ADR 0018 decides. The engine records question_answered and puts the item back in its station's arrival state, rework_count unchanged; its next run's brief carries the question and the answer. Audited as item.answered with the answer's length and the choice index, never its text. 400 when the body has both answer and choice or neither, or the answer is not 1 to 2000 characters; 400 bad-choice for a choice outside the question's choices; 409 no-open-question when the item has none (none was asked, it was answered, or a move, pause or rejection withdrew it), item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/answer (the `AnswerItem` operationId).
+func (c *ClientWithResponses) AnswerItemWithResponse(ctx context.Context, org OrgRef, item ItemRef, body AnswerItemJSONRequestBody, reqEditors ...RequestEditorFn) (*AnswerItemResponse, error) {
+	rsp, err := c.AnswerItem(ctx, org, item, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAnswerItemResponse(rsp)
 }
 
 // ApproveItemWithResponse Approve an item waiting for a human; it moves to the next station
@@ -29910,6 +32048,51 @@ func (c *ClientWithResponses) GetKnowledgeDocumentContentWithResponse(ctx contex
 	return ParseGetKnowledgeDocumentContentResponse(rsp)
 }
 
+// ListKnowledgeDocumentUsesWithResponse One page of the runs that used a document
+//
+// Newest first use first (ADR 0027), after the run id after; next_after, when set, is the after of the next page. Each names its run, item and factory, so a client links to them; a run of a factory the caller may not see is left out. 404 knowledge-document-not-found.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/knowledge/documents/{document}/uses (the `ListKnowledgeDocumentUses` operationId).
+func (c *ClientWithResponses) ListKnowledgeDocumentUsesWithResponse(ctx context.Context, org OrgRef, document DocumentRef, params *ListKnowledgeDocumentUsesParams, reqEditors ...RequestEditorFn) (*ListKnowledgeDocumentUsesResponse, error) {
+	rsp, err := c.ListKnowledgeDocumentUses(ctx, org, document, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListKnowledgeDocumentUsesResponse(rsp)
+}
+
+// GiveKnowledgeVerdictWithBodyWithResponse Say whether a document helped or misled
+//
+// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
+func (c *ClientWithResponses) GiveKnowledgeVerdictWithBodyWithResponse(ctx context.Context, org OrgRef, document DocumentRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GiveKnowledgeVerdictResponse, error) {
+	rsp, err := c.GiveKnowledgeVerdictWithBody(ctx, org, document, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGiveKnowledgeVerdictResponse(rsp)
+}
+
+// GiveKnowledgeVerdictWithResponse Say whether a document helped or misled
+//
+// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
+func (c *ClientWithResponses) GiveKnowledgeVerdictWithResponse(ctx context.Context, org OrgRef, document DocumentRef, body GiveKnowledgeVerdictJSONRequestBody, reqEditors ...RequestEditorFn) (*GiveKnowledgeVerdictResponse, error) {
+	rsp, err := c.GiveKnowledgeVerdict(ctx, org, document, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGiveKnowledgeVerdictResponse(rsp)
+}
+
 // SearchKnowledgeWithResponse Search the knowledge base as agents do
 //
 // What the gateway's knowledge__search tool returns: chunks ranked by keywords and, with an embedding model, nearest neighbours too, fused by reciprocal rank; over every source, or the named ones (404 knowledge-source-not-found for a name the organization has not).
@@ -30073,6 +32256,21 @@ func (c *ClientWithResponses) SyncKnowledgeSourceWithResponse(ctx context.Contex
 		return nil, err
 	}
 	return ParseSyncKnowledgeSourceResponse(rsp)
+}
+
+// GetKnowledgeUsageWithResponse Where a source's documents were used
+//
+// Per document of the source with a use or a verdict in the last days days (ADR 0027, decision 3): the distinct runs that used it and the verdicts given, agents' and people's apart; at most 500, the most used first, then by id. 404 knowledge-source-not-found.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/knowledge/usage (the `GetKnowledgeUsage` operationId).
+func (c *ClientWithResponses) GetKnowledgeUsageWithResponse(ctx context.Context, org OrgRef, params *GetKnowledgeUsageParams, reqEditors ...RequestEditorFn) (*GetKnowledgeUsageResponse, error) {
+	rsp, err := c.GetKnowledgeUsage(ctx, org, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetKnowledgeUsageResponse(rsp)
 }
 
 // ListMemberTokensWithResponse Every member's personal tokens in the organization
@@ -30324,6 +32522,21 @@ func (c *ClientWithResponses) GetRunWithResponse(ctx context.Context, org OrgRef
 		return nil, err
 	}
 	return ParseGetRunResponse(rsp)
+}
+
+// ListRunKnowledgeWithResponse The knowledge documents a run used, with the verdicts given on them for it
+//
+// Its uses by time, document and kind, and the verdicts agents and people gave for the run (ADR 0027). 404 for a run of another organization.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/runs/{run}/knowledge (the `ListRunKnowledge` operationId).
+func (c *ClientWithResponses) ListRunKnowledgeWithResponse(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*ListRunKnowledgeResponse, error) {
+	rsp, err := c.ListRunKnowledge(ctx, org, run, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListRunKnowledgeResponse(rsp)
 }
 
 // SearchOrgWithResponse Find the organization's items, agents, factories and connections, for the shell's search box
@@ -32892,6 +35105,171 @@ func ParseSubmitItemResponse(rsp *http.Response) (*SubmitItemResponse, error) {
 	return response, nil
 }
 
+// ParseListJudgesResponse parses an HTTP response from a ListJudgesWithResponse call
+func ParseListJudgesResponse(rsp *http.Response) (*ListJudgesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListJudgesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest JudgeList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateJudgeResponse parses an HTTP response from a CreateJudgeWithResponse call
+func ParseCreateJudgeResponse(rsp *http.Response) (*CreateJudgeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateJudgeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Judge
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetJudgeResponse parses an HTTP response from a GetJudgeWithResponse call
+func ParseGetJudgeResponse(rsp *http.Response) (*GetJudgeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetJudgeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Judge
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateJudgeResponse parses an HTTP response from a UpdateJudgeWithResponse call
+func ParseUpdateJudgeResponse(rsp *http.Response) (*UpdateJudgeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateJudgeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Judge
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTryJudgeResponse parses an HTTP response from a TryJudgeWithResponse call
+func ParseTryJudgeResponse(rsp *http.Response) (*TryJudgeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TryJudgeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest JudgeTries
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetMetricsResponse parses an HTTP response from a GetMetricsWithResponse call
 func ParseGetMetricsResponse(rsp *http.Response) (*GetMetricsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -33603,6 +35981,46 @@ func ParseGetItemResponse(rsp *http.Response) (*GetItemResponse, error) {
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAnswerItemResponse parses an HTTP response from a AnswerItemWithResponse call
+func ParseAnswerItemResponse(rsp *http.Response) (*AnswerItemResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AnswerItemResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Item
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Problem
@@ -34335,6 +36753,72 @@ func ParseGetKnowledgeDocumentContentResponse(rsp *http.Response) (*GetKnowledge
 	return response, nil
 }
 
+// ParseListKnowledgeDocumentUsesResponse parses an HTTP response from a ListKnowledgeDocumentUsesWithResponse call
+func ParseListKnowledgeDocumentUsesResponse(rsp *http.Response) (*ListKnowledgeDocumentUsesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListKnowledgeDocumentUsesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest KnowledgeDocumentUsePage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGiveKnowledgeVerdictResponse parses an HTTP response from a GiveKnowledgeVerdictWithResponse call
+func ParseGiveKnowledgeVerdictResponse(rsp *http.Response) (*GiveKnowledgeVerdictResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GiveKnowledgeVerdictResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest KnowledgeVerdict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseSearchKnowledgeResponse parses an HTTP response from a SearchKnowledgeWithResponse call
 func ParseSearchKnowledgeResponse(rsp *http.Response) (*SearchKnowledgeResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -34611,6 +37095,39 @@ func ParseSyncKnowledgeSourceResponse(rsp *http.Response) (*SyncKnowledgeSourceR
 	switch {
 	case rsp.StatusCode == 202:
 		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetKnowledgeUsageResponse parses an HTTP response from a GetKnowledgeUsageWithResponse call
+func ParseGetKnowledgeUsageResponse(rsp *http.Response) (*GetKnowledgeUsageResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetKnowledgeUsageResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest KnowledgeUsage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Problem
@@ -35096,6 +37613,39 @@ func ParseGetRunResponse(rsp *http.Response) (*GetRunResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Run
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListRunKnowledgeResponse parses an HTTP response from a ListRunKnowledgeWithResponse call
+func ParseListRunKnowledgeResponse(rsp *http.Response) (*ListRunKnowledgeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListRunKnowledgeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RunKnowledge
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -35710,6 +38260,21 @@ type ServerInterface interface {
 	// SubmitItem Submit a work item to a factory's first station
 	// (POST /v1/orgs/{org}/factories/{factory}/items)
 	SubmitItem(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// ListJudges The judges of the factory's current version, each with its last 30 days
+	// (GET /v1/orgs/{org}/factories/{factory}/judges)
+	ListJudges(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// CreateJudge Add a judge and publish it as the factory's next version
+	// (POST /v1/orgs/{org}/factories/{factory}/judges)
+	CreateJudge(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// GetJudge One judge of the current version, its last 30 days, its recent scores and where it runs
+	// (GET /v1/orgs/{org}/factories/{factory}/judges/{judge})
+	GetJudge(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, judge JudgeRef)
+	// UpdateJudge Replace a judge's file and publish it as the factory's next version
+	// (PUT /v1/orgs/{org}/factories/{factory}/judges/{judge})
+	UpdateJudge(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, judge JudgeRef)
+	// TryJudge Queue the judge on the 10 newest finished runs of its agents
+	// (POST /v1/orgs/{org}/factories/{factory}/judges/{judge}/try)
+	TryJudge(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, judge JudgeRef)
 	// GetMetrics The factory's flow over a range of UTC days
 	// (GET /v1/orgs/{org}/factories/{factory}/metrics)
 	GetMetrics(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetMetricsParams)
@@ -35776,6 +38341,9 @@ type ServerInterface interface {
 	// GetItem One work item
 	// (GET /v1/orgs/{org}/items/{item})
 	GetItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
+	// AnswerItem Answer the question an item's agent asked
+	// (POST /v1/orgs/{org}/items/{item}/answer)
+	AnswerItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
 	// ApproveItem Approve an item waiting for a human; it moves to the next station
 	// (POST /v1/orgs/{org}/items/{item}/approve)
 	ApproveItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
@@ -35833,6 +38401,12 @@ type ServerInterface interface {
 	// GetKnowledgeDocumentContent The uploaded original of a document
 	// (GET /v1/orgs/{org}/knowledge/documents/{document}/content)
 	GetKnowledgeDocumentContent(w http.ResponseWriter, r *http.Request, org OrgRef, document DocumentRef)
+	// ListKnowledgeDocumentUses One page of the runs that used a document
+	// (GET /v1/orgs/{org}/knowledge/documents/{document}/uses)
+	ListKnowledgeDocumentUses(w http.ResponseWriter, r *http.Request, org OrgRef, document DocumentRef, params ListKnowledgeDocumentUsesParams)
+	// GiveKnowledgeVerdict Say whether a document helped or misled
+	// (PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict)
+	GiveKnowledgeVerdict(w http.ResponseWriter, r *http.Request, org OrgRef, document DocumentRef)
 	// SearchKnowledge Search the knowledge base as agents do
 	// (GET /v1/orgs/{org}/knowledge/search)
 	SearchKnowledge(w http.ResponseWriter, r *http.Request, org OrgRef, params SearchKnowledgeParams)
@@ -35860,6 +38434,9 @@ type ServerInterface interface {
 	// SyncKnowledgeSource Sync a source now
 	// (POST /v1/orgs/{org}/knowledge/sources/{source}/sync)
 	SyncKnowledgeSource(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef)
+	// GetKnowledgeUsage Where a source's documents were used
+	// (GET /v1/orgs/{org}/knowledge/usage)
+	GetKnowledgeUsage(w http.ResponseWriter, r *http.Request, org OrgRef, params GetKnowledgeUsageParams)
 	// ListMemberTokens Every member's personal tokens in the organization
 	// (GET /v1/orgs/{org}/member-tokens)
 	ListMemberTokens(w http.ResponseWriter, r *http.Request, org OrgRef)
@@ -35902,6 +38479,9 @@ type ServerInterface interface {
 	// GetRun One agent run (404 for a run of another organization)
 	// (GET /v1/orgs/{org}/runs/{run})
 	GetRun(w http.ResponseWriter, r *http.Request, org OrgRef, run string)
+	// ListRunKnowledge The knowledge documents a run used, with the verdicts given on them for it
+	// (GET /v1/orgs/{org}/runs/{run}/knowledge)
+	ListRunKnowledge(w http.ResponseWriter, r *http.Request, org OrgRef, run string)
 	// SearchOrg Find the organization's items, agents, factories and connections, for the shell's search box
 	// (GET /v1/orgs/{org}/search)
 	SearchOrg(w http.ResponseWriter, r *http.Request, org OrgRef, params SearchOrgParams)
@@ -38751,6 +41331,208 @@ func (siw *ServerInterfaceWrapper) SubmitItem(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// ListJudges operation middleware
+func (siw *ServerInterfaceWrapper) ListJudges(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListJudges(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateJudge operation middleware
+func (siw *ServerInterfaceWrapper) CreateJudge(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateJudge(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetJudge operation middleware
+func (siw *ServerInterfaceWrapper) GetJudge(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "judge" -------------
+	var judge JudgeRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "judge", r.PathValue("judge"), &judge, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "judge", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetJudge(w, r, org, factory, judge)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateJudge operation middleware
+func (siw *ServerInterfaceWrapper) UpdateJudge(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "judge" -------------
+	var judge JudgeRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "judge", r.PathValue("judge"), &judge, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "judge", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateJudge(w, r, org, factory, judge)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TryJudge operation middleware
+func (siw *ServerInterfaceWrapper) TryJudge(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "judge" -------------
+	var judge JudgeRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "judge", r.PathValue("judge"), &judge, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "judge", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TryJudge(w, r, org, factory, judge)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetMetrics operation middleware
 func (siw *ServerInterfaceWrapper) GetMetrics(w http.ResponseWriter, r *http.Request) {
 
@@ -39900,6 +42682,41 @@ func (siw *ServerInterfaceWrapper) GetItem(w http.ResponseWriter, r *http.Reques
 	handler.ServeHTTP(w, r)
 }
 
+// AnswerItem operation middleware
+func (siw *ServerInterfaceWrapper) AnswerItem(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item" -------------
+	var item ItemRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item", r.PathValue("item"), &item, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AnswerItem(w, r, org, item)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ApproveItem operation middleware
 func (siw *ServerInterfaceWrapper) ApproveItem(w http.ResponseWriter, r *http.Request) {
 
@@ -40612,6 +43429,105 @@ func (siw *ServerInterfaceWrapper) GetKnowledgeDocumentContent(w http.ResponseWr
 	handler.ServeHTTP(w, r)
 }
 
+// ListKnowledgeDocumentUses operation middleware
+func (siw *ServerInterfaceWrapper) ListKnowledgeDocumentUses(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "document" -------------
+	var document DocumentRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "document", r.PathValue("document"), &document, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "document", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListKnowledgeDocumentUsesParams
+
+	// ------------- Optional query parameter "after" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "after", r.URL.Query(), &params.After, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListKnowledgeDocumentUses(w, r, org, document, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GiveKnowledgeVerdict operation middleware
+func (siw *ServerInterfaceWrapper) GiveKnowledgeVerdict(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "document" -------------
+	var document DocumentRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "document", r.PathValue("document"), &document, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "document", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GiveKnowledgeVerdict(w, r, org, document)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // SearchKnowledge operation middleware
 func (siw *ServerInterfaceWrapper) SearchKnowledge(w http.ResponseWriter, r *http.Request) {
 
@@ -40978,6 +43894,61 @@ func (siw *ServerInterfaceWrapper) SyncKnowledgeSource(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SyncKnowledgeSource(w, r, org, source)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetKnowledgeUsage operation middleware
+func (siw *ServerInterfaceWrapper) GetKnowledgeUsage(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetKnowledgeUsageParams
+
+	// ------------- Required query parameter "source" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "source", r.URL.Query(), &params.Source, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "source"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "source", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "days" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "days", r.URL.Query(), &params.Days, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "days"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "days", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetKnowledgeUsage(w, r, org, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -41568,6 +44539,41 @@ func (siw *ServerInterfaceWrapper) GetRun(w http.ResponseWriter, r *http.Request
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetRun(w, r, org, run)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListRunKnowledge operation middleware
+func (siw *ServerInterfaceWrapper) ListRunKnowledge(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "run" -------------
+	var run string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "run", r.PathValue("run"), &run, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "run", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRunKnowledge(w, r, org, run)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -42190,6 +45196,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/lead-time", wrapper.GetLeadTimeBridge)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/touches", wrapper.GetTouchMetrics)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/agents/{agent}/stats", wrapper.GetAgentStats)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/judges", wrapper.ListJudges)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/judges", wrapper.CreateJudge)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/judges/{judge}", wrapper.GetJudge)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/judges/{judge}", wrapper.UpdateJudge)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/judges/{judge}/try", wrapper.TryJudge)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.GetAndon)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.PullAndon)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon/clear", wrapper.ClearAndon)
@@ -42211,7 +45222,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/touches/{event}/reason", wrapper.SetTouchReason)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs", wrapper.ListRuns)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs/{run}", wrapper.GetRun)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs/{run}/knowledge", wrapper.ListRunKnowledge)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/approve", wrapper.ApproveItem)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/answer", wrapper.AnswerItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/reject", wrapper.RejectItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/move", wrapper.MoveItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/lane", wrapper.SetItemLane)
@@ -42249,6 +45262,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/documents/{document}", wrapper.DeleteKnowledgeDocument)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/documents/{document}", wrapper.GetKnowledgeDocument)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/documents/{document}/content", wrapper.GetKnowledgeDocumentContent)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/documents/{document}/uses", wrapper.ListKnowledgeDocumentUses)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/documents/{document}/verdict", wrapper.GiveKnowledgeVerdict)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/usage", wrapper.GetKnowledgeUsage)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/search", wrapper.SearchKnowledge)
 
 	return m
@@ -45117,6 +48133,211 @@ func (response SubmitItemdefaultApplicationProblemPlusJSONResponse) VisitSubmitI
 	return err
 }
 
+type ListJudgesRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type ListJudgesResponseObject interface {
+	VisitListJudgesResponse(w http.ResponseWriter) error
+}
+
+type ListJudges200JSONResponse JudgeList
+
+func (response ListJudges200JSONResponse) VisitListJudgesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListJudgesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListJudgesdefaultApplicationProblemPlusJSONResponse) VisitListJudgesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateJudgeRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Body    *CreateJudgeJSONRequestBody
+}
+
+type CreateJudgeResponseObject interface {
+	VisitCreateJudgeResponse(w http.ResponseWriter) error
+}
+
+type CreateJudge201JSONResponse Judge
+
+func (response CreateJudge201JSONResponse) VisitCreateJudgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateJudgedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateJudgedefaultApplicationProblemPlusJSONResponse) VisitCreateJudgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetJudgeRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Judge   JudgeRef   `json:"judge"`
+}
+
+type GetJudgeResponseObject interface {
+	VisitGetJudgeResponse(w http.ResponseWriter) error
+}
+
+type GetJudge200JSONResponse Judge
+
+func (response GetJudge200JSONResponse) VisitGetJudgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetJudgedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetJudgedefaultApplicationProblemPlusJSONResponse) VisitGetJudgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateJudgeRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Judge   JudgeRef   `json:"judge"`
+	Body    *UpdateJudgeJSONRequestBody
+}
+
+type UpdateJudgeResponseObject interface {
+	VisitUpdateJudgeResponse(w http.ResponseWriter) error
+}
+
+type UpdateJudge200JSONResponse Judge
+
+func (response UpdateJudge200JSONResponse) VisitUpdateJudgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateJudgedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UpdateJudgedefaultApplicationProblemPlusJSONResponse) VisitUpdateJudgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TryJudgeRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Judge   JudgeRef   `json:"judge"`
+}
+
+type TryJudgeResponseObject interface {
+	VisitTryJudgeResponse(w http.ResponseWriter) error
+}
+
+type TryJudge202JSONResponse JudgeTries
+
+func (response TryJudge202JSONResponse) VisitTryJudgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TryJudgedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response TryJudgedefaultApplicationProblemPlusJSONResponse) VisitTryJudgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetMetricsRequestObject struct {
 	Org     OrgRef     `json:"org"`
 	Factory FactoryRef `json:"factory"`
@@ -45988,6 +49209,63 @@ type GetItemdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetItemdefaultApplicationProblemPlusJSONResponse) VisitGetItemResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AnswerItemRequestObject struct {
+	Org  OrgRef  `json:"org"`
+	Item ItemRef `json:"item"`
+	Body *AnswerItemJSONRequestBody
+}
+
+type AnswerItemResponseObject interface {
+	VisitAnswerItemResponse(w http.ResponseWriter) error
+}
+
+type AnswerItem200JSONResponse Item
+
+func (response AnswerItem200JSONResponse) VisitAnswerItemResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AnswerItem409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response AnswerItem409ApplicationProblemPlusJSONResponse) VisitAnswerItemResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AnswerItemdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response AnswerItemdefaultApplicationProblemPlusJSONResponse) VisitAnswerItemResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -46976,6 +50254,88 @@ func (response GetKnowledgeDocumentContentdefaultApplicationProblemPlusJSONRespo
 	return err
 }
 
+type ListKnowledgeDocumentUsesRequestObject struct {
+	Org      OrgRef      `json:"org"`
+	Document DocumentRef `json:"document"`
+	Params   ListKnowledgeDocumentUsesParams
+}
+
+type ListKnowledgeDocumentUsesResponseObject interface {
+	VisitListKnowledgeDocumentUsesResponse(w http.ResponseWriter) error
+}
+
+type ListKnowledgeDocumentUses200JSONResponse KnowledgeDocumentUsePage
+
+func (response ListKnowledgeDocumentUses200JSONResponse) VisitListKnowledgeDocumentUsesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListKnowledgeDocumentUsesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListKnowledgeDocumentUsesdefaultApplicationProblemPlusJSONResponse) VisitListKnowledgeDocumentUsesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GiveKnowledgeVerdictRequestObject struct {
+	Org      OrgRef      `json:"org"`
+	Document DocumentRef `json:"document"`
+	Body     *GiveKnowledgeVerdictJSONRequestBody
+}
+
+type GiveKnowledgeVerdictResponseObject interface {
+	VisitGiveKnowledgeVerdictResponse(w http.ResponseWriter) error
+}
+
+type GiveKnowledgeVerdict200JSONResponse KnowledgeVerdict
+
+func (response GiveKnowledgeVerdict200JSONResponse) VisitGiveKnowledgeVerdictResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GiveKnowledgeVerdictdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GiveKnowledgeVerdictdefaultApplicationProblemPlusJSONResponse) VisitGiveKnowledgeVerdictResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type SearchKnowledgeRequestObject struct {
 	Org    OrgRef `json:"org"`
 	Params SearchKnowledgeParams
@@ -47316,6 +50676,46 @@ type SyncKnowledgeSourcedefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response SyncKnowledgeSourcedefaultApplicationProblemPlusJSONResponse) VisitSyncKnowledgeSourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetKnowledgeUsageRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params GetKnowledgeUsageParams
+}
+
+type GetKnowledgeUsageResponseObject interface {
+	VisitGetKnowledgeUsageResponse(w http.ResponseWriter) error
+}
+
+type GetKnowledgeUsage200JSONResponse KnowledgeUsage
+
+func (response GetKnowledgeUsage200JSONResponse) VisitGetKnowledgeUsageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetKnowledgeUsagedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetKnowledgeUsagedefaultApplicationProblemPlusJSONResponse) VisitGetKnowledgeUsageResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -47882,6 +51282,46 @@ type GetRundefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetRundefaultApplicationProblemPlusJSONResponse) VisitGetRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRunKnowledgeRequestObject struct {
+	Org OrgRef `json:"org"`
+	Run string `json:"run"`
+}
+
+type ListRunKnowledgeResponseObject interface {
+	VisitListRunKnowledgeResponse(w http.ResponseWriter) error
+}
+
+type ListRunKnowledge200JSONResponse RunKnowledge
+
+func (response ListRunKnowledge200JSONResponse) VisitListRunKnowledgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRunKnowledgedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListRunKnowledgedefaultApplicationProblemPlusJSONResponse) VisitListRunKnowledgeResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -48602,6 +52042,21 @@ type StrictServerInterface interface {
 	// SubmitItem Submit a work item to a factory's first station
 	// (POST /v1/orgs/{org}/factories/{factory}/items)
 	SubmitItem(ctx context.Context, request SubmitItemRequestObject) (SubmitItemResponseObject, error)
+	// ListJudges The judges of the factory's current version, each with its last 30 days
+	// (GET /v1/orgs/{org}/factories/{factory}/judges)
+	ListJudges(ctx context.Context, request ListJudgesRequestObject) (ListJudgesResponseObject, error)
+	// CreateJudge Add a judge and publish it as the factory's next version
+	// (POST /v1/orgs/{org}/factories/{factory}/judges)
+	CreateJudge(ctx context.Context, request CreateJudgeRequestObject) (CreateJudgeResponseObject, error)
+	// GetJudge One judge of the current version, its last 30 days, its recent scores and where it runs
+	// (GET /v1/orgs/{org}/factories/{factory}/judges/{judge})
+	GetJudge(ctx context.Context, request GetJudgeRequestObject) (GetJudgeResponseObject, error)
+	// UpdateJudge Replace a judge's file and publish it as the factory's next version
+	// (PUT /v1/orgs/{org}/factories/{factory}/judges/{judge})
+	UpdateJudge(ctx context.Context, request UpdateJudgeRequestObject) (UpdateJudgeResponseObject, error)
+	// TryJudge Queue the judge on the 10 newest finished runs of its agents
+	// (POST /v1/orgs/{org}/factories/{factory}/judges/{judge}/try)
+	TryJudge(ctx context.Context, request TryJudgeRequestObject) (TryJudgeResponseObject, error)
 	// GetMetrics The factory's flow over a range of UTC days
 	// (GET /v1/orgs/{org}/factories/{factory}/metrics)
 	GetMetrics(ctx context.Context, request GetMetricsRequestObject) (GetMetricsResponseObject, error)
@@ -48668,6 +52123,9 @@ type StrictServerInterface interface {
 	// GetItem One work item
 	// (GET /v1/orgs/{org}/items/{item})
 	GetItem(ctx context.Context, request GetItemRequestObject) (GetItemResponseObject, error)
+	// AnswerItem Answer the question an item's agent asked
+	// (POST /v1/orgs/{org}/items/{item}/answer)
+	AnswerItem(ctx context.Context, request AnswerItemRequestObject) (AnswerItemResponseObject, error)
 	// ApproveItem Approve an item waiting for a human; it moves to the next station
 	// (POST /v1/orgs/{org}/items/{item}/approve)
 	ApproveItem(ctx context.Context, request ApproveItemRequestObject) (ApproveItemResponseObject, error)
@@ -48725,6 +52183,12 @@ type StrictServerInterface interface {
 	// GetKnowledgeDocumentContent The uploaded original of a document
 	// (GET /v1/orgs/{org}/knowledge/documents/{document}/content)
 	GetKnowledgeDocumentContent(ctx context.Context, request GetKnowledgeDocumentContentRequestObject) (GetKnowledgeDocumentContentResponseObject, error)
+	// ListKnowledgeDocumentUses One page of the runs that used a document
+	// (GET /v1/orgs/{org}/knowledge/documents/{document}/uses)
+	ListKnowledgeDocumentUses(ctx context.Context, request ListKnowledgeDocumentUsesRequestObject) (ListKnowledgeDocumentUsesResponseObject, error)
+	// GiveKnowledgeVerdict Say whether a document helped or misled
+	// (PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict)
+	GiveKnowledgeVerdict(ctx context.Context, request GiveKnowledgeVerdictRequestObject) (GiveKnowledgeVerdictResponseObject, error)
 	// SearchKnowledge Search the knowledge base as agents do
 	// (GET /v1/orgs/{org}/knowledge/search)
 	SearchKnowledge(ctx context.Context, request SearchKnowledgeRequestObject) (SearchKnowledgeResponseObject, error)
@@ -48752,6 +52216,9 @@ type StrictServerInterface interface {
 	// SyncKnowledgeSource Sync a source now
 	// (POST /v1/orgs/{org}/knowledge/sources/{source}/sync)
 	SyncKnowledgeSource(ctx context.Context, request SyncKnowledgeSourceRequestObject) (SyncKnowledgeSourceResponseObject, error)
+	// GetKnowledgeUsage Where a source's documents were used
+	// (GET /v1/orgs/{org}/knowledge/usage)
+	GetKnowledgeUsage(ctx context.Context, request GetKnowledgeUsageRequestObject) (GetKnowledgeUsageResponseObject, error)
 	// ListMemberTokens Every member's personal tokens in the organization
 	// (GET /v1/orgs/{org}/member-tokens)
 	ListMemberTokens(ctx context.Context, request ListMemberTokensRequestObject) (ListMemberTokensResponseObject, error)
@@ -48794,6 +52261,9 @@ type StrictServerInterface interface {
 	// GetRun One agent run (404 for a run of another organization)
 	// (GET /v1/orgs/{org}/runs/{run})
 	GetRun(ctx context.Context, request GetRunRequestObject) (GetRunResponseObject, error)
+	// ListRunKnowledge The knowledge documents a run used, with the verdicts given on them for it
+	// (GET /v1/orgs/{org}/runs/{run}/knowledge)
+	ListRunKnowledge(ctx context.Context, request ListRunKnowledgeRequestObject) (ListRunKnowledgeResponseObject, error)
 	// SearchOrg Find the organization's items, agents, factories and connections, for the shell's search box
 	// (GET /v1/orgs/{org}/search)
 	SearchOrg(ctx context.Context, request SearchOrgRequestObject) (SearchOrgResponseObject, error)
@@ -50930,6 +54400,158 @@ func (sh *strictHandler) SubmitItem(w http.ResponseWriter, r *http.Request, org 
 	}
 }
 
+// ListJudges operation middleware
+func (sh *strictHandler) ListJudges(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request ListJudgesRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListJudges(ctx, request.(ListJudgesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListJudges")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListJudgesResponseObject); ok {
+		if err := validResponse.VisitListJudgesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateJudge operation middleware
+func (sh *strictHandler) CreateJudge(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request CreateJudgeRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	var body CreateJudgeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateJudge(ctx, request.(CreateJudgeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateJudge")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateJudgeResponseObject); ok {
+		if err := validResponse.VisitCreateJudgeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetJudge operation middleware
+func (sh *strictHandler) GetJudge(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, judge JudgeRef) {
+	var request GetJudgeRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Judge = judge
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetJudge(ctx, request.(GetJudgeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetJudge")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetJudgeResponseObject); ok {
+		if err := validResponse.VisitGetJudgeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateJudge operation middleware
+func (sh *strictHandler) UpdateJudge(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, judge JudgeRef) {
+	var request UpdateJudgeRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Judge = judge
+
+	var body UpdateJudgeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateJudge(ctx, request.(UpdateJudgeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateJudge")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateJudgeResponseObject); ok {
+		if err := validResponse.VisitUpdateJudgeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TryJudge operation middleware
+func (sh *strictHandler) TryJudge(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, judge JudgeRef) {
+	var request TryJudgeRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Judge = judge
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TryJudge(ctx, request.(TryJudgeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TryJudge")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TryJudgeResponseObject); ok {
+		if err := validResponse.VisitTryJudgeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetMetrics operation middleware
 func (sh *strictHandler) GetMetrics(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetMetricsParams) {
 	var request GetMetricsRequestObject
@@ -51553,6 +55175,40 @@ func (sh *strictHandler) GetItem(w http.ResponseWriter, r *http.Request, org Org
 	}
 }
 
+// AnswerItem operation middleware
+func (sh *strictHandler) AnswerItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
+	var request AnswerItemRequestObject
+
+	request.Org = org
+	request.Item = item
+
+	var body AnswerItemJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AnswerItem(ctx, request.(AnswerItemRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AnswerItem")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AnswerItemResponseObject); ok {
+		if err := validResponse.VisitAnswerItemResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ApproveItem operation middleware
 func (sh *strictHandler) ApproveItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
 	var request ApproveItemRequestObject
@@ -52148,6 +55804,68 @@ func (sh *strictHandler) GetKnowledgeDocumentContent(w http.ResponseWriter, r *h
 	}
 }
 
+// ListKnowledgeDocumentUses operation middleware
+func (sh *strictHandler) ListKnowledgeDocumentUses(w http.ResponseWriter, r *http.Request, org OrgRef, document DocumentRef, params ListKnowledgeDocumentUsesParams) {
+	var request ListKnowledgeDocumentUsesRequestObject
+
+	request.Org = org
+	request.Document = document
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListKnowledgeDocumentUses(ctx, request.(ListKnowledgeDocumentUsesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListKnowledgeDocumentUses")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListKnowledgeDocumentUsesResponseObject); ok {
+		if err := validResponse.VisitListKnowledgeDocumentUsesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GiveKnowledgeVerdict operation middleware
+func (sh *strictHandler) GiveKnowledgeVerdict(w http.ResponseWriter, r *http.Request, org OrgRef, document DocumentRef) {
+	var request GiveKnowledgeVerdictRequestObject
+
+	request.Org = org
+	request.Document = document
+
+	var body GiveKnowledgeVerdictJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GiveKnowledgeVerdict(ctx, request.(GiveKnowledgeVerdictRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GiveKnowledgeVerdict")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GiveKnowledgeVerdictResponseObject); ok {
+		if err := validResponse.VisitGiveKnowledgeVerdictResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // SearchKnowledge operation middleware
 func (sh *strictHandler) SearchKnowledge(w http.ResponseWriter, r *http.Request, org OrgRef, params SearchKnowledgeParams) {
 	var request SearchKnowledgeRequestObject
@@ -52405,6 +56123,33 @@ func (sh *strictHandler) SyncKnowledgeSource(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SyncKnowledgeSourceResponseObject); ok {
 		if err := validResponse.VisitSyncKnowledgeSourceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetKnowledgeUsage operation middleware
+func (sh *strictHandler) GetKnowledgeUsage(w http.ResponseWriter, r *http.Request, org OrgRef, params GetKnowledgeUsageParams) {
+	var request GetKnowledgeUsageRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetKnowledgeUsage(ctx, request.(GetKnowledgeUsageRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetKnowledgeUsage")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetKnowledgeUsageResponseObject); ok {
+		if err := validResponse.VisitGetKnowledgeUsageResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -52801,6 +56546,33 @@ func (sh *strictHandler) GetRun(w http.ResponseWriter, r *http.Request, org OrgR
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetRunResponseObject); ok {
 		if err := validResponse.VisitGetRunResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListRunKnowledge operation middleware
+func (sh *strictHandler) ListRunKnowledge(w http.ResponseWriter, r *http.Request, org OrgRef, run string) {
+	var request ListRunKnowledgeRequestObject
+
+	request.Org = org
+	request.Run = run
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListRunKnowledge(ctx, request.(ListRunKnowledgeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListRunKnowledge")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListRunKnowledgeResponseObject); ok {
+		if err := validResponse.VisitListRunKnowledgeResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

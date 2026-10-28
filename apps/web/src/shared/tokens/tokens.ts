@@ -31,6 +31,7 @@ export const tokenScopeGroups: readonly { id: TokenGroupId; label: string; scope
       { id: 'item:decide', label: 'Decide items', needs: 'approver' },
       { id: 'item:operate', label: 'Move and pause items', needs: 'approver' },
       { id: 'andon:manage', label: 'Pull and clear the andon', needs: 'approver' },
+      { id: 'knowledge:verdict', label: 'Mark knowledge as helpful or misleading', needs: null },
     ],
   },
   {

@@ -133,6 +133,9 @@ const (
 	AuditItemCancelled = "item.cancelled"
 	// AuditItemRejected is a person sending an item back for rework (from, to, reason).
 	AuditItemRejected = "item.rejected"
+	// AuditItemAnswered is a person's answer to an item's open question: the answer's length, and
+	// choice_index when a choice was picked, never its text.
+	AuditItemAnswered = "item.answered"
 	// AuditItemPartAdded is a part added to an open assembly (part, key).
 	AuditItemPartAdded = "item.part_added"
 	// AuditTargetItem is the target kind of entries about an item.

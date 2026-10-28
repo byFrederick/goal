@@ -317,10 +317,14 @@ var describers = map[string]func(gen.Event) string{
 	"check_failed": func(e gen.Event) string {
 		return fmt.Sprintf("check `%s` failed (exit %v)", str(e, "command"), e.Data["exit_code"])
 	},
-	"approved":        func(e gen.Event) string { return "approved by " + e.Actor },
-	"lease_taken":     func(e gen.Event) string { return "run stopped by " + e.Actor + " (" + str(e, "action") + ")" },
-	"paused":          withReason,
-	"note":            func(e gen.Event) string { return "note from " + e.Actor + ": " + cut(oneLine(str(e, "text")), 300) },
+	"approved":       func(e gen.Event) string { return "approved by " + e.Actor },
+	"lease_taken":    func(e gen.Event) string { return "run stopped by " + e.Actor + " (" + str(e, "action") + ")" },
+	"paused":         withReason,
+	"note":           func(e gen.Event) string { return "note from " + e.Actor + ": " + cut(oneLine(str(e, "text")), 300) },
+	"question_asked": questionAsked,
+	"question_answered": func(e gen.Event) string {
+		return cut(oneLine("answer from "+e.Actor+": "+str(e, "answer")), 300)
+	},
 	"contract_failed": withReason,
 	"blocked":         withReason,
 	"rejected":        withReason,
@@ -330,6 +334,28 @@ var describers = map[string]func(gen.Event) string{
 	"released":        withReason,
 	"lease_expired":   withReason,
 	"done":            withReason,
+}
+
+// questionAsked is an agent's question, with its choices numbered from 1 as goal answer
+// --choice takes them.
+func questionAsked(e gen.Event) string {
+	line := str(e, "agent") + " asked: " + str(e, "question")
+
+	if choices, _ := e.Data["choices"].([]any); len(choices) > 0 {
+		numbered := make([]string, len(choices))
+		for i, c := range choices {
+			text, _ := c.(string)
+			if text == "" && c != nil {
+				text = fmt.Sprint(c)
+			}
+
+			numbered[i] = fmt.Sprintf("%d. %s", i+1, text)
+		}
+
+		line += " (choices: " + strings.Join(numbered, ", ") + ")"
+	}
+
+	return cut(oneLine(line), 300)
 }
 
 func runFinished(e gen.Event) string {
@@ -437,6 +463,8 @@ const (
 	verbMerge   = "merge"
 	// verbNote leaves a note for the agents; not a decision.
 	verbNote = "note"
+	// verbAnswer answers the question an item's agent asked; not a decision either.
+	verbAnswer = "answer"
 	// verbMove, verbPause and verbLane are a person's controls of an item's flow.
 	verbMove  = "move"
 	verbPause = "pause"
@@ -511,6 +539,81 @@ func noteItem(ctx context.Context, out *printer, getenv func(string) string, arg
 	out.printf("✓ note left on %s; the next run reads it\n", ref)
 
 	return nil
+}
+
+// answerItem answers the question an item's agent asked: goal answer <item> "<text>" | --choice
+// <n> [--factory F]. Choices are numbered from 1, as goal follow prints them; goald counts from 0.
+func answerItem(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	fs := newFlags(verbAnswer)
+	choice := fs.Int("choice", 0, "the number of the picked choice, from 1")
+	factory := fs.String("factory", "", "the factory of a bare item number")
+	org := addOrgFlag(fs)
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil {
+		return errUsage
+	}
+
+	body, ok := answerBody(fs, pos, *choice)
+	if !ok {
+		return errUsage
+	}
+
+	c, err := connect(ctx, getenv, *org)
+	if err != nil {
+		return err
+	}
+
+	ref, err := itemRef(ctx, c, pos[0], *factory)
+	if err != nil {
+		return err
+	}
+
+	res, err := c.AnswerItemWithResponse(ctx, c.org, ref, body)
+	if err != nil {
+		return apiDown(err)
+	}
+
+	if res.JSON200 == nil {
+		return answerRefused(res.HTTPResponse, conflictOr(res.ApplicationproblemJSON409, res.ApplicationproblemJSONDefault), ref, *choice)
+	}
+
+	it := res.JSON200
+	out.printf("✓ answered %s; now %s at %s\n", it.Ref, it.State, it.Station)
+
+	return nil
+}
+
+// answerBody is the request goal answer sends for its positionals (the item, then the text) and
+// --choice, numbered from 1: the text or the choice, never both, and no blank text.
+func answerBody(fs *flag.FlagSet, pos []string, choice int) (gen.ItemAnswer, bool) {
+	picked := false
+
+	fs.Visit(func(f *flag.Flag) { picked = picked || f.Name == "choice" })
+
+	switch {
+	case picked && len(pos) == 1 && choice >= 1:
+		index := choice - 1
+
+		return gen.ItemAnswer{Choice: &index}, true
+	case !picked && len(pos) == 2 && strings.TrimSpace(pos[1]) != "":
+		return gen.ItemAnswer{Answer: &pos[1]}, true
+	default:
+		return gen.ItemAnswer{}, false
+	}
+}
+
+// answerRefused says goald's refusal of an answer: the two an answer can run into in plain
+// words, by the problem's code, anything else as the other verbs say it.
+func answerRefused(res *http.Response, p *gen.Problem, ref string, choice int) error {
+	switch problemCode(p) {
+	case "no-open-question":
+		return fmt.Errorf("%s has no open question to answer", ref)
+	case "bad-choice":
+		return fmt.Errorf("choice %d is not one of the question's choices", choice)
+	default:
+		return problem(res, p)
+	}
 }
 
 // moveItem puts an item at another station of its line: goal move <item> <station> [--reason

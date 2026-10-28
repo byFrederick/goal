@@ -125,6 +125,21 @@ var triggerRows = []struct {
 		code: codePlaceholderInvalid, message: []string{"trigger red-main", "create.title", "{{check..name}}"},
 	},
 	{
+		name: "model check", doc: withTriggers("dedupe: check.name }", `dedupe: check.name, modelAgrees: { question: "Is this a real regression?", connection: claude, model: claude-haiku-5-5 } }`),
+	},
+	{
+		name: "model check with a blank question", doc: withTriggers("dedupe: check.name }", `dedupe: check.name, modelAgrees: { question: "   " } } #here`),
+		code: codeModelQuestionInvalid, message: []string{"trigger red-main", "only.modelAgrees.question", "empty"},
+	},
+	{
+		name: "model check with a question too long", doc: withTriggers("dedupe: check.name }", `dedupe: check.name, modelAgrees: { question: "`+strings.Repeat("why ", 126)+`" } } #here`),
+		code: codeModelQuestionInvalid, message: []string{"trigger red-main", "only.modelAgrees.question", "500"},
+	},
+	{
+		name: "model check without a question", doc: withTriggers("dedupe: check.name }", "dedupe: check.name, modelAgrees: { model: claude-haiku-5-5 } } #here"),
+		code: codeSchemaRequired, message: []string{"question"},
+	},
+	{
 		name: "event not allowed", doc: withTriggers("        on: github.check_run.failed\n", "        on: slack.message #here\n"),
 		code: codeSchemaInvalid, message: []string{"spec.board.triggers[1].on"},
 	},
@@ -141,35 +156,44 @@ func TestCheck_Triggers(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, problems := Check(checkTree(tt.doc, nil))
-
-			if tt.code == "" {
-				if len(problems) > 0 {
-					t.Fatalf("problems = %+v, want none", problems)
-				}
-
-				return
-			}
-
-			if len(problems) != 1 {
-				t.Fatalf("want one %s problem, got %+v", tt.code, problems)
-			}
-
-			p := problems[0]
-			if p.Code != tt.code || p.Severity != domain.SeverityError || p.File != FileName || p.Check == "" {
-				t.Errorf("problem = %+v, want an error %s in %s with a check", p, tt.code, FileName)
-			}
-
-			if want := markedLine(tt.doc); p.Line != want {
-				t.Errorf("problem line = %d, want %d: %+v", p.Line, want, p)
-			}
-
-			for _, m := range tt.message {
-				if !strings.Contains(p.Message, m) {
-					t.Errorf("message %q does not name %s", p.Message, m)
-				}
-			}
+			checkOneProblem(t, tt.doc, tt.code, tt.message)
 		})
+	}
+}
+
+// checkOneProblem checks that doc has no problem when code is "", and otherwise exactly one: an
+// error with that code in factory.yaml, on the line marked "#here", whose message names each of
+// message.
+func checkOneProblem(t *testing.T, doc, code string, message []string) {
+	t.Helper()
+
+	_, problems := Check(checkTree(doc, nil))
+
+	if code == "" {
+		if len(problems) > 0 {
+			t.Fatalf("problems = %+v, want none", problems)
+		}
+
+		return
+	}
+
+	if len(problems) != 1 {
+		t.Fatalf("want one %s problem, got %+v", code, problems)
+	}
+
+	p := problems[0]
+	if p.Code != code || p.Severity != domain.SeverityError || p.File != FileName || p.Check == "" {
+		t.Errorf("problem = %+v, want an error %s in %s with a check", p, code, FileName)
+	}
+
+	if want := markedLine(doc); p.Line != want {
+		t.Errorf("problem line = %d, want %d: %+v", p.Line, want, p)
+	}
+
+	for _, m := range message {
+		if !strings.Contains(p.Message, m) {
+			t.Errorf("message %q does not name %s", p.Message, m)
+		}
 	}
 }
 
@@ -189,7 +213,9 @@ func TestLoad_ParsesTriggers(t *testing.T) {
 		{
 			Name: "shop-incident", On: "webhook.shop-alerts.failed",
 			Filter: &TriggerFilter{Repo: "acme/shop", SkipBots: true},
-			Only:   &TriggerOnly{FailuresInARow: 2, Dedupe: "service"},
+			Only: &TriggerOnly{
+				FailuresInARow: 2, Dedupe: "service", ModelAgrees: &TriggerModelAgrees{Question: "Is this a real outage rather than a blip?"},
+			},
 			Create: TriggerCreate{
 				Type: "incident", Station: "triage", Expedite: true,
 				Title: "{{service}} is failing", Brief: "Alert: {{alert.summary}}",

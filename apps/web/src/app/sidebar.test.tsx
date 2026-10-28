@@ -188,19 +188,6 @@ describe('the sidebar', () => {
     expect(links.some((text) => text?.startsWith('Knowledge'))).toBe(true);
   });
 
-  it.each([['Credentials', /^Credentials$/]])(
-    'renders %s as not available: aria-disabled, focusable, and inert',
-    async (_, name) => {
-      const { router } = renderSidebar({ can: ['connection:read', 'knowledge:read'] });
-      const control = within(await nav()).getByRole('button', { name });
-
-      expect(control.getAttribute('aria-disabled')).toBe('true');
-      expect(control.tabIndex).not.toBe(-1);
-      fireEvent.click(control);
-      expect(router.state.location.pathname).toBe('/o/acme');
-    },
-  );
-
   it('links Runs to the runs page', async () => {
     renderSidebar();
 
@@ -213,19 +200,30 @@ describe('the sidebar', () => {
 
   it('shows the not-available tooltip on hover', async () => {
     renderSidebar();
-    fireEvent.focus(within(await nav()).getByRole('button', { name: /^Credentials$/ }));
+    await collapse();
+    fireEvent.focus(within(await nav()).getByRole('button', { name: /^New item/ }));
 
     expect(await screen.findByText('Not available yet')).toBeTruthy();
   });
 
-  it('keeps Jonah disabled in the open factory', async () => {
+  it('lists Intake as a link and Jonah as a link in the open factory', async () => {
     renderSidebar({ at: '/o/acme/f/goal' });
+    const sidebar = await nav();
+
+    expect(within(sidebar).getByRole('link', { name: 'Intake' }).getAttribute('href')).toBe('/o/acme/f/goal/intake');
+    expect(within(sidebar).getByRole('link', { name: 'Jonah' }).getAttribute('href')).toBe(
+      '/o/acme/f/goal/jonah/evals',
+    );
+  });
+
+  it('keeps Jonah current on its Evals page', async () => {
+    renderSidebar({ at: '/o/acme/f/goal/jonah/evals' });
 
     expect(
       within(await nav())
-        .getByRole('button', { name: 'Jonah' })
-        .getAttribute('aria-disabled'),
-    ).toBe('true');
+        .getByRole('link', { name: 'Jonah' })
+        .getAttribute('aria-current'),
+    ).toBe('page');
   });
 
   it('lists Intake as a link between Agents and Jonah, current on its pages', async () => {
@@ -233,10 +231,9 @@ describe('the sidebar', () => {
     const sidebar = await nav();
     const link = within(sidebar).getByRole('link', { name: 'Intake' });
 
-    expect(link.getAttribute('href')).toBe('/o/acme/f/goal/intake');
     expect(link.getAttribute('aria-current')).toBe('page');
     const agents = within(sidebar).getByRole('link', { name: 'Agents' });
-    const jonah = within(sidebar).getByRole('button', { name: 'Jonah' });
+    const jonah = within(sidebar).getByRole('link', { name: 'Jonah' });
     expect(agents.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(link.compareDocumentPosition(jonah) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -439,7 +436,7 @@ describe('the sidebar', () => {
 
 describe('the collapsed rail', () => {
   it('lists its entries in order with accessible names', async () => {
-    renderSidebar({ can: ['connection:read', 'knowledge:read', 'factory:create'] });
+    renderSidebar({ can: ['connection:read', 'credential:read', 'knowledge:read', 'factory:create'] });
     await collapse();
     const names = railNames(await nav());
 
@@ -457,6 +454,19 @@ describe('the collapsed rail', () => {
     expect(names.slice(11)).toEqual(['New factory', 'Spend this week, 37% of budget', 'FC, Freddy Cruz, account']);
   });
 
+  it('links Credentials to its page for those who may read credentials', async () => {
+    renderSidebar({ can: ['credential:read'] });
+    const link = within(await nav()).getByRole('link', { name: /^Credentials/ });
+
+    expect(link.getAttribute('href')).toBe('/o/acme/credentials');
+  });
+
+  it('does not list Credentials without credential:read', async () => {
+    renderSidebar({ can: ['connection:read'] });
+
+    expect(within(await nav()).queryByRole('link', { name: /^Credentials/ })).toBeNull();
+  });
+
   it('links Needs you to its page, with the count it waits on', async () => {
     renderSidebar();
     await collapse();
@@ -466,7 +476,7 @@ describe('the collapsed rail', () => {
     expect(link.getAttribute('aria-disabled')).toBeNull();
   });
 
-  it.each(['New item', 'Credentials'])('keeps %s disabled, and says what it is and why', async (name) => {
+  it.each(['New item'])('keeps %s disabled, and says what it is and why', async (name) => {
     renderSidebar();
     await collapse();
     const control = within(await nav()).getByRole('button', { name: new RegExp(`^${name}`) });

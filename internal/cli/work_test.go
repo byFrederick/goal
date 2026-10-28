@@ -383,3 +383,175 @@ func TestDescribe_RunCostKeepsCents(t *testing.T) {
 		t.Errorf("usd(0.00004) = %q", got)
 	}
 }
+
+// What the answer tests send and the question events they describe.
+const (
+	flagChoice    = "--choice"
+	kindAsked     = "question_asked"
+	keyAgent      = "agent"
+	keyQuestion   = "question"
+	roleArchitect = "architect"
+)
+
+// answerGoald plays an item with an open question: goal#1 takes an answer, goal#2 has no open
+// question, and a choice past the first two is not one of the question's.
+type answerGoald struct {
+	mu     sync.Mutex
+	called []string
+	bodies []map[string]any
+}
+
+func (g *answerGoald) serve(t *testing.T) *httptest.Server {
+	t.Helper()
+
+	refuse := func(w http.ResponseWriter, status int, code string) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(gen.Problem{Title: "Refused", Status: status, Code: &code})
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/orgs/acme/items/{item}/answer", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+
+		_ = json.NewDecoder(r.Body).Decode(&b)
+
+		g.mu.Lock()
+		g.called, g.bodies = append(g.called, r.PathValue("item")), append(g.bodies, b)
+		g.mu.Unlock()
+
+		switch {
+		case r.PathValue("item") == closedRef:
+			refuse(w, http.StatusConflict, "no-open-question")
+		case b["choice"] != nil && b["choice"] != float64(0) && b["choice"] != float64(1):
+			refuse(w, http.StatusBadRequest, "bad-choice")
+		case b["answer"] == "forbidden":
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(http.StatusConflict)
+
+			detail := "the item moved meanwhile"
+			_ = json.NewEncoder(w).Encode(gen.Problem{Title: "Item changed", Status: http.StatusConflict, Detail: &detail})
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(gen.Item{Ref: notedRef, State: gen.ItemStateQueued, Station: stationSpec})
+		}
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	return srv
+}
+
+func TestAnswer_SendsTheTextOrTheChoice(t *testing.T) {
+	t.Parallel()
+
+	g := &answerGoald{}
+	env := testEnv(t, g.serve(t).URL, map[string]string{envOrg: orgAcme})
+
+	var out bytes.Buffer
+	for _, args := range [][]string{
+		{verbAnswer, notedRef, "Use the read replica."},
+		{verbAnswer, notedRef, flagChoice, "2"},
+	} {
+		if err := run(t.Context(), args, &printer{w: &out}, env, nil); err != nil {
+			t.Fatalf("goal %v: %v", args, err)
+		}
+	}
+
+	line := "✓ answered goal#1; now queued at spec\n"
+	if out.String() != line+line {
+		t.Errorf("output %q; want %q twice", out.String(), line)
+	}
+
+	if !slices.Equal(g.called, []string{notedRef, notedRef}) || len(g.bodies[0]) != 1 || g.bodies[0]["answer"] != "Use the read replica." ||
+		len(g.bodies[1]) != 1 || g.bodies[1]["choice"] != float64(1) {
+		t.Errorf("goald got %v with %v", g.called, g.bodies)
+	}
+}
+
+func TestAnswer_UsageErrors(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv(t, "http://127.0.0.1:1", nil) // never reached
+
+	for _, args := range [][]string{
+		{verbAnswer},
+		{verbAnswer, notedRef},
+		{verbAnswer, notedRef, "  "},
+		{verbAnswer, notedRef, "a", "b"},
+		{verbAnswer, notedRef, "a", flagChoice, "1"},
+		{verbAnswer, notedRef, flagChoice, "0"},
+		{verbAnswer, notedRef, flagChoice, "-1"},
+		{verbAnswer, notedRef, flagChoice, "x"},
+		{verbAnswer, flagChoice, "1"},
+	} {
+		if err := run(t.Context(), args, &printer{w: &bytes.Buffer{}}, env, nil); !errors.Is(err, errUsage) {
+			t.Errorf("goal %v = %v; want a usage error", args, err)
+		}
+	}
+}
+
+func TestAnswer_Refusals(t *testing.T) {
+	t.Parallel()
+
+	g := &answerGoald{}
+	env := testEnv(t, g.serve(t).URL, map[string]string{envOrg: orgAcme})
+
+	for _, tt := range []struct {
+		args []string
+		want string
+	}{
+		{args: []string{verbAnswer, closedRef, "yes"}, want: closedRef + " has no open question to answer"},
+		{args: []string{verbAnswer, notedRef, flagChoice, "3"}, want: "choice 3 is not one of the question's choices"},
+		{args: []string{verbAnswer, notedRef, "forbidden"}, want: "Item changed: the item moved meanwhile"},
+	} {
+		err := run(t.Context(), tt.args, &printer{w: &bytes.Buffer{}}, env, nil)
+		if err == nil || !strings.Contains(err.Error(), tt.want) || strings.Contains(err.Error(), "Refused") {
+			t.Errorf("goal %v = %v; want %q", tt.args, err, tt.want)
+		}
+	}
+}
+
+func TestDescribe_QuestionEvents(t *testing.T) {
+	t.Parallel()
+
+	long := strings.Repeat("why ", 100)
+
+	for _, tt := range []struct {
+		e    gen.Event
+		want string
+	}{
+		{
+			e: gen.Event{Kind: kindAsked, Data: map[string]any{
+				keyAgent: roleArchitect, keyQuestion: "Which\ndatabase?", "choices": []any{"PostgreSQL", "the replica"},
+			}},
+			want: roleArchitect + " asked: Which database? (choices: 1. PostgreSQL, 2. the replica)",
+		},
+		{
+			e:    gen.Event{Kind: kindAsked, Data: map[string]any{keyAgent: roleArchitect, keyQuestion: "Which database?"}},
+			want: roleArchitect + " asked: Which database?",
+		},
+		{
+			e:    gen.Event{Kind: kindAsked, Data: map[string]any{keyAgent: roleArchitect, keyQuestion: "Odd?", "choices": []any{"yes", nil, 2}}},
+			want: roleArchitect + " asked: Odd? (choices: 1. yes, 2. , 3. 2)",
+		},
+		{
+			e:    gen.Event{Kind: "question_answered", Actor: "pat", Data: map[string]any{"answer": "the  replica", "choice_index": 1}},
+			want: "answer from pat: the replica",
+		},
+		{
+			e:    gen.Event{Kind: kindAsked, Data: map[string]any{keyAgent: roleArchitect, keyQuestion: long}},
+			want: cut(roleArchitect+" asked: "+oneLine(long), 300),
+		},
+	} {
+		got := describe(tt.e)
+		if got != tt.want {
+			t.Errorf("describe(%s) = %q, want %q", tt.e.Kind, got, tt.want)
+		}
+
+		if strings.Contains(got, "\n") || len([]rune(strings.TrimSuffix(got, "…"))) > 300 {
+			t.Errorf("describe(%s) = %q, want one line of at most 300 characters", tt.e.Kind, got)
+		}
+	}
+}
