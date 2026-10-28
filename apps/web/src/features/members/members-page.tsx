@@ -7,7 +7,7 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { Check, ChevronDown, ChevronRight, Ellipsis, Minus, Plus, Search, X } from 'lucide-react';
 import { Component, type ReactNode, Suspense, useId, useState } from 'react';
-import { authConfigQuery, factoriesQuery, invitationsQuery, membersQuery, orgQuery } from '../../api/queries';
+import { authConfigQuery, factoriesQuery, invitationsQuery, membersQuery, meQuery, orgQuery } from '../../api/queries';
 import type { Factory, FactoryRole, Invitation, Member, OrgRole, OrgSummary } from '../../api/types';
 import { displayName, hasName, initialsOf } from '../../shared/names';
 import { useOrg } from '../../shared/org';
@@ -41,6 +41,7 @@ import {
   roleChange,
 } from './people';
 import { refusal as refusalText, usePeopleChanges } from './use-people';
+import { domainOf, useSignupDomain } from './use-signup-domain';
 
 /** What the caller may do on this page. */
 interface Powers {
@@ -49,6 +50,8 @@ interface Powers {
   /** Give and take factory roles (goald's): owners and admins. */
   grants: boolean;
   role: OrgRole | null | undefined;
+  /** The caller's sign-in email, which sign-up by domain takes its domain from. */
+  email: string | undefined;
 }
 
 /** The loading state: the page background and a label for screen readers, no placeholder shapes. */
@@ -96,12 +99,14 @@ function MembersData() {
   const { data: members } = useSuspenseQuery(membersQuery(org.id));
   const { data: factories } = useSuspenseQuery(factoriesQuery(org.id));
   const { data: config } = useSuspenseQuery(authConfigQuery);
+  const { data: me } = useSuspenseQuery(meQuery);
   const readsInvitations = detail.can.includes('invitation:read');
   const { data: invitations = [] } = useQuery({ ...invitationsQuery(org.id), enabled: readsInvitations });
   const powers: Powers = {
     manages: config.mode === 'session' && detail.can.includes('member:manage'),
     grants: detail.can.includes('member:manage'),
     role: detail.role,
+    email: me.user?.email,
   };
   return (
     <Members
@@ -279,7 +284,13 @@ function Members({ org, members, invitations, factories, powers, signIn }: Membe
         </div>
 
         <div className="flex min-w-0 flex-col gap-4">
-          {powers.manages ? <InviteLinkCard /> : null}
+          {powers.manages ? (
+            <InviteLinkCard org={org} owner={powers.role === 'owner'} email={powers.email} />
+          ) : (
+            <SectionCard title="Sign-up" className="gap-3 p-4 md:p-5">
+              <SignupDomainRow org={org} owner={false} email={powers.email} />
+            </SectionCard>
+          )}
           <CapabilitiesCard />
         </div>
       </div>
@@ -651,8 +662,8 @@ function FactoryRoles({
   );
 }
 
-/** The invite link, with its controls. No invite link API exists yet: each control is not available. */
-function InviteLinkCard() {
+/** The invite link, with its controls, and sign-up by domain. No invite link API exists yet: each control is not available. */
+function InviteLinkCard({ org, owner, email }: { org: OrgSummary; owner: boolean; email: string | undefined }) {
   return (
     <SectionCard title="Invite link" className="gap-3 p-4 md:p-5">
       <div className="flex h-9 min-w-0 items-center gap-2 rounded-control border border-rule bg-panel px-3">
@@ -679,16 +690,50 @@ function InviteLinkCard() {
           </NotAvailable>
         </span>
       </div>
-      <div className="flex items-start gap-3 border-t border-line pt-3">
-        <span className="flex flex-1 flex-col gap-1">
-          <span className="text-body font-medium">Only emails at a domain</span>
-          <span className="text-secondary text-muted">Anyone at your domain joins as a Member</span>
-        </span>
-        <NotAvailable label="Restrict sign-up to a domain">
-          <Switch checked={false} onCheckedChange={() => {}} aria-label="Restrict sign-up to a domain" />
-        </NotAvailable>
-      </div>
+      <SignupDomainRow org={org} owner={owner} email={email} />
     </SectionCard>
+  );
+}
+
+/** The role a person joins as by sign-up domain, with its article: goald's join_role. */
+const joinsAs: Record<FactoryRole, string> = { viewer: 'a Viewer', approver: 'an Approver', editor: 'an Editor' };
+
+/** "Only emails at a domain": on, the caller's email domain; only owners change it, others see it as it is. */
+function SignupDomainRow({ org, owner, email }: { org: OrgSummary; owner: boolean; email: string | undefined }) {
+  const { settings, stored, busy, failure, turn } = useSignupDomain(org, email);
+  const domain = stored?.domain ?? domainOf(email);
+  const ready = settings.isSuccess && domain !== undefined;
+  return (
+    <div className="flex items-start gap-3 border-t border-line pt-3">
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="text-body font-medium">Only emails at a domain</span>
+        {settings.isError ? (
+          <span role="alert" className="text-secondary text-rework-ink">
+            Sign-up by domain could not load. Reload the page to try again.
+          </span>
+        ) : settings.isPending ? (
+          <span className="text-secondary text-muted">
+            <span className="sr-only">Loading</span>
+          </span>
+        ) : ready ? (
+          <span className="text-secondary text-muted">
+            {`Anyone at ${domain} joins as ${joinsAs[stored?.join_role ?? 'viewer']}`}
+          </span>
+        ) : null}
+        {failure ? (
+          <span role="alert" className="text-secondary text-rework-ink">
+            {failure}
+          </span>
+        ) : null}
+      </span>
+      <Switch
+        checked={stored !== null}
+        onCheckedChange={turn}
+        disabled={!owner || !ready || busy}
+        aria-busy={settings.isPending || busy || undefined}
+        aria-label="Restrict sign-up to a domain"
+      />
+    </div>
   );
 }
 

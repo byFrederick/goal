@@ -20,6 +20,7 @@ import type {
   ItemState,
   Org,
   Run,
+  SignupDomain,
   ToolApproval,
   VersionRef,
 } from '@goal/api-client';
@@ -156,6 +157,8 @@ export interface MockState {
   /** Who exists and belongs where, and the invitations (people.ts). */
   people: MockPeople;
   slots: Record<string, MockSlots>;
+  /** Each organization's sign-up domain, while one is set (ADR 0023, decision 7). */
+  signupDomains: Record<string, SignupDomain>;
   /** Every organization's audit log, oldest first. */
   audit: { org: string; entry: AuditEntry }[];
   nextAuditId: number;
@@ -432,6 +435,7 @@ export const orgCan = [
   'org:delete',
   'org:manage',
   'org:read',
+  'org:signup_domain',
   'org:transfer',
   'personal_token:manage',
   'personal_token:read',
@@ -1962,6 +1966,7 @@ export function seed(now = Date.now()): MockState {
       [acmeOrg]: { max: 6, factories: { [goalFactory.id]: 3, [sreFactory.id]: 2 } },
       [labsOrg]: { max: null, factories: {} },
     },
+    signupDomains: {},
     audit: [],
     nextAuditId: 1,
     stations: {
