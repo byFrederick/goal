@@ -147,14 +147,21 @@ export function ItemPage() {
     [item, events, factory],
   );
   const steps = stepsOf({ item, stations: factory.stations, events, flow: item.flow ?? noFlow, now: Date.now() });
-  // The top bar's actions: Watch live (not built yet), then the item's decisions, Move in a menu.
+  // The top bar's actions: Watch live (not built yet), then the item's decisions, Move and Cancel item.
   // A phone has its decisions in its card under the title, so the bar has no actions there.
   const phone = usePhone();
-  // On a phone the bar's More actions menu holds Pause, Send back and Move; its Back link goes to the board.
+  // On a phone the bar's More actions menu holds Pause, Send back, Move and Cancel item; its Back link goes to the board.
   const actions = useMemo(
     () =>
       phone ? (
-        <ItemDecisions item={decidable} factory={factory.id} station={station} controls={controls} split="controls" />
+        <ItemDecisions
+          item={decidable}
+          factory={factory.id}
+          station={station}
+          controls={controls}
+          split="controls"
+          cancellable
+        />
       ) : (
         <div className="flex items-center gap-2">
           <NotAvailable>
@@ -163,7 +170,14 @@ export function ItemPage() {
               Watch live
             </Button>
           </NotAvailable>
-          <ItemDecisions item={decidable} factory={factory.id} station={station} controls={controls} moveInMenu />
+          <ItemDecisions
+            item={decidable}
+            factory={factory.id}
+            station={station}
+            controls={controls}
+            moveInMenu
+            cancellable
+          />
         </div>
       ),
     [phone, decidable, factory.id, station, controls],

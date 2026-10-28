@@ -6,15 +6,17 @@
 // decisions show disabled with who decides ("Approvers of sre decide here."); without
 // item:operate pause and move are not offered. goald refuses them anyway.
 import { type QueryKey, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, Check, Ellipsis, ExternalLink, GitMerge, Pause, Play, RotateCcw, Undo2 } from 'lucide-react';
+import { ArrowRight, Ban, Check, Ellipsis, ExternalLink, GitMerge, Pause, Play, RotateCcw, Undo2 } from 'lucide-react';
 import { type FormEvent, useId, useState } from 'react';
 import { toast } from 'sonner';
-import { ApiError, approveItem, mergeItem, pauseItem, rejectItem, retryItem } from '../api/client';
+import { ApiError, approveItem, cancelItem, mergeItem, pauseItem, rejectItem, retryItem } from '../api/client';
 import { keys } from '../api/queries';
 import type { Factory, Item, ItemState, Station } from '../api/types';
 import { Button } from '../ui/button';
 import { cn } from '../ui/cn';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 import { Dialog, DialogClose, DialogContent } from '../ui/dialog';
+import { Field, Textarea } from '../ui/field';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../ui/menu';
 import { useFactoryById } from './factory';
 import { humanize } from './format';
@@ -108,6 +110,27 @@ export function useApprove() {
 }
 
 /**
+ * Cancels an open item (Cancel item, the item page's). A 409 (the item closed meanwhile) is said in the
+ * dialog, so it raises no toast; the other errors do. The invalidations are the decisions' own.
+ */
+export function useCancelItem(item: DecidableItem, factory: string) {
+  const client = useQueryClient();
+  const org = useOrg();
+  return useMutation({
+    mutationFn: (reason: string) => cancelItem(org.id, item.key, reason || undefined),
+    onSuccess: () => toast.success(`Cancelled ${item.ref}.`),
+    onError: (err) => {
+      if (err instanceof ApiError && err.status === 409) return;
+      toast.error(`Could not cancel ${item.ref}`, { description: err.message });
+    },
+    onSettled: () =>
+      Promise.all(
+        itemChangeInvalidations(org.id, factory, item.key).map((queryKey) => client.invalidateQueries({ queryKey })),
+      ),
+  });
+}
+
+/**
  * The queries a change to one item moves: its factory's work (the board), the organization's
  * attention and inboxes, and the item with its parts (an assembly's pause, retry or cancel changes them).
  */
@@ -154,6 +177,11 @@ interface Props {
    * with Pause, Send back and Move. Undefined renders both, as the desktop does.
    */
   split?: 'decisions' | 'controls';
+  /**
+   * The item's page offers Cancel item (a button, or a menu entry on a phone). It shows only while the
+   * item is open and the caller holds item:decide; an assembly's page never passes it.
+   */
+  cancellable?: boolean;
   className?: string;
 }
 
@@ -168,9 +196,11 @@ export function ItemDecisions({
   sendBackLabel = 'Send back',
   moveInMenu = false,
   split,
+  cancellable = false,
   className,
 }: Props) {
   const decide = useDecision(item, factory);
+  const cancel = useCancelItem(item, factory);
   const grants = useFactoryById(factory);
   const mayDecide = holds(grants, 'item:decide');
   const mayOperate = holds(grants, 'item:operate');
@@ -179,13 +209,35 @@ export function ItemDecisions({
   const ctl =
     controls && mayOperate ? controlsFor(item, controls.reworkTarget) : { pause: false, sendBack: false, move: false };
   const [open, setOpen] = useState<'reject' | 'merge' | 'pause' | 'move' | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
   const reject = can.reject || ctl.sendBack;
   const decisions = can.approve || reject || can.merge || can.retry;
+  const cancelHere = cancellable && mayDecide && item.state !== 'done' && item.state !== 'cancelled';
 
-  const menuHas = Boolean(controls) && (ctl.pause || reject || ctl.move);
-  if (split === 'controls' ? !menuHas : split === 'decisions' ? !decisions : !decisions && !ctl.pause && !ctl.move) {
+  const menuHas = (Boolean(controls) && (ctl.pause || reject || ctl.move)) || cancelHere;
+  if (
+    split === 'controls'
+      ? !menuHas
+      : split === 'decisions'
+        ? !decisions
+        : !decisions && !ctl.pause && !ctl.move && !cancelHere
+  ) {
     return null;
   }
+
+  // Closing the cancel dialog drops a refusal and the typed reason with it.
+  const closeCancel = (next: boolean) => {
+    setCancelOpen(next);
+    if (!next) {
+      cancel.reset();
+      setCancelReason('');
+    }
+  };
+  const cancelRefusal =
+    cancel.error instanceof ApiError && cancel.error.status === 409
+      ? (cancel.error.detail ?? cancel.error.title)
+      : undefined;
 
   const pending = decide.isPending ? decide.variables?.kind : undefined;
   const btn = layout === 'stack' ? 'w-full justify-center' : '';
@@ -270,7 +322,7 @@ export function ItemDecisions({
             align="end"
             className="w-52"
             onCloseAutoFocus={(event) => {
-              if (open !== null) event.preventDefault();
+              if (open !== null || cancelOpen) event.preventDefault();
             }}
           >
             {ctl.pause ? (
@@ -289,6 +341,12 @@ export function ItemDecisions({
               <MenuItem disabled={decide.isPending} onSelect={() => setOpen('move')}>
                 <ArrowRight size={16} strokeWidth={1.75} aria-hidden="true" />
                 Move
+              </MenuItem>
+            ) : null}
+            {cancelHere ? (
+              <MenuItem disabled={cancel.isPending} className="text-rework" onSelect={() => setCancelOpen(true)}>
+                <Ban size={16} strokeWidth={1.75} aria-hidden="true" />
+                Cancel item
               </MenuItem>
             ) : null}
           </MenuContent>
@@ -315,6 +373,12 @@ export function ItemDecisions({
             </MenuItem>
           </MenuContent>
         </Menu>
+      ) : null}
+      {split === undefined && cancelHere ? (
+        <Button variant="rework" disabled={cancel.isPending} onClick={() => setCancelOpen(true)}>
+          <Ban size={16} strokeWidth={1.75} aria-hidden="true" />
+          {cancel.isPending ? 'Cancelling…' : 'Cancel item'}
+        </Button>
       ) : null}
       {split !== 'controls' && decisions && !mayDecide ? (
         <p id={reasonId} className={cn('m-0 text-sm text-muted', layout === 'row' && 'basis-full')}>
@@ -361,7 +425,69 @@ export function ItemDecisions({
           refusal={decide.variables?.kind === 'merge' ? mergeRefusal(decide.error) : undefined}
         />
       ) : null}
+      {cancelHere ? (
+        <CancelItemDialog
+          itemRef={item.ref}
+          open={cancelOpen}
+          onOpenChange={closeCancel}
+          reason={cancelReason}
+          onReasonChange={setCancelReason}
+          onConfirm={() => cancel.mutate(cancelReason, { onSuccess: () => closeCancel(false) })}
+          pending={cancel.isPending}
+          refusal={cancelRefusal}
+        />
+      ) : null}
     </div>
+  );
+}
+
+interface CancelItemDialogProps {
+  itemRef: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  reason: string;
+  onReasonChange: (reason: string) => void;
+  onConfirm: () => void;
+  pending: boolean;
+  /** goald's refusal (409), said inline; the dialog stays open. */
+  refusal: string | undefined;
+}
+
+/** Cancel item: says the pull request stays open, takes an optional reason and confirms in red. */
+function CancelItemDialog({
+  itemRef,
+  open,
+  onOpenChange,
+  reason,
+  onReasonChange,
+  onConfirm,
+  pending,
+  refusal,
+}: CancelItemDialogProps) {
+  return (
+    <ConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={`Cancel ${itemRef}?`}
+      description="The factory stops working on it and its pull request stays open. You can't reopen a cancelled item."
+      confirmLabel="Cancel item"
+      pendingLabel="Cancelling…"
+      tone="danger"
+      pending={pending}
+      onConfirm={onConfirm}
+    >
+      <Field label="Reason" help="Optional.">
+        <Textarea rows={3} value={reason} onChange={(e) => onReasonChange(e.target.value)} />
+      </Field>
+      {refusal ? (
+        <p
+          role="alert"
+          className="m-0 rounded-control border border-rework-tint bg-rework-tint px-3 py-2 text-sm leading-snug text-rework-ink"
+        >
+          {refusal}
+        </p>
+      ) : null}
+    </ConfirmDialog>
   );
 }
 
