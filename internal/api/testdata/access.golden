@@ -3796,6 +3796,32 @@ transferOwnership    pat-demoted      403 forbidden            404 org-not-found
 transferOwnership    pat-removed      401 unauthenticated      401 unauthenticated
 transferOwnership    pat-platform     403 forbidden            404 org-not-found
 transferOwnership    pat-deleted-org  401 unauthenticated      401 unauthenticated
+tryIntakeTrigger     anonymous        401 unauthenticated      401 unauthenticated
+tryIntakeTrigger     owner            200                      404 org-not-found
+tryIntakeTrigger     admin            200                      404 org-not-found
+tryIntakeTrigger     viewer           403 forbidden            404 org-not-found
+tryIntakeTrigger     approver         403 forbidden            404 org-not-found
+tryIntakeTrigger     editor           200                      404 org-not-found
+tryIntakeTrigger     member-no-roles  404 factory-not-found    404 org-not-found
+tryIntakeTrigger     other-org-owner  404 org-not-found        200
+tryIntakeTrigger     platform-admin   404 org-not-found        404 org-not-found
+tryIntakeTrigger     stale-owner      200                      404 org-not-found
+tryIntakeTrigger     key-scoped       403 forbidden            404 org-not-found
+tryIntakeTrigger     key-restricted   404 factory-not-found    404 org-not-found
+tryIntakeTrigger     key-other-org    404 org-not-found        200
+tryIntakeTrigger     key-expired      401 unauthenticated      401 unauthenticated
+tryIntakeTrigger     key-revoked      401 unauthenticated      401 unauthenticated
+tryIntakeTrigger     bearer-owner     200                      404 org-not-found
+tryIntakeTrigger     pat-approver     403 forbidden            404 org-not-found
+tryIntakeTrigger     pat-owner        200                      404 org-not-found
+tryIntakeTrigger     pat-viewer       403 forbidden            404 org-not-found
+tryIntakeTrigger     pat-other-org    404 org-not-found        200
+tryIntakeTrigger     pat-expired      401 unauthenticated      401 unauthenticated
+tryIntakeTrigger     pat-revoked      401 unauthenticated      401 unauthenticated
+tryIntakeTrigger     pat-demoted      404 factory-not-found    404 org-not-found
+tryIntakeTrigger     pat-removed      401 unauthenticated      401 unauthenticated
+tryIntakeTrigger     pat-platform     200                      404 org-not-found
+tryIntakeTrigger     pat-deleted-org  401 unauthenticated      401 unauthenticated
 tryJudge             anonymous        401 unauthenticated      401 unauthenticated
 tryJudge             owner            200                      404 org-not-found
 tryJudge             admin            200                      404 org-not-found

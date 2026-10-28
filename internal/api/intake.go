@@ -145,16 +145,16 @@ func (s *server) GetIntakeTrigger(ctx context.Context, req gen.GetIntakeTriggerR
 }
 
 func (s *server) TryIntakeTrigger(ctx context.Context, req gen.TryIntakeTriggerRequestObject) (gen.TryIntakeTriggerResponseObject, error) {
+	f, err := s.factory(ctx, req.Factory)
+	if err != nil {
+		return nil, err
+	}
+
 	if req.Body == nil || req.Body.Firing == "" {
 		return nil, fmt.Errorf("%w: name the firing to try", errInvalid)
 	}
 
 	by, err := actorOf(ctx, "try a trigger")
-	if err != nil {
-		return nil, err
-	}
-
-	f, err := s.factory(ctx, req.Factory)
 	if err != nil {
 		return nil, err
 	}
