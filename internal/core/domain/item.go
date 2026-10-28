@@ -129,6 +129,19 @@ func IntegrationBranch(root Item) string {
 	return branchName("goal/a", root)
 }
 
+// RunBase is the branch a run of it works on, always it.Branch(), and the base that branch is cut
+// from and its pull request goes into, decided once at run start (ADR 0033). A part whose root
+// has an integration branch builds on it, unless the part's pull request was opened against
+// another base (prBase, empty while it names none), such as one opened against the default
+// branch before the switch. Every other item gets an empty base: the default branch.
+func RunBase(it, root Item, prBase string) (branch, base string) {
+	if it.ParentID == "" || root.IntegrationBranch == "" || (prBase != "" && prBase != root.IntegrationBranch) {
+		return it.Branch(), ""
+	}
+
+	return it.Branch(), root.IntegrationBranch
+}
+
 // branchName is prefix, the item's number and, when its title has one, a dash and the title's
 // slug: lowercase ASCII letters and digits, each other run of characters one dash, cut near
 // maxSlug.
