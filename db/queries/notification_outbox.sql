@@ -48,3 +48,55 @@ SELECT EXISTS (
   WHERE event = 'budget' AND created_at >= sqlc.arg(since)::timestamptz
     AND event_id LIKE 'budget/' || sqlc.arg(factory_id)::uuid::text || '/%'
 ) AS queued;
+
+-- name: ClaimNotifications :many
+-- The sender job's claim (decision 3): at most max due rows of channel (pending, next attempt at
+-- or before now, no lease live at now), oldest due first, that no other transaction holds, each
+-- leased until until with one more attempt. Each row comes with what its message needs and the
+-- facts that say whether its recipient still qualifies: their organization role (blank when no
+-- longer a member), their role on the event's factory (blank: none) and their saved channels for the event
+-- (NULL without a saved preference). The address is the notification email, else the sign-in
+-- email.
+WITH due AS (
+  SELECT d.id FROM notification_outbox d
+  WHERE d.channel = sqlc.arg(channel)::text AND d.state = 'pending' AND d.next_attempt_at <= sqlc.arg(now)::timestamptz
+    AND (d.lease_until IS NULL OR d.lease_until <= sqlc.arg(now)::timestamptz)
+  ORDER BY d.next_attempt_at, d.id
+  LIMIT sqlc.arg(max)::int
+  FOR UPDATE SKIP LOCKED
+),
+claimed AS (
+  UPDATE notification_outbox o SET lease_until = sqlc.arg(until)::timestamptz, attempts = o.attempts + 1
+  FROM due WHERE o.id = due.id
+  RETURNING o.*
+),
+members AS (
+  SELECT (m ->> 'user_id')::uuid AS user_id, m ->> 'email' AS email, m ->> 'role' AS role
+  FROM jsonb_array_elements(goal_members()) AS m
+)
+SELECT c.id, c.event_id, c.event, c.user_id, c.channel, c.payload, c.attempts, c.created_at,
+       coalesce(m.role, '')::text AS org_role,
+       coalesce(nullif(ns.email, ''), m.email, '')::text AS address,
+       coalesce(fr.role, '')::text AS factory_role,
+       p.email AS prefers_email, p.slack AS prefers_slack,
+       org.slug::text AS org_slug,
+       coalesce(f.name, '')::text AS factory_name, coalesce(f.title, f.name, '')::text AS factory_title,
+       coalesce(w.number, 0)::bigint AS item_number, coalesce(w.title, '')::text AS item_title
+FROM claimed c
+JOIN organizations org ON org.id = c.org_id
+LEFT JOIN members m ON m.user_id = c.user_id
+LEFT JOIN notification_settings ns ON ns.user_id = c.user_id
+LEFT JOIN factories f ON f.id = (c.payload ->> 'factory_id')::uuid
+LEFT JOIN factory_roles fr ON fr.factory_id = f.id AND fr.user_id = c.user_id
+LEFT JOIN work_items w ON w.id = (c.payload ->> 'item_id')::uuid
+LEFT JOIN notification_preferences p ON p.user_id = c.user_id AND p.event = c.event
+ORDER BY c.next_attempt_at, c.id;
+
+-- name: FinishNotification :execrows
+-- Ends the claim of row id that made attempt attempts: sent at sent_at, back to pending until
+-- next_attempt_at, or failed or skipped with last_error; the lease is released. No row when a
+-- later claim took it.
+UPDATE notification_outbox
+SET state = sqlc.arg(state)::text, sent_at = sqlc.narg(sent_at)::timestamptz, last_error = sqlc.narg(last_error)::text,
+    next_attempt_at = coalesce(sqlc.narg(next_attempt_at)::timestamptz, next_attempt_at), lease_until = NULL
+WHERE id = sqlc.arg(id) AND state = 'pending' AND attempts = sqlc.arg(attempts)::int;

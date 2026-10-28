@@ -2,6 +2,7 @@ package porttest
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 
@@ -108,4 +109,132 @@ func (o *NotificationOutbox) Calls() int {
 	defer o.mu.Unlock()
 
 	return o.calls
+}
+
+var _ ports.NotificationDeliveries = (*NotificationDeliveries)(nil)
+
+// DeliveryRow is one outbox row of a NotificationDeliveries: the claim's view of it and its
+// delivery state.
+type DeliveryRow struct {
+	ports.Notification
+	State         string
+	NextAttemptAt time.Time
+	LeaseUntil    time.Time // zero: no lease
+	LastError     string
+	SentAt        time.Time
+}
+
+// NotificationDeliveries keeps outbox rows in memory with the database's claim rules: per
+// organization, due pending rows without a live lease, oldest due first, and a finish only under
+// the attempt that claimed.
+type NotificationDeliveries struct {
+	mu     sync.Mutex
+	rows   map[domain.OrgID][]*DeliveryRow
+	nextID int64
+}
+
+// NewNotificationDeliveries returns an outbox with no rows.
+func NewNotificationDeliveries() *NotificationDeliveries {
+	return &NotificationDeliveries{rows: map[domain.OrgID][]*DeliveryRow{}}
+}
+
+// Queue adds a pending row of org, due at n.At, and returns its id. n.ID and n.Attempts are
+// ignored; the claim's facts (Qualifies, Address, names) are what each claim returns.
+func (d *NotificationDeliveries) Queue(org domain.OrgID, n ports.Notification) int64 {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.nextID++
+	n.ID, n.Attempts = d.nextID, 0
+	d.rows[org] = append(d.rows[org], &DeliveryRow{Notification: n, State: ports.NotificationPending, NextAttemptAt: n.At})
+
+	return n.ID
+}
+
+// Row returns row id as it is now, and whether it exists.
+func (d *NotificationDeliveries) Row(id int64) (DeliveryRow, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	for _, rows := range d.rows {
+		for _, r := range rows {
+			if r.ID == id {
+				return *r, true
+			}
+		}
+	}
+
+	return DeliveryRow{}, false
+}
+
+// ClaimNotifications implements ports.NotificationDeliveries.
+func (d *NotificationDeliveries) ClaimNotifications(ctx context.Context, channel string, now time.Time, lease time.Duration, limit int) ([]ports.Notification, error) {
+	org, ok := domain.OrgFrom(ctx)
+	if !ok {
+		return nil, domain.ErrNoOrg
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	var due []*DeliveryRow
+
+	for _, r := range d.rows[org] {
+		if r.Channel == channel && r.State == ports.NotificationPending && !r.NextAttemptAt.After(now) &&
+			(r.LeaseUntil.IsZero() || !r.LeaseUntil.After(now)) {
+			due = append(due, r)
+		}
+	}
+
+	slices.SortStableFunc(due, func(a, b *DeliveryRow) int {
+		if c := a.NextAttemptAt.Compare(b.NextAttemptAt); c != 0 {
+			return c
+		}
+
+		return int(a.ID - b.ID)
+	})
+
+	out := make([]ports.Notification, 0, min(limit, len(due)))
+
+	for _, r := range due[:min(limit, len(due))] {
+		r.LeaseUntil = now.Add(lease)
+		r.Attempts++
+		out = append(out, r.Notification)
+	}
+
+	return out, nil
+}
+
+// FinishNotification implements ports.NotificationDeliveries.
+func (d *NotificationDeliveries) FinishNotification(ctx context.Context, id int64, attempts int, o ports.NotificationOutcome) (bool, error) {
+	org, ok := domain.OrgFrom(ctx)
+	if !ok {
+		return false, domain.ErrNoOrg
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	for _, r := range d.rows[org] {
+		if r.ID != id {
+			continue
+		}
+
+		if r.State != ports.NotificationPending || r.Attempts != attempts {
+			return false, nil
+		}
+
+		r.State, r.LeaseUntil, r.LastError = o.State, time.Time{}, o.Reason
+
+		switch o.State {
+		case ports.NotificationSent:
+			r.SentAt = o.At
+		case ports.NotificationPending:
+			r.NextAttemptAt = o.RetryAt
+		}
+
+		return true, nil
+	}
+
+	return false, nil
 }

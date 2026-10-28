@@ -33,6 +33,156 @@ func (q *Queries) BudgetNotificationSince(ctx context.Context, arg BudgetNotific
 	return queued, err
 }
 
+const claimNotifications = `-- name: ClaimNotifications :many
+WITH due AS (
+  SELECT d.id FROM notification_outbox d
+  WHERE d.channel = $1::text AND d.state = 'pending' AND d.next_attempt_at <= $2::timestamptz
+    AND (d.lease_until IS NULL OR d.lease_until <= $2::timestamptz)
+  ORDER BY d.next_attempt_at, d.id
+  LIMIT $3::int
+  FOR UPDATE SKIP LOCKED
+),
+claimed AS (
+  UPDATE notification_outbox o SET lease_until = $4::timestamptz, attempts = o.attempts + 1
+  FROM due WHERE o.id = due.id
+  RETURNING o.id, o.org_id, o.event_id, o.event, o.user_id, o.channel, o.payload, o.state, o.attempts, o.next_attempt_at, o.lease_until, o.last_error, o.created_at, o.sent_at
+),
+members AS (
+  SELECT (m ->> 'user_id')::uuid AS user_id, m ->> 'email' AS email, m ->> 'role' AS role
+  FROM jsonb_array_elements(goal_members()) AS m
+)
+SELECT c.id, c.event_id, c.event, c.user_id, c.channel, c.payload, c.attempts, c.created_at,
+       coalesce(m.role, '')::text AS org_role,
+       coalesce(nullif(ns.email, ''), m.email, '')::text AS address,
+       coalesce(fr.role, '')::text AS factory_role,
+       p.email AS prefers_email, p.slack AS prefers_slack,
+       org.slug::text AS org_slug,
+       coalesce(f.name, '')::text AS factory_name, coalesce(f.title, f.name, '')::text AS factory_title,
+       coalesce(w.number, 0)::bigint AS item_number, coalesce(w.title, '')::text AS item_title
+FROM claimed c
+JOIN organizations org ON org.id = c.org_id
+LEFT JOIN members m ON m.user_id = c.user_id
+LEFT JOIN notification_settings ns ON ns.user_id = c.user_id
+LEFT JOIN factories f ON f.id = (c.payload ->> 'factory_id')::uuid
+LEFT JOIN factory_roles fr ON fr.factory_id = f.id AND fr.user_id = c.user_id
+LEFT JOIN work_items w ON w.id = (c.payload ->> 'item_id')::uuid
+LEFT JOIN notification_preferences p ON p.user_id = c.user_id AND p.event = c.event
+ORDER BY c.next_attempt_at, c.id
+`
+
+type ClaimNotificationsParams struct {
+	Channel string
+	Now     time.Time
+	Max     int32
+	Until   time.Time
+}
+
+type ClaimNotificationsRow struct {
+	ID           int64
+	EventID      string
+	Event        string
+	UserID       uuid.UUID
+	Channel      string
+	Payload      []byte
+	Attempts     int32
+	CreatedAt    time.Time
+	OrgRole      string
+	Address      string
+	FactoryRole  string
+	PrefersEmail *bool
+	PrefersSlack *bool
+	OrgSlug      string
+	FactoryName  string
+	FactoryTitle string
+	ItemNumber   int64
+	ItemTitle    string
+}
+
+// The sender job's claim (decision 3): at most max due rows of channel (pending, next attempt at
+// or before now, no lease live at now), oldest due first, that no other transaction holds, each
+// leased until until with one more attempt. Each row comes with what its message needs and the
+// facts that say whether its recipient still qualifies: their organization role (blank when no
+// longer a member), their role on the event's factory (blank: none) and their saved channels for the event
+// (NULL without a saved preference). The address is the notification email, else the sign-in
+// email.
+func (q *Queries) ClaimNotifications(ctx context.Context, arg ClaimNotificationsParams) ([]ClaimNotificationsRow, error) {
+	rows, err := q.db.Query(ctx, claimNotifications,
+		arg.Channel,
+		arg.Now,
+		arg.Max,
+		arg.Until,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ClaimNotificationsRow
+	for rows.Next() {
+		var i ClaimNotificationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EventID,
+			&i.Event,
+			&i.UserID,
+			&i.Channel,
+			&i.Payload,
+			&i.Attempts,
+			&i.CreatedAt,
+			&i.OrgRole,
+			&i.Address,
+			&i.FactoryRole,
+			&i.PrefersEmail,
+			&i.PrefersSlack,
+			&i.OrgSlug,
+			&i.FactoryName,
+			&i.FactoryTitle,
+			&i.ItemNumber,
+			&i.ItemTitle,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const finishNotification = `-- name: FinishNotification :execrows
+UPDATE notification_outbox
+SET state = $1::text, sent_at = $2::timestamptz, last_error = $3::text,
+    next_attempt_at = coalesce($4::timestamptz, next_attempt_at), lease_until = NULL
+WHERE id = $5 AND state = 'pending' AND attempts = $6::int
+`
+
+type FinishNotificationParams struct {
+	State         string
+	SentAt        *time.Time
+	LastError     *string
+	NextAttemptAt *time.Time
+	ID            int64
+	Attempts      int32
+}
+
+// Ends the claim of row id that made attempt attempts: sent at sent_at, back to pending until
+// next_attempt_at, or failed or skipped with last_error; the lease is released. No row when a
+// later claim took it.
+func (q *Queries) FinishNotification(ctx context.Context, arg FinishNotificationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, finishNotification,
+		arg.State,
+		arg.SentAt,
+		arg.LastError,
+		arg.NextAttemptAt,
+		arg.ID,
+		arg.Attempts,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const latestItemEventID = `-- name: LatestItemEventID :one
 SELECT id FROM item_events WHERE item_id = $1 AND kind = $2 ORDER BY id DESC LIMIT 1
 `
