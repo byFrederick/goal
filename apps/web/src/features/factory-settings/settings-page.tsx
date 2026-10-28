@@ -37,7 +37,7 @@ export function FactorySettingsPage() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_200px] lg:gap-10">
         <div className="flex min-w-0 flex-col gap-4">
           <GeneralCard factory={factory} />
-          <PeopleCard org={org} />
+          <PeopleCard org={org} factory={factory} />
           {showDanger ? (
             <SectionCard
               id="danger"

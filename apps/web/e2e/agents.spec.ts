@@ -244,7 +244,18 @@ test.describe('Agents page', () => {
     await expectNoHorizontalScroll(page);
   });
 
-  test('New agent is disabled and says it is not available yet', async ({ page }) => {
+  test('New agent adds an agent and opens it in the definition', async ({ page }) => {
+    await page.goto(index);
+    await page.getByRole('button', { name: 'New agent' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Add agent' });
+    await dialog.getByLabel('Name').fill('cost-analyst');
+    await dialog.getByRole('button', { name: 'Add agent' }).click();
+
+    await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/definition\/agents\?agent=cost-analyst$/);
+  });
+
+  test('New agent is disabled for a viewer and says it is not available yet', async ({ page, request }) => {
+    await request.post('/__mock/reset', { data: { role: 'viewer' } });
     await page.goto(index);
     const create = page.getByRole('button', { name: 'New agent' });
 

@@ -2,9 +2,9 @@
 // agents, and each agent's model, cap and the statistics measured over the last 7 days. The definition
 // comes from the running version; the statistics are one request per agent.
 import { useQueries, useQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { Check, Code, Plus } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { agentStatsQuery, versionModelQuery } from '../../api/queries';
 import type { AgentStats } from '../../api/types';
 import { ErrorScreen, PendingScreen } from '../../app/states';
@@ -13,10 +13,13 @@ import { type Model, type ModelStation, modelOf } from '../../shared/definition/
 import { factoryTitle, useFactory, useFactoryParams } from '../../shared/factory';
 import { formatPercent, formatUsd } from '../../shared/format';
 import { useOrg } from '../../shared/org';
+import { holds } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { NotAvailable } from '../../ui/not-available';
+import { AddAgentDialog } from '../factory-editor/agents/agent-dialogs';
+import { DraftSessionProvider, useDraftSession } from '../factory-editor/draft/use-draft';
 import {
   agentNamesOf,
   agentsOf,
@@ -46,29 +49,65 @@ export function AgentsPage() {
 
   const model = modelOf(running.data.model);
   const statsByAgent = new Map<string, AgentStats | undefined>(names.map((name, i) => [name, stats[i]?.data]));
-  return <Ready model={model} statsByAgent={statsByAgent} />;
+  // The draft session the New agent dialog writes to; a viewer sees the running version and no control.
+  const canEdit = holds(factory, 'definition:edit');
+  return (
+    <DraftSessionProvider key={`${factory.id}:${canEdit}`} org={org.id} factory={factory.id} readOnly={!canEdit}>
+      <Ready model={model} statsByAgent={statsByAgent} canEdit={canEdit} />
+    </DraftSessionProvider>
+  );
 }
 
-function Ready({ model, statsByAgent }: { model: Model; statsByAgent: Map<string, AgentStats | undefined> }) {
+function Ready({
+  model,
+  statsByAgent,
+  canEdit,
+}: {
+  model: Model;
+  statsByAgent: Map<string, AgentStats | undefined>;
+  canEdit: boolean;
+}) {
   const factory = useFactory();
+  const params = useFactoryParams();
+  const navigate = useNavigate();
+  const session = useDraftSession();
+  const [adding, setAdding] = useState(false);
   const agents = agentsOf(model);
   const stations = stationsOf(model);
   const positions = stations.reduce((sum, station) => sum + staffingOf(station, agents).length, 0);
   const sentence = lineSentence(agents.length, positions, factoryTitle(factory));
+
+  // The agent is in the draft once its save lands; the definition then opens on it.
+  const added = async (name: string) => {
+    await session.flush();
+    await navigate({
+      to: '/o/$org/f/$factory/definition/$section',
+      params: { ...params, section: 'agents' },
+      search: { agent: name },
+    });
+  };
 
   return (
     <>
       <TopBarSlot
         actions={[
           <ViewAsFiles key="files" />,
-          <NotAvailable key="new">
-            <Button variant="primary">
+          canEdit ? (
+            <Button key="new" variant="primary" onClick={() => setAdding(true)}>
               <Plus aria-hidden="true" />
               New agent
             </Button>
-          </NotAvailable>,
+          ) : (
+            <NotAvailable key="new">
+              <Button variant="primary">
+                <Plus aria-hidden="true" />
+                New agent
+              </Button>
+            </NotAvailable>
+          ),
         ]}
       />
+      {canEdit ? <AddAgentDialog open={adding} onOpenChange={setAdding} onAdded={added} /> : null}
       <div className="flex flex-col gap-6 px-4 pt-4 pb-10 md:px-7 md:pt-6">
         <header className="flex flex-col gap-1">
           <h1 className="m-0 text-page-title">Agents</h1>

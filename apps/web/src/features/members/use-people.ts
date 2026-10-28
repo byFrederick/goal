@@ -18,6 +18,8 @@ const unreachable = 'Can’t reach Goal. Check your connection and try again.';
 
 /** A refused change in the page's words. */
 export function refusal(err: unknown, org: string): string {
+  // Declined at the re-sign-in prompt: the change was not made, and goald's own text would say nothing of why.
+  if (err instanceof ApiError && err.code === 'reauth-required') return 'Not changed: this needs a recent sign-in.';
   if (err instanceof ApiError) return err.detail ?? err.title;
   const kind = (err as Partial<AuthFailure>)?.kind;
   switch (kind) {
