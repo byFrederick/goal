@@ -315,6 +315,7 @@ func describe(e gen.Event) string {
 var describers = map[string]func(gen.Event) string{
 	"created":       func(gen.Event) string { return "created" },
 	"moved":         func(e gen.Event) string { return fmt.Sprintf("moved %s → %s", str(e, "from"), str(e, "to")) },
+	"lane_set":      laneSet,
 	"claimed":       func(e gen.Event) string { return "claimed for " + str(e, "agent") },
 	"run_started":   func(e gen.Event) string { return "run started (" + e.Actor + ")" },
 	"run_finished":  runFinished,
@@ -425,6 +426,16 @@ func usd(v float64) string {
 	}
 }
 
+// laneSet renders a person's lane change; an item without a lane had (none).
+func laneSet(e gen.Event) string {
+	from := str(e, "from")
+	if from == "" {
+		from = "(none)"
+	}
+
+	return fmt.Sprintf("lane %s → %s", from, str(e, "to"))
+}
+
 func withReason(e gen.Event) string {
 	if s := str(e, "reason") + str(e, "error"); s != "" {
 		return e.Kind + ": " + cut(oneLine(s), 300)
@@ -500,9 +511,10 @@ const (
 	verbNote = "note"
 	// verbAnswer answers the question an item's agent asked; not a decision either.
 	verbAnswer = "answer"
-	// verbMove and verbPause are a person's controls of an item's flow.
+	// verbMove, verbPause and verbLane are a person's controls of an item's flow.
 	verbMove  = "move"
 	verbPause = "pause"
+	verbLane  = "lane"
 )
 
 // decide acts on an item: goal approve <item> [--always-allow]; goal reject <item> --reason "..."; goal retry
@@ -797,6 +809,44 @@ func moveItem(ctx context.Context, out *printer, getenv func(string) string, arg
 	}
 
 	out.printf("✓ moved %s; now %s at %s\n", it.Ref, it.State, it.Station)
+
+	return nil
+}
+
+// laneItem sets an open item's lane, which picks the agent at stations that route by lane: goal
+// lane <item> <lane> [--factory F]. goald refuses a lane no routed station of the line routes,
+// and an item in progress, done, cancelled or an assembly.
+func laneItem(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	fs := newFlags(verbLane)
+	factory := fs.String("factory", "", "the factory of a bare item number")
+	org := addOrgFlag(fs)
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 2 || strings.TrimSpace(pos[1]) == "" {
+		return errUsage
+	}
+
+	c, err := connect(ctx, getenv, *org)
+	if err != nil {
+		return err
+	}
+
+	ref, err := itemRef(ctx, c, pos[0], *factory)
+	if err != nil {
+		return err
+	}
+
+	res, err := c.SetItemLaneWithResponse(ctx, c.org, ref, gen.SetLaneRequest{Lane: pos[1]})
+	if err != nil {
+		return apiDown(err)
+	}
+
+	it, err := answer(res.JSON200, res.HTTPResponse, conflictOr(res.ApplicationproblemJSON409, res.ApplicationproblemJSONDefault))
+	if err != nil {
+		return err
+	}
+
+	out.printf("✓ set the lane of %s to %s\n", it.Ref, deref(it.Lane))
 
 	return nil
 }

@@ -116,6 +116,17 @@ var (
 	ErrUnknownStation = errors.New("station is not on the item's line")
 	// ErrReasonRequired means a send-back or an upstream move without a reason.
 	ErrReasonRequired = errors.New("a reason is required")
+	// ErrLaneRequired means a lane set to nothing but spaces.
+	ErrLaneRequired = errors.New("a lane is required")
+	// ErrUnknownLane means a lane that none of the item's line's routed stations routes.
+	ErrUnknownLane = errors.New("no station of the item's line routes that lane")
+	// ErrItemInProgress means a lane set on an item in progress: its running agent was chosen by
+	// the old lane, so it is paused or moved first.
+	ErrItemInProgress = errors.New("item is in progress; pause or move it first")
+	// ErrItemIsAssembly means a lane set on an assembly: its parts carry their own lanes.
+	ErrItemIsAssembly = errors.New("item is an assembly; its parts carry their own lanes")
+	// ErrSameLane means a lane set to the one the item has.
+	ErrSameLane = errors.New("item already has that lane")
 	// ErrItemChanged means the item changed while a person acted on it; nothing changed.
 	ErrItemChanged = errors.New("item changed meanwhile; read it again")
 )
@@ -166,6 +177,58 @@ func (e *Engine) Move(ctx context.Context, id domain.ItemID, to string, by domai
 		ItemID: it.ID, From: it.Position(), To: pos, Rework: upstream, At: now, DoneAt: doneAt, Events: events,
 		Audit: itemAudit(it, now, by, domain.AuditItemMoved, withReason(map[string]any{keyFrom: it.Station, keyTo: target.ID}, reason)),
 	})
+}
+
+// SetLane sets an open item's lane, which picks the agent at the stations that route by lane;
+// the item stays where it is. When any station of its line routes by lane, the lane must be one
+// that station routes. An item in progress is refused (its agent was chosen by the old lane), and
+// so is an assembly, whose parts carry their own lanes.
+func (e *Engine) SetLane(ctx context.Context, id domain.ItemID, lane string, by domain.Actor) (domain.Item, error) {
+	lane = strings.TrimSpace(lane)
+	if lane == "" {
+		return domain.Item{}, fmt.Errorf("set the lane of %s: %w", id, ErrLaneRequired)
+	}
+
+	it, l, err := e.itemAndLine(ctx, id)
+	if err != nil {
+		return domain.Item{}, fmt.Errorf("set the lane of %s: %w", id, err)
+	}
+
+	routes := routedLanes(l)
+
+	switch {
+	case closed(it):
+		return domain.Item{}, fmt.Errorf("set the lane of %s: %w", id, ErrItemClosed)
+	case it.State == domain.StateInProgress:
+		return domain.Item{}, fmt.Errorf("set the lane of %s: %w", id, ErrItemInProgress)
+	case it.State == domain.StateAssembly:
+		return domain.Item{}, fmt.Errorf("set the lane of %s: %w", id, ErrItemIsAssembly)
+	case len(routes) > 0 && !slices.Contains(routes, lane):
+		return domain.Item{}, fmt.Errorf("set the lane of %s to %q (routed: %s): %w", id, lane, strings.Join(routes, ", "), ErrUnknownLane)
+	case lane == it.Lane:
+		return domain.Item{}, fmt.Errorf("set the lane of %s to %q: %w", id, lane, ErrSameLane)
+	}
+
+	now := e.clock.Now()
+	data := map[string]any{keyFrom: it.Lane, keyTo: lane}
+
+	return e.control(ctx, "set_lane", it, by, ports.Transition{
+		ItemID: it.ID, From: it.Position(), To: it.Position(), Lane: lane, At: now,
+		Events: []domain.Event{decision(it, domain.EventLaneSet, now, by, data)},
+		Audit:  itemAudit(it, now, by, domain.AuditItemLaneSet, data),
+	})
+}
+
+// routedLanes are the lanes the stations of l route by, sorted; none when no station routes.
+func routedLanes(l domain.Line) []string {
+	var lanes []string
+	for _, s := range l.Stations {
+		lanes = append(lanes, slices.Collect(maps.Keys(s.Route))...)
+	}
+
+	slices.Sort(lanes)
+
+	return slices.Compact(lanes)
 }
 
 // Pause stops an open item where it is: it becomes blocked with a paused event (the reason is

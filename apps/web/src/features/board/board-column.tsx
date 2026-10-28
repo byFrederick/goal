@@ -2,6 +2,8 @@
 // meter and what the station says), then the expedite zone and the standard zone of cards. The
 // constraint's column is amber-edged; the drum's column splits its standard zone into the buffer's
 // Ready cards, "Next in" first, and the In progress cards. The phone keeps its station tabs (board-page).
+// On the desktop, every column's body starts at one height without subgrid: the header has a fixed min-height,
+// the expedite zone one card's height, and each standard zone opens with a one-line sub-header slot.
 import type { Board, BoardStation, ItemCard, PartsSummary } from '../../api/types';
 import { formatDuration, humanize, plural } from '../../shared/format';
 import { waitingOnYou } from '../../shared/item-state';
@@ -90,7 +92,10 @@ function ColumnHeader({
   const [left, right] = meta(station, decides, finishedThisWeek);
   return (
     <header
-      className={cn('flex flex-col gap-2 rounded-cell border border-line bg-card p-3', constraint && constraintEdge)}
+      className={cn(
+        'flex flex-col gap-2 rounded-cell border border-line bg-card p-3 md:min-h-[5.5rem]',
+        constraint && constraintEdge,
+      )}
     >
       <div className="flex items-center gap-2">
         <h2 className="m-0 min-w-0 truncate text-heading font-medium">{humanize(station.id)}</h2>
@@ -106,6 +111,14 @@ function ColumnHeader({
       </div>
     </header>
   );
+}
+
+/**
+ * A standard zone's first line on the desktop: the drum's labels sit here, and every other column keeps it
+ * empty, so all the zones' first cards start at the same height. Empty and hidden from screen readers.
+ */
+function SubHeaderSlot() {
+  return <div aria-hidden="true" className="hidden min-h-[1lh] px-1 text-meta md:block" />;
 }
 
 /** A zone's label row, as in the picture: "Ready, buffer 2 of 2" with "Next in", or "In progress". */
@@ -165,8 +178,15 @@ export function StationColumn({
   return (
     <DropColumn station={station} className="flex min-w-0 flex-col gap-2">
       <ColumnHeader station={station} constraint={constraint} decides={decides} finishedThisWeek={finishedThisWeek} />
+      {/* On the desktop, one expedite card's height plus the zone's padding: every column's standard zone starts
+          at the same height, whether or not it holds an expedite card. A second card in a column moves that one. */}
       {showExpedite ? (
-        <div className={cn('flex min-h-10 flex-col gap-2 rounded-cell p-2', expedite.length > 0 && 'bg-amber-tint')}>
+        <div
+          className={cn(
+            'flex min-h-10 flex-col gap-2 rounded-cell p-2 md:min-h-[199px]',
+            expedite.length > 0 && 'bg-amber-tint',
+          )}
+        >
           {expedite.map(card)}
         </div>
       ) : null}
@@ -177,9 +197,11 @@ export function StationColumn({
             {ready.map(card)}
             <ZoneLabel>In progress</ZoneLabel>
           </>
-        ) : null}
+        ) : (
+          <SubHeaderSlot />
+        )}
         {working.map(card)}
-        {station.items.length === 0 ? <p className="m-0 px-1 py-2 text-meta text-muted">Empty</p> : null}
+        {station.items.length === 0 ? <p className="m-0 px-1 py-2 text-meta text-muted md:py-0">Empty</p> : null}
       </div>
     </DropColumn>
   );

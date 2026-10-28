@@ -114,7 +114,7 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
         ...factory,
         defKeys.draft(org, f),
         ...(data.number !== undefined
-          ? [defKeys.versions(org, f), defKeys.versionsOf(org, f), keys.evals(org, f)]
+          ? [defKeys.versions(org, f), defKeys.versionsOf(org, f), keys.evals(org, f), keys.judges(org, f)]
           : []),
         ...(data.number !== undefined ? [defKeys.versions(org, f), defKeys.versionsOf(org, f)] : []),
         ...(data.number !== undefined ? [intakeKeys.triggers(org, f)] : []),
@@ -127,6 +127,7 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
         defKeys.draft(org, f),
         defKeys.compares(org, f),
         keys.board(org, f),
+        keys.judges(org, f),
         keys.overviews(org),
         // The triggers of the running definition (what the intake shows).
         keys.intake(org, f),
@@ -157,8 +158,9 @@ export function connectionInvalidations(org: string): QueryKey[] {
 
 /**
  * The queries one `knowledge` event touches (spec 4 §8.3): a source's sync started or ended, so
- * the source lists, each source with its documents and each document's text may have changed.
- * Not a search: one open on Knowledge is an embedding call on goald, run again when asked.
+ * the source lists, each source with its documents and each document's text may have changed, and
+ * the usage of the sources (the runs that opened each document). The documents' uses sit under the
+ * 'document' prefix. Not a search: one open on Knowledge is an embedding call on goald, run again when asked.
  */
 export function knowledgeInvalidations(org: string): QueryKey[] {
   const knowledge = keys.knowledge(org);
@@ -166,6 +168,7 @@ export function knowledgeInvalidations(org: string): QueryKey[] {
     [...knowledge, 'sources'],
     [...knowledge, 'source'],
     [...knowledge, 'document'],
+    [...knowledge, 'usage'],
   ];
 }
 

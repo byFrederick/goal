@@ -21,6 +21,7 @@ import type {
   AuthConfig,
   Board,
   ConstraintReport,
+  CreateJudgeRequest,
   DeviceRequest,
   EvalCaseFromRun,
   EvalEstimate,
@@ -37,6 +38,10 @@ import type {
   ItemAnswer,
   ItemList,
   ItemState,
+  Judge,
+  JudgeList,
+  JudgeTries,
+  JudgeWrite,
   LeadTimeBridge,
   Me,
   Member,
@@ -411,6 +416,48 @@ export function startEvalRun(org: string, factory: string, run: EvalRunRequest):
 export function addEvalCase(org: string, factory: string, from: EvalCaseFromRun): Promise<Version> {
   return unwrap(
     goal.POST(orgPath('/factories/{factory}/evals/cases'), { params: { path: { org, factory } }, body: from }),
+  );
+}
+
+/** The factory's judges of the current version, each with its last 30 days (ADR 0025). 503 judges-unavailable while goald serves none. */
+export function listJudges(org: string, factory: string, signal?: AbortSignal): Promise<JudgeList> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/judges'), { params: { path: { org, factory } }, ...cancel(signal) }),
+  );
+}
+
+/** One judge of the current version: its file, its 30 days, its newest scores and where it runs. 404 judge-not-found. */
+export function getJudge(org: string, factory: string, judge: string, signal?: AbortSignal): Promise<Judge> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/judges/{judge}'), {
+      params: { path: { org, factory, judge } },
+      ...cancel(signal),
+    }),
+  );
+}
+
+/**
+ * Adds a judge and publishes it as the next version. 409 judge-exists, draft-open, definition-invalid,
+ * draft-base-moved, evals-pending and evals-failing are the page's to show.
+ */
+export function createJudge(org: string, factory: string, judge: CreateJudgeRequest): Promise<Judge> {
+  return unwrap(goal.POST(orgPath('/factories/{factory}/judges'), { params: { path: { org, factory } }, body: judge }));
+}
+
+/** Replaces a judge's file and publishes it: the same 409s as createJudge, and 404 judge-not-found. */
+export function updateJudge(org: string, factory: string, judge: string, write: JudgeWrite): Promise<Judge> {
+  return unwrap(
+    goal.PUT(orgPath('/factories/{factory}/judges/{judge}'), {
+      params: { path: { org, factory, judge } },
+      body: write,
+    }),
+  );
+}
+
+/** Queues the judge on the 10 newest finished runs of its agents. Those scores never count in the 30 days. */
+export function tryJudge(org: string, factory: string, judge: string): Promise<JudgeTries> {
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/judges/{judge}/try'), { params: { path: { org, factory, judge } } }),
   );
 }
 
