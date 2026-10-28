@@ -575,10 +575,18 @@ func closeAssembly(ctx context.Context, q *db.Queries, row db.WorkItem, at time.
 		return landAssembly(ctx, q, parent, c, at)
 	}
 
+	return finishAssembly(ctx, q, parent, c, at, cancel)
+}
+
+// finishAssembly closes parent, an assembly whose last part closed with c.Done parts done:
+// done at its last done part's station when a part is done and cancel is not set, else
+// cancelled at its own station, with an assembly_done event.
+func finishAssembly(ctx context.Context, q *db.Queries, parent db.WorkItem, c db.PartCountsRow, at time.Time, cancel bool) error {
 	closed, station := domain.StateCancelled, parent.Station
 	if c.Done > 0 && !cancel {
 		closed = domain.StateDone
 
+		var err error
 		if station, err = q.LastDonePartStation(ctx, parent.ID); err != nil {
 			return fmt.Errorf("done station of the assembly: %w", err)
 		}

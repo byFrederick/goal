@@ -148,7 +148,7 @@ func testIntegrationBranchAssemblyLandsAtItsStation(f *fixture) {
 	events := f.Events(t, it.ID)
 	sameEvents(t, events[len(events)-1:], []domain.Event{{
 		FactoryID: f.factory, ItemID: it.ID, At: t3, Kind: domain.EventAssemblyLanding, Station: stLand, Actor: domain.ActorEngine,
-		Data: map[string]any{"parts_done": 2, dataParts: 3, "branch": branchIntg},
+		Data: map[string]any{dataPartsDone: 2, dataParts: 3, "branch": branchIntg},
 	}})
 
 	for _, e := range events {
@@ -185,7 +185,7 @@ func testIntegrationBranchNoDonePartOrCancelClosesAsToday(f *fixture) {
 	events := f.Events(t, dropped.ID)
 	sameEvents(t, events[len(events)-1:], []domain.Event{{
 		FactoryID: f.factory, ItemID: dropped.ID, At: t1, Kind: domain.EventAssemblyDone, Station: stWork, Actor: domain.ActorEngine,
-		Data: map[string]any{"state": string(domain.StateCancelled), "parts_done": 0, dataParts: 1},
+		Data: map[string]any{dataState: string(domain.StateCancelled), dataPartsDone: 0, dataParts: 1},
 	}})
 
 	// A person's cancel, with a part already done.
@@ -216,6 +216,6 @@ func testIntegrationBranchNoDonePartOrCancelClosesAsToday(f *fixture) {
 	events = f.Events(t, it.ID)
 	sameEvents(t, events[len(events)-1:], []domain.Event{{
 		FactoryID: f.factory, ItemID: it.ID, At: t2, Kind: domain.EventAssemblyDone, Station: stWork, Actor: domain.ActorEngine,
-		Data: map[string]any{"state": string(domain.StateCancelled), "parts_done": 1, dataParts: 3},
+		Data: map[string]any{dataState: string(domain.StateCancelled), dataPartsDone: 1, dataParts: 3},
 	}})
 }
