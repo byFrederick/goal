@@ -376,7 +376,7 @@ Differences from `docs/design/screens/build/agents.jpg`, each for a reason:
 - Agent marks are one colour, not one per agent: the design tokens have no per-agent palette.
 - The summary counts the agents' positions at stations, not copies, so it reads "4 agents" where the picture reads 15.
 - Building "New agent" and People with access: the picture's chip reads "Operator", but the contract has three factory roles (viewer, approver, editor), so the chips read Viewer, Approver and Editor (`factoryRoleNames`). The editor and admin lines are new copy written to match the others.
-- The mock seed keeps its members, so the People with access list shows an owner, an admin and an editor on `goal` instead of the picture's owner, approver and viewer. Changing the seed would move the Members e2e expectations.
+- The mock seed gives `goal` an owner, an admin (M. Okafor, kept for the Members e2e expectations), an approver (J. Lindqvist) and a viewer (A. Ortiz). The People with access list therefore shows the admin row the picture does not have.
 - The Factory defaults' connections read the mock seed (github, playwright), not the picture's (github, cloudflare, context7): the seed has no cloudflare or context7 connection.
 
 ### The intake trigger page

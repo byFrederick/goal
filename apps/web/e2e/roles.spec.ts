@@ -209,7 +209,8 @@ test.describe('factory roles on the settings page', () => {
   as('owner');
 
   test('an owner adds a person to a factory role, changes it and removes it', async ({ page }) => {
-    await page.goto('/o/acme/f/goal/settings');
+    // Ortiz is a viewer of goal in the seed, so the role is added on sre, where he has none.
+    await page.goto('/o/acme/f/sre/settings');
     const people = page.getByRole('region', { name: 'People with access' });
     const row = people
       .locator('div')

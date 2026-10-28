@@ -80,7 +80,7 @@ test('an owner sees everyone, why a role cannot change, and changes factory role
     await expect(own).toBeDisabled();
     await expect(own).toHaveAccessibleDescription('Acme needs at least one owner');
     await expect(page.getByRole('combobox', { name: 'Role of M. Okafor in Acme' })).toBeEnabled();
-    await expect(personOf(page, 'J. Lindqvist')).toContainText('goal editor, sre editor');
+    await expect(personOf(page, 'J. Lindqvist')).toContainText('goal approver, sre editor');
   }
   await expect(page.getByRole('region', { name: /Waiting to join/ })).toContainText('d.ross@example.com');
 
@@ -164,13 +164,13 @@ test('a change with an old sign-in asks to confirm it’s you, then goes through
   await signedInAs(page.request, 'f.cruz@example.com', false);
   await page.goto('/o/acme/members');
   const details = await openPerson(page, 'A. Ortiz');
-  await details.getByRole('group', { name: 'goal: role of A. Ortiz' }).getByText('Viewer').click();
+  await details.getByRole('group', { name: 'sre: role of A. Ortiz' }).getByText('Viewer').click();
   const reauth = page.getByRole('dialog', { name: 'Confirm it’s you' });
   await reauth.getByRole('button', { name: 'Email me a code' }).click();
   await reauth.getByLabel('Code').fill('000000');
   await expect(reauth).toBeHidden();
   await page.keyboard.press('Escape');
-  await expect(personOf(page, 'A. Ortiz')).toContainText('goal viewer, support viewer');
+  await expect(personOf(page, 'A. Ortiz')).toContainText('sre viewer, support viewer');
 });
 
 test('a member sees everyone read-only, and leaves', async ({ page }) => {
