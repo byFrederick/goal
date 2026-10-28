@@ -5788,6 +5788,16 @@ export interface components {
                     [key: string]: unknown;
                 };
             };
+            /** @description factory.yaml's starter section (ADR 0032), absent when the YAML has none. It is not a Visual section and has no ETag: onboarding submits starter.item once, through submitItem, to a factory with no items, and YAML mode edits it. */
+            starter?: {
+                item: {
+                    title: string;
+                    /** @description One of board.workTypes; when absent, submitItem gives the first */
+                    type?: string;
+                    /** @description The item's brief, in markdown */
+                    body?: string;
+                };
+            };
         };
         /** @description The data of one `event: definition` on /v1/orgs/{org}/stream; it carries no content */
         DefinitionEvent: {
