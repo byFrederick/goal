@@ -291,6 +291,7 @@ var probes = map[string]probe{
 	"listItemParts":   {method: http.MethodGet, path: "/v1/orgs/acme/items/acme%231/parts", org: testOrg, factory: acmeID},
 	"addItemPart":     {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/parts", body: `{"title":"a","brief":"b"}`, org: testOrg, factory: acmeID},
 	"approveItem":     {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/approve", org: testOrg, factory: acmeID},
+	"answerItem":      {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/answer", body: `{"choice":0}`, org: testOrg, factory: acmeID},
 	"rejectItem":      {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/reject", body: `{"reason":"no"}`, org: testOrg, factory: acmeID},
 	"retryItem":       {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/retry", org: testOrg, factory: acmeID},
 	"moveItem":        {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/move", body: `{"to":"approve"}`, org: testOrg, factory: acmeID},

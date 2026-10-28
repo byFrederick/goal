@@ -50,6 +50,7 @@ import {
   listConnectionKinds,
   listConnections,
 } from './connections';
+import { listCredentials } from './credentials';
 import {
   getDraft,
   getDraftFile,
@@ -75,6 +76,7 @@ import {
   listKnowledgeSources,
   searchKnowledge,
 } from './knowledge';
+import { getOrgPolicy } from './policy';
 import { getOrgSpend } from './spend';
 import type { Factory, ItemEvent, SpendWindow } from './types';
 import { getWebhookDelivery, listWebhookDeliveries, listWebhookEndpoints } from './webhooks';
@@ -132,6 +134,8 @@ export const keys = {
   /** What each factory needs from people now (the rail's badges). */
   attention: (org: string) => ['org', org, 'attention'] as const,
   settings: (org: string) => ['org', org, 'settings'] as const,
+  /** The organization's model and tool policy (ADR 0024), the Models and policies screen. */
+  policy: (org: string) => ['org', org, 'policy'] as const,
   apiKeys: (org: string) => ['org', org, 'api-keys'] as const,
   /** Its members (spec 3 §10.1); identity service changes invalidate members and invitations. */
   members: (org: string) => ['org', org, 'members'] as const,
@@ -151,6 +155,8 @@ export const keys = {
   /** Audit entries about connections: every one's (`all`) or one's, by its id. */
   connectionActivity: (org: string, id?: string) => ['org', org, 'connections', 'activity', id ?? 'all'] as const,
   connectionKinds: (org: string) => ['org', org, 'connection-kinds'] as const,
+  /** The organization's credentials (ADR 0017): the list, which a connection's change also moves. */
+  credentials: (org: string) => ['org', org, 'credentials'] as const,
   /**
    * The prefix of everything of the organization's knowledge base (spec 4 §10): the source lists
    * by filter, each source and its documents, a document's text, searches. `event: knowledge` re-reads
@@ -324,6 +330,14 @@ export const connectionActivityQuery = (org: string, id?: string) =>
     staleTime: 30_000,
   });
 
+/** The organization's credentials, by name, never a value (credential:read: every member). */
+export const credentialsQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.credentials(org),
+    queryFn: ({ signal }) => listCredentials(org, signal),
+    staleTime: 30_000,
+  });
+
 /** The organization's knowledge sources; `factory` (an id) narrows them to what its current version lists. */
 export const knowledgeSourcesQuery = (org: string, filter: KnowledgeSourceFilter = {}) =>
   queryOptions({
@@ -372,6 +386,13 @@ export const settingsQuery = (org: string) =>
   queryOptions({
     queryKey: keys.settings(org),
     queryFn: ({ signal }) => getOrgSettings(org, signal),
+    staleTime: 30_000,
+  });
+
+export const policyQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.policy(org),
+    queryFn: ({ signal }) => getOrgPolicy(org, signal),
     staleTime: 30_000,
   });
 
