@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"time"
 
@@ -191,4 +192,133 @@ func (s *Store) QueueBudgetNotification(ctx context.Context, factory domain.Fact
 	}
 
 	return nil
+}
+
+var _ ports.NotificationDeliveries = (*Store)(nil)
+
+// ClaimNotifications implements ports.NotificationDeliveries.
+func (s *Store) ClaimNotifications(ctx context.Context, channel string, now time.Time, lease time.Duration, limit int) ([]ports.Notification, error) {
+	var rows []db.ClaimNotificationsRow
+
+	err := s.inTx(ctx, func(q *db.Queries) error {
+		var err error
+
+		rows, err = q.ClaimNotifications(ctx, db.ClaimNotificationsParams{
+			Channel: channel, Now: now, Until: now.Add(lease), Max: int32(min(limit, maxClaim)), //nolint:gosec // bounded by maxClaim
+		})
+
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("claim %s notifications: %w", channel, err)
+	}
+
+	out := make([]ports.Notification, 0, len(rows))
+
+	for _, r := range rows {
+		n, err := claimedNotification(r)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, n)
+	}
+
+	return out, nil
+}
+
+// maxClaim bounds one claim, whatever the caller asks for.
+const maxClaim = 1000
+
+// claimedNotification is the claim's row r as the sender reads it.
+func claimedNotification(r db.ClaimNotificationsRow) (ports.Notification, error) {
+	var p struct {
+		FactoryID string  `json:"factory_id"`
+		Station   string  `json:"station"`
+		Kind      string  `json:"kind"`
+		SpentUSD  float64 `json:"spent_usd"`
+		WeeklyUSD float64 `json:"weekly_usd"`
+	}
+
+	if err := json.Unmarshal(r.Payload, &p); err != nil {
+		return ports.Notification{}, fmt.Errorf("notification %d payload: %w", r.ID, err)
+	}
+
+	event := domain.NotificationEvent(r.Event)
+
+	return ports.Notification{
+		ID: r.ID, EventID: r.EventID, Event: event, Channel: r.Channel, UserID: domain.UserID(r.UserID.String()),
+		Attempts: int(r.Attempts), At: r.CreatedAt,
+		Qualifies: stillQualifies(r, event), Address: r.Address,
+		OrgSlug: r.OrgSlug, FactoryID: domain.FactoryID(p.FactoryID), FactoryName: r.FactoryName, FactoryTitle: r.FactoryTitle,
+		ItemNumber: r.ItemNumber, ItemTitle: r.ItemTitle, Station: p.Station, AndonKind: p.Kind,
+		SpentUSD: p.SpentUSD, WeeklyUSD: p.WeeklyUSD,
+	}, nil
+}
+
+// stillQualifies applies the queue's recipient rule to r again: a member who is an owner or an
+// admin, or holds one of the event's factory roles, with the row's channel on (their saved
+// choice, else the default).
+func stillQualifies(r db.ClaimNotificationsRow, event domain.NotificationEvent) bool {
+	roles, known := notifyRoles[event]
+	if !known || r.OrgRole == "" || r.Address == "" {
+		return false
+	}
+
+	if r.OrgRole != string(domain.OrgOwner) && r.OrgRole != string(domain.OrgAdmin) && !slices.Contains(roles, r.FactoryRole) {
+		return false
+	}
+
+	def := domain.DefaultNotificationPreferences().Events[event]
+
+	switch r.Channel {
+	case ports.ChannelEmail:
+		return valueOr(r.PrefersEmail, def.Email)
+	case ports.ChannelSlack:
+		return valueOr(r.PrefersSlack, def.Slack)
+	default:
+		return false
+	}
+}
+
+func valueOr(b *bool, def bool) bool {
+	if b == nil {
+		return def
+	}
+
+	return *b
+}
+
+// FinishNotification implements ports.NotificationDeliveries.
+func (s *Store) FinishNotification(ctx context.Context, id int64, attempts int, o ports.NotificationOutcome) (bool, error) {
+	p := db.FinishNotificationParams{State: o.State, ID: id, Attempts: int32(attempts)} //nolint:gosec // attempts come from a claim's int32
+
+	switch o.State {
+	case ports.NotificationSent:
+		at := o.At
+		p.SentAt = &at
+	case ports.NotificationPending:
+		at := o.RetryAt
+		p.NextAttemptAt = &at
+	}
+
+	if o.Reason != "" {
+		reason := o.Reason
+		p.LastError = &reason
+	}
+
+	var n int64
+
+	err := s.inTx(ctx, func(q *db.Queries) error {
+		var err error
+
+		n, err = q.FinishNotification(ctx, p)
+
+		return err
+	})
+	if err != nil {
+		return false, fmt.Errorf("finish notification %d: %w", id, err)
+	}
+
+	return n == 1, nil
 }
