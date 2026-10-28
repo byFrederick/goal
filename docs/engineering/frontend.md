@@ -303,11 +303,35 @@ The Intake screens (ADR 0016, `intake/`; the triggers of ADR 0026) are `features
 
 - **Data**: `getIntake` (`api/intake.ts`) under `intakeQuery`, keyed `keys.intake(org, factory)`. Item events and the current version's publish (`definition` `current`) invalidate it (`shared/invalidation.ts`). The page owns its states: loading, error, empty (no items and no triggers) and ready. The suggestion tab is `?group=`, kept in the URL.
 - **Sources bar** (`sources-bar.tsx`): the newest items' sources as one bar and its legend. The series take foundation tokens (`run`, `ok`, `ink-soft`, `run-soft`, `muted`), not the factory colours, which are for badges.
-- **Triggers table** (`triggers-table.tsx`): a table from 768 px; below it each row's cells stack. A problem is named in red under the name. The switch (`trigger-toggle.ts`, `set-trigger-enabled.ts`) runs the definition's draft in order: open the draft, read `factory.yaml`, change only `spec.board.triggers[name].enabled` (`trigger-yaml.ts` edits the text at the parser's offsets, so comments and spacing stay), save the file with its sha256, then publish with `expected_current_version_id` set to the version shown. It refuses while a draft is open (the switch says to publish or discard it in Definition) and is disabled without `definition:edit`. A failed step reverts the switch and shows the error.
+- **Triggers table** (`triggers-table.tsx`): a table from 768 px; below it each row's cells stack. A problem is named in red under the name. The switch (`trigger-toggle.ts`, `set-trigger-enabled.ts`) runs the definition's draft in order: open the draft, read `factory.yaml`, change only `spec.board.triggers[name].enabled` (`trigger-yaml.ts` edits the text at the parser's offsets, so comments and spacing stay), save the file with its sha256, then publish with `expected_current_version_id` set to the version shown. It refuses while a draft is open, and when the draft that `openDraft` returns already has saves or changes (someone else's edits: the switch says to publish or discard it in Definition) and is disabled without `definition:edit`. A failed step reverts the switch and shows the error.
 - **Suggested triggers** (`suggested-triggers.tsx`, `suggestions.ts`): a fixed catalog. Add goes to the trigger page's address; a suggestion whose event the schema does not accept is disabled.
 - **New trigger** (`new-trigger-dialog.tsx`, `sources.ts`): MASTER.md's two-pane picker. Schedule, Webhook, GitHub and Cloudflare are choosable; Slack, Linear, Jira and Sentry are disabled ("Not available yet", ADR 0016 decision 4). Only `github.issues.labeled`, `github.check_run.failed` and `schedule` can be chosen (the schema's accepted keys). Continue goes to `…/intake/new/<source>?on=<event key>`, built by `newTriggerHref`.
 
 The Vitest suites are `intake-page.test.tsx` (the four states), `intake-switch.test.tsx` (the publish, the revert, the refusal while a draft is open and the permission), `trigger-yaml.test.ts` and `new-trigger-dialog.test.tsx`. `e2e/intake.spec.ts` covers the page at 1440 and 375 px and the picker; it was not run in the box. The mock's `software` factory has no seeded definition, so the switch's publish is covered by Vitest only.
+### Webhooks page
+
+`/o/$org/f/$factory/intake/webhooks` (`routes/o.$org.f.$factory.intake.webhooks.tsx`, `features/webhooks/`), the factory's Intake page for webhook endpoints (ADR 0026). The sidebar's Intake entry stays unavailable until the Intake list is built. The loader prefetches the list (`webhooksQuery`); the page shows its own loading, error, empty and ready states.
+
+- **Data**: `api/webhooks.ts` calls the five webhook operations through the generated client. The list is `['org', org, 'factory', factory, 'webhooks']` (`keys.webhooks`), and each endpoint's deliveries sit under that prefix, so one prefix refreshes both. Addresses are `${origin}${address}`, where `address` is `/hooks/{endpoint id}` as the contract gives it.
+- **The one-time secret**: a create or a rotate returns the secret once. Its mutation keeps the answer in the page's state, not in the mutation result or the query cache, and then invalidates the list. The secret dialog (`secret-dialog.tsx`) closes only on Done, and dropping the page's state drops the secret. `webhooks-page.test.tsx` checks that the secret is in no DOM and no query after Done.
+- **Rotate** asks first (a confirmation that the sender stops until it has the new secret). A failed rotation keeps the confirmation open and says why inside it; the confirmation closes only when the new secret is shown. Create and Rotate need a sign-in from the last 10 minutes: the session wrapper (`session.ts`) opens the re-auth dialog on `reauth-required` and sends the request once more. `api/webhooks.test.ts` covers that path, and a 401 calls the unauthenticated handler.
+- **Refresh**: the list refetches on the factory's item events (`'webhooks'` in `workKeys`, `shared/invalidation.ts`), on resync and on window focus. A created delivery makes an item, so item events cover it. A refused delivery makes no item, and the stream has no event for it, so it shows on the next refetch. The stream's `intake` event is an API follow-up.
+- **Feeds**: an endpoint's triggers as chips, or "Nothing. n deliveries were kept but created no items." with a plain link to `…/intake/new` (the trigger page is built by the web-intake part). The count is the week's delivered and refused deliveries.
+- **Deliveries**: the newest five of each endpoint, one page; paging is not built. A refused row is red and says its reason. View request opens the request's headers and body; a body that is not UTF-8 text is labelled base64.
+- **Send a test**: a curl sample for the first endpoint, with `X-Goal-Signature` (`X-Hub-Signature-256` for a GitHub endpoint). The fields the trigger can read are the top-level keys of the newest accepted delivery's JSON body, or `event` alone. "Send a sample delivery" is `NotAvailable`: the browser never holds a secret, so it cannot sign a request to `/hooks/{id}`.
+
+Differences from `docs/design/screens/intake/webhooks.jpg`, each for a reason:
+
+- The address is `/hooks/{endpoint id}`, not `/hooks/<factory>/<name>`: ADR 0026 decision 3, since a name keys the factory (AGENTS.md rule 2).
+- The secret is a sealed secret shown once with Rotate, not a credential "in Credentials": ADR 0026 decision 2.
+- The endpoint's name stands where the picture's display title does ("cf-deploys", not "Cloudflare deploys"): the API has no display title.
+- Each trigger is named but not placed ("fix at Spec, expedite lane" is left out): the API does not return the placement.
+- A refusal has its reason only, with no second explanation line: the API gives no such text.
+- The delivery row has no event name ("deploy.failed"): the API has none; the row says the outcome.
+- The top bar's crumb reads "Webhooks" beside the factory badge, not "Intake › Webhooks": the Intake page is not built.
+- Each day bar's tooltip names the day and its counts; the card's words give the week's totals.
+- "Send a test" says the delivery shows "once the page refreshes", not "within seconds": the list refetches on item events and focus, not on a timer.
+- Rotate asks for a confirmation, which the picture does not show.
 
 ### Factory settings
 

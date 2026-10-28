@@ -76,6 +76,7 @@ import {
   searchKnowledge,
 } from './knowledge';
 import type { ItemEvent } from './types';
+import { getWebhookDelivery, listWebhookDeliveries, listWebhookEndpoints } from './webhooks';
 
 /**
  * The one way route loaders load (loaders.test.ts keeps it so): an ensureQueryData that survives
@@ -169,6 +170,12 @@ export const keys = {
   inbox: (org: string, factory?: string) => ['org', org, 'inbox', factory ?? 'all'] as const,
   factory: (org: string, factory: string) => ['org', org, 'factory', factory] as const,
   board: (org: string, factory: string) => ['org', org, 'factory', factory, 'board'] as const,
+  /** The factory's webhook endpoints; their deliveries sit under it, so one prefix refreshes both. */
+  webhooks: (org: string, factory: string) => ['org', org, 'factory', factory, 'webhooks'] as const,
+  webhookDeliveries: (org: string, factory: string, endpoint: string) =>
+    ['org', org, 'factory', factory, 'webhooks', endpoint, 'deliveries'] as const,
+  webhookDelivery: (org: string, factory: string, endpoint: string, delivery: string) =>
+    ['org', org, 'factory', factory, 'webhooks', endpoint, 'deliveries', delivery] as const,
   /** The mutation key of moving an item of the factory (the Move menu): the stream waits for it. */
   move: (org: string, factory: string) => ['org', org, 'factory', factory, 'move'] as const,
   metrics: (org: string, factory: string, range: FlowRange) =>
@@ -391,6 +398,27 @@ export const archivedFactoriesQuery = (org: string) =>
 
 export const boardQuery = (org: string, factory: string) =>
   queryOptions({ queryKey: keys.board(org, factory), queryFn: ({ signal }) => getBoard(org, factory, signal) });
+
+/** The Webhooks screen's first page of deliveries per endpoint: the newest five. */
+export const webhookDeliveryLimit = 5;
+
+export const webhooksQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: keys.webhooks(org, factory),
+    queryFn: ({ signal }) => listWebhookEndpoints(org, factory, signal),
+  });
+
+export const webhookDeliveriesQuery = (org: string, factory: string, endpoint: string) =>
+  queryOptions({
+    queryKey: keys.webhookDeliveries(org, factory, endpoint),
+    queryFn: ({ signal }) => listWebhookDeliveries(org, factory, endpoint, webhookDeliveryLimit, signal),
+  });
+
+export const webhookDeliveryQuery = (org: string, factory: string, endpoint: string, delivery: string) =>
+  queryOptions({
+    queryKey: keys.webhookDelivery(org, factory, endpoint, delivery),
+    queryFn: ({ signal }) => getWebhookDelivery(org, factory, endpoint, delivery, signal),
+  });
 
 /**
  * A factory's flow over a range, with the range before it. Flow statistics refetch at most every

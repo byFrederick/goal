@@ -151,6 +151,20 @@ describe('the Intake switch', () => {
     expect(toggle.getAttribute('aria-checked')).toBe('true');
   });
 
+  it("changes nothing when the draft it opens already has someone's edits", async () => {
+    vi.mocked(openDraft).mockResolvedValue({ id: 'draft-1', revision: 3, change_count: 2 } as never);
+    renderSwitches(factoryWith());
+    const toggle = await screen.findByRole('switch', { name: 'flaky-test-on-main' });
+    fireEvent.click(toggle);
+
+    expect(await screen.findByText(draftOpenNotice)).toBeTruthy();
+    expect(openDraft).toHaveBeenCalledWith('org-1', 'factory-1');
+    expect(getDraftFile).not.toHaveBeenCalled();
+    expect(putDraftFile).not.toHaveBeenCalled();
+    expect(publishDraft).not.toHaveBeenCalled();
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+  });
+
   it('is disabled for people who cannot edit the definition', async () => {
     renderSwitches(factoryWith({ can: ['item:operate'] } as never));
     const toggle = await screen.findByRole('switch', { name: 'flaky-test-on-main' });

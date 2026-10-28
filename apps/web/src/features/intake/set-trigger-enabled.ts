@@ -14,8 +14,14 @@ export interface SetTriggerEnabled {
   enabled: boolean;
 }
 
+/** Thrown when the draft the switch opened already had someone's edits: nothing is written or published. */
+export class OpenDraftError extends Error {}
+
 export async function setTriggerEnabled({ org, factory, currentVersionId, trigger, enabled }: SetTriggerEnabled) {
-  await openDraft(org, factory);
+  // openDraft returns a draft that is already open (200) as it is. Only a draft with no saves and no changes
+  // is one this write can own; anything else holds someone's unpublished edits, which a publish must not ship.
+  const draft = await openDraft(org, factory);
+  if (draft.revision !== 1 || draft.change_count > 0) throw new OpenDraftError();
   const file = await getDraftFile(org, factory, 'factory.yaml');
   const next = withTriggerEnabled(file.text, trigger, enabled);
   const saved = await putDraftFile(org, factory, 'factory.yaml', next, { sha256: file.sha256 });

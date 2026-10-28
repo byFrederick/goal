@@ -7,7 +7,7 @@ import { defKeys, keys } from '../../api/queries';
 import { useFactory } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
-import { setTriggerEnabled } from './set-trigger-enabled';
+import { OpenDraftError, setTriggerEnabled } from './set-trigger-enabled';
 
 /** Said instead of a change while a draft is open: the draft is what Definition publishes, not the switch. */
 export const draftOpenNotice = 'Publish or discard the open draft in Definition first. The trigger is unchanged.';
@@ -29,7 +29,12 @@ export function useTriggerToggle(name: string, enabled: boolean) {
         enabled: next,
       }),
     onSuccess: () => setNotice(null),
-    onError: (error) => setNotice(`Not changed. ${error instanceof Error ? error.message : 'Try again.'}`),
+    onError: (error) =>
+      setNotice(
+        error instanceof OpenDraftError
+          ? draftOpenNotice
+          : `Not changed. ${error instanceof Error ? error.message : 'Try again.'}`,
+      ),
     // Waits for the refetch, so the switch shows the stored value again without a flicker back.
     onSettled: async () => {
       await Promise.all([
