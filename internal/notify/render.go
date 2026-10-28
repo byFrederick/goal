@@ -59,6 +59,7 @@ func Render(n ports.Notification, publicURL string) (ports.Message, error) {
 	}
 
 	account := base + "/account"
+
 	footer := "You get this email because of your notification settings."
 	if n.Channel == ports.ChannelSlack {
 		footer = "You get this message because of your notification settings."

@@ -401,7 +401,6 @@ func TestBackoff_DoublesUpToAnHour(t *testing.T) {
 type slackHarness struct {
 	senderHarness
 	org   domain.OrgID
-	ctx   context.Context
 	conns *porttest.Connections
 }
 
@@ -431,7 +430,7 @@ func newSlackSender(t *testing.T, mailer bool) slackHarness {
 			orgs: orgList{o.ID}, outbox: porttest.NewNotificationDeliveries(), mailer: porttest.NewMailer(),
 			slack: porttest.NewDirectMessenger(), clock: clock, logs: &syncBuffer{},
 		},
-		org: o.ID, ctx: domain.WithOrg(t.Context(), o.ID), conns: conns,
+		org: o.ID, conns: conns,
 	}
 
 	d := Deps{
@@ -451,7 +450,8 @@ func newSlackSender(t *testing.T, mailer bool) slackHarness {
 func (h slackHarness) connect(t *testing.T, name, kind, token string) {
 	t.Helper()
 
-	if _, err := h.conns.Create(h.ctx, domain.NewConnection{Name: name, Kind: kind, Secrets: map[string]string{"token": token}}, domain.LocalUser); err != nil {
+	ctx := domain.WithOrg(t.Context(), h.org)
+	if _, err := h.conns.Create(ctx, domain.NewConnection{Name: name, Kind: kind, Secrets: map[string]string{"token": token}}, domain.LocalUser); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -471,14 +471,16 @@ func TestSender_SlackSendsDirectMessage(t *testing.T) {
 
 	h := newSlackSender(t, false)
 	h.connect(t, "slack", "slack", "xoxb-test-token")
-	id := h.queue(h.org, slackNotification(domain.NotifyApproval))
 
-	if n := h.work(t); n != 1 {
-		t.Fatalf("work finished %d rows; want 1", n)
+	n := slackNotification(domain.NotifyApproval)
+	id := h.queue(h.org, n)
+
+	if done := h.work(t); done != 1 {
+		t.Fatalf("work finished %d rows; want 1", done)
 	}
 
 	sent := h.slack.Sent()
-	if len(sent) != 1 || sent[0].Token != "xoxb-test-token" || sent[0].Message.To != "ann@example.com" ||
+	if len(sent) != 1 || sent[0].Token != "xoxb-test-token" || sent[0].Message.To != n.Address ||
 		!strings.Contains(sent[0].Message.Text, "needs your OK") || !strings.Contains(sent[0].Message.Text, publicURL+"/o/acme/f/web-app/items/12") {
 		t.Fatalf("sent %+v; want the approval to ann@example.com with the connection's token", sent)
 	}

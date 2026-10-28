@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	token = "xoxb-test-token"
+	token = "xoxb-test-token" //nolint:gosec // a made-up token for the fake Slack
 	email = "ann@example.com"
 )
 
@@ -58,7 +58,7 @@ func (f *fakeSlack) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	fmt.Fprint(w, body)
+	_, _ = fmt.Fprint(w, body)
 }
 
 func (f *fakeSlack) Calls() []call {
@@ -158,12 +158,13 @@ func TestSlack_RefusesRedirects(t *testing.T) {
 
 	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		elsewhere.Add(1)
-		fmt.Fprint(w, `{"ok":true,"user":{"id":"U123"}}`)
+
+		_, _ = fmt.Fprint(w, `{"ok":true,"user":{"id":"U123"}}`)
 	}))
 	t.Cleanup(other.Close)
 
 	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, other.URL+r.URL.Path, http.StatusTemporaryRedirect)
+		http.Redirect(w, r, other.URL+r.URL.Path, http.StatusTemporaryRedirect) //nolint:gosec // the redirect under test
 	}))
 	t.Cleanup(redirect.Close)
 

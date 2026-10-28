@@ -109,7 +109,7 @@ func (m *Messenger) call(ctx context.Context, token, method string, form url.Val
 		return &ports.DMError{Code: "slack-unreachable"}
 	}
 
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxReply))
 	if err != nil {
