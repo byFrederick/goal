@@ -122,7 +122,7 @@ function renderSidebar({ path = '/o/acme' }: Setup = {}) {
     path: '/o/$org',
     beforeLoad: () => ({ org: summary }),
     component: () => (
-      <AccountProvider org={summary}>
+      <AccountProvider>
         <Sidebar org={summary} />
         <Outlet />
       </AccountProvider>

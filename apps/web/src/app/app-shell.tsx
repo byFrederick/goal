@@ -18,7 +18,7 @@ import { TopBar, TopBarSetContext, type TopBarState, usePageLabel } from './top-
 
 export function AppShell({ org, children }: { org: OrgSummary; children: ReactNode }) {
   return (
-    <AccountProvider org={org}>
+    <AccountProvider>
       <div className="flex min-h-dvh flex-col bg-shell pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] md:flex-row">
         <a
           href="#main"
@@ -58,6 +58,7 @@ export function ShellFrame({ tabs = true, children }: FrameProps) {
           <PhoneTopBar
             title={topBar?.crumb ?? pageTitle}
             actions={topBar?.actions}
+            back={topBar?.back}
             onMenu={openDrawer}
             drawerOpen={drawer}
             menuRef={menu}

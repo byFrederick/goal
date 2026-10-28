@@ -77,14 +77,19 @@ describe('GET /v1/orgs/acme/search', () => {
     await fetch(`${base}/__mock/reset`, { method: 'POST' });
   });
 
-  it('answers "spend" with acme’s three spend items first', async () => {
+  it('answers "spend" with acme’s three spend items first, then the one waiting on a person', async () => {
     const res = await fetch(`${base}/v1/orgs/acme/search?q=spend`);
     expect(res.status).toBe(200);
     const body = (await res.json()) as { items: SearchItem[]; agents: unknown[]; factories: unknown[] };
     const titles = body.items.map((i) => i.title);
-    expect(titles).toHaveLength(3);
+    expect(titles).toHaveLength(4);
+    expect(titles[3]).toBe('Show the sidebar spend for the organization');
     expect(titles.slice(0, 3).sort()).toEqual(
-      ["Show this week's spend", 'Check the spend against the budget', 'S3 spend up 22% month over month'].sort(),
+      [
+        "Show this week's spend in the sidebar",
+        'Check the spend against the budget',
+        'S3 spend up 22% month over month',
+      ].sort(),
     );
     expect(body.items.every((i) => i.factory_name && i.station)).toBe(true);
   });

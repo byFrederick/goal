@@ -1,8 +1,10 @@
 // The contract's shapes, generated from contracts/api/openapi.yaml into @goal/api-client, under the names
 // the screens use. Nothing here is written by hand: a shape changes in the contract first.
-import type { ItemPage, MergeRequest } from '@goal/api-client';
+import type { components, ItemPage, MergeRequest } from '@goal/api-client';
 
 export type {
+  Activity,
+  ActivityEvent,
   Actor,
   AgentHit,
   AgentStats,
@@ -42,6 +44,10 @@ export type {
   ConstraintSource,
   CreatedApiKey,
   CreatedPersonalToken,
+  Credential,
+  CredentialPatch,
+  CredentialType,
+  CredentialUsers,
   CurrentRun,
   DefinitionCounts,
   DefinitionEvent,
@@ -64,6 +70,7 @@ export type {
   FactoryRole,
   FactoryRoleGrant,
   FactorySlots,
+  FactorySpend,
   FactoryStart,
   FileChange,
   FileContent,
@@ -72,12 +79,18 @@ export type {
   Inbox,
   InboxEntry,
   InboxEntryKind,
+  Intake,
+  IntakeEvent,
+  IntakeTrigger,
+  IntakeTriggerDetail,
   Invitation,
   Item,
+  ItemAnswer,
   ItemAt,
   ItemCard,
   ItemEvent,
   ItemFlow,
+  ItemQuestion,
   ItemSpan,
   ItemState,
   ItemsAtRemovedStations,
@@ -110,6 +123,8 @@ export type {
   OrgAttention,
   OrgDeleted,
   OrgRole,
+  OrgRun,
+  OrgRunList,
   OrgSearch,
   OrgSettings,
   OrgSettingsPatch,
@@ -127,7 +142,10 @@ export type {
   Ranges,
   RestoreRequest,
   Run,
+  RunItem,
   RunList,
+  RunStatus,
+  RunSummary,
   SaveResult,
   SearchItem,
   Section,
@@ -173,3 +191,25 @@ export type ItemList = ItemPage;
 
 /** How goald merges a pull request (POST /v1/orgs/{org}/items/{item}/merge). */
 export type MergeMethod = NonNullable<MergeRequest['method']>;
+
+// The spend shapes are the contract's, read from the generated schema (the api-client does not re-export them).
+type Schemas = components['schemas'];
+// The credential shapes a create or an import sends and answers (ADR 0017), read from the generated schema.
+export type NewCredential = Schemas['NewCredential'];
+export type CredentialImport = Schemas['CredentialImport'];
+export type CredentialImportResult = Schemas['CredentialImportResult'];
+export type CredentialImportOutcome = Schemas['CredentialImportOutcome'];
+export type AgentSpend = Schemas['AgentSpend'];
+export type ModelSpend = Schemas['ModelSpend'];
+export type OrgSpend = Schemas['OrgSpend'];
+/** The organization's policy (ADR 0024): what it allows every factory, the facts about it, and its parts. */
+export type OrgPolicyInput = Schemas['OrgPolicyInput'];
+export type OrgPolicyView = Schemas['OrgPolicyView'];
+export type ToolPolicy = Schemas['ToolPolicy'];
+export type PolicyModel = Schemas['PolicyModel'];
+export type PolicyBoxSize = Schemas['PolicyBoxSize'];
+export type SpendBudget = Schemas['SpendBudget'];
+export type SpendBudgetState = Schemas['SpendBudgetState'];
+export type SpendDay = Schemas['SpendDay'];
+export type SpendWindow = Schemas['SpendWindow'];
+export type WeekCost = Schemas['WeekCost'];

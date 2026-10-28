@@ -1,33 +1,25 @@
-// The account (canvas "Account-Menu", "Mobile-Org-Switcher"; spec 3 §10.2): the person at the
+// The account menu (canvas "Account-Menu", "Mobile-Org-Switcher"; spec 3 §10.2): the person at the
 // bottom of the sidebar (on phones, of the drawer) opens a panel naming the person, their role in
-// this organization and whether they are a platform admin, with Edit name…, Personal tokens (to
-// this organization's API keys page, 3-12b), Sign out and Sign out everywhere…. With sign-in off (GOAL_AUTH=none) it names
-// the local user and has no actions.
+// this organization and whether they are a platform admin. Its rows: the theme, Profile and Personal
+// tokens (both on the account page, /account), Notifications, Connected apps and Keyboard shortcuts
+// (disabled, "Not available yet"), then Sign out and Sign out everywhere…. With sign-in off (GOAL_AUTH=none)
+// it names the local user and has no actions. The account page itself is features/account/account-page.tsx.
 //
-// The restyled menu (docs/design/screens/account/shell.jpg, "Account menu") shows the name, a role pill
-// and the code-host identity only when the session carries one, then Theme (Auto, Light, Dark), Profile
-// (opens Edit name…), Notifications, Personal tokens, Connected apps, Keyboard shortcuts (?), Sign out and
-// Sign out everywhere…. Notifications, Connected apps and Keyboard shortcuts are disabled ("Not available yet").
-//
-// AccountProvider (in AppShell) keeps the dialogs those actions open, so they outlive the panel or
-// sheet that opened them, and keeps the session alive while signed in.
+// AccountProvider (in AppShell) keeps the sign-out confirmation, so it outlives the panel or sheet that
+// opened it, and keeps the session alive while signed in.
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Bell, CircleCheck, Keyboard, KeyRound, LogOut, Puzzle, UserRound } from 'lucide-react';
-import { createContext, type FormEvent, type ReactNode, use, useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { createContext, type ReactNode, use, useEffect, useState } from 'react';
 import { meQuery, orgQuery } from '../api/queries';
 import type { Me, OrgSummary } from '../api/types';
-import { keepSessionAlive, roleName, useSignOut, useUpdateName } from '../shared/account';
+import { keepSessionAlive, roleName, useSignOut } from '../shared/account';
 import { displayName, initialsOf } from '../shared/names';
 import { holds } from '../shared/permissions';
-import { Button } from '../ui/button';
 import { Callout } from '../ui/callout';
 import { Chip } from '../ui/chip';
 import { cn } from '../ui/cn';
 import { ConfirmDialog } from '../ui/confirm-dialog';
-import { Dialog, DialogClose, DialogContent } from '../ui/dialog';
-import { Field, Input } from '../ui/field';
 import { Avatar } from '../ui/mark';
 import { menuRow } from '../ui/menu';
 import { NotAvailable } from '../ui/not-available';
@@ -46,24 +38,24 @@ interface Account {
   person: NonNullable<Me['user']> | undefined;
   status: AccountStatus;
   platformAdmin: boolean;
-  editName: () => void;
   signOut: () => void;
   signOutEverywhere: () => void;
 }
 
 const AccountContext = createContext<Account | null>(null);
 
-function useAccount(): Account {
+/** The account's state and actions, for the account menu and the account page inside AppShell. */
+export function useAccount(): Account {
   const account = use(AccountContext);
   if (!account) throw new Error('useAccount outside AccountProvider');
   return account;
 }
 
-export function AccountProvider({ org, children }: { org: OrgSummary; children: ReactNode }) {
+export function AccountProvider({ children }: { children: ReactNode }) {
   const { data: me, isPending, isError } = useQuery(meQuery);
   const person = me?.mode === 'session' ? me.user : undefined;
   const status: AccountStatus = isPending ? 'loading' : isError ? 'error' : me?.mode === 'session' ? 'ready' : 'local';
-  const [dialog, setDialog] = useState<'name' | 'everywhere' | null>(null);
+  const [everywhereOpen, setEverywhereOpen] = useState(false);
   const { signOut, everywhere } = useSignOut();
   const signedIn = me?.mode === 'session';
 
@@ -78,29 +70,20 @@ export function AccountProvider({ org, children }: { org: OrgSummary; children: 
     person,
     status,
     platformAdmin: me?.platform_admin ?? false,
-    editName: () => setDialog('name'),
     signOut: () => {
       if (!signOut.isPending) signOut.mutate();
     },
-    signOutEverywhere: () => setDialog('everywhere'),
+    signOutEverywhere: () => setEverywhereOpen(true),
   };
 
   return (
     <AccountContext value={account}>
       {children}
-      {person ? (
-        <EditNameDialog
-          open={dialog === 'name'}
-          onOpenChange={(open) => setDialog(open ? 'name' : null)}
-          name={person.name}
-          orgName={org.name}
-        />
-      ) : null}
       <ConfirmDialog
-        open={dialog === 'everywhere'}
+        open={everywhereOpen}
         onOpenChange={(open) => {
           if (!open) everywhere.reset();
-          setDialog(open ? 'everywhere' : null);
+          setEverywhereOpen(open);
         }}
         title="Sign out of every browser and the CLI?"
         description="Every session ends, this one too. API keys and personal tokens keep working until they are revoked."
@@ -161,7 +144,7 @@ export function AccountMenu({ org, size = 'sidebar' }: { org: OrgSummary; size?:
   );
 }
 
-/** The anchor of the API keys page's Personal tokens section (personal-tokens.tsx). */
+/** The anchor of the account page's Personal tokens section (features/account/personal-tokens.tsx). */
 const tokensAnchor = 'personal-tokens';
 
 /** Whether the person may see their personal tokens in `org` (personal_token:read). */
@@ -239,8 +222,8 @@ function AccountHeader({
 }
 
 /**
- * The theme, then the rows: Profile opens Edit name, Personal tokens goes to the organization's API
- * keys page, and the three pages not built yet are disabled. Sign out and Sign out everywhere end it.
+ * The theme, then the rows: Profile and Personal tokens open their sections of the account page, and the
+ * three pages not built yet are disabled. Sign out and Sign out everywhere end it.
  */
 function AccountRows({ org, onAction }: { org: OrgSummary; onAction: () => void }) {
   const account = useAccount();
@@ -255,10 +238,10 @@ function AccountRows({ org, onAction }: { org: OrgSummary; onAction: () => void 
       <ul className="m-0 flex list-none flex-col p-0">
         {account.person ? (
           <li>
-            <button type="button" aria-haspopup="dialog" onClick={act(account.editName)} className={actionRow}>
+            <Link to="/account" onClick={onAction} className={actionRow}>
               <UserRound {...iconProps} />
               Profile
-            </button>
+            </Link>
           </li>
         ) : null}
         <li>
@@ -271,13 +254,7 @@ function AccountRows({ org, onAction }: { org: OrgSummary; onAction: () => void 
         </li>
         {tokens ? (
           <li>
-            <Link
-              to="/o/$org/api-keys"
-              params={{ org: org.slug }}
-              hash={tokensAnchor}
-              onClick={onAction}
-              className={actionRow}
-            >
+            <Link to="/account" hash={tokensAnchor} onClick={onAction} className={actionRow}>
               <KeyRound {...iconProps} />
               Personal tokens
             </Link>
@@ -358,93 +335,5 @@ export function AccountBlock({ org, onAction }: { org: OrgSummary; onAction: () 
     <section aria-label="Account" className="flex flex-col pt-1">
       <AccountBody org={org} onAction={onAction} />
     </section>
-  );
-}
-
-/** Why a name was not saved: the identity service was not reached, or it refused the name. */
-function saveFailure(err: unknown): string {
-  return (err as { kind?: string }).kind === 'unreachable'
-    ? 'Goal couldn’t save it. Check your connection and try again.'
-    : 'Goal couldn’t save that name. A name is 1 to 80 characters.';
-}
-
-function EditNameDialog({
-  open,
-  onOpenChange,
-  name,
-  orgName,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  name: string;
-  orgName: string;
-}) {
-  const [value, setValue] = useState(name);
-  const [invalid, setInvalid] = useState<string>();
-  const field = useRef<HTMLInputElement>(null);
-  const update = useUpdateName();
-
-  const onSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const next = value.trim();
-    if (next.length < 1 || next.length > 80) {
-      setInvalid('A name is 1 to 80 characters.');
-      return;
-    }
-    update.mutate(next, {
-      onSuccess: () => {
-        onOpenChange(false);
-        toast.success('Name saved');
-      },
-    });
-  };
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (next) {
-          setValue(name);
-          setInvalid(undefined);
-          update.reset();
-        }
-        onOpenChange(next);
-      }}
-    >
-      <DialogContent title="Edit name" initialFocus={field}>
-        <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
-          <Field
-            label="Name"
-            help={`1 to 80 characters. ${orgName}’s members and the audit log show it.`}
-            error={invalid ?? (update.isError ? saveFailure(update.error) : undefined)}
-          >
-            <Input
-              ref={field}
-              value={value}
-              maxLength={80}
-              autoComplete="name"
-              onChange={(e) => setValue(e.target.value)}
-            />
-          </Field>
-          <div className="flex flex-wrap justify-end gap-2">
-            <DialogClose asChild>
-              <Button variant="white" size="lg" className="md:h-10 md:text-sm">
-                Cancel
-              </Button>
-            </DialogClose>
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              disabled={update.isPending}
-              className="md:h-10 md:text-sm"
-            >
-              {update.isPending ? 'Saving…' : 'Save'}
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }

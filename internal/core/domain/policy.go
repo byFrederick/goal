@@ -114,7 +114,49 @@ type AssemblyPolicy struct {
 	// with context: [inflight] finishes it, and gives every later claim of the item a Changed
 	// since your plan section (ChangedSinceSection). Off by default.
 	ChangedSince bool
+	// Integration says whether an assembly's parts merge into one integration branch that lands
+	// on the default branch at a gate (ADR 0033); its zero value is trunk.
+	Integration IntegrationPolicy
 }
+
+// IntegrationMode says where an assembly's parts merge.
+type IntegrationMode string
+
+// Integration modes, as written in factory.yaml's flow.assemblies.integration.mode.
+const (
+	// IntegrationModeTrunk is the default: each part merges into the default branch.
+	IntegrationModeTrunk IntegrationMode = "trunk"
+	// IntegrationModeBranch merges an assembly's parts into its integration branch
+	// (IntegrationBranch), which lands on the default branch at the landing station.
+	IntegrationModeBranch IntegrationMode = "branch"
+)
+
+// IntegrationRefresh says when an integration branch takes in the default branch.
+type IntegrationRefresh string
+
+// Integration refreshes, as written in factory.yaml's flow.assemblies.integration.refresh.
+const (
+	// RefreshOnLand is the default: the branch is brought up to date when it lands.
+	RefreshOnLand IntegrationRefresh = "onLand"
+	// RefreshEachPart brings the branch up to date before each part runs.
+	RefreshEachPart IntegrationRefresh = "eachPart"
+)
+
+// IntegrationPolicy is board.flow.assemblies.integration, with its defaults applied.
+type IntegrationPolicy struct {
+	Mode    IntegrationMode
+	Refresh IntegrationRefresh
+	// MinParts is the fewest parts an assembly needs for an integration branch; one with fewer
+	// stays on trunk.
+	MinParts int
+	// LandAt is the station where an integration branch lands, "" for the first merge station
+	// after the planning station (Line.LandingStation).
+	LandAt string
+}
+
+// Branches reports whether assemblies get an integration branch: only in mode branch, so the
+// zero policy of a line built without config is trunk.
+func (p IntegrationPolicy) Branches() bool { return p.Mode == IntegrationModeBranch }
 
 // AndonPolicy pulls the andon cord when too many gate verdicts reject.
 type AndonPolicy struct {

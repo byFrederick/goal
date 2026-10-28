@@ -1,13 +1,13 @@
-// The Organization settings form (C §10.9): what it holds, the rules it checks before saving
-// (goald's own, so a request is never refused for a reason the form could have said), the patch
-// that sends only what changed, and the sentence under the slot limits.
+// The Organization settings form (C §10.9): what it holds (name, address and slot caps; the short
+// mark is not on the page), the rules it checks before saving (goald's own, so a request is never
+// refused for a reason the form could have said), the patch that sends only what changed, and the
+// sentence under the slot limits.
 import type { OrgSettings, OrgSettingsPatch } from '../../api/types';
 import { checkSlug } from '../../shared/org-rules';
 
 /** The form's values as typed; a slot cap is text, blank for no cap. */
 export interface SettingsForm {
   name: string;
-  mark: string;
   slug: string;
   /** The organization's cap: agents running at once across its factories. */
   max: string;
@@ -16,14 +16,13 @@ export interface SettingsForm {
 }
 
 /** An error per field; a factory's cap is `factory:<id>`. */
-export type FieldErrors = Partial<Record<'name' | 'mark' | 'slug' | 'max' | `factory:${string}`, string>>;
+export type FieldErrors = Partial<Record<'name' | 'slug' | 'max' | `factory:${string}`, string>>;
 
 const capText = (cap: number | null) => (cap === null ? '' : String(cap));
 
 export function formOf(settings: OrgSettings): SettingsForm {
   return {
     name: settings.name,
-    mark: settings.mark,
     slug: settings.slug,
     max: capText(settings.slots.max),
     factories: Object.fromEntries(settings.slots.factories.map((f) => [f.factory_id, capText(f.max)])),
@@ -48,8 +47,6 @@ export function validate(form: SettingsForm): FieldErrors {
   const name = form.name.trim();
   if (!name) errors.name = 'Give the organization a name.';
   else if ([...name].length > 80) errors.name = 'At most 80 characters.';
-  const mark = form.mark.trim();
-  if (!mark || [...mark].length > 2) errors.mark = 'One or two letters or digits.';
   const slug = checkSlug(form.slug.trim());
   if (slug) errors.slug = slug;
   if (parseCap(form.max) === undefined) errors.max = capError;
@@ -68,8 +65,6 @@ export function changedFields(initial: OrgSettings, form: SettingsForm): OrgSett
   const patch: OrgSettingsPatch = {};
   const name = form.name.trim();
   if (name !== initial.name) patch.name = name;
-  const mark = form.mark.trim();
-  if (mark !== initial.mark) patch.mark = mark;
   const slug = form.slug.trim();
   if (slug !== initial.slug) patch.slug = slug;
 

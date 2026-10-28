@@ -23,6 +23,7 @@ import type { Factory, FactoryOverviewList, Me, Org, OrgAttention, OrgSummary } 
 import { TooltipProvider } from '../ui/tooltip';
 import { AccountProvider } from './account-menu';
 import { ShellFrame } from './app-shell';
+import { PhoneTopBar } from './phone-chrome';
 import { TopBarSlot } from './top-bar';
 
 const org: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'Ac', factory_count: 2, role: 'owner' };
@@ -90,7 +91,7 @@ function renderShell({ at, list = factories }: { at: string; list?: Factory[] })
     path: '/o/$org',
     beforeLoad: () => ({ org }),
     component: () => (
-      <AccountProvider org={org}>
+      <AccountProvider>
         <Outlet />
       </AccountProvider>
     ),
@@ -174,6 +175,39 @@ describe('the phone top bar', () => {
   });
 });
 
+describe('the phone top bar with a Back link', () => {
+  it('puts the Back link after the Goal mark and before the title', () => {
+    render(
+      <PhoneTopBar
+        title="#147"
+        actions={undefined}
+        back={<a href="/o/acme/f/goal/board">Back to Board</a>}
+        onMenu={() => {}}
+        drawerOpen={false}
+        menuRef={{ current: null }}
+      />,
+    );
+    const mark = screen.getByRole('button', { name: 'Open menu' });
+    const back = screen.getByRole('link', { name: 'Back to Board' });
+    const title = screen.getByText('#147');
+    expect(mark.compareDocumentPosition(back) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('draws no Back link when the page sets none', () => {
+    render(
+      <PhoneTopBar
+        title="Floor"
+        actions={undefined}
+        onMenu={() => {}}
+        drawerOpen={false}
+        menuRef={{ current: null }}
+      />,
+    );
+    expect(screen.queryByRole('link', { name: 'Back to Board' })).toBeNull();
+  });
+});
+
 describe('the drawer', () => {
   it('opens from the Goal mark and names the organization', async () => {
     renderShell({ at: '/o/acme/f/software' });
@@ -211,20 +245,20 @@ describe('the drawer', () => {
     await waitFor(() => expect(document.activeElement).toBe(mark));
   });
 
-  it('disables Needs you with the not-available tooltip', async () => {
+  it('does not list Needs you as not available in the drawer', async () => {
     renderShell({ at: '/o/acme/f/software' });
     fireEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
     const drawer = await screen.findByRole('dialog', { name: 'Acme' });
-    const needs = within(drawer).getByRole('button', { name: 'Needs you' });
-    expect(needs.getAttribute('aria-disabled')).toBe('true');
+    expect(within(drawer).queryByRole('button', { name: 'Needs you' })).toBeNull();
   });
 });
 
 describe('the tab bar', () => {
-  it('marks Needs you as not available', async () => {
+  it('links Needs you to /o/$org/needs-you, with the count it waits on', async () => {
     renderShell({ at: '/o/acme/f/software' });
-    const needs = within(await tabs()).getByRole('button', { name: 'Needs you' });
-    expect(needs.getAttribute('aria-disabled')).toBe('true');
+    const needs = within(await tabs()).getByRole('link', { name: /^Needs you/ });
+    expect(needs.getAttribute('href')).toBe('/o/acme/needs-you');
+    expect(needs.getAttribute('aria-disabled')).toBeNull();
   });
 
   it('opens the factory the page is in, and marks the current tab', async () => {

@@ -14,6 +14,7 @@ import {
 } from '@goal/api-client';
 import { sessionHandlers, withSession } from './session';
 import type {
+  Activity,
   AgentStats,
   AndonPull,
   AssemblyParts,
@@ -28,6 +29,7 @@ import type {
   Inbox,
   Invitation,
   Item,
+  ItemAnswer,
   ItemList,
   ItemState,
   LeadTimeBridge,
@@ -42,10 +44,12 @@ import type {
   Org,
   OrgAttention,
   OrgDeleted,
+  OrgRunList,
   OrgSettings,
   OrgSettingsPatch,
   OrgSummary,
   RunList,
+  RunStatus,
   TouchMetrics,
   TouchReason,
   WeeklyThroughput,
@@ -279,6 +283,21 @@ export function getLeadTime(
 }
 
 /** Items finished in each of the `weeks` weeks ending on `to` (today when absent). */
+/** The factory's latest milestone events, newest first (listFactoryActivity). */
+export function getFactoryActivity(
+  org: string,
+  factory: string,
+  { limit }: { limit?: number },
+  signal?: AbortSignal,
+): Promise<Activity> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/activity'), {
+      params: { path: { org, factory }, query: limit !== undefined ? { limit } : {} },
+      ...cancel(signal),
+    }),
+  );
+}
+
 export function getWeekly(
   org: string,
   factory: string,
@@ -407,6 +426,41 @@ export function listItemRuns(org: string, item: string, signal?: AbortSignal): P
   return unwrap(goal.GET(orgPath('/items/{item}/runs'), { params: { path: { org, item } }, ...cancel(signal) }));
 }
 
+/** The org-level runs filter (GET /v1/orgs/{org}/runs): unset values are left out, and the window is the UTC day when absent. */
+export interface RunsFilter {
+  /** A factory's id or name. */
+  factory?: string | undefined;
+  status?: RunStatus | undefined;
+  since?: string | undefined;
+  until?: string | undefined;
+  q?: string | undefined;
+  limit?: number | undefined;
+  cursor?: string | undefined;
+}
+
+/** The filter as query parameters: unset and empty values are left out. */
+function runsQuery({ factory, status, since, until, q, limit, cursor }: RunsFilter) {
+  return {
+    ...(factory ? { factory } : {}),
+    ...(status ? { status } : {}),
+    ...(since ? { since } : {}),
+    ...(until ? { until } : {}),
+    ...(q ? { q } : {}),
+    ...(limit !== undefined ? { limit } : {}),
+    ...(cursor ? { cursor } : {}),
+  };
+}
+
+/** The organization's agent runs, newest first, with the window's summary (ignores status and q). */
+export function listOrgRuns(org: string, filter: RunsFilter, signal?: AbortSignal): Promise<OrgRunList> {
+  return unwrap(
+    goal.GET(orgPath('/runs'), {
+      params: { path: { org }, query: runsQuery(filter) },
+      ...cancel(signal),
+    }),
+  );
+}
+
 /** Leaves the local user's note for the agents working an item; the receipt says when one reads it. */
 export function noteItem(org: string, item: string, text: string): Promise<NoteReceipt> {
   return unwrap(goal.POST(orgPath('/items/{item}/notes'), { params: { path: { org, item } }, body: { text } }));
@@ -422,6 +476,11 @@ export function approveItem(org: string, item: string): Promise<Item> {
 
 export function rejectItem(org: string, item: string, reason: string): Promise<Item> {
   return unwrap(goal.POST(orgPath('/items/{item}/reject'), { params: { path: { org, item } }, body: { reason } }));
+}
+
+/** Answers the item's open question: a choice by its index in Item.question.choices, or the person's own words. */
+export function answerItem(org: string, item: string, body: ItemAnswer): Promise<Item> {
+  return unwrap(goal.POST(orgPath('/items/{item}/answer'), { params: { path: { org, item } }, body }));
 }
 
 export function mergeItem(org: string, item: string, method?: MergeMethod): Promise<Item> {

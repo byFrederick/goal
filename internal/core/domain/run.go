@@ -22,6 +22,16 @@ const (
 	SandboxLarge  SandboxSize = "large"
 )
 
+// SandboxSizes are the sandbox sizes, smallest first.
+var SandboxSizes = []SandboxSize{SandboxSmall, SandboxMedium, SandboxLarge}
+
+// BoxSize is what one sandbox backend gives a box of Size: its virtual CPUs and memory.
+type BoxSize struct {
+	Size        SandboxSize
+	VCPUs       float64
+	MemoryBytes int64
+}
+
 // Lease is an agent slot's hold on an item. It expires unless heartbeated, so work held by a
 // crashed instance returns to the queue.
 type Lease struct {

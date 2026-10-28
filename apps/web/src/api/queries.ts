@@ -20,6 +20,7 @@ import {
   getAuthConfig,
   getBoard,
   getConstraint,
+  getFactoryActivity,
   getFactoryOverview,
   getInbox,
   getItem,
@@ -38,7 +39,9 @@ import {
   listItemRuns,
   listItems,
   listMembers,
+  listOrgRuns,
   listOrgs,
+  type RunsFilter,
 } from './client';
 import {
   type ConnectionFilter,
@@ -47,6 +50,7 @@ import {
   listConnectionKinds,
   listConnections,
 } from './connections';
+import { listCredentials } from './credentials';
 import {
   getDraft,
   getDraftFile,
@@ -61,6 +65,7 @@ import {
   listVersions,
   validateDraft,
 } from './definitions';
+import { definitionFile, getIntake, getIntakeTrigger } from './intake';
 import { listApiKeys, listMemberTokens, listPersonalTokens } from './keys';
 import {
   getKnowledgeDocument,
@@ -71,8 +76,11 @@ import {
   listKnowledgeSources,
   searchKnowledge,
 } from './knowledge';
+import { getOrgPolicy } from './policy';
 import { type SearchQuery, searchOrg } from './search';
-import type { ItemEvent } from './types';
+import { getOrgSpend } from './spend';
+import type { Factory, ItemEvent, SpendWindow } from './types';
+import { getWebhookDelivery, listWebhookDeliveries, listWebhookEndpoints } from './webhooks';
 
 /**
  * The one way route loaders load (loaders.test.ts keeps it so): an ensureQueryData that survives
@@ -127,6 +135,8 @@ export const keys = {
   /** What each factory needs from people now (the rail's badges). */
   attention: (org: string) => ['org', org, 'attention'] as const,
   settings: (org: string) => ['org', org, 'settings'] as const,
+  /** The organization's model and tool policy (ADR 0024), the Models and policies screen. */
+  policy: (org: string) => ['org', org, 'policy'] as const,
   apiKeys: (org: string) => ['org', org, 'api-keys'] as const,
   /** Its members (spec 3 §10.1); identity service changes invalidate members and invitations. */
   members: (org: string) => ['org', org, 'members'] as const,
@@ -146,12 +156,16 @@ export const keys = {
   /** Audit entries about connections: every one's (`all`) or one's, by its id. */
   connectionActivity: (org: string, id?: string) => ['org', org, 'connections', 'activity', id ?? 'all'] as const,
   connectionKinds: (org: string) => ['org', org, 'connection-kinds'] as const,
+  /** The organization's credentials (ADR 0017): the list, which a connection's change also moves. */
+  credentials: (org: string) => ['org', org, 'credentials'] as const,
   /**
    * The prefix of everything of the organization's knowledge base (spec 4 §10): the source lists
    * by filter, each source and its documents, a document's text, searches. `event: knowledge` re-reads
    * all of it but the searches (shared/invalidation.ts).
    */
   knowledge: (org: string) => ['org', org, 'knowledge'] as const,
+  /** The spend over one window (week, month or 90d) with the factories' budgets. */
+  spend: (org: string, window: SpendWindow) => ['org', org, 'spend', window] as const,
   knowledgeSources: (org: string, filter: KnowledgeSourceFilter) =>
     ['org', org, 'knowledge', 'sources', filter] as const,
   knowledgeSource: (org: string, name: string) => ['org', org, 'knowledge', 'source', name] as const,
@@ -168,10 +182,18 @@ export const keys = {
   inbox: (org: string, factory?: string) => ['org', org, 'inbox', factory ?? 'all'] as const,
   factory: (org: string, factory: string) => ['org', org, 'factory', factory] as const,
   board: (org: string, factory: string) => ['org', org, 'factory', factory, 'board'] as const,
+  /** The factory's webhook endpoints; their deliveries sit under it, so one prefix refreshes both. */
+  webhooks: (org: string, factory: string) => ['org', org, 'factory', factory, 'webhooks'] as const,
+  webhookDeliveries: (org: string, factory: string, endpoint: string) =>
+    ['org', org, 'factory', factory, 'webhooks', endpoint, 'deliveries'] as const,
+  webhookDelivery: (org: string, factory: string, endpoint: string, delivery: string) =>
+    ['org', org, 'factory', factory, 'webhooks', endpoint, 'deliveries', delivery] as const,
   /** The mutation key of moving an item of the factory (the Move menu): the stream waits for it. */
   move: (org: string, factory: string) => ['org', org, 'factory', factory, 'move'] as const,
   metrics: (org: string, factory: string, range: FlowRange) =>
     ['org', org, 'factory', factory, 'metrics', range] as const,
+  /** The factory's latest milestone events (listFactoryActivity); the stream refreshes it, nothing polls. */
+  activity: (org: string, factory: string) => ['org', org, 'factory', factory, 'activity'] as const,
   weekly: (org: string, factory: string, to: string | undefined, type: string | undefined) =>
     ['org', org, 'factory', factory, 'weekly', to ?? 'today', type ?? 'all'] as const,
   constraint: (org: string, factory: string, from: string | undefined, to: string | undefined) =>
@@ -188,9 +210,21 @@ export const keys = {
     ['org', org, 'factory', factory, 'items', filter] as const,
   item: (org: string, item: string) => ['org', org, 'item', item] as const,
   events: (org: string, item: string) => ['org', org, 'item', item, 'events'] as const,
-  runs: (org: string, item: string) => ['org', org, 'item', item, 'runs'] as const,
+  itemRuns: (org: string, item: string) => ['org', org, 'item', item, 'runs'] as const,
+  /** The organization's agent runs across factories (the Runs page). Rooted at ['org', org, 'runs']: the stream invalidates that prefix. */
+  runs: (org: string, filter?: RunsFilter) =>
+    filter ? (['org', org, 'runs', filter] as const) : (['org', org, 'runs'] as const),
   parts: (org: string, item: string) => ['org', org, 'item', item, 'parts'] as const,
+  /** The factory's intake (sources and triggers); item and definition events refresh it. */
+  intake: (org: string, factory: string) => ['org', org, 'factory', factory, 'intake'] as const,
 };
+
+export const intakeQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: keys.intake(org, factory),
+    queryFn: ({ signal }) => getIntake(org, factory, undefined, signal),
+    staleTime: 10_000,
+  });
 
 /** Fixed while the app runs: goald's GOAL_AUTH changes only with a restart. */
 export const authConfigQuery = queryOptions({
@@ -231,6 +265,14 @@ export const overviewQuery = (org: string, window = '7d') =>
   queryOptions({
     queryKey: keys.overview(org, window),
     queryFn: ({ signal }) => getFactoryOverview(org, window, signal),
+    staleTime: 30_000,
+  });
+
+/** The organization's spend over a window, with its factories' budgets (the spend screen). */
+export const spendQuery = (org: string, window: SpendWindow) =>
+  queryOptions({
+    queryKey: keys.spend(org, window),
+    queryFn: ({ signal }) => getOrgSpend(org, window, signal),
     staleTime: 30_000,
   });
 
@@ -288,6 +330,14 @@ export const connectionActivityQuery = (org: string, id?: string) =>
   queryOptions({
     queryKey: keys.connectionActivity(org, id),
     queryFn: ({ signal }) => listConnectionAudit(org, { connection: id, limit: id ? 6 : 5 }, signal),
+    staleTime: 30_000,
+  });
+
+/** The organization's credentials, by name, never a value (credential:read: every member). */
+export const credentialsQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.credentials(org),
+    queryFn: ({ signal }) => listCredentials(org, signal),
     staleTime: 30_000,
   });
 
@@ -352,6 +402,13 @@ export const settingsQuery = (org: string) =>
     staleTime: 30_000,
   });
 
+export const policyQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.policy(org),
+    queryFn: ({ signal }) => getOrgPolicy(org, signal),
+    staleTime: 30_000,
+  });
+
 export const membersQuery = (org: string) =>
   queryOptions({
     queryKey: keys.members(org),
@@ -387,6 +444,27 @@ export const archivedFactoriesQuery = (org: string) =>
 export const boardQuery = (org: string, factory: string) =>
   queryOptions({ queryKey: keys.board(org, factory), queryFn: ({ signal }) => getBoard(org, factory, signal) });
 
+/** The Webhooks screen's first page of deliveries per endpoint: the newest five. */
+export const webhookDeliveryLimit = 5;
+
+export const webhooksQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: keys.webhooks(org, factory),
+    queryFn: ({ signal }) => listWebhookEndpoints(org, factory, signal),
+  });
+
+export const webhookDeliveriesQuery = (org: string, factory: string, endpoint: string) =>
+  queryOptions({
+    queryKey: keys.webhookDeliveries(org, factory, endpoint),
+    queryFn: ({ signal }) => listWebhookDeliveries(org, factory, endpoint, webhookDeliveryLimit, signal),
+  });
+
+export const webhookDeliveryQuery = (org: string, factory: string, endpoint: string, delivery: string) =>
+  queryOptions({
+    queryKey: keys.webhookDelivery(org, factory, endpoint, delivery),
+    queryFn: ({ signal }) => getWebhookDelivery(org, factory, endpoint, delivery, signal),
+  });
+
 /**
  * A factory's flow over a range, with the range before it. Flow statistics refetch at most every
  * 30 s however many events arrive (E §10.3).
@@ -417,6 +495,16 @@ export const weeklyQuery = (org: string, factory: string, { to, type }: FlowRang
     queryKey: keys.weekly(org, factory, to, type),
     queryFn: ({ signal }) => getWeekly(org, factory, { to, type }, signal),
     staleTime: 30_000,
+  });
+
+/** The rows the Floor's Activity card shows. */
+const activityLimit = 5;
+
+/** The factory's latest milestone events, newest first (the Floor's Activity card). */
+export const activityQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: keys.activity(org, factory),
+    queryFn: ({ signal }) => getFactoryActivity(org, factory, { limit: activityLimit }, signal),
   });
 
 /** The constraint over a range (the work type does not change it). */
@@ -485,6 +573,41 @@ export const defKeys = {
   template: (org: string, name: string, version?: number) =>
     ['org', org, 'template', name, version ?? 'latest'] as const,
 };
+
+/** The intake's keys: every read of a factory's triggers sits under its `intake` root, which work events invalidate. */
+export const intakeKeys = {
+  root: (org: string, f: string) => ['org', org, 'factory', f, 'intake'] as const,
+  triggers: (org: string, f: string) => [...intakeKeys.root(org, f), 'triggers'] as const,
+  trigger: (org: string, f: string, trigger: string) => [...intakeKeys.triggers(org, f), trigger] as const,
+  /** factory.yaml as the page reads it: the draft's, or the running version's (one per version id). */
+  definition: (org: string, f: string, source: string) => [...intakeKeys.root(org, f), 'definition', source] as const,
+};
+
+/** One trigger of the current definition, with this week's results and its recent events. */
+export const intakeTriggerQuery = (org: string, factory: string, trigger: string) =>
+  queryOptions({
+    queryKey: intakeKeys.trigger(org, factory, trigger),
+    queryFn: ({ signal }) => getIntakeTrigger(org, factory, trigger, signal),
+  });
+
+/**
+ * factory.yaml as a trigger page reads it: the open draft's when there is one (what a save changes),
+ * else the running version's. A factory with no version has an empty file.
+ */
+export const definitionTextQuery = (org: string, factory: Factory) =>
+  factory.draft
+    ? queryOptions({
+        queryKey: intakeKeys.definition(org, factory.id, 'draft'),
+        queryFn: ({ signal }) => getDraftFile(org, factory.id, definitionFile, signal),
+      })
+    : queryOptions({
+        queryKey: intakeKeys.definition(org, factory.id, factory.current?.id ?? 'none'),
+        queryFn: async ({ signal }) =>
+          factory.current
+            ? getVersionFile(org, factory.id, factory.current.id, definitionFile, signal)
+            : { text: '', sha256: '' },
+        staleTime: Number.POSITIVE_INFINITY,
+      });
 
 export const factoryQuery = (org: string, factory: string) =>
   queryOptions({ queryKey: defKeys.factory(org, factory), queryFn: ({ signal }) => getFactory(org, factory, signal) });
@@ -622,8 +745,12 @@ function retryUnlessRefused(failures: number, error: Error): boolean {
 }
 
 /** An item's runs: under the item's key, so every event of the item refreshes them. */
-export const runsQuery = (org: string, item: string) =>
-  queryOptions({ queryKey: keys.runs(org, item), queryFn: ({ signal }) => listItemRuns(org, item, signal) });
+export const itemRunsQuery = (org: string, item: string) =>
+  queryOptions({ queryKey: keys.itemRuns(org, item), queryFn: ({ signal }) => listItemRuns(org, item, signal) });
+
+/** The organization's runs in one window and filter (the Runs page). The stream refreshes them; nothing polls. */
+export const runsQuery = (org: string, filter: RunsFilter) =>
+  queryOptions({ queryKey: keys.runs(org, filter), queryFn: ({ signal }) => listOrgRuns(org, filter, signal) });
 
 const eventPage = 500;
 

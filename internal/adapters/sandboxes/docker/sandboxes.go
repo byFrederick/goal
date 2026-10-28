@@ -34,6 +34,19 @@ var boxLimits = map[domain.SandboxSize]Config{
 	domain.SandboxLarge:  {CPUs: 4, MemoryBytes: 8 << 30, PIDs: 4096},
 }
 
+// BoxSizes are the CPUs and memory of each sandbox size, smallest first, from boxLimits: what
+// GET /v1/orgs/{org}/policy shows under GOAL_SANDBOX=docker.
+func BoxSizes() []domain.BoxSize {
+	out := make([]domain.BoxSize, 0, len(domain.SandboxSizes))
+
+	for _, size := range domain.SandboxSizes {
+		l := boxLimits[size]
+		out = append(out, domain.BoxSize{Size: size, VCPUs: l.CPUs, MemoryBytes: l.MemoryBytes})
+	}
+
+	return out
+}
+
 // Sandbox timings: how long a killed command gets for its output to end before the stream is
 // cut, how often a command whose output ended is asked whether it exited, and how long the
 // adapter's own calls get once the caller's context is gone.

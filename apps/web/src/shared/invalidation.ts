@@ -2,7 +2,7 @@
 // EventSource.
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import { savedHere } from '../api/definitions';
-import { defKeys, keys } from '../api/queries';
+import { defKeys, intakeKeys, keys } from '../api/queries';
 import type { DefinitionEvent, FactoryEvent, StreamEvent } from '../api/types';
 
 /**
@@ -17,16 +17,22 @@ const workKeys = [
   'weekly',
   'lead-time',
   'constraint',
+  'activity',
   'touches',
   'andon',
   'agent',
+  // The intake reads the newest items' sources, so every item move can change it.
+  'intake',
+  // The webhook endpoints and their deliveries: a created delivery makes an item, and the stream
+  // has no event for a refused one, so a refetch on item events and on focus is what refreshes it.
+  'webhooks',
 ] as const;
 
 /** Run progress: it changes a card on the board, not where work is or what waits on people. */
 const runProgress = new Set(['tool_call', 'tool_result', 'agent_message']);
 
 /**
- * The queries one item event touches: the organization's attention counts, inboxes and factory
+ * The queries one item event touches: the organization's attention counts, inboxes, runs and factory
  * overviews, the factory's work keys (only its board for run progress) and the item, by ref and
  * by id, all within the organization.
  */
@@ -34,6 +40,8 @@ export function invalidationsFor(org: string, event: StreamEvent): QueryKey[] {
   return [
     keys.attention(org),
     keys.inboxes(org),
+    // Every item event can start, end or change a run, so the Runs page's queries are all stale.
+    keys.runs(org),
     ...(runProgress.has(event.kind)
       ? [keys.board(org, event.factory_id)]
       : factoryWorkInvalidations(org, event.factory_id)),
@@ -105,6 +113,7 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
         ...factory,
         defKeys.draft(org, f),
         ...(data.number !== undefined ? [defKeys.versions(org, f), defKeys.versionsOf(org, f)] : []),
+        ...(data.number !== undefined ? [intakeKeys.triggers(org, f)] : []),
       ];
     case 'current':
       return [
@@ -115,9 +124,13 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
         defKeys.compares(org, f),
         keys.board(org, f),
         keys.overviews(org),
+        // The triggers of the running definition (what the intake shows).
+        keys.intake(org, f),
         // What uses a connection or a knowledge source is read from the current versions.
         keys.connections(org),
         keys.knowledge(org),
+        // A trigger's rules and its results read from the current definition.
+        intakeKeys.triggers(org, f),
       ];
     case 'factory':
       return [...factory, keys.attention(org), keys.overviews(org)];
@@ -130,10 +143,11 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
  * The queries one `connection` event touches (spec 4 §8.3): a connection created, changed, tested
  * or deleted changes the lists, that connection and the audit entries about connections, all
  * under one prefix; it carries no value. The kinds too: a connection of a kind another admin just
- * defined (kinds have no event of their own).
+ * defined (kinds have no event of their own). A credential's "used by" names the connections
+ * that refer to it, so the credentials list moves with them.
  */
 export function connectionInvalidations(org: string): QueryKey[] {
-  return [keys.connections(org), keys.connectionKinds(org)];
+  return [keys.connections(org), keys.connectionKinds(org), keys.credentials(org)];
 }
 
 /**

@@ -88,6 +88,10 @@ export interface NoteEntry {
   text: string;
   detail?: string;
   tone: Tone;
+  /** An agent's question or a person's answer: the row gets the question mark. */
+  question?: boolean;
+  /** The question is still open: its row says Now. */
+  open?: boolean;
 }
 
 export type Entry = RunEntry | CheckEntry | NoteEntry;
@@ -160,8 +164,17 @@ function note(e: ItemEvent): Omit<NoteEntry, 'kind' | 'key' | 'at' | 'station' |
     case 'note':
       return {
         text: `${actor} left a note for the next run`,
-        tone: 'muted',
+        tone: 'you',
         ...(str(e.data.text) ? { detail: str(e.data.text) as string } : {}),
+      };
+    case 'question_asked':
+      return { text: 'Asked you a question', tone: 'you', question: true };
+    case 'question_answered':
+      return {
+        text: `${actor} answered`,
+        tone: 'you',
+        question: true,
+        ...(str(e.data.answer) ? { detail: str(e.data.answer) as string } : {}),
       };
     case 'merged':
       return { text: `${actor} merged the pull request`, tone: 'ok' };
@@ -211,11 +224,16 @@ function applyRecord(run: RunEntry, record: Run) {
   if (record.definition_version !== null) run.version = record.definition_version;
 }
 
-export function buildTrace(events: readonly ItemEvent[], records: readonly Run[] = []): Trace {
+/**
+ * The item's history as people read it. `questionOpen` is whether the item still holds an open
+ * question (Item.question): only then is its latest question's row marked Now.
+ */
+export function buildTrace(events: readonly ItemEvent[], records: readonly Run[] = [], questionOpen = false): Trace {
   const entries: Entry[] = [];
   const runs = new Map<string, RunEntry>();
   // The slot of the latest claim: every run until the next claim works in it.
   let slot: number | undefined;
+  const lastAsked = events.findLast((e) => e.kind === 'question_asked');
 
   for (const e of events) {
     const station = e.station ?? '';
@@ -308,7 +326,18 @@ export function buildTrace(events: readonly ItemEvent[], records: readonly Run[]
     }
 
     const n = note(e);
-    if (n) entries.push({ kind: 'note', key: `ev-${e.id}`, at: e.at, station, actor: e.actor, ...n });
+    // Only the latest question can be open, and only while the item still holds it (the caller's word).
+    const open = questionOpen && e === lastAsked;
+    if (n)
+      entries.push({
+        kind: 'note',
+        key: `ev-${e.id}`,
+        at: e.at,
+        station,
+        actor: e.actor,
+        ...n,
+        ...(open ? { open } : {}),
+      });
   }
 
   for (const record of records) {
@@ -328,6 +357,35 @@ export function buildTrace(events: readonly ItemEvent[], records: readonly Run[]
   return { entries, costUsd, turns, ...(model ? { model } : {}) };
 }
 
+/**
+ * The acceptance criteria an output names: a string list under `acceptance` (this factory's spec
+ * contract) or `acceptance_criteria`. Anything else is no criteria.
+ */
+export function criteriaOf(value: unknown): string[] {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return [];
+  const obj = value as Record<string, unknown>;
+  const list = obj.acceptance ?? obj.acceptance_criteria;
+  return Array.isArray(list) && list.every((c) => typeof c === 'string') ? list : [];
+}
+
+/** The criteria a run's final reply lists, if the run replied with an output. */
+export function runCriteria(run: RunEntry): string[] {
+  return run.reply?.kind === 'output' ? criteriaOf(run.reply.value) : [];
+}
+
+/** The tools that change a file, by the name the agents call them. */
+const editTools = new Set(['Edit', 'Write', 'MultiEdit']);
+
+/** The distinct files the trace's edits touched: the Changes tab's count. */
+export function editedFiles(trace: Trace): string[] {
+  const files = new Set<string>();
+  for (const e of trace.entries) {
+    if (e.kind !== 'run') continue;
+    for (const t of e.tools) if (editTools.has(t.tool) && t.argument) files.add(t.argument);
+  }
+  return [...files];
+}
+
 /** The last `n` tool calls across runs, newest last: the mobile "latest steps". */
 export function latestToolCalls(trace: Trace, n: number): ToolCall[] {
   return trace.entries.flatMap((e) => (e.kind === 'run' ? e.tools : [])).slice(-n);
@@ -336,10 +394,4 @@ export function latestToolCalls(trace: Trace, n: number): ToolCall[] {
 /** The run still working, if any. */
 export function activeRun(trace: Trace): RunEntry | undefined {
   return trace.entries.findLast((e): e is RunEntry => e.kind === 'run' && e.status === 'running');
-}
-
-/** Whom a note reaches: the agent working the item, else the last one that worked at its station. */
-export function noteRecipient(trace: Trace, station: string): string | undefined {
-  const runs = trace.entries.filter((e): e is RunEntry => e.kind === 'run');
-  return (activeRun(trace) ?? runs.findLast((r) => r.station === station))?.agent;
 }
