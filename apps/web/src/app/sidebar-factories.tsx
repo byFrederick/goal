@@ -131,7 +131,7 @@ function FactoryGroup({
                   onClick={onNavigate}
                   className={rowClass}
                 >
-                  {page.label}
+                  <span className="min-w-0 flex-1 truncate">{page.label}</span>
                   {page.id === 'jonah' && jonahWaiting > 0 ? (
                     <Count value={jonahWaiting} label=" waiting for your review" />
                   ) : null}
@@ -139,7 +139,7 @@ function FactoryGroup({
               ) : (
                 <NotAvailable>
                   <button type="button" className={rowClass}>
-                    {page.label}
+                    <span className="min-w-0 flex-1 truncate">{page.label}</span>
                   </button>
                 </NotAvailable>
               )}
