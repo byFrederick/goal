@@ -133,6 +133,8 @@ type Deps struct {
 	Knowledge Knowledge
 	// Questions takes the questions agents ask with question__ask, which every run is served.
 	Questions Questions
+	// ToolApprovals take the Ask-first tool calls runs report at POST /run/tool-approval.
+	ToolApprovals ToolApprovals
 }
 
 // Config bounds the gateway. Zero values take the defaults below.
@@ -161,14 +163,16 @@ type Gateway struct {
 	log         *slog.Logger
 	knowledge   Knowledge // nil without Deps.Knowledge
 	questions   Questions
+	approvals   ToolApprovals
 	cfg         Config
 	mcp         http.Handler
 }
 
 // New returns a gateway; goald mounts it at its MCP path.
 func New(d Deps, cfg Config) (*Gateway, error) {
-	if d.Definitions == nil || d.Items == nil || d.Connections == nil || d.Events == nil || d.Clock == nil || d.Questions == nil {
-		return nil, errors.New("gateway: Definitions, Items, Connections, Events, Clock and Questions are required")
+	if d.Definitions == nil || d.Items == nil || d.Connections == nil || d.Events == nil || d.Clock == nil || d.Questions == nil ||
+		d.ToolApprovals == nil {
+		return nil, errors.New("gateway: Definitions, Items, Connections, Events, Clock, Questions and ToolApprovals are required")
 	}
 
 	if len(cfg.Key) == 0 {
@@ -179,7 +183,7 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 
 	g := &Gateway{
 		defs: d.Definitions, items: d.Items, connections: d.Connections, events: d.Events, clock: d.Clock, log: d.Logger,
-		knowledge: d.Knowledge, questions: d.Questions, cfg: cfg,
+		knowledge: d.Knowledge, questions: d.Questions, approvals: d.ToolApprovals, cfg: cfg,
 	}
 	if g.log == nil {
 		g.log = slog.New(slog.DiscardHandler)
