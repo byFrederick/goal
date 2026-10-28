@@ -130,6 +130,25 @@ With `board.flow.assemblies.changedSince: true` (default false), plans bind late
 - It states what it lists and nothing else: telling agents to re-derive the brief's paths against current main belongs in the factory's prompts and rules.
 - A code-host error is logged: the item finishes without a base commit, or runs without the section.
 
+## Assembly integration branches
+
+`board.flow.assemblies.integration` makes an assembly's parts merge into one integration branch, `goal/a<root number>-<root title slug>`, that lands on the default branch at a gate ([ADR 0033](../adr/0033-assembly-integration-branches.md)). Every key is optional:
+
+| Key | Values | Default | Meaning |
+| --- | --- | --- | --- |
+| `mode` | `trunk`, `branch` | `trunk` | `trunk`: each part merges into the default branch. `branch`: the parts merge into the assembly's integration branch. |
+| `refresh` | `onLand`, `eachPart` | `onLand` | When the integration branch takes in the default branch: when it lands, or before each part. |
+| `minParts` | integer, 0 or more | `0` | An assembly with fewer parts stays on trunk. |
+| `landAt` | a station id | the first station with `action: merge` after the station whose plan made the assembly | Where the integration branch lands. |
+
+A definition without the block is trunk, `onLand`, 0 and no `landAt`. The checks report:
+
+- `unknown-station` when `landAt` names no station;
+- `integration-land-at-not-merge` when `landAt` names a station that is not an agent station with a `gate` and `action: merge`;
+- `integration-without-merge-station` when `mode` is `branch` and no station has `action: merge`.
+
+Nothing reads the settings yet: the store, the engine and the worker follow in the parts of the assembly ADR 0033 describes.
+
 ## Judges and eval cases
 
 Jonah's two file kinds live under `evals/` ([ADR 0025](../adr/0025-judges-and-evals-as-the-screens-show-them.md)). `contracts/definitions/evals.schema.json` defines both, and `config.Check` validates them with the factory (`internal/config/evals.go`). Judge runs and eval runs are built in `internal/jonah` but goald does not run them yet; the publish eval gate is described under [Publishing with eval cases](#publishing-with-eval-cases).
@@ -264,6 +283,36 @@ Each problem is located at its key under `spec.board.triggers` in `factory.yaml`
 | A `{{` in `create.title` or `create.brief` is unclosed, empty or not a dotted field name | `placeholder-invalid` |
 
 The time zone check reads the host's zoneinfo, so a process without tzdata refuses every zone but `UTC`.
+
+## Starter item: `starter.item`
+
+A template can carry one small, safe first item, at the root of `factory.yaml` next to `spec` ([ADR 0032](../adr/0032-self-serve-onboarding.md), decision 3). Onboarding's last step, "Watch your first item", submits it once, through `submitItem`, to a new factory that has no items yet; a factory with items gets none. The section is optional, and the engine does nothing with it.
+
+```yaml
+starter:
+  item:
+    title: Add a contributing guide to the README
+    type: docs
+    body: |
+      Add a **Contributing** section to the README: how to set up the
+      repository, run the tests and open a pull request.
+```
+
+- `item` (required in `starter`): the only key of the section.
+- `title` (required): the item's title, 1 to 200 characters, as `submitItem` takes it.
+- `type`: one of `board.workTypes`. When absent, the item gets the first work type, as `submitItem` gives it.
+- `body`: the item's brief in markdown, at most 20000 characters.
+
+The factory model (`FactoryModel`, returned by `getTemplate`, the draft and a version) carries it as `starter` with the same keys, absent when `factory.yaml` has none. It is not a Visual editor section and has no ETag: the editor leaves it as written, and YAML mode edits it.
+
+### Starter checks
+
+Each problem is located at its key under `starter.item` in `factory.yaml`. The editor's model has no starter section, so the problems are in section `files`.
+
+| Problem | Code |
+| --- | --- |
+| The section fails the schema: no `item`, no `title`, an empty or too long `title`, a too long `body`, an unknown key | `schema-required`, `schema-invalid`, `schema-unknown-key` |
+| `type` is not in `board.workTypes`; with no `board.workTypes`, every `type` is unknown | `unknown-work-type` |
 
 ## Organization policy
 

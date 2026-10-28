@@ -466,6 +466,54 @@ func (q *Queries) KnowledgeRunUses(ctx context.Context, runID uuid.UUID) ([]Know
 	return items, nil
 }
 
+const knowledgeRunVerdicts = `-- name: KnowledgeRunVerdicts :many
+SELECT source_id, document_id, run_id, item_id, verdict, note, actor, at
+FROM knowledge_verdicts
+WHERE run_id = $1
+ORDER BY at, document_id, actor
+`
+
+type KnowledgeRunVerdictsRow struct {
+	SourceID   uuid.UUID
+	DocumentID uuid.UUID
+	RunID      *uuid.UUID
+	ItemID     *uuid.UUID
+	Verdict    string
+	Note       string
+	Actor      string
+	At         time.Time
+}
+
+// The verdicts given for a run, by time, document and actor.
+func (q *Queries) KnowledgeRunVerdicts(ctx context.Context, runID *uuid.UUID) ([]KnowledgeRunVerdictsRow, error) {
+	rows, err := q.db.Query(ctx, knowledgeRunVerdicts, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []KnowledgeRunVerdictsRow
+	for rows.Next() {
+		var i KnowledgeRunVerdictsRow
+		if err := rows.Scan(
+			&i.SourceID,
+			&i.DocumentID,
+			&i.RunID,
+			&i.ItemID,
+			&i.Verdict,
+			&i.Note,
+			&i.Actor,
+			&i.At,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const knowledgeSourceKind = `-- name: KnowledgeSourceKind :one
 SELECT kind FROM knowledge_sources WHERE id = $1
 `

@@ -1,26 +1,24 @@
-// Knowledge (spec 4 §10, canvas "Knowledge" and "Mobile-Knowledge"): the organization's knowledge
-// base. Its sources, each with its kind, live status (the stream's `event: knowledge` re-reads
-// them), document count, last and next sync and the factories that may search it: a table when
-// `main` is 960 px wide, cards below. Owners and admins (knowledge:manage) get New source, Sync
-// now and Upload…. Beside the table, the documents of the source ?source= picks (failures first)
-// and how factories find what; below it, Try a search. ?factory= (the factory sidebar's
-// Knowledge) shows only the sources that factory's current version lists.
+// Knowledge (canvas "Knowledge", ADR 0016): the organization's knowledge base. The Sources card
+// lists each source with its sync, the factories that read it and its document count; managers
+// sync, retry, upload and add from it. Below it, "Look something up" searches every source, and
+// "Where it was used" lists the documents of one source. Its runs and agents' verdicts are not
+// built yet, so their controls render as NotAvailable. ?factory= (the factory sidebar's Knowledge)
+// shows only the sources that factory's current version lists.
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Link, useSearch } from '@tanstack/react-router';
-import { BookOpen, Code, RefreshCw, Zap } from 'lucide-react';
+import { BookOpen, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { factoriesQuery, knowledgeDocumentsQuery, knowledgeSourcesQuery } from '../../api/queries';
 import type { KnowledgeSource } from '../../api/types';
 import { plural } from '../../shared/format';
-import { sourceSummary } from '../../shared/knowledge';
+import { sourceKinds, sourceSummary } from '../../shared/knowledge';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
-import { cn } from '../../ui/cn';
+import { Chip } from '../../ui/chip';
 import { EmptyState } from '../../ui/empty-state';
-import { descriptionClass, eyebrowClass, PageHeader } from '../../ui/page-header';
-import { DocumentLine } from './documents';
-import { KindLabel, StatusText, SyncNowButton, UsedBy, useSyncSource } from './parts';
+import { NotAvailable } from '../../ui/not-available';
+import { StatusText, SyncNowButton, UsedBy, useSyncSource } from './parts';
 import { SearchCard } from './search-card';
 import { UploadDialog } from './upload';
 import { sourceStatus, syncTimes } from './words';
@@ -30,11 +28,10 @@ export function KnowledgePage() {
   const search = useSearch({ from: '/o/$org/_org/knowledge/' });
   const manage = useOrgHolds('knowledge:manage');
   const listed = useQuery(factoriesQuery(org.id));
-  const factories = listed.data ?? [];
-  const factory = search.factory ? factories.find((f) => f.name === search.factory) : undefined;
+  const factory = search.factory ? (listed.data ?? []).find((f) => f.name === search.factory) : undefined;
   // A ?factory= the organization has no factory of (a typo, a renamed factory) is said, never unfiltered.
   const missing = search.factory !== undefined && listed.isSuccess && !factory;
-  // The search tries every source, and "as a factory" those it lists: it reads the whole list.
+  // The search and the usage card read every source; the Sources card is narrowed by ?factory=.
   const everything = useQuery(knowledgeSourcesQuery(org.id));
   const list = useQuery({
     ...knowledgeSourcesQuery(org.id, factory ? { factory: factory.id } : {}),
@@ -46,57 +43,39 @@ export function KnowledgePage() {
 
   const sources = missing ? [] : (list.data ?? []);
   const all = everything.data ?? [];
-  const selected = pickSource(sources, search.source);
+  const selected = pickSource(sources);
 
-  const newSource = manage ? (
+  const addSource = manage ? (
     <Button asChild variant="primary" className="h-11 md:h-10">
       <Link to="/o/$org/knowledge/new" params={{ org: org.slug }}>
-        <span aria-hidden="true">+</span> New source
+        <Plus size={16} strokeWidth={1.5} aria-hidden="true" />
+        Add a source
       </Link>
     </Button>
   ) : null;
 
   return (
     <>
-      <PageHeader
-        eyebrow={<p className={cn(eyebrowClass, 'md:hidden')}>{org.name}</p>}
-        title="Knowledge"
-        description={
-          <>
-            <p className={cn(descriptionClass, 'max-w-[80ch] md:hidden')}>
-              {org.name}’s knowledge base. Each factory’s definition lists the sources its agents search.
-            </p>
-            <p className={cn(descriptionClass, 'hidden max-w-[80ch] md:block')}>
-              {org.name}’s knowledge base. Agents search it before they ask a person or guess, and get snippets with
-              links.
-            </p>
-          </>
-        }
-        actions={newSource}
-      />
+      <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <h1 className="m-0 text-page-title tracking-display">Knowledge</h1>
+          <p className="m-0 text-body text-ink-soft">
+            What agents can look up before they act: synced documents, searched on every run.
+          </p>
+        </div>
+        {addSource}
+      </header>
 
       {list.isPending && !missing ? (
-        <div aria-busy="true" className="rounded-card border border-line bg-card p-5">
+        <div aria-busy="true" className="rounded-card border border-line bg-card">
           <span role="status" className="sr-only">
             Loading knowledge sources
           </span>
-          <div className="flex flex-col gap-4">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="grid grid-cols-[1fr_1fr_1fr] items-center gap-4">
-                <div className="h-3 rounded-chip bg-panel" />
-                <div className="h-3 rounded-chip bg-panel" />
-                <div className="h-3 rounded-chip bg-panel" />
-              </div>
-            ))}
-          </div>
         </div>
       ) : list.isError ? (
-        <div
-          className="flex max-w-xl flex-col items-start gap-3 rounded-card border border-line bg-card p-5"
-          role="alert"
-        >
+        <div role="alert" className="flex flex-col items-start gap-3 rounded-card border border-line bg-card p-5">
           <Callout tone="rework">Couldn’t load the knowledge sources. Check your connection and try again.</Callout>
-          <Button variant="white" onClick={() => void list.refetch()}>
+          <Button variant="secondary" onClick={() => void list.refetch()}>
             Try again
           </Button>
         </div>
@@ -104,7 +83,7 @@ export function KnowledgePage() {
         <EmptyState
           icon={<BookOpen size={20} strokeWidth={1.5} />}
           title="No knowledge sources yet"
-          actions={newSource}
+          actions={addSource}
         >
           {manage
             ? 'Upload the runbooks and docs your agents should read first, or sync a repository’s docs through a connection.'
@@ -115,7 +94,6 @@ export function KnowledgePage() {
           sources={sources}
           factory={search.factory}
           missing={missing}
-          selected={selected?.name}
           manage={manage}
           sync={sync}
           onUpload={setUploading}
@@ -123,12 +101,9 @@ export function KnowledgePage() {
         />
       )}
 
-      <div className="grid items-start gap-4 @[960px]:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        <SearchCard sources={all} loading={everything.isPending} factories={factories} />
-        <div className="flex min-w-0 flex-col gap-4">
-          {selected ? <DocumentsCard source={selected} now={now} /> : null}
-          <WhoFindsWhat />
-        </div>
+      <div className="grid items-start gap-4 @[960px]:grid-cols-2">
+        <SearchCard sources={all} />
+        <UsageCard source={selected} />
       </div>
 
       <UploadDialog source={uploading} onClose={() => setUploading(null)} />
@@ -136,25 +111,16 @@ export function KnowledgePage() {
   );
 }
 
-/**
- * The source whose documents show beside the list: the one ?source= names, else the first that
- * failed its sync, else the first with documents of its own (a live source has none).
- */
-function pickSource(sources: KnowledgeSource[], named: string | undefined): KnowledgeSource | undefined {
+/** The source whose documents the usage card lists: the first that failed its sync, else the first with documents. */
+function pickSource(sources: KnowledgeSource[]): KnowledgeSource | undefined {
   const stored = sources.filter((s) => s.kind !== 'live');
-  return (
-    stored.find((s) => s.name === named) ??
-    stored.find((s) => s.status === 'failed') ??
-    stored.find((s) => s.documents > 0) ??
-    stored[0]
-  );
+  return stored.find((s) => s.status === 'failed') ?? stored.find((s) => s.documents > 0) ?? stored[0];
 }
 
 function SourcesCard({
   sources,
   factory,
   missing,
-  selected,
   manage,
   sync,
   onUpload,
@@ -164,65 +130,53 @@ function SourcesCard({
   factory: string | undefined;
   /** No factory of the organization is named `factory`. */
   missing: boolean;
-  selected: string | undefined;
   manage: boolean;
   sync: ReturnType<typeof useSyncSource>;
   onUpload: (s: KnowledgeSource) => void;
   now: number;
 }) {
   const org = useOrg();
-  const action = (s: KnowledgeSource, className: string) =>
-    !manage ? null : s.kind === 'synced' ? (
-      <SyncNowButton source={s} sync={sync} className={className} />
-    ) : s.kind === 'upload' ? (
-      <Button variant="white" className={className} aria-label={`Upload…, ${s.title}`} onClick={() => onUpload(s)}>
-        Upload…
-      </Button>
-    ) : null;
 
   return (
-    <section
-      aria-labelledby="sources-count"
-      className="@[960px]:rounded-card @[960px]:border @[960px]:border-line @[960px]:bg-card @[960px]:p-5"
-    >
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 id="sources-count" className="m-0 text-lg font-medium">
-          {plural(sources.length, 'source')}
-          {factory ? <span className="text-muted"> {factory} may search</span> : null}
+    <section aria-labelledby="sources-h" className="flex min-w-0 flex-col rounded-card border border-line bg-card">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 pt-4 pb-3">
+        <h2 id="sources-h" className="m-0 text-heading">
+          Sources
         </h2>
+        <Chip>
+          <span className="tabular-nums">{sources.length}</span>
+        </Chip>
         {factory ? (
-          <Link
-            to="/o/$org/knowledge"
-            params={{ org: org.slug }}
-            className="text-sm text-ink underline underline-offset-3 hover:text-run"
-          >
-            Show every source
-          </Link>
-        ) : (
-          <span className="hidden text-sm text-muted @[640px]:inline">Owners and admins add and change sources.</span>
-        )}
+          <>
+            <span className="text-secondary text-muted">{factory} may search</span>
+            <Link
+              to="/o/$org/knowledge"
+              params={{ org: org.slug }}
+              className="ml-auto text-secondary text-ink underline underline-offset-3 hover:text-run"
+            >
+              Show every source
+            </Link>
+          </>
+        ) : null}
       </div>
 
       {sources.length === 0 ? (
-        <p className="m-0 border-t border-line pt-4 text-[15px] text-muted">
+        <p className="m-0 border-t border-line px-5 py-4 text-body text-muted">
           {missing
             ? `${org.name} has no factory named ${factory}.`
             : `${factory}’s current version lists no knowledge source. Its definition’s Connections and knowledge says which sources its agents may search.`}
         </p>
       ) : (
         <>
-          <table className="hidden w-full border-collapse text-sm @[960px]:table">
+          <table className="hidden w-full border-collapse text-body @[960px]:table">
             <caption className="sr-only">Knowledge sources of {org.name}</caption>
             <thead>
-              <tr className="text-left text-[13px] text-muted [&>th]:pb-2 [&>th]:font-normal">
+              <tr className="bg-panel text-left text-secondary text-muted [&>th]:border-t [&>th]:border-line [&>th]:px-4 [&>th]:py-2 [&>th]:font-control">
                 <th scope="col">Source</th>
-                <th scope="col">Kind</th>
-                <th scope="col">Status</th>
-                <th scope="col">Documents</th>
-                <th scope="col">Last sync</th>
-                <th scope="col">Used by</th>
-                <th scope="col">
-                  <span className="sr-only">Actions</span>
+                <th scope="col">Sync</th>
+                <th scope="col">Read by</th>
+                <th scope="col" className="w-30 text-right">
+                  Documents
                 </th>
               </tr>
             </thead>
@@ -230,62 +184,67 @@ function SourcesCard({
               {sources.map((s) => {
                 const status = sourceStatus(s);
                 const times = syncTimes(s, now);
+                const Icon = sourceKinds[s.kind].icon;
                 return (
-                  <tr
-                    key={s.id}
-                    className={cn(
-                      'border-t border-line align-middle [&>td]:py-2.5 [&>td]:pr-3',
-                      s.name === selected ? 'bg-card' : status.tone === 'rework' ? 'bg-rework-tint/40' : undefined,
-                    )}
-                  >
-                    <td className="max-w-[240px]">
-                      <span className="flex min-w-0 flex-col">
-                        <Link
-                          to="/o/$org/knowledge/$source"
-                          params={{ org: org.slug, source: s.name }}
-                          className="text-[15px] font-medium text-ink underline-offset-3 hover:underline"
+                  <tr key={s.id} className="align-top [&>td]:border-t [&>td]:border-line [&>td]:px-4 [&>td]:py-3">
+                    <td className="min-w-0">
+                      <span className="flex min-w-0 items-center gap-3">
+                        <span
+                          aria-hidden="true"
+                          className="grid size-9 shrink-0 place-items-center rounded-cell bg-ink text-shell"
                         >
-                          {s.title}
-                        </Link>
-                        <span translate="no" className="text-[13px] break-words text-muted">
-                          {sourceSummary(s)}
+                          <Icon size={18} strokeWidth={1.5} />
+                        </span>
+                        <span className="flex min-w-0 flex-col">
+                          <Link
+                            to="/o/$org/knowledge/$source"
+                            params={{ org: org.slug, source: s.name }}
+                            className="font-control text-ink underline-offset-3 break-words hover:underline"
+                          >
+                            {s.title}
+                          </Link>
+                          <span translate="no" className="text-meta break-words text-muted">
+                            {sourceSummary(s)}
+                          </span>
                         </span>
                       </span>
                     </td>
-                    <td>
-                      <KindLabel kind={s.kind} />
+                    <td className="min-w-0">
+                      <span className="flex flex-col items-start gap-1">
+                        <StatusText line={status} busy={s.status === 'syncing'} />
+                        <span className="text-secondary text-muted">{times.next ?? times.last}</span>
+                        {manage && s.kind === 'synced' ? (
+                          <SyncNowButton
+                            source={s}
+                            sync={sync}
+                            label={s.status === 'failed' ? 'Retry now' : 'Sync now'}
+                            className="mt-1"
+                          />
+                        ) : null}
+                      </span>
                     </td>
-                    <td className="max-w-[240px]">
-                      <StatusText line={status} busy={s.status === 'syncing'} />
+                    <td className="min-w-0">
+                      <UsedBy source={s} />
                     </td>
-                    <td className="tabular-nums">
+                    <td className="text-right">
                       {s.kind === 'live' ? (
                         <span className="text-muted">None stored</span>
                       ) : (
                         <Link
-                          to="/o/$org/knowledge"
-                          params={{ org: org.slug }}
-                          search={(prev) => ({ ...prev, source: s.name })}
-                          replace
-                          resetScroll={false}
-                          aria-current={s.name === selected ? 'true' : undefined}
-                          className="text-ink underline underline-offset-3 hover:text-run"
+                          to="/o/$org/knowledge/$source"
+                          params={{ org: org.slug, source: s.name }}
+                          className="tabular-nums text-ink underline underline-offset-3 hover:text-run"
                         >
                           {s.documents}
-                          <span className="sr-only"> documents of {s.title}, show them</span>
+                          <span className="sr-only"> documents of {s.title}, open the source</span>
                         </Link>
                       )}
+                      {manage && s.kind === 'upload' ? (
+                        <div className="mt-2 flex justify-end">
+                          <UploadButton source={s} onUpload={onUpload} />
+                        </div>
+                      ) : null}
                     </td>
-                    <td className="whitespace-nowrap">
-                      <span className="flex flex-col">
-                        <span>{times.last}</span>
-                        {times.next ? <span className="text-[13px] text-muted">{times.next}</span> : null}
-                      </span>
-                    </td>
-                    <td className="max-w-[180px]">
-                      <UsedBy source={s} />
-                    </td>
-                    <td className="text-right whitespace-nowrap">{action(s, 'h-8 px-2.5 text-[13px]')}</td>
                   </tr>
                 );
               })}
@@ -294,33 +253,40 @@ function SourcesCard({
 
           <ul
             aria-label={`Knowledge sources of ${org.name}`}
-            className="m-0 flex list-none flex-col gap-3 p-0 @[960px]:hidden"
+            className="m-0 flex list-none flex-col gap-3 border-t border-line p-4 @[960px]:hidden"
           >
             {sources.map((s) => {
               const status = sourceStatus(s);
-              const users = s.used_by.factories.map((f) => f.name);
+              const times = syncTimes(s, now);
+              const readers = s.used_by.factories.map((f) => f.name);
               return (
-                <li key={s.id} className="flex flex-col gap-1.5 rounded-card border border-line bg-card px-3.5 py-3">
+                <li key={s.id} className="flex flex-col gap-2 rounded-card border border-line px-3 py-3">
                   <div className="flex items-baseline justify-between gap-3">
                     <Link
                       to="/o/$org/knowledge/$source"
                       params={{ org: org.slug, source: s.name }}
-                      className="min-h-6 min-w-0 text-[15px] font-medium break-words text-ink underline-offset-3 hover:underline"
+                      className="min-w-0 font-control text-ink break-words underline-offset-3 hover:underline"
                     >
                       {s.title}
                     </Link>
-                    <KindLabel kind={s.kind} className="shrink-0 text-[13px] text-muted" />
+                    {s.kind === 'live' ? null : (
+                      <span className="shrink-0 text-secondary text-muted">{plural(s.documents, 'document')}</span>
+                    )}
                   </div>
-                  <StatusText
-                    line={{ tone: status.tone, text: status.text }}
-                    busy={s.status === 'syncing'}
-                    className="text-sm"
-                  />
-                  <p className="m-0 text-[13px] text-muted">
-                    {users.length > 0 ? `Used by ${users.join(', ')}` : 'No factory lists it yet'}
-                    {s.kind === 'live' ? '' : `, ${plural(s.documents, 'document')}`}
-                  </p>
-                  {s.kind === 'synced' && manage ? <div className="mt-1">{action(s, 'h-11')}</div> : null}
+                  <StatusText line={status} busy={s.status === 'syncing'} className="text-secondary" />
+                  <span className="text-secondary text-muted">{times.next ?? times.last}</span>
+                  <span className="text-secondary text-muted">
+                    Read by {readers.length > 0 ? readers.join(', ') : 'no factory yet'}
+                  </span>
+                  {manage && s.kind === 'synced' ? (
+                    <SyncNowButton
+                      source={s}
+                      sync={sync}
+                      label={s.status === 'failed' ? 'Retry now' : 'Sync now'}
+                      className="h-11 self-start"
+                    />
+                  ) : null}
+                  {manage && s.kind === 'upload' ? <UploadButton source={s} onUpload={onUpload} /> : null}
                 </li>
               );
             })}
@@ -331,99 +297,101 @@ function SourcesCard({
   );
 }
 
-/** The selected source's documents: the first page, failures first, and a link to them all. */
-function DocumentsCard({ source, now }: { source: KnowledgeSource; now: number }) {
-  const org = useOrg();
-  const pages = useInfiniteQuery(knowledgeDocumentsQuery(org.id, source.name));
-  const first = pages.data?.pages[0]?.documents ?? [];
-  const shown = [...first].sort((a, b) => Number(b.status === 'failed') - Number(a.status === 'failed')).slice(0, 5);
+/** Upload… for an upload source; its name says which source the button adds to. */
+function UploadButton({ source, onUpload }: { source: KnowledgeSource; onUpload: (s: KnowledgeSource) => void }) {
   return (
-    <section
-      aria-labelledby="documents-of"
-      className="hidden min-w-0 flex-col gap-1.5 rounded-card border border-line bg-card p-5 @[960px]:flex"
-    >
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 id="documents-of" className="m-0 text-lg font-medium">
-          {source.title}
+    <Button variant="secondary" size="sm" aria-label={`Upload…, ${source.title}`} onClick={() => onUpload(source)}>
+      Upload…
+    </Button>
+  );
+}
+
+/**
+ * Where it was used: the documents of one source, failures first, with the runs that opened each
+ * and the agents' verdict. Those two are not recorded in the API yet, so their controls are
+ * NotAvailable and show no count.
+ */
+function UsageCard({ source }: { source: KnowledgeSource | undefined }) {
+  return (
+    <section aria-labelledby="usage-h" className="flex min-w-0 flex-col rounded-card border border-line bg-card p-5">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 pb-3">
+        <h2 id="usage-h" className="m-0 text-heading">
+          Where it was used
         </h2>
-        <span className="shrink-0 text-[13px] text-muted">{plural(source.documents, 'document')}</span>
+        <span className="text-secondary text-muted">Runs that opened each document, last 7 days</span>
       </div>
-      <p className="m-0 mb-1 text-sm text-muted">Documents of the selected source, with failure reasons.</p>
-      {pages.isPending ? (
-        <p aria-busy="true" className="m-0 text-sm text-muted">
-          Loading documents…
-        </p>
-      ) : pages.isError ? (
-        <p role="alert" className="m-0 text-sm text-rework-ink">
-          Couldn’t load the documents.
-        </p>
-      ) : shown.length === 0 ? (
-        <p className="m-0 border-t border-line pt-2.5 text-sm text-muted">No documents yet.</p>
+      {source ? (
+        <UsageRows source={source} />
       ) : (
-        <ul className="m-0 flex list-none flex-col p-0">
-          {shown.map((d) => (
-            <li key={d.id} className="border-t border-line py-2.5">
-              <DocumentLine source={source.name} document={d} now={now} />
-            </li>
-          ))}
-        </ul>
+        <p className="m-0 border-t border-line pt-3 text-secondary text-muted">No documents yet.</p>
       )}
-      <Link
-        to="/o/$org/knowledge/$source"
-        params={{ org: org.slug, source: source.name }}
-        className="mt-1 self-start text-sm text-ink underline underline-offset-3 hover:text-run"
-      >
-        {source.documents > shown.length ? `All ${plural(source.documents, 'document')}` : `Open ${source.title}`}
-      </Link>
     </section>
   );
 }
 
-/** Who finds what (canvas): how factories reach each kind of source. */
-function WhoFindsWhat() {
-  const rows = [
-    {
-      icon: Code,
-      text: (
-        <>
-          A factory’s definition lists the sources it may search. Agents find them with{' '}
-          <code translate="no" className="font-mono text-[13px]">
-            knowledge__search
-          </code>{' '}
-          and read an upload whole with{' '}
-          <code translate="no" className="font-mono text-[13px]">
-            knowledge__read
-          </code>
-          .
-        </>
-      ),
-    },
-    {
-      icon: RefreshCw,
-      text: 'Synced sources are read with the connection’s own access, so every factory that lists one sees everything that access sees. Page restrictions at the source aren’t applied per agent.',
-    },
-    { icon: Zap, text: 'Live sources store nothing: a factory listing one gets that connection’s search tools.' },
-  ];
+function UsageRows({ source }: { source: KnowledgeSource }) {
+  const org = useOrg();
+  const pages = useInfiniteQuery(knowledgeDocumentsQuery(org.id, source.name));
+  const first = pages.data?.pages[0]?.documents ?? [];
+  const shown = [...first].sort((a, b) => Number(b.status === 'failed') - Number(a.status === 'failed')).slice(0, 5);
+
+  if (pages.isPending) {
+    return (
+      <div aria-busy="true" className="border-t border-line pt-3">
+        <span role="status" className="sr-only">
+          Loading documents
+        </span>
+      </div>
+    );
+  }
+  if (pages.isError) {
+    return (
+      <p role="alert" className="m-0 border-t border-line pt-3 text-secondary text-rework-ink">
+        Couldn’t load the documents.
+      </p>
+    );
+  }
+  if (shown.length === 0) {
+    return <p className="m-0 border-t border-line pt-3 text-secondary text-muted">No documents yet.</p>;
+  }
   return (
-    <section
-      aria-labelledby="who-finds"
-      className="flex min-w-0 flex-col gap-1.5 rounded-card border border-line bg-card p-5"
-    >
-      <h2 id="who-finds" className="m-0 mb-1 text-lg font-medium">
-        Who finds what
-      </h2>
+    <>
+      <div className="grid grid-cols-[minmax(0,1fr)_72px_112px] items-center gap-4 border-t border-line py-2 font-control text-secondary text-muted">
+        <span>Document</span>
+        <span className="text-right">Runs</span>
+        <span>Agents’ verdict</span>
+      </div>
       <ul className="m-0 flex list-none flex-col p-0">
-        {rows.map(({ icon: Icon, text }, i) => (
+        {shown.map((d) => (
           <li
-            // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list
-            key={i}
-            className="grid grid-cols-[20px_minmax(0,1fr)] gap-2.5 border-t border-line py-2.5 text-sm leading-normal first:border-t-0"
+            key={d.id}
+            className="grid grid-cols-[minmax(0,1fr)_72px_112px] items-center gap-4 border-t border-line py-3 text-body"
           >
-            <Icon size={16} strokeWidth={1.5} aria-hidden="true" className="mt-0.5 text-ink-soft" />
-            <span>{text}</span>
+            <span className="font-mono text-secondary break-all text-ink">{d.title}</span>
+            <NotAvailable label="Runs">
+              <button
+                type="button"
+                aria-label={`Runs of ${d.title}`}
+                className="justify-self-end tabular-nums text-muted"
+              >
+                –
+              </button>
+            </NotAvailable>
+            <NotAvailable label="Agents’ verdict">
+              <button type="button" aria-label={`Agents’ verdict on ${d.title}`} className="text-muted">
+                –
+              </button>
+            </NotAvailable>
           </li>
         ))}
       </ul>
-    </section>
+      <div className="flex justify-end border-t border-line pt-3">
+        <NotAvailable label="Make an item to fix it">
+          <Button variant="secondary" size="sm">
+            Make an item to fix it
+          </Button>
+        </NotAvailable>
+      </div>
+    </>
   );
 }

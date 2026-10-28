@@ -2,7 +2,7 @@
 // role and factory roles, and the invitations, as Better Auth's rows and Goal's factory_roles keep
 // them. Members and roles (canvas "Members"), Invite-Accept and Transfer ownership read and change
 // them through goald's routes (api.ts) and the identity service's (auth.ts). The seed is the
-// boards' Acme: an owner, an admin, four members with factory roles, one pending invitation.
+// boards' Acme: an owner, an admin, two members with factory roles, two pending invitations.
 import type { FactoryRole, Member, OrgRole } from '@goal/api-client';
 
 export interface MockPerson {
@@ -65,9 +65,10 @@ export const directory = {
   doe: person(7, 'j.doe@example.com', 'J. Doe'),
 } as const;
 
-/** The seed's invitations: acme's pending one, one that was cancelled, one to someone who joined. */
+/** The seed's invitations: acme's two pending ones, one that was cancelled, one to someone who joined. */
 export const invitationIds = {
   pending: '019a1c00-0000-7000-8000-0000000e0001',
+  second: '019a1c00-0000-7000-8000-0000000e0004',
   cancelled: '019a1c00-0000-7000-8000-0000000e0002',
   member: '019a1c00-0000-7000-8000-0000000e0003',
 } as const;
@@ -102,10 +103,8 @@ export function seedPeople(now: number, { acme, labs, factories }: SeedOrgs): Mo
       [acme]: [
         member(d.owner, 'owner', 0),
         member(d.okafor, 'admin', 0),
-        member(d.lindqvist, 'member', 1, { [factories.sre]: 'approver', [factories.support]: 'viewer' }),
-        member(d.ortiz, 'member', 0, { [factories.goal]: 'viewer', [factories.sre]: 'viewer' }),
-        member(d.lee, 'member', 3, { [factories.goal]: 'approver' }),
-        member(d.nair, 'member', 4, { [factories.support]: 'editor' }),
+        member(d.lindqvist, 'member', 1, { [factories.goal]: 'editor', [factories.sre]: 'editor' }),
+        member(d.ortiz, 'member', 2, { [factories.support]: 'viewer' }),
       ],
       [labs]: [member(d.owner, 'owner', 0), member(d.ortiz, 'member', 2)],
     },
@@ -115,8 +114,19 @@ export function seedPeople(now: number, { acme, labs, factories }: SeedOrgs): Mo
         orgId: acme,
         email: 'd.ross@example.com',
         role: 'member',
-        factoryRoles: [{ factoryId: factories.sre, role: 'viewer' }],
+        factoryRoles: [{ factoryId: factories.sre, role: 'editor' }],
         inviterId: d.okafor.id,
+        createdAt: now - 3 * dayMs,
+        expiresAt: now + 4 * dayMs,
+        status: 'pending',
+      },
+      {
+        id: invitationIds.second,
+        orgId: acme,
+        email: 'ops@example.com',
+        role: 'member',
+        factoryRoles: [{ factoryId: factories.support, role: 'viewer' }],
+        inviterId: d.owner.id,
         createdAt: now - 60_000,
         expiresAt: now + invitationLifetimeMs,
         status: 'pending',

@@ -126,6 +126,8 @@ const taskFields = z.object({
    * branch; it aborted, so the branch is as pushed and the agent resolves them first.
    */
   base_conflicts: z.array(z.string()).optional(),
+  /** The branch those files conflict with when the bundle named a base; absent means the default branch. */
+  base_branch: z.string().optional(),
   /** Definition mode (ADR 0021): the run changes the factory's draft files in /workspace for this request. */
   draft_request: DraftRequest.optional(),
   /** Judge mode (ADR 0025): the run scores this material with this judge, in one model call without tools. */
@@ -187,7 +189,7 @@ const toolSpec = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9@:/._+-]*$/);
 export const Bundle = z
   .object({
     spec: taskFields
-      .omit({ gateway_url: true, base_conflicts: true })
+      .omit({ gateway_url: true, base_conflicts: true, base_branch: true })
       .refine(itemNamed, itemMessage)
       .refine(oneMode, modeMessage),
     /** Files under /goal by path, base64. */
@@ -200,6 +202,11 @@ export const Bundle = z
         branch: z.string().min(1),
         /** How an existing branch is brought up to date with the default branch; rebase when absent. */
         fresh_base: z.enum(['rebase', 'merge']).optional(),
+        /**
+         * The branch the item's branch starts from and is brought up to date with; empty or absent
+         * means the default branch. Prepare creates it from the default branch when the remote has none.
+         */
+        base: z.string().optional(),
       })
       .optional(),
     git_credentials: z.array(GitCredential).default([]),

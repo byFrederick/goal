@@ -117,6 +117,8 @@ type harness struct {
 	connections *porttest.Connections
 	clock       *porttest.Clock
 	key         []byte
+	// questions stand in for the engine behind question__ask (question_test.go).
+	questions *fakeQuestions
 }
 
 func newHarness(t *testing.T, cfg Config) *harness {
@@ -170,6 +172,7 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 
 	h := &harness{
 		store: porttest.NewStore(), clock: porttest.NewClock(time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)), key: []byte("gateway-test-key"),
+		questions: &fakeQuestions{},
 	}
 	h.org, h.connections = newConnections(t, h.clock)
 
@@ -192,6 +195,7 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 		Connections: h.connections,
 		Events:      h.store,
 		Clock:       h.clock,
+		Questions:   h.questions,
 	}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -289,8 +293,8 @@ func toolNames(res *mcp.ListToolsResult) []string {
 }
 
 // The gateway proxies no connection (spec 4 §5.9): an agent's organization connections are its
-// box's, so none of their tools is listed, whatever protocol the agent speaks, and the list is
-// the task's own.
+// box's, so none of their tools is listed, only Goal's question tool, whatever protocol the agent
+// speaks, and the list is the task's own.
 func TestGateway_ServesNoConnectionsTools(t *testing.T) {
 	t.Parallel()
 
@@ -303,8 +307,8 @@ func TestGateway_ServesNoConnectionsTools(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if len(res.Tools) != 0 {
-				t.Errorf("tools = %+v, want none of the connections'", res.Tools)
+			if got := toolNames(res); !slices.Equal(got, []string{questionTool}) {
+				t.Errorf("tools = %v, want %s and none of the connections'", got, questionTool)
 			}
 
 			// Claude Code refuses a tools/list result without a valid cache scope, and then has no tools.

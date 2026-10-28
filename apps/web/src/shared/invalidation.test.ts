@@ -92,6 +92,9 @@ describe('invalidationsFor an item event', () => {
       ]),
     );
     expect(stale).not.toContainEqual(keys.board(acme, sre));
+    expect(stale).not.toContainEqual(keys.webhooks(acme, sre));
+    // A created delivery makes an item, so the factory's webhooks (and their deliveries) refetch with it.
+    expect(invalidationsFor(acme, event('approved'))).toContainEqual(keys.webhooks(acme, goal));
     expect(stale).not.toContainEqual(keys.item(acme, 'goal#7'));
     expect(stale).not.toContainEqual(keys.factories(acme));
     expect(stale.filter((k) => k[1] === labs)).toEqual([]);
@@ -186,6 +189,7 @@ function definitionCache() {
   client.setQueryData(defKeys.compare(acme, goal, 'base', 'draft', 42), {});
   client.setQueryData(defKeys.versionFile(acme, 'a1b2'), '');
   client.setQueryData(defKeys.templates(acme), []);
+  client.setQueryData([...keys.evals(acme, goal), 'cases'], {});
   client.setQueryData(defKeys.draft(acme, sre), {});
   return client;
 }
@@ -250,6 +254,24 @@ describe('definitionInvalidations', () => {
     expect(stale).not.toContainEqual(defKeys.versionFile(acme, 'a1b2'));
   });
 
+  test('a publish re-reads the eval cases, since it starts their run', async () => {
+    const stale = await staleAfter(
+      definitionCache(),
+      definitionInvalidations(acme, definition({ kind: 'current', number: 9 })),
+    );
+
+    expect(stale).toContainEqual([...keys.evals(acme, goal), 'cases']);
+  });
+
+  test('a draft saved elsewhere re-reads no eval case', async () => {
+    const stale = await staleAfter(
+      definitionCache(),
+      definitionInvalidations(acme, definition({ revision: saved.revision + 1, by: 'user:local' })),
+    );
+
+    expect(stale).not.toContainEqual([...keys.evals(acme, goal), 'cases']);
+  });
+
   test('a factory created or deleted re-reads the list, attention and overviews', async () => {
     const stale = await staleAfter(definitionCache(), definitionInvalidations(acme, definition({ kind: 'factory' })));
 
@@ -262,6 +284,18 @@ describe('definitionInvalidations', () => {
   test('ignores data that is no definition event', () => {
     expect(definitionInvalidations(acme, { kind: 'draft' })).toEqual([]);
     expect(definitionInvalidations(acme, null)).toEqual([]);
+  });
+});
+
+describe('the intake', () => {
+  test('an item event and a publish of the running definition re-read the factory intake, and a draft save does not', () => {
+    expect(invalidationsFor(acme, event('approved'))).toContainEqual(keys.intake(acme, goal));
+    expect(definitionInvalidations(acme, definition({ kind: 'current', number: 9 }))).toContainEqual(
+      keys.intake(acme, goal),
+    );
+    expect(definitionInvalidations(acme, definition({ kind: 'draft', number: 2 }))).not.toContainEqual(
+      keys.intake(acme, goal),
+    );
   });
 });
 

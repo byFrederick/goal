@@ -175,7 +175,7 @@ func TestPermissions_KeysNeverHoldThese(t *testing.T) {
 
 	never := []string{
 		"member:read", "member:manage", "invitation:read", "api_key:read", "api_key:manage",
-		"org:delete", "org:transfer", "org:manage", "org:create", "platform:read", "platform:manage",
+		"org:delete", "org:transfer", "org:manage", "org:create", "platform:read", "platform:manage", "webhook:manage",
 	}
 
 	for name, r := range permissionRules {
@@ -192,7 +192,7 @@ func TestPermissions_PersonalTokensCarryExactlyThese(t *testing.T) {
 
 	want := []string{
 		"andon:manage", "authenticated", "connection:browse", "connection:read", "credential:read", "definition:edit", "definition:publish",
-		"factory:archive", "factory:create", "factory:delete", string(permFactoryRead), "item:create", "item:decide", "item:operate", "knowledge:read", "org:read",
+		"factory:archive", "factory:create", "factory:delete", string(permFactoryRead), "intake:read", "item:create", "item:decide", "item:operate", "knowledge:read", "knowledge:verdict", "org:read",
 	}
 
 	var got []string
@@ -595,9 +595,9 @@ func TestServer_VisibleAndCan(t *testing.T) {
 		can      []domain.Permission // exactly, when set
 		canHolds domain.Permission
 	}{
-		{name: "viewer on their factory", p: viewer, f: mxF, visible: true, can: []domain.Permission{"factory:read"}},
+		{name: "viewer on their factory", p: viewer, f: mxF, visible: true, can: []domain.Permission{"factory:read", "intake:read"}},
 		{name: "viewer on another", p: viewer, f: mxG, visible: false, can: []domain.Permission{}},
-		{name: "member's org permissions", p: viewer, can: []domain.Permission{"connection:browse", "connection:read", "credential:read", "knowledge:read", "member:read", "org:read", "personal_token:read"}},
+		{name: "member's org permissions", p: viewer, can: []domain.Permission{"connection:browse", "connection:read", "credential:read", "knowledge:read", "knowledge:verdict", "member:read", "org:read", "personal_token:read"}},
 		{name: "a stale owner may still be offered deleting", p: stale, canHolds: "org:delete"},
 		{name: "local user under none", authz: AllowAll{}, p: domain.LocalPrincipal, f: mxG, visible: true, canHolds: "definition:publish"},
 	}

@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, archiveFactory, pauseFactory, purgeFactory, restoreFactory } from '../../api/client';
-import { defKeys, orgQuery } from '../../api/queries';
+import { defKeys, membersQuery, orgQuery } from '../../api/queries';
 import type { Factory, Org, OrgSummary } from '../../api/types';
 import { renderFactoryPage } from '../../test/route';
 import { FactorySettingsPage } from './settings-page';
@@ -90,9 +90,10 @@ async function renderSettings(current: Factory, can: string[]) {
     seed: [
       [orgQuery(org.id).queryKey, orgWith(can)],
       [defKeys.factory(org.id, current.id), current],
+      [membersQuery(org.id).queryKey, []],
     ],
   });
-  await screen.findByRole('heading', { name: 'Factory settings' });
+  await screen.findByRole('heading', { name: 'Settings' });
   return rendered;
 }
 
@@ -102,11 +103,11 @@ describe('Danger zone of a factory', () => {
   it('offers Pause first for a running factory and pauses then archives', async () => {
     await renderSettings(factory, archiver);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Archive factory…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
     const dialog = await screen.findByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Pause first' }));
 
-    await screen.findByRole('button', { name: 'Restore factory' });
+    await screen.findByRole('button', { name: 'Restore' });
     expect(pauseFactory).toHaveBeenCalledWith('org-1', 'factory-1');
     expect(archiveFactory).toHaveBeenCalledWith('org-1', 'factory-1');
     const pausedAt = vi.mocked(pauseFactory).mock.invocationCallOrder.at(0) ?? 0;
@@ -121,7 +122,7 @@ describe('Danger zone of a factory', () => {
       new ApiError({ title: 'Conflict', status: 409, code: 'factory-busy', detail: '2 items are being worked' }),
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Archive factory…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
     const dialog = await screen.findByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Archive factory' }));
 
@@ -133,19 +134,19 @@ describe('Danger zone of a factory', () => {
   it('shows Restore instead of Archive for an archived factory', async () => {
     await renderSettings(archived, archiver);
 
-    expect(screen.getByRole('button', { name: 'Restore factory' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Archive factory…' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Restore' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull();
     expect(screen.getByText(/It stays paused until you resume it\./)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Restore factory' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
     await waitFor(() => expect(restoreFactory).toHaveBeenCalledWith('org-1', 'factory-1'));
-    await screen.findByRole('button', { name: 'Archive factory…' });
+    await screen.findByRole('button', { name: 'Archive' });
   });
 
   it('disables Delete until archived', async () => {
     await renderSettings(paused, archiver);
 
-    const remove = screen.getByRole('button', { name: 'Delete factory…' }) as HTMLButtonElement;
+    const remove = screen.getByRole('button', { name: 'Delete' }) as HTMLButtonElement;
     expect(remove.disabled).toBe(true);
     expect(screen.getByText('Archive the factory first')).toBeTruthy();
   });
@@ -153,7 +154,7 @@ describe('Danger zone of a factory', () => {
   it('deletes only after the typed name and opens the Factories home', async () => {
     const { router } = await renderSettings(archived, archiver);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete factory…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     const dialog = await screen.findByRole('dialog');
     const confirm = within(dialog).getByRole('button', { name: 'Delete factory' }) as HTMLButtonElement;
     expect(confirm.disabled).toBe(true);
@@ -166,10 +167,12 @@ describe('Danger zone of a factory', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme'));
   });
 
-  it('leaves the Danger zone out without factory:archive', async () => {
+  it('shows only Pause without factory:archive or factory:delete', async () => {
     await renderSettings(factory, []);
 
-    expect(screen.queryByText('Danger zone')).toBeNull();
-    expect(screen.queryByRole('button', { name: /Archive factory/ })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Danger zone' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
   });
 });

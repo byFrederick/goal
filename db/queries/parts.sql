@@ -34,3 +34,12 @@ SELECT station FROM work_items
 WHERE parent_id = sqlc.arg(parent_id)::uuid AND part_key IS NOT NULL AND state = 'done'
 ORDER BY done_at DESC NULLS LAST, number DESC
 LIMIT 1;
+
+-- name: SetIntegrationBranch :execrows
+-- Sets an assembly's integration branch and landing station once: a row that has a branch keeps
+-- it, so a second call changes nothing (no rows).
+UPDATE work_items SET
+  integration_branch = sqlc.arg(integration_branch)::text,
+  integration_land_at = sqlc.arg(integration_land_at)::text,
+  updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id) AND integration_branch IS NULL;

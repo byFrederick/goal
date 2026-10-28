@@ -10,6 +10,9 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
+// defaultIntegration is board.flow.assemblies.integration when a definition leaves it out.
+var defaultIntegration = domain.IntegrationPolicy{Mode: domain.IntegrationModeTrunk, Refresh: domain.RefreshOnLand}
+
 // The line carries the flow policy and targets the engine and the flow metrics read.
 func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 	t.Parallel()
@@ -26,7 +29,7 @@ func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 		Targets: domain.Targets{ThroughputPerDay: 8, LeadTime: 6 * time.Hour, ExpediteLeadTime: time.Hour},
 		Assemblies: domain.AssemblyPolicy{
 			FreshBase: domain.FreshBaseRebase, OnConflict: domain.ConflictRework, Overlap: domain.OverlapSerialize,
-			Materialize: true,
+			Materialize: true, Integration: defaultIntegration,
 		},
 		Retry: domain.RetryPolicy{TransientAttempts: domain.DefaultTransientAttempts},
 	}
@@ -54,6 +57,7 @@ func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 
 	set := domain.AssemblyPolicy{
 		FreshBase: domain.FreshBaseMerge, OnConflict: domain.ConflictHuman, Overlap: domain.OverlapSerialize, Materialize: true,
+		Integration: defaultIntegration,
 	}
 	if got := plain.Line().Flow.Assemblies; got != set {
 		t.Errorf("assemblies = %+v, want %+v", got, set)
@@ -67,7 +71,7 @@ func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 
 	if got, want := half.Line().Flow.Assemblies, (domain.AssemblyPolicy{
 		FreshBase: domain.FreshBaseRebase, OnConflict: domain.ConflictHuman, Overlap: domain.OverlapSerialize,
-		Materialize: true,
+		Materialize: true, Integration: defaultIntegration,
 	}); got != want {
 		t.Errorf("assemblies with only onConflict = %+v, want %+v", got, want)
 	}
@@ -86,6 +90,54 @@ func TestLoad_RefusesUnknownAssemblyPolicies(t *testing.T) {
 		_, problems := Check(checkTree(doc, nil))
 		if !slices.ContainsFunc(problems, func(p domain.DefinitionProblem) bool { return p.Check == checkSchema && p.Blocking() }) {
 			t.Errorf("assemblies %s: problems %+v, want a schema problem", assemblies, problems)
+		}
+	}
+}
+
+// board.flow.assemblies.integration maps field by field; left out, it is trunk, onLand, no
+// minimum and no landAt.
+func TestLine_CarriesAssembliesIntegration(t *testing.T) {
+	t.Parallel()
+
+	trunk := defaultIntegration
+	merge := strings.Replace(baseFactory, doneStation, "      - id: land\n        kind: agent\n        agent: worker\n"+
+		"        gate: { onReject: work }\n        action: merge\n"+doneStation, 1)
+
+	for flow, want := range map[string]domain.IntegrationPolicy{
+		"": trunk,
+		"    flow:\n      assemblies: { overlap: allow }\n":  trunk,
+		"    flow:\n      assemblies: { integration: {} }\n": trunk,
+		"    flow:\n      assemblies:\n        integration: { mode: branch, refresh: eachPart, minParts: 3, landAt: land }\n": {
+			Mode: domain.IntegrationModeBranch, Refresh: domain.RefreshEachPart, MinParts: 3, LandAt: "land",
+		},
+		"    flow:\n      assemblies:\n        integration: { minParts: 2 }\n": {
+			Mode: domain.IntegrationModeTrunk, Refresh: domain.RefreshOnLand, MinParts: 2,
+		},
+	} {
+		f, err := Load(checkTree(merge+flow, nil))
+		if err != nil {
+			t.Fatalf("flow %q: %v", flow, err)
+		}
+
+		if got := f.Line().Flow.Assemblies.Integration; got != want {
+			t.Errorf("flow %q: integration = %+v, want %+v", flow, got, want)
+		}
+	}
+}
+
+// flow.assemblies.integration takes only its keys, each one of its values.
+func TestLoad_RefusesUnknownIntegrationKeys(t *testing.T) {
+	t.Parallel()
+
+	for _, integration := range []string{
+		"{ colour: red }", "{ mode: fork }", "{ mode: '' }", "{ refresh: always }", "{ minParts: -1 }", "{ minParts: 1.5 }",
+		"{ landAt: 3 }", "branch",
+	} {
+		doc := baseFactory + "    flow:\n      assemblies:\n        integration: " + integration + "\n"
+
+		_, problems := Check(checkTree(doc, nil))
+		if !slices.ContainsFunc(problems, func(p domain.DefinitionProblem) bool { return p.Check == checkSchema && p.Blocking() }) {
+			t.Errorf("integration %s: problems %+v, want a schema problem", integration, problems)
 		}
 	}
 }

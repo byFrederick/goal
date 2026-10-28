@@ -28,7 +28,7 @@ export interface Prepared {
   branch?: string;
   /** Whether that branch already existed on the remote: earlier runs of the item pushed it. */
   branch_existed?: boolean;
-  /** How the existing branch was brought up to date with the default branch; absent for a new one. */
+  /** How the existing branch was brought up to date with its base; absent for a new one. */
   fresh_base?: FreshBase;
   /** The files that conflicted doing so, sorted; the rebase or merge was aborted. */
   conflicts?: string[];
@@ -47,9 +47,10 @@ type FreshBase = NonNullable<NonNullable<Bundle['repository']>['fresh_base']>;
  * goal-agent prepare: fetches the run bundle from the gateway with the run's task token and
  * sets the sandbox up for `goal-agent run`. It writes /goal (spec.json and the agent's files),
  * configures a git credential helper per bundle credential, clones the repository into
- * /workspace on the item's branch (the remote one when it exists, otherwise new from the default
- * branch), brings an existing branch up to date with the default branch (fresh_base: rebase or
- * merge; a conflict is aborted and reported, not failed), and installs tools with mise: the
+ * /workspace on the item's branch (the remote one when it exists, otherwise new from the base: the
+ * bundle's repository.base, created from the default branch when missing, or the default branch),
+ * brings an existing branch up to date with that base (fresh_base: rebase or merge; a conflict is
+ * aborted and reported, not failed), and installs tools with mise: the
  * repository's own (mise.toml, .tool-versions, …), then the definition's runtime.tools. The factory's rules
  * go to the user-level rules in the config dir, never into /workspace, so they cannot be committed.
  * In definition mode (the bundle's definition, ADR 0021) /workspace gets the factory's draft files
@@ -92,18 +93,26 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
     out.definition_files = Object.keys(baseline).length;
   }
   const repo = bundle.repository;
+  let baseBranch: string | undefined;
   if (repo) {
     const ws = deps.dirs.workspace;
+    // An empty base is the default branch, as an absent one.
+    const base = repo.base || undefined;
     await must(deps, 'git', ['check-ref-format', '--branch', repo.branch]);
+    if (base) await must(deps, 'git', ['check-ref-format', '--branch', base]);
     await must(deps, 'git', ['clone', '--quiet', '--', repo.url, ws]);
-    const remote = `refs/remotes/origin/${repo.branch}`;
-    const existed = (await deps.exec('git', ['rev-parse', '--verify', '--quiet', remote], { cwd: ws })) === 0;
-    const branch = existed ? ['-B', repo.branch, `origin/${repo.branch}`] : ['-b', repo.branch];
+    const existed = await hasRemote(deps, ws, repo.branch);
+    if (base) await ensureBase(deps, ws, base);
+    const start = base ? [`origin/${base}`] : [];
+    const branch = existed ? ['-B', repo.branch, `origin/${repo.branch}`] : ['-b', repo.branch, ...start];
     await must(deps, 'git', ['checkout', '--quiet', ...branch], ws);
     if (existed) {
       out.fresh_base = repo.fresh_base ?? 'rebase';
-      const conflicts = await freshen(deps, ws, out.fresh_base);
-      if (conflicts.length > 0) out.conflicts = conflicts;
+      const conflicts = await freshen(deps, ws, out.fresh_base, base);
+      if (conflicts.length > 0) {
+        out.conflicts = conflicts;
+        baseBranch = base;
+      }
     }
     // The repository's own tools; mise trusts configs under /workspace (MISE_TRUSTED_CONFIG_PATHS).
     await must(deps, 'mise', ['install', '--yes'], ws);
@@ -111,7 +120,12 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
     out.branch_existed = existed;
   }
 
-  const spec = { ...bundle.spec, gateway_url: gateway, ...(out.conflicts ? { base_conflicts: out.conflicts } : {}) };
+  const spec = {
+    ...bundle.spec,
+    gateway_url: gateway,
+    ...(out.conflicts ? { base_conflicts: out.conflicts } : {}),
+    ...(baseBranch ? { base_branch: baseBranch } : {}),
+  };
   await put(join(deps.dirs.goal, 'spec.json'), JSON.stringify(spec));
 
   if (bundle.tools.length > 0) {
@@ -125,13 +139,38 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
   return out;
 }
 
+async function hasRemote(deps: PrepareDeps, ws: string, branch: string): Promise<boolean> {
+  const ref = `refs/remotes/origin/${branch}`;
+  return (await deps.exec('git', ['rev-parse', '--verify', '--quiet', ref], { cwd: ws })) === 0;
+}
+
 /**
- * Rebases the checked-out branch on the default branch (origin/HEAD, which clone set) or merges
- * the default branch into it. On a conflict it aborts, so the branch is as pushed, and returns the
- * conflicting files; any other failure throws.
+ * Makes sure the remote has the base branch. A missing one is created from the default branch
+ * (origin/HEAD) and pushed plainly, never forced. When that push fails because another run pushed
+ * the base first, it fetches theirs and uses it; any other failure throws.
  */
-async function freshen(deps: PrepareDeps, ws: string, mode: FreshBase): Promise<string[]> {
-  const base = (await deps.output('git', ['rev-parse', '--abbrev-ref', 'origin/HEAD'], { cwd: ws })).trim();
+async function ensureBase(deps: PrepareDeps, ws: string, base: string): Promise<void> {
+  if (await hasRemote(deps, ws, base)) return;
+  await must(deps, 'git', ['branch', '--no-track', base, 'origin/HEAD'], ws);
+  const code = await deps.exec('git', ['push', '--quiet', 'origin', base], { cwd: ws });
+  if (code === 0) return;
+  const tracking = `+refs/heads/${base}:refs/remotes/origin/${base}`;
+  if ((await deps.exec('git', ['fetch', '--quiet', 'origin', tracking], { cwd: ws })) !== 0) {
+    throw new Error(`git push exited ${code}`);
+  }
+  // The local base follows the one that won, so nothing in the workspace points at the lost one.
+  await must(deps, 'git', ['branch', '--force', '--no-track', base, `origin/${base}`], ws);
+}
+
+/**
+ * Rebases the checked-out branch on its base (origin/<base>, or the default branch: origin/HEAD,
+ * which clone set) or merges the base into it. On a conflict it aborts, so the branch is as pushed,
+ * and returns the conflicting files; any other failure throws.
+ */
+async function freshen(deps: PrepareDeps, ws: string, mode: FreshBase, onto?: string): Promise<string[]> {
+  const base = onto
+    ? `origin/${onto}`
+    : (await deps.output('git', ['rev-parse', '--abbrev-ref', 'origin/HEAD'], { cwd: ws })).trim();
   if (!base.startsWith('origin/')) throw new Error(`origin/HEAD is ${base || 'not set'}`);
   const args = mode === 'merge' ? ['merge', '--quiet', '--no-edit', base] : ['rebase', '--quiet', base];
   const code = await deps.exec('git', args, { cwd: ws });

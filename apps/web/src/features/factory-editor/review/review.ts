@@ -52,12 +52,15 @@ export interface Hunk {
 
 const overlaps = ([a = 0, b = 0]: readonly number[], from: number, to: number) => a > 0 && a <= to && b >= from;
 
+/** The name of a change's section ("Line", "Agents"); "Files" for one the editor does not know. */
+export function sectionName(section: string): string {
+  return section in sectionInfo ? sectionInfo[section as keyof typeof sectionInfo].label : 'Files';
+}
+
 /** "Line: build station", "Connections: browser", "Agents: reviewer". */
 export function changeLabel(change: Change): string {
-  const section =
-    change.section in sectionInfo ? sectionInfo[change.section as keyof typeof sectionInfo].label : 'Files';
   const target = change.target.kind === 'station' ? `${change.target.id} station` : change.target.id;
-  return `${section}: ${target}`;
+  return `${sectionName(change.section)}: ${target}`;
 }
 
 /**
@@ -139,12 +142,12 @@ export function blockedSentence(errors: number): string {
   return `Fix ${plural(errors, 'problem')} first. Your draft stays saved.`;
 }
 
-/** What publishing does to the running version (B's copy fix: runs, not items, finish on it). */
+/** What publishing does to the running version: the first publish saves v1; later, the roll-back line. */
 export function publishExplainer(current: number | null, next: number): string {
   if (current === null) {
     return `Publishing saves version ${next}. Later edits start a new draft; nothing changes the running factory until you publish again.`;
   }
-  return `v${current} keeps running until you publish. Runs already started finish on v${current}; new runs start on v${next}.`;
+  return 'You can roll back to any earlier version later.';
 }
 
 // Versions.
@@ -155,6 +158,12 @@ const day = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', time
 export function publishedLine(at: string | null, by: Actor | null): string {
   const when = at ? day.format(new Date(at)) : '';
   return by ? `${when} by ${by.name}`.trim() : when;
+}
+
+/** "All 21 versions". The list is one page, newest first, and numbers count up from 1, so the newest numbered version is the total. A draft has no number. */
+export function allVersionsText(versions: readonly { number: number | null }[]): string {
+  const newest = versions.find((v) => v.number !== null)?.number;
+  return newest ? `All ${newest} versions` : 'All versions';
 }
 
 /** Where a draft or version started ("Template cost-review v2", "Clone of sre v3"). */
