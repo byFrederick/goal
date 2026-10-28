@@ -104,8 +104,22 @@ test('the line and the flow tiles show on the Floor', async ({ page }) => {
   await expect(flow.getByRole('meter', { name: /of the target of 10 a day$/ })).toBeVisible();
   // The phone shows four tiles; Hands-off is one of the two hidden on it.
   test.skip(isPhone(page), 'the phone shows four tiles');
-  await expect(flow.getByRole('button', { name: 'Hands-off' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(flow.getByText('Hands-off')).toBeVisible();
+  await expect(flow.getByRole('img', { name: /over 7 days$/ })).toBeVisible();
   await expectAccessible(page);
+});
+
+test('Add a build agent raises the station by one in a draft and opens the Line editor', async ({ page }) => {
+  // The phone's Floor shows the what-if the same way; this flow runs on the desktop card.
+  test.skip(isPhone(page), 'the what-if is on the desktop card');
+  await page.goto('/o/acme/f/software');
+  const card = page.getByRole('region', { name: 'Where work waits' });
+  await expect(card.getByText('With a 7th build agent')).toBeVisible();
+  await card.getByRole('button', { name: 'Add a build agent' }).click();
+
+  // The draft is not published: the person reviews and publishes it in the Line editor.
+  await expect(page).toHaveURL(/\/o\/acme\/f\/software\/definition\/line$/);
+  await expect(page.getByText('engineer × 7')).toBeVisible();
 });
 
 test('a phone shows the range the URL names', async ({ page }) => {
