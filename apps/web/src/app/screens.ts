@@ -38,7 +38,9 @@ export type FactoryPath =
   | '/o/$org/f/$factory/intake'
   | '/o/$org/f/$factory/definition'
   | '/o/$org/f/$factory/settings'
-  | '/o/$org/f/$factory/jonah/evals';
+  | '/o/$org/f/$factory/jonah/evals'
+  | '/o/$org/f/$factory/jonah/judges'
+  | '/o/$org/f/$factory/jonah/judges/$judge';
 /** Paths of the organization's screens; their only param is its slug. */
 export type OrgPath =
   | '/o/$org'
@@ -117,7 +119,7 @@ export const factoryScreens: readonly FactoryScreen[] = [
     available: true,
     filters: '/o/$org/knowledge',
   },
-  // Jonah's Evals (ADR 0025); its other tabs (Overview, Proposals, Judges, Bake-offs) are not built yet.
+  // Jonah's Evals (ADR 0025); its Judges are reached from its tabs, and Overview, Proposals and Bake-offs are not built yet.
   {
     id: 'jonah',
     label: 'Jonah',

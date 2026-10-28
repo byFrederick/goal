@@ -26,6 +26,7 @@ import {
   getInbox,
   getItem,
   getItemParts,
+  getJudge,
   getLeadTime,
   getMe,
   getMetrics,
@@ -40,6 +41,7 @@ import {
   listItemEvents,
   listItemRuns,
   listItems,
+  listJudges,
   listMembers,
   listOrgRuns,
   listOrgs,
@@ -219,6 +221,8 @@ export const keys = {
   parts: (org: string, item: string) => ['org', org, 'item', item, 'parts'] as const,
   /** The prefix of a factory's eval cases and their estimate (Jonah's Evals). A `definition` event refreshes it. */
   evals: (org: string, factory: string) => ['org', org, 'factory', factory, 'evals'] as const,
+  /** The prefix of a factory's judges (Jonah's Judges). A `definition` event refreshes it. */
+  judges: (org: string, factory: string) => ['org', org, 'factory', factory, 'judges'] as const,
   /** The factory's intake (sources and triggers); item and definition events refresh it. */
   intake: (org: string, factory: string) => ['org', org, 'factory', factory, 'intake'] as const,
 };
@@ -550,6 +554,20 @@ export const evalsQuery = (org: string, factory: string) =>
   queryOptions({
     queryKey: [...keys.evals(org, factory), 'cases'] as const,
     queryFn: ({ signal }) => listEvals(org, factory, signal),
+  });
+
+/** The factory's judges of the current version, each with its 30 days (listJudges). */
+export const judgesQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: [...keys.judges(org, factory), 'list'] as const,
+    queryFn: ({ signal }) => listJudges(org, factory, signal),
+  });
+
+/** One judge of the current version with its file, its scores and where it runs (getJudge). */
+export const judgeQuery = (org: string, factory: string, judge: string) =>
+  queryOptions({
+    queryKey: [...keys.judges(org, factory), 'judge', judge] as const,
+    queryFn: ({ signal }) => getJudge(org, factory, judge, signal),
   });
 
 /** What a run of every case would cost about (estimateEvalRun): a read, so it is asked again on each refresh. */
