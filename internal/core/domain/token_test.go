@@ -170,6 +170,83 @@ func TestTaskToken_EvalNamesNoConnection(t *testing.T) {
 	}
 }
 
+// A Jonah review's token names no connection and carries the review's window (and whether a
+// person asked for it), which no other kind of token may carry. Signing refuses what verifying
+// refuses, and a token another issuer signed with the same key is refused all the same.
+func TestTaskToken_JonahNamesNoConnectionAndAWindow(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
+	key := []byte("gateway-key")
+	claims := TaskClaims{
+		Kind: TaskKindJonah, OrgID: "o1", FactoryID: "f1", VersionID: "v1", Agent: "jonah", RunID: "r1",
+		WindowStart: now.Add(-24 * time.Hour).Unix(), WindowEnd: now.Unix(), Manual: true, ExpiresAt: now.Add(time.Hour).Unix(),
+	}
+
+	token, err := SignTaskToken(key, claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := VerifyTaskToken(key, token, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	claims.Audience = TaskAudience
+	if !reflect.DeepEqual(got, claims) {
+		t.Errorf("claims = %+v, want %+v", got, claims)
+	}
+
+	tests := map[string]func(*TaskClaims){
+		"a jonah token with a connection":      func(c *TaskClaims) { c.Connections = []string{"acme-host"} },
+		"a jonah token without a window":       func(c *TaskClaims) { c.WindowStart, c.WindowEnd = 0, 0 },
+		"a jonah token without a start":        func(c *TaskClaims) { c.WindowStart = 0 },
+		"a jonah token ending at its start":    func(c *TaskClaims) { c.WindowEnd = c.WindowStart },
+		"a jonah token ending before start":    func(c *TaskClaims) { c.WindowEnd = c.WindowStart - 1 },
+		"a station token with a window":        func(c *TaskClaims) { c.Kind = "" },
+		"an eval token with a window":          func(c *TaskClaims) { c.Kind = TaskKindEval },
+		"a station token marked manual":        func(c *TaskClaims) { c.Kind, c.WindowStart, c.WindowEnd = "", 0, 0 },
+		"an eval token with only a window end": func(c *TaskClaims) { c.Kind, c.WindowStart, c.Manual = TaskKindEval, 0, false },
+	}
+
+	enc := base64.RawURLEncoding
+
+	for name, change := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			bad := claims
+			change(&bad)
+
+			if _, err := SignTaskToken(key, bad); !errors.Is(err, ErrBadTaskToken) {
+				t.Errorf("SignTaskToken: err = %v, want ErrBadTaskToken", err)
+			}
+
+			payload, err := json.Marshal(bad)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := VerifyTaskToken(key, enc.EncodeToString(payload)+"."+enc.EncodeToString(mac(key, payload)), now); !errors.Is(err, ErrBadTaskToken) {
+				t.Errorf("VerifyTaskToken: err = %v, want ErrBadTaskToken", err)
+			}
+		})
+	}
+
+	// Other tokens leave the window out of their encoding.
+	plain, err := json.Marshal(TaskClaims{OrgID: "o1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, field := range []string{`"ws"`, `"we"`, `"jm"`} {
+		if strings.Contains(string(plain), field) {
+			t.Errorf("production claims encode %s: %s", field, plain)
+		}
+	}
+}
+
 func TestTaskToken_CarriesTheRunsBranchAndBase(t *testing.T) {
 	t.Parallel()
 

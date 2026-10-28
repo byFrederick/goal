@@ -69,6 +69,9 @@ type bundleSpec struct {
 	// GrantedCalls are the Ask-first calls a person approved for this run (ADR 0031 decision 5),
 	// which the worker allows once each when connection, tool and canonical input match.
 	GrantedCalls []grantedCall `json:"granted_calls"`
+	// Jonah is a Jonah review's definition files, events and rejected proposals (jonah.go); nil
+	// for every other run.
+	Jonah *bundleJonah `json:"jonah,omitempty"`
 }
 
 // grantedCall is one call approved for the run, its input as canonical JSON.
@@ -131,7 +134,8 @@ type gitCredential struct {
 // ServeRun serves GET /run: the bundle of the run whose task token the request carries, from
 // the definition version the run started on and the item it works on, or with notes_after the
 // notes left since the run started (serveNotes). A token that does not verify is 401; one whose
-// factory, agent, station or item the version or the organization does not have is 403.
+// factory, agent, station or item the version or the organization does not have is 403. A jonah
+// token is served a Jonah review's bundle (jonahBundle), and 503 without Deps.Jonah.
 func (g *Gateway) ServeRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
@@ -153,7 +157,7 @@ func (g *Gateway) ServeRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	b, err := g.bundle(ctx, claims)
+	b, err := g.bundleOf(ctx, claims)
 	switch {
 	case errors.Is(err, errForbidden) || errors.Is(err, ports.ErrNotFound):
 		g.log.WarnContext(ctx, "run bundle forbidden", claimAttrs(claims, "reason", err)...)
@@ -176,6 +180,15 @@ func (g *Gateway) ServeRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	g.log.InfoContext(ctx, "run bundle served", claimAttrs(claims, "files", len(b.Files))...)
+}
+
+// bundleOf is the bundle of the run c names: a Jonah review's for a TaskKindJonah token.
+func (g *Gateway) bundleOf(ctx context.Context, c domain.TaskClaims) (runBundle, error) {
+	if c.Kind == domain.TaskKindJonah {
+		return g.jonahBundle(ctx, c)
+	}
+
+	return g.bundle(ctx, c)
 }
 
 // taskRun is what a task token names, checked against its definition version and organization.

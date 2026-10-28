@@ -191,7 +191,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Connections: connections, Events: store, Clock: clock, Logger: log,
-		Knowledge: kb.searcher, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng},
+		Knowledge: kb.searcher, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store,
 	}, gateway.Config{Key: []byte(key)})
 	if err != nil {
 		return err
@@ -254,7 +254,10 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	purger := retention.New(store, objects, clock, s.OrgRetention, log)
 
 	return serve(ctx, log, s, servers, eng, defs, definitionNotices, feed,
-		jobs{purger: purger, platform: platform, clock: clock, identity: newIdentityWatch(s, store), ingestor: kb.ingestor})
+		jobs{
+			purger: purger, platform: platform, clock: clock, identity: newIdentityWatch(s, store), ingestor: kb.ingestor,
+			reviews: jonahReviewLoop(s, store, defs, eng, clock, log), scheduleLock: intake,
+		})
 }
 
 // knowledgeBase is the knowledge base as goald wires it (spec 4 §4.8): its sources and documents
@@ -527,13 +530,16 @@ func (a engineToolApprovals) RequestToolApproval(ctx context.Context, c gateway.
 }
 
 // jobs are goald's scheduled jobs: the purge of deleted organizations, the sign-in clean-up, the
-// knowledge base's ingestion and under GOAL_AUTH=session the startup watch of the identity service.
+// knowledge base's ingestion, the Jonah reviews (swept under the schedule lock) and under
+// GOAL_AUTH=session the startup watch of the identity service.
 type jobs struct {
-	purger   *retention.Purger
-	platform ports.Platform
-	clock    ports.Clock
-	identity *identityWatch
-	ingestor *knowledge.Ingestor
+	purger       *retention.Purger
+	platform     ports.Platform
+	clock        ports.Clock
+	identity     *identityWatch
+	ingestor     *knowledge.Ingestor
+	reviews      *jonah.Reviews
+	scheduleLock scheduleLock
 }
 
 // serve runs the HTTP servers, the engine, the stream feed, the definitions reloads and the
@@ -583,6 +589,7 @@ func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Se
 	wg.Go(func() { j.purger.Run(ctx, purgeEvery) })
 	wg.Go(func() { cleanUpAuth(ctx, log, j.platform, j.clock, authCleanUpEvery) })
 	wg.Go(func() { fireSchedules(ctx, log, eng, j.clock, scheduleEvery) })
+	wg.Go(func() { runJonahReviews(ctx, log, j.scheduleLock, j.reviews, j.clock, s.JonahReviewEvery) })
 
 	if s.KBWorkers > 0 {
 		wg.Go(func() { j.ingestor.Run(ctx) })
