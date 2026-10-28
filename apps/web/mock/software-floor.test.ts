@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { ConstraintReport, Metrics, TouchMetrics } from '@goal/api-client';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createMockApi, type MockApi } from './api.ts';
 
 /**
@@ -16,6 +16,9 @@ describe('the mock software Floor', () => {
   let base = '';
 
   beforeAll(async () => {
+    // The seeded history stops at the clock, so the figures depend on the time of day. Pin it.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-28T23:30:00Z'));
     api = createMockApi();
     server = createServer((req, res) =>
       api.handle(req, res, () => {
@@ -28,6 +31,7 @@ describe('the mock software Floor', () => {
   });
 
   afterAll(async () => {
+    vi.useRealTimers();
     api.close();
     await new Promise((resolve) => server.close(resolve));
   });
