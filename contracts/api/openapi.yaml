@@ -854,6 +854,40 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/OrgSpend" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/spend/export:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: exportSpend
+      x-goal-scope: org:read
+      tags: [spend]
+      summary: The organization's spend over a window as CSV, one row per factory, agent and model
+      description: >-
+        The CSV export of getOrgSpend (ADR 0020, decision 3): the runs that started in the
+        window's [since, until) in the factories the caller sees, summed by factory, agent and
+        model and ordered by factory id, agent and model. The header row is factory, agent, model,
+        cost_usd; factory is the factory's metadata.name and cost_usd is decimal USD. The body is
+        streamed. More than 100000 rows is a 413 problem export-too-large, answered before any
+        byte of the body; every error before the first row is a problem, and one after it ends
+        the stream early. A window outside the enum is a 400 problem.
+      parameters:
+        - name: window
+          in: query
+          description: As for getOrgSpend
+          schema: { $ref: "#/components/schemas/SpendWindow" }
+      responses:
+        "200":
+          description: The spend rows as CSV
+          headers:
+            Content-Disposition:
+              description: attachment; filename="spend-<yyyy-mm-dd>.csv", the UTC day of the export
+              required: true
+              schema: { type: string }
+          content:
+            text/csv:
+              schema: { type: string }
+        "413": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/metrics/touches:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -2598,6 +2632,57 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/OrgRunList" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/runs/export:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: exportRuns
+      x-goal-scope: org:read
+      tags: [work]
+      summary: The organization's agent runs as CSV, with the filters of listRuns
+      description: >-
+        The CSV export of listRuns (ADR 0020, decision 3): every run listRuns would list over its
+        pages, with the same filters and the same order (newest first), one row per run and no
+        paging. The header row is id, factory, item_ref, item_title, station, agent, model,
+        status, started_at, ended_at, turns, cost_usd: factory is the factory's metadata.name,
+        agent the agent's name in its factory, times are RFC 3339 in UTC (ended_at empty while the
+        run runs) and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a
+        413 problem export-too-large, answered before any byte of the body; every error before the
+        first row is a problem, and one after it ends the stream early.
+      parameters:
+        - name: factory
+          in: query
+          description: As for listRuns
+          schema: { type: string }
+        - name: status
+          in: query
+          description: As for listRuns
+          schema: { $ref: "#/components/schemas/RunStatus" }
+        - name: since
+          in: query
+          description: As for listRuns
+          schema: { type: string, format: date-time }
+        - name: until
+          in: query
+          description: As for listRuns
+          schema: { type: string, format: date-time }
+        - name: q
+          in: query
+          description: As for listRuns
+          schema: { type: string, maxLength: 200 }
+      responses:
+        "200":
+          description: The runs as CSV
+          headers:
+            Content-Disposition:
+              description: attachment; filename="runs-<yyyy-mm-dd>.csv", the UTC day of the export
+              required: true
+              schema: { type: string }
+          content:
+            text/csv:
+              schema: { type: string }
+        "413": { $ref: "#/components/responses/Problem" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/runs/{run}:
     parameters:

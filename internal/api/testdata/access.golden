@@ -728,6 +728,58 @@ estimateEvalRun      pat-demoted      404 factory-not-found    404 org-not-found
 estimateEvalRun      pat-removed      401 unauthenticated      401 unauthenticated
 estimateEvalRun      pat-platform     200                      404 org-not-found
 estimateEvalRun      pat-deleted-org  401 unauthenticated      401 unauthenticated
+exportRuns           anonymous        401 unauthenticated      401 unauthenticated
+exportRuns           owner            200                      404 org-not-found
+exportRuns           admin            200                      404 org-not-found
+exportRuns           viewer           200                      404 org-not-found
+exportRuns           approver         200                      404 org-not-found
+exportRuns           editor           200                      404 org-not-found
+exportRuns           member-no-roles  404 factory-not-found    404 org-not-found
+exportRuns           other-org-owner  404 org-not-found        200
+exportRuns           platform-admin   404 org-not-found        404 org-not-found
+exportRuns           stale-owner      200                      404 org-not-found
+exportRuns           key-scoped       200                      404 org-not-found
+exportRuns           key-restricted   404 factory-not-found    404 org-not-found
+exportRuns           key-other-org    404 org-not-found        200
+exportRuns           key-expired      401 unauthenticated      401 unauthenticated
+exportRuns           key-revoked      401 unauthenticated      401 unauthenticated
+exportRuns           bearer-owner     200                      404 org-not-found
+exportRuns           pat-approver     403 forbidden            404 org-not-found
+exportRuns           pat-owner        200                      404 org-not-found
+exportRuns           pat-viewer       200                      404 org-not-found
+exportRuns           pat-other-org    404 org-not-found        200
+exportRuns           pat-expired      401 unauthenticated      401 unauthenticated
+exportRuns           pat-revoked      401 unauthenticated      401 unauthenticated
+exportRuns           pat-demoted      404 factory-not-found    404 org-not-found
+exportRuns           pat-removed      401 unauthenticated      401 unauthenticated
+exportRuns           pat-platform     200                      404 org-not-found
+exportRuns           pat-deleted-org  401 unauthenticated      401 unauthenticated
+exportSpend          anonymous        401 unauthenticated      401 unauthenticated
+exportSpend          owner            200                      404 org-not-found
+exportSpend          admin            200                      404 org-not-found
+exportSpend          viewer           200                      404 org-not-found
+exportSpend          approver         200                      404 org-not-found
+exportSpend          editor           200                      404 org-not-found
+exportSpend          member-no-roles  200                      404 org-not-found
+exportSpend          other-org-owner  404 org-not-found        200
+exportSpend          platform-admin   404 org-not-found        404 org-not-found
+exportSpend          stale-owner      200                      404 org-not-found
+exportSpend          key-scoped       200                      404 org-not-found
+exportSpend          key-restricted   200                      404 org-not-found
+exportSpend          key-other-org    404 org-not-found        200
+exportSpend          key-expired      401 unauthenticated      401 unauthenticated
+exportSpend          key-revoked      401 unauthenticated      401 unauthenticated
+exportSpend          bearer-owner     200                      404 org-not-found
+exportSpend          pat-approver     403 forbidden            404 org-not-found
+exportSpend          pat-owner        200                      404 org-not-found
+exportSpend          pat-viewer       200                      404 org-not-found
+exportSpend          pat-other-org    404 org-not-found        200
+exportSpend          pat-expired      401 unauthenticated      401 unauthenticated
+exportSpend          pat-revoked      401 unauthenticated      401 unauthenticated
+exportSpend          pat-demoted      200                      404 org-not-found
+exportSpend          pat-removed      401 unauthenticated      401 unauthenticated
+exportSpend          pat-platform     200                      404 org-not-found
+exportSpend          pat-deleted-org  401 unauthenticated      401 unauthenticated
 formatDefinition     anonymous        401 unauthenticated      401 unauthenticated
 formatDefinition     owner            200                      404 org-not-found
 formatDefinition     admin            200                      404 org-not-found

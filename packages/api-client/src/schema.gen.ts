@@ -608,6 +608,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/spend/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's spend over a window as CSV, one row per factory, agent and model
+         * @description The CSV export of getOrgSpend (ADR 0020, decision 3): the runs that started in the window's [since, until) in the factories the caller sees, summed by factory, agent and model and ordered by factory id, agent and model. The header row is factory, agent, model, cost_usd; factory is the factory's metadata.name and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early. A window outside the enum is a 400 problem.
+         */
+        get: operations["exportSpend"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/metrics/touches": {
         parameters: {
             query?: never;
@@ -2176,6 +2199,29 @@ export interface paths {
          * @description The runs that started in [since, until) in the factories the caller may read, or in the one named by factory, newest first (by start, then id), paged by next_cursor. When since is absent it is the start of the current UTC day; when until is absent it is the end of that day; since must be before until. The summary covers the same factories and window whatever status and q say. A wide window is a scan of every run in it: keep it short.
          */
         get: operations["listRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/runs/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's agent runs as CSV, with the filters of listRuns
+         * @description The CSV export of listRuns (ADR 0020, decision 3): every run listRuns would list over its pages, with the same filters and the same order (newest first), one row per run and no paging. The header row is id, factory, item_ref, item_title, station, agent, model, status, started_at, ended_at, turns, cost_usd: factory is the factory's metadata.name, agent the agent's name in its factory, times are RFC 3339 in UTC (ended_at empty while the run runs) and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early.
+         */
+        get: operations["exportRuns"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7189,6 +7235,36 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    exportSpend: {
+        parameters: {
+            query?: {
+                /** @description As for getOrgSpend */
+                window?: components["schemas"]["SpendWindow"];
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The spend rows as CSV */
+            200: {
+                headers: {
+                    /** @description attachment; filename="spend-<yyyy-mm-dd>.csv", the UTC day of the export */
+                    "Content-Disposition": string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            413: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
     getOrgTouchMetrics: {
         parameters: {
             query?: {
@@ -9310,6 +9386,44 @@ export interface operations {
                     "application/json": components["schemas"]["OrgRunList"];
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    exportRuns: {
+        parameters: {
+            query?: {
+                /** @description As for listRuns */
+                factory?: string;
+                /** @description As for listRuns */
+                status?: components["schemas"]["RunStatus"];
+                /** @description As for listRuns */
+                since?: string;
+                /** @description As for listRuns */
+                until?: string;
+                /** @description As for listRuns */
+                q?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The runs as CSV */
+            200: {
+                headers: {
+                    /** @description attachment; filename="runs-<yyyy-mm-dd>.csv", the UTC day of the export */
+                    "Content-Disposition": string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            413: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };

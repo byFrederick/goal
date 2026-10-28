@@ -5941,6 +5941,24 @@ type ListRunsParams struct {
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// ExportRunsParams defines parameters for ExportRuns.
+type ExportRunsParams struct {
+	// Factory As for listRuns
+	Factory *string `form:"factory,omitempty" json:"factory,omitempty"`
+
+	// Status As for listRuns
+	Status *RunStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// Since As for listRuns
+	Since *time.Time `form:"since,omitempty" json:"since,omitempty"`
+
+	// Until As for listRuns
+	Until *time.Time `form:"until,omitempty" json:"until,omitempty"`
+
+	// Q As for listRuns
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+}
+
 // SearchOrgParams defines parameters for SearchOrg.
 type SearchOrgParams struct {
 	// Q What to find, 1 to 200 characters once trimmed; anything else is a 400 problem
@@ -5953,6 +5971,12 @@ type SearchOrgParams struct {
 // GetOrgSpendParams defines parameters for GetOrgSpend.
 type GetOrgSpendParams struct {
 	// Window week starts on Monday 00:00 UTC, month on the 1st 00:00 UTC, 90d at 00:00 UTC 89 days before today; each ends now
+	Window *SpendWindow `form:"window,omitempty" json:"window,omitempty"`
+}
+
+// ExportSpendParams defines parameters for ExportSpend.
+type ExportSpendParams struct {
+	// Window As for getOrgSpend
 	Window *SpendWindow `form:"window,omitempty" json:"window,omitempty"`
 }
 
@@ -7737,6 +7761,13 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/runs (the `ListRuns` operationId).
 	ListRuns(ctx context.Context, org OrgRef, params *ListRunsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ExportRuns The organization's agent runs as CSV, with the filters of listRuns
+	//
+	// The CSV export of listRuns (ADR 0020, decision 3): every run listRuns would list over its pages, with the same filters and the same order (newest first), one row per run and no paging. The header row is id, factory, item_ref, item_title, station, agent, model, status, started_at, ended_at, turns, cost_usd: factory is the factory's metadata.name, agent the agent's name in its factory, times are RFC 3339 in UTC (ended_at empty while the run runs) and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early.
+	//
+	// Corresponds with GET /v1/orgs/{org}/runs/export (the `ExportRuns` operationId).
+	ExportRuns(ctx context.Context, org OrgRef, params *ExportRunsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetRun One agent run (404 for a run of another organization)
 	//
 	// Corresponds with GET /v1/orgs/{org}/runs/{run} (the `GetRun` operationId).
@@ -7778,6 +7809,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/spend (the `GetOrgSpend` operationId).
 	GetOrgSpend(ctx context.Context, org OrgRef, params *GetOrgSpendParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ExportSpend The organization's spend over a window as CSV, one row per factory, agent and model
+	//
+	// The CSV export of getOrgSpend (ADR 0020, decision 3): the runs that started in the window's [since, until) in the factories the caller sees, summed by factory, agent and model and ordered by factory id, agent and model. The header row is factory, agent, model, cost_usd; factory is the factory's metadata.name and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early. A window outside the enum is a 400 problem.
+	//
+	// Corresponds with GET /v1/orgs/{org}/spend/export (the `ExportSpend` operationId).
+	ExportSpend(ctx context.Context, org OrgRef, params *ExportSpendParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	//
@@ -10887,6 +10925,23 @@ func (c *Client) ListRuns(ctx context.Context, org OrgRef, params *ListRunsParam
 	return c.Client.Do(req)
 }
 
+// ExportRuns The organization's agent runs as CSV, with the filters of listRuns
+//
+// The CSV export of listRuns (ADR 0020, decision 3): every run listRuns would list over its pages, with the same filters and the same order (newest first), one row per run and no paging. The header row is id, factory, item_ref, item_title, station, agent, model, status, started_at, ended_at, turns, cost_usd: factory is the factory's metadata.name, agent the agent's name in its factory, times are RFC 3339 in UTC (ended_at empty while the run runs) and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early.
+//
+// Corresponds with GET /v1/orgs/{org}/runs/export (the `ExportRuns` operationId).
+func (c *Client) ExportRuns(ctx context.Context, org OrgRef, params *ExportRunsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewExportRunsRequest(c.Server, org, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetRun One agent run (404 for a run of another organization)
 //
 // Corresponds with GET /v1/orgs/{org}/runs/{run} (the `GetRun` operationId).
@@ -10979,6 +11034,23 @@ func (c *Client) UpdateOrgSettings(ctx context.Context, org OrgRef, body UpdateO
 // Corresponds with GET /v1/orgs/{org}/spend (the `GetOrgSpend` operationId).
 func (c *Client) GetOrgSpend(ctx context.Context, org OrgRef, params *GetOrgSpendParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetOrgSpendRequest(c.Server, org, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ExportSpend The organization's spend over a window as CSV, one row per factory, agent and model
+//
+// The CSV export of getOrgSpend (ADR 0020, decision 3): the runs that started in the window's [since, until) in the factories the caller sees, summed by factory, agent and model and ordered by factory id, agent and model. The header row is factory, agent, model, cost_usd; factory is the factory's metadata.name and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early. A window outside the enum is a 400 problem.
+//
+// Corresponds with GET /v1/orgs/{org}/spend/export (the `ExportSpend` operationId).
+func (c *Client) ExportSpend(ctx context.Context, org OrgRef, params *ExportSpendParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewExportSpendRequest(c.Server, org, params)
 	if err != nil {
 		return nil, err
 	}
@@ -18270,6 +18342,115 @@ func NewListRunsRequest(server string, org OrgRef, params *ListRunsParams) (*htt
 	return req, nil
 }
 
+// NewExportRunsRequest constructs an http.Request for the ExportRuns method
+func NewExportRunsRequest(server string, org OrgRef, params *ExportRunsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/runs/export", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Factory != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "factory", *params.Factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Status != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "status", *params.Status, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Since != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "since", *params.Since, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Until != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "until", *params.Until, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Q != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "q", *params.Q, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetRunRequest constructs an http.Request for the GetRun method
 func NewGetRunRequest(server string, org OrgRef, run string) (*http.Request, error) {
 	var err error
@@ -18478,6 +18659,67 @@ func NewGetOrgSpendRequest(server string, org OrgRef, params *GetOrgSpendParams)
 	}
 
 	operationPath := fmt.Sprintf("/v1/orgs/%s/spend", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Window != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "window", *params.Window, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewExportSpendRequest constructs an http.Request for the ExportSpend method
+func NewExportSpendRequest(server string, org OrgRef, params *ExportSpendParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/spend/export", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -20456,6 +20698,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/runs (the `ListRuns` operationId).
 	ListRunsWithResponse(ctx context.Context, org OrgRef, params *ListRunsParams, reqEditors ...RequestEditorFn) (*ListRunsResponse, error)
 
+	// ExportRunsWithResponse The organization's agent runs as CSV, with the filters of listRuns
+	//
+	// The CSV export of listRuns (ADR 0020, decision 3): every run listRuns would list over its pages, with the same filters and the same order (newest first), one row per run and no paging. The header row is id, factory, item_ref, item_title, station, agent, model, status, started_at, ended_at, turns, cost_usd: factory is the factory's metadata.name, agent the agent's name in its factory, times are RFC 3339 in UTC (ended_at empty while the run runs) and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/runs/export (the `ExportRuns` operationId).
+	ExportRunsWithResponse(ctx context.Context, org OrgRef, params *ExportRunsParams, reqEditors ...RequestEditorFn) (*ExportRunsResponse, error)
+
 	// GetRunWithResponse One agent run (404 for a run of another organization)
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -20505,6 +20756,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/spend (the `GetOrgSpend` operationId).
 	GetOrgSpendWithResponse(ctx context.Context, org OrgRef, params *GetOrgSpendParams, reqEditors ...RequestEditorFn) (*GetOrgSpendResponse, error)
+
+	// ExportSpendWithResponse The organization's spend over a window as CSV, one row per factory, agent and model
+	//
+	// The CSV export of getOrgSpend (ADR 0020, decision 3): the runs that started in the window's [since, until) in the factories the caller sees, summed by factory, agent and model and ordered by factory id, agent and model. The header row is factory, agent, model, cost_usd; factory is the factory's metadata.name and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early. A window outside the enum is a 400 problem.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/spend/export (the `ExportSpend` operationId).
+	ExportSpendWithResponse(ctx context.Context, org OrgRef, params *ExportSpendParams, reqEditors ...RequestEditorFn) (*ExportSpendResponse, error)
 
 	// StreamEventsWithResponse The organization's events as they happen (Server-Sent Events)
 	//
@@ -26954,6 +27214,61 @@ func (r ListRunsResponse) ContentType() string {
 	return ""
 }
 
+// ExportRunsResponse200Headers the declared response headers of an HTTP 200 response for ExportRuns
+type ExportRunsResponse200Headers struct {
+	ContentDisposition string
+}
+
+type ExportRunsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSON413 the response for an HTTP 413 `application/problem+json` response
+	ApplicationproblemJSON413 *Problem
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *ExportRunsResponse200Headers
+}
+
+// GetApplicationproblemJSON413 returns the response for an HTTP 413 `application/problem+json` response
+func (r ExportRunsResponse) GetApplicationproblemJSON413() *Problem {
+	return r.ApplicationproblemJSON413
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ExportRunsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ExportRunsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ExportRunsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ExportRunsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ExportRunsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetRunResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -27188,6 +27503,61 @@ func (r GetOrgSpendResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetOrgSpendResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ExportSpendResponse200Headers the declared response headers of an HTTP 200 response for ExportSpend
+type ExportSpendResponse200Headers struct {
+	ContentDisposition string
+}
+
+type ExportSpendResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSON413 the response for an HTTP 413 `application/problem+json` response
+	ApplicationproblemJSON413 *Problem
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *ExportSpendResponse200Headers
+}
+
+// GetApplicationproblemJSON413 returns the response for an HTTP 413 `application/problem+json` response
+func (r ExportSpendResponse) GetApplicationproblemJSON413() *Problem {
+	return r.ApplicationproblemJSON413
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ExportSpendResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ExportSpendResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ExportSpendResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ExportSpendResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ExportSpendResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -30091,6 +30461,21 @@ func (c *ClientWithResponses) ListRunsWithResponse(ctx context.Context, org OrgR
 	return ParseListRunsResponse(rsp)
 }
 
+// ExportRunsWithResponse The organization's agent runs as CSV, with the filters of listRuns
+//
+// The CSV export of listRuns (ADR 0020, decision 3): every run listRuns would list over its pages, with the same filters and the same order (newest first), one row per run and no paging. The header row is id, factory, item_ref, item_title, station, agent, model, status, started_at, ended_at, turns, cost_usd: factory is the factory's metadata.name, agent the agent's name in its factory, times are RFC 3339 in UTC (ended_at empty while the run runs) and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/runs/export (the `ExportRuns` operationId).
+func (c *ClientWithResponses) ExportRunsWithResponse(ctx context.Context, org OrgRef, params *ExportRunsParams, reqEditors ...RequestEditorFn) (*ExportRunsResponse, error) {
+	rsp, err := c.ExportRuns(ctx, org, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseExportRunsResponse(rsp)
+}
+
 // GetRunWithResponse One agent run (404 for a run of another organization)
 //
 // Returns a wrapper object for the known response body format(s).
@@ -30175,6 +30560,21 @@ func (c *ClientWithResponses) GetOrgSpendWithResponse(ctx context.Context, org O
 		return nil, err
 	}
 	return ParseGetOrgSpendResponse(rsp)
+}
+
+// ExportSpendWithResponse The organization's spend over a window as CSV, one row per factory, agent and model
+//
+// The CSV export of getOrgSpend (ADR 0020, decision 3): the runs that started in the window's [since, until) in the factories the caller sees, summed by factory, agent and model and ordered by factory id, agent and model. The header row is factory, agent, model, cost_usd; factory is the factory's metadata.name and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early. A window outside the enum is a 400 problem.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/spend/export (the `ExportSpend` operationId).
+func (c *ClientWithResponses) ExportSpendWithResponse(ctx context.Context, org OrgRef, params *ExportSpendParams, reqEditors ...RequestEditorFn) (*ExportSpendResponse, error) {
+	rsp, err := c.ExportSpend(ctx, org, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseExportSpendResponse(rsp)
 }
 
 // StreamEventsWithResponse The organization's events as they happen (Server-Sent Events)
@@ -34818,6 +35218,52 @@ func ParseListRunsResponse(rsp *http.Response) (*ListRunsResponse, error) {
 	return response, nil
 }
 
+// ParseExportRunsResponse parses an HTTP response from a ExportRunsWithResponse call
+func ParseExportRunsResponse(rsp *http.Response) (*ExportRunsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ExportRunsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers ExportRunsResponse200Headers
+		if values := rsp.Header.Values("Content-Disposition"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Disposition", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentDisposition = value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseGetRunResponse parses an HTTP response from a GetRunWithResponse call
 func ParseGetRunResponse(rsp *http.Response) (*GetRunResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -34978,6 +35424,52 @@ func ParseGetOrgSpendResponse(rsp *http.Response) (*GetOrgSpendResponse, error) 
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseExportSpendResponse parses an HTTP response from a ExportSpendWithResponse call
+func ParseExportSpendResponse(rsp *http.Response) (*ExportSpendResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ExportSpendResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers ExportSpendResponse200Headers
+		if values := rsp.Header.Values("Content-Disposition"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Disposition", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentDisposition = value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil
@@ -35634,6 +36126,9 @@ type ServerInterface interface {
 	// ListRuns The organization's agent runs across the factories the caller sees, newest first
 	// (GET /v1/orgs/{org}/runs)
 	ListRuns(w http.ResponseWriter, r *http.Request, org OrgRef, params ListRunsParams)
+	// ExportRuns The organization's agent runs as CSV, with the filters of listRuns
+	// (GET /v1/orgs/{org}/runs/export)
+	ExportRuns(w http.ResponseWriter, r *http.Request, org OrgRef, params ExportRunsParams)
 	// GetRun One agent run (404 for a run of another organization)
 	// (GET /v1/orgs/{org}/runs/{run})
 	GetRun(w http.ResponseWriter, r *http.Request, org OrgRef, run string)
@@ -35649,6 +36144,9 @@ type ServerInterface interface {
 	// GetOrgSpend What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
 	// (GET /v1/orgs/{org}/spend)
 	GetOrgSpend(w http.ResponseWriter, r *http.Request, org OrgRef, params GetOrgSpendParams)
+	// ExportSpend The organization's spend over a window as CSV, one row per factory, agent and model
+	// (GET /v1/orgs/{org}/spend/export)
+	ExportSpend(w http.ResponseWriter, r *http.Request, org OrgRef, params ExportSpendParams)
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	// (GET /v1/orgs/{org}/stream)
 	StreamEvents(w http.ResponseWriter, r *http.Request, org OrgRef, params StreamEventsParams)
@@ -41242,6 +41740,100 @@ func (siw *ServerInterfaceWrapper) ListRuns(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// ExportRuns operation middleware
+func (siw *ServerInterfaceWrapper) ExportRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ExportRunsParams
+
+	// ------------- Optional query parameter "factory" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "factory", r.URL.Query(), &params.Factory, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "factory"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "since" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "since", r.URL.Query(), &params.Since, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "since"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "since", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "until" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "until", r.URL.Query(), &params.Until, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "until"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "until", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExportRuns(w, r, org, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetRun operation middleware
 func (siw *ServerInterfaceWrapper) GetRun(w http.ResponseWriter, r *http.Request) {
 
@@ -41417,6 +42009,48 @@ func (siw *ServerInterfaceWrapper) GetOrgSpend(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetOrgSpend(w, r, org, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ExportSpend operation middleware
+func (siw *ServerInterfaceWrapper) ExportSpend(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ExportSpendParams
+
+	// ------------- Optional query parameter "window" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "window", r.URL.Query(), &params.Window, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "window"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "window", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExportSpend(w, r, org, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -41838,6 +42472,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/search", wrapper.SearchOrg)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/overview", wrapper.GetFactoryOverview)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/spend", wrapper.GetOrgSpend)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/spend/export", wrapper.ExportSpend)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/metrics/touches", wrapper.GetOrgTouchMetrics)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/inbox", wrapper.GetInbox)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories", wrapper.ListFactories)
@@ -41910,6 +42545,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/needs/{need}", wrapper.UnlinkItem)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/touches/{event}/reason", wrapper.SetTouchReason)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs", wrapper.ListRuns)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs/export", wrapper.ExportRuns)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs/{run}", wrapper.GetRun)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/approve", wrapper.ApproveItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/reject", wrapper.RejectItem)
@@ -47495,6 +48131,74 @@ func (response ListRunsdefaultApplicationProblemPlusJSONResponse) VisitListRunsR
 	return err
 }
 
+type ExportRunsRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params ExportRunsParams
+}
+
+type ExportRunsResponseObject interface {
+	VisitExportRunsResponse(w http.ResponseWriter) error
+}
+
+type ExportRuns200ResponseHeaders struct {
+	ContentDisposition string
+}
+
+type ExportRuns200TextcsvResponse struct {
+	Body          io.Reader
+	Headers       ExportRuns200ResponseHeaders
+	ContentLength int64
+}
+
+func (response ExportRuns200TextcsvResponse) VisitExportRunsResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "text/csv")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.Header().Set("Content-Disposition", fmt.Sprint(response.Headers.ContentDisposition))
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type ExportRuns413ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ExportRuns413ApplicationProblemPlusJSONResponse) VisitExportRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExportRunsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ExportRunsdefaultApplicationProblemPlusJSONResponse) VisitExportRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetRunRequestObject struct {
 	Org OrgRef `json:"org"`
 	Run string `json:"run"`
@@ -47683,6 +48387,74 @@ type GetOrgSpenddefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetOrgSpenddefaultApplicationProblemPlusJSONResponse) VisitGetOrgSpendResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExportSpendRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params ExportSpendParams
+}
+
+type ExportSpendResponseObject interface {
+	VisitExportSpendResponse(w http.ResponseWriter) error
+}
+
+type ExportSpend200ResponseHeaders struct {
+	ContentDisposition string
+}
+
+type ExportSpend200TextcsvResponse struct {
+	Body          io.Reader
+	Headers       ExportSpend200ResponseHeaders
+	ContentLength int64
+}
+
+func (response ExportSpend200TextcsvResponse) VisitExportSpendResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "text/csv")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.Header().Set("Content-Disposition", fmt.Sprint(response.Headers.ContentDisposition))
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type ExportSpend413ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ExportSpend413ApplicationProblemPlusJSONResponse) VisitExportSpendResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExportSpenddefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ExportSpenddefaultApplicationProblemPlusJSONResponse) VisitExportSpendResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -48430,6 +49202,9 @@ type StrictServerInterface interface {
 	// ListRuns The organization's agent runs across the factories the caller sees, newest first
 	// (GET /v1/orgs/{org}/runs)
 	ListRuns(ctx context.Context, request ListRunsRequestObject) (ListRunsResponseObject, error)
+	// ExportRuns The organization's agent runs as CSV, with the filters of listRuns
+	// (GET /v1/orgs/{org}/runs/export)
+	ExportRuns(ctx context.Context, request ExportRunsRequestObject) (ExportRunsResponseObject, error)
 	// GetRun One agent run (404 for a run of another organization)
 	// (GET /v1/orgs/{org}/runs/{run})
 	GetRun(ctx context.Context, request GetRunRequestObject) (GetRunResponseObject, error)
@@ -48445,6 +49220,9 @@ type StrictServerInterface interface {
 	// GetOrgSpend What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
 	// (GET /v1/orgs/{org}/spend)
 	GetOrgSpend(ctx context.Context, request GetOrgSpendRequestObject) (GetOrgSpendResponseObject, error)
+	// ExportSpend The organization's spend over a window as CSV, one row per factory, agent and model
+	// (GET /v1/orgs/{org}/spend/export)
+	ExportSpend(ctx context.Context, request ExportSpendRequestObject) (ExportSpendResponseObject, error)
 	// StreamEvents The organization's events as they happen (Server-Sent Events)
 	// (GET /v1/orgs/{org}/stream)
 	StreamEvents(ctx context.Context, request StreamEventsRequestObject) (StreamEventsResponseObject, error)
@@ -52386,6 +53164,33 @@ func (sh *strictHandler) ListRuns(w http.ResponseWriter, r *http.Request, org Or
 	}
 }
 
+// ExportRuns operation middleware
+func (sh *strictHandler) ExportRuns(w http.ResponseWriter, r *http.Request, org OrgRef, params ExportRunsParams) {
+	var request ExportRunsRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ExportRuns(ctx, request.(ExportRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ExportRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ExportRunsResponseObject); ok {
+		if err := validResponse.VisitExportRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetRun operation middleware
 func (sh *strictHandler) GetRun(w http.ResponseWriter, r *http.Request, org OrgRef, run string) {
 	var request GetRunRequestObject
@@ -52519,6 +53324,33 @@ func (sh *strictHandler) GetOrgSpend(w http.ResponseWriter, r *http.Request, org
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetOrgSpendResponseObject); ok {
 		if err := validResponse.VisitGetOrgSpendResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ExportSpend operation middleware
+func (sh *strictHandler) ExportSpend(w http.ResponseWriter, r *http.Request, org OrgRef, params ExportSpendParams) {
+	var request ExportSpendRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ExportSpend(ctx, request.(ExportSpendRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ExportSpend")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ExportSpendResponseObject); ok {
+		if err := validResponse.VisitExportSpendResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

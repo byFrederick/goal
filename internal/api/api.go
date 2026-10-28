@@ -39,6 +39,7 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -89,6 +90,7 @@ type Items interface {
 	Runs(ctx context.Context, item domain.ItemID, limit int) ([]domain.Run, error)
 	Run(ctx context.Context, id domain.RunID) (domain.Run, error)
 	OrgRuns(ctx context.Context, q ports.RunQuery) ([]domain.ListedRun, domain.RunSummary, error)
+	EachOrgRun(ctx context.Context, q ports.RunQuery, maxRows int, each func(domain.ListedRun) error) error
 	ListItems(ctx context.Context, q ports.ItemQuery) ([]domain.Item, error)
 	SearchItems(ctx context.Context, q ports.ItemSearch) ([]domain.Item, error)
 	Assemblies(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID]domain.Assembly, error)
@@ -98,6 +100,8 @@ type Items interface {
 	DoneByBucket(ctx context.Context, q ports.FlowQuery, d time.Duration, n int) ([]int, error)
 	SpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
 	OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgSpend, error)
+	EachAgentModelSpend(ctx context.Context, w domain.SpendWindow, factories []domain.FactoryID, maxRows int,
+		each func(domain.AgentModelSpend) error) error
 	ItemTimes(ctx context.Context, q ports.FlowQuery, limit int) ([]domain.ItemTime, error)
 	Attention(ctx context.Context) ([]domain.Attention, error)
 	InboxItems(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.AttentionItem, error)
@@ -193,6 +197,8 @@ type Deps struct {
 	OrgPolicies     ports.OrgPolicies
 	BoxSizes        []domain.BoxSize
 	EgressAddresses []netip.Prefix
+	// ExportMaxRows caps a CSV export (ADR 0020, decision 3); 0 is 100000.
+	ExportMaxRows int
 
 	// Evals serve Jonah's evals routes (evals.go). Optional: while it is nil those routes answer
 	// 503 evals-unavailable; when set, all three of its collaborators are.
@@ -272,7 +278,7 @@ func New(d Deps) (http.Handler, error) {
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
 		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, search: d.KnowledgeSearch, uploadMax: d.UploadMaxBytes,
 		policies: d.OrgPolicies, boxSizes: slices.Clone(d.BoxSizes), egress: slices.Clone(d.EgressAddresses),
-		evals: d.Evals, clock: d.Clock, log: log,
+		evals: d.Evals, clock: d.Clock, log: log, exportMax: cmp.Or(d.ExportMaxRows, defaultExportMaxRows),
 	}
 	s.inbox = append([]InboxSource{workInbox{s: s}}, d.InboxSources...)
 
@@ -400,6 +406,8 @@ type server struct {
 	uploads   KnowledgeUploads
 	search    KnowledgeSearch
 	uploadMax int64
+	// exportMax caps a CSV export.
+	exportMax int
 	// policies, boxSizes and egress serve the policy routes.
 	policies ports.OrgPolicies
 	boxSizes []domain.BoxSize
@@ -623,7 +631,7 @@ func problemOf(err error) gen.Problem {
 	// wrap ports.ErrNameTaken); the credentials' before the connections' (both wrap
 	// ports.ErrNoMasterKey).
 	for _, answer := range []func(error) (gen.Problem, bool){
-		fixedProblem, policyProblem, edgeProblem, partProblem, credentialProblem, webhookProblem, connectionProblem, knowledgeProblem, evalProblem, definitionProblem, controlProblem, agentProblem, triggerProblem, apiKeyProblem, personalTokenProblem,
+		fixedProblem, exportProblem, policyProblem, edgeProblem, partProblem, credentialProblem, webhookProblem, connectionProblem, knowledgeProblem, evalProblem, definitionProblem, controlProblem, agentProblem, triggerProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {
 			return p

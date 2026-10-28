@@ -78,3 +78,60 @@ func (s *Store) OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgS
 
 	return domain.NewOrgSpend(w, f), nil
 }
+
+// EachAgentModelSpend implements ports.Spend: in one read-only repeatable-read transaction, so
+// the count and every page read one snapshot, it counts up to max+1 rows, then reads them in
+// pages of s.page() by their key, holding one page at a time.
+func (s *Store) EachAgentModelSpend(ctx context.Context, w domain.SpendWindow, factories []domain.FactoryID, maxRows int,
+	each func(domain.AgentModelSpend) error,
+) error {
+	if err := w.Check(); err != nil {
+		return err
+	}
+
+	ids := uuids(factories)
+	if _, ok := domain.OrgFrom(ctx); ok && len(ids) == 0 {
+		return nil
+	}
+
+	since, until := w.Bounds()
+	params := db.OrgSpendByAgentModelParams{Factories: ids, Since: since, Until: until, MaxRows: int64(s.page())}
+
+	err := s.orgTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(q *db.Queries) error {
+		n, err := q.CountAgentModelSpend(ctx, db.CountAgentModelSpendParams{Factories: ids, Since: since, Until: until, MaxRows: int64(maxRows) + 1})
+		if err != nil {
+			return err
+		}
+
+		if n > int64(maxRows) {
+			return fmt.Errorf("more than %d rows: %w", maxRows, ports.ErrTooMany)
+		}
+
+		for {
+			rows, err := q.OrgSpendByAgentModel(ctx, params)
+			if err != nil {
+				return err
+			}
+
+			for _, r := range rows {
+				if err := each(domain.AgentModelSpend{
+					FactoryID: domain.FactoryID(r.FactoryID.String()), Agent: r.Agent, Model: r.Model, USD: r.SpendUsd,
+				}); err != nil {
+					return err
+				}
+			}
+
+			if len(rows) < int(params.MaxRows) {
+				return nil
+			}
+
+			last := rows[len(rows)-1]
+			params.Paged, params.AfterFactory, params.AfterAgent, params.AfterModel = true, last.FactoryID, last.Agent, last.Model
+		}
+	})
+	if err != nil {
+		return fmt.Errorf("export the organization's spend this %s: %w", w.Period, err)
+	}
+
+	return nil
+}
