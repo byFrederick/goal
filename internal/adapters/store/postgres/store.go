@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"time"
@@ -420,7 +421,7 @@ func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, err
 	err = s.inTx(ctx, func(q *db.Queries) error {
 		err := q.InsertRun(ctx, db.InsertRunParams{
 			ID: id, FactoryID: factory, DefinitionVersionID: version, ItemID: item, Station: r.Station, Agent: r.Agent,
-			Model: r.Model, StartedAt: r.StartedAt,
+			Model: r.Model, StartedAt: r.StartedAt, Kind: string(cmp.Or(r.Kind, domain.RunKindStation)),
 		})
 		if err != nil {
 			return fmt.Errorf("insert run: %w", err)

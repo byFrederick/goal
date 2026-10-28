@@ -1128,6 +1128,11 @@ func (s *Store) deleteFactory(id domain.FactoryID) {
 	s.andon = slices.DeleteFunc(s.andon, func(a andonRecord) bool { return a.pull.FactoryID == id })
 	s.edges = slices.DeleteFunc(s.edges, func(e domain.Edge) bool { return gone[e.Item] || gone[e.Needs] })
 	maps.DeleteFunc(s.views, func(_ domain.SavedViewID, v savedViewRecord) bool { return v.view.Factory == id })
+
+	if org, ok := s.factories[id]; ok {
+		s.purgeJonah(org, id)
+	}
+
 	delete(s.factories, id)
 	delete(s.numbers, id)
 	delete(s.factCaps, id)
