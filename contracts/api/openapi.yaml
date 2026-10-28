@@ -7248,6 +7248,21 @@ components:
               type: object
               description: weekly_usd, daily_usd, per_item_usd, max_turns_per_task, on_exhausted
               additionalProperties: {}
+        starter:
+          type: object
+          description: >-
+            factory.yaml's starter section (ADR 0032), absent when the YAML has none. It is not a
+            Visual section and has no ETag: onboarding submits starter.item once, through submitItem,
+            to a factory with no items, and YAML mode edits it.
+          required: [item]
+          properties:
+            item:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string }
+                type: { type: string, description: "One of board.workTypes; when absent, submitItem gives the first" }
+                body: { type: string, description: "The item's brief, in markdown" }
     DefinitionEvent:
       type: object
       description: "The data of one `event: definition` on /v1/orgs/{org}/stream; it carries no content"
