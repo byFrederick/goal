@@ -184,7 +184,7 @@ linters:
             - pkg: github.com/byFrederick/goal/internal/adapters
               desc: the gateway reaches secrets and events through ports and its own interfaces
             - pkg: github.com/byFrederick/goal/internal/core/engine
-              desc: the gateway serves tools; it never drives the engine
+              desc: the gateway serves tools and reaches the engine only through its own interfaces (Questions), which cmd/goald wires
             - pkg: github.com/aws
               desc: AWS access belongs in internal/adapters
             - pkg: github.com/jackc/pgx

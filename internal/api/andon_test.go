@@ -194,7 +194,7 @@ func (h *harness) verdicts(t *testing.T, at time.Time, reasons map[bool][]string
 
 	for rejected, list := range reasons {
 		for _, reason := range list {
-			e := domain.Event{FactoryID: reviewID, ItemID: it.ID, At: at, Kind: domain.EventGateApproved, Station: stCheck, Actor: "writer"}
+			e := domain.Event{FactoryID: reviewID, ItemID: it.ID, At: at, Kind: domain.EventGateApproved, Station: stCheck, Actor: evalAgent}
 			if rejected {
 				e.Kind, e.Data = domain.EventGateRejected, map[string]any{"reason": reason}
 			}

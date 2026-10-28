@@ -1,6 +1,7 @@
 // A router harness for component tests: mounts one screen under a factory's route with the route
 // context the screens read (the organization and the factory), and with the queries it reads seeded,
 // so no request leaves the test. Used by tests only.
+
 import { QueryClient, QueryClientProvider, type QueryKey } from '@tanstack/react-query';
 import {
   createMemoryHistory,
@@ -100,10 +101,13 @@ export function renderFactoryPage({
   return {
     ...render(
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <TooltipProvider>
+          <RouterProvider router={router} />
+        </TooltipProvider>
       </QueryClientProvider>,
     ),
     router,
+    queryClient,
   };
 }
 

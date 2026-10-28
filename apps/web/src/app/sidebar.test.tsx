@@ -122,7 +122,7 @@ function renderSidebar({
     path: '/o/$org',
     beforeLoad: () => ({ org: summary }),
     component: () => (
-      <AccountProvider org={summary}>
+      <AccountProvider>
         <Sidebar org={summary} />
         <Outlet />
       </AccountProvider>
@@ -188,19 +188,6 @@ describe('the sidebar', () => {
     expect(links.some((text) => text?.startsWith('Knowledge'))).toBe(true);
   });
 
-  it.each([['Credentials', /^Credentials$/]])(
-    'renders %s as not available: aria-disabled, focusable, and inert',
-    async (_, name) => {
-      const { router } = renderSidebar({ can: ['connection:read', 'knowledge:read'] });
-      const control = within(await nav()).getByRole('button', { name });
-
-      expect(control.getAttribute('aria-disabled')).toBe('true');
-      expect(control.tabIndex).not.toBe(-1);
-      fireEvent.click(control);
-      expect(router.state.location.pathname).toBe('/o/acme');
-    },
-  );
-
   it('links Runs to the runs page', async () => {
     renderSidebar();
 
@@ -213,18 +200,33 @@ describe('the sidebar', () => {
 
   it('shows the not-available tooltip on hover', async () => {
     renderSidebar();
-    fireEvent.focus(within(await nav()).getByRole('button', { name: /^Credentials$/ }));
+    await collapse();
+    fireEvent.focus(within(await nav()).getByRole('button', { name: /^New item/ }));
 
     expect(await screen.findByText('Not available yet')).toBeTruthy();
   });
 
-  it('keeps Intake and Jonah disabled in the open factory', async () => {
+  it('keeps Jonah disabled in the open factory', async () => {
     renderSidebar({ at: '/o/acme/f/goal' });
-    const sidebar = await nav();
 
-    for (const name of ['Intake', 'Jonah']) {
-      expect(within(sidebar).getByRole('button', { name }).getAttribute('aria-disabled')).toBe('true');
-    }
+    expect(
+      within(await nav())
+        .getByRole('button', { name: 'Jonah' })
+        .getAttribute('aria-disabled'),
+    ).toBe('true');
+  });
+
+  it('lists Intake as a link between Agents and Jonah, current on its pages', async () => {
+    renderSidebar({ at: '/o/acme/f/goal/intake' });
+    const sidebar = await nav();
+    const link = within(sidebar).getByRole('link', { name: 'Intake' });
+
+    expect(link.getAttribute('href')).toBe('/o/acme/f/goal/intake');
+    expect(link.getAttribute('aria-current')).toBe('page');
+    const agents = within(sidebar).getByRole('link', { name: 'Agents' });
+    const jonah = within(sidebar).getByRole('button', { name: 'Jonah' });
+    expect(agents.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(link.compareDocumentPosition(jonah) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('lists Agents as a link in the open factory, current on its index and on each agent', async () => {
@@ -279,13 +281,14 @@ describe('the sidebar', () => {
     expect(within(sidebar).getByRole('link', { name: /support factory.*andon pulled/ })).toBeTruthy();
   });
 
-  it('shows the spend this week against the budget, and is not a link', async () => {
+  it('shows the spend this week against the budget, as a link to Spend and billing', async () => {
     renderSidebar();
     const sidebar = await nav();
 
     expect(within(sidebar).getByText('Spend this week')).toBeTruthy();
     expect(within(sidebar).getByText('$512 of $1,400')).toBeTruthy();
-    expect(within(sidebar).queryByRole('link', { name: /Spend/ })).toBeNull();
+    const link = within(sidebar).getByRole('link', { name: /Spend this week/ });
+    expect(link.getAttribute('href')).toBe('/o/acme/spend');
   });
 
   it('shows the amount alone when no factory has a budget', async () => {
@@ -424,7 +427,7 @@ describe('the sidebar', () => {
 
 describe('the collapsed rail', () => {
   it('lists its entries in order with accessible names', async () => {
-    renderSidebar({ can: ['connection:read', 'knowledge:read', 'factory:create'] });
+    renderSidebar({ can: ['connection:read', 'credential:read', 'knowledge:read', 'factory:create'] });
     await collapse();
     const names = railNames(await nav());
 
@@ -442,6 +445,19 @@ describe('the collapsed rail', () => {
     expect(names.slice(11)).toEqual(['New factory', 'Spend this week, 37% of budget', 'FC, Freddy Cruz, account']);
   });
 
+  it('links Credentials to its page for those who may read credentials', async () => {
+    renderSidebar({ can: ['credential:read'] });
+    const link = within(await nav()).getByRole('link', { name: /^Credentials/ });
+
+    expect(link.getAttribute('href')).toBe('/o/acme/credentials');
+  });
+
+  it('does not list Credentials without credential:read', async () => {
+    renderSidebar({ can: ['connection:read'] });
+
+    expect(within(await nav()).queryByRole('link', { name: /^Credentials/ })).toBeNull();
+  });
+
   it('links Needs you to its page, with the count it waits on', async () => {
     renderSidebar();
     await collapse();
@@ -451,7 +467,7 @@ describe('the collapsed rail', () => {
     expect(link.getAttribute('aria-disabled')).toBeNull();
   });
 
-  it.each(['New item', 'Credentials'])('keeps %s disabled, and says what it is and why', async (name) => {
+  it.each(['New item'])('keeps %s disabled, and says what it is and why', async (name) => {
     renderSidebar();
     await collapse();
     const control = within(await nav()).getByRole('button', { name: new RegExp(`^${name}`) });

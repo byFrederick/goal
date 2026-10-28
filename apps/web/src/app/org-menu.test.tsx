@@ -163,15 +163,21 @@ describe('the organization menu', () => {
     );
   });
 
-  it('renders Spend and billing and Models and policies disabled, with the not-available tooltip', async () => {
+  it('renders Spend and billing disabled, with the not-available tooltip', async () => {
     renderMenu();
     const m = await menu();
-    for (const name of ['Spend and billing', 'Models and policies']) {
-      const item = within(m).getByRole('menuitem', { name });
-      expect(item.getAttribute('aria-disabled')).toBe('true');
-    }
-    fireEvent.focus(within(m).getByRole('menuitem', { name: 'Spend and billing' }));
+    const item = within(m).getByRole('menuitem', { name: 'Spend and billing' });
+    expect(item.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.focus(item);
     expect(await screen.findByText('Not available yet')).toBeTruthy();
+  });
+
+  it("links Models and policies to the organization's page", async () => {
+    renderMenu();
+    const m = await menu();
+    expect(within(m).getByRole('menuitem', { name: 'Models and policies' }).getAttribute('href')).toBe(
+      '/o/goal/models',
+    );
   });
 
   it('shows the Members count only while the members list loads, then the count', async () => {

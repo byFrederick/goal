@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { ensureFound, ensureLoaded, factoriesQuery, meQuery, orgQuery, orgsQuery } from '../api/queries';
 import { AppShell } from '../app/app-shell';
 import { NotFoundScreen } from '../app/states';
-import { findOrg, rememberOrg } from '../shared/org';
+import { findOrg, OrgContext, rememberOrg } from '../shared/org';
 import { OrgStream } from '../shared/stream';
 
 // Every page of one organization: the sidebar (or the phone's top row) and one live stream for the
@@ -38,9 +38,11 @@ function OrgLayout() {
 
   return (
     <OrgStream org={org.id}>
-      <AppShell org={org}>
-        <Outlet />
-      </AppShell>
+      <OrgContext value={org}>
+        <AppShell org={org}>
+          <Outlet />
+        </AppShell>
+      </OrgContext>
     </OrgStream>
   );
 }

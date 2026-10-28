@@ -1,15 +1,27 @@
 // The organization the screens act in: the one the URL names (/o/$org, by slug or id), resolved
-// by the /o/$org layout before anything under it loads. The last one opened is remembered so `/`
-// can return to it.
+// by the /o/$org layout before anything under it loads, and the one /account shows (the last one
+// opened). It reaches the screens through OrgContext, which both routes provide. The last one opened
+// is remembered so `/` can return to it.
 import { useQuery } from '@tanstack/react-query';
-import { useRouteContext } from '@tanstack/react-router';
+import { useMatch } from '@tanstack/react-router';
+import { createContext, use } from 'react';
 import { orgQuery } from '../api/queries';
 import type { Org, OrgSummary } from '../api/types';
 import { holds, type OrgPermission } from './permissions';
 
-/** The organization of the current /o/$org route. Query keys are rooted at its `id`; links use its `slug`. */
+/** The organization a page under an organization shows. Query keys are rooted at its `id`; links use its `slug`. */
+export const OrgContext = createContext<OrgSummary | null>(null);
+
+/**
+ * The current organization: from OrgContext (/account), or from the /o/$org route that matched (the
+ * organization pages' layout also provides it).
+ */
 export function useOrg(): OrgSummary {
-  return useRouteContext({ from: '/o/$org' }).org;
+  const provided = use(OrgContext);
+  const routed = useMatch({ from: '/o/$org', shouldThrow: false, select: (m) => m?.context.org });
+  const org = provided ?? routed;
+  if (!org) throw new Error('useOrg outside an organization page');
+  return org;
 }
 
 /**
