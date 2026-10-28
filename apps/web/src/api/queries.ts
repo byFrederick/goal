@@ -33,6 +33,7 @@ import {
   getMetrics,
   getOrg,
   getOrgSettings,
+  getProposal,
   getTouchMetrics,
   getWeekly,
   type ItemFilter,
@@ -586,6 +587,13 @@ export const proposalsQuery = (org: string, factory: string, state?: ProposalSta
   queryOptions({
     queryKey: [...keys.jonah(org, factory), 'proposals', { state }] as const,
     queryFn: ({ signal }) => listProposals(org, factory, { state }, signal),
+  });
+
+/** One proposal with its files and evidence (getProposal), under its number beside the lists. */
+export const proposalQuery = (org: string, factory: string, number: number) =>
+  queryOptions({
+    queryKey: [...keys.jonah(org, factory), 'proposals', number] as const,
+    queryFn: ({ signal }) => getProposal(org, factory, number, signal),
   });
 
 /** What a run of every case would cost about (estimateEvalRun): a read, so it is asked again on each refresh. */

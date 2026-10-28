@@ -244,3 +244,7 @@ export type ProposalState = Schemas['ProposalState'];
 export type ProposalEntry = Schemas['ProposalEntry'];
 export type ProposalEstimate = Schemas['ProposalEstimate'];
 export type ProposalPage = Schemas['ProposalPage'];
+export type Proposal = Schemas['Proposal'];
+export type ProposalFile = Schemas['ProposalFile'];
+export type ProposalEvidence = Schemas['ProposalEvidence'];
+export type ProposalDecided = Schemas['ProposalDecided'];

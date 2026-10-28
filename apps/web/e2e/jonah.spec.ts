@@ -27,9 +27,12 @@ test('the overview shows the two proposals waiting, the policy and what Jonah no
   await expectNoHorizontalScroll(page);
 });
 
-test('the controls not built yet are disabled, and the pass rates are not shown', async ({ page }) => {
+test('each proposal links to its page, the Evals control is not available, and the pass rates are not shown', async ({
+  page,
+}) => {
   await page.goto('/o/acme/f/software/jonah');
-  await expect(page.getByRole('button', { name: 'Review' }).first()).toHaveAttribute('aria-disabled', 'true');
+  await expect(page.getByRole('link', { name: 'Review' }).first()).toHaveAttribute('href', /\/jonah\/proposals\/8$/);
+  await expect(page.getByRole('button', { name: 'Evals' }).first()).toHaveAttribute('aria-disabled', 'true');
   await expect(page.getByText('Pass rate by judge, last 30 days')).toBeVisible();
   await expect(page.getByText('Not available yet').first()).toBeVisible();
 });

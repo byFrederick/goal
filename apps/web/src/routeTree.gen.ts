@@ -56,6 +56,7 @@ import { Route as OOrgFFactoryJonahIndexRouteImport } from './routes/o.$org.f.$f
 import { Route as OOrgFFactoryJonahEvalsRouteImport } from './routes/o.$org.f.$factory.jonah.evals'
 import { Route as OOrgFFactoryJonahJudgesIndexRouteImport } from './routes/o.$org.f.$factory.jonah.judges.index'
 import { Route as OOrgFFactoryJonahJudgesJudgeRouteImport } from './routes/o.$org.f.$factory.jonah.judges.$judge'
+import { Route as OOrgFFactoryJonahProposalsNumberRouteImport } from './routes/o.$org.f.$factory.jonah.proposals.$number'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -298,6 +299,12 @@ const OOrgFFactoryJonahJudgesJudgeRoute =
     path: '/jonah/judges/$judge',
     getParentRoute: () => OOrgFFactoryRoute,
   } as any)
+const OOrgFFactoryJonahProposalsNumberRoute =
+  OOrgFFactoryJonahProposalsNumberRouteImport.update({
+    id: '/jonah/proposals/$number',
+    path: '/jonah/proposals/$number',
+    getParentRoute: () => OOrgFFactoryRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -345,6 +352,7 @@ export interface FileRoutesByFullPath {
   '/o/$org/f/$factory/items/': typeof OOrgFFactoryItemsIndexRoute
   '/o/$org/f/$factory/jonah/': typeof OOrgFFactoryJonahIndexRoute
   '/o/$org/f/$factory/jonah/judges/$judge': typeof OOrgFFactoryJonahJudgesJudgeRoute
+  '/o/$org/f/$factory/jonah/proposals/$number': typeof OOrgFFactoryJonahProposalsNumberRoute
   '/o/$org/f/$factory/jonah/judges/': typeof OOrgFFactoryJonahJudgesIndexRoute
 }
 export interface FileRoutesByTo {
@@ -390,6 +398,7 @@ export interface FileRoutesByTo {
   '/o/$org/f/$factory/items': typeof OOrgFFactoryItemsIndexRoute
   '/o/$org/f/$factory/jonah': typeof OOrgFFactoryJonahIndexRoute
   '/o/$org/f/$factory/jonah/judges/$judge': typeof OOrgFFactoryJonahJudgesJudgeRoute
+  '/o/$org/f/$factory/jonah/proposals/$number': typeof OOrgFFactoryJonahProposalsNumberRoute
   '/o/$org/f/$factory/jonah/judges': typeof OOrgFFactoryJonahJudgesIndexRoute
 }
 export interface FileRoutesById {
@@ -440,6 +449,7 @@ export interface FileRoutesById {
   '/o/$org/f/$factory/items/': typeof OOrgFFactoryItemsIndexRoute
   '/o/$org/f/$factory/jonah/': typeof OOrgFFactoryJonahIndexRoute
   '/o/$org/f/$factory/jonah/judges/$judge': typeof OOrgFFactoryJonahJudgesJudgeRoute
+  '/o/$org/f/$factory/jonah/proposals/$number': typeof OOrgFFactoryJonahProposalsNumberRoute
   '/o/$org/f/$factory/jonah/judges/': typeof OOrgFFactoryJonahJudgesIndexRoute
 }
 export interface FileRouteTypes {
@@ -490,6 +500,7 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/items/'
     | '/o/$org/f/$factory/jonah/'
     | '/o/$org/f/$factory/jonah/judges/$judge'
+    | '/o/$org/f/$factory/jonah/proposals/$number'
     | '/o/$org/f/$factory/jonah/judges/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -535,6 +546,7 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/items'
     | '/o/$org/f/$factory/jonah'
     | '/o/$org/f/$factory/jonah/judges/$judge'
+    | '/o/$org/f/$factory/jonah/proposals/$number'
     | '/o/$org/f/$factory/jonah/judges'
   id:
     | '__root__'
@@ -584,6 +596,7 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/items/'
     | '/o/$org/f/$factory/jonah/'
     | '/o/$org/f/$factory/jonah/judges/$judge'
+    | '/o/$org/f/$factory/jonah/proposals/$number'
     | '/o/$org/f/$factory/jonah/judges/'
   fileRoutesById: FileRoutesById
 }
@@ -931,6 +944,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OOrgFFactoryJonahJudgesJudgeRouteImport
       parentRoute: typeof OOrgFFactoryRoute
     }
+    '/o/$org/f/$factory/jonah/proposals/$number': {
+      id: '/o/$org/f/$factory/jonah/proposals/$number'
+      path: '/jonah/proposals/$number'
+      fullPath: '/o/$org/f/$factory/jonah/proposals/$number'
+      preLoaderRoute: typeof OOrgFFactoryJonahProposalsNumberRouteImport
+      parentRoute: typeof OOrgFFactoryRoute
+    }
   }
 }
 
@@ -1007,6 +1027,7 @@ interface OOrgFFactoryRouteChildren {
   OOrgFFactoryItemsIndexRoute: typeof OOrgFFactoryItemsIndexRoute
   OOrgFFactoryJonahIndexRoute: typeof OOrgFFactoryJonahIndexRoute
   OOrgFFactoryJonahJudgesJudgeRoute: typeof OOrgFFactoryJonahJudgesJudgeRoute
+  OOrgFFactoryJonahProposalsNumberRoute: typeof OOrgFFactoryJonahProposalsNumberRoute
   OOrgFFactoryJonahJudgesIndexRoute: typeof OOrgFFactoryJonahJudgesIndexRoute
 }
 
@@ -1026,6 +1047,7 @@ const OOrgFFactoryRouteChildren: OOrgFFactoryRouteChildren = {
   OOrgFFactoryItemsIndexRoute: OOrgFFactoryItemsIndexRoute,
   OOrgFFactoryJonahIndexRoute: OOrgFFactoryJonahIndexRoute,
   OOrgFFactoryJonahJudgesJudgeRoute: OOrgFFactoryJonahJudgesJudgeRoute,
+  OOrgFFactoryJonahProposalsNumberRoute: OOrgFFactoryJonahProposalsNumberRoute,
   OOrgFFactoryJonahJudgesIndexRoute: OOrgFFactoryJonahJudgesIndexRoute,
 }
 

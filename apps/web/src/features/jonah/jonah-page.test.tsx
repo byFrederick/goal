@@ -237,15 +237,16 @@ describe('the Jonah overview, its four states', () => {
     expect(within(noticed).getByText('Watching, 3 of 5')).toBeTruthy();
   });
 
-  it('shows the controls not built yet as not available, and no pass rates', async () => {
+  it('links each proposal to its page, shows the Evals control as not available, and no pass rates', async () => {
     vi.mocked(getJonahOverview).mockResolvedValue(overview);
     vi.mocked(listProposals).mockResolvedValue(listOf([proposal8, proposal7]));
     renderOverview();
 
     await screen.findByRole('heading', { name: 'Waiting for your review' });
-    const review = screen.getAllByRole('button', { name: 'Review' });
+    const review = screen.getAllByRole('link', { name: 'Review' });
     expect(review).toHaveLength(2);
-    for (const button of review) expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(review[0]?.getAttribute('href')).toContain('/jonah/proposals/8');
+    expect(review[1]?.getAttribute('href')).toContain('/jonah/proposals/7');
     expect(
       screen.getAllByRole('button', { name: 'Evals' }).every((b) => b.getAttribute('aria-disabled') === 'true'),
     ).toBe(true);

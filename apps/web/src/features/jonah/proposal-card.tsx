@@ -1,10 +1,12 @@
 // A proposal in a list (MASTER.md, cards and chips; jonah.html's proposal): its number chip, the agents and
 // the files it edits, its age, its title, the estimate before → about after, the cost per item and the
-// evidence it rests on. Review opens the proposal's page, which is not built yet (part proposal-ui), so it
-// renders through NotAvailable. The Evals figure needs the eval loop's numbers, which the estimate lacks.
+// evidence it rests on. Review opens the proposal's page. The Evals figure needs the eval loop's numbers, which
+// the estimate lacks, so it renders through NotAvailable.
+import { Link } from '@tanstack/react-router';
 import { ArrowRight } from 'lucide-react';
 import type { ProposalEntry } from '../../api/types';
 import { since } from '../../shared/connections';
+import { useFactoryParams } from '../../shared/factory';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { NotAvailable } from '../../ui/not-available';
@@ -40,6 +42,7 @@ export function ProposalCard({
   waiting: boolean;
 }) {
   const { number, title, state, created_at, paths, agents, estimate, evidence_count } = proposal;
+  const params = useFactoryParams();
   const headingId = `proposal-${number}-title`;
   const figures = estimate ? estimateOf(estimate) : undefined;
 
@@ -84,11 +87,11 @@ export function ProposalCard({
 
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <span className="text-secondary text-ink-soft">{basedOnText(evidence_count)}</span>
-        <NotAvailable label="Review">
-          <Button variant={primary ? 'primary' : 'secondary'} size="sm">
+        <Button asChild variant={primary ? 'primary' : 'secondary'} size="sm">
+          <Link to="/o/$org/f/$factory/jonah/proposals/$number" params={{ ...params, number: String(number) }}>
             Review
-          </Button>
-        </NotAvailable>
+          </Link>
+        </Button>
       </div>
     </article>
   );
