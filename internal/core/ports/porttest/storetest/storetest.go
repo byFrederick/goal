@@ -91,6 +91,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Runs_FinishOnceAndAddCost", testRuns},
 		{"Runs_OldestFirstUpToLimitAndOneByID", testRunReads},
 		{"OrgRuns_NewestFirstFilteredPagedAndSummed", testOrgRuns},
+		{"EachOrgRun_EveryRunInListOrderUpToMax", testEachOrgRun},
 		{"AppendEvents_InOrder", testAppendEvents},
 		{"Notes_AppendToOpenItemsReadSinceTheLatestRun", testNotes},
 		{"Notes_RefusedOnClosedItems", testNotesOnClosedItems},
@@ -119,6 +120,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"FinishLostRuns_OnlyTheCurrentOrg", testFinishLostRunsOneOrg},
 		{"SpendSince_OnlyTheCurrentOrg", testSpendSinceOneOrg},
 		{"OrgSpend", testOrgSpend},
+		{"EachAgentModelSpend_ByFactoryAgentAndModelUpToMax", testEachAgentModelSpend},
 		{"ClaimNext_OrgAndFactorySlotCaps", testSlotCaps},
 		{"Concurrent_ClaimsNeverExceedTheOrgCap", testConcurrentClaimsCapped},
 		{"ItemSpans_FollowEveryTransition", testSpansFollowEveryTransition},
@@ -155,14 +157,20 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 	}
 
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			h := newHarness(t)
-			org := h.NewOrg(t)
-			tc.test(&fixture{Harness: h, t: t, org: org, factory: h.NewFactory(t, org)})
-		})
+		runCase(t, newHarness, tc.name, tc.test)
 	}
+}
+
+// runCase runs one case in a parallel subtest with its own harness.
+func runCase(t *testing.T, newHarness func(t *testing.T) Harness, name string, test func(f *fixture)) {
+	t.Helper()
+	t.Run(name, func(t *testing.T) {
+		t.Parallel()
+
+		h := newHarness(t)
+		org := h.NewOrg(t)
+		test(&fixture{Harness: h, t: t, org: org, factory: h.NewFactory(t, org)})
+	})
 }
 
 // Names and times the suite uses. Times are whole seconds: stores may keep microseconds only.

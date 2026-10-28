@@ -171,6 +171,14 @@ type AgentSpend struct {
 	USD       float64
 }
 
+// AgentModelSpend is the spend of an agent of a factory on a model.
+type AgentModelSpend struct {
+	FactoryID FactoryID
+	Agent     string
+	Model     string
+	USD       float64
+}
+
 // ModelSpend is the spend on a model.
 type ModelSpend struct {
 	Model string

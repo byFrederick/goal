@@ -334,7 +334,7 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 
 	// The commands on one item, and the command groups, by name.
 	if handler, ok := map[string]command{
-		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbAnswer: answerItem, verbMove: moveItem, verbPause: pauseItem, verbDeny: denyItem, verbLane: laneItem,
+		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbAnswer: answerItem, verbMove: moveItem, verbLane: laneItem, verbPause: pauseItem, verbDeny: denyItem,
 		"status": status, "factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
 		"connection": connectionCommand, "credential": credentialCommand, "policy": policyCommand, "knowledge": knowledgeCommand, "search": search, "runs": runs, "eval": evalCommand, "spend": spend,
 		"judge": judgeCommand, "triggers": triggersCommand, "webhooks": webhooksCommand, cmdStandingRules: standingRulesCommand,

@@ -479,3 +479,60 @@ func (s *Store) Assemblies(ctx context.Context, factory domain.FactoryID, ids []
 
 	return out, nil
 }
+
+// EachOrgRun implements ports.Store. As the postgres store pages, it finds each next run after
+// the one before under the lock and calls each without it, so each may use the store; it never
+// holds the matching runs at once.
+func (s *Store) EachOrgRun(ctx context.Context, q ports.RunQuery, maxRows int, each func(domain.ListedRun) error) error {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return err
+	}
+
+	q.After = nil
+
+	for first := true; ; first = false {
+		r, n, ok := s.nextOrgRun(org, q)
+		if first && n > maxRows {
+			return fmt.Errorf("%d runs, more than %d: %w", n, maxRows, ports.ErrTooMany)
+		}
+
+		if !ok {
+			return nil
+		}
+
+		if err := each(r); err != nil {
+			return err
+		}
+
+		q.After = &ports.RunCursor{StartedAt: r.StartedAt, ID: r.ID}
+	}
+}
+
+// nextOrgRun is the first run of org matching q after q.After in the list's order, and how many
+// match.
+func (s *Store) nextOrgRun(org domain.OrgID, q ports.RunQuery) (domain.ListedRun, int, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var (
+		best  domain.ListedRun
+		found bool
+		n     int
+	)
+
+	for _, r := range s.runs {
+		it, ok := s.visible(r.ItemID, org)
+		if !ok || !slices.Contains(q.Factories, r.FactoryID) || !inWindow(r.StartedAt, q.Since, q.Until) || !runMatches(q, r, it) {
+			continue
+		}
+
+		n++
+
+		if !found || cmp.Or(r.StartedAt.Compare(best.StartedAt), cmp.Compare(r.ID, best.ID)) > 0 {
+			best, found = domain.ListedRun{Run: *r, ItemNumber: it.Number, ItemTitle: it.Title}, true
+		}
+	}
+
+	return best, n, found
+}
