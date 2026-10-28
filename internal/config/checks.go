@@ -121,6 +121,7 @@ func (c *checker) run() []domain.DefinitionProblem {
 	c.removedForms()
 	c.evals()
 	c.triggers()
+	c.starter()
 
 	return c.problems
 }

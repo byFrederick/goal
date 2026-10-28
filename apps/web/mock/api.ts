@@ -1329,6 +1329,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       const at = body.now;
       fixed = typeof at === 'string' && !Number.isNaN(Date.parse(at)) ? Date.parse(at) : undefined;
       state = seed(clock());
+      // {orgs: "none"}: a person with no organization yet, so onboarding's first step is what opens.
+      if (body.orgs === 'none') state.orgs = [];
       const role = roleSetting(body.role);
       grants = role ? grantsOf(sources.table, role) : undefined;
       if (grants) withRole(state, grants);
