@@ -173,6 +173,18 @@ usage:
                                                   and print what it is about to cost
   goal eval show <run> [--factory F] [--json]     an eval run's state and cost, and each case's tries:
                                                   pass, fail or error
+  goal bake-off run <agent> [--model M]... [--trials N] [--follow] [--factory F] [--json]
+                                                  print the estimate and the models, then start a bake-off
+                                                  of the agent's eval cases on 2 to 4 models (default its
+                                                  model and goald's default ones; --trials: tries per case,
+                                                  default 3); --follow waits for the result
+  goal bake-off show <id> [--factory F] [--json]  the recommended model against the current one, then per
+                                                  model the pass rate, cost and time per item, turns and
+                                                  judged share (Recommended, Now), and per case the tries
+                                                  passed per model
+  goal bake-off apply <id> [--model M] [--factory F] [--json]
+                                                  write the recommended model (or M) as the agent's model
+                                                  into the factory's draft; nothing is published
   goal spend [--window week|month|90d] [--json]   what the organization's agent runs cost (default this
                                                   week), per merged item and on rework, and each
                                                   factory's budget: running, stopped or over_budget,
@@ -253,7 +265,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, connection, credential, knowledge, search, runs, eval, spend, judge, triggers, webhooks) acts in one
+Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, connection, credential, knowledge, search, runs, eval, bake-off, spend, judge, triggers, webhooks) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or

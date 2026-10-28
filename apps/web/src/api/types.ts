@@ -17,6 +17,15 @@ export type {
   AuditPage,
   AuthConfig,
   AuthMode,
+  BakeOff,
+  BakeOffApply,
+  BakeOffArm,
+  BakeOffArmSummary,
+  BakeOffCase,
+  BakeOffCaseArm,
+  BakeOffJudged,
+  BakeOffList,
+  BakeOffStarted,
   Board,
   BoardLane,
   BoardLine,
@@ -211,6 +220,10 @@ export type NewCredential = Schemas['NewCredential'];
 export type CredentialImport = Schemas['CredentialImport'];
 export type CredentialImportResult = Schemas['CredentialImportResult'];
 export type CredentialImportOutcome = Schemas['CredentialImportOutcome'];
+// What a code host connection reaches (GET …/connections/{connection}/repositories), for the Code step.
+export type RepositoryList = Schemas['RepositoryList'];
+export type RepositoryOwner = Schemas['RepositoryOwner'];
+export type Repository = Schemas['Repository'];
 // The organization's knowledge usage (ADR 0027): where a source's documents were used, and the runs of one document.
 export type KnowledgeUsage = Schemas['KnowledgeUsage'];
 export type KnowledgeDocumentUsage = Schemas['KnowledgeDocumentUsage'];

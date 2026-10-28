@@ -177,3 +177,58 @@ describe('TraceList: a spec run and the timeline states', () => {
     expect(screen.getByText('Investigator')).toBeTruthy();
   });
 });
+
+describe('TraceList: the event rows', () => {
+  const reads: Entry = {
+    ...run,
+    tools: [
+      { id: 'r1', tool: 'Read', argument: 'apps/web/src/features/a.ts', isError: false, at: '2026-10-25T08:00:10Z' },
+      { id: 'r2', tool: 'Read', argument: 'apps/web/src/shared/b.ts', isError: false, at: '2026-10-25T08:00:20Z' },
+    ],
+  };
+
+  it('shows consecutive reads as one row, naming their directory', async () => {
+    renderBoardPage({
+      page: () => <TraceList entries={[reads]} itemState="done" />,
+      org,
+      factory,
+      builderMeta,
+    });
+
+    const events = await screen.findByRole('list', { name: 'Events by Investigator' });
+    const rows = within(events).getAllByRole('listitem');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.textContent).toContain('Read 2 files in apps/web/src');
+  });
+
+  it('shows a failed step as failed, with its output behind a closed disclosure', async () => {
+    const output = 'FAIL TestClaim: expected expedite first';
+    const failed: Entry = {
+      ...run,
+      tools: [
+        {
+          id: 'b1',
+          tool: 'Bash',
+          argument: 'go test ./internal/engine/',
+          summary: output,
+          isError: true,
+          at: '2026-10-25T08:00:10Z',
+        },
+      ],
+    };
+    renderBoardPage({
+      page: () => <TraceList entries={[failed]} itemState="done" />,
+      org,
+      factory,
+      builderMeta,
+    });
+
+    const events = await screen.findByRole('list', { name: 'Events by Investigator' });
+    const row = within(events).getByRole('listitem');
+    expect(row.textContent).toContain('failed');
+    expect(row.textContent).toContain('Ran go…');
+    const details = within(row).getByText(output).closest('details');
+    expect(details).not.toBeNull();
+    expect(details?.open).toBe(false);
+  });
+});

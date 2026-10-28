@@ -20,6 +20,7 @@ import {
   getAgentStats,
   getAttention,
   getAuthConfig,
+  getBakeOff,
   getBoard,
   getConstraint,
   getFactoryActivity,
@@ -36,6 +37,7 @@ import {
   getTouchMetrics,
   getWeekly,
   type ItemFilter,
+  listBakeOffs,
   listEvals,
   listFactories,
   listInvitations,
@@ -54,6 +56,7 @@ import {
   getConnection,
   listConnectionAudit,
   listConnectionKinds,
+  listConnectionRepositories,
   listConnections,
 } from './connections';
 import { listCredentials } from './credentials';
@@ -164,6 +167,9 @@ export const keys = {
   /** Audit entries about connections: every one's (`all`) or one's, by its id. */
   connectionActivity: (org: string, id?: string) => ['org', org, 'connections', 'activity', id ?? 'all'] as const,
   connectionKinds: (org: string) => ['org', org, 'connection-kinds'] as const,
+  /** The owners and repositories a code host connection reaches; `owner` absent is its own account. */
+  connectionRepositories: (org: string, connection: string, owner?: string) =>
+    ['org', org, 'connections', 'repositories', connection, owner ?? 'account'] as const,
   /** The organization's credentials (ADR 0017): the list, which a connection's change also moves. */
   credentials: (org: string) => ['org', org, 'credentials'] as const,
   /**
@@ -227,8 +233,14 @@ export const keys = {
   runs: (org: string, filter?: RunsFilter) =>
     filter ? (['org', org, 'runs', filter] as const) : (['org', org, 'runs'] as const),
   parts: (org: string, item: string) => ['org', org, 'item', item, 'parts'] as const,
-  /** The prefix of a factory's eval cases and their estimate (Jonah's Evals). A `definition` event refreshes it. */
+  /**
+   * The prefix of a factory's eval cases, their estimate (Jonah's Evals) and its bake-offs. A `definition`
+   * event refreshes all of it; no stream event reports a bake-off's progress, so a bake-off is read again on
+   * focus and on its own actions.
+   */
   evals: (org: string, factory: string) => ['org', org, 'factory', factory, 'evals'] as const,
+  /** The factory's bake-offs (under keys.evals): the list, and each bake-off by its id. */
+  bakeOffs: (org: string, factory: string) => [...keys.evals(org, factory), 'bake-offs'] as const,
   /** The prefix of a factory's judges (Jonah's Judges). A `definition` event refreshes it. */
   judges: (org: string, factory: string) => ['org', org, 'factory', factory, 'judges'] as const,
   /** The factory's intake (sources and triggers); item and definition events refresh it. */
@@ -340,6 +352,16 @@ export const connectionQuery = (org: string, name: string) =>
     queryFn: ({ signal }) => getConnection(org, name, signal),
     staleTime: 30_000,
     retry: retryUnlessRefused,
+  });
+
+/** The repositories of one owner a GitHub connection reaches (connection:browse); a step's list, not cached for long. */
+export const connectionRepositoriesQuery = (org: string, connection: string, owner?: string) =>
+  queryOptions({
+    queryKey: keys.connectionRepositories(org, connection, owner),
+    queryFn: ({ signal }) => listConnectionRepositories(org, connection, owner, signal),
+    staleTime: 30_000,
+    // A failed list shows its problem with Retry; an automatic retry would only delay that.
+    retry: false,
   });
 
 /** A kind changes with a goald release or an admin's edit: minutes are fresh enough. */
@@ -588,6 +610,20 @@ export const evalsQuery = (org: string, factory: string) =>
   queryOptions({
     queryKey: [...keys.evals(org, factory), 'cases'] as const,
     queryFn: ({ signal }) => listEvals(org, factory, signal),
+  });
+
+/** The factory's bake-offs, newest first (listBakeOffs). */
+export const bakeOffsQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: [...keys.bakeOffs(org, factory), 'list'] as const,
+    queryFn: ({ signal }) => listBakeOffs(org, factory, signal),
+  });
+
+/** One bake-off with its arms and per-case tries (getBakeOff). */
+export const bakeOffQuery = (org: string, factory: string, bakeOff: string) =>
+  queryOptions({
+    queryKey: [...keys.bakeOffs(org, factory), bakeOff] as const,
+    queryFn: ({ signal }) => getBakeOff(org, factory, bakeOff, signal),
   });
 
 /** The factory's judges of the current version, each with its 30 days (listJudges). */

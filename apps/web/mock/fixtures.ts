@@ -420,6 +420,7 @@ export const orgCan = [
   'api_key:manage',
   'api_key:read',
   'audit:read',
+  'connection:browse',
   'connection:manage',
   'connection:read',
   'factory:create',
@@ -575,6 +576,10 @@ const specRun = (tools: Tool[], cost: number, turns: number): Step => ({
   cost,
   turns,
 });
+
+/** A shell command longer than the timeline shows, and a failed step's output of 2,000 characters. */
+const longCommand = `go test ./internal/engine/ ${'-run TestClaimExpediteBeforePriority '.repeat(20)}`.slice(0, 500);
+const longOutput = 'output without a break '.repeat(100).slice(0, 2000);
 
 const goalSeeds: Seed[] = [
   // The assembly "Usage and budgets": its part 4 of 4 is goal#147 (the item page's chip links here).
@@ -1250,6 +1255,32 @@ const goalSeeds: Seed[] = [
       { move: 'merge' },
       { move: 'done' },
       { done: true },
+    ],
+  },
+  {
+    number: 343,
+    title: 'Item Timeline: run event rows match the design',
+    type: 'fix',
+    body: 'Event rows run past the run card and wrap one character per line.',
+    station: 'build',
+    state: 'in_progress',
+    createdMin: 90,
+    updatedMin: 5,
+    steps: [
+      { move: 'build' },
+      {
+        run: 'frontend-engineer',
+        model: 'claude-haiku-5-5',
+        tools: [
+          ['Read', 'apps/web/src/features/items/trace-view.tsx', 'Read 370 lines'],
+          ['Read', 'apps/web/src/features/items/timeline.ts', 'Read 397 lines'],
+          ['Bash', longCommand, 'ok'],
+          ['Edit', 'apps/web/src/features/items/trace-view.tsx', 'Edited 1 file'],
+          ['Bash', 'pnpm --dir apps/web run test', longOutput, true],
+        ],
+        cost: 0.4,
+        turns: 9,
+      },
     ],
   },
 ];

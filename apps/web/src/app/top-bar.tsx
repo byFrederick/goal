@@ -36,6 +36,8 @@ import {
  */
 export interface TopBarState {
   crumb?: string | undefined;
+  /** A crumb between the page and its last crumb, such as Bake-offs above one bake-off. Factory pages only. */
+  parent?: { label: string; to: '/o/$org/f/$factory/jonah/bake-offs' } | undefined;
   actions?: ReactNode | undefined;
   back?: ReactNode | undefined;
 }
@@ -49,12 +51,12 @@ export const TopBarSetContext = createContext<SetTopBar | null>(null);
  * Sets the top bar's last crumb and actions while the page is mounted, and clears them when it
  * unmounts. Renders nothing itself.
  */
-export function TopBarSlot({ crumb, actions, back }: TopBarState) {
+export function TopBarSlot({ crumb, parent, actions, back }: TopBarState) {
   const set = useContext(TopBarSetContext);
   useLayoutEffect(() => {
-    set?.({ crumb, actions, back });
+    set?.({ crumb, parent, actions, back });
     return () => set?.(null);
-  }, [set, crumb, actions, back]);
+  }, [set, crumb, parent, actions, back]);
   return null;
 }
 
@@ -73,6 +75,8 @@ const factoryRoutePages: Record<string, string> = {
   '/o/$org/f/$factory/jonah/evals': 'jonah',
   '/o/$org/f/$factory/jonah/judges/': 'jonah',
   '/o/$org/f/$factory/jonah/judges/$judge': 'jonah',
+  '/o/$org/f/$factory/jonah/bake-offs/': 'jonah',
+  '/o/$org/f/$factory/jonah/bake-offs/$bakeOff': 'jonah',
 };
 
 /** The organization page each organization route shows, by route id. */
@@ -115,7 +119,7 @@ export function TopBar({ state }: { state: TopBarState | null }) {
   return (
     <header className="hidden h-14 flex-none items-center gap-2 border-b border-rule bg-shell px-7 md:flex">
       {inFactory ? (
-        <FactoryCrumbs routeId={routeId} crumb={state?.crumb} />
+        <FactoryCrumbs routeId={routeId} crumb={state?.crumb} parent={state?.parent} />
       ) : (
         <OrgCrumbs routeId={routeId} crumb={state?.crumb} />
       )}
@@ -124,7 +128,15 @@ export function TopBar({ state }: { state: TopBarState | null }) {
   );
 }
 
-function FactoryCrumbs({ routeId, crumb }: { routeId: string; crumb: string | undefined }) {
+function FactoryCrumbs({
+  routeId,
+  crumb,
+  parent,
+}: {
+  routeId: string;
+  crumb: string | undefined;
+  parent: TopBarState['parent'];
+}) {
   const org = useOrg();
   const factory = useFactory();
   const { data: factories = [] } = useQuery(factoriesQuery(org.id));
@@ -161,6 +173,16 @@ function FactoryCrumbs({ routeId, crumb }: { routeId: string; crumb: string | un
         page.label
       ),
     });
+    if (parent) {
+      items.push({
+        key: 'parent',
+        node: (
+          <Link to={parent.to} params={params} className={crumbLink}>
+            {parent.label}
+          </Link>
+        ),
+      });
+    }
     items.push({ key: 'crumb', node: <Current>{crumb}</Current> });
   }
   return <Trail items={items} />;

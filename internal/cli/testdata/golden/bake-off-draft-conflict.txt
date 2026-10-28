@@ -1,0 +1,4 @@
+exit 1
+--- stdout
+--- stderr
+goal: refused: frontend-engineer's file changed since v3, the version the bake-off ran (Precondition Failed: agents/frontend-engineer.yaml changed since v3); merge the change in the builder, then apply again

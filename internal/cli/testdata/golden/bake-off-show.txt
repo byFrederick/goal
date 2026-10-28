@@ -1,0 +1,15 @@
+exit 0
+--- stdout
+bake-off bo1 of frontend-engineer (ship) on v3: done, 2 cases, 3 tries each, $3.90 of about $4.50
+claude-haiku-5-5 is recommended over claude-opus-5-5 (Now): the same pass rate (83%), at $0.12 per item against $1.20 (10% of the cost)
+
+MODEL              PASS RATE  COST/ITEM  TIME/ITEM  TURNS  JUDGED PLAIN LANGUAGE
+claude-opus-5-5    83%        $1.20      4m10s      31.2   80%                    Now
+claude-sonnet-5-5  50%        $0.40      2m20s      25.0   -
+claude-haiku-5-5   83%        $0.12      1m36s      28.0   75%                    Recommended
+
+tries passed per case, out of 3
+CASE         claude-opus-5-5  claude-sonnet-5-5  claude-haiku-5-5
+lease-fix    3/3              2/3                3/3
+review-step  2/3              1/3                2/3
+--- stderr

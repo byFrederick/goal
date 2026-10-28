@@ -29,6 +29,7 @@ import {
   runRole,
   type ToolCall,
 } from './timeline';
+import { checkStep, type Segment, type StepRow, toolSteps } from './timeline-rows';
 
 const shownTools = 6;
 
@@ -69,23 +70,28 @@ const tileTone = {
 } as const;
 type TileTone = keyof typeof tileTone;
 
-/** One row of a run's timeline: time, the icon tile, the text and a meta column on the right. */
+/**
+ * One row of a run's timeline: the time, the icon tile, the sentence and a short right label. On a
+ * phone the label drops under the sentence. `output` is a failed step's raw output, behind a disclosure.
+ */
 function EventRow({
   at,
   tone,
   icon: Icon,
   children,
-  meta,
+  right,
+  output,
 }: {
   at: string;
   tone: TileTone;
   icon: LucideIcon;
   children: ReactNode;
-  meta?: ReactNode;
+  right?: ReactNode;
+  output?: string[] | undefined;
 }) {
   return (
-    <li className="flex min-w-0 items-start gap-3 text-body">
-      <time dateTime={at} className="w-11 shrink-0 pt-1 text-secondary text-muted tabular-nums">
+    <li className="grid grid-cols-[44px_22px_minmax(0,1fr)] items-start gap-x-2 py-2 text-body md:grid-cols-[44px_22px_minmax(0,1fr)_auto]">
+      <time dateTime={at} className="pt-1 text-meta text-muted tabular-nums">
         {formatClock(at)}
       </time>
       <span
@@ -94,9 +100,49 @@ function EventRow({
       >
         <Icon size={13} strokeWidth={1.75} />
       </span>
-      <div className="min-w-0 flex-1 leading-normal [overflow-wrap:anywhere]">{children}</div>
-      {meta ? <span className="shrink-0 pl-2 text-right text-secondary text-muted">{meta}</span> : null}
+      <div className="min-w-0 leading-normal wrap-break-word">
+        {children}
+        {output && output.length > 0 ? <OutputDisclosure lines={output} /> : null}
+      </div>
+      {right ? (
+        <span className="col-start-3 whitespace-nowrap text-secondary text-muted md:col-auto">{right}</span>
+      ) : null}
     </li>
+  );
+}
+
+/** A step's raw output, collapsed: a mono block with a height limit that scrolls. */
+function OutputDisclosure({ lines }: { lines: string[] }) {
+  return (
+    <details className="mt-1 text-secondary">
+      <summary className="w-fit cursor-pointer text-muted">Show the output</summary>
+      <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap wrap-break-word rounded-control bg-shell p-2 font-mono text-secondary leading-normal">
+        {lines.join('\n\n')}
+      </pre>
+    </details>
+  );
+}
+
+/** A sentence's segments: plain words, and code on one line that truncates, its full text in a title. */
+function Sentence({ segments }: { segments: Segment[] }) {
+  return (
+    <>
+      {segments.map((s, i) =>
+        s.code ? (
+          <code
+            // biome-ignore lint/suspicious/noArrayIndexKey: segments are a fixed list for one sentence
+            key={i}
+            title={s.text}
+            className="inline-block max-w-full truncate align-bottom font-mono text-secondary"
+          >
+            {s.text}
+          </code>
+        ) : (
+          // biome-ignore lint/suspicious/noArrayIndexKey: segments are a fixed list for one sentence
+          <Fragment key={i}>{s.text}</Fragment>
+        ),
+      )}
+    </>
   );
 }
 
@@ -118,44 +164,38 @@ function outcomeOf(
   return { tone: 'ok', label: 'Finished', dot: false };
 }
 
-/** A run's rows: its tool calls, checks and notes, in the order they happened. */
-type Row = { key: string; at: string; tone: TileTone; icon: LucideIcon; children: ReactNode; meta?: ReactNode };
+/** A run's rows: its tool steps, checks and notes, in the order they happened. */
+type Row = {
+  key: string;
+  at: string;
+  tone: TileTone;
+  icon: LucideIcon;
+  children: ReactNode;
+  right?: ReactNode;
+  output?: string[] | undefined;
+};
 
-function toolRow(call: ToolCall): Row {
+function stepRow(step: StepRow): Row {
   return {
-    key: `tool-${call.at}-${call.id}`,
-    at: call.at,
-    tone: call.isError ? 'rework' : 'plain',
-    icon: toolIcon(call.tool),
-    children: (
-      <>
-        <span className="font-mono text-secondary">{call.tool}</span>
-        {call.argument ? <span className="font-mono text-secondary text-muted"> {call.argument}</span> : null}
-        {call.isError ? <span className="text-rework-ink"> failed</span> : null}
-      </>
-    ),
-    meta: call.summary,
+    key: step.key,
+    at: step.at,
+    tone: step.failed ? 'rework' : 'plain',
+    icon: toolIcon(step.tool),
+    children: <Sentence segments={step.segments} />,
+    right: step.right ? <span className={cn(step.failed && 'text-rework-ink')}>{step.right}</span> : undefined,
+    output: step.output,
   };
 }
 
 function checkRow(check: CheckEntry): Row {
-  const detail = [
-    check.durationMs !== undefined ? formatDuration(check.durationMs) : '',
-    !check.passed && check.exitCode !== undefined ? `exit ${check.exitCode}` : '',
-  ]
-    .filter(Boolean)
-    .join(', ');
+  const step = checkStep(check);
   return {
     key: check.key,
     at: check.at,
     tone: check.passed ? 'ok' : 'rework',
     icon: check.passed ? CircleCheck : CircleX,
-    children: (
-      <>
-        <code className="font-mono text-secondary">{check.command}</code> {check.passed ? 'passed' : 'failed'}
-      </>
-    ),
-    meta: detail || undefined,
+    children: <Sentence segments={step.segments} />,
+    right: step.right,
   };
 }
 
@@ -169,7 +209,7 @@ function noteRow(note: NoteEntry): Row {
     tone,
     icon: note.question ? CircleHelp : people ? MessageSquare : Circle,
     // An open question's row says Now, in the you ink.
-    meta: note.open ? <span className="text-you-ink">Now</span> : undefined,
+    right: note.open ? <span className="text-you-ink">Now</span> : undefined,
     children: (
       <>
         <span>{note.text}</span>
@@ -216,7 +256,7 @@ function RunCard({
   const label = runRole(run);
   const criteria = runCriteria(run);
   const rows: Row[] = [
-    ...run.tools.map(toolRow),
+    ...toolSteps(run.tools).map(stepRow),
     ...extra.flatMap((e): Row[] => (e.kind === 'check' ? [checkRow(e)] : e.kind === 'note' ? [noteRow(e)] : [])),
   ].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
   const shown = all || rows.length <= shownTools ? rows : rows.slice(-shownTools);
@@ -272,9 +312,9 @@ function RunCard({
           </p>
         ) : null}
         {rows.length > 0 ? (
-          <ol aria-label={`Events by ${label}`} className="m-0 flex list-none flex-col gap-3 p-0">
+          <ol aria-label={`Events by ${label}`} className="m-0 flex list-none flex-col p-0">
             {shown.map((r) => (
-              <EventRow key={r.key} at={r.at} tone={r.tone} icon={r.icon} meta={r.meta}>
+              <EventRow key={r.key} at={r.at} tone={r.tone} icon={r.icon} right={r.right} output={r.output}>
                 {r.children}
               </EventRow>
             ))}
@@ -304,12 +344,12 @@ function RunCard({
 /** The item's events outside a run (a note, a check the engine ran), as rows without a card. */
 export function EventList({ entries }: { entries: Entry[] }) {
   return (
-    <ol className="m-0 flex list-none flex-col gap-3 p-0">
+    <ol className="m-0 flex list-none flex-col p-0">
       {entries.map((e) => {
         if (e.kind === 'run') return null;
         const r = e.kind === 'check' ? checkRow(e) : noteRow(e);
         return (
-          <EventRow key={r.key} at={r.at} tone={r.tone} icon={r.icon} meta={r.meta}>
+          <EventRow key={r.key} at={r.at} tone={r.tone} icon={r.icon} right={r.right} output={r.output}>
             {r.children}
           </EventRow>
         );
