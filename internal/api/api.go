@@ -201,6 +201,9 @@ type Deps struct {
 	// Evals serve Jonah's evals routes (evals.go). Optional: while it is nil those routes answer
 	// 503 evals-unavailable; when set, all three of its collaborators are.
 	Evals *EvalDeps
+	// Jonah serves Jonah's overview, proposals and reviews (jonah.go). Optional: while it is nil
+	// those routes answer 503 jonah-unavailable; when set, both of its collaborators are.
+	Jonah *JonahDeps
 	// Clock dates ages and metric windows and paces stream heartbeats.
 	Clock  ports.Clock
 	Logger *slog.Logger
@@ -216,6 +219,7 @@ func (d Deps) complete() bool {
 		d.OrgPolicies == nil, len(d.BoxSizes) == 0,
 		d.Judges != nil && (d.Judges.Judges == nil || d.Judges.Scores == nil || d.Judges.Tries == nil),
 		d.Evals != nil && (d.Evals.Runs == nil || d.Evals.Loop == nil || d.Evals.Judges == nil),
+		d.Jonah != nil && (d.Jonah.Store == nil || d.Jonah.Decisions == nil),
 	}
 
 	return !slices.Contains(missing, true)
@@ -259,7 +263,7 @@ func New(d Deps) (http.Handler, error) {
 		return nil, errors.New("api: Engine, Items, Factories, Definitions, Versions, Orgs, Audit, Access, Authorizer, Platform, Feed, Builder, Clock, " +
 			"Connections, Credentials, Intake, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeSearch, OrgPolicies, BoxSizes, " +
 			"a positive UploadMaxBytes and a positive OrgRetention are required, Judges, when set, needs Judges, Scores and Tries, " +
-			"and Evals, when set, needs Runs, Loop and Judges")
+			"Evals, when set, needs Runs, Loop and Judges, and Jonah, when set, needs Store and Decisions")
 	}
 
 	if err := d.failsClosed(); err != nil {
@@ -278,7 +282,7 @@ func New(d Deps) (http.Handler, error) {
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
 		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, search: d.KnowledgeSearch, uploadMax: d.UploadMaxBytes,
 		policies: d.OrgPolicies, boxSizes: slices.Clone(d.BoxSizes), egress: slices.Clone(d.EgressAddresses),
-		judges: d.Judges, evals: d.Evals, clock: d.Clock, log: log,
+		judges: d.Judges, evals: d.Evals, jonah: d.Jonah, clock: d.Clock, log: log,
 	}
 	s.inbox = append([]InboxSource{workInbox{s: s}}, d.InboxSources...)
 
@@ -414,6 +418,8 @@ type server struct {
 	judges *JudgeDeps
 	// evals serve the evals routes; nil when this goald does not run evals.
 	evals *EvalDeps
+	// jonah serves the Jonah routes; nil when this goald does not.
+	jonah *JonahDeps
 	clock ports.Clock
 	log   *slog.Logger
 }
@@ -635,7 +641,7 @@ func problemOf(err error) gen.Problem {
 	// wrap ports.ErrNameTaken); the credentials' before the connections' (both wrap
 	// ports.ErrNoMasterKey).
 	for _, answer := range []func(error) (gen.Problem, bool){
-		fixedProblem, policyProblem, edgeProblem, partProblem, credentialProblem, webhookProblem, connectionProblem, knowledgeProblem, judgeProblem, evalProblem, definitionProblem,
+		fixedProblem, policyProblem, edgeProblem, partProblem, credentialProblem, webhookProblem, connectionProblem, knowledgeProblem, judgeProblem, evalProblem, jonahProblem, definitionProblem,
 		controlProblem, questionProblem, agentProblem, triggerProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {

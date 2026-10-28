@@ -130,6 +130,32 @@ approveItem          pat-demoted      404 item-not-found       404 org-not-found
 approveItem          pat-removed      401 unauthenticated      401 unauthenticated
 approveItem          pat-platform     200                      404 org-not-found
 approveItem          pat-deleted-org  401 unauthenticated      401 unauthenticated
+approveProposal      anonymous        401 unauthenticated      401 unauthenticated
+approveProposal      owner            200                      404 org-not-found
+approveProposal      admin            200                      404 org-not-found
+approveProposal      viewer           403 forbidden            404 org-not-found
+approveProposal      approver         403 forbidden            404 org-not-found
+approveProposal      editor           200                      404 org-not-found
+approveProposal      member-no-roles  404 factory-not-found    404 org-not-found
+approveProposal      other-org-owner  404 org-not-found        200
+approveProposal      platform-admin   404 org-not-found        404 org-not-found
+approveProposal      stale-owner      200                      404 org-not-found
+approveProposal      key-scoped       403 forbidden            404 org-not-found
+approveProposal      key-restricted   404 factory-not-found    404 org-not-found
+approveProposal      key-other-org    404 org-not-found        200
+approveProposal      key-expired      401 unauthenticated      401 unauthenticated
+approveProposal      key-revoked      401 unauthenticated      401 unauthenticated
+approveProposal      bearer-owner     200                      404 org-not-found
+approveProposal      pat-approver     403 forbidden            404 org-not-found
+approveProposal      pat-owner        200                      404 org-not-found
+approveProposal      pat-viewer       403 forbidden            404 org-not-found
+approveProposal      pat-other-org    404 org-not-found        200
+approveProposal      pat-expired      401 unauthenticated      401 unauthenticated
+approveProposal      pat-revoked      401 unauthenticated      401 unauthenticated
+approveProposal      pat-demoted      404 factory-not-found    404 org-not-found
+approveProposal      pat-removed      401 unauthenticated      401 unauthenticated
+approveProposal      pat-platform     200                      404 org-not-found
+approveProposal      pat-deleted-org  401 unauthenticated      401 unauthenticated
 archiveFactory       anonymous        401 unauthenticated      401 unauthenticated
 archiveFactory       owner            200                      404 org-not-found
 archiveFactory       admin            200                      404 org-not-found
@@ -754,6 +780,32 @@ discardDraft         pat-demoted      404 factory-not-found    404 org-not-found
 discardDraft         pat-removed      401 unauthenticated      401 unauthenticated
 discardDraft         pat-platform     200                      404 org-not-found
 discardDraft         pat-deleted-org  401 unauthenticated      401 unauthenticated
+editProposal         anonymous        401 unauthenticated      401 unauthenticated
+editProposal         owner            200                      404 org-not-found
+editProposal         admin            200                      404 org-not-found
+editProposal         viewer           403 forbidden            404 org-not-found
+editProposal         approver         403 forbidden            404 org-not-found
+editProposal         editor           200                      404 org-not-found
+editProposal         member-no-roles  404 factory-not-found    404 org-not-found
+editProposal         other-org-owner  404 org-not-found        200
+editProposal         platform-admin   404 org-not-found        404 org-not-found
+editProposal         stale-owner      200                      404 org-not-found
+editProposal         key-scoped       403 forbidden            404 org-not-found
+editProposal         key-restricted   404 factory-not-found    404 org-not-found
+editProposal         key-other-org    404 org-not-found        200
+editProposal         key-expired      401 unauthenticated      401 unauthenticated
+editProposal         key-revoked      401 unauthenticated      401 unauthenticated
+editProposal         bearer-owner     200                      404 org-not-found
+editProposal         pat-approver     403 forbidden            404 org-not-found
+editProposal         pat-owner        200                      404 org-not-found
+editProposal         pat-viewer       403 forbidden            404 org-not-found
+editProposal         pat-other-org    404 org-not-found        200
+editProposal         pat-expired      401 unauthenticated      401 unauthenticated
+editProposal         pat-revoked      401 unauthenticated      401 unauthenticated
+editProposal         pat-demoted      404 factory-not-found    404 org-not-found
+editProposal         pat-removed      401 unauthenticated      401 unauthenticated
+editProposal         pat-platform     200                      404 org-not-found
+editProposal         pat-deleted-org  401 unauthenticated      401 unauthenticated
 estimateEvalRun      anonymous        401 unauthenticated      401 unauthenticated
 estimateEvalRun      owner            200                      404 org-not-found
 estimateEvalRun      admin            200                      404 org-not-found
@@ -1326,6 +1378,32 @@ getItem              pat-demoted      404 item-not-found       404 org-not-found
 getItem              pat-removed      401 unauthenticated      401 unauthenticated
 getItem              pat-platform     200                      404 org-not-found
 getItem              pat-deleted-org  401 unauthenticated      401 unauthenticated
+getJonahOverview     anonymous        401 unauthenticated      401 unauthenticated
+getJonahOverview     owner            200                      404 org-not-found
+getJonahOverview     admin            200                      404 org-not-found
+getJonahOverview     viewer           200                      404 org-not-found
+getJonahOverview     approver         200                      404 org-not-found
+getJonahOverview     editor           200                      404 org-not-found
+getJonahOverview     member-no-roles  404 factory-not-found    404 org-not-found
+getJonahOverview     other-org-owner  404 org-not-found        200
+getJonahOverview     platform-admin   404 org-not-found        404 org-not-found
+getJonahOverview     stale-owner      200                      404 org-not-found
+getJonahOverview     key-scoped       200                      404 org-not-found
+getJonahOverview     key-restricted   404 factory-not-found    404 org-not-found
+getJonahOverview     key-other-org    404 org-not-found        200
+getJonahOverview     key-expired      401 unauthenticated      401 unauthenticated
+getJonahOverview     key-revoked      401 unauthenticated      401 unauthenticated
+getJonahOverview     bearer-owner     200                      404 org-not-found
+getJonahOverview     pat-approver     200                      404 org-not-found
+getJonahOverview     pat-owner        200                      404 org-not-found
+getJonahOverview     pat-viewer       200                      404 org-not-found
+getJonahOverview     pat-other-org    404 org-not-found        200
+getJonahOverview     pat-expired      401 unauthenticated      401 unauthenticated
+getJonahOverview     pat-revoked      401 unauthenticated      401 unauthenticated
+getJonahOverview     pat-demoted      404 factory-not-found    404 org-not-found
+getJonahOverview     pat-removed      401 unauthenticated      401 unauthenticated
+getJonahOverview     pat-platform     200                      404 org-not-found
+getJonahOverview     pat-deleted-org  401 unauthenticated      401 unauthenticated
 getJudge             anonymous        401 unauthenticated      401 unauthenticated
 getJudge             owner            200                      404 org-not-found
 getJudge             admin            200                      404 org-not-found
@@ -1690,6 +1768,32 @@ getOrgTouchMetrics   pat-demoted      200                      404 org-not-found
 getOrgTouchMetrics   pat-removed      401 unauthenticated      401 unauthenticated
 getOrgTouchMetrics   pat-platform     200                      404 org-not-found
 getOrgTouchMetrics   pat-deleted-org  401 unauthenticated      401 unauthenticated
+getProposal          anonymous        401 unauthenticated      401 unauthenticated
+getProposal          owner            200                      404 org-not-found
+getProposal          admin            200                      404 org-not-found
+getProposal          viewer           200                      404 org-not-found
+getProposal          approver         200                      404 org-not-found
+getProposal          editor           200                      404 org-not-found
+getProposal          member-no-roles  404 factory-not-found    404 org-not-found
+getProposal          other-org-owner  404 org-not-found        200
+getProposal          platform-admin   404 org-not-found        404 org-not-found
+getProposal          stale-owner      200                      404 org-not-found
+getProposal          key-scoped       200                      404 org-not-found
+getProposal          key-restricted   404 factory-not-found    404 org-not-found
+getProposal          key-other-org    404 org-not-found        200
+getProposal          key-expired      401 unauthenticated      401 unauthenticated
+getProposal          key-revoked      401 unauthenticated      401 unauthenticated
+getProposal          bearer-owner     200                      404 org-not-found
+getProposal          pat-approver     200                      404 org-not-found
+getProposal          pat-owner        200                      404 org-not-found
+getProposal          pat-viewer       200                      404 org-not-found
+getProposal          pat-other-org    404 org-not-found        200
+getProposal          pat-expired      401 unauthenticated      401 unauthenticated
+getProposal          pat-revoked      401 unauthenticated      401 unauthenticated
+getProposal          pat-demoted      404 factory-not-found    404 org-not-found
+getProposal          pat-removed      401 unauthenticated      401 unauthenticated
+getProposal          pat-platform     200                      404 org-not-found
+getProposal          pat-deleted-org  401 unauthenticated      401 unauthenticated
 getRun               anonymous        401 unauthenticated      401 unauthenticated
 getRun               owner            200                      404 org-not-found
 getRun               admin            200                      404 org-not-found
@@ -2652,6 +2756,32 @@ listPlatformAdmins   pat-demoted      install: 403 forbidden
 listPlatformAdmins   pat-removed      install: 401 unauthenticated
 listPlatformAdmins   pat-platform     install: 403 forbidden
 listPlatformAdmins   pat-deleted-org  install: 401 unauthenticated
+listProposals        anonymous        401 unauthenticated      401 unauthenticated
+listProposals        owner            200                      404 org-not-found
+listProposals        admin            200                      404 org-not-found
+listProposals        viewer           200                      404 org-not-found
+listProposals        approver         200                      404 org-not-found
+listProposals        editor           200                      404 org-not-found
+listProposals        member-no-roles  404 factory-not-found    404 org-not-found
+listProposals        other-org-owner  404 org-not-found        200
+listProposals        platform-admin   404 org-not-found        404 org-not-found
+listProposals        stale-owner      200                      404 org-not-found
+listProposals        key-scoped       200                      404 org-not-found
+listProposals        key-restricted   404 factory-not-found    404 org-not-found
+listProposals        key-other-org    404 org-not-found        200
+listProposals        key-expired      401 unauthenticated      401 unauthenticated
+listProposals        key-revoked      401 unauthenticated      401 unauthenticated
+listProposals        bearer-owner     200                      404 org-not-found
+listProposals        pat-approver     200                      404 org-not-found
+listProposals        pat-owner        200                      404 org-not-found
+listProposals        pat-viewer       200                      404 org-not-found
+listProposals        pat-other-org    404 org-not-found        200
+listProposals        pat-expired      401 unauthenticated      401 unauthenticated
+listProposals        pat-revoked      401 unauthenticated      401 unauthenticated
+listProposals        pat-demoted      404 factory-not-found    404 org-not-found
+listProposals        pat-removed      401 unauthenticated      401 unauthenticated
+listProposals        pat-platform     200                      404 org-not-found
+listProposals        pat-deleted-org  401 unauthenticated      401 unauthenticated
 listRunKnowledge     anonymous        401 unauthenticated      401 unauthenticated
 listRunKnowledge     owner            200                      404 org-not-found
 listRunKnowledge     admin            200                      404 org-not-found
@@ -3146,6 +3276,32 @@ putOrgPolicy         pat-demoted      403 forbidden            404 org-not-found
 putOrgPolicy         pat-removed      401 unauthenticated      401 unauthenticated
 putOrgPolicy         pat-platform     403 forbidden            404 org-not-found
 putOrgPolicy         pat-deleted-org  401 unauthenticated      401 unauthenticated
+queueJonahReview     anonymous        401 unauthenticated      401 unauthenticated
+queueJonahReview     owner            200                      404 org-not-found
+queueJonahReview     admin            200                      404 org-not-found
+queueJonahReview     viewer           403 forbidden            404 org-not-found
+queueJonahReview     approver         403 forbidden            404 org-not-found
+queueJonahReview     editor           200                      404 org-not-found
+queueJonahReview     member-no-roles  404 factory-not-found    404 org-not-found
+queueJonahReview     other-org-owner  404 org-not-found        200
+queueJonahReview     platform-admin   404 org-not-found        404 org-not-found
+queueJonahReview     stale-owner      200                      404 org-not-found
+queueJonahReview     key-scoped       403 forbidden            404 org-not-found
+queueJonahReview     key-restricted   404 factory-not-found    404 org-not-found
+queueJonahReview     key-other-org    404 org-not-found        200
+queueJonahReview     key-expired      401 unauthenticated      401 unauthenticated
+queueJonahReview     key-revoked      401 unauthenticated      401 unauthenticated
+queueJonahReview     bearer-owner     200                      404 org-not-found
+queueJonahReview     pat-approver     403 forbidden            404 org-not-found
+queueJonahReview     pat-owner        200                      404 org-not-found
+queueJonahReview     pat-viewer       403 forbidden            404 org-not-found
+queueJonahReview     pat-other-org    404 org-not-found        200
+queueJonahReview     pat-expired      401 unauthenticated      401 unauthenticated
+queueJonahReview     pat-revoked      401 unauthenticated      401 unauthenticated
+queueJonahReview     pat-demoted      404 factory-not-found    404 org-not-found
+queueJonahReview     pat-removed      401 unauthenticated      401 unauthenticated
+queueJonahReview     pat-platform     200                      404 org-not-found
+queueJonahReview     pat-deleted-org  401 unauthenticated      401 unauthenticated
 rejectItem           anonymous        401 unauthenticated      401 unauthenticated
 rejectItem           owner            200                      404 org-not-found
 rejectItem           admin            200                      404 org-not-found
@@ -3172,6 +3328,32 @@ rejectItem           pat-demoted      404 item-not-found       404 org-not-found
 rejectItem           pat-removed      401 unauthenticated      401 unauthenticated
 rejectItem           pat-platform     200                      404 org-not-found
 rejectItem           pat-deleted-org  401 unauthenticated      401 unauthenticated
+rejectProposal       anonymous        401 unauthenticated      401 unauthenticated
+rejectProposal       owner            200                      404 org-not-found
+rejectProposal       admin            200                      404 org-not-found
+rejectProposal       viewer           403 forbidden            404 org-not-found
+rejectProposal       approver         403 forbidden            404 org-not-found
+rejectProposal       editor           200                      404 org-not-found
+rejectProposal       member-no-roles  404 factory-not-found    404 org-not-found
+rejectProposal       other-org-owner  404 org-not-found        200
+rejectProposal       platform-admin   404 org-not-found        404 org-not-found
+rejectProposal       stale-owner      200                      404 org-not-found
+rejectProposal       key-scoped       403 forbidden            404 org-not-found
+rejectProposal       key-restricted   404 factory-not-found    404 org-not-found
+rejectProposal       key-other-org    404 org-not-found        200
+rejectProposal       key-expired      401 unauthenticated      401 unauthenticated
+rejectProposal       key-revoked      401 unauthenticated      401 unauthenticated
+rejectProposal       bearer-owner     200                      404 org-not-found
+rejectProposal       pat-approver     403 forbidden            404 org-not-found
+rejectProposal       pat-owner        200                      404 org-not-found
+rejectProposal       pat-viewer       403 forbidden            404 org-not-found
+rejectProposal       pat-other-org    404 org-not-found        200
+rejectProposal       pat-expired      401 unauthenticated      401 unauthenticated
+rejectProposal       pat-revoked      401 unauthenticated      401 unauthenticated
+rejectProposal       pat-demoted      404 factory-not-found    404 org-not-found
+rejectProposal       pat-removed      401 unauthenticated      401 unauthenticated
+rejectProposal       pat-platform     200                      404 org-not-found
+rejectProposal       pat-deleted-org  401 unauthenticated      401 unauthenticated
 removeFactoryRole    anonymous        401 unauthenticated      401 unauthenticated
 removeFactoryRole    owner            200                      404 org-not-found
 removeFactoryRole    admin            200                      404 org-not-found
