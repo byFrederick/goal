@@ -11,6 +11,35 @@ import (
 	"unicode/utf8"
 )
 
+// Refusals of a decision on a proposal and of a manual review (ADR 0034 decisions 2, 7 and 8).
+var (
+	// ErrProposalDraftOpen refuses Approve while the factory has an open draft.
+	ErrProposalDraftOpen = errors.New("the factory has an open draft: publish or discard it first, or edit the proposal into it")
+	// ErrProposalStale refuses Approve when a file the proposal edits changed since its review.
+	ErrProposalStale = errors.New("a file the proposal edits changed since it was made")
+	// ErrProposalDraftConflict refuses Edit when the draft's copy of a file is not the proposal's base.
+	ErrProposalDraftConflict = errors.New("the draft's copy of a file the proposal edits is not the one it was made against")
+	// ErrReviewInFlight refuses a manual review while one is pending or running.
+	ErrReviewInFlight = errors.New("a review of this factory is pending or running")
+	// ErrLearningBudgetExhausted refuses a review while the last 7 days' review runs cost
+	// learning.jonah.weeklyUsd or more.
+	ErrLearningBudgetExhausted = errors.New("this factory's review runs used their weekly budget")
+)
+
+// Audit actions of Jonah's decisions.
+const (
+	AuditProposalPublished = "learning_proposal.published"
+	AuditProposalApplied   = "learning_proposal.applied"
+	AuditProposalRejected  = "learning_proposal.rejected"
+	AuditReviewQueued      = "jonah_review.queued"
+)
+
+// Audit target kinds of Jonah's entries.
+const (
+	AuditTargetProposal    = "learning_proposal"
+	AuditTargetJonahReview = "jonah_review"
+)
+
 // RunKind is whose run an agent run is: a line's, at a station, or a Jonah review's (ADR 0034).
 type RunKind string
 
