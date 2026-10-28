@@ -88,9 +88,9 @@ describe('the mock credentials import', () => {
     expect(
       (await call('/credentials/import', 'POST', { format: 'yaml', text: 'no map here', dry_run: true })).status,
     ).toBe(400);
-    expect(
-      (await call('/credentials/import', 'POST', { format: 'env', text: 'AB=x', dry_run: true })).status,
-    ).toBe(400);
+    expect((await call('/credentials/import', 'POST', { format: 'env', text: 'AB=x', dry_run: true })).status).toBe(
+      400,
+    );
   });
 });
 
