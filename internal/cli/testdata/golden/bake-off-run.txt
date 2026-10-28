@@ -1,0 +1,10 @@
+exit 0
+--- stdout
+started bake-off bo1 of frontend-engineer (ship) on v3: 2 cases, 3 tries each on 3 models, about $4.50
+not priced, with no tries and no runs of their agent yet: review-step
+ARM  MODEL
+1    claude-opus-5-5    Now
+2    claude-sonnet-5-5
+3    claude-haiku-5-5
+follow it with: goal bake-off show bo1 --factory web
+--- stderr

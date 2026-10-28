@@ -1,0 +1,5 @@
+exit 0
+--- stdout
+wrote claude-haiku-5-5 as frontend-engineer's model in draft d7 (the draft of v4, revision 12)
+nothing is published: the draft publishes through the eval gate as any other (goal factory publish web)
+--- stderr

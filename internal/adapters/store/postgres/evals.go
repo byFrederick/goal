@@ -15,7 +15,7 @@ import (
 
 var _ ports.Evals = (*Evals)(nil)
 
-// Evals implements ports.Evals over 00068's eval_runs and eval_results, as goal_app under
+// Evals implements ports.Evals over 00068's eval_runs and eval_results and 00077's eval_run_arms, as goal_app under
 // row-level security: every statement sees the organization in ctx. A method that changes a try
 // and its run locks the try first, so claims, records and finishes never deadlock.
 type Evals struct{ s *Store }
@@ -50,19 +50,14 @@ func (e *Evals) CreateRun(ctx context.Context, n domain.NewEvalRun, by domain.Ac
 		return domain.EvalRun{}, err
 	}
 
-	cases := db.InsertEvalResultsParams{EvalRunID: id}
-	for _, c := range n.Cases {
-		cases.CaseNames = append(cases.CaseNames, c.Name)
-		cases.CaseSha256s = append(cases.CaseSha256s, string(c.SHA256))
-		cases.Tries = append(cases.Tries, int32(c.Tries)) //nolint:gosec // Check keeps tries positive; a case file's tries are small
-	}
+	cases := evalResultsParams(id, n.Cases)
 
 	var out domain.EvalRun
 
 	err = e.s.inTx(ctx, func(q *db.Queries) error {
 		r, err := q.InsertEvalRun(ctx, db.InsertEvalRunParams{
-			ID: id, FactoryID: factory, VersionID: version, ContentSha256: string(n.ContentSHA256), Trigger: string(n.Trigger),
-			Cases: optional(n.Case), EstimateUsd: n.EstimateUSD, CreatedBy: by.Ref(),
+			ID: id, Kind: string(domain.EvalKindEval), FactoryID: factory, VersionID: version, ContentSha256: string(n.ContentSHA256),
+			Trigger: string(n.Trigger), Cases: optional(n.Case), EstimateUsd: n.EstimateUSD, CreatedBy: by.Ref(),
 		})
 		if isForeignKeyViolation(err) {
 			return fmt.Errorf("factory %s or version %q of it: %w", n.FactoryID, n.VersionID, ports.ErrNotFound)
@@ -96,6 +91,18 @@ func (e *Evals) CreateRun(ctx context.Context, n domain.NewEvalRun, by domain.Ac
 	return out, nil
 }
 
+// evalResultsParams are one pending try per case and try, of arm 0 until the caller sets it.
+func evalResultsParams(run uuid.UUID, cases []domain.EvalCase) db.InsertEvalResultsParams {
+	p := db.InsertEvalResultsParams{EvalRunID: run}
+	for _, c := range cases {
+		p.CaseNames = append(p.CaseNames, c.Name)
+		p.CaseSha256s = append(p.CaseSha256s, string(c.SHA256))
+		p.Tries = append(p.Tries, int32(c.Tries)) //nolint:gosec // Check keeps tries positive; a case file's tries are small
+	}
+
+	return p
+}
+
 // ClaimResult implements ports.Evals.
 func (e *Evals) ClaimResult(ctx context.Context, now time.Time, lease time.Duration) (domain.EvalResult, error) {
 	var out domain.EvalResult
@@ -127,7 +134,7 @@ func (e *Evals) ClaimResult(ctx context.Context, now time.Time, lease time.Durat
 
 // RecordResult implements ports.Evals.
 func (e *Evals) RecordResult(ctx context.Context, claimed domain.EvalResult, o domain.EvalOutcome) error {
-	key := fmt.Sprintf("eval run %s case %s try %d", claimed.EvalRunID, claimed.Case, claimed.Try)
+	key := fmt.Sprintf("eval run %s arm %d case %s try %d", claimed.EvalRunID, claimed.Arm, claimed.Case, claimed.Try)
 
 	if err := o.Check(); err != nil {
 		return fmt.Errorf("record %s: %w", key, err)
@@ -157,8 +164,10 @@ func (e *Evals) RecordResult(ctx context.Context, claimed domain.EvalResult, o d
 	err = e.s.inTx(ctx, func(q *db.Queries) error {
 		n, err := q.RecordEvalResult(ctx, db.RecordEvalResultParams{
 			State: string(o.State), RunID: agentRun, CheckedBy: o.CheckedBy, Detail: detail, CostUsd: o.CostUSD,
-			Turns:     int32(o.Turns),                                                                       //nolint:gosec // Check keeps turns non-negative; a try's turns are small
-			EvalRunID: run, CaseName: claimed.Case, Try: int32(claimed.Try), LeaseUntil: claimed.LeaseUntil, //nolint:gosec // a claimed try
+			Turns:      int32(o.Turns), //nolint:gosec // Check keeps turns non-negative; a try's turns are small
+			DurationMs: o.Duration.Milliseconds(), EvalRunID: run,
+			Arm:      int16(claimed.Arm),                                                    //nolint:gosec // a claimed try's arm, 0 to 4
+			CaseName: claimed.Case, Try: int32(claimed.Try), LeaseUntil: claimed.LeaseUntil, //nolint:gosec // a claimed try
 		})
 		if isForeignKeyViolation(err) {
 			return fmt.Errorf("run %s: %w", o.RunID, ports.ErrNotFound)
@@ -308,8 +317,9 @@ func (e *Evals) CaseHistory(ctx context.Context, factory domain.FactoryID) ([]do
 		}
 
 		r, err := evalResultFrom(db.EvalResult{
-			EvalRunID: t.EvalRunID, CaseName: t.CaseName, CaseSha256: t.CaseSha256, Try: t.Try, State: t.State,
+			EvalRunID: t.EvalRunID, Arm: t.Arm, CaseName: t.CaseName, CaseSha256: t.CaseSha256, Try: t.Try, State: t.State,
 			LeaseUntil: t.LeaseUntil, RunID: t.RunID, CheckedBy: t.CheckedBy, Detail: t.Detail, CostUsd: t.CostUsd, Turns: t.Turns,
+			DurationMs: t.DurationMs,
 		})
 		if err != nil {
 			return nil, err
@@ -367,7 +377,7 @@ func evalRunFrom(r db.EvalRun) (domain.EvalRun, error) {
 	}
 
 	out := domain.EvalRun{
-		ID: domain.EvalRunID(r.ID.String()), FactoryID: domain.FactoryID(r.FactoryID.String()),
+		ID: domain.EvalRunID(r.ID.String()), Kind: domain.EvalRunKind(r.Kind), FactoryID: domain.FactoryID(r.FactoryID.String()),
 		ContentSHA256: domain.BlobHash(r.ContentSha256), Trigger: domain.EvalTrigger(r.Trigger), Case: deref(r.Cases),
 		State: domain.EvalRunState(r.State), EstimateUSD: r.EstimateUsd, CostUSD: r.CostUsd, CreatedBy: by,
 		CreatedAt: r.CreatedAt.UTC(),
@@ -386,8 +396,9 @@ func evalRunFrom(r db.EvalRun) (domain.EvalRun, error) {
 
 func evalResultFrom(r db.EvalResult) (domain.EvalResult, error) {
 	out := domain.EvalResult{
-		EvalRunID: domain.EvalRunID(r.EvalRunID.String()), Case: r.CaseName, CaseSHA256: domain.BlobHash(r.CaseSha256),
+		EvalRunID: domain.EvalRunID(r.EvalRunID.String()), Arm: int(r.Arm), Case: r.CaseName, CaseSHA256: domain.BlobHash(r.CaseSha256),
 		Try: int(r.Try), State: domain.EvalResultState(r.State), CheckedBy: r.CheckedBy, CostUSD: r.CostUsd, Turns: int(r.Turns),
+		Duration: time.Duration(r.DurationMs) * time.Millisecond,
 	}
 
 	if r.LeaseUntil != nil {
@@ -399,7 +410,7 @@ func evalResultFrom(r db.EvalResult) (domain.EvalResult, error) {
 	}
 
 	if err := json.Unmarshal(r.Detail, &out.Detail); err != nil {
-		return domain.EvalResult{}, fmt.Errorf("eval run %s case %s try %d detail: %w", r.EvalRunID, r.CaseName, r.Try, err)
+		return domain.EvalResult{}, fmt.Errorf("eval run %s arm %d case %s try %d detail: %w", r.EvalRunID, r.Arm, r.CaseName, r.Try, err)
 	}
 
 	return out, nil

@@ -5,9 +5,9 @@
 // may use when the kind is an MCP server (not built yet: the controls are disabled), and Add <kind>.
 // goald has no test of values before a connection exists (spec 4 §8.2), so Add opens the new
 // connection, which offers its test. Secret values leave the page once, in the create request, and
-// are cleared after it.
+// are cleared after it. A `next` path in the URL (the onboarding's Code step) takes the person back there instead.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate, useSearch } from '@tanstack/react-router';
+import { Link, useNavigate, useRouter, useSearch } from '@tanstack/react-router';
 import { Info, Plus, Search } from 'lucide-react';
 import { type FormEvent, type ReactNode, useDeferredValue, useId, useState } from 'react';
 import { ApiError } from '../../api/client';
@@ -30,7 +30,7 @@ import { kindSummary, refusalText } from './words';
 
 export function NewConnectionPage() {
   const org = useOrg();
-  const { kind: chosen } = useSearch({ from: '/o/$org/_org/connections/new' });
+  const { kind: chosen, next } = useSearch({ from: '/o/$org/_org/connections/new' });
   const navigate = useNavigate({ from: '/o/$org/connections/new' });
   const manage = useOrgHolds('connection:manage');
   const kindsQuery = useQuery(connectionKindsQuery(org.id));
@@ -97,7 +97,7 @@ export function NewConnectionPage() {
                   </div>
                 </div>
                 {manage ? (
-                  <ConnectionForm key={kind.name} kind={kind} connections={connections} />
+                  <ConnectionForm key={kind.name} kind={kind} connections={connections} next={next} />
                 ) : (
                   <Callout tone="note">{reasons.connections(org.name)}</Callout>
                 )}
@@ -265,10 +265,19 @@ function CatalogItem({
 }
 
 /** The write-only fields' order and the name, then the tools (MCP kinds), the status line and Add. */
-function ConnectionForm({ kind, connections }: { kind: ConnectionKind; connections: Connection[] }) {
+function ConnectionForm({
+  kind,
+  connections,
+  next,
+}: {
+  kind: ConnectionKind;
+  connections: Connection[];
+  next: string | undefined;
+}) {
   const org = useOrg();
   const client = useQueryClient();
   const navigate = useNavigate();
+  const router = useRouter();
   const taken = connections.map((c) => c.name);
   const [name, setName] = useState(() => suggestedName(kind.name, taken));
   const [values, setValues] = useState<Record<string, string>>({});
@@ -308,6 +317,10 @@ function ConnectionForm({ kind, connections }: { kind: ConnectionKind; connectio
       setValues({});
       client.setQueryData(keys.connection(org.id, created.name), created);
       await client.invalidateQueries({ queryKey: keys.connections(org.id) });
+      if (next) {
+        router.history.push(next);
+        return;
+      }
       await navigate({
         to: '/o/$org/connections/$connection',
         params: { org: org.slug, connection: created.name },

@@ -26,20 +26,70 @@ func (q *Queries) AddEvalRunCost(ctx context.Context, arg AddEvalRunCostParams) 
 	return err
 }
 
+const bakeOffs = `-- name: BakeOffs :many
+SELECT id, org_id, factory_id, version_id, content_sha256, trigger, cases, state, estimate_usd, cost_usd, created_by, created_at, finished_at, kind, station, agent, tries_per_case FROM eval_runs
+WHERE factory_id = $1 AND kind = 'bake-off'
+ORDER BY created_at DESC, id DESC
+LIMIT $2
+`
+
+type BakeOffsParams struct {
+	FactoryID uuid.UUID
+	MaxRuns   int32
+}
+
+func (q *Queries) BakeOffs(ctx context.Context, arg BakeOffsParams) ([]EvalRun, error) {
+	rows, err := q.db.Query(ctx, bakeOffs, arg.FactoryID, arg.MaxRuns)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EvalRun
+	for rows.Next() {
+		var i EvalRun
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrgID,
+			&i.FactoryID,
+			&i.VersionID,
+			&i.ContentSha256,
+			&i.Trigger,
+			&i.Cases,
+			&i.State,
+			&i.EstimateUsd,
+			&i.CostUsd,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.FinishedAt,
+			&i.Kind,
+			&i.Station,
+			&i.Agent,
+			&i.TriesPerCase,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const claimEvalResult = `-- name: ClaimEvalResult :one
 WITH next AS (
-  SELECT r.eval_run_id, r.case_name, r.try
+  SELECT r.eval_run_id, r.arm, r.case_name, r.try
   FROM eval_results r JOIN eval_runs e ON e.id = r.eval_run_id
   WHERE r.state IN ('pending', 'running') AND (r.state = 'pending' OR r.lease_until <= $2::timestamptz)
     AND e.state IN ('queued', 'running')
-  ORDER BY e.created_at, e.id, r.case_name, r.try
+  ORDER BY e.created_at, e.id, r.case_name, r.try, r.arm
   LIMIT 1
   FOR UPDATE OF r SKIP LOCKED
 )
 UPDATE eval_results r SET state = 'running', lease_until = $1::timestamptz
 FROM next
-WHERE r.eval_run_id = next.eval_run_id AND r.case_name = next.case_name AND r.try = next.try
-RETURNING r.eval_run_id, r.org_id, r.case_name, r.case_sha256, r.try, r.state, r.lease_until, r.run_id, r.checked_by, r.detail, r.cost_usd, r.turns
+WHERE r.eval_run_id = next.eval_run_id AND r.arm = next.arm AND r.case_name = next.case_name AND r.try = next.try
+RETURNING r.eval_run_id, r.org_id, r.case_name, r.case_sha256, r.try, r.state, r.lease_until, r.run_id, r.checked_by, r.detail, r.cost_usd, r.turns, r.arm, r.duration_ms
 `
 
 type ClaimEvalResultParams struct {
@@ -48,7 +98,7 @@ type ClaimEvalResultParams struct {
 }
 
 // The oldest claimable try: pending, or running with its lease ended, of a run not finished.
-// Tries another transaction holds are skipped.
+// Tries another transaction holds are skipped. A bake-off's arms take turns on each case and try.
 func (q *Queries) ClaimEvalResult(ctx context.Context, arg ClaimEvalResultParams) (EvalResult, error) {
 	row := q.db.QueryRow(ctx, claimEvalResult, arg.LeaseUntil, arg.Now)
 	var i EvalResult
@@ -65,6 +115,8 @@ func (q *Queries) ClaimEvalResult(ctx context.Context, arg ClaimEvalResultParams
 		&i.Detail,
 		&i.CostUsd,
 		&i.Turns,
+		&i.Arm,
+		&i.DurationMs,
 	)
 	return i, err
 }
@@ -74,7 +126,7 @@ SELECT DISTINCT ON (c.case_name) c.case_name, c.eval_run_id, c.cost_usd::numeric
 FROM (
   SELECT r.case_name, r.eval_run_id, e.created_at, sum(r.cost_usd) AS cost_usd
   FROM eval_results r JOIN eval_runs e ON e.id = r.eval_run_id
-  WHERE e.factory_id = $1 AND r.state IN ('pass', 'fail', 'error')
+  WHERE e.factory_id = $1 AND e.kind = 'eval' AND r.state IN ('pass', 'fail', 'error')
   GROUP BY r.case_name, r.eval_run_id, e.created_at
 ) c
 ORDER BY c.case_name, c.created_at DESC, c.eval_run_id DESC
@@ -86,7 +138,7 @@ type EvalCaseLatestCostsRow struct {
 	CostUsd   float64
 }
 
-// Each case's cost in the latest of the factory's runs that finished a try of it.
+// Each case's cost in the latest of the factory's eval runs that finished a try of it.
 func (q *Queries) EvalCaseLatestCosts(ctx context.Context, factoryID uuid.UUID) ([]EvalCaseLatestCostsRow, error) {
 	rows, err := q.db.Query(ctx, evalCaseLatestCosts, factoryID)
 	if err != nil {
@@ -108,12 +160,12 @@ func (q *Queries) EvalCaseLatestCosts(ctx context.Context, factoryID uuid.UUID) 
 }
 
 const evalCaseTries = `-- name: EvalCaseTries :many
-SELECT t.eval_run_id, t.case_name, t.case_sha256, t.try, t.state, t.lease_until, t.run_id, t.checked_by, t.detail,
-       t.cost_usd, t.turns, t.n::bigint AS n
+SELECT t.eval_run_id, t.arm, t.case_name, t.case_sha256, t.try, t.state, t.lease_until, t.run_id, t.checked_by, t.detail,
+       t.cost_usd, t.turns, t.duration_ms, t.n::bigint AS n
 FROM (
-  SELECT r.eval_run_id, r.org_id, r.case_name, r.case_sha256, r.try, r.state, r.lease_until, r.run_id, r.checked_by, r.detail, r.cost_usd, r.turns, row_number() OVER (PARTITION BY r.case_name ORDER BY e.created_at DESC, e.id DESC, r.try DESC) AS n
+  SELECT r.eval_run_id, r.org_id, r.case_name, r.case_sha256, r.try, r.state, r.lease_until, r.run_id, r.checked_by, r.detail, r.cost_usd, r.turns, r.arm, r.duration_ms, row_number() OVER (PARTITION BY r.case_name ORDER BY e.created_at DESC, e.id DESC, r.try DESC) AS n
   FROM eval_results r JOIN eval_runs e ON e.id = r.eval_run_id
-  WHERE e.factory_id = $1 AND r.state IN ('pass', 'fail', 'error')
+  WHERE e.factory_id = $1 AND e.kind = 'eval' AND r.state IN ('pass', 'fail', 'error')
 ) t
 WHERE t.n <= $2::bigint
 ORDER BY t.case_name, t.n
@@ -126,6 +178,7 @@ type EvalCaseTriesParams struct {
 
 type EvalCaseTriesRow struct {
 	EvalRunID  uuid.UUID
+	Arm        int16
 	CaseName   string
 	CaseSha256 string
 	Try        int32
@@ -136,10 +189,12 @@ type EvalCaseTriesRow struct {
 	Detail     []byte
 	CostUsd    float64
 	Turns      int32
+	DurationMs int64
 	N          int64
 }
 
-// Each case's last finished tries in the factory's runs, newest first (n from 1).
+// Each case's last finished tries in the factory's eval runs, newest first (n from 1). A
+// bake-off's tries ran other models, so they do not price the next run.
 func (q *Queries) EvalCaseTries(ctx context.Context, arg EvalCaseTriesParams) ([]EvalCaseTriesRow, error) {
 	rows, err := q.db.Query(ctx, evalCaseTries, arg.FactoryID, arg.Tries)
 	if err != nil {
@@ -151,6 +206,7 @@ func (q *Queries) EvalCaseTries(ctx context.Context, arg EvalCaseTriesParams) ([
 		var i EvalCaseTriesRow
 		if err := rows.Scan(
 			&i.EvalRunID,
+			&i.Arm,
 			&i.CaseName,
 			&i.CaseSha256,
 			&i.Try,
@@ -161,6 +217,7 @@ func (q *Queries) EvalCaseTries(ctx context.Context, arg EvalCaseTriesParams) ([
 			&i.Detail,
 			&i.CostUsd,
 			&i.Turns,
+			&i.DurationMs,
 			&i.N,
 		); err != nil {
 			return nil, err
@@ -174,7 +231,7 @@ func (q *Queries) EvalCaseTries(ctx context.Context, arg EvalCaseTriesParams) ([
 }
 
 const evalResults = `-- name: EvalResults :many
-SELECT eval_run_id, org_id, case_name, case_sha256, try, state, lease_until, run_id, checked_by, detail, cost_usd, turns FROM eval_results WHERE eval_run_id = $1 ORDER BY case_name, try
+SELECT eval_run_id, org_id, case_name, case_sha256, try, state, lease_until, run_id, checked_by, detail, cost_usd, turns, arm, duration_ms FROM eval_results WHERE eval_run_id = $1 ORDER BY arm, case_name, try
 `
 
 func (q *Queries) EvalResults(ctx context.Context, evalRunID uuid.UUID) ([]EvalResult, error) {
@@ -199,6 +256,8 @@ func (q *Queries) EvalResults(ctx context.Context, evalRunID uuid.UUID) ([]EvalR
 			&i.Detail,
 			&i.CostUsd,
 			&i.Turns,
+			&i.Arm,
+			&i.DurationMs,
 		); err != nil {
 			return nil, err
 		}
@@ -211,7 +270,7 @@ func (q *Queries) EvalResults(ctx context.Context, evalRunID uuid.UUID) ([]EvalR
 }
 
 const evalRun = `-- name: EvalRun :one
-SELECT id, org_id, factory_id, version_id, content_sha256, trigger, cases, state, estimate_usd, cost_usd, created_by, created_at, finished_at FROM eval_runs WHERE id = $1
+SELECT id, org_id, factory_id, version_id, content_sha256, trigger, cases, state, estimate_usd, cost_usd, created_by, created_at, finished_at, kind, station, agent, tries_per_case FROM eval_runs WHERE id = $1
 `
 
 func (q *Queries) EvalRun(ctx context.Context, id uuid.UUID) (EvalRun, error) {
@@ -231,14 +290,58 @@ func (q *Queries) EvalRun(ctx context.Context, id uuid.UUID) (EvalRun, error) {
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.FinishedAt,
+		&i.Kind,
+		&i.Station,
+		&i.Agent,
+		&i.TriesPerCase,
 	)
 	return i, err
+}
+
+const evalRunArms = `-- name: EvalRunArms :many
+SELECT eval_run_id, org_id, arm, model, is_current, summarized_at, tries, passed, errors, cost_per_item_usd, ms_per_item, mean_turns, judge, judged_share, per_case FROM eval_run_arms WHERE eval_run_id = ANY ($1::uuid[]) ORDER BY eval_run_id, arm
+`
+
+func (q *Queries) EvalRunArms(ctx context.Context, evalRunIds []uuid.UUID) ([]EvalRunArm, error) {
+	rows, err := q.db.Query(ctx, evalRunArms, evalRunIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EvalRunArm
+	for rows.Next() {
+		var i EvalRunArm
+		if err := rows.Scan(
+			&i.EvalRunID,
+			&i.OrgID,
+			&i.Arm,
+			&i.Model,
+			&i.IsCurrent,
+			&i.SummarizedAt,
+			&i.Tries,
+			&i.Passed,
+			&i.Errors,
+			&i.CostPerItemUsd,
+			&i.MsPerItem,
+			&i.MeanTurns,
+			&i.Judge,
+			&i.JudgedShare,
+			&i.PerCase,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const finishEvalRun = `-- name: FinishEvalRun :one
 UPDATE eval_runs SET state = $1, finished_at = $2
 WHERE id = $3
-RETURNING id, org_id, factory_id, version_id, content_sha256, trigger, cases, state, estimate_usd, cost_usd, created_by, created_at, finished_at
+RETURNING id, org_id, factory_id, version_id, content_sha256, trigger, cases, state, estimate_usd, cost_usd, created_by, created_at, finished_at, kind, station, agent, tries_per_case
 `
 
 type FinishEvalRunParams struct {
@@ -264,29 +367,36 @@ func (q *Queries) FinishEvalRun(ctx context.Context, arg FinishEvalRunParams) (E
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.FinishedAt,
+		&i.Kind,
+		&i.Station,
+		&i.Agent,
+		&i.TriesPerCase,
 	)
 	return i, err
 }
 
 const insertEvalResults = `-- name: InsertEvalResults :exec
-INSERT INTO eval_results (eval_run_id, case_name, case_sha256, try)
-SELECT $1::uuid, c.name, c.sha256, t.try
-FROM (SELECT unnest($2::text[]) AS name, unnest($3::text[]) AS sha256,
-             unnest($4::integer[]) AS tries) c
+INSERT INTO eval_results (eval_run_id, arm, case_name, case_sha256, try)
+SELECT $1::uuid, $2::smallint, c.name, c.sha256, t.try
+FROM (SELECT unnest($3::text[]) AS name, unnest($4::text[]) AS sha256,
+             unnest($5::integer[]) AS tries) c
 CROSS JOIN LATERAL generate_series(1, c.tries) AS t (try)
 `
 
 type InsertEvalResultsParams struct {
 	EvalRunID   uuid.UUID
+	Arm         int16
 	CaseNames   []string
 	CaseSha256s []string
 	Tries       []int32
 }
 
-// One pending try per case and try number: case i gets tries 1 to tries[i].
+// One pending try of the arm (0 in an eval run) per case and try number: case i gets tries 1 to
+// tries[i].
 func (q *Queries) InsertEvalResults(ctx context.Context, arg InsertEvalResultsParams) error {
 	_, err := q.db.Exec(ctx, insertEvalResults,
 		arg.EvalRunID,
+		arg.Arm,
 		arg.CaseNames,
 		arg.CaseSha256s,
 		arg.Tries,
@@ -296,14 +406,17 @@ func (q *Queries) InsertEvalResults(ctx context.Context, arg InsertEvalResultsPa
 
 const insertEvalRun = `-- name: InsertEvalRun :one
 
-INSERT INTO eval_runs (id, factory_id, version_id, content_sha256, trigger, cases, estimate_usd, created_by)
-VALUES ($1, $2, $3, $4, $5,
-        $6, $7, $8)
-RETURNING id, org_id, factory_id, version_id, content_sha256, trigger, cases, state, estimate_usd, cost_usd, created_by, created_at, finished_at
+INSERT INTO eval_runs (id, kind, factory_id, version_id, content_sha256, trigger, cases, estimate_usd, created_by,
+                       station, agent, tries_per_case)
+VALUES ($1, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10, $11,
+        $12)
+RETURNING id, org_id, factory_id, version_id, content_sha256, trigger, cases, state, estimate_usd, cost_usd, created_by, created_at, finished_at, kind, station, agent, tries_per_case
 `
 
 type InsertEvalRunParams struct {
 	ID            uuid.UUID
+	Kind          string
 	FactoryID     uuid.UUID
 	VersionID     *uuid.UUID
 	ContentSha256 string
@@ -311,14 +424,18 @@ type InsertEvalRunParams struct {
 	Cases         *string
 	EstimateUsd   float64
 	CreatedBy     string
+	Station       *string
+	Agent         *string
+	TriesPerCase  *int16
 }
 
-// Eval runs and their tries (00068), under row-level security: every statement sees the
+// Eval runs and their tries (00068), a bake-off's arms (00077), under row-level security: every statement sees the
 // transaction's organization only. A store method locks a try before its run (ClaimEvalResult,
 // RecordEvalResult, then the run's update), so two methods never wait on each other in a cycle.
 func (q *Queries) InsertEvalRun(ctx context.Context, arg InsertEvalRunParams) (EvalRun, error) {
 	row := q.db.QueryRow(ctx, insertEvalRun,
 		arg.ID,
+		arg.Kind,
 		arg.FactoryID,
 		arg.VersionID,
 		arg.ContentSha256,
@@ -326,6 +443,9 @@ func (q *Queries) InsertEvalRun(ctx context.Context, arg InsertEvalRunParams) (E
 		arg.Cases,
 		arg.EstimateUsd,
 		arg.CreatedBy,
+		arg.Station,
+		arg.Agent,
+		arg.TriesPerCase,
 	)
 	var i EvalRun
 	err := row.Scan(
@@ -342,13 +462,35 @@ func (q *Queries) InsertEvalRun(ctx context.Context, arg InsertEvalRunParams) (E
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.FinishedAt,
+		&i.Kind,
+		&i.Station,
+		&i.Agent,
+		&i.TriesPerCase,
 	)
 	return i, err
 }
 
+const insertEvalRunArms = `-- name: InsertEvalRunArms :exec
+INSERT INTO eval_run_arms (eval_run_id, arm, model, is_current)
+SELECT $1::uuid, a.ord::smallint, a.model, a.model = $2::text
+FROM unnest($3::text[]) WITH ORDINALITY AS a (model, ord)
+`
+
+type InsertEvalRunArmsParams struct {
+	EvalRunID    uuid.UUID
+	CurrentModel string
+	Models       []string
+}
+
+// A bake-off's arms, numbered from 1 in the order given.
+func (q *Queries) InsertEvalRunArms(ctx context.Context, arg InsertEvalRunArmsParams) error {
+	_, err := q.db.Exec(ctx, insertEvalRunArms, arg.EvalRunID, arg.CurrentModel, arg.Models)
+	return err
+}
+
 const latestEvalRunForContent = `-- name: LatestEvalRunForContent :one
-SELECT id, org_id, factory_id, version_id, content_sha256, trigger, cases, state, estimate_usd, cost_usd, created_by, created_at, finished_at FROM eval_runs
-WHERE factory_id = $1 AND content_sha256 = $2
+SELECT id, org_id, factory_id, version_id, content_sha256, trigger, cases, state, estimate_usd, cost_usd, created_by, created_at, finished_at, kind, station, agent, tries_per_case FROM eval_runs
+WHERE factory_id = $1 AND content_sha256 = $2 AND kind = 'eval'
 ORDER BY created_at DESC, id DESC
 LIMIT 1
 `
@@ -358,6 +500,7 @@ type LatestEvalRunForContentParams struct {
 	ContentSha256 string
 }
 
+// The publish gate's run: a bake-off runs other models, so it never counts.
 func (q *Queries) LatestEvalRunForContent(ctx context.Context, arg LatestEvalRunForContentParams) (EvalRun, error) {
 	row := q.db.QueryRow(ctx, latestEvalRunForContent, arg.FactoryID, arg.ContentSha256)
 	var i EvalRun
@@ -375,12 +518,16 @@ func (q *Queries) LatestEvalRunForContent(ctx context.Context, arg LatestEvalRun
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.FinishedAt,
+		&i.Kind,
+		&i.Station,
+		&i.Agent,
+		&i.TriesPerCase,
 	)
 	return i, err
 }
 
 const lockEvalRun = `-- name: LockEvalRun :one
-SELECT id, org_id, factory_id, version_id, content_sha256, trigger, cases, state, estimate_usd, cost_usd, created_by, created_at, finished_at FROM eval_runs WHERE id = $1 FOR UPDATE
+SELECT id, org_id, factory_id, version_id, content_sha256, trigger, cases, state, estimate_usd, cost_usd, created_by, created_at, finished_at, kind, station, agent, tries_per_case FROM eval_runs WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockEvalRun(ctx context.Context, id uuid.UUID) (EvalRun, error) {
@@ -400,6 +547,10 @@ func (q *Queries) LockEvalRun(ctx context.Context, id uuid.UUID) (EvalRun, error
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.FinishedAt,
+		&i.Kind,
+		&i.Station,
+		&i.Agent,
+		&i.TriesPerCase,
 	)
 	return i, err
 }
@@ -407,9 +558,9 @@ func (q *Queries) LockEvalRun(ctx context.Context, id uuid.UUID) (EvalRun, error
 const recordEvalResult = `-- name: RecordEvalResult :execrows
 UPDATE eval_results
 SET state = $1, lease_until = NULL, run_id = $2, checked_by = $3,
-    detail = $4, cost_usd = $5, turns = $6
-WHERE eval_run_id = $7 AND case_name = $8 AND try = $9
-  AND state = 'running' AND lease_until = $10::timestamptz
+    detail = $4, cost_usd = $5, turns = $6, duration_ms = $7
+WHERE eval_run_id = $8 AND arm = $9 AND case_name = $10 AND try = $11
+  AND state = 'running' AND lease_until = $12::timestamptz
 `
 
 type RecordEvalResultParams struct {
@@ -419,7 +570,9 @@ type RecordEvalResultParams struct {
 	Detail     []byte
 	CostUsd    float64
 	Turns      int32
+	DurationMs int64
 	EvalRunID  uuid.UUID
+	Arm        int16
 	CaseName   string
 	Try        int32
 	LeaseUntil time.Time
@@ -434,10 +587,54 @@ func (q *Queries) RecordEvalResult(ctx context.Context, arg RecordEvalResultPara
 		arg.Detail,
 		arg.CostUsd,
 		arg.Turns,
+		arg.DurationMs,
 		arg.EvalRunID,
+		arg.Arm,
 		arg.CaseName,
 		arg.Try,
 		arg.LeaseUntil,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const recordEvalRunArmSummary = `-- name: RecordEvalRunArmSummary :execrows
+UPDATE eval_run_arms
+SET summarized_at = now(), tries = $1, passed = $2, errors = $3,
+    cost_per_item_usd = $4, ms_per_item = $5, mean_turns = $6,
+    judge = $7, judged_share = $8, per_case = $9
+WHERE eval_run_id = $10 AND arm = $11
+`
+
+type RecordEvalRunArmSummaryParams struct {
+	Tries          *int32
+	Passed         *int32
+	Errors         *int32
+	CostPerItemUsd *float64
+	MsPerItem      *int64
+	MeanTurns      *float64
+	Judge          *string
+	JudgedShare    *float64
+	PerCase        []byte
+	EvalRunID      uuid.UUID
+	Arm            int16
+}
+
+func (q *Queries) RecordEvalRunArmSummary(ctx context.Context, arg RecordEvalRunArmSummaryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordEvalRunArmSummary,
+		arg.Tries,
+		arg.Passed,
+		arg.Errors,
+		arg.CostPerItemUsd,
+		arg.MsPerItem,
+		arg.MeanTurns,
+		arg.Judge,
+		arg.JudgedShare,
+		arg.PerCase,
+		arg.EvalRunID,
+		arg.Arm,
 	)
 	if err != nil {
 		return 0, err

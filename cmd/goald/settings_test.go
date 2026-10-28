@@ -285,6 +285,33 @@ func TestSettings_Models(t *testing.T) {
 	}
 }
 
+// The bake-off models: none by default; GOAL_BAKEOFF_MODELS lists model ids, and a value that is
+// not a list of them refuses to start, naming the variable.
+func TestSettings_BakeOffModels(t *testing.T) {
+	t.Parallel()
+
+	s, err := settingsFrom(envOf(nil))
+	if err != nil || len(s.BakeOffModels) != 0 {
+		t.Fatalf("default bake-off models = %v (%v), want none", s.BakeOffModels, err)
+	}
+
+	s, err = settingsFrom(envOf(map[string]string{"GOAL_BAKEOFF_MODELS": " claude-sonnet-5-5 , claude-haiku-5-5"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if want := []string{"claude-sonnet-5-5", "claude-haiku-5-5"}; !slices.Equal(s.BakeOffModels, want) {
+		t.Errorf("bake-off models = %v, want %v", s.BakeOffModels, want)
+	}
+
+	for _, bad := range []string{"gpt-5", "claude-haiku-5-5,,claude-sonnet-5-5", "claude-haiku-5-5,claude-haiku-5-5", "Claude-Opus"} {
+		_, err := settingsFrom(envOf(map[string]string{"GOAL_BAKEOFF_MODELS": bad}))
+		if err == nil || !strings.Contains(err.Error(), "GOAL_BAKEOFF_MODELS") {
+			t.Errorf("GOAL_BAKEOFF_MODELS=%q: err = %v, want a refusal naming it", bad, err)
+		}
+	}
+}
+
 // The egress addresses: none by default; GOAL_EGRESS_ADDRESSES lists CIDRs, and a value that is
 // not one refuses to start, naming the variable.
 func TestSettings_EgressAddresses(t *testing.T) {

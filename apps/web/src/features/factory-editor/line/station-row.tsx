@@ -433,8 +433,10 @@ function OrderButton({
   );
 }
 
-function WipStepper({
+/** A number a station sets with − and +: its WIP limit, or its copies (`noun`, "copies"). Shared with onboarding's Line step. */
+export function WipStepper({
   label,
+  noun = 'WIP limit',
   wip,
   onChange,
   onBlur,
@@ -443,6 +445,8 @@ function WipStepper({
   readOnly,
 }: {
   label: string;
+  /** What the number is, for screen readers and the buttons: "WIP limit" (the default) or "copies". */
+  noun?: string;
   wip: number | undefined;
   onChange: (wip: number | undefined) => void;
   onBlur: () => void;
@@ -454,11 +458,13 @@ function WipStepper({
   const atMin = (wip ?? 1) <= 1;
   return (
     <fieldset className="m-0 inline-flex min-w-0 items-center gap-1 border-0 p-0">
-      <legend className="sr-only">WIP limit for {label}</legend>
+      <legend className="sr-only">
+        {noun} for {label}
+      </legend>
       {readOnly ? null : (
         <button
           type="button"
-          aria-label={`Lower the WIP limit of ${label}`}
+          aria-label={`Lower the ${noun} of ${label}`}
           aria-disabled={atMin || undefined}
           onClick={() => {
             if (!atMin) onChange((wip ?? 2) - 1);
@@ -471,7 +477,7 @@ function WipStepper({
       <input
         inputMode="numeric"
         value={wip ?? ''}
-        aria-label={`WIP limit of ${label}`}
+        aria-label={`${noun} of ${label}`}
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
         onChange={(e) => {
@@ -489,7 +495,7 @@ function WipStepper({
       {readOnly ? null : (
         <button
           type="button"
-          aria-label={`Raise the WIP limit of ${label}`}
+          aria-label={`Raise the ${noun} of ${label}`}
           onClick={() => onChange((wip ?? 0) + 1)}
           className={iconButton}
         >

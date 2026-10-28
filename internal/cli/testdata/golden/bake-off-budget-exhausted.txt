@@ -1,0 +1,4 @@
+exit 1
+--- stdout
+--- stderr
+goal: refused: the bake-off would cost about $4.50, more than is left of this week's learning budget (not priced: review-step); run it with fewer models or --trials, or wait for the budget to renew
