@@ -284,23 +284,12 @@ func (s *server) GetProposal(ctx context.Context, req gen.GetProposalRequestObje
 	out := gen.GetProposal200JSONResponse{
 		Number: e.Number, Title: e.Title, State: e.State, CreatedAt: e.CreatedAt, Paths: e.Paths, Agents: e.Agents,
 		Estimate: e.Estimate, EvidenceCount: e.EvidenceCount, Summary: p.Summary,
-		Files: make([]gen.ProposalFile, 0, len(p.Files)), Evidence: make([]gen.ProposalEvidence, 0, len(p.Evidence)),
+		Evidence:           make([]gen.ProposalEvidence, 0, len(p.Evidence)),
 		MadeAgainstVersion: made.Number, PublishesAsVersion: rec.LastVersionNumber + 1,
 	}
 
-	for _, f := range p.Files {
-		base := ""
-
-		if f.BaseSHA256 != "" {
-			file, err := s.defs.VersionFile(ctx, rec.ID, authoring.VersionSelector{Kind: authoring.SelectNumber, Number: made.Number}, f.Path)
-			if err != nil && !errors.Is(err, authoring.ErrFileNotFound) {
-				return nil, fmt.Errorf("read %s of v%d: %w", f.Path, made.Number, err)
-			}
-
-			base = string(file.Content)
-		}
-
-		out.Files = append(out.Files, gen.ProposalFile{Path: f.Path, BaseSha256: f.BaseSHA256, BaseContent: base, Content: f.Content})
+	if out.Files, err = s.proposalFilesOut(ctx, rec.ID, p, made.Number); err != nil {
+		return nil, err
 	}
 
 	for _, ev := range p.Evidence {
@@ -329,6 +318,29 @@ func (s *server) GetProposal(ctx context.Context, req gen.GetProposalRequestObje
 
 	if p.DecidedBy != "" {
 		out.DecidedBy, out.DecidedAt = &p.DecidedBy, &p.DecidedAt
+	}
+
+	return out, nil
+}
+
+// proposalFilesOut are p's files, each with its content in version made of f (empty for a new
+// file).
+func (s *server) proposalFilesOut(ctx context.Context, f domain.FactoryID, p domain.Proposal, made int) ([]gen.ProposalFile, error) {
+	out := make([]gen.ProposalFile, 0, len(p.Files))
+
+	for _, file := range p.Files {
+		base := ""
+
+		if file.BaseSHA256 != "" {
+			b, err := s.defs.VersionFile(ctx, f, authoring.VersionSelector{Kind: authoring.SelectNumber, Number: made}, file.Path)
+			if err != nil && !errors.Is(err, authoring.ErrFileNotFound) {
+				return nil, fmt.Errorf("read %s of v%d: %w", file.Path, made, err)
+			}
+
+			base = string(b.Content)
+		}
+
+		out = append(out, gen.ProposalFile{Path: file.Path, BaseSha256: file.BaseSHA256, BaseContent: base, Content: file.Content})
 	}
 
 	return out, nil

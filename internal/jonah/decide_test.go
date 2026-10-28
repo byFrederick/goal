@@ -3,6 +3,8 @@ package jonah_test
 import (
 	"context"
 	"errors"
+	"maps"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -45,7 +47,7 @@ func (d *definition) Head(context.Context, domain.FactoryID) (domain.DefinitionV
 }
 
 func versionID(n int) domain.DefinitionVersionID {
-	return domain.DefinitionVersionID("v" + string(rune('0'+n)))
+	return domain.DefinitionVersionID("v" + strconv.Itoa(n))
 }
 
 func (d *definition) CurrentFile(_ context.Context, _ domain.FactoryID, path string) ([]byte, bool, error) {
@@ -74,9 +76,9 @@ func (d *definition) OpenDraft(context.Context, domain.FactoryID) (int64, bool, 
 		return d.revision, false, nil
 	}
 
-	d.draft = map[string]string{}
-	for p, c := range d.current {
-		d.draft[p] = c
+	d.draft = maps.Clone(d.current)
+	if d.draft == nil {
+		d.draft = map[string]string{}
 	}
 
 	d.revision++
@@ -204,7 +206,7 @@ func newDecideFixture(t *testing.T) (*decideFixture, context.Context) {
 	return f, ctx
 }
 
-func (f *decideFixture) state(t *testing.T, ctx context.Context) domain.Proposal {
+func (f *decideFixture) state(ctx context.Context, t *testing.T) domain.Proposal {
 	t.Helper()
 
 	p, err := f.store.Proposal(ctx, factory, 1)
@@ -275,8 +277,8 @@ func TestDecide_ApproveRefusals(t *testing.T) {
 				t.Fatalf("approve = %v, want ErrProposalStale", err)
 			}
 
-			if f.def.draft != nil || f.state(t, ctx).State != domain.ProposalProposed {
-				t.Errorf("after a stale approve draft = %v, proposal %s; want no draft and still proposed", f.def.draft, f.state(t, ctx).State)
+			if f.def.draft != nil || f.state(ctx, t).State != domain.ProposalProposed {
+				t.Errorf("after a stale approve draft = %v, proposal %s; want no draft and still proposed", f.def.draft, f.state(ctx, t).State)
 			}
 		})
 	}
@@ -291,7 +293,7 @@ func TestDecide_ApproveRefusals(t *testing.T) {
 			t.Fatalf("approve = %v, want the gate's refusal", err)
 		}
 
-		if f.def.draft == nil || f.def.discarded != 0 || f.state(t, ctx).State != domain.ProposalProposed {
+		if f.def.draft == nil || f.def.discarded != 0 || f.state(ctx, t).State != domain.ProposalProposed {
 			t.Errorf("after the gate draft = %v, discarded %d; want it open and the proposal proposed", f.def.draft, f.def.discarded)
 		}
 	})

@@ -57,6 +57,14 @@ import (
 	"github.com/byFrederick/goal/internal/retention"
 )
 
+// jonahDeps serve the Jonah routes over store: decisions publish and edit through the same
+// authoring service as the builder.
+func jonahDeps(store *postgres.Store, authors *authoring.Service, clock ports.Clock, log *slog.Logger) *api.JonahDeps {
+	return &api.JonahDeps{Store: store, Decisions: jonah.NewDecider(jonah.DecideDeps{
+		Proposals: store, Authoring: api.NewJonahAuthoring(authors), Audit: store, Clock: clock, Log: log,
+	})}
+}
+
 // minKeyBytes is the shortest gateway key goald accepts (openssl rand -hex 32 gives 64).
 const minKeyBytes = 32
 
@@ -224,11 +232,6 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// Platform admins, the security log and the sign-in clean-up: install-level, in no organization.
 	platform := postgres.NewPlatform(store)
 
-	// Jonah's decisions publish and edit through the same authoring service as the builder.
-	decisions := jonah.NewDecider(jonah.DecideDeps{
-		Proposals: store, Authoring: api.NewJonahAuthoring(authors), Audit: store, Clock: clock, Log: log,
-	})
-
 	apiHandler, err := api.New(api.Deps{
 		Engine: eng, Items: store, Factories: defs, Definitions: authors, Versions: definitionStore, Orgs: store, Audit: store, OrgRetention: s.OrgRetention,
 		Authorizer: authorizer(s.Auth, clock), Auth: api.AuthConfig{
@@ -238,7 +241,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Connections: connections, Credentials: credentials, Intake: intake, ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
-		Jonah: &api.JonahDeps{Store: store, Decisions: decisions},
+		Jonah: jonahDeps(store, authors, clock, log),
 		Clock: clock, Logger: log,
 	})
 	if err != nil {

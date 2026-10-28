@@ -1,8 +1,11 @@
 package api_test
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -16,11 +19,15 @@ import (
 )
 
 const (
-	acmeJonah     = "/v1/orgs/acme/factories/acme/jonah"
-	acmeProposals = acmeJonah + "/proposals"
-	rulePath      = "rules/evidence.md"
-	writerNew     = "# writer\nAttach a screenshot.\n"
-	ruleNew       = "Show evidence.\n"
+	permFactoryRead    = domain.Permission("factory:read")
+	permDefinitionEdit = domain.Permission("definition:edit")
+	acmeJonah          = "/v1/orgs/acme/factories/acme/jonah"
+	acmeProposals      = acmeJonah + "/proposals"
+	rulePath           = "rules/evidence.md"
+	writerNew          = "# writer\nAttach a screenshot.\n"
+	ruleNew            = "Show evidence.\n"
+	// reviewStation is where the evidence of TestJonah_Reads was sent back.
+	reviewStation = "review"
 )
 
 var (
@@ -263,8 +270,8 @@ func TestJonah_RejectProposal(t *testing.T) {
 		t.Errorf("%d %s entries, want 1", n, domain.AuditProposalRejected)
 	}
 
-	for _, c := range []struct{ verb, body string }{{"approve", ""}, {"edit", ""}, {"reject", `{"reason":"again"}`}} {
-		code, p := problemOfCall(t, h, http.MethodPost, path+"/"+c.verb, c.body)
+	for _, c := range []struct{ verb, body string }{{"/approve", ""}, {"/edit", ""}, {"/reject", `{"reason":"again"}`}} {
+		code, p := problemOfCall(t, h, http.MethodPost, path+c.verb, c.body)
 		wantProblem(t, c.verb+" of a decided proposal", code, p, http.StatusConflict, "proposal-decided")
 	}
 
@@ -335,7 +342,7 @@ func TestJonah_Permissions(t *testing.T) {
 	// An API key that may read and edit acme but not publish.
 	h.as(domain.Principal{
 		Kind: domain.PrincipalService, Key: "019a0000-0000-7000-8000-0000000000ed", Name: "ci", Org: testOrg,
-		Scopes: []domain.Permission{"factory:read", "definition:edit"}, KeyCeiling: domain.FactoryEditor,
+		Scopes: []domain.Permission{permFactoryRead, permDefinitionEdit}, KeyCeiling: domain.FactoryEditor,
 	})
 
 	code, p := problemOfCall(t, h, http.MethodPost, path+"/approve", "")
@@ -375,8 +382,8 @@ func TestJonah_Reads(t *testing.T) {
 	stored := h.review(t, []domain.NewProposal{
 		{
 			Title: "Ask for a screenshot", Summary: "Four UI changes came back without one.", Files: files,
-			Evidence: []domain.ProposalEvidence{{ItemID: domain.ItemID(it.Id), Station: "review", Quote: "No screenshot."}},
-			Estimate: domain.ProposalEstimate{Metric: domain.MetricSentBackRate, Station: "review", Before: 0.4, After: 0.2, CostPerItemUSD: 0.05},
+			Evidence: []domain.ProposalEvidence{{ItemID: domain.ItemID(it.Id), Station: reviewStation, Quote: "No screenshot."}},
+			Estimate: domain.ProposalEstimate{Metric: domain.MetricSentBackRate, Station: reviewStation, Before: 0.4, After: 0.2, CostPerItemUSD: 0.05},
 		},
 		{Title: "Tighten the rule", Files: files[1:]},
 	},
@@ -392,86 +399,124 @@ func TestJonah_Reads(t *testing.T) {
 
 	h.jonahRun(t, 1.5)
 
+	h.wantOverview(t, stored[0].Number, it.Ref)
+	h.wantProposalPages(t, stored)
+	h.wantProposal(t, stored[0].Number, files, it)
+}
+
+// wantOverview checks the overview of TestJonah_Reads: proposal became the first observation,
+// which rests on ref.
+func (h *harness) wantOverview(t *testing.T, proposal int64, ref string) {
+	t.Helper()
+
 	var ov gen.JonahOverview
 	if code := h.call(t, http.MethodGet, acmeJonah, "", &ov); code != http.StatusOK {
 		t.Fatalf("overview = %d, want 200", code)
 	}
 
-	if ov.Policy.ProposeAfter != 5 || ov.Policy.WeeklyUsd != 10 || !ov.Policy.Enabled || strings.Join(ov.Policy.ApproverRoles, ",") != "owner,admin,editor" {
-		t.Errorf("policy = %+v, want the defaults approved by owner, admin and editor", ov.Policy)
+	wantPolicy := gen.JonahPolicy{Enabled: true, ProposeAfter: 5, WeeklyUsd: 10, ApproverRoles: []string{"owner", "admin", "editor"}}
+	if !reflect.DeepEqual(ov.Policy, wantPolicy) {
+		t.Errorf("policy = %+v, want %+v", ov.Policy, wantPolicy)
 	}
 
-	if ov.Waiting != 1 || ov.MonthCostUsd != 1.5 || ov.LastReview == nil || ov.LastReview.State != gen.JonahReviewStateDone {
-		t.Errorf("overview = %+v, want 1 waiting, $1.50 this month and the last review done", ov)
+	if got := fmt.Sprintf("%d %g %s", ov.Waiting, ov.MonthCostUsd, val(ov.LastReview).State); got != "1 1.5 done" {
+		t.Errorf("waiting, month's cost and last review = %s, want 1 1.5 done", got)
 	}
 
-	if len(ov.Observations) != 2 {
-		t.Fatalf("observations = %+v, want 2", ov.Observations)
+	type seen struct {
+		Summary, State string
+		Count, Of      int
+		Proposal       int64
+		Items          string
 	}
 
+	got := []seen{}
 	for _, o := range ov.Observations {
-		switch o.Summary {
-		case "UI changes lack screenshots":
-			if o.State != "proposed" || val(o.Proposal) != stored[0].Number || len(o.ItemRefs) != 1 || o.ItemRefs[0] != it.Ref || o.Count != 4 || o.ProposeAfter != 5 {
-				t.Errorf("proposed observation = %+v, want proposal %d resting on %s", o, stored[0].Number, it.Ref)
-			}
-		default:
-			if o.State != "watching" || o.Proposal != nil || o.Count != 3 {
-				t.Errorf("watched observation = %+v, want watching 3 of 5", o)
-			}
-		}
+		got = append(got, seen{o.Summary, string(o.State), o.Count, o.ProposeAfter, val(o.Proposal), strings.Join(o.ItemRefs, ",")})
 	}
 
-	// The list: newest first, by state, one page at a time.
+	slices.SortFunc(got, func(a, b seen) int { return strings.Compare(a.State, b.State) })
+
+	want := []seen{{"UI changes lack screenshots", "proposed", 4, 5, proposal, ref}, {"Tests skipped", "watching", 3, 5, 0, ""}}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("observations = %+v, want %+v", got, want)
+	}
+}
+
+// proposalPage lists acme's proposals with query and returns the page.
+func (h *harness) proposalPage(t *testing.T, query string) gen.ProposalPage {
+	t.Helper()
+
 	var page gen.ProposalPage
-	if code := h.call(t, http.MethodGet, acmeProposals+"?limit=1", "", &page); code != http.StatusOK {
-		t.Fatalf("list = %d, want 200", code)
+	if code := h.call(t, http.MethodGet, acmeProposals+"?"+query, "", &page); code != http.StatusOK {
+		t.Fatalf("list ?%s = %d, want 200", query, code)
 	}
 
-	if len(page.Proposals) != 1 || page.Proposals[0].Number != stored[1].Number || page.Next == nil {
-		t.Fatalf("first page = %+v, want proposal %d and a next page", page, stored[1].Number)
+	return page
+}
+
+// numbers are page's proposal numbers and its next, 0 when it has none.
+func numbers(page gen.ProposalPage) string {
+	out := []string{}
+	for _, p := range page.Proposals {
+		out = append(out, strconv.FormatInt(p.Number, 10)+":"+string(p.State))
 	}
 
-	after := *page.Next
-	page = gen.ProposalPage{}
+	return fmt.Sprint(out, " next ", val(page.Next))
+}
 
-	if code := h.call(t, http.MethodGet, acmeProposals+"?limit=1&after="+strconv.FormatInt(after, 10), "", &page); code != http.StatusOK {
-		t.Fatalf("second page = %d, want 200", code)
+// wantProposalPages checks the list of TestJonah_Reads' stored proposals: the second is rejected.
+func (h *harness) wantProposalPages(t *testing.T, stored []domain.Proposal) {
+	t.Helper()
+
+	// Newest first, one page at a time.
+	first := h.proposalPage(t, "limit=1")
+	if got, want := numbers(first), fmt.Sprintf("[%d:rejected] next %d", stored[1].Number, stored[1].Number); got != want {
+		t.Fatalf("first page = %s, want %s", got, want)
 	}
 
-	if len(page.Proposals) != 1 || page.Next != nil {
-		t.Fatalf("second page = %+v, want the last proposal and no next", page)
+	second := h.proposalPage(t, "limit=1&after="+strconv.FormatInt(val(first.Next), 10))
+	if got, want := numbers(second), fmt.Sprintf("[%d:proposed] next 0", stored[0].Number); got != want {
+		t.Fatalf("second page = %s, want %s", got, want)
 	}
 
-	e := page.Proposals[0]
-	if e.Number != stored[0].Number || strings.Join(e.Paths, ",") != writerFile+","+rulePath || strings.Join(e.Agents, ",") != writerAgent ||
-		e.EvidenceCount != 1 || e.Estimate == nil || e.Estimate.Before != 0.4 || e.Estimate.CostPerItemUsd != 0.05 {
-		t.Errorf("entry = %+v, want its paths, the writer, 1 piece of evidence and its estimate", e)
+	e := second.Proposals[0]
+	got := fmt.Sprint(e.Paths, e.Agents, e.EvidenceCount, val(e.Estimate))
+	want := fmt.Sprint([]string{writerFile, rulePath}, []string{writerAgent}, 1,
+		gen.ProposalEstimate{Metric: gen.SentBackRate, Station: reviewStation, Before: 0.4, After: 0.2, CostPerItemUsd: 0.05})
+
+	if got != want {
+		t.Errorf("entry = %s, want %s", got, want)
 	}
 
-	page = gen.ProposalPage{}
+	if got, want := numbers(h.proposalPage(t, "state=rejected")), fmt.Sprintf("[%d:rejected] next 0", stored[1].Number); got != want {
+		t.Errorf("rejected = %s, want %s", got, want)
+	}
+}
 
-	if code := h.call(t, http.MethodGet, acmeProposals+"?state=rejected", "", &page); code != http.StatusOK || len(page.Proposals) != 1 ||
-		page.Proposals[0].State != gen.ProposalStateRejected {
-		t.Errorf("rejected = %d %+v, want the one rejected", code, page)
+// wantProposal checks proposal number of TestJonah_Reads, which edits files and rests on it.
+func (h *harness) wantProposal(t *testing.T, number int64, files []domain.ProposalFile, it gen.Item) {
+	t.Helper()
+
+	p := h.getProposal(t, acmeProposals+"/"+strconv.FormatInt(number, 10))
+	if got := fmt.Sprint(p.MadeAgainstVersion, p.PublishesAsVersion, p.Summary != ""); got != "1 2 true" {
+		t.Errorf("versions and summary = %s, want 1 2 true", got)
 	}
 
-	// The proposal: base and new content, evidence and versions.
-	p := h.getProposal(t, acmeProposals+"/"+strconv.FormatInt(stored[0].Number, 10))
-	if p.MadeAgainstVersion != 1 || p.PublishesAsVersion != 2 || len(p.Files) != 2 || p.Summary == "" {
-		t.Fatalf("proposal = %+v, want 2 files from v1 to v2", p)
+	wantFiles := []gen.ProposalFile{
+		{Path: writerFile, BaseSha256: files[0].BaseSHA256, BaseContent: writerPrompt, Content: writerNew},
+		{Path: rulePath, Content: ruleNew},
+	}
+	if !reflect.DeepEqual(p.Files, wantFiles) {
+		t.Errorf("files = %+v, want %+v", p.Files, wantFiles)
 	}
 
-	if f := p.Files[0]; f.BaseContent != writerPrompt || f.Content != writerNew || f.BaseSha256 != files[0].BaseSHA256 {
-		t.Errorf("edited file = %+v, want v1's prompt and the new one", f)
-	}
+	station := reviewStation
 
-	if f := p.Files[1]; f.BaseContent != "" || f.BaseSha256 != "" || f.Content != ruleNew {
-		t.Errorf("new file = %+v, want no base", f)
-	}
-
-	if len(p.Evidence) != 1 || p.Evidence[0].ItemRef != it.Ref || p.Evidence[0].ItemTitle != it.Title || p.Evidence[0].Quote != "No screenshot." {
-		t.Errorf("evidence = %+v, want %s with its title and quote", p.Evidence, it.Ref)
+	wantEvidence := []gen.ProposalEvidence{{ItemRef: it.Ref, ItemTitle: it.Title, Station: &station, Quote: "No screenshot."}}
+	if !reflect.DeepEqual(p.Evidence, wantEvidence) {
+		t.Errorf("evidence = %+v, want %+v", p.Evidence, wantEvidence)
 	}
 
 	code, pr := problemOfCall(t, h, http.MethodGet, acmeProposals+"/99", "")
