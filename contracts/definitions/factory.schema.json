@@ -388,6 +388,17 @@
               "type": "string",
               "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
               "description": "An event field, dotted (check.name); passes when no open item this trigger created holds the same value of it."
+            },
+            "modelAgrees": {
+              "type": "object",
+              "description": "The model check, run last: passes when a model answers yes to the question about the event, which it reads as untrusted data.",
+              "required": ["question"],
+              "additionalProperties": false,
+              "properties": {
+                "question": { "type": "string", "description": "The yes or no question the model answers about the event: not blank, at most 500 characters." },
+                "connection": { "type": "string", "description": "The organization connection that pays for the check; runtime.modelConnection when unset." },
+                "model": { "type": "string", "description": "The model asked; the connection kind's default when unset." }
+              }
             }
           }
         },
