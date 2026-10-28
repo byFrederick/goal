@@ -1695,6 +1695,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Try the trigger with one of its past events, creating nothing
+         * @description A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+         */
+        post: operations["tryIntakeTrigger"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/metrics/lead-time": {
         parameters: {
             query?: never;
@@ -5126,6 +5153,8 @@ export interface components {
             events: components["schemas"]["IntakeEvent"][];
         };
         IntakeEvent: {
+            /** @description The firing's id */
+            id: string;
             /** @description The event's value of the trigger's only.dedupe field, or its event key without one */
             title: string;
             /** @description The event key it matched */
@@ -5143,6 +5172,60 @@ export interface components {
              */
             item_number: number | null;
             /** @description Why it was skipped; null otherwise */
+            reason: string | null;
+        };
+        TriggerTryRequest: {
+            /** @description The id of one of the trigger's 20 newest events */
+            firing: string;
+        };
+        /** @description What the trigger would do with the event now. Every string shaped by the event (the item's title and brief, the model's reason, a step's reason) is text to show as text, never markup. */
+        TriggerTry: {
+            /** @description The firing tried */
+            firing: string;
+            /** @description The event reached the trigger (its when step passed) */
+            matched: boolean;
+            /**
+             * @description would_create when no step skips the event; skipped otherwise
+             * @enum {string}
+             */
+            outcome: "would_create" | "skipped";
+            /** @description The reason a skipped firing would record (the step, a colon and why); null for would_create */
+            reason: string | null;
+            /** @description In the order they run: when, each configured only condition (failuresInARow, dedupe, then modelAgrees), create, then each configured limit (perDay, pauseOnBudget). Steps after the one that skipped are not_reached. */
+            steps: components["schemas"]["TriggerTryStep"][];
+            /** @description The item it would create; null when the create step was not reached */
+            item: {
+                type: string;
+                station: string;
+                lane: string | null;
+                expedite: boolean;
+                /** @description create.title rendered with the event's fields */
+                title: string;
+                /** @description The item's body, create.brief rendered, then the event's fields marked as untrusted data */
+                brief: string;
+            } | null;
+            /** @description The model check's answer; null when it did not run or gave no answer */
+            model_check: {
+                /** @description The model answered yes */
+                worth: boolean;
+                /** @description The model's one-line reason */
+                reason: string;
+                model: string;
+                input_tokens: number;
+                output_tokens: number;
+                /**
+                 * Format: double
+                 * @description What the check cost
+                 */
+                cost_usd: number;
+            } | null;
+        };
+        TriggerTryStep: {
+            /** @enum {string} */
+            step: "when" | "only.failuresInARow" | "only.dedupe" | "only.modelAgrees" | "create" | "limits.perDay" | "limits.pauseOnBudget";
+            /** @enum {string} */
+            outcome: "passed" | "skipped" | "not_reached";
+            /** @description Why it passed or skipped; null when not reached or with nothing to say */
             reason: string | null;
         };
         LeadTimeBridge: {
@@ -9449,6 +9532,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IntakeTriggerDetail"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    tryIntakeTrigger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TriggerTryRequest"];
+            };
+        };
+        responses: {
+            /** @description What the trigger would do with the event */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TriggerTry"];
                 };
             };
             default: components["responses"]["Problem"];

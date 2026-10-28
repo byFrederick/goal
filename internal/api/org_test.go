@@ -285,7 +285,11 @@ var probes = map[string]probe{
 	"getTouchMetrics":     {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/metrics/touches", org: testOrg, factory: acmeID},
 	"getIntake":           {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/intake", org: testOrg, factory: acmeID},
 	"getIntakeTrigger":    {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/intake/triggers/nightly-audit", org: testOrg, factory: acmeID},
-	"getOrgTouchMetrics":  {method: http.MethodGet, path: "/v1/orgs/acme/metrics/touches", org: testOrg},
+	"tryIntakeTrigger": {
+		method: http.MethodPost, path: "/v1/orgs/acme/factories/acme/intake/triggers/nightly-audit/try", body: `{"firing":"no-such-firing"}`,
+		org: testOrg, factory: acmeID,
+	},
+	"getOrgTouchMetrics": {method: http.MethodGet, path: "/v1/orgs/acme/metrics/touches", org: testOrg},
 	"setTouchReason": {
 		method: http.MethodPut, path: "/v1/orgs/acme/items/acme%231/touches/1/reason", body: `{"reason":"other"}`, org: testOrg, factory: acmeID,
 	},

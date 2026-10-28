@@ -347,6 +347,15 @@ every other line and comment stays byte for byte. A file with no `triggers` key,
 trigger written in place (and `board` under `spec` when that is missing too). The draft-model API cannot carry `board.triggers`
 yet (`internal/factorymodel/model.go`), which is why the page does not use it.
 
+Try with a past event (ADR 0028, `trigger-try.tsx`) opens a dialog that runs `POST …/intake/triggers/{trigger}/try`
+(`tryIntakeTrigger`, through the `intakeTryMutation` key) against one of the trigger's events. It tries the
+saved trigger, not the open edits: Try is disabled with its reason while the form has unsaved edits, for a
+trigger that is not saved yet, for a trigger that is not a schedule (its events are not stored, the API's
+`event-not-stored`) and for a schedule with no past events. The result says whether the event matched, each step,
+the item it would create and, when the Only if has the model check, the model's answer and its cost; it also says
+nothing was created. The model check's question is the Only if's `modelAgrees.question`, written with the other
+keys; a blank question blocks Save. The connection and model of `modelAgrees` are kept as the file has them.
+
 Rules the page follows:
 - A draft with edits of its own blocks the save, with a link to the definition editor: the page never
   publishes someone else's draft. An invalid save leaves this page's own write in the draft, so that write does not

@@ -55,6 +55,7 @@ spec:
         cron: "0 6 * * MON-FRI"
         timeZone: Europe/Berlin
         create: { type: feature, station: inbox, title: "Nightly audit" }
+        limits: { perDay: 1 }
       - name: flaky-test-on-main
         on: github.check_run.failed
         only: { dedupe: check }
@@ -426,9 +427,11 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		h.publishImport(t, authors, files)
 	}
 
+	h.intake = porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), h.store)
+
 	e, err := engine.New(engine.Deps{
 		Store: h.store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
-		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock,
+		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock, Intake: h.intake, Audit: tenancy,
 		CodeHosts:   map[string]ports.CodeHost{"github": h.codehost},
 		Connections: sharedRules{Connections: engineConnections(t, newTenancy(t)), h: h},
 		Credentials: porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), tenancy, nil),
@@ -472,7 +475,6 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.platform = porttest.NewPlatform(h.keys)
 
 	connections := h.connections(t, tenancy)
-	h.intake = porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), h.store)
 
 	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,

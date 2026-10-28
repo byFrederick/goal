@@ -17,11 +17,10 @@ const modelCheckFailed = "Model check failed"
 // errNoModelCheck means the engine was built without a model check (Deps.ModelCheck).
 var errNoModelCheck = errors.New("no model check (Deps.ModelCheck)")
 
-// modelAgrees runs t's only.modelAgrees on ev and returns why it skips the event: the model's
-// reason on a no, modelCheckFailed when the check gave no answer; "" on a yes. A failure never
-// passes. It logs the check without the event's text, the question, the reason or any connection
-// value.
-func (e *Engine) modelAgrees(ctx context.Context, l domain.Line, t domain.Trigger, ev domain.IntakeEvent) string {
+// modelAgrees runs t's only.modelAgrees on ev and returns the model's answer with its reason on
+// one line, or no answer and modelCheckFailed when the check gave none. Only a yes passes. It logs
+// the check without the event's text, the question, the reason or any connection value.
+func (e *Engine) modelAgrees(ctx context.Context, l domain.Line, t domain.Trigger, ev domain.IntakeEvent) (*domain.ModelAnswer, string) {
 	m := t.Only.ModelAgrees
 	attrs := []any{
 		slog.String("org_id", string(l.OrgID)), slog.String("factory", string(l.FactoryID)), slog.String("trigger", t.Name),
@@ -33,7 +32,7 @@ func (e *Engine) modelAgrees(ctx context.Context, l domain.Line, t domain.Trigge
 		e.log.WarnContext(ctx, "trigger model check", append(attrs, slog.String("model", m.Model), slog.String("outcome", "failed"),
 			slog.String("error", err.Error()))...)
 
-		return stepModel + ": " + modelCheckFailed
+		return nil, modelCheckFailed
 	}
 
 	outcome := "no"
@@ -45,16 +44,17 @@ func (e *Engine) modelAgrees(ctx context.Context, l domain.Line, t domain.Trigge
 		slog.String("model", cmp.Or(ans.Model, m.Model)), slog.String("outcome", outcome),
 		slog.Int("input_tokens", ans.InputTokens), slog.Int("output_tokens", ans.OutputTokens), slog.Float64("cost_usd", ans.CostUSD))...)
 
-	if ans.Worth {
-		return ""
-	}
-
 	reason := domain.PlainValue(ans.Reason, domain.MaxModelReason)
-	if reason == "" {
+
+	switch {
+	case reason != "":
+	case ans.Worth:
+		reason = "the model answered yes"
+	default:
 		reason = "the model answered no"
 	}
 
-	return stepModel + ": " + reason
+	return &ans, reason
 }
 
 // askModel resolves the check's connection (only.modelAgrees.connection, else the runtime's model

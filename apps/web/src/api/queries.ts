@@ -7,6 +7,7 @@ import {
   infiniteQueryOptions,
   isCancelledError,
   keepPreviousData,
+  mutationOptions,
   type QueryClient,
   type QueryKey,
   queryOptions,
@@ -70,7 +71,7 @@ import {
   listVersions,
   validateDraft,
 } from './definitions';
-import { definitionFile, getIntake, getIntakeTrigger } from './intake';
+import { definitionFile, getIntake, getIntakeTrigger, tryIntakeTrigger } from './intake';
 import { listApiKeys, listMemberTokens, listPersonalTokens } from './keys';
 import {
   getKnowledgeDocument,
@@ -657,6 +658,16 @@ export const intakeTriggerQuery = (org: string, factory: string, trigger: string
   queryOptions({
     queryKey: intakeKeys.trigger(org, factory, trigger),
     queryFn: ({ signal }) => getIntakeTrigger(org, factory, trigger, signal),
+  });
+
+/**
+ * A dry run of the saved trigger against one of its events (ADR 0028). A mutation, not a cached read: each
+ * try is a new answer, so its key sits under the trigger's and the result is never reused.
+ */
+export const intakeTryMutation = (org: string, factory: string, trigger: string) =>
+  mutationOptions({
+    mutationKey: [...intakeKeys.trigger(org, factory, trigger), 'try'],
+    mutationFn: (firing: string) => tryIntakeTrigger(org, factory, trigger, firing),
   });
 
 /**
