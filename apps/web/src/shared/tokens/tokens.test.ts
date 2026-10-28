@@ -53,6 +53,7 @@ describe('what a personal token can do', () => {
         'knowledge:read',
         'knowledge:verdict',
         'org:read',
+        'trigger:try',
       ].sort(),
     );
   });

@@ -20,6 +20,7 @@ import type {
   ItemState,
   Org,
   Run,
+  ToolApproval,
   VersionRef,
 } from '@goal/api-client';
 import type { Judge } from '../src/api/types.ts';
@@ -64,6 +65,8 @@ export interface MockItem {
   waitsOn?: MockWaitsOn;
   /** The agent's open question (Item.question), null once answered or withdrawn by a move, pause or send back. */
   question?: ItemQuestion | null;
+  /** The tool call the agent asked to make that waits for a person (Item.tool_approval, ADR 0031), null once decided. */
+  tool_approval?: ToolApproval | null;
   /** The assembly it is a part of (the assembly's item id) and its place among the parts, 1-based. */
   partOf?: { id: string; part: number };
 }
@@ -216,6 +219,16 @@ type Step =
   | { waiting: true; reason?: string }
   /** The agent asks a person a question: the run ends and the item waits (ADR 0018). */
   | { ask: { text: string; choices: string[]; agent: string } }
+  /** The agent asks to make an Ask-first tool call: the run ends and the item waits (ADR 0031). */
+  | {
+      tool_approval: {
+        connection: string;
+        tool: string;
+        input: unknown;
+        agent: string;
+        always_allow_offered: boolean;
+      };
+    }
   | { blocked: string }
   | { done: true };
 
@@ -1656,6 +1669,33 @@ const softwareSeeds: Seed[] = [
     updatedMin: 50,
     steps: [],
   },
+  {
+    number: 151,
+    title: 'Webhook as an intake source',
+    type: 'feature',
+    body: 'Intake takes a POST from a webhook and makes it a work item.',
+    station: 'spec',
+    state: 'waiting_human',
+    agent: 'architect',
+    createdMin: 240,
+    updatedMin: 4,
+    steps: [
+      {
+        tool_approval: {
+          connection: 'github',
+          tool: 'add_issue_comment',
+          input: {
+            body: 'Thanks for the request. This is being built as #151: a webhook source on the Intake page that turns a POST into a work item. I will link the pull request here when it opens.',
+            issue_number: 212,
+            owner: 'byFrederick',
+            repo: 'goal',
+          },
+          agent: 'architect',
+          always_allow_offered: true,
+        },
+      },
+    ],
+  },
   ...[17, 18, 19, 20, 21, 22, 23].map((number) => ({
     number,
     title: `Merged change ${number}`,
@@ -1817,6 +1857,28 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
           asked_at,
           agent: step.ask.agent,
           run_id: run,
+        };
+      } else if ('tool_approval' in step) {
+        const call = step.tool_approval;
+        const run = `${id.slice(-6)}-run-${runs}`;
+        const asked_at = item.updated_at;
+        push('tool_approval_requested', call.agent, {
+          connection: call.connection,
+          tool: call.tool,
+          input: call.input,
+          agent: call.agent,
+          run_id: run,
+          always_allow_offered: call.always_allow_offered,
+        });
+        item.tool_approval = {
+          id: state.nextEventId - 1,
+          connection: call.connection,
+          tool: call.tool,
+          input: call.input,
+          agent: call.agent,
+          run_id: run,
+          asked_at,
+          always_allow_offered: call.always_allow_offered,
         };
       } else if ('blocked' in step) {
         push('blocked', 'engine', { reason: step.blocked });

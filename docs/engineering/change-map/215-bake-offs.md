@@ -1,6 +1,6 @@
 ## When you change
 
-The bake-off store: the `eval_run_arms` table and the bake-off columns of `eval_runs` (`kind`, `station`, `agent`, `tries_per_case`) and `eval_results` (`arm`, `duration_ms`) (`db/migrations/00075_bake_offs.sql` and the migrations after it), their queries in `db/queries/evals.sql`, or the adapter's bake-off methods (`internal/adapters/store/postgres/bakeoffs.go`)
+The bake-off store: the `eval_run_arms` table and the bake-off columns of `eval_runs` (`kind`, `station`, `agent`, `tries_per_case`) and `eval_results` (`arm`, `duration_ms`) (`db/migrations/00077_bake_offs.sql` and the migrations after it), their queries in `db/queries/evals.sql`, or the adapter's bake-off methods (`internal/adapters/store/postgres/bakeoffs.go`)
 
 ## Also change
 

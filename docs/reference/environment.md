@@ -148,6 +148,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_FEEDBACK` | config | no | The reviewer's feedback on an earlier attempt, which the agent's task prompt includes. |
 | `GOAL_GATEWAY_TOKEN` | secret | yes | The run's gateway token, which the worker fetches its bundle and reaches the MCP gateway with. |
 | `GOAL_GATEWAY_URL` | config | yes | The MCP gateway's URL: for goald it defaults from the listeners; the worker needs it to fetch its run's bundle. |
+| `GOAL_GIT_ATTEMPT_TIMEOUT` | config | no | The time limit in seconds of each attempt of a network git step in goal-agent prepare (the clone, the base branch's push and fetch); a cut-off attempt is retried. 300 when unset. |
 
 ## The control Worker (`apps/control-worker`, its vars and Secrets Store bindings in `deploy/cloudflare/wrangler.jsonc`)
 

@@ -49,7 +49,7 @@ func bakeOffOf(state gen.BakeOffState) gen.BakeOff {
 		Arms: []gen.BakeOffArm{
 			{Arm: 1, Model: "claude-opus-5-5", IsCurrent: true},
 			{Arm: 2, Model: "claude-sonnet-5-5"},
-			{Arm: 3, Model: "claude-haiku-5-5"},
+			{Arm: 3, Model: cliHaiku},
 		},
 		PerCase: []gen.BakeOffCase{
 			{Case: "lease-fix", Arms: []gen.BakeOffCaseArm{{Arm: 1, Passed: 2}, {Arm: 2, Passed: 1}, {Arm: 3, Passed: 0}}},

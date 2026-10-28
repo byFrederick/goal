@@ -7,6 +7,7 @@ import {
   infiniteQueryOptions,
   isCancelledError,
   keepPreviousData,
+  mutationOptions,
   type QueryClient,
   type QueryKey,
   queryOptions,
@@ -47,6 +48,7 @@ import {
   listMembers,
   listOrgRuns,
   listOrgs,
+  listSavedViews,
   type RunsFilter,
 } from './client';
 import {
@@ -71,14 +73,16 @@ import {
   listVersions,
   validateDraft,
 } from './definitions';
-import { definitionFile, getIntake, getIntakeTrigger } from './intake';
+import { definitionFile, getIntake, getIntakeTrigger, tryIntakeTrigger } from './intake';
 import { listApiKeys, listMemberTokens, listPersonalTokens } from './keys';
 import {
   getKnowledgeDocument,
   getKnowledgeSource,
+  getKnowledgeUsage,
   type KnowledgeQuery,
   type KnowledgeSourceFilter,
   listKnowledgeDocuments,
+  listKnowledgeDocumentUses,
   listKnowledgeSources,
   searchKnowledge,
 } from './knowledge';
@@ -178,6 +182,10 @@ export const keys = {
   knowledgeDocuments: (org: string, name: string) => ['org', org, 'knowledge', 'source', name, 'documents'] as const,
   knowledgeDocument: (org: string, id: string) => ['org', org, 'knowledge', 'document', id] as const,
   knowledgeSearch: (org: string, query: KnowledgeQuery) => ['org', org, 'knowledge', 'search', query] as const,
+  /** Where one source's documents were used over `days` days (ADR 0027, decision 3). */
+  knowledgeUsage: (org: string, source: string, days: number) =>
+    ['org', org, 'knowledge', 'usage', source, days] as const,
+  knowledgeDocumentUses: (org: string, id: string) => ['org', org, 'knowledge', 'document', id, 'uses'] as const,
   /** The shell's search box (sidebar-search.tsx): one entry per debounced query and limit. */
   search: (org: string, query: SearchQuery) => ['org', org, 'search', query] as const,
   /** The prefix of every factory overview window. */
@@ -233,7 +241,16 @@ export const keys = {
   judges: (org: string, factory: string) => ['org', org, 'factory', factory, 'judges'] as const,
   /** The factory's intake (sources and triggers); item and definition events refresh it. */
   intake: (org: string, factory: string) => ['org', org, 'factory', factory, 'intake'] as const,
+  /** The factory's saved views (ADR 0020): the Items page's nav. Its mutations invalidate it. */
+  views: (org: string, factory: string) => ['org', org, 'factory', factory, 'views'] as const,
 };
+
+/** The factory's saved views, shared ones first (listSavedViews). */
+export const viewsQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: keys.views(org, factory),
+    queryFn: ({ signal }) => listSavedViews(org, factory, signal),
+  });
 
 export const intakeQuery = (org: string, factory: string) =>
   queryOptions({
@@ -387,6 +404,23 @@ export const knowledgeDocumentQuery = (org: string, id: string) =>
   queryOptions({
     queryKey: keys.knowledgeDocument(org, id),
     queryFn: ({ signal }) => getKnowledgeDocument(org, id, signal),
+    staleTime: 30_000,
+    retry: retryUnlessRefused,
+  });
+
+/** Where a source's documents were used over the last `days` days (7 by default), the most used first. */
+export const knowledgeUsageQuery = (org: string, source: string, days = 7) =>
+  queryOptions({
+    queryKey: keys.knowledgeUsage(org, source, days),
+    queryFn: ({ signal }) => getKnowledgeUsage(org, source, days, signal),
+    staleTime: 30_000,
+  });
+
+/** The first page of the runs that used a document, newest first (the card's uses under a document). */
+export const knowledgeDocumentUsesQuery = (org: string, id: string, limit = 50) =>
+  queryOptions({
+    queryKey: keys.knowledgeDocumentUses(org, id),
+    queryFn: ({ signal }) => listKnowledgeDocumentUses(org, id, { limit }, signal),
     staleTime: 30_000,
     retry: retryUnlessRefused,
   });
@@ -646,6 +680,16 @@ export const intakeTriggerQuery = (org: string, factory: string, trigger: string
   queryOptions({
     queryKey: intakeKeys.trigger(org, factory, trigger),
     queryFn: ({ signal }) => getIntakeTrigger(org, factory, trigger, signal),
+  });
+
+/**
+ * A dry run of the saved trigger against one of its events (ADR 0028). A mutation, not a cached read: each
+ * try is a new answer, so its key sits under the trigger's and the result is never reused.
+ */
+export const intakeTryMutation = (org: string, factory: string, trigger: string) =>
+  mutationOptions({
+    mutationKey: [...intakeKeys.trigger(org, factory, trigger), 'try'],
+    mutationFn: (firing: string) => tryIntakeTrigger(org, factory, trigger, firing),
   });
 
 /**

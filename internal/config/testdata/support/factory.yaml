@@ -52,7 +52,7 @@ spec:
       - name: shop-incident
         on: webhook.shop-alerts.failed
         filter: { repo: acme/shop, skipBots: true }
-        only: { failuresInARow: 2, dedupe: service }
+        only: { failuresInARow: 2, dedupe: service, modelAgrees: { question: "Is this a real outage rather than a blip?" } }
         create: { type: incident, station: triage, expedite: true, title: "{{service}} is failing", brief: "Alert: {{alert.summary}}" }
         limits: { perDay: 3, pauseOnBudget: true }
     stations:

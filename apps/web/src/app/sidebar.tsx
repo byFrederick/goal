@@ -116,6 +116,7 @@ export function SidebarContent({
   const trouble = useConnectionTrouble(org.id);
   const busy = useSidebarBusy(org.id);
   const [searching, setSearching] = useState(startSearching);
+  const [composeWith, setComposeWith] = useState<{ title: string } | null>(null);
   const searchIcon = useRef<HTMLButtonElement>(null);
   const returnFocus = useRef(false);
 
@@ -126,6 +127,9 @@ export function SidebarContent({
     returnFocus.current = focusIcon;
     setSearching(false);
   }, []);
+  // The search's New item row opens the composer with the query as its title, once the sidebar's New item is back.
+  const openComposer = useCallback((title: string) => setComposeWith({ title }), []);
+  const composed = useCallback(() => setComposeWith(null), []);
   // The Search icon is back in the DOM once the search closes; Escape and Close search return focus to it.
   useEffect(() => {
     if (!searching && returnFocus.current) {
@@ -138,7 +142,7 @@ export function SidebarContent({
     <div className="flex min-h-full flex-1 flex-col">
       {busy ? <span className="sr-only">Loading</span> : null}
       {searching ? (
-        <SidebarSearch org={org} onClose={closeSearch} />
+        <SidebarSearch org={org} onClose={closeSearch} onNewItem={openComposer} />
       ) : (
         <>
           <SidebarTop
@@ -149,7 +153,7 @@ export function SidebarContent({
             searchIcon={searchIcon}
             onSearch={openSearch}
           />
-          <NewItemFromSidebar />
+          <NewItemFromSidebar openWith={composeWith} onOpened={composed} />
           <ul className="m-0 mt-2 flex list-none flex-col gap-1 p-0">
             {screensFor(sidebarOrgScreens, can).map((screen) => (
               <li key={screen.id}>

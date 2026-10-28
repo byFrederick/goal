@@ -129,6 +129,9 @@ type Connection struct {
 	UpdatedAt  time.Time
 	LastUsedAt *time.Time
 	LastTest   *ConnectionTest
+	// ToolModes are the modes set on the connection's tools, by tool name (ADR 0031 decision 1); a
+	// tool without one is ToolModeAllow. A mode for a tool the last test did not list is kept. Never nil.
+	ToolModes map[string]ConnectionToolMode
 }
 
 // ConnectionTest is the outcome of a connection's test.
@@ -136,6 +139,9 @@ type ConnectionTest struct {
 	At    time.Time
 	OK    bool
 	Error string
+	// Tools are the tool names the connection's MCP server listed, sorted; nil when the test listed
+	// none (ADR 0031 decision 2).
+	Tools []string
 }
 
 // NewConnection is a connection to create: its kind's non-secret values in Fields, its secret
@@ -149,18 +155,19 @@ type NewConnection struct {
 // ConnectionPatch changes a connection. Name, when set, renames it (its sealed values stay: they
 // are bound to its id); Description, when set, replaces it; Fields, when not nil, replaces every
 // non-secret value; Secrets replaces the named secret values only, an empty value clearing an
-// optional one and {{name}} making it a reference to credential name (ConnectionSecrets). The kind
-// never changes.
+// optional one and {{name}} making it a reference to credential name (ConnectionSecrets); ToolModes,
+// when not nil, replaces every tool's mode (CheckToolModes). The kind never changes.
 type ConnectionPatch struct {
 	Name        *string
 	Description *string
 	Fields      map[string]string
 	Secrets     map[string]string
+	ToolModes   map[string]ConnectionToolMode
 }
 
 // Empty reports whether p changes nothing.
 func (p ConnectionPatch) Empty() bool {
-	return p.Name == nil && p.Description == nil && p.Fields == nil && len(p.Secrets) == 0
+	return p.Name == nil && p.Description == nil && p.Fields == nil && len(p.Secrets) == 0 && p.ToolModes == nil
 }
 
 // ResolvedConnection is a connection opened for one run: its kind and every value, secret ones
@@ -1000,15 +1007,20 @@ func (k ConnectionKind) Outline(c Connection) ConnectionOutline {
 var EngineActor = Actor{Kind: ActorSystem, ID: "engine", Name: "engine"}
 
 // ConnectionUse is what connections are opened for, which their connection.used audit rows
-// record: one run, a person's merge of an item's pull requests or a knowledge source's sync.
+// record: one run, a person's merge of an item's pull requests, a knowledge source's sync or a
+// trigger's model check of an event.
 type ConnectionUse struct {
-	// By uses them: the zero value is EngineActor (runs and syncs); a merge is the person's.
+	// By uses them: the zero value is EngineActor (runs, syncs and model checks); a merge is the
+	// person's.
 	By Actor
-	// Run is the run that receives them, Item the item whose pull requests are merged and
-	// Source the knowledge source synced; each is empty when the use is another.
-	Run    RunID
-	Item   ItemID
-	Source string
+	// Run is the run that receives them, Item the item whose pull requests are merged, Source the
+	// knowledge source synced, and Trigger the trigger whose model check asks about the event with
+	// idempotency key Event; each is empty when the use is another.
+	Run     RunID
+	Item    ItemID
+	Source  string
+	Trigger string
+	Event   string
 }
 
 // Actor is who uses the connections: By, or EngineActor when unset.
@@ -1021,11 +1033,13 @@ func (u ConnectionUse) Actor() Actor {
 }
 
 // AuditData is what the connection.used row of connection name records: the name, and the run,
-// the item or the source, whichever the use has.
+// the item, the source or the trigger and event, whichever the use has.
 func (u ConnectionUse) AuditData(name string) map[string]any {
 	out := map[string]any{"name": name}
 
-	for key, v := range map[string]string{"run_id": string(u.Run), "item_id": string(u.Item), "source": u.Source} {
+	for key, v := range map[string]string{
+		"run_id": string(u.Run), "item_id": string(u.Item), "source": u.Source, "trigger": u.Trigger, "event": u.Event,
+	} {
 		if v != "" {
 			out[key] = v
 		}

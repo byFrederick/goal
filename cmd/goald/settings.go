@@ -40,7 +40,7 @@ type settings struct {
 	// be any, with GOAL_PUBLIC_URL and a gateway listener of its own off loopback.
 	Listen string
 	// GatewayListen is the MCP gateway's own address (GOAL_GATEWAY_LISTEN, optional). When set,
-	// that listener serves only /mcp and /run and the main one answers them with 404; it is required, and
+	// that listener serves only the gateway's paths (/mcp, /run, /run/tool-approval) and the main one answers them with 404; it is required, and
 	// different, when Listen is not loopback (phase 3, §5.5). It may be off loopback, such as the
 	// Docker bridge's address on Linux: every request there needs a task token.
 	GatewayListen string

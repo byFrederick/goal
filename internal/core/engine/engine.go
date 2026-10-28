@@ -110,6 +110,12 @@ type Deps struct {
 	// Intake records trigger firings and holds the schedule lock (intake.go, schedules.go); nil
 	// leaves Intake and FireSchedules failing with errNoIntake.
 	Intake ports.Intake
+	// ModelCheck asks a model a trigger's only.modelAgrees question (modelcheck.go); nil skips
+	// every event of a trigger with one, "Model check failed" (ADR 0028 decision 3).
+	ModelCheck ports.ModelCheck
+	// Audit takes the trigger.tried entry of each trigger dry run (try.go); nil leaves TryTrigger
+	// failing with errNoAudit.
+	Audit  ports.Audit
 	Clock  ports.Clock
 	Logger *slog.Logger // nil discards logs
 }
@@ -140,6 +146,13 @@ type Config struct {
 	// TransientBackoff is the wait before an item whose sandbox was lost runs again in a new one;
 	// it doubles with each loss (default 15s).
 	TransientBackoff time.Duration
+	// MergeWait is how long a gate's merge reads a pull request again while its host is still
+	// computing whether it can be merged, before putting the merge off (default 60s). It must be
+	// shorter than the gate merge's own bound (gateMergeTimeout, 2m).
+	MergeWait time.Duration
+	// MergeDeferrals is how many times in a row a gate's merge may be put off because a pull
+	// request is not mergeable yet before the item blocks (default 5).
+	MergeDeferrals int
 	// SweepLimit caps leases requeued per sweep and items released per queue station per tick (default 100).
 	SweepLimit int
 	// Image is the agent image every sandbox starts from (required).
@@ -179,6 +192,8 @@ const (
 	defaultCheckTimeout = 30 * time.Minute
 	defaultBackoff      = 15 * time.Second
 	defaultSweepLimit   = 100
+	defaultMergeWait    = time.Minute
+	defaultDeferrals    = 5
 	cleanupTimeout      = 10 * time.Second
 )
 
@@ -195,6 +210,8 @@ type Engine struct {
 	minters     map[string]ports.Minter
 	policies    ports.OrgPolicies
 	intake      ports.Intake
+	modelCheck  ports.ModelCheck
+	audit       ports.Audit
 	clock       ports.Clock
 	log         *slog.Logger
 	cfg         Config
@@ -231,6 +248,10 @@ func New(d Deps, cfg Config) (*Engine, error) {
 		return nil, fmt.Errorf("engine: heartbeat every %s must be shorter than the lease TTL %s", cfg.HeartbeatEvery, cfg.LeaseTTL)
 	}
 
+	if cfg.MergeWait >= gateMergeTimeout {
+		return nil, fmt.Errorf("engine: the merge wait %s must be shorter than a gate merge's bound %s", cfg.MergeWait, gateMergeTimeout)
+	}
+
 	if cfg.Image == "" || cfg.GatewayURL == "" || cfg.GatewayKeyRef == "" {
 		return nil, errors.New("engine: the agent image, the gateway URL and the gateway key reference are required")
 	}
@@ -251,7 +272,7 @@ func New(d Deps, cfg Config) (*Engine, error) {
 
 	return &Engine{
 		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, connections: d.Connections,
-		credentials: d.Credentials, codehosts: d.CodeHosts, minters: d.Minters, policies: d.Policies, intake: d.Intake, clock: d.Clock, log: log, cfg: cfg, lines: lines,
+		credentials: d.Credentials, codehosts: d.CodeHosts, minters: d.Minters, policies: d.Policies, intake: d.Intake, modelCheck: d.ModelCheck, audit: d.Audit, clock: d.Clock, log: log, cfg: cfg, lines: lines,
 		active: map[domain.ItemID]*activeRun{}, exhausted: map[domain.FactoryID]bool{},
 	}, nil
 }
@@ -338,6 +359,14 @@ func withDefaults(cfg Config) Config {
 
 	if cfg.SweepLimit <= 0 {
 		cfg.SweepLimit = defaultSweepLimit
+	}
+
+	if cfg.MergeWait <= 0 {
+		cfg.MergeWait = defaultMergeWait
+	}
+
+	if cfg.MergeDeferrals <= 0 {
+		cfg.MergeDeferrals = defaultDeferrals
 	}
 
 	return cfg

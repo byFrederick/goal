@@ -13,23 +13,27 @@ describe('the type of an entry', () => {
     expect(typeOf(kind('question'))).toBe('question');
   });
 
+  it('shows a tool approval as an Approval', () => {
+    expect(typeOf(kind('tool_approval'))).toBe('approval');
+  });
+
   it.each(['andon', 'rework_warning', 'blocked', 'expedite'])('shows %s as an Alert', (k) => {
     expect(typeOf(kind(k))).toBe('alert');
   });
 
   it('shows a kind this build does not know as a generic row', () => {
-    expect(typeOf(kind('tool_approval'))).toBe('generic');
+    expect(typeOf(kind('sync_failed'))).toBe('generic');
   });
 });
 
 describe('which tab an entry shows under', () => {
   it('shows every entry, generic ones included, under All', () => {
-    for (const k of ['decision', 'andon', 'tool_approval']) expect(inTab(kind(k), 'all')).toBe(true);
+    for (const k of ['decision', 'andon', 'tool_approval', 'sync_failed']) expect(inTab(kind(k), 'all')).toBe(true);
   });
 
   it('shows a generic row under no type tab', () => {
     for (const tab of ['decision', 'alert', 'approval', 'question'] as const) {
-      expect(inTab(kind('tool_approval'), tab)).toBe(false);
+      expect(inTab(kind('sync_failed'), tab)).toBe(false);
     }
   });
 
@@ -47,8 +51,10 @@ describe('which tab an entry shows under', () => {
     expect(inTab(kind('question'), 'all')).toBe(true);
   });
 
-  it('shows no entry under Approvals, which has no backend yet', () => {
-    expect(inTab(kind('decision'), 'approval')).toBe(false);
-    expect(inTab(kind('question'), 'approval')).toBe(false);
+  it('shows a tool approval under Approvals and All only', () => {
+    expect(inTab(kind('tool_approval'), 'approval')).toBe(true);
+    expect(inTab(kind('tool_approval'), 'decision')).toBe(false);
+    expect(inTab(kind('tool_approval'), 'alert')).toBe(false);
+    expect(inTab(kind('tool_approval'), 'all')).toBe(true);
   });
 });

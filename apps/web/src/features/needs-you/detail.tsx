@@ -1,5 +1,6 @@
 // The detail of the selected entry: a Decision shows its approval brief, the item's recent events and
-// the action bar (Approve, Edit then approve, Deny, Always allow); a Question shows the item page's
+// the action bar (Approve, Edit then approve, Deny); an Approval shows the tool call it asks to make,
+// the same action bar and Always allow when offered (ADR 0031); a Question shows the item page's
 // question card, with its quick answers and Write an answer; an Alert shows what pulled it or blocked
 // it, and links to the item or the factory's Floor. The phone's approve view is the same content in
 // one column (mobile/approve).
@@ -7,15 +8,16 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { eventsQuery } from '../../api/queries';
-import type { Factory, InboxEntry } from '../../api/types';
+import type { Factory, InboxEntry, ToolApproval } from '../../api/types';
 import { formatAge, formatClock, formatPercent, formatUsd, humanize } from '../../shared/format';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
+import { cn } from '../../ui/cn';
 import { NotAvailable } from '../../ui/not-available';
 import { QuestionCard } from '../items/question-card';
 import { decisionOf } from './actions';
-import { ageOf } from './rows';
+import { ageOf, approvalTitle } from './rows';
 import { typeLabel, typeOf } from './types';
 
 export interface DetailProps {
@@ -25,12 +27,26 @@ export interface DetailProps {
   /** The phone's approve view: one column, with the actions stacked under the brief. */
   phone?: boolean;
   pending: boolean;
+  /** Whether the Always allow checkbox is offered for an Approval (the API offers it and the caller may manage connections). */
+  allowAlways: boolean;
+  alwaysAllow: boolean;
+  onAlwaysAllow: (checked: boolean) => void;
   onApprove: () => void;
   onDeny: () => void;
 }
 
-/** The selected entry's detail; a Decision gets Approve and Deny, a Question its card, an Alert its facts and links. */
-export function Detail({ entry, factory, phone = false, pending, onApprove, onDeny }: DetailProps) {
+/** The selected entry's detail; an Approval gets the tool call and Approve and Deny, a Decision Approve and Deny, a Question its card, an Alert its facts and links. */
+export function Detail({
+  entry,
+  factory,
+  phone = false,
+  pending,
+  allowAlways,
+  alwaysAllow,
+  onAlwaysAllow,
+  onApprove,
+  onDeny,
+}: DetailProps) {
   const type = typeOf(entry);
   const station = humanize(entry.station ?? entry.item?.station ?? '');
   const age = formatAge(ageOf(entry));
@@ -44,19 +60,34 @@ export function Detail({ entry, factory, phone = false, pending, onApprove, onDe
           <Crumb entry={entry} station={station} />
         </div>
         <h2 id="detail-title" className="m-0 text-detail-title font-semibold text-ink">
-          {entry.item ? entry.item.title : kindTitle(entry)}
+          {entry.tool_approval ? approvalTitle(entry.tool_approval) : entry.item ? entry.item.title : kindTitle(entry)}
         </h2>
         {/* The question card says how long ago the agent asked, so a question has no line of its own here. */}
         {type === 'question' ? null : (
           <p className="m-0 text-secondary text-muted">
-            {type === 'decision'
+            {type === 'decision' || type === 'approval'
               ? `Asked ${age} ago. The run is paused until you answer.`
               : `${age} ago. ${alertSummary(entry, station)}`}
           </p>
         )}
       </header>
 
-      {type === 'decision' ? (
+      {type === 'approval' && entry.tool_approval ? (
+        <>
+          <ToolCall call={entry.tool_approval} />
+          <ActionBar
+            entry={entry}
+            approval
+            phone={phone}
+            pending={pending}
+            allowAlways={allowAlways}
+            alwaysAllow={alwaysAllow}
+            onAlwaysAllow={onAlwaysAllow}
+            onApprove={onApprove}
+            onDeny={onDeny}
+          />
+        </>
+      ) : type === 'decision' ? (
         <>
           <Brief entry={entry} />
           <ActionBar entry={entry} phone={phone} pending={pending} onApprove={onApprove} onDeny={onDeny} />
@@ -129,7 +160,7 @@ function alertSummary(entry: InboxEntry, station: string): string {
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex gap-4 text-secondary">
-      <dt className="w-28 flex-none text-muted">{label}</dt>
+      <dt className="w-30 flex-none text-muted">{label}</dt>
       <dd className="m-0 min-w-0 text-ink">{children}</dd>
     </div>
   );
@@ -167,45 +198,83 @@ function Brief({ entry }: { entry: InboxEntry }) {
   );
 }
 
-/** Approve (violet, A), Edit then approve and Deny (D), and Always allow: the last two are not built yet. */
+/** The tool call an Approval asks to make: its input as canonical JSON, then its tool and connection. */
+function ToolCall({ call }: { call: ToolApproval }) {
+  return (
+    <>
+      <section aria-labelledby="tool-call-h" className="flex flex-col gap-2">
+        <h3 id="tool-call-h" className="m-0 text-secondary font-semibold text-ink">
+          The call it will make
+        </h3>
+        <pre className="m-0 overflow-x-auto whitespace-pre-wrap break-words rounded-cell border border-rule bg-panel px-4 py-3 font-mono text-secondary text-ink">
+          {JSON.stringify(call.input, null, 2)}
+        </pre>
+      </section>
+      <dl className="m-0 flex flex-col gap-2">
+        <Fact label="Tool">
+          <span className="font-mono">{call.tool}</span>
+        </Fact>
+        <Fact label="Connection">{call.connection}</Fact>
+      </dl>
+    </>
+  );
+}
+
+/**
+ * Approve (violet, A), Edit then approve (not built yet) and Deny (D). An Approval also gets the
+ * Always allow checkbox when the API offers it to this caller (ADR 0031, decision 8).
+ */
 function ActionBar({
   entry,
+  approval = false,
   phone,
   pending,
+  allowAlways = false,
+  alwaysAllow = false,
+  onAlwaysAllow,
   onApprove,
   onDeny,
 }: {
   entry: InboxEntry;
+  approval?: boolean;
   phone: boolean;
   pending: boolean;
+  allowAlways?: boolean;
+  alwaysAllow?: boolean;
+  onAlwaysAllow?: (checked: boolean) => void;
   onApprove: () => void;
   onDeny: () => void;
 }) {
-  const merge = decisionOf(entry) === 'merge';
+  const merge = !approval && decisionOf(entry) === 'merge';
   const full = phone ? 'w-full justify-center' : undefined;
+  const call = entry.tool_approval;
   return (
-    <div className="flex flex-col gap-4">
-      <div className={phone ? 'flex flex-col gap-2' : 'flex flex-wrap items-center gap-2'}>
-        <Button variant="approve" onClick={onApprove} disabled={pending} className={full}>
-          {merge ? 'Merge' : 'Approve'}
-          <kbd className="font-control text-meta opacity-80">A</kbd>
+    <div className={phone ? 'flex flex-col gap-2' : 'flex flex-wrap items-center gap-2'}>
+      <Button variant="approve" onClick={onApprove} disabled={pending} className={full}>
+        {merge ? 'Merge' : 'Approve'}
+        <kbd className="font-control text-meta opacity-80">A</kbd>
+      </Button>
+      <NotAvailable label="Edit, then approve">
+        <Button variant="secondary" className={full}>
+          Edit, then approve
         </Button>
-        <NotAvailable label="Edit, then approve">
-          <Button variant="secondary" className={full}>
-            Edit, then approve
-          </Button>
-        </NotAvailable>
-        <Button variant="secondary" onClick={onDeny} disabled={pending} className={full}>
-          Deny
-          <kbd className="font-control text-meta text-muted">D</kbd>
-        </Button>
-      </div>
-      <label className="flex items-center gap-2 text-secondary text-ink-soft">
-        <NotAvailable label="Always allow">
-          <input type="checkbox" className="size-4 accent-you" />
-        </NotAvailable>
-        Always allow this kind of action
-      </label>
+      </NotAvailable>
+      <Button variant="secondary" onClick={onDeny} disabled={pending} className={full}>
+        Deny
+        <kbd className="font-control text-meta text-muted">D</kbd>
+      </Button>
+      {approval && allowAlways && call ? (
+        <label className={cn('flex items-center gap-2 text-secondary text-ink-soft', !phone && 'ml-auto')}>
+          <input
+            type="checkbox"
+            className="size-4 accent-you"
+            checked={alwaysAllow}
+            disabled={pending}
+            onChange={(e) => onAlwaysAllow?.(e.target.checked)}
+          />
+          Always allow {call.agent} to {call.tool}
+        </label>
+      ) : null}
     </div>
   );
 }

@@ -32,7 +32,7 @@ func (s *server) AnswerItem(ctx context.Context, req gen.AnswerItemRequestObject
 	}
 
 	out := s.itemOf(ctx, it)
-	if out.Question, err = s.openQuestion(ctx, it.ID); err != nil {
+	if out.Question, out.ToolApproval, err = s.openAsks(ctx, it.ID); err != nil {
 		return nil, err
 	}
 
@@ -57,15 +57,15 @@ func answerOf(body *gen.ItemAnswer) (string, *int, error) {
 	return answer, nil, nil
 }
 
-// openQuestion is an item's open question as the contract has it, read from all its events, or
-// nil when none is open.
-func (s *server) openQuestion(ctx context.Context, id domain.ItemID) (*gen.ItemQuestion, error) {
+// openAsks are an item's open question and open tool approval as the contract has them, read
+// from all its events at once, each nil when none is open. An item has at most one of them.
+func (s *server) openAsks(ctx context.Context, id domain.ItemID) (*gen.ItemQuestion, *gen.ToolApproval, error) {
 	var events []domain.Event
 
 	for after := int64(0); ; {
 		page, err := s.items.ItemEvents(ctx, id, after, maxEventLimit)
 		if err != nil {
-			return nil, fmt.Errorf("read the events of item %s: %w", id, err)
+			return nil, nil, fmt.Errorf("read the events of item %s: %w", id, err)
 		}
 
 		events = append(events, page...)
@@ -77,14 +77,22 @@ func (s *server) openQuestion(ctx context.Context, id domain.ItemID) (*gen.ItemQ
 		after = page[len(page)-1].ID
 	}
 
-	q, open := domain.OpenQuestion(events)
-	if !open {
-		return nil, nil
+	var (
+		question *gen.ItemQuestion
+		approval *gen.ToolApproval
+	)
+
+	if q, open := domain.OpenQuestion(events); open {
+		question = &gen.ItemQuestion{
+			Text: q.Text, Choices: append([]string{}, q.Choices...), AskedAt: q.At, Agent: q.Agent, RunId: string(q.RunID),
+		}
 	}
 
-	return &gen.ItemQuestion{
-		Text: q.Text, Choices: append([]string{}, q.Choices...), AskedAt: q.At, Agent: q.Agent, RunId: string(q.RunID),
-	}, nil
+	if a, open := domain.OpenToolApproval(events); open {
+		approval = toolApprovalOf(a)
+	}
+
+	return question, approval, nil
 }
 
 // questionProblem maps the refusals of an answer: a choice outside the question's choices is

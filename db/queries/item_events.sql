@@ -44,3 +44,21 @@ JOIN work_items w ON w.id = e.item_id
 WHERE e.factory_id = sqlc.arg(factory_id) AND e.kind = ANY (sqlc.arg(kinds)::text[])
 ORDER BY e.at DESC, e.id DESC
 LIMIT sqlc.arg(max_events)::bigint;
+
+-- name: OpenToolApprovals :many
+-- The organization's open tool approvals by connection name (row-level security, no WHERE
+-- org_id): the waiting_human items whose latest tool approval request, decision or withdrawal
+-- (domain.OpenToolApproval's kinds) is a request, on item_events_item_idx.
+SELECT coalesce(e.data->>'connection', '')::text AS connection, count(*)::bigint AS open
+FROM work_items w
+CROSS JOIN LATERAL (
+  SELECT l.kind, l.data FROM item_events l
+  WHERE l.item_id = w.id
+    AND l.kind IN ('tool_approval_requested', 'tool_approval_granted', 'tool_approval_denied',
+                   'moved', 'paused', 'rejected', 'cancelled')
+  ORDER BY l.id DESC
+  LIMIT 1
+) e
+WHERE w.state = 'waiting_human' AND e.kind = 'tool_approval_requested'
+GROUP BY 1
+ORDER BY 1;

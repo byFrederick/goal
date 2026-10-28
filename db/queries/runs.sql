@@ -59,6 +59,25 @@ WHERE r.factory_id = ANY (sqlc.arg(factories)::uuid[])
 ORDER BY r.started_at DESC, r.id DESC
 LIMIT sqlc.arg(max_runs)::bigint;
 
+-- name: CountOrgRuns :one
+-- How many runs ListOrgRuns would list over all its pages, counted up to max_runs: the export's
+-- cap (ports.Store.EachOrgRun) needs only to know whether there are more.
+SELECT count(*) FROM (
+  SELECT 1
+  FROM agent_runs r
+  JOIN work_items w ON w.id = r.item_id
+  WHERE r.factory_id = ANY (sqlc.arg(factories)::uuid[])
+    AND r.started_at >= sqlc.arg(since) AND r.started_at < sqlc.arg(until)
+    AND (sqlc.arg(status)::text = '' OR r.status = sqlc.arg(status)::text)
+    AND (sqlc.arg(pattern)::text = ''
+         OR w.title ILIKE '%' || sqlc.arg(pattern)::text || '%' ESCAPE '\'
+         OR r.agent ILIKE '%' || sqlc.arg(pattern)::text || '%' ESCAPE '\'
+         OR r.model ILIKE '%' || sqlc.arg(pattern)::text || '%' ESCAPE '\'
+         OR (sqlc.arg(number)::bigint > 0 AND w.number = sqlc.arg(number)::bigint
+             AND (sqlc.narg(number_of)::uuid IS NULL OR r.factory_id = sqlc.narg(number_of)::uuid)))
+  LIMIT sqlc.arg(max_runs)::bigint
+) matching;
+
 -- name: OrgRunsSummary :many
 -- Each factory's runs that started in [since, until), whatever their status, for the run list's
 -- summary; agent_runs_factory_started_idx serves the range. Factories without a run have no row.

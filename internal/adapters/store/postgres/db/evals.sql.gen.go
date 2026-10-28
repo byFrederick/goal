@@ -429,7 +429,7 @@ type InsertEvalRunParams struct {
 	TriesPerCase  *int16
 }
 
-// Eval runs and their tries (00068), a bake-off's arms (00075), under row-level security: every statement sees the
+// Eval runs and their tries (00068), a bake-off's arms (00077), under row-level security: every statement sees the
 // transaction's organization only. A store method locks a try before its run (ClaimEvalResult,
 // RecordEvalResult, then the run's update), so two methods never wait on each other in a cycle.
 func (q *Queries) InsertEvalRun(ctx context.Context, arg InsertEvalRunParams) (EvalRun, error) {

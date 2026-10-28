@@ -2,6 +2,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type {
   Connection,
+  components,
   KnowledgeDocumentList,
   KnowledgeDocumentPage,
   KnowledgeSearchResult,
@@ -11,6 +12,9 @@ import type {
 } from '@goal/api-client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createMockApi, type MockApi } from './api.ts';
+
+type KnowledgeUsage = components['schemas']['KnowledgeUsage'];
+type KnowledgeDocumentUsePage = components['schemas']['KnowledgeDocumentUsePage'];
 
 let api: MockApi;
 let server: Server;
@@ -61,13 +65,36 @@ describe('the mock knowledge base', () => {
     const { body } = await call<KnowledgeSourceList>(sources);
     expect(body.sources.map((s) => [s.name, s.kind, s.status, s.documents])).toEqual([
       ['dashboards', 'synced', 'failed', 1],
-      ['goal-docs', 'synced', 'idle', 2],
+      ['goal-docs', 'synced', 'idle', 5],
       ['support-macros', 'synced', 'idle', 1],
     ]);
     const hits = await call<KnowledgeSearchResult>('/v1/orgs/acme/knowledge/search?q=refunds');
     expect(hits.body.hits.map((h) => [h.source, h.title])).toEqual([['support-macros', 'refund-policy.md']]);
     const synced = await call<KnowledgeSearchResult>('/v1/orgs/acme/knowledge/search?q=latency&source=dashboards');
     expect(synced.body.hits.map((h) => h.url)).toEqual(['https://github.com/acme/dashboards/blob/main/api-latency.md']);
+  });
+
+  it('serves goal-docs usage as the card pictures it, and each document’s runs with their items', async () => {
+    const usage = await call<KnowledgeUsage>('/v1/orgs/acme/knowledge/usage?source=goal-docs');
+    expect(usage.status).toBe(200);
+    expect(usage.body.documents.map((d) => [d.title, d.runs, d.agents_helped, d.agents_misled])).toEqual([
+      ['AGENTS.md', 212, 61, 0],
+      ['factory-definition.md', 64, 22, 1],
+      ['MASTER.md', 41, 9, 6],
+      ['testing.md', 33, 14, 0],
+    ]);
+    expect((await call(`/v1/orgs/acme/knowledge/usage?source=nope`)).status).toBe(404);
+
+    const id = usage.body.documents[2]?.id ?? '';
+    const uses = await call<KnowledgeDocumentUsePage>(`/v1/orgs/acme/knowledge/documents/${id}/uses`);
+    expect(uses.status).toBe(200);
+    expect(uses.body.uses).toHaveLength(41);
+    const first = uses.body.uses[0];
+    expect(first?.item.ref).toMatch(/^[a-z-]+#\d+$/);
+    expect(first?.factory.name).toBeTruthy();
+    expect((await call(`/v1/orgs/acme/knowledge/documents/nope/uses`)).body).toMatchObject({
+      code: 'knowledge-document-not-found',
+    });
   });
 
   it('names the factories whose current version lists a source, and keeps it while they do', async () => {

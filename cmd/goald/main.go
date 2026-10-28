@@ -1,6 +1,6 @@
 // Command goald is Goal's daemon: it runs the current definition version of every factory on one
-// flow engine, serves the HTTP API (/v1/) and the gateway agents use (/mcp and /run, on a listener of
-// its own with GOAL_GATEWAY_LISTEN), and runs every agent run in a sandbox of its own: in Docker,
+// flow engine, serves the HTTP API (/v1/) and the gateway agents use (/mcp, /run and /run/tool-approval,
+// on a listener of its own with GOAL_GATEWAY_LISTEN), and runs every agent run in a sandbox of its own: in Docker,
 // or on Cloudflare Containers through the control Worker (GOAL_SANDBOX).
 //
 // All wiring happens here, by hand: PostgreSQL (store, definition versions, item and definition
@@ -182,7 +182,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Connections: connections, Events: store, Clock: clock, Logger: log,
-		Knowledge: kb.searcher, Questions: engineQuestions{eng: &eng},
+		Knowledge: kb.searcher, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng},
 	}, gateway.Config{Key: []byte(key)})
 	if err != nil {
 		return err
@@ -198,7 +198,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
 		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, CodeHosts: hosts, Clock: clock,
-		Minters: minters(s), Policies: policies, Intake: intake, Logger: log,
+		Minters: minters(s), Policies: policies, Intake: intake, Audit: store, Logger: log,
 	}, engine.Config{
 		TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: boxes.gateway, GatewayKeyRef: s.GatewayKeyRef, MaxRuns: s.MaxRuns,
 	})
@@ -429,7 +429,8 @@ func httpServers(s settings, proxySecret string, apiHandler, gw, spa http.Handle
 }
 
 // routes are the handlers of goald's listeners: the main one serves the API, the SPA and, when
-// the gateway has no listener of its own, the agents' gateway at /mcp and /run (gw serves both).
+// the gateway has no listener of its own, the agents' gateway at /mcp, /run and /run/tool-approval
+// (gw serves them all).
 // With one (separate), the gateway listener serves only those (everything else 404) and the main
 // one answers them with 404, so the gateway address agents are given reaches nothing else;
 // gatewayOnly is nil without one.
@@ -438,7 +439,7 @@ func routes(separate bool, apiHandler, gw, spa http.Handler) (primary, gatewayOn
 	mux.Handle("/v1/", apiHandler)
 	mux.Handle("/", spa)
 
-	gatewayPaths := []string{api.GatewayPath, api.RunPath}
+	gatewayPaths := []string{api.GatewayPath, api.RunPath, api.ToolApprovalPath}
 
 	if !separate {
 		for _, p := range gatewayPaths {
@@ -458,11 +459,13 @@ func routes(separate bool, apiHandler, gw, spa http.Handler) (primary, gatewayOn
 	return mux, only
 }
 
-// gatewayHandler serves the gateway's paths: the MCP endpoint and the run bundle.
+// gatewayHandler serves the gateway's paths: the MCP endpoint, the run bundle and the run's
+// tool approvals.
 func gatewayHandler(gw *gateway.Gateway) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle(api.GatewayPath, gw)
 	mux.HandleFunc(api.RunPath, gw.ServeRun)
+	mux.HandleFunc(api.ToolApprovalPath, gw.ServeToolApproval)
 
 	return mux
 }
@@ -485,6 +488,29 @@ func (q engineQuestions) Ask(ctx context.Context, in gateway.Question) error {
 			engine.MaxQuestionRunes, engine.MaxChoices, engine.MaxChoiceRunes)}
 	case err != nil:
 		return fmt.Errorf("ask: %w", err)
+	}
+
+	return nil
+}
+
+// engineToolApprovals hands the Ask-first tool calls runs report to the engine, read through eng
+// when a call comes in, as engineQuestions does. The engine's refusals become the gateway's: an
+// open tool approval or question, an item no longer in progress (the run's lease has ended) and a
+// malformed call or one of a connection the organization does not have.
+type engineToolApprovals struct{ eng **engine.Engine }
+
+func (a engineToolApprovals) RequestToolApproval(ctx context.Context, c gateway.ToolCall) error {
+	_, err := (*a.eng).RequestToolApproval(ctx, c.Item, c.Run, c.Agent, c.Connection, c.Tool, c.Input)
+
+	switch {
+	case errors.Is(err, engine.ErrToolApprovalOpen) || errors.Is(err, engine.ErrQuestionOpen):
+		return fmt.Errorf("%w: %w", gateway.ErrToolApprovalOpen, err)
+	case errors.Is(err, engine.ErrNotInProgress) || errors.Is(err, engine.ErrItemChanged):
+		return fmt.Errorf("%w: %w", gateway.ErrRunEnded, err)
+	case errors.Is(err, engine.ErrBadToolCall) || errors.Is(err, ports.ErrNotFound):
+		return fmt.Errorf("%w: %w", gateway.ErrBadToolCall, err)
+	case err != nil:
+		return fmt.Errorf("request tool approval: %w", err)
 	}
 
 	return nil
