@@ -332,3 +332,53 @@ func commentStart(l string) int {
 
 	return -1
 }
+
+// The starter item is read from the root of factory.yaml with the model's keys, is absent when
+// the YAML has none, and survives a Visual section's edit untouched.
+func TestFromYAML_ReadsTheStarter(t *testing.T) {
+	t.Parallel()
+
+	doc := corpus(t)["starter.yaml"]
+
+	m, _, err := FromYAML(doc, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := map[string]any{"item": map[string]any{
+		"title": "Add a contributing guide to the README",
+		"type":  "docs",
+		"body": "Add a **Contributing** section to the README: how to set up the\n" +
+			"repository, run the tests and open a pull request.\n",
+	}}
+	if !reflect.DeepEqual(m.Starter, want) {
+		t.Errorf("starter = %#v, want %#v", m.Starter, want)
+	}
+
+	if b, _ := json.Marshal(m); !strings.Contains(string(b), `"starter":{"item":{`) {
+		t.Errorf("the model's JSON has no starter: %s", b)
+	}
+
+	basics := maps.Clone(m.Basics)
+	basics["name"] = "acme-handbook"
+
+	changed := apply(t, doc, Basics, basics)
+
+	after, _, err := FromYAML(changed, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(after.Starter, want) || !bytes.Contains(changed, []byte("title: \"Add a contributing guide to the README\"   # small and safe\n")) {
+		t.Errorf("a Basics edit changed the starter:\n%s", changed)
+	}
+
+	without, _, err := FromYAML(corpus(t)["triggers.yaml"], nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if b, _ := json.Marshal(without); without.Starter != nil || strings.Contains(string(b), "starter") {
+		t.Errorf("a factory.yaml without a starter has one in its model: %s", b)
+	}
+}

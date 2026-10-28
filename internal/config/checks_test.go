@@ -282,6 +282,10 @@ var locatedCases = []struct {
 		name: "trigger placeholder", doc: withTriggers(`          title: "Sweep {{ repo }}"`, `          title: "Sweep {{}}" #here`),
 		code: codePlaceholderInvalid, section: domain.SectionFiles,
 	},
+	{
+		name: "starter work type", doc: withStarter("    type: docs\n", "    type: chore #here\n"),
+		code: codeUnknownWorkType, section: domain.SectionFiles,
+	},
 }
 
 // Every problem config reports names its code and severity and is located for both editors:
