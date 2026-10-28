@@ -335,7 +335,7 @@ func (s *Store) JonahSpendSince(ctx context.Context, factory domain.FactoryID, s
 	var usd float64
 
 	for id, r := range s.runs {
-		if _, ok := s.visible(r.ItemID, org); ok && r.FactoryID == factory && s.jonah.runKinds[id] == domain.RunKindJonah &&
+		if s.runVisible(r, org) && r.FactoryID == factory && s.jonah.runKinds[id] == domain.RunKindJonah &&
 			!r.StartedAt.Before(since) {
 			usd += r.Result.CostUSD
 		}

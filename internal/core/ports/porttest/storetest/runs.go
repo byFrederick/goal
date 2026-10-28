@@ -203,3 +203,53 @@ func sameSummary(t *testing.T, what string, got, want domain.RunSummary) {
 		t.Errorf("OrgRuns' summary (%s) = %+v; want %+v", what, got, want)
 	}
 }
+
+// testRunsJonahWithoutItem: a Jonah run works no item. It starts and finishes with its cost, in
+// its organization only, and writes no item event, which PostgreSQL would refuse without an item
+// (item_events.item_id is NOT NULL); a station run still needs an item that exists.
+func testRunsJonahWithoutItem(f *fixture) {
+	t := f.t
+	t2 := t1.Add(time.Minute)
+
+	id, err := f.Store.StartRun(f.ctx(t), ports.NewRun{
+		FactoryID: f.factory, Agent: "jonah", Model: model, StartedAt: t1, Kind: domain.RunKindJonah,
+	})
+	if err != nil {
+		t.Fatalf("StartRun of a jonah run without an item: %v", err)
+	}
+
+	res := domain.RunResult{Status: domain.RunSucceeded, CostUSD: 0.5, Turns: 4, SessionID: "s-1"}
+	if err := f.Store.FinishRun(f.ctx(t), id, res, t2); err != nil {
+		t.Fatalf("FinishRun of a jonah run without an item: %v", err)
+	}
+
+	got, err := f.Store.Run(f.ctx(t), id)
+	want := domain.Run{ID: id, FactoryID: f.factory, Agent: "jonah", Model: model, Result: res, StartedAt: t1, EndedAt: t2}
+
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	sameRuns(t, []domain.Run{got}, []domain.Run{want})
+
+	if usd, err := f.Jonah.JonahSpendSince(f.ctx(t), f.factory, t1); err != nil || usd != 0.5 {
+		t.Errorf("JonahSpendSince = %v, %v; want 0.5, the jonah run's cost", usd, err)
+	}
+
+	other := f.otherOrg(t)
+
+	_, err = f.Store.Run(other.ctx(t), id)
+	expect(t, "Run of another org's jonah run", err, ports.ErrNotFound)
+
+	_, err = f.Store.StartRun(other.ctx(t), ports.NewRun{FactoryID: f.factory, Agent: "jonah", StartedAt: t1, Kind: domain.RunKindJonah})
+	expect(t, "StartRun of a jonah run in another org's factory", err, ports.ErrNotFound)
+
+	for _, item := range []domain.ItemID{"", missingItem} {
+		for _, kind := range []domain.RunKind{"", domain.RunKindStation} {
+			_, err := f.Store.StartRun(f.ctx(t), ports.NewRun{
+				FactoryID: f.factory, ItemID: item, Station: stWork, Agent: agWorker, Model: model, StartedAt: t1, Kind: kind,
+			})
+			expect(t, "StartRun of a station run of item "+string(item), err, ports.ErrNotFound)
+		}
+	}
+}

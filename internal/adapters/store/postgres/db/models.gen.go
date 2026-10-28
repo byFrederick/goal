@@ -13,7 +13,7 @@ import (
 type AgentRun struct {
 	ID                  uuid.UUID
 	FactoryID           uuid.UUID
-	ItemID              uuid.UUID
+	ItemID              *uuid.UUID
 	Station             string
 	Agent               string
 	Model               string

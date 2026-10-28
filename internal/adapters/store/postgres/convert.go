@@ -66,9 +66,18 @@ func itemFrom(w db.WorkItem) (domain.Item, error) {
 	return it, nil
 }
 
+// itemIDOf is the item a run worked; empty for a Jonah run, which works none (00077).
+func itemIDOf(id *uuid.UUID) domain.ItemID {
+	if id == nil {
+		return ""
+	}
+
+	return domain.ItemID(id.String())
+}
+
 func runFrom(r db.AgentRun) domain.Run {
 	run := domain.Run{
-		ID: domain.RunID(r.ID.String()), FactoryID: domain.FactoryID(r.FactoryID.String()), ItemID: domain.ItemID(r.ItemID.String()),
+		ID: domain.RunID(r.ID.String()), FactoryID: domain.FactoryID(r.FactoryID.String()), ItemID: itemIDOf(r.ItemID),
 		Station: r.Station, Agent: r.Agent, Model: r.Model, StartedAt: r.StartedAt.UTC(),
 		Result: domain.RunResult{
 			Status: domain.RunStatus(r.Status), CostUSD: r.CostUsd, Turns: int(r.Turns), InputTokens: r.InputTokens,

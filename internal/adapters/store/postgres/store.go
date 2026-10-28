@@ -395,9 +395,18 @@ func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, err
 		return "", err
 	}
 
-	item, err := parseID("item", string(r.ItemID))
-	if err != nil {
-		return "", err
+	kind := cmp.Or(r.Kind, domain.RunKindStation)
+
+	// Only a Jonah run may work no item (00077); it writes no run_started item event.
+	var item *uuid.UUID
+
+	if r.ItemID != "" || kind != domain.RunKindJonah {
+		id, err := parseID("item", string(r.ItemID))
+		if err != nil {
+			return "", err
+		}
+
+		item = &id
 	}
 
 	var version *uuid.UUID
@@ -421,10 +430,18 @@ func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, err
 	err = s.inTx(ctx, func(q *db.Queries) error {
 		err := q.InsertRun(ctx, db.InsertRunParams{
 			ID: id, FactoryID: factory, DefinitionVersionID: version, ItemID: item, Station: r.Station, Agent: r.Agent,
-			Model: r.Model, StartedAt: r.StartedAt, Kind: string(cmp.Or(r.Kind, domain.RunKindStation)),
+			Model: r.Model, StartedAt: r.StartedAt, Kind: string(kind),
 		})
+		if isForeignKeyViolation(err) {
+			return fmt.Errorf("insert run: its item or factory: %w", ports.ErrNotFound)
+		}
+
 		if err != nil {
 			return fmt.Errorf("insert run: %w", err)
+		}
+
+		if item == nil {
+			return nil
 		}
 
 		return appendEvents(ctx, q, []domain.Event{{
@@ -447,7 +464,7 @@ func (s *Store) Runs(ctx context.Context, item domain.ItemID, limit int) ([]doma
 	}
 
 	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.AgentRun, error) {
-		return q.ItemRuns(ctx, db.ItemRunsParams{ItemID: uid, MaxRuns: int64(limit)})
+		return q.ItemRuns(ctx, db.ItemRunsParams{ItemID: &uid, MaxRuns: int64(limit)})
 	})
 	if err != nil {
 		return nil, fmt.Errorf("runs of item %s: %w", item, err)
@@ -560,9 +577,12 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 			return err
 		}
 
-		// Lock the item before the run, in the order every other method takes them.
-		if _, err := q.LockItem(ctx, item); err != nil {
-			return fmt.Errorf("lock item: %w", err)
+		// Lock the item before the run, in the order every other method takes them. A Jonah run
+		// works no item (00077): it adds no item cost and writes no run_finished item event.
+		if item != nil {
+			if _, err := q.LockItem(ctx, *item); err != nil {
+				return fmt.Errorf("lock item: %w", err)
+			}
 		}
 
 		row, err := q.FinishRun(ctx, db.FinishRunParams{
@@ -578,7 +598,11 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 			return err
 		}
 
-		if err := q.AddItemCost(ctx, db.AddItemCostParams{ID: item, CostUsd: res.CostUSD}); err != nil {
+		if item == nil {
+			return nil
+		}
+
+		if err := q.AddItemCost(ctx, db.AddItemCostParams{ID: *item, CostUsd: res.CostUSD}); err != nil {
 			return err
 		}
 
