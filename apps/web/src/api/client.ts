@@ -22,6 +22,11 @@ import type {
   Board,
   ConstraintReport,
   DeviceRequest,
+  EvalCaseFromRun,
+  EvalEstimate,
+  EvalList,
+  EvalRunRequest,
+  EvalRunStarted,
   EventPage,
   Factory,
   FactoryOverviewList,
@@ -29,6 +34,7 @@ import type {
   Inbox,
   Invitation,
   Item,
+  ItemAnswer,
   ItemList,
   ItemState,
   LeadTimeBridge,
@@ -51,6 +57,7 @@ import type {
   RunStatus,
   TouchMetrics,
   TouchReason,
+  Version,
   WeeklyThroughput,
 } from './types';
 
@@ -363,6 +370,49 @@ export function getAgentStats(
   );
 }
 
+/**
+ * The factory's eval cases of the current version, each with its last tries, and the summary
+ * (ADR 0025). 503 evals-unavailable while goald runs no evals.
+ */
+export function listEvals(org: string, factory: string, signal?: AbortSignal): Promise<EvalList> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/evals'), { params: { path: { org, factory } }, ...cancel(signal) }),
+  );
+}
+
+/** What a run would cost, about, without starting it. Asked with no case, it prices every case. */
+export function estimateEvalRun(
+  org: string,
+  factory: string,
+  run: EvalRunRequest,
+  signal?: AbortSignal,
+): Promise<EvalEstimate> {
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/evals/estimate'), {
+      params: { path: { org, factory } },
+      body: run,
+      ...cancel(signal),
+    }),
+  );
+}
+
+/** 400 eval-case-unknown for a case the content does not have; 404 version-not-found; 503 evals-unavailable. */
+export function startEvalRun(org: string, factory: string, run: EvalRunRequest): Promise<EvalRunStarted> {
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/evals/runs'), { params: { path: { org, factory } }, body: run }),
+  );
+}
+
+/**
+ * Adds a case from a past run and publishes it as the next version. 409 eval-case-exists, draft-open,
+ * evals-pending and evals-failing (the publish's eval gate) are the dialog's to show.
+ */
+export function addEvalCase(org: string, factory: string, from: EvalCaseFromRun): Promise<Version> {
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/evals/cases'), { params: { path: { org, factory } }, body: from }),
+  );
+}
+
 export interface ItemFilter {
   state?: ItemState | undefined;
   station?: string | undefined;
@@ -475,6 +525,11 @@ export function approveItem(org: string, item: string): Promise<Item> {
 
 export function rejectItem(org: string, item: string, reason: string): Promise<Item> {
   return unwrap(goal.POST(orgPath('/items/{item}/reject'), { params: { path: { org, item } }, body: { reason } }));
+}
+
+/** Answers the item's open question: a choice by its index in Item.question.choices, or the person's own words. */
+export function answerItem(org: string, item: string, body: ItemAnswer): Promise<Item> {
+  return unwrap(goal.POST(orgPath('/items/{item}/answer'), { params: { path: { org, item } }, body }));
 }
 
 export function mergeItem(org: string, item: string, method?: MergeMethod): Promise<Item> {

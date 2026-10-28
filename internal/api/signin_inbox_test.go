@@ -15,7 +15,7 @@ func TestAPI_SignIn_InboxAndAttentionByPermission(t *testing.T) {
 	t.Parallel()
 
 	h := newSignedIn(t)
-	h.seedInboxItems(t) // line's decision, blocked, paused and expedite items
+	h.seedInboxItems(t) // line's decision, question, blocked, paused and expedite items
 
 	if err := h.identity.GrantFactoryRole(testOrg, viewerID, lineID, domain.FactoryViewer); err != nil {
 		t.Fatal(err)
@@ -30,20 +30,22 @@ func TestAPI_SignIn_InboxAndAttentionByPermission(t *testing.T) {
 		return out
 	}
 
-	if got := kinds(ownerToken); !slices.Contains(got, gen.InboxEntryKindDecision) {
-		t.Errorf("owner's inbox = %v, want line's decision", got)
+	if got := kinds(ownerToken); !slices.Contains(got, gen.InboxEntryKindDecision) || !slices.Contains(got, gen.InboxEntryKindQuestion) {
+		t.Errorf("owner's inbox = %v, want line's decision and question", got)
 	}
 
-	if got := kinds(viewerToken); slices.Contains(got, gen.InboxEntryKindDecision) || !slices.Contains(got, gen.InboxEntryKindBlocked) {
-		t.Errorf("viewer's inbox = %v, want line's blocked items and no decision", got)
+	if got := kinds(viewerToken); slices.Contains(got, gen.InboxEntryKindDecision) || slices.Contains(got, gen.InboxEntryKindQuestion) ||
+		!slices.Contains(got, gen.InboxEntryKindBlocked) {
+		t.Errorf("viewer's inbox = %v, want line's blocked items and no decision or question", got)
 	}
 
 	onYou := func(token string) int {
 		return decode[gen.OrgAttention](t, h.as(t, token, http.MethodGet, acmePath+"/attention", ""), http.StatusOK).WaitingOnYou
 	}
 
-	if owner, viewer := onYou(ownerToken), onYou(viewerToken); owner != 1 || viewer != 0 {
-		t.Errorf("waiting on the owner %d, on the viewer %d; want 1 and 0", owner, viewer)
+	// The decision and the question are the owner's; the viewer may decide neither.
+	if owner, viewer := onYou(ownerToken), onYou(viewerToken); owner != 2 || viewer != 0 {
+		t.Errorf("waiting on the owner %d, on the viewer %d; want 2 and 0", owner, viewer)
 	}
 
 	if err := h.identity.GrantFactoryRole(testOrg, viewerID, lineID, ""); err != nil {

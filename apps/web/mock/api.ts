@@ -60,7 +60,9 @@ import type {
 import { parse } from 'yaml';
 import { authSettings, createMockAuth } from './auth.ts';
 import { createConnections } from './connections.ts';
+import { createCredentials } from './credentials.ts';
 import { createDefinitions } from './definitions.ts';
+import { createEvals } from './evals.ts';
 import { parseFault, sleep, takeFault } from './faults.ts';
 import {
   acmeOrg,
@@ -207,6 +209,14 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     acme: acmeOrg,
   });
 
+  const credentials = createCredentials({
+    clock,
+    actor: (req) => auth.actor(req),
+    stale: (req, res) => stale(req, res),
+    factories: (org) => state.factories.filter((f) => f.org_id === org),
+    acme: acmeOrg,
+  });
+
   const knowledge = createKnowledge({
     clock,
     actor: (req) => auth.actor(req),
@@ -222,6 +232,10 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     acme: acmeOrg,
   });
 
+  const evals = createEvals({
+    clock,
+    factory: (org, key) => findFactory(key, org),
+  });
   const webhooks = createWebhooks({
     clock,
     factories: (org) => state.factories.filter((f) => f.org_id === org),
@@ -698,6 +712,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   const moveTo = (it: MockItem, to: string, actor: string, data: Record<string, unknown> = {}) => {
     const from = it.station;
     it.station = to;
+    // A move withdraws the agent's open question, as goald does (ADR 0018).
+    it.question = null;
     const kind = findFactory(it.factory)?.stations.find((s) => s.id === to)?.kind;
     it.state = kind === 'done' ? 'done' : kind === 'human' ? 'waiting_human' : 'queued';
     it.agent = null;
@@ -938,6 +954,21 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       .filter((it) => it.factory === f.name)
       .flatMap((it): InboxEntry[] => {
         const base = { ...entry(f, 'expedite', it.id, it.created_at), item: card(it), station: it.station };
+        // An item has at most one entry: its open question, then its decision (the API's inbox rule).
+        if (it.question) {
+          if (!decides) return [];
+          return [
+            {
+              ...base,
+              id: `question:${it.id}`,
+              kind: 'question',
+              since: it.question.asked_at,
+              action: null,
+              approval: null,
+              question: it.question,
+            },
+          ];
+        }
         if (it.state === 'waiting_human') {
           if (!decides) return [];
           return [
@@ -983,7 +1014,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     return [...items, ...warnings];
   };
 
-  const kindOrder: InboxEntry['kind'][] = ['decision', 'andon', 'rework_warning', 'blocked', 'expedite'];
+  const kindOrder: InboxEntry['kind'][] = ['decision', 'question', 'andon', 'rework_warning', 'blocked', 'expedite'];
 
   /**
    * A board station's statistics: the seeded busy and send-back shares and queue trend, how long
@@ -1303,12 +1334,16 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       const at = body.now;
       fixed = typeof at === 'string' && !Number.isNaN(Date.parse(at)) ? Date.parse(at) : undefined;
       state = seed(clock());
+      // {orgs: "none"}: a person with no organization yet, so onboarding's first step is what opens.
+      if (body.orgs === 'none') state.orgs = [];
       const role = roleSetting(body.role);
       grants = role ? grantsOf(sources.table, role) : undefined;
       if (grants) withRole(state, grants);
       apiKeys.reset(clock());
       connections.reset(clock());
+      credentials.reset(clock());
       knowledge.reset(clock());
+      evals.reset();
       webhooks.reset();
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
       const cookie = auth.reset(authSettings(body.auth));
@@ -1399,7 +1434,9 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await definitions.handle(org, rest, method, url, req, res)) return;
     if (await apiKeys.handle(forCaller(req, org), rest, method, req, res, () => readBody(req))) return;
     if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
+    if (await credentials.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
+    if (await evals.handle(org, rest, method, res, () => readBody(req))) return;
     if (await spend.handle(org, rest, method, url, res)) return;
     if (await policy.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await webhooks.handle(org.id, rest, method, req, res, () => readBody(req))) return;
@@ -1806,7 +1843,9 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return res.end();
     }
 
-    m = rest.match(/^\/items\/([^/]+)(?:\/(events|runs|parts|notes|approve|reject|merge|retry|move|pause|cancel))?$/);
+    m = rest.match(
+      /^\/items\/([^/]+)(?:\/(events|runs|parts|notes|approve|reject|merge|retry|move|pause|cancel|answer))?$/,
+    );
     if (!m) return problem(res, 404, 'Not found', path);
 
     const it = findItem(decodeURIComponent(m[1] ?? ''), org.id);
@@ -1935,6 +1974,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         return problem(res, 409, 'Conflict', `${ref(it)} is already blocked`, 'already-blocked');
       take('pause');
       it.state = 'blocked';
+      it.question = null;
       emit(it, 'paused', by, { actor: 'user:local', ...(reason ? { reason } : {}) });
       return json(res, 200, full(it));
     }
@@ -1943,6 +1983,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       if (closed) return problem(res, 409, 'Conflict', `${ref(it)} is ${it.state}`, 'item-closed');
       take('cancel');
       it.state = 'cancelled';
+      it.question = null;
       emit(it, 'cancelled', by, { actor: 'user:local', ...(reason ? { reason } : {}) });
       return json(res, 200, full(it));
     }
@@ -1960,6 +2001,45 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       emit(it, 'rejected', by, { reason, planned: false, actor: 'user:local' });
       it.rework_count += 1;
       moveTo(it, back.id, by);
+      return json(res, 200, full(it));
+    }
+
+    if (action === 'answer') {
+      // goald checks the body first, then whether the item is still open, then the question and the choice.
+      const hasChoice = body.choice !== undefined;
+      const hasAnswer = body.answer !== undefined;
+      const text = typeof body.answer === 'string' ? body.answer.trim() : '';
+      if (hasChoice === hasAnswer) {
+        return problem(res, 400, 'Bad Request', 'an answer is either a choice or text, not both or neither');
+      }
+      if (hasAnswer && (!text || [...text].length > 2000)) {
+        return problem(res, 400, 'Bad Request', 'an answer is 1 to 2000 characters');
+      }
+      if (closed) return problem(res, 409, 'Conflict', `${ref(it)} is ${it.state}`, 'item-closed');
+      if (!it.question) {
+        return problem(res, 409, 'Conflict', `${ref(it)} has no open question`, 'no-open-question');
+      }
+      const choices = it.question.choices;
+      const index = typeof body.choice === 'number' ? body.choice : -1;
+      if (hasChoice && (!Number.isInteger(index) || index < 0 || index >= choices.length)) {
+        return problem(
+          res,
+          400,
+          'Bad Request',
+          `choice ${String(body.choice)} is not one of the question's choices`,
+          'bad-choice',
+        );
+      }
+      const answer = hasChoice ? (choices[index] ?? '') : text;
+      emit(it, 'question_answered', by, {
+        answer,
+        actor: 'user:local',
+        ...(hasChoice ? { choice_index: index } : {}),
+      });
+      // The run's brief carries the answer; the item goes back to its station's queue.
+      it.question = null;
+      it.state = 'queued';
+      it.agent = null;
       return json(res, 200, full(it));
     }
 

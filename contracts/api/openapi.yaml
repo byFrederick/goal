@@ -86,6 +86,12 @@ tags:
       Factory definitions: creating factories, the one shared draft per factory (Visual
       sections, single files and the whole tree, each write under an If-Match precondition),
       validation, publishing, versions, compare, restore and the template catalog
+  - name: judges
+    description: >-
+      Jonah's judges (ADR 0025): each a file evals/judges/<slug>.md of the factory's definition
+      that scores a sample of its agents' finished runs. Viewers read them and their 30-day
+      figures; those who may publish add, change and try them, and every change publishes a new
+      version through the usual checks.
   - name: evals
     description: >-
       Jonah's eval cases (ADR 0025): each evals/cases/<name>.yaml of a factory's definition, its
@@ -921,14 +927,15 @@ paths:
       description: >-
         The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no
         identity, so every entry is everyone's. decision: an item waiting for a person's decision,
-        with its approval brief; andon: a factory's open andon pull, its line stopped;
+        with its approval brief; question: an item whose agent asked a person a question (ADR
+        0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped;
         rework_warning: a gate one rejection away from its andon policy's rework rate (display
         only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that
-        waits on nothing else. An item has at most one entry (decision, then blocked, then
-        expedite). Later phases add kinds (tool_approval, sync_failed, proposal), which clients
+        waits on nothing else. An item has at most one entry (question, then decision, then blocked,
+        then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients
         that do not know them render as a generic row. When more entries exist than limit, the
-        most recent ones are kept and truncated is true. Entries are ordered by kind (decision,
-        andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is
+        most recent ones are kept and truncated is true. Entries are ordered by kind (decision and
+        question together, then andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is
         enough for every screen to count what it groups (the Floor's Needs you card, the phone's
         Items view).
       parameters:
@@ -2131,6 +2138,117 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AgentStats" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/judges:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: listJudges
+      x-goal-scope: factory:read
+      tags: [judges]
+      summary: The judges of the factory's current version, each with its last 30 days
+      description: >-
+        One entry per evals/judges/<slug>.md of the current version, by slug, each with its
+        production scores of the last 30 days (runs scored, pass rate, cost and a daily pass-rate
+        series by UTC day; tries never count). judge_cost_usd is what every judge run of the
+        factory cost in those 30 days. Empty, with version null, before the first publish. 503
+        judges-unavailable when this goald does not serve judges.
+      responses:
+        "200":
+          description: The judges
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JudgeList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createJudge
+      x-goal-scope: definition:publish
+      tags: [judges]
+      summary: Add a judge and publish it as the factory's next version
+      description: >-
+        Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the
+        current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409
+        judge-exists (the current version has a judge of that slug), draft-open (the factory has an
+        open draft: publish or discard it first; it is left as it is), definition-invalid (with
+        problems; the draft this call opened is discarded), draft-base-moved
+        (expected_current_version_id is not the current version). When the factory has eval cases
+        and the eval gate refuses (evals-pending, evals-failing), the draft stays open, so it
+        publishes once its run passes. 503 judges-unavailable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateJudgeRequest" }
+      responses:
+        "201":
+          description: The judge as the new version has it
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Judge" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/judges/{judge}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/JudgeRef"
+    get:
+      operationId: getJudge
+      x-goal-scope: factory:read
+      tags: [judges]
+      summary: One judge of the current version, its last 30 days, its recent scores and where it runs
+      description: >-
+        Everything in its file, its 30-day summary, its newest production scores (every state,
+        newest first) and runs_on: the box and connections of the factory's defaults it inherits.
+        404 judge-not-found; 503 judges-unavailable.
+      responses:
+        "200":
+          description: The judge
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Judge" }
+        default: { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: updateJudge
+      x-goal-scope: definition:publish
+      tags: [judges]
+      summary: Replace a judge's file and publish it as the factory's next version
+      description: >-
+        As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The
+        same 409 draft-open, definition-invalid and draft-base-moved answers, and the same eval
+        gate.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JudgeWrite" }
+      responses:
+        "200":
+          description: The judge as the new version has it
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Judge" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/judges/{judge}/try:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/JudgeRef"
+    post:
+      operationId: tryJudge
+      x-goal-scope: definition:publish
+      tags: [judges]
+      summary: Queue the judge on the 10 newest finished runs of its agents
+      description: >-
+        Each try names the run's item and is scored like any other score, but never counts in
+        the judge's 30-day figures. Tries cost model spend, so only those who may publish queue
+        them. 404 judge-not-found; 503 judges-unavailable.
+      responses:
+        "202":
+          description: The queued tries, newest run first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JudgeTries" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/andon:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -2704,6 +2822,29 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Run" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/runs/{run}/knowledge:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - name: run
+        in: path
+        required: true
+        description: The run's id
+        schema: { type: string }
+    get:
+      operationId: listRunKnowledge
+      x-goal-scope: factory:read
+      tags: [knowledge]
+      summary: The knowledge documents a run used, with the verdicts given on them for it
+      description: >-
+        Its uses by time, document and kind, and the verdicts agents and people gave for the run
+        (ADR 0027). 404 for a run of another organization.
+      responses:
+        "200":
+          description: The run's knowledge
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RunKnowledge" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/approve:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -2715,6 +2856,37 @@ paths:
       responses:
         "200":
           description: The item after the decision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/items/{item}/answer:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/ItemRef"
+    post:
+      operationId: answerItem
+      x-goal-scope: item:decide
+      summary: Answer the question an item's agent asked
+      description: >-
+        Answers the item's open question (Item.question) with one of its choices or in the
+        caller's own words, as ADR 0018 decides. The engine records question_answered and puts the
+        item back in its station's arrival state, rework_count unchanged; its next run's brief
+        carries the question and the answer. Audited as item.answered with the answer's length and
+        the choice index, never its text. 400 when the body has both answer and choice or neither,
+        or the answer is not 1 to 2000 characters; 400 bad-choice for a choice outside the
+        question's choices; 409 no-open-question when the item has none (none was asked, it was
+        answered, or a move, pause or rejection withdrew it), item-closed for a done or cancelled
+        item, item-changed when it moved meanwhile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ItemAnswer" }
+      responses:
+        "200":
+          description: The item after the answer
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
@@ -3539,6 +3711,89 @@ paths:
             application/octet-stream:
               schema: { type: string, format: binary }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/knowledge/documents/{document}/uses:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/DocumentRef"
+    get:
+      operationId: listKnowledgeDocumentUses
+      x-goal-scope: knowledge:read
+      tags: [knowledge]
+      summary: One page of the runs that used a document
+      description: >-
+        Newest first use first (ADR 0027), after the run id after; next_after, when set, is the
+        after of the next page. Each names its run, item and factory, so a client links to them;
+        a run of a factory the caller may not see is left out. 404 knowledge-document-not-found.
+      parameters:
+        - name: after
+          in: query
+          description: The last run id of the previous page
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: The page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeDocumentUsePage" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/knowledge/documents/{document}/verdict:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/DocumentRef"
+    put:
+      operationId: giveKnowledgeVerdict
+      x-goal-scope: knowledge:verdict
+      tags: [knowledge]
+      summary: Say whether a document helped or misled
+      description: >-
+        The caller's verdict on the document, of a run of the organization when run_id is set
+        (ADR 0027, decision 2). There is one per person, document and run, so a second replaces
+        the first. 404 knowledge-document-not-found, 404 run-not-found, 422
+        knowledge-document-not-used for a run with no use of the document. Audited as
+        knowledge_verdict.given, without the note; sends the stream event knowledge.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/KnowledgeVerdictInput" }
+      responses:
+        "200":
+          description: The verdict as stored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeVerdict" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/knowledge/usage:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: getKnowledgeUsage
+      x-goal-scope: knowledge:read
+      tags: [knowledge]
+      summary: Where a source's documents were used
+      description: >-
+        Per document of the source with a use or a verdict in the last days days (ADR 0027,
+        decision 3): the distinct runs that used it and the verdicts given, agents' and people's
+        apart; at most 500, the most used first, then by id. 404 knowledge-source-not-found.
+      parameters:
+        - name: source
+          in: query
+          required: true
+          description: The source's name
+          schema: { type: string }
+        - name: days
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 90, default: 7 }
+      responses:
+        "200":
+          description: The usage
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeUsage" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/knowledge/search:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -3628,6 +3883,12 @@ components:
       in: path
       required: true
       description: The factory's metadata.id or metadata.name
+      schema: { type: string }
+    JudgeRef:
+      name: judge
+      in: path
+      required: true
+      description: "The judge's slug: its file name in evals/judges without .md"
       schema: { type: string }
     EvalRunRef:
       name: eval_run
@@ -3766,7 +4027,8 @@ components:
             Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found
             (404), connection-cannot-sync (400), knowledge-source-name-taken,
             knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413),
-            unsupported-document-type (415).
+            unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run
+            has no use of the document).
             Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found
             (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409),
             and a publish's evals-pending (its eval run is queued or running, or it started one)
@@ -4697,6 +4959,38 @@ components:
         waiting:
           description: Why the item is not claimed yet; getItem only, absent unless it is queued or ready with an open need
           allOf: [{ $ref: "#/components/schemas/ItemWaiting" }]
+        question:
+          description: >-
+            The question the item's agent asked a person and nobody has answered yet (ADR 0018);
+            getItem and answerItem only, absent or null when there is none
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/ItemQuestion" }]
+    ItemQuestion:
+      type: object
+      description: An agent's open question about an item, read from its question_asked event
+      required: [text, choices, asked_at, agent, run_id]
+      properties:
+        text: { type: string, description: The question, 1 to 500 characters }
+        choices:
+          type: array
+          description: The quick answers the agent offered, 0 to 4; empty for a free answer only
+          items: { type: string }
+        asked_at: { type: string, format: date-time }
+        agent: { type: string, description: "The asking agent's role name, as in frontend-engineer; never its copy number" }
+        run_id: { type: string, description: The run that asked; it ended when it asked }
+    ItemAnswer:
+      type: object
+      description: A person's answer to an item's open question; exactly one of answer and choice
+      properties:
+        answer:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: The answer in the person's own words, 1 to 2000 characters (surrounding space is trimmed)
+        choice:
+          type: integer
+          minimum: 0
+          description: The index of the picked choice in Item.question.choices
     ItemWaiting:
       type: object
       description: >-
@@ -5513,6 +5807,157 @@ components:
         throughput_per_day: { type: number, format: double, nullable: true }
         lead_time_hours: { type: number, format: double, nullable: true, description: The p85 lead time to stay under }
         expedite_lead_time_minutes: { type: integer, nullable: true, description: Lead time of each expedite item }
+    JudgeOutcome:
+      type: object
+      required: [score, label, meaning]
+      properties:
+        score: { type: number, format: double, minimum: 0, maximum: 1 }
+        label: { type: string }
+        meaning: { type: string }
+    JudgeWrite:
+      type: object
+      description: >-
+        A judge's file as evals.schema.json has its front matter, with the Markdown rubric that
+        follows it. Validated when it is published, as every definition file is.
+      required: [title, criterion, outcomes, pass_mark, sample, rubric]
+      properties:
+        title: { type: string }
+        criterion: { type: string, description: What it checks, in one sentence }
+        agents:
+          type: array
+          description: The agents whose runs it scores; empty or absent, every agent
+          items: { type: string }
+        outcomes:
+          type: array
+          items: { $ref: "#/components/schemas/JudgeOutcome" }
+        pass_mark: { type: number, format: double, description: The lowest score that passes, from 0 to 1 }
+        sample: { type: number, format: double, description: The share of the agents' finished runs it scores, from 0 to 1; 0 pauses it }
+        model: { type: string, description: "The judge run's model; absent, the factory's runtime.model" }
+        enabled: { type: boolean, default: true }
+        rubric: { type: string, description: The file's Markdown body }
+        expected_current_version_id:
+          type: string
+          description: The version the caller saw running; the publish is refused (draft-base-moved) when another one runs
+    CreateJudgeRequest:
+      allOf:
+        - type: object
+          required: [slug]
+          properties:
+            slug: { type: string, description: "The judge's file name without .md: 3 to 40 lowercase letters, digits and hyphens, starting with a letter" }
+        - $ref: "#/components/schemas/JudgeWrite"
+    JudgeDay:
+      type: object
+      required: [day, scored, passed, pass_rate]
+      properties:
+        day: { type: string, format: date, description: The UTC day }
+        scored: { type: integer }
+        passed: { type: integer }
+        pass_rate: { type: number, format: double }
+    JudgeSummary:
+      type: object
+      description: A judge's production scores over the last 30 days; tries never count
+      required: [scored, passed, pass_rate, cost_usd, days]
+      properties:
+        scored: { type: integer, description: The runs scored }
+        passed: { type: integer }
+        pass_rate: { type: number, format: double, description: Passed over scored, 0 when nothing was scored }
+        cost_usd: { type: number, format: double, description: What its judge runs cost, errors included }
+        days:
+          type: array
+          description: One point per UTC day with a scored run, oldest first
+          items: { $ref: "#/components/schemas/JudgeDay" }
+    JudgeListEntry:
+      type: object
+      required: [slug, title, criterion, agents, sample, pass_mark, enabled, summary]
+      properties:
+        slug: { type: string }
+        title: { type: string }
+        criterion: { type: string }
+        agents: { type: array, items: { type: string }, description: Empty means every agent }
+        sample: { type: number, format: double }
+        pass_mark: { type: number, format: double }
+        enabled: { type: boolean }
+        summary: { $ref: "#/components/schemas/JudgeSummary" }
+    JudgeList:
+      type: object
+      required: [version, judges, judge_cost_usd]
+      properties:
+        version: { type: integer, nullable: true, description: The number of the version the judges are read from; null before the first publish }
+        judges:
+          type: array
+          description: By slug
+          items: { $ref: "#/components/schemas/JudgeListEntry" }
+        judge_cost_usd: { type: number, format: double, description: "What the factory's judge runs cost over the last 30 days" }
+    JudgeScoreState:
+      type: string
+      enum: [queued, running, scored, error]
+    JudgeScore:
+      type: object
+      description: One production score of a judge; outcome, score and passed once it is scored
+      required: [id, state, item_ref, item_title]
+      properties:
+        id: { type: string }
+        state: { $ref: "#/components/schemas/JudgeScoreState" }
+        item_ref: { type: string, description: "<factory name>#<number>" }
+        item_title: { type: string }
+        outcome: { type: string, description: The label of the outcome the judge gave }
+        score: { type: number, format: double }
+        passed: { type: boolean }
+        reason: { type: string, description: The judge's one sentence, or what went wrong for an error }
+        scored_at: { type: string, format: date-time }
+    JudgeRunsOn:
+      type: object
+      description: Where the judge's runs run; a judge inherits the factory's defaults
+      required: [size, connections, sees, inherited]
+      properties:
+        size: { type: string, description: "The box: the factory's runtime.size, medium when it says none" }
+        connections:
+          type: array
+          description: "The connections of the factory's current version, read only"
+          items: { type: string }
+        sees:
+          type: array
+          description: What a judge run reads of the run it scores
+          items: { type: string, enum: [events, spec, pull_request] }
+        inherited: { type: boolean, description: True while these are the factory's defaults }
+    Judge:
+      type: object
+      required: [slug, title, criterion, agents, outcomes, pass_mark, sample, enabled, rubric, version, summary, recent, runs_on]
+      properties:
+        slug: { type: string }
+        title: { type: string }
+        criterion: { type: string }
+        agents: { type: array, items: { type: string }, description: Empty means every agent }
+        outcomes:
+          type: array
+          items: { $ref: "#/components/schemas/JudgeOutcome" }
+        pass_mark: { type: number, format: double }
+        sample: { type: number, format: double }
+        model: { type: string, description: "Absent: the factory's runtime.model" }
+        enabled: { type: boolean }
+        rubric: { type: string }
+        version: { type: integer, description: The number of the version the judge is read from }
+        summary: { $ref: "#/components/schemas/JudgeSummary" }
+        recent:
+          type: array
+          description: The newest production scores, newest first
+          items: { $ref: "#/components/schemas/JudgeScore" }
+        runs_on: { $ref: "#/components/schemas/JudgeRunsOn" }
+    JudgeTry:
+      type: object
+      required: [id, state, item_ref, item_title]
+      properties:
+        id: { type: string }
+        state: { $ref: "#/components/schemas/JudgeScoreState" }
+        item_ref: { type: string, description: "<factory name>#<number>" }
+        item_title: { type: string }
+    JudgeTries:
+      type: object
+      required: [tries]
+      properties:
+        tries:
+          type: array
+          items: { $ref: "#/components/schemas/JudgeTry" }
     AgentStats:
       type: object
       required: [agent, from, to, model, stations, tasks_finished, sent_back, median_turns, spend_per_task_usd, task_time_p85_minutes, spend_usd, reasons, denied_tool_calls]
@@ -5844,7 +6289,14 @@ components:
         item_id: { type: string }
         run_id: { type: string }
         at: { type: string, format: date-time }
-        kind: { type: string }
+        kind:
+          type: string
+          description: >-
+            What happened, as in submitted, moved, note or lease_taken. question_asked: the
+            item's agent asked a person (data question, choices, agent as the role name, run_id);
+            the run ends and the item waits at its station. question_answered: a person answered
+            (data answer, the picked choice's text or their words; choice_index only when a
+            choice was picked; actor); the item goes back to its station's queue
         station: { type: string }
         actor: { type: string }
         data:
@@ -6387,7 +6839,7 @@ components:
     InboxEntryKind:
       type: string
       description: What waits; later phases add kinds, which clients that do not know them show as a generic row
-      enum: [decision, andon, rework_warning, blocked, expedite]
+      enum: [decision, question, andon, rework_warning, blocked, expedite]
     InboxEntry:
       type: object
       required: [id, kind, factory, since, item, station, action, approval, blocked, andon, rework]
@@ -6395,8 +6847,8 @@ components:
         id:
           type: string
           description: >-
-            "<kind>:<id of what waits>": decision:, blocked: and expedite:<item id>, andon:<pull id>,
-            rework_warning:<factory id>:<gate station>
+            "<kind>:<id of what waits>": decision:, question:, blocked: and expedite:<item id>,
+            andon:<pull id>, rework_warning:<factory id>:<gate station>
         kind: { $ref: "#/components/schemas/InboxEntryKind" }
         factory:
           type: object
@@ -6409,7 +6861,7 @@ components:
           type: string
           format: date-time
           description: >-
-            Since when it waits: the item's last change (decision, blocked), its creation
+            Since when it waits: the item's last change (decision, question, blocked), its creation
             (expedite), the pull (andon), now (rework_warning)
         item:
           description: The item it is about, or null for an entry that is about no item
@@ -6432,6 +6884,11 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/InboxBlocked"
+        question:
+          description: A question entry's open question; absent or null for other kinds
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/ItemQuestion"
         andon:
           description: The open pull of an andon entry; null for other kinds
           nullable: true
@@ -7150,6 +7607,21 @@ components:
               type: object
               description: weekly_usd, daily_usd, per_item_usd, max_turns_per_task, on_exhausted
               additionalProperties: {}
+        starter:
+          type: object
+          description: >-
+            factory.yaml's starter section (ADR 0032), absent when the YAML has none. It is not a
+            Visual section and has no ETag: onboarding submits starter.item once, through submitItem,
+            to a factory with no items, and YAML mode edits it.
+          required: [item]
+          properties:
+            item:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string }
+                type: { type: string, description: "One of board.workTypes; when absent, submitItem gives the first" }
+                body: { type: string, description: "The item's brief, in markdown" }
     DefinitionEvent:
       type: object
       description: "The data of one `event: definition` on /v1/orgs/{org}/stream; it carries no content"
@@ -7752,6 +8224,95 @@ components:
         heading: { type: string, description: 'The headings the chunk is under ("Install > Docker")' }
         snippet: { type: string, description: The chunk's text }
         score: { type: number, format: double }
+    KnowledgeUsage:
+      type: object
+      required: [source, days, documents]
+      properties:
+        source: { type: string, description: The source's name }
+        days: { type: integer, description: The window in days }
+        documents:
+          type: array
+          items: { $ref: "#/components/schemas/KnowledgeDocumentUsage" }
+    KnowledgeDocumentUsage:
+      type: object
+      description: One document's use over the window; getKnowledgeDocument has its url
+      required: [id, title, source, runs, agents_helped, agents_misled, people_helped, people_misled]
+      properties:
+        id: { type: string, description: The document's id }
+        title: { type: string }
+        source: { type: string, description: Its source's name }
+        runs: { type: integer, description: The distinct runs that used it }
+        agents_helped: { type: integer }
+        agents_misled: { type: integer }
+        people_helped: { type: integer }
+        people_misled: { type: integer }
+    KnowledgeUseKind:
+      type: string
+      enum: [search, read]
+      description: search when knowledge__search returned some of its chunks, read when knowledge__read opened it
+    KnowledgeDocumentUsePage:
+      type: object
+      required: [uses]
+      properties:
+        uses:
+          type: array
+          items: { $ref: "#/components/schemas/KnowledgeDocumentUse" }
+        next_after: { type: string, description: "The after of the next page; absent on the last" }
+    KnowledgeDocumentUse:
+      type: object
+      description: One run that used a document
+      required: [run_id, item, factory, kinds, at]
+      properties:
+        run_id: { type: string }
+        item: { $ref: "#/components/schemas/RunItem" }
+        factory: { $ref: "#/components/schemas/FactoryHit" }
+        kinds:
+          type: array
+          items: { $ref: "#/components/schemas/KnowledgeUseKind" }
+        at: { type: string, format: date-time, description: The run's first use of the document }
+    KnowledgeVerdictInput:
+      type: object
+      required: [verdict]
+      additionalProperties: false
+      properties:
+        verdict: { type: string, enum: [helped, misled] }
+        run_id: { type: string, description: A run of the organization that used the document }
+        note: { type: string, maxLength: 500 }
+    KnowledgeVerdict:
+      type: object
+      required: [document, source, verdict, by, at]
+      properties:
+        document: { type: string, description: The document's id }
+        source: { type: string, description: Its source's name }
+        verdict: { type: string, enum: [helped, misled] }
+        run_id: { type: string }
+        item_id: { type: string, description: The run's item }
+        note: { type: string }
+        by: { $ref: "#/components/schemas/Actor" }
+        at: { type: string, format: date-time }
+    RunKnowledge:
+      type: object
+      required: [uses, verdicts]
+      properties:
+        uses:
+          type: array
+          items: { $ref: "#/components/schemas/RunKnowledgeUse" }
+        verdicts:
+          type: array
+          description: The verdicts given for the run, by time
+          items: { $ref: "#/components/schemas/KnowledgeVerdict" }
+    RunKnowledgeUse:
+      type: object
+      required: [document, source, kind, chunks, at]
+      properties:
+        document: { type: string, description: The document's id }
+        source: { type: string, description: Its source's name }
+        kind: { $ref: "#/components/schemas/KnowledgeUseKind" }
+        chunks:
+          type: array
+          description: The chunk ids a search returned; none for a read
+          items: { type: integer, format: int64 }
+        at: { type: string, format: date-time }
     KnowledgeEvent:
       type: object
       description: "The data of one `event: knowledge` on /v1/orgs/{org}/stream: a source's sync started or ended"

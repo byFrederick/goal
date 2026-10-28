@@ -32,8 +32,10 @@ import (
 )
 
 const (
-	acmeID    = "8d4f2b1a-3c5e-4f60-9a7b-1c2d3e4f5a6b"
-	acmeItems = "/v1/orgs/acme/factories/acme/items"
+	acmeID      = "8d4f2b1a-3c5e-4f60-9a7b-1c2d3e4f5a6b"
+	acmeItems   = "/v1/orgs/acme/factories/acme/items"
+	acmeItemRef = "acme#1"
+	lineItemRef = "line#1"
 )
 
 // acme is inbox → approve (human) → done: enough to submit, read and decide on items, with an
@@ -187,6 +189,10 @@ type harness struct {
 	evals      *porttest.Evals
 	evalJudges *porttest.Judges
 	evalLoop   *jonah.Evals
+	// judges are the versions' judges as tests set them, judgeScores their scores; tries are
+	// queued by a jonah loop over them and the store's finished runs.
+	judges      *porttest.Judges
+	judgeScores *porttest.JudgeScores
 }
 
 // acme's one prompt and its path.
@@ -448,7 +454,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.seam, h.tenancy = &seam{}, tenancy
 	h.skills, h.skillSource = &flakyObjects{ObjectStore: porttest.NewObjectStore()}, porttest.NewSkillSource()
 	h.builder = builder.New(h.skills, h.clock, builder.Config{
-		Models: []builder.Model{{ID: "claude-opus-5-5", Label: "Claude Opus 5.5"}, {ID: "claude-haiku-5-5", Label: "Claude Haiku 5.5"}},
+		Models: []builder.Model{{ID: "claude-opus-5-5", Label: "Claude Opus 5.5"}, {ID: modelHaiku, Label: "Claude Haiku 5.5"}},
 	})
 
 	// One identity keeps the people and the organizations' API keys: the sign-in's under
@@ -481,6 +487,8 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity
 		deps.Auth = api.AuthConfig{Mode: api.AuthSession, EmailCodes: !in.noEmailCodes, Google: in.google}
 	}
+
+	deps.Judges = h.judgeDeps(tenancy)
 
 	handler, err := api.New(h.withEvals(deps, tenancy, opts))
 	if err != nil {
@@ -533,6 +541,20 @@ func (h *harness) startFeed(t *testing.T, in *signIn) (*api.Feed, func()) {
 		if err := <-done; err != nil {
 			t.Error(err)
 		}
+	}
+}
+
+// judgeDeps are h's judges and their scores, with a jonah loop over them and the store's finished
+// runs for tries.
+func (h *harness) judgeDeps(tenancy *porttest.Tenancy) *api.JudgeDeps {
+	h.judges, h.judgeScores = porttest.NewJudges(), porttest.NewJudgeScores(h.store)
+
+	return &api.JudgeDeps{
+		Judges: h.judges, Scores: h.judgeScores,
+		Tries: jonah.New(jonah.Deps{
+			Orgs: tenancy, Runs: h.store, Finished: porttest.NewFinishedRuns(h.store), Judges: h.judges, Scores: h.judgeScores,
+			Runner: porttest.NewJudgeRunner(nil), Clock: h.clock,
+		}, jonah.Config{}),
 	}
 }
 

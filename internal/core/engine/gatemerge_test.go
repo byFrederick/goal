@@ -363,3 +363,119 @@ func TestGateMerge_ConflictWithOnConflictHumanBlocks(t *testing.T) {
 
 	h.expectBlockedAtGate(t, it.ID, "go.mod")
 }
+
+// landingURL is the pull request from the integration branch into the default branch, and
+// approveEmpty the landing gate's approval of an integration branch with nothing to land.
+const (
+	landingURL   = "https://github.com/acme/app/pull/9"
+	approveEmpty = `{"decision":"approve","pull_requests":[]}`
+)
+
+// landingLine is gateMergeLine with a repository, in integration mode branch: review is the
+// landing station.
+func landingLine() domain.Line {
+	l := gateMergeLine()
+	l.Runtime.Repository = domain.Repository{URL: repoURL, Connection: connGit}
+	l.Flow.Assemblies.Integration = domain.IntegrationPolicy{Mode: domain.IntegrationModeBranch, MinParts: 1}
+
+	return l
+}
+
+// landing makes item 1, "big request", a landing root queued at the review gate, as the store's
+// closeAssembly leaves a finished assembly whose parts built on its integration branch.
+func (h *harness) landing(t *testing.T) domain.Item {
+	t.Helper()
+
+	it := h.submit(t, domain.NewItem{Title: assemblyTitle})
+	if _, err := h.store.SetIntegrationBranch(inOrg(t), it.ID, integrationBranch, stReview, h.clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	return h.at(t, h.item(t, it.ID), stReview, domain.StateQueued)
+}
+
+// The landing gate's approval merges the pull request from the integration branch and the
+// assembly goes to done.
+func TestGateMerge_LandingMergesAndGoesToDone(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, landingLine(), byAgent(map[string]string{
+		agReviewer: `{"decision":"approve","pull_request":"` + landingURL + `"}`,
+	}))
+
+	pr := openPR(landingURL)
+	pr.HeadBranch = integrationBranch
+	h.codehost.Add(pr)
+
+	root := h.landing(t)
+	h.step(t)
+
+	if got := h.item(t, root.ID); got.Position() != (domain.Position{Station: stDone, State: domain.StateDone}) {
+		t.Fatalf("assembly at %+v, want done (events %v)", got.Position(), h.kinds(root.ID))
+	}
+
+	if merges := h.codehost.Merges(); !reflect.DeepEqual(merges, []porttest.MergeCall{squashOf(landingURL, connGitHub)}) {
+		t.Errorf("merges %+v, want the landing pull request", merges)
+	}
+
+	h.expectEngineMerged(t, root.ID, 1)
+}
+
+// An assembly whose integration branch holds nothing beyond the default branch lands with an
+// explicit empty pull_requests: it goes to done and nothing is merged.
+func TestGateMerge_EmptyLandingAdvancesWithoutMerging(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, landingLine(), byAgent(map[string]string{
+		agReviewer: approveEmpty,
+	}))
+
+	root := h.landing(t)
+	h.step(t)
+
+	if got := h.item(t, root.ID); got.Position() != (domain.Position{Station: stDone, State: domain.StateDone}) {
+		t.Fatalf("assembly at %+v, want done (events %v)", got.Position(), h.kinds(root.ID))
+	}
+
+	if merges, merged := h.codehost.Merges(), h.eventsOf(root.ID, domain.EventMerged); len(merges) != 0 || len(merged) != 0 {
+		t.Errorf("merges %+v, merged events %+v; want none", merges, merged)
+	}
+}
+
+// Without an integration branch, an approval that names no pull request blocks at the gate as
+// before, an explicit empty pull_requests included; so does a landing whose output omits it.
+func TestGateMerge_EmptyPullRequestsFailsWithoutIntegrationBranch(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		line    domain.Line
+		landing bool
+		review  string
+	}{
+		{name: "trunk item, empty pull_requests", line: gateMergeLine(), review: approveEmpty},
+		{name: "trunk item, no pull request", line: gateMergeLine(), review: approve},
+		{name: "root on trunk, empty pull_requests", line: landingLine(), review: approveEmpty},
+		{name: "landing that names no pull request", line: landingLine(), landing: true, review: approve},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarness(t, tt.line, byAgent(map[string]string{agWorker: `{"summary":"done"}`, agReviewer: tt.review}))
+
+			var it domain.Item
+			if tt.landing {
+				it = h.landing(t)
+			} else {
+				it = h.submit(t, domain.NewItem{Title: assemblyTitle})
+				h.step(t) // built
+			}
+
+			h.step(t)
+
+			h.expectBlockedAtGate(t, it.ID, "no output names a pull_request")
+		})
+	}
+}

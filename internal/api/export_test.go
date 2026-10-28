@@ -78,9 +78,9 @@ func TestExportRuns(t *testing.T) {
 
 	at := func(m int) string { return t0.Add(time.Duration(m) * time.Minute).UTC().Format(time.RFC3339) }
 	header := strings.Fields("id factory item_ref item_title station agent model status started_at ended_at turns cost_usd")
-	rowOK := []string{string(ok), lineSlug, "line#1", title, stBuild, agBackend, runModel, "succeeded", at(1), at(2), "3", "0.5"}
-	rowFailed := []string{string(failed), lineSlug, "line#1", title, stBuild, agBackend, runModel, "failed", at(2), at(3), "0", "0.125"}
-	rowRunning := []string{string(running), acmeSlug, "acme#1", "Write the user guide", stInbox, evalAgent, runModel, "running", at(3), "", "0", "0"}
+	rowOK := []string{string(ok), lineSlug, lineItemRef, title, stBuild, agBackend, runModel, "succeeded", at(1), at(2), "3", "0.5"}
+	rowFailed := []string{string(failed), lineSlug, lineItemRef, title, stBuild, agBackend, runModel, "failed", at(2), at(3), "0", "0.125"}
+	rowRunning := []string{string(running), acmeSlug, acmeItemRef, "Write the user guide", stInbox, evalAgent, runModel, "running", at(3), "", "0", "0"}
 	file := "runs-" + t0.UTC().Format(time.DateOnly) + ".csv"
 
 	res := h.request(t, http.MethodGet, runsExportPath, "", nil)
@@ -165,7 +165,7 @@ func TestExportSpend(t *testing.T) {
 	header := strings.Fields("factory agent model cost_usd")
 	acmeRow := []string{acmeSlug, evalAgent, "claude-fable-5-1", "1"}
 	lineFable := []string{lineSlug, agBackend, "claude-fable-5-1", "5"}
-	lineHaiku := []string{lineSlug, agentFrontend, "claude-haiku-5-5", "4"}
+	lineHaiku := []string{lineSlug, agentFrontend, modelHaiku, "4"}
 	file := "spend-" + t0.UTC().Format(time.DateOnly) + ".csv"
 
 	// Rows are ordered by factory id, then agent and model.

@@ -28,6 +28,7 @@ const (
 	keyConnections = "connections"
 	keyKnowledge   = "knowledge"
 	keyImage       = "image"
+	keyStarter     = "starter"
 	keySettings    = "settings" // model only: a connection's connector settings
 	keyLegacy      = "legacy"   // model only: a connection in the inline type form
 

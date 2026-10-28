@@ -270,6 +270,9 @@ spec:
       tools:
         allow: [Read, Grep, Glob, Bash, WebFetch]
         deny: ["Bash(aws * delete*)", "Bash(aws * put*)", "Bash(terraform apply*)", "Bash(kubectl delete*)"]
+    - name: fixer
+      description: Makes an approved change and says how to roll it back.
+      prompt: ./agents/fixer.md
   board:
     workTypes: [incident, change, toil]
     stations:
@@ -286,6 +289,7 @@ const sreFiles = () =>
     'agents/triager.md': '# triager\n\nSort the alert: incident, change or toil, and how urgent it is.\n',
     'agents/investigator.md':
       '# investigator\n\nFind the cause. Propose the smallest safe change and how to roll it back.\n',
+    'agents/fixer.md': '# fixer\n\nMake the approved change. Say how to roll it back.\n',
     'skills/aws-investigation/SKILL.md':
       '---\nname: aws-investigation\ndescription: Read-only playbook for ECS, RDS, ALB, Lambda\n---\n\n# AWS investigation\n\nDescribe before you change: logs, metrics, recent deploys.\n',
     'skills/incident-triage/SKILL.md':
@@ -464,6 +468,17 @@ metadata:
   name: software
   title: Software
 spec:
+  agents:
+    - name: architect
+      description: Writes the spec for an item.
+    - name: backend-engineer
+      description: Builds Go changes from the spec.
+    - name: frontend-engineer
+      description: Builds the React UI, following the design system.
+    - name: infra-engineer
+      description: Changes Terraform and the deploy scripts.
+    - name: reviewer
+      description: Reviews the pull request against the spec.
   board:
     workTypes: [feature, fix, refactor]
     stations:

@@ -265,6 +265,36 @@ func TestServeRun_ServesTheRunsBundle(t *testing.T) {
 	}
 }
 
+// A part on its assembly's integration branch gets the branch and base the engine put in its
+// task token (ADR 0033).
+func TestServeRun_BundleBaseFromTheTaskToken(t *testing.T) {
+	t.Parallel()
+
+	h := newHarnessWith(t, Config{}, harnessDeps{yaml: bundleYAML, files: bundleFiles})
+	it := h.submit(t, factoryID, "Add a health endpoint", "")
+	c := h.claims()
+	c.ItemID, c.Branch, c.Base = it.ID, "goal/9-store", "goal/a8-big-request"
+
+	status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, c))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (%s)", status, body)
+	}
+
+	var got runBundle
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+
+	want := bundleRepository{URL: "https://github.com/acme/api.git", Branch: c.Branch, Base: c.Base, FreshBase: domain.FreshBaseMerge}
+	if got.Repository == nil || *got.Repository != want {
+		t.Errorf("repository = %+v, want %+v", got.Repository, want)
+	}
+
+	if !strings.Contains(string(body), `"base":"goal/a8-big-request"`) {
+		t.Errorf("the bundle names no base:\n%s", body)
+	}
+}
+
 // A repository connection that is also one of the agent's signs git in once.
 func TestServeRun_OneGitLoginPerCredential(t *testing.T) {
 	t.Parallel()

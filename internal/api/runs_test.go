@@ -248,7 +248,7 @@ func TestAPI_ListRuns(t *testing.T) {
 		Id: string(failed), ItemId: string(build.ID), Station: stBuild, Agent: agBackend, Model: runModel,
 		Status: gen.RunStatus(domain.RunFailed), CostUsd: 0.25, Error: &failure, StartedAt: t0.Add(2 * time.Minute), EndedAt: &ended,
 		Factory: gen.FactoryHit{Id: lineID, Name: lineSlug, Title: row.Factory.Title},
-		Item:    gen.RunItem{Id: string(build.ID), Ref: "line#1", Title: "Fix the backend build"},
+		Item:    gen.RunItem{Id: string(build.ID), Ref: lineItemRef, Title: "Fix the backend build"},
 	}
 
 	if got := asJSON(t, row); got != asJSON(t, want) {

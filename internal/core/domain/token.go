@@ -52,7 +52,13 @@ type TaskClaims struct {
 	// tools (WebFetch, WebSearch) when its Read the web and docs default is off or ask, which the
 	// gateway adds to the agent's deny rules whatever the version says.
 	DeniedCommands []string `json:"d,omitempty"`
-	ExpiresAt      int64    `json:"e"` // unix seconds
+	// Branch is the run's branch and Base the branch it is cut from and its pull request goes
+	// into, as the engine decided them at run start (RunBase). An empty Base is the default
+	// branch; tokens issued before them name neither, and the gateway then takes the item's
+	// branch and the default branch.
+	Branch    string `json:"b,omitempty"`
+	Base      string `json:"bb,omitempty"`
+	ExpiresAt int64  `json:"e"` // unix seconds
 }
 
 // SignTaskToken issues a per-task gateway token for TaskAudience, whatever c.Audience says. Any
