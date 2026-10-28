@@ -145,6 +145,24 @@ usage:
                                                   week), per merged item and on rework, and each
                                                   factory's budget: running, stopped or over_budget,
                                                   its spend today and in the last 7 days
+  goal triggers list <factory> [--json]           the factory's triggers in definition order: on or off,
+                                                  when they fire, what they create, the items they
+                                                  created in the last 7 days, and why one may not be
+                                                  creating items (triggers change in the definition)
+  goal triggers show <factory> <trigger> [--json] a trigger, what its items did in the last 7 days
+                                                  and its recent events: created, merged or skipped
+  goal webhooks list <factory> [--json]           the factory's webhook endpoints: kind, address,
+                                                  the triggers they feed, deliveries in 7 days
+                                                  (never a secret)
+  goal webhooks create <factory> <name> [--kind generic|github] [--json]
+                                                  add an endpoint (default kind generic); its signing
+                                                  secret is printed once, alone on stdout: store it in
+                                                  the sender now
+  goal webhooks rotate <factory> <name> [--json]  replace its signing secret, printed once the same
+                                                  way; the old one stops working at once
+  goal webhooks deliveries <factory> <name> [--limit N] [--after C] [--json]
+                                                  what it received, newest first: refused (and why),
+                                                  accepted or created an item
   goal connection import-env                      once, after the cutover to connections: GOAL_GITHUB_TOKEN
                                                   becomes github, CLAUDE_CODE_OAUTH_TOKEN (or ANTHROPIC_API_KEY)
                                                   claude; names that exist are left as they are
@@ -191,7 +209,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, move, pause, the decisions, status, andon, factory, connection, credential, knowledge, search, runs, eval, spend) acts in one
+Every command that talks to goald (run, follow, item, note, move, pause, the decisions, status, andon, factory, connection, credential, knowledge, search, runs, eval, spend, triggers, webhooks) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or

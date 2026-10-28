@@ -22,7 +22,7 @@ describe('changedFields', () => {
   });
 
   test('sends only the General fields that changed, trimmed', () => {
-    const form = { ...formOf(acme), name: '  Acme Labs ', mark: 'Ac' };
+    const form = { ...formOf(acme), name: '  Acme Labs ' };
     expect(changedFields(acme, form)).toEqual({ name: 'Acme Labs' });
   });
 
@@ -60,10 +60,9 @@ describe('validate', () => {
     expect(validate(formOf(acme))).toEqual({});
   });
 
-  test('needs a name and a mark', () => {
-    expect(validate({ ...formOf(acme), name: '  ', mark: '' })).toEqual({
+  test('needs a name', () => {
+    expect(validate({ ...formOf(acme), name: '  ' })).toEqual({
       name: 'Give the organization a name.',
-      mark: 'One or two letters or digits.',
     });
   });
 

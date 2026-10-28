@@ -149,7 +149,7 @@ function renderPage({
       [factoriesQuery(org.id).queryKey, factories],
     ],
     search,
-    path: 'credentials/',
+    path: '/credentials',
   });
 }
 

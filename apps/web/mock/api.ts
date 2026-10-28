@@ -73,11 +73,15 @@ import {
   trackSpan,
 } from './fixtures.ts';
 import { constraintOf, type DayRange, type FlowInput, leadTimeOf, metricsOf, rangeOf, weeklyOf } from './flow.ts';
+import { intakeOf } from './intake.ts';
 import { createKeys } from './keys.ts';
 import { createKnowledge } from './knowledge.ts';
 import { membersFor, orgCanOf } from './people.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
+import { orgRunsOf } from './runs.ts';
+import { createSpend } from './spend.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
+import { createWebhooks } from './webhooks.ts';
 
 type Next = (err?: unknown) => void;
 
@@ -222,6 +226,11 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       }
     },
     acme: acmeOrg,
+  });
+
+  const webhooks = createWebhooks({
+    clock,
+    factories: (org) => state.factories.filter((f) => f.org_id === org),
   });
 
   const ref = (it: MockItem) => `${it.factory}#${it.number}`;
@@ -717,6 +726,16 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const last = state.andon[f.name]?.at(-1);
     return last && last.cleared_at === null ? last : null;
   };
+
+  // The spend figures: the factories the organization has, with the andon pull that stops one (spend.ts).
+  const spend = createSpend({
+    clock,
+    factoriesOf,
+    reasonOf: (_org, f) => {
+      const last = state.andon[f.name]?.at(-1);
+      return last && last.cleared_at === null ? last.reason : null;
+    },
+  });
 
   /** A pull or a clear: its audit entry and the organization's `event: factory`, as goald's trigger sends it. */
   const andonChanged = (f: Factory, pull: AndonPull) => {
@@ -1294,6 +1313,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       connections.reset(clock());
       credentials.reset(clock());
       knowledge.reset(clock());
+      webhooks.reset();
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
       const cookie = auth.reset(authSettings(body.auth));
       if (cookie) res.setHeader('Set-Cookie', cookie);
@@ -1385,6 +1405,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await credentials.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
+    if (await spend.handle(org, rest, method, url, res)) return;
+    if (await webhooks.handle(org.id, rest, method, req, res, () => readBody(req))) return;
 
     if (rest === '' && method === 'GET') return json(res, 200, forCaller(req, withCount(org)));
     if (rest === '' && method === 'DELETE') {
@@ -1440,6 +1462,11 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       const archived = url.searchParams.get('archived') === 'true';
       const factories = state.factories.filter((f) => f.org_id === org.id && Boolean(f.archived_at) === archived);
       return json(res, 200, { factories });
+    }
+
+    if (rest === '/runs' && method === 'GET') {
+      const result = orgRunsOf(state, org.id, url.searchParams);
+      return 'body' in result ? json(res, 200, result.body) : problem(res, result.status, result.title, result.detail);
     }
 
     if (rest === '/attention' && method === 'GET') {
@@ -1510,6 +1537,13 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return;
     }
 
+    if (rest.match(/^\/factories\/[^/]+\/intake$/) && method === 'GET') {
+      const key = decodeURIComponent(rest.split('/')[2] ?? '');
+      const factory = findFactory(key, org.id);
+      if (!factory) return problem(res, 404, 'Factory not found', key);
+      return json(res, 200, intakeOf(factory.name));
+    }
+
     let m = rest.match(/^\/factories\/([^/]+)\/agents\/([^/]+)\/stats$/);
     if (m && method === 'GET') {
       const key = decodeURIComponent(m[1] ?? '');
@@ -1519,6 +1553,43 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       if (stats === null)
         return problem(res, 404, 'Not Found', `factory ${factory.name} has no such agent`, 'agent-not-found');
       return typeof stats === 'string' ? problem(res, 400, 'Bad Request', stats) : json(res, 200, stats);
+    }
+
+    // GET …/activity: the factory's milestone events, newest first (listFactoryActivity). Run events are
+    // never listed, and each event carries its item's ref, number and title.
+    m = rest.match(/^\/factories\/([^/]+)\/activity$/);
+    if (m && method === 'GET') {
+      const key = decodeURIComponent(m[1] ?? '');
+      const factory = findFactory(key, org.id);
+      if (!factory) return problem(res, 404, 'Factory not found', key);
+      const limit = Number(url.searchParams.get('limit') ?? 20);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+        return problem(res, 400, 'Bad Request', 'limit must be in [1, 50]');
+      }
+      const milestones = new Set([
+        'created',
+        'moved',
+        'gate_approved',
+        'gate_rejected',
+        'approved',
+        'rejected',
+        'blocked',
+        'check_failed',
+        'merged',
+        'done',
+        'assembled',
+        'cancelled',
+      ]);
+      const events = state.events
+        .flatMap((e) => {
+          const it = state.items.find((o) => o.id === e.item_id);
+          return it && it.factory === factory.name && milestones.has(e.kind)
+            ? [{ ...e, ref: ref(it), number: it.number, title: it.title }]
+            : [];
+        })
+        .sort((a, b) => b.at.localeCompare(a.at) || b.id - a.id)
+        .slice(0, limit);
+      return json(res, 200, { events });
     }
 
     m = rest.match(

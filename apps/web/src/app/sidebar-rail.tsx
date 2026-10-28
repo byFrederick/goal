@@ -101,7 +101,7 @@ export function SidebarRail({ org, busy, focusOnMount, onExpand }: SidebarRailPr
         <RailFactories org={org} mayCreate={mayCreate} />
       </ul>
       <div className="mt-auto flex flex-col items-center gap-1 pt-4">
-        <SpendRing overview={overview.data} />
+        <SpendRing org={org} overview={overview.data} />
         <AccountMenu org={org} size="rail" />
       </div>
     </nav>
@@ -195,11 +195,11 @@ const ringRadius = 10;
 const circumference = 2 * Math.PI * ringRadius;
 
 /**
- * Spend this week as a ring, the arc the share of the weekly budgets spent. Not a control (Spend and
- * billing has no page yet), so it is an image with its words in its name, not a focusable tooltip.
- * Without a budget the ring is an empty track and the name carries the amount.
+ * Spend this week as a ring, the arc the share of the weekly budgets spent, and a link to Spend and
+ * billing. Its name carries the words: the ring itself is decoration. Without a budget the ring is an
+ * empty track and the name carries the amount.
  */
-function SpendRing({ overview }: { overview: FactoryOverviewList | undefined }) {
+function SpendRing({ org, overview }: { org: OrgSummary; overview: FactoryOverviewList | undefined }) {
   if (!overview) return null;
   const { spend_usd: spend, budget_usd: budget } = overview;
   const share = budget ? Math.min(1, spend / budget) : 0;
@@ -208,7 +208,7 @@ function SpendRing({ overview }: { overview: FactoryOverviewList | undefined }) 
       ? `Spend this week, ${formatUsdCompact(spend)}`
       : `Spend this week, ${Math.round(share * 100)}% of budget`;
   return (
-    <span role="img" aria-label={label} className="flex size-7 flex-none">
+    <Link to="/o/$org/spend" params={{ org: org.slug }} aria-label={label} className="flex size-7 flex-none">
       <svg viewBox="0 0 26 26" aria-hidden="true" focusable="false" className="size-7">
         <circle cx={13} cy={13} r={ringRadius} fill="none" strokeWidth={3} className="stroke-hover" />
         {share > 0 ? (
@@ -225,6 +225,6 @@ function SpendRing({ overview }: { overview: FactoryOverviewList | undefined }) 
           />
         ) : null}
       </svg>
-    </span>
+    </Link>
   );
 }

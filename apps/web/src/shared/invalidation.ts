@@ -17,16 +17,22 @@ const workKeys = [
   'weekly',
   'lead-time',
   'constraint',
+  'activity',
   'touches',
   'andon',
   'agent',
+  // The intake reads the newest items' sources, so every item move can change it.
+  'intake',
+  // The webhook endpoints and their deliveries: a created delivery makes an item, and the stream
+  // has no event for a refused one, so a refetch on item events and on focus is what refreshes it.
+  'webhooks',
 ] as const;
 
 /** Run progress: it changes a card on the board, not where work is or what waits on people. */
 const runProgress = new Set(['tool_call', 'tool_result', 'agent_message']);
 
 /**
- * The queries one item event touches: the organization's attention counts, inboxes and factory
+ * The queries one item event touches: the organization's attention counts, inboxes, runs and factory
  * overviews, the factory's work keys (only its board for run progress) and the item, by ref and
  * by id, all within the organization.
  */
@@ -34,6 +40,8 @@ export function invalidationsFor(org: string, event: StreamEvent): QueryKey[] {
   return [
     keys.attention(org),
     keys.inboxes(org),
+    // Every item event can start, end or change a run, so the Runs page's queries are all stale.
+    keys.runs(org),
     ...(runProgress.has(event.kind)
       ? [keys.board(org, event.factory_id)]
       : factoryWorkInvalidations(org, event.factory_id)),
@@ -115,6 +123,8 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
         defKeys.compares(org, f),
         keys.board(org, f),
         keys.overviews(org),
+        // The triggers of the running definition (what the intake shows).
+        keys.intake(org, f),
         // What uses a connection or a knowledge source is read from the current versions.
         keys.connections(org),
         keys.knowledge(org),

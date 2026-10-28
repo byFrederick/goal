@@ -151,10 +151,9 @@ test('send a running item back to its rework station', async ({ page, request })
   );
 });
 
-test('Escape from Move, Send back and Pause puts focus back on the button that opened them', async ({ page }) => {
+test('Escape from Send back and Pause puts focus back on the button that opened them', async ({ page }) => {
   await page.goto('/o/acme/f/goal/items/12');
   for (const [button, dialog] of [
-    ['Move', /^Move goal#12$/],
     ['Send back to Spec', /^Send goal#12 back/],
     ['Pause', /^Pause goal#12/],
   ] as const) {
@@ -167,13 +166,24 @@ test('Escape from Move, Send back and Pause puts focus back on the button that o
   }
 });
 
+test('Escape from Move, opened from More actions, puts focus back on the More actions button', async ({ page }) => {
+  await page.goto('/o/acme/f/goal/items/12');
+  const more = page.getByRole('button', { name: 'More actions', exact: true });
+  await more.click();
+  await page.getByRole('menuitem', { name: 'Move', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: /^Move goal#12$/ })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: /^Move goal#12$/ })).toBeHidden();
+  await expect(more).toBeFocused();
+});
+
 test('a station a publish adds is a Move choice on the open Item page, without navigating', async ({
   page,
   request,
 }) => {
   await page.goto('/o/acme/f/goal/items/12');
-  const move = page.getByRole('button', { name: 'Move', exact: true });
-  await move.click();
+  await page.getByRole('button', { name: 'More actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Move', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Move goal#12' });
   await expect(dialog.getByRole('radio', { name: /Build/ })).toBeVisible();
   await expect(dialog.getByRole('radio', { name: /QA check/i })).toHaveCount(0);
@@ -199,6 +209,7 @@ test('a station a publish adds is a Move choice on the open Item page, without n
   });
   expect(published.status()).toBe(201);
 
-  await move.click();
+  await page.getByRole('button', { name: 'More actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Move', exact: true }).click();
   await expect(dialog.getByRole('radio', { name: /QA check/i })).toBeVisible();
 });

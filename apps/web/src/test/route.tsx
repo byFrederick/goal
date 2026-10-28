@@ -1,6 +1,7 @@
 // A router harness for component tests: mounts one screen under a factory's route with the route
 // context the screens read (the organization and the factory), and with the queries it reads seeded,
 // so no request leaves the test. Used by tests only.
+
 import { QueryClient, QueryClientProvider, type QueryKey } from '@tanstack/react-query';
 import {
   createMemoryHistory,
@@ -11,9 +12,11 @@ import {
   RouterProvider,
 } from '@tanstack/react-router';
 import { render } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { boardQuery, builderMetaQuery, factoriesQuery, itemQuery, partsQuery } from '../api/queries';
 import type { AssemblyParts, Board, BuilderMeta, Factory, Item, OrgSummary } from '../api/types';
+import { TopBar, TopBarSetContext, type TopBarState } from '../app/top-bar';
+import { TooltipProvider } from '../ui/tooltip';
 
 /** jsdom has no CSS.escape, scrollIntoView or scrollTo, which the board's picker and the router call. */
 function polyfillLayout() {
@@ -98,11 +101,25 @@ export function renderFactoryPage({
   return {
     ...render(
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <TooltipProvider>
+          <RouterProvider router={router} />
+        </TooltipProvider>
       </QueryClientProvider>,
     ),
     router,
+    queryClient,
   };
+}
+
+/** The shell's top bar above the page, as ShellFrame draws it: the page's TopBarSlot sets its actions here. */
+function TopBarFrame() {
+  const [state, setState] = useState<TopBarState | null>(null);
+  return (
+    <TopBarSetContext.Provider value={setState}>
+      <TopBar state={state} />
+      <Outlet />
+    </TopBarSetContext.Provider>
+  );
 }
 
 /**
@@ -117,37 +134,42 @@ export function renderOrgPage({
   seed = [],
   search,
   path,
+  topBar = false,
 }: {
   page: () => ReactNode;
   org: OrgSummary;
   seed?: readonly Seed[];
   search?: Record<string, string> | undefined;
-  /** The page's own route under /o/$org (say 'credentials/'), when the page navigates to it. */
+  /** The page's own path under the organization ('/needs-you'), when its navigation names it. */
   path?: string;
+  /** Draw the shell's top bar above the page, for a page whose actions live there (TopBarSlot). */
+  topBar?: boolean;
 }) {
   polyfillLayout();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   for (const [key, data] of seed) queryClient.setQueryData(key, data);
 
-  const rootRoute = createRootRoute();
+  const rootRoute = createRootRoute(topBar ? { component: TopBarFrame } : {});
+  // With a path, the page is a child of the organization's route, as a real page under it is.
   const orgRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/o/$org',
     beforeLoad: () => ({ org }),
     component: path ? Outlet : page,
   });
-  // With a path, the page is that child route, so a navigation to it still matches.
-  const pageRoute = path ? createRoute({ getParentRoute: () => orgRoute, path, component: page }) : undefined;
+  if (path) orgRoute.addChildren([createRoute({ getParentRoute: () => orgRoute, path, component: page })]);
   const query = search && Object.keys(search).length > 0 ? `?${new URLSearchParams(search)}` : '';
   const router = createRouter({
-    routeTree: rootRoute.addChildren([pageRoute ? orgRoute.addChildren([pageRoute]) : orgRoute]),
-    history: createMemoryHistory({ initialEntries: [`/o/${org.slug}/${path ?? ''}${query}`] }),
+    routeTree: rootRoute.addChildren([orgRoute]),
+    history: createMemoryHistory({ initialEntries: [`/o/${org.slug}${path ?? ''}${query}`] }),
   });
 
   return {
     ...render(
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <TooltipProvider>
+          <RouterProvider router={router} />
+        </TooltipProvider>
       </QueryClientProvider>,
     ),
     router,

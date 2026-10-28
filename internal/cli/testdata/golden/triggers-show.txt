@@ -1,0 +1,8 @@
+nightly: on
+  On       schedule
+  When     0 8 * * MON-FRI, Europe/Berlin
+  Creates  task → triage
+Last 7 days: 3 created, 1 merged, $4.20 spent
+AT                    OUTCOME  TITLE               ITEM
+2026-10-26 08:00 UTC  merged   Nightly docs sweep  docs#12
+2026-10-25 08:00 UTC  skipped  Nightly docs sweep  dedupe: an open item has the title

@@ -308,6 +308,76 @@ func newerFirst(d domain.WebhookDelivery, c domain.DeliveryCursor) int {
 	return cmp.Or(c.ReceivedAt.Compare(d.ReceivedAt), cmp.Compare(c.ID, d.ID))
 }
 
+// Delivery implements ports.Intake.
+func (in *Intake) Delivery(ctx context.Context, endpoint domain.WebhookEndpointID, id domain.WebhookDeliveryID) (domain.WebhookDelivery, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.WebhookDelivery{}, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	for _, r := range in.d.deliveries {
+		if r.org == org && r.d.EndpointID == endpoint && r.d.ID == id {
+			return cloneDelivery(r.d), nil
+		}
+	}
+
+	return domain.WebhookDelivery{}, fmt.Errorf("delivery %s of endpoint %s: %w", id, endpoint, ports.ErrNotFound)
+}
+
+// DeliveryDays implements ports.Intake.
+func (in *Intake) DeliveryDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.DeliveryDay, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	type key struct {
+		endpoint domain.WebhookEndpointID
+		day      time.Time
+	}
+
+	counts := map[key]*domain.DeliveryDay{}
+
+	for _, r := range in.d.deliveries {
+		e, ok := in.d.endpoints[r.d.EndpointID]
+		if r.org != org || !ok || e.e.FactoryID != factory || r.d.ReceivedAt.Before(since) {
+			continue
+		}
+
+		at := r.d.ReceivedAt.UTC()
+		k := key{r.d.EndpointID, time.Date(at.Year(), at.Month(), at.Day(), 0, 0, 0, 0, time.UTC)}
+
+		c, ok := counts[k]
+		if !ok {
+			c = &domain.DeliveryDay{EndpointID: k.endpoint, Day: k.day}
+			counts[k] = c
+		}
+
+		if r.d.Outcome == domain.DeliveryRefused {
+			c.Refused++
+		} else {
+			c.Delivered++
+		}
+	}
+
+	out := make([]domain.DeliveryDay, 0, len(counts))
+	for _, c := range counts {
+		out = append(out, *c)
+	}
+
+	slices.SortFunc(out, func(a, b domain.DeliveryDay) int {
+		return cmp.Or(cmp.Compare(a.EndpointID, b.EndpointID), a.Day.Compare(b.Day))
+	})
+
+	return out, nil
+}
+
 // PruneDeliveries implements ports.Intake.
 func (in *Intake) PruneDeliveries(_ context.Context, before time.Time) (int, error) {
 	in.d.mu.Lock()
@@ -543,6 +613,118 @@ func (in *Intake) TriggerStats(ctx context.Context, factory domain.FactoryID, si
 	out := []domain.TriggerStat{}
 	for _, name := range slices.Sorted(maps.Keys(stats)) {
 		out = append(out, *stats[name])
+	}
+
+	return out, nil
+}
+
+// ItemSources implements ports.Intake.
+func (in *Intake) ItemSources(ctx context.Context, factory domain.FactoryID, last int) (domain.SourceWindow, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.SourceWindow{}, err
+	}
+
+	items := in.items(org, factory, time.Time{})
+	slices.SortFunc(items, func(a, b domain.Item) int { return cmp.Or(b.CreatedAt.Compare(a.CreatedAt), cmp.Compare(b.ID, a.ID)) })
+	items = items[:min(len(items), max(last, 0))]
+
+	w := domain.SourceWindow{Counts: []domain.SourceCount{}}
+	counts := map[domain.ItemSource]int{}
+
+	for i, it := range items {
+		counts[it.Source]++
+
+		if i == 0 {
+			w.To = it.CreatedAt
+		}
+
+		w.From = it.CreatedAt
+	}
+
+	for _, src := range slices.Sorted(maps.Keys(counts)) {
+		w.Counts = append(w.Counts, domain.SourceCount{Source: src, Items: counts[src]})
+	}
+
+	return w, nil
+}
+
+// TriggerDays implements ports.Intake.
+func (in *Intake) TriggerDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.TriggerDay, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	type key struct {
+		trigger string
+		day     time.Time
+	}
+
+	counts := map[key]int{}
+
+	in.d.mu.Lock()
+	for _, r := range in.d.firings {
+		if r.org == org && r.f.FactoryID == factory && r.f.Outcome == domain.FiringCreated && !r.f.At.Before(since) {
+			counts[key{r.f.Trigger, r.f.At.UTC().Truncate(24 * time.Hour)}]++
+		}
+	}
+	in.d.mu.Unlock()
+
+	out := []domain.TriggerDay{}
+	for k, n := range counts {
+		out = append(out, domain.TriggerDay{Trigger: k.trigger, Day: k.day, Created: n})
+	}
+
+	slices.SortFunc(out, func(a, b domain.TriggerDay) int {
+		return cmp.Or(cmp.Compare(a.Trigger, b.Trigger), a.Day.Compare(b.Day))
+	})
+
+	return out, nil
+}
+
+// Firings implements ports.Intake.
+func (in *Intake) Firings(ctx context.Context, factory domain.FactoryID, trigger string, limit int) ([]domain.FiringEntry, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var mine []domain.TriggerFiring
+
+	in.d.mu.Lock()
+
+	for _, r := range in.d.firings {
+		if r.org == org && r.f.FactoryID == factory && r.f.Trigger == trigger {
+			mine = append(mine, r.f)
+		}
+	}
+	in.d.mu.Unlock()
+
+	slices.SortFunc(mine, func(a, b domain.TriggerFiring) int { return cmp.Or(b.At.Compare(a.At), cmp.Compare(b.ID, a.ID)) })
+	mine = mine[:min(len(mine), max(limit, 0))]
+
+	in.store.mu.Lock()
+	defer in.store.mu.Unlock()
+
+	merged := map[domain.ItemID]bool{}
+
+	for _, e := range in.store.events {
+		if e.Kind == domain.EventMerged {
+			merged[e.ItemID] = true
+		}
+	}
+
+	out := make([]domain.FiringEntry, 0, len(mine))
+
+	for _, f := range mine {
+		e := domain.FiringEntry{Firing: f}
+
+		if it, ok := in.store.visible(f.ItemID, org); ok && f.ItemID != "" {
+			e.ItemNumber, e.Merged = it.Number, merged[f.ItemID]
+		}
+
+		out = append(out, e)
 	}
 
 	return out, nil
