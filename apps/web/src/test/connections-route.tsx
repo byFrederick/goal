@@ -14,6 +14,7 @@ import { render } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { factoriesQuery, orgQuery } from '../api/queries';
 import type { Connection, ConnectionKind, Org, OrgSummary } from '../api/types';
+import { newConnectionSearch } from '../features/connections/search';
 import { TooltipProvider } from '../ui/tooltip';
 
 /** A query's key and the data the page reads from it, so the page's first render has it. */
@@ -56,7 +57,13 @@ export function renderConnectionsRoute({
   const orgPages = createRoute({ getParentRoute: () => orgRoute, id: '_org', component: Outlet });
   const connections = createRoute({ getParentRoute: () => orgPages, path: 'connections', component: Outlet });
   const list = createRoute({ getParentRoute: () => connections, path: '/', component: components.list });
-  const add = createRoute({ getParentRoute: () => connections, path: 'new', component: components.add });
+  // The add page's search is the app's (its `next` is checked the way sign-in checks it).
+  const add = createRoute({
+    getParentRoute: () => connections,
+    path: 'new',
+    validateSearch: (search: Record<string, unknown>) => newConnectionSearch(search),
+    component: components.add,
+  });
   const connection = createRoute({
     getParentRoute: () => connections,
     path: '$connection',

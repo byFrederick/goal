@@ -194,6 +194,10 @@ export type NewCredential = Schemas['NewCredential'];
 export type CredentialImport = Schemas['CredentialImport'];
 export type CredentialImportResult = Schemas['CredentialImportResult'];
 export type CredentialImportOutcome = Schemas['CredentialImportOutcome'];
+// What a code host connection reaches (GET …/connections/{connection}/repositories), for the Code step.
+export type RepositoryList = Schemas['RepositoryList'];
+export type RepositoryOwner = Schemas['RepositoryOwner'];
+export type Repository = Schemas['Repository'];
 export type AgentSpend = Schemas['AgentSpend'];
 export type ModelSpend = Schemas['ModelSpend'];
 export type OrgSpend = Schemas['OrgSpend'];
