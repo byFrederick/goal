@@ -2,7 +2,20 @@
 // "expires this week" count, the type counts and when each credential was last used.
 import type { Credential } from '@goal/api-client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { countByType, expiringText, expiringThisWeek, expiryOf, lastUsedText, usedByLabels } from './words';
+import {
+  countByType,
+  expiringText,
+  expiringThisWeek,
+  expiryOf,
+  importCount,
+  importFormat,
+  lastUsedText,
+  nameProblem,
+  remindOptions,
+  similarName,
+  usedByConnections,
+  usedByLabels,
+} from './words';
 
 const NOW = Date.parse('2026-10-27T12:00:00Z');
 const DAY = 86_400_000;
@@ -122,5 +135,55 @@ describe('usedByLabels', () => {
 
   it('is empty for a credential nothing uses', () => {
     expect(usedByLabels(credential())).toEqual([]);
+  });
+});
+
+describe('the name rule', () => {
+  it('accepts a credential name and names what is wrong with the rest', () => {
+    expect(nameProblem('cloudflare-token-2027')).toBeUndefined();
+    expect(nameProblem('ab')).toMatch(/3 to 40/);
+    expect(nameProblem('Bad_Name')).toMatch(/3 to 40/);
+    expect(nameProblem('1token')).toMatch(/3 to 40/);
+    expect(nameProblem('')).toBe('Give the credential a name.');
+  });
+});
+
+describe('a similar name', () => {
+  const existing = ['cloudflare-token', 'linear-key'];
+
+  it('is the existing name before a trailing -suffix, either way round', () => {
+    expect(similarName('cloudflare-token-2027', existing)).toBe('cloudflare-token');
+    expect(similarName('cloudflare-token', ['cloudflare-token-2027'])).toBe('cloudflare-token-2027');
+  });
+
+  it('is none for a name that only starts the same way, or the identical name', () => {
+    expect(similarName('cloudflare-tokens', existing)).toBeUndefined();
+    expect(similarName('cloud', existing)).toBeUndefined();
+    expect(similarName('cloudflare-token', existing)).toBeUndefined();
+  });
+});
+
+describe('the import', () => {
+  it('reads a YAML credentials map as YAML and anything else as .env', () => {
+    expect(importFormat('credentials:\n  a-key: x\n')).toBe('yaml');
+    expect(importFormat('SENTRY_TOKEN=x\n')).toBe('env');
+  });
+
+  it('counts the new names, and the existing ones too when they are replaced', () => {
+    const found = [{ exists: false }, { exists: false }, { exists: true }];
+    expect(importCount(found, 'skip')).toBe(2);
+    expect(importCount(found, 'replace')).toBe(3);
+  });
+
+  it('says how many connections use an existing name, in the singular for one', () => {
+    expect(usedByConnections(2)).toBe('Used by 2 connections');
+    expect(usedByConnections(1)).toBe('Used by 1 connection');
+  });
+});
+
+describe('the rotation reminder', () => {
+  it('offers the days before the expiry, and never', () => {
+    expect(remindOptions.map((o) => o.days)).toEqual([14, 7, 30, 0]);
+    expect(remindOptions.at(-1)?.label).toBe('Never');
   });
 });
