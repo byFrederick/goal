@@ -27,13 +27,13 @@ export function visibleEntries(entries: readonly InboxEntry[], { type = 'all', f
   return entries.filter((e) => (!factory || e.factory.name === factory) && inTab(e, type));
 }
 
-/** How many entries each tab holds, for the factory chosen. Approval and question have none yet. */
+/** How many entries each tab holds, for the factory chosen. Approval has none yet. */
 export function tabCounts(entries: readonly InboxEntry[], factory?: string): Record<NeedsTab, number> {
   const counts: Record<NeedsTab, number> = { all: 0, approval: 0, decision: 0, question: 0, alert: 0 };
   for (const e of entries) {
     if (factory && e.factory.name !== factory) continue;
     counts.all += 1;
-    for (const tab of ['decision', 'alert'] as const) if (inTab(e, tab)) counts[tab] += 1;
+    for (const tab of ['decision', 'question', 'alert'] as const) if (inTab(e, tab)) counts[tab] += 1;
   }
   return counts;
 }

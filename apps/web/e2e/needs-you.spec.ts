@@ -21,10 +21,24 @@ test('the Decisions tab writes its type to the URL and hides the alerts', async 
   await expect(page.getByRole('button', { name: /^Decisions/ })).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('Approvals and Questions are not built yet and say so', async ({ page }) => {
+test('Approvals is not built yet and says so', async ({ page }) => {
   await page.goto('/o/acme/needs-you');
   await expect(page.getByRole('button', { name: /^Approvals/ })).toHaveAttribute('aria-disabled', 'true');
-  await expect(page.getByRole('button', { name: /^Questions/ })).toHaveAttribute('aria-disabled', 'true');
+});
+
+test('the Questions filter shows the agent question and answering it removes the row', async ({ page }) => {
+  // Item 14 of the goal factory holds the pictured question (see question.spec.ts); the caller decides there.
+  await page.goto('/o/acme/needs-you');
+  await page.getByRole('button', { name: /^Questions/ }).click();
+  await expect(page).toHaveURL(/type=question/);
+
+  const list = page.getByRole('list', { name: /Waiting on you/ });
+  await expect(list.getByRole('link', { name: /frontend-engineer: / })).toBeVisible();
+
+  const card = page.getByRole('region', { name: 'frontend-engineer asks you' });
+  await card.getByRole('button', { name: 'Only this factory' }).click();
+
+  await expect(list.getByRole('link', { name: /frontend-engineer: / })).toHaveCount(0);
 });
 
 test('J and K move the selection, and the URL names the selected entry', async ({ page }) => {

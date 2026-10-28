@@ -19,7 +19,8 @@ const maxAnswer = 2000;
 interface Props {
   /** The item's id or ref, as answerItem takes it. */
   itemKey: string;
-  factory: Factory;
+  /** The factory the item is in. Its `can` decides whether the answers are offered; without it, they wait. */
+  factory: Pick<Factory, 'id' | 'name'> & Partial<Pick<Factory, 'can' | 'archived_at'>>;
   question: ItemQuestion;
   className?: string;
 }
