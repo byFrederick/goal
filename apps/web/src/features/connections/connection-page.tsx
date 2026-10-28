@@ -29,6 +29,7 @@ import { descriptionClass, PageHeader } from '../../ui/page-header';
 import { ReadOnly } from '../../ui/read-only';
 import { EnvNames, ToneText, WriteOnly } from './parts';
 import { ReplaceSecretDialog } from './replace-secret-dialog';
+import { ToolsCard } from './tools-card';
 import { useTestConnection } from './use-test';
 import { activityText, activityWhen, modeSentence, refusalText } from './words';
 
@@ -60,7 +61,7 @@ export function ConnectionPage() {
     <>
       <TopBarSlot crumb={connection.name} />
       <nav aria-label="Breadcrumb" className="text-sm text-muted">
-        <ol className="m-0 flex list-none gap-1.5 p-0">
+        <ol className="m-0 flex list-none gap-2 p-0">
           <li>
             <Link
               to="/o/$org/connections"
@@ -119,8 +120,8 @@ export function ConnectionPage() {
         <Callout tone="rework">A required secret isn’t set: runs that get this connection fail until it is.</Callout>
       ) : null}
       {kind?.mint ? (
-        <section className="flex items-start gap-3 rounded-card border border-line bg-card px-4 py-3.5 text-[15px] leading-normal">
-          <Clock size={18} strokeWidth={1.5} aria-hidden="true" className="mt-0.5 shrink-0 text-run" />
+        <section className="flex items-start gap-3 rounded-card border border-line bg-card px-4 py-3 text-body leading-normal">
+          <Clock size={18} strokeWidth={1.5} aria-hidden="true" className="mt-0 shrink-0 text-run" />
           <p className="m-0">
             <strong className="font-medium">Agents get short-lived credentials per run.</strong> When a run starts, Goal
             mints credentials from the stored keys that last the run’s timeout plus 15 minutes, and passes only those.
@@ -140,6 +141,7 @@ export function ConnectionPage() {
             manage={manage}
             onReplace={setReplacing}
           />
+          {kind?.modes.includes('mcp') ? <ToolsCard connection={connection} manage={manage} /> : null}
           <UsedByCard connection={connection} />
           {manage ? <DeleteCard connection={connection} /> : null}
         </div>
@@ -266,15 +268,13 @@ function FieldsCard({
         {secret.map((f) => {
           const set = c.secrets_set.includes(f.name);
           return (
-            <div key={f.name} className="col-span-full flex min-w-0 flex-col gap-1.5">
+            <div key={f.name} className="col-span-full flex min-w-0 flex-col gap-2">
               <span className="flex flex-wrap items-center gap-2 text-sm font-medium">
                 {f.title}
                 <WriteOnly />
               </span>
-              <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-control border border-line bg-shell py-1.5 pr-1.5 pl-3">
-                <span
-                  className={cn('inline-flex items-center gap-2 text-[15px]', set ? 'text-ink' : 'text-rework-ink')}
-                >
+              <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-control border border-line bg-shell py-2 pr-2 pl-3">
+                <span className={cn('inline-flex items-center gap-2 text-body', set ? 'text-ink' : 'text-rework-ink')}>
                   {set ? <Check size={16} strokeWidth={1.75} aria-hidden="true" className="text-ok" /> : null}
                   {set ? 'Set' : f.required ? 'Not set: runs that get it fail' : 'Not set'}
                 </span>
@@ -285,7 +285,7 @@ function FieldsCard({
                   </Button>
                 ) : null}
               </div>
-              <p className="m-0 text-[13px] leading-snug text-muted">
+              <p className="m-0 text-secondary leading-snug text-muted">
                 Never shown again. Replacing it asks for a fresh sign-in and applies from the next run.
               </p>
             </div>
@@ -333,7 +333,7 @@ function UsedByCard({ connection: c }: { connection: Connection }) {
       ) : (
         <ul className="m-0 flex list-none flex-col p-0">
           {c.used_by.factories.map((f) => (
-            <li key={f.id} className="border-t border-line py-2.5 text-[15px] first:border-t-0 first:pt-0">
+            <li key={f.id} className="border-t border-line py-2 text-body first:border-t-0 first:pt-0">
               <Link
                 to="/o/$org/f/$factory/definition/$section"
                 params={{ org: org.slug, factory: f.name, section: 'connections' }}
@@ -377,7 +377,7 @@ function DeleteCard({ connection: c }: { connection: Connection }) {
   return (
     <section className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-card p-4 md:p-5">
       <div className="flex min-w-0 max-w-[560px] flex-col gap-1">
-        <h2 className="m-0 text-[15px] font-medium">
+        <h2 className="m-0 text-body font-medium">
           Delete <span translate="no">{c.name}</span>
         </h2>
         <p id={reasonId} className="m-0 text-sm leading-normal text-muted">
@@ -442,7 +442,7 @@ function RunGetsCard({ connection: c, kind }: { connection: Connection; kind: Co
       {modes.length > 0 && kind ? (
         <dl className="m-0 flex flex-col">
           {kind.modes.map((m, i) => (
-            <div key={m} className="grid grid-cols-[52px_minmax(0,1fr)] gap-3 border-t border-line py-2.5">
+            <div key={m} className="grid grid-cols-[52px_minmax(0,1fr)] gap-3 border-t border-line py-2">
               <dt>
                 <Chip className="font-mono font-normal">{modes[i]}</Chip>
               </dt>
@@ -451,7 +451,9 @@ function RunGetsCard({ connection: c, kind }: { connection: Connection; kind: Co
           ))}
         </dl>
       ) : null}
-      {c.docs ? <p className="m-0 text-[13px] leading-normal text-muted">The kind tells agents: “{c.docs}”</p> : null}
+      {c.docs ? (
+        <p className="m-0 text-secondary leading-normal text-muted">The kind tells agents: “{c.docs}”</p>
+      ) : null}
     </section>
   );
 }
@@ -470,7 +472,7 @@ function RecentUse({ org, connection, now }: { org: string; connection: Connecti
         <h2 id={`${id}-use`} className="m-0 text-lg font-medium">
           Recent use
         </h2>
-        <span className="text-[13px] text-muted">From the audit log</span>
+        <span className="text-secondary text-muted">From the audit log</span>
       </div>
       {activity.isPending ? (
         <p className="m-0 text-sm text-muted">Loading…</p>
@@ -483,13 +485,13 @@ function RecentUse({ org, connection, now }: { org: string; connection: Connecti
           {entries.map((e) => (
             <li
               key={e.id}
-              className="flex items-start justify-between gap-3 border-t border-line py-2.5 first:border-t-0 first:pt-0"
+              className="flex items-start justify-between gap-3 border-t border-line py-2 first:border-t-0 first:pt-0"
             >
               <span className="min-w-0 text-sm">
                 <span className="block break-words">{sentence(activityText(e))}</span>
-                <span className="block text-[13px] text-muted">{e.actor.name}</span>
+                <span className="block text-secondary text-muted">{e.actor.name}</span>
               </span>
-              <span className="shrink-0 text-[13px] text-muted">{activityWhen(e.at, now)}</span>
+              <span className="shrink-0 text-secondary text-muted">{activityWhen(e.at, now)}</span>
             </li>
           ))}
         </ul>
