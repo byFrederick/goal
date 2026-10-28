@@ -103,6 +103,7 @@ type Items interface {
 	OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgSpend, error)
 	ItemTimes(ctx context.Context, q ports.FlowQuery, limit int) ([]domain.ItemTime, error)
 	Attention(ctx context.Context) ([]domain.Attention, error)
+	OpenToolApprovals(ctx context.Context) (map[string]int, error)
 	InboxItems(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.AttentionItem, error)
 	ItemSpans(ctx context.Context, id domain.ItemID) ([]domain.Span, error)
 	CurrentRun(ctx context.Context, id domain.ItemID) (*domain.CurrentRun, error)

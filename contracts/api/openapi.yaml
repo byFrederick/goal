@@ -3221,11 +3221,13 @@ paths:
       operationId: updateConnection
       x-goal-scope: connection:manage
       tags: [connections]
-      summary: Rename a connection, or change its description, fields or secrets
+      summary: Rename a connection, or change its description, fields, secrets or tool modes
       description: >-
         fields, when present, replaces every non-secret value; secrets replaces the named secret
         fields only (an empty value clears an optional one), audited as
-        connection.secret_replaced; the rest as connection.updated. A rename is 409
+        connection.secret_replaced; the rest as connection.updated. tools, when present, replaces
+        every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no
+        MCP server, an unknown mode or a malformed tool name. A rename is 409
         connection-in-use while a factory's current version names the connection, 409
         connection-name-taken when another has the name. The kind never changes. Needs a sign-in
         from the last 10 minutes.
@@ -7792,7 +7794,7 @@ components:
     Connection:
       type: object
       description: An organization's connection (spec 4 §4.3), never a secret value
-      required: [id, name, kind, description, fields, secrets_set, status, used_by, last_used_at, last_test, created_by, created_at, updated_by, updated_at]
+      required: [id, name, kind, description, fields, secrets_set, status, used_by, last_used_at, last_test, tools, waiting_approvals, created_by, created_at, updated_by, updated_at]
       properties:
         id: { type: string }
         name: { $ref: "#/components/schemas/ConnectionName" }
@@ -7822,10 +7824,39 @@ components:
           description: getConnection only, the env names a run gets from it
           items: { type: string }
         docs: { type: string, description: "getConnection only, its kind's docs for agents" }
+        tools:
+          type: array
+          description: >-
+            Its tools and their modes (ADR 0031 decisions 1 and 2), sorted by name: one entry for
+            each tool the last test listed and each tool with a mode set, a tool without a mode
+            being allow; empty for a connection never tested and without modes
+          items: { $ref: "#/components/schemas/ConnectionTool" }
+        waiting_approvals:
+          type: integer
+          minimum: 0
+          description: >-
+            The open tool approvals on this connection in the organization, by its current name;
+            the connections list's "Writes waiting for your OK" is their sum
         created_by: { $ref: "#/components/schemas/Actor" }
         created_at: { type: string, format: date-time }
         updated_by: { $ref: "#/components/schemas/Actor" }
         updated_at: { type: string, format: date-time }
+    ConnectionToolMode:
+      type: string
+      description: >-
+        What a run may do with one tool of the connection (ADR 0031 decision 1): allow runs the
+        call, ask pauses it for a person, off refuses it
+      enum: [allow, ask, off]
+    ConnectionTool:
+      type: object
+      required: [name, mode]
+      properties:
+        name:
+          type: string
+          description: >-
+            The tool's name as the MCP server lists it, without the connection prefix: 1 to 128
+            letters, digits, underscores, dots or dashes
+        mode: { $ref: "#/components/schemas/ConnectionToolMode" }
     ConnectionUsers:
       type: object
       description: What uses a connection, so it cannot be deleted or renamed meanwhile
@@ -7875,6 +7906,13 @@ components:
           writeOnly: true
           description: The secret fields to replace, by name; an empty value clears an optional one
           additionalProperties: { type: string }
+        tools:
+          type: array
+          description: >-
+            Every tool's mode: replaces them all, so send the full list (a tool left out goes back
+            to allow). Only for a connection whose kind has an MCP server; a tool named twice is
+            refused.
+          items: { $ref: "#/components/schemas/ConnectionTool" }
     CredentialName:
       type: string
       description: >-
