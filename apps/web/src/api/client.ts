@@ -19,10 +19,15 @@ import type {
   AndonPull,
   AssemblyParts,
   AuthConfig,
+  BakeOff,
+  BakeOffApply,
+  BakeOffList,
+  BakeOffStarted,
   Board,
   ConstraintReport,
   CreateJudgeRequest,
   DeviceRequest,
+  Draft,
   EvalCaseFromRun,
   EvalEstimate,
   EvalList,
@@ -415,6 +420,49 @@ export function startEvalRun(org: string, factory: string, run: EvalRunRequest):
 export function addEvalCase(org: string, factory: string, from: EvalCaseFromRun): Promise<Version> {
   return unwrap(
     goal.POST(orgPath('/factories/{factory}/evals/cases'), { params: { path: { org, factory } }, body: from }),
+  );
+}
+
+/** The factory's bake-offs, newest first: at most 20 (ADR 0029). 503 evals-unavailable. */
+export function listBakeOffs(org: string, factory: string, signal?: AbortSignal): Promise<BakeOffList> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/evals/bake-offs'), {
+      params: { path: { org, factory } },
+      ...cancel(signal),
+    }),
+  );
+}
+
+/** One bake-off with its arms, its tries passed per case and its recommendation. 404 eval-run-not-found. */
+export function getBakeOff(org: string, factory: string, bakeOff: string, signal?: AbortSignal): Promise<BakeOff> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/evals/bake-offs/{bake_off}'), {
+      params: { path: { org, factory, bake_off: bakeOff } },
+      ...cancel(signal),
+    }),
+  );
+}
+
+/** Queues a new bake-off of the same agent on the current version. 404 eval-run-not-found, then the refusals of a start. */
+export function rerunBakeOff(org: string, factory: string, bakeOff: string): Promise<BakeOffStarted> {
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/evals/bake-offs/{bake_off}/rerun'), {
+      params: { path: { org, factory, bake_off: bakeOff } },
+    }),
+  );
+}
+
+/**
+ * Writes an arm's model as the agent's model into the factory's draft; it never publishes. 412
+ * draft-conflict when the agent changed since the bake-off's version: the builder shows it.
+ */
+export function applyBakeOff(org: string, factory: string, bakeOff: string, arm: number): Promise<Draft> {
+  const body: BakeOffApply = { arm };
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/evals/bake-offs/{bake_off}/apply'), {
+      params: { path: { org, factory, bake_off: bakeOff } },
+      body,
+    }),
   );
 }
 

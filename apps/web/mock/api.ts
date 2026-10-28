@@ -59,6 +59,7 @@ import type {
 } from '@goal/api-client';
 import { parse } from 'yaml';
 import { authSettings, createMockAuth } from './auth.ts';
+import { createBakeOffs } from './bake-offs.ts';
 import { createConnections } from './connections.ts';
 import { createCredentials } from './credentials.ts';
 import { createDefinitions } from './definitions.ts';
@@ -235,6 +236,10 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   });
 
   const evals = createEvals({
+    clock,
+    factory: (org, key) => findFactory(key, org),
+  });
+  const bakeOffs = createBakeOffs({
     clock,
     factory: (org, key) => findFactory(key, org),
   });
@@ -1396,6 +1401,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       credentials.reset(clock());
       knowledge.reset(clock());
       evals.reset();
+      bakeOffs.reset();
       judges.reset();
       webhooks.reset();
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
@@ -1491,6 +1497,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (rest === '/search' && method === 'GET') return searchOf(org, url, forCaller(req, org), res);
     if (await evals.handle(org, rest, method, res, () => readBody(req))) return;
+    if (await bakeOffs.handle(org, rest, method, res, () => readBody(req))) return;
     if (await judges.handle(org, rest, method, res, () => readBody(req))) return;
     if (await spend.handle(org, rest, method, url, res)) return;
     if (await policy.handle(org, rest, method, req, res, () => readBody(req))) return;
