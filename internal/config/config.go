@@ -31,6 +31,9 @@ type Factory struct {
 	Kind       string   `json:"kind"`
 	Metadata   Metadata `json:"metadata"`
 	Spec       Spec     `json:"spec"`
+	// Starter is what a new factory made from the definition starts with (ADR 0032); nil when
+	// factory.yaml has none.
+	Starter *Starter `json:"starter,omitempty"`
 
 	// files is the factory's file tree; relative paths in the spec resolve against its root.
 	files fs.FS

@@ -74,6 +74,25 @@
         "board": { "$ref": "#/$defs/board" },
         "learning": { "$ref": "#/$defs/learning" }
       }
+    },
+    "starter": {
+      "type": "object",
+      "description": "What a new factory made from this definition starts with (ADR 0032). Onboarding submits starter.item once, when the factory has no items yet.",
+      "required": ["item"],
+      "additionalProperties": false,
+      "properties": {
+        "item": {
+          "type": "object",
+          "description": "A small, safe first item the person watches go through the line.",
+          "required": ["title"],
+          "additionalProperties": false,
+          "properties": {
+            "title": { "type": "string", "minLength": 1, "maxLength": 200, "description": "The item's title." },
+            "type": { "type": "string", "description": "One of board.workTypes; when absent, the item gets the first work type, as submitItem does." },
+            "body": { "type": "string", "maxLength": 20000, "description": "The item's brief, in markdown." }
+          }
+        }
+      }
     }
   },
   "$defs": {

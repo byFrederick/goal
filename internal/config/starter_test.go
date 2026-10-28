@@ -1,0 +1,116 @@
+package config
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/byFrederick/goal/internal/core/domain"
+)
+
+// starterBlock is a valid starter item (ADR 0032) at the root of baseFactory, whose board gets
+// the work types fix and docs. Rows replace one of its lines and mark it with "#here".
+const starterBlock = `starter:
+  item:
+    title: Add a contributing guide to the README
+    type: docs
+    body: |
+      Add a short **Contributing** section.
+`
+
+// withStarter is baseFactory with work types and starterBlock, after the given replacements of
+// the block.
+func withStarter(pairs ...string) string {
+	return edited("  board:\n", "  board:\n    workTypes: [fix, docs]\n") + replaced(starterBlock, pairs...)
+}
+
+func TestLoad_ParsesStarter(t *testing.T) {
+	t.Parallel()
+
+	f, err := Load(checkTree(withStarter(), nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := StarterItem{
+		Title: "Add a contributing guide to the README", Type: "docs", Body: "Add a short **Contributing** section.\n",
+	}
+	if f.Starter == nil || f.Starter.Item != want {
+		t.Errorf("starter = %+v, want item %+v", f.Starter, want)
+	}
+
+	if f, err := Load(checkTree(baseFactory, nil)); err != nil || f.Starter != nil {
+		t.Errorf("a factory without a starter: starter = %+v, err = %v; want nil, nil", f.Starter, err)
+	}
+}
+
+// starterRows are the rows of TestCheck_Starter: a definition and the one problem it must
+// produce, none when code is "".
+var starterRows = []struct {
+	name    string
+	doc     string
+	code    string
+	message []string // what the message must name
+}{
+	{name: "valid starter", doc: withStarter()},
+	{name: "no type", doc: withStarter("    type: docs\n", "")},
+	{name: "no body", doc: withStarter("    body: |\n      Add a short **Contributing** section.\n", "")},
+	{
+		name: "type not a work type", doc: withStarter("    type: docs\n", "    type: chore #here\n"),
+		code: codeUnknownWorkType, message: []string{"starter.item.type", `"chore"`, "board.workTypes"},
+	},
+	{
+		name: "type without work types", doc: strings.Replace(withStarter("    type: docs\n", "    type: docs #here\n"), "    workTypes: [fix, docs]\n", "", 1),
+		code: codeUnknownWorkType, message: []string{`"docs"`},
+	},
+	{
+		name: "no title", doc: withStarter("  item:\n    title: Add a contributing guide to the README\n", "  item: #here\n"),
+		code: codeSchemaRequired, message: []string{"title"},
+	},
+	{
+		name: "empty title", doc: withStarter("    title: Add a contributing guide to the README\n", "    title: \"\" #here\n"),
+		code: codeSchemaInvalid, message: []string{"starter.item.title"},
+	},
+	{
+		name: "unknown key in item", doc: withStarter("    type: docs\n", "    type: docs\n    station: work #here\n"),
+		code: codeSchemaUnknownKey, message: []string{"station"},
+	},
+}
+
+func TestCheck_Starter(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range starterRows {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, problems := Check(checkTree(tt.doc, nil))
+
+			if tt.code == "" {
+				if len(problems) > 0 {
+					t.Fatalf("problems = %+v, want none", problems)
+				}
+
+				return
+			}
+
+			if len(problems) != 1 {
+				t.Fatalf("want one %s problem, got %+v", tt.code, problems)
+			}
+
+			p := problems[0]
+			if p.Code != tt.code || p.Severity != domain.SeverityError || p.File != FileName || p.Check == "" {
+				t.Errorf("problem = %+v, want an error %s in %s with a check", p, tt.code, FileName)
+			}
+
+			if want := markedLine(tt.doc); p.Line != want {
+				t.Errorf("problem line = %d, want %d: %+v", p.Line, want, p)
+			}
+
+			for _, m := range tt.message {
+				if !strings.Contains(p.Message, m) {
+					t.Errorf("message %q does not name %s", p.Message, m)
+				}
+			}
+		})
+	}
+}
