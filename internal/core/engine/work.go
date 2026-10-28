@@ -59,6 +59,10 @@ type claimed struct {
 	timeout  time.Duration
 	boxLimit time.Duration
 	noMerge  bool
+	// branch and base are the runs' branch and the branch it is cut from and its pull request
+	// goes into, decided at the claim's start (integrate); both empty for the item's branch on the
+	// default branch, as for every item that is not a part on an integration branch.
+	branch, base string
 }
 
 // webTools are the Claude Code tools of the builtins.web group, which the organization policy's
@@ -216,8 +220,9 @@ func (e *Engine) backoff(ctx context.Context, lease domain.Lease, d time.Duratio
 }
 
 // admitted finds the claim's agent (agentFor), applies the organization policy to it
-// (applyPolicy) and reports whether it may run; when not, the item is blocked (no agent, or the
-// policy could not be read) or waits for a person (the policy refuses its model).
+// (applyPolicy), decides its runs' branch and base (integrate) and reports whether it may run;
+// when not, the item is blocked (no agent, the policy could not be read, or the base could not
+// be decided) or waits for a person (the policy refuses its model).
 func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) bool {
 	var err error
 	if c.agent, err = agentFor(c.line, c.station, c.item.Lane); err != nil {
@@ -226,6 +231,9 @@ func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) boo
 	}
 
 	refusal, err := e.applyPolicy(ctx, c)
+	if err == nil && refusal == "" {
+		err = e.integrate(ctx, log, c)
+	}
 
 	switch {
 	case err != nil:
@@ -673,6 +681,10 @@ func workspaceNote(c claimed, b *box, env runEnv) string {
 	}
 
 	state := "a new branch from the default branch"
+	if c.base != "" {
+		state = "a new branch from `" + c.base + "`"
+	}
+
 	if b.existed {
 		state = "it already exists: it holds the work of earlier runs of this item"
 	}
@@ -682,8 +694,23 @@ func workspaceNote(c claimed, b *box, env runEnv) string {
 		host = u.Host
 	}
 
-	return fmt.Sprintf("## Workspace\n\nYour working directory is a clone of %s with branch `%s` checked out (%s). %s",
-		r.URL, c.item.Branch(), state, env.pushNote(host))
+	note := fmt.Sprintf("## Workspace\n\nYour working directory is a clone of %s with branch `%s` checked out (%s). %s",
+		r.URL, cmp.Or(c.branch, c.item.Branch()), state, env.pushNote(host))
+	if c.base == "" {
+		return note
+	}
+
+	refresh := cmp.Or(c.line.Flow.Assemblies.Integration.Refresh, domain.RefreshOnLand)
+
+	return note + fmt.Sprintf("\n\nThis part builds on its assembly's integration branch `%s`, not the default branch: "+
+		"open your pull request into `%s`. The integration branch takes in the default branch %s (refresh: %s).",
+		c.base, c.base, refreshWhen[refresh], refresh)
+}
+
+// refreshWhen says when an integration branch takes in the default branch, by its refresh.
+var refreshWhen = map[domain.IntegrationRefresh]string{
+	domain.RefreshOnLand:   "when the assembly lands",
+	domain.RefreshEachPart: "before each part runs",
 }
 
 // gatewayToken signs the run's task token: what the gateway serves it (its bundle, its tools)
@@ -696,7 +723,7 @@ func (e *Engine) gatewayToken(ctx context.Context, c claimed, runID domain.RunID
 
 	token, err := domain.SignTaskToken([]byte(key), domain.TaskClaims{
 		OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, VersionID: c.line.VersionID, ItemID: c.item.ID, Station: c.station.ID, Agent: c.agent.Name, RunID: runID,
-		Connections: c.agent.Connections, Model: c.model, DeniedCommands: c.deny, ExpiresAt: e.clock.Now().Add(c.timeout + e.cfg.LeaseTTL).Unix(),
+		Connections: c.agent.Connections, Model: c.model, DeniedCommands: c.deny, Branch: c.branch, Base: c.base, ExpiresAt: e.clock.Now().Add(c.timeout + e.cfg.LeaseTTL).Unix(),
 	})
 	if err != nil {
 		return "", fmt.Errorf("gateway token: %w", err)
