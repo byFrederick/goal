@@ -28,6 +28,8 @@ const (
 	ruleNew            = "Show evidence.\n"
 	// reviewStation is where the evidence of TestJonah_Reads was sent back.
 	reviewStation = "review"
+	// rejectBody is a valid rejection.
+	rejectBody = `{"reason":"Not this time."}`
 )
 
 var (
@@ -275,7 +277,7 @@ func TestJonah_RejectProposal(t *testing.T) {
 		wantProblem(t, c.verb+" of a decided proposal", code, p, http.StatusConflict, "proposal-decided")
 	}
 
-	code, p := problemOfCall(t, h, http.MethodPost, acmeProposals+"/99/reject", `{"reason":"no"}`)
+	code, p := problemOfCall(t, h, http.MethodPost, acmeProposals+"/99/reject", rejectBody)
 	wantProblem(t, "reject of an unknown proposal", code, p, http.StatusNotFound, "proposal-not-found")
 }
 
@@ -355,7 +357,7 @@ func TestJonah_Permissions(t *testing.T) {
 	h.as(acmeMember(domain.FactoryViewer))
 
 	for _, c := range []struct{ path, body string }{
-		{path + "/approve", ""}, {path + "/edit", ""}, {path + "/reject", `{"reason":"no"}`}, {acmeJonah + "/reviews", ""},
+		{path + "/approve", ""}, {path + "/edit", ""}, {path + "/reject", rejectBody}, {acmeJonah + "/reviews", ""},
 	} {
 		code, p := problemOfCall(t, h, http.MethodPost, c.path, c.body)
 		wantProblem(t, "a viewer's POST "+c.path, code, p, http.StatusForbidden, "forbidden")
