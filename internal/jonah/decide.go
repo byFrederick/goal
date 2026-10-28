@@ -275,15 +275,9 @@ func (dc *Decider) QueueReview(ctx context.Context, f domain.FactoryID, version 
 		return domain.JonahReview{}, fmt.Errorf("queue review: $%.2f of $%.2f spent: %w", spent, policy.WeeklyUSD, domain.ErrLearningBudgetExhausted)
 	}
 
-	start := now.Add(-FirstWindow)
-
-	last, err := dc.d.Proposals.JonahReviews(ctx, f, 1)
+	start, err := windowStart(ctx, dc.d.Proposals, f, now)
 	if err != nil {
-		return domain.JonahReview{}, fmt.Errorf("queue review: read the last review: %w", err)
-	}
-
-	if len(last) > 0 && !last[0].WindowEnd.IsZero() && last[0].WindowEnd.Before(now) {
-		start = last[0].WindowEnd
+		return domain.JonahReview{}, fmt.Errorf("queue review: %w", err)
 	}
 
 	r, err := dc.d.Proposals.QueueJonahReview(ctx, domain.NewJonahReview{
