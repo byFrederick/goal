@@ -39,11 +39,11 @@ function HowJudgesWork() {
         <div key={title} className="flex items-start gap-3 rounded-card bg-panel p-4 text-secondary">
           <span
             aria-hidden="true"
-            className="grid size-7.5 shrink-0 place-items-center rounded-control border border-rule bg-card text-run"
+            className="grid size-8 shrink-0 place-items-center rounded-control border border-rule bg-card text-run"
           >
             <Icon size={16} strokeWidth={1.75} />
           </span>
-          <span className="flex flex-col gap-0.5">
+          <span className="flex flex-col gap-1">
             <b className="font-control font-semibold">{title}</b>
             {text}
           </span>
@@ -119,7 +119,7 @@ export function JudgesPage() {
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
-      <TopBarSlot crumb="Judges" actions={[newButton]} />
+      <TopBarSlot crumb="Judges" actions={empty ? undefined : [newButton]} />
       <JonahHeader tab="judges" counts={{ judges: entries.length }} />
 
       {empty ? (

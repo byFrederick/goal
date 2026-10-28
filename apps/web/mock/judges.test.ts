@@ -19,10 +19,17 @@ const org = { id: 'org-1' } as never;
 const software = { id: 'factory-software', name: 'software' };
 const judges = () =>
   createJudges({
-    factory: (_org, key) => (key === 'software' ? software : key === 'support' ? { id: 'f-2', name: 'support' } : undefined),
+    factory: (_org, key) =>
+      key === 'software' ? software : key === 'support' ? { id: 'f-2', name: 'support' } : undefined,
   });
 
-async function call(api: ReturnType<typeof judges>, rest: string, method: string, body: unknown = {}, factory = 'software') {
+async function call(
+  api: ReturnType<typeof judges>,
+  rest: string,
+  method: string,
+  body: unknown = {},
+  factory = 'software',
+) {
   const res = fakeRes();
   const path = rest.replace('{factory}', factory);
   await api.handle(org, path, method, res as unknown as ServerResponse, async () => body as Record<string, unknown>);

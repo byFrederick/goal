@@ -90,7 +90,7 @@ export function JudgesTable({
                   {passMarkText(judge.pass_mark)}
                 </td>
                 <td className="border-b border-line px-4 py-3 align-middle">
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-3">
                     {summary.days.length > 1 ? (
                       <Sparkline
                         className="h-6 w-24"

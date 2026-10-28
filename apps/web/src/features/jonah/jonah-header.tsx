@@ -21,13 +21,16 @@ const tabLabels: Record<JonahTab, string> = {
 /** The tabs in order; Judges and Evals have pages so far. */
 const tabOrder: readonly JonahTab[] = ['overview', 'proposals', 'judges', 'evals', 'bake-offs'];
 
-/** The intro line under the name, per tab. The tabs without a page keep the first line Jonah had. */
+const evalsIntro =
+  'Eval cases replay a task an agent must get right, before any change to the definition is published.';
+
+/** The intro line under the name, per tab. The tabs without a page keep the evals line, the first Jonah had. */
 const introOf: Record<JonahTab, string> = {
-  overview: 'Eval cases replay a task an agent must get right, before any change to the definition is published.',
-  proposals: 'Eval cases replay a task an agent must get right, before any change to the definition is published.',
+  overview: evalsIntro,
+  proposals: evalsIntro,
   judges: 'Judges read a sample of runs and score them against a rubric you write.',
-  evals: 'Eval cases replay a task an agent must get right, before any change to the definition is published.',
-  'bake-offs': 'Eval cases replay a task an agent must get right, before any change to the definition is published.',
+  evals: evalsIntro,
+  'bake-offs': evalsIntro,
 };
 
 const tabClass =

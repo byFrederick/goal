@@ -146,7 +146,7 @@ function JudgeEditor({
         ]}
       />
 
-      <div className="flex flex-wrap items-center gap-3.5">
+      <div className="flex flex-wrap items-center gap-4">
         <h1 className="m-0 text-page-title tracking-display">{judge.title}</h1>
         <span className="inline-flex items-center gap-2 font-control text-secondary font-semibold">
           <Switch
@@ -185,7 +185,7 @@ function JudgeEditor({
 
             <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
               <legend className="mb-2 text-sm font-medium text-ink">Agents it scores</legend>
-              <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-2">
                 {form.agents.length === 0 ? <span className="text-secondary text-ink-soft">All agents</span> : null}
                 {form.agents.map((agent) => (
                   <Chip key={agent} size="lg">
@@ -330,7 +330,7 @@ function JudgeEditor({
             ) : (
               <ul className="m-0 flex list-none flex-col p-0">
                 {judge.recent.map((score) => (
-                  <li key={score.id} className="flex flex-col gap-1 border-b border-line py-2.5 last:border-b-0">
+                  <li key={score.id} className="flex flex-col gap-1 border-b border-line py-3 last:border-b-0">
                     <span className="font-control text-secondary font-semibold">
                       {itemNumber(score.item_ref)} {score.item_title}
                     </span>
@@ -349,7 +349,7 @@ function JudgeEditor({
           </SectionCard>
 
           <SectionCard title="Runs on" headingLevel="h2">
-            <dl className="m-0 flex flex-col gap-2.5 text-secondary">
+            <dl className="m-0 flex flex-col gap-3 text-secondary">
               <RunsOnRow term="Box" value={judge.runs_on.size} />
               <RunsOnRow
                 term="Connections"
@@ -369,7 +369,7 @@ function JudgeEditor({
 
 function RunsOnRow({ term, value }: { term: string; value: string }) {
   return (
-    <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
+    <div className="flex flex-col gap-1 sm:flex-row sm:gap-3">
       <dt className="w-28 shrink-0 text-muted">{term}</dt>
       <dd className="m-0 min-w-0">{value}</dd>
     </div>

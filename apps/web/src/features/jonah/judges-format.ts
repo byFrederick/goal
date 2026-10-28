@@ -54,7 +54,7 @@ export function scoreText(score: JudgeScore): string {
   }
 }
 
-/** The run's number from its ref ("software#149" reads "#149"). */
+/** The run's number from its ref: the text from its hash on. */
 export function itemNumber(ref: string): string {
   const at = ref.indexOf('#');
   return at === -1 ? ref : ref.slice(at);
