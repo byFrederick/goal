@@ -172,19 +172,39 @@ var ErrBadRunRequest = fmt.Errorf("bad run request: %w", ErrInvalid)
 // a lease, a repository or a connection besides the model's, a jonah bundle without a window that
 // ends after it starts, or a window on another bundle.
 func (r RunRequest) Check() error {
-	switch {
-	case r.OrgID == "" || r.FactoryID == "" || r.Agent == "" || r.ModelConnection == "":
+	if r.OrgID == "" || r.FactoryID == "" || r.Agent == "" || r.ModelConnection == "" {
 		return fmt.Errorf("%w: it needs an organization, a factory, an agent and a model connection", ErrBadRunRequest)
-	case r.Bundle == TaskKindJonah && (r.WindowStart.IsZero() || !r.WindowEnd.After(r.WindowStart)):
-		return fmt.Errorf("%w: a jonah bundle needs a window that ends after it starts", ErrBadRunRequest)
-	case r.Bundle != TaskKindJonah && (!r.WindowStart.IsZero() || !r.WindowEnd.IsZero() || r.Manual):
-		return fmt.Errorf("%w: only a jonah bundle has a window", ErrBadRunRequest)
+	}
+
+	if err := r.checkWindow(); err != nil {
+		return err
+	}
+
+	switch {
 	case r.Kind == RunKindJonah:
 		return r.checkJonah()
 	case r.Kind != "" && r.Kind != RunKindStation:
 		return fmt.Errorf("%w: unknown run kind %q", ErrBadRunRequest, r.Kind)
 	case r.Item == "" || r.Station == "":
 		return fmt.Errorf("%w: a station run needs its item and station", ErrBadRunRequest)
+	}
+
+	return nil
+}
+
+// checkWindow refuses a jonah bundle without a window that ends after it starts, and a window or
+// Manual on any other bundle.
+func (r RunRequest) checkWindow() error {
+	if r.Bundle == TaskKindJonah {
+		if r.WindowStart.IsZero() || !r.WindowEnd.After(r.WindowStart) {
+			return fmt.Errorf("%w: a jonah bundle needs a window that ends after it starts", ErrBadRunRequest)
+		}
+
+		return nil
+	}
+
+	if !r.WindowStart.IsZero() || !r.WindowEnd.IsZero() || r.Manual {
+		return fmt.Errorf("%w: only a jonah bundle has a window", ErrBadRunRequest)
 	}
 
 	return nil

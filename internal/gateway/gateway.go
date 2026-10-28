@@ -10,7 +10,7 @@
 // or expired token, or one for no or another audience, gets 401 with no detail. goald's API
 // refuses task tokens, so they work only here. The
 // claims name the factory, its definition version, the agent and the run; that version must
-// declare the agent, otherwise 403.
+// declare the agent, otherwise 403, except a Jonah review's (below).
 //
 // # Run bundle
 //
@@ -66,6 +66,14 @@
 // the question to Questions (the engine's Ask, adapted by cmd/goald), which records it and ends
 // the run; the agent is told to stop. Input outside the limits and the engine's refusals, such
 // as a second open question, are tool errors with the reason.
+//
+// # Jonah reviews
+//
+// A token of kind domain.TaskKindJonah is a Jonah review's run (ADR 0034 decision 1, jonah.go).
+// Its bundle's spec.jonah holds the version's files a proposal may edit, the factory's sent-back
+// events in the token's window and its proposals rejected in the last 90 days, read through
+// Deps.Jonah (503 when nil); it names no item, repository, connection, rule or knowledge source.
+// Its MCP session needs no agent of the version, lists no tool and refuses every call.
 //
 // # State
 //

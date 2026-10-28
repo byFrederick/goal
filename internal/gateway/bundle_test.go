@@ -876,11 +876,14 @@ const jonahYAML = factoryYAML + `  learning:
     jonah: { proposeAfter: 3, model: claude-haiku-5-5 }
 `
 
+// jonahRule is the rule file of jonahFiles.
+const jonahRule = "rules/go-errors.md"
+
 // jonahFiles are the version's files besides factory.yaml and the engineer's prompt: some a
 // review reads, and evals, a readme and a binary file it does not.
 var jonahFiles = map[string]string{
 	"skills/acme-conventions/SKILL.md": "---\nname: acme-conventions\n---\n",
-	"rules/go-errors.md":               "Wrap with %w.\n",
+	jonahRule:                          "Wrap with %w.\n",
 	"contracts/change.json":            `{"type":"object"}`,
 	"evals/notes.md":                   "# What the evals cover\n",
 	"README.md":                        "# acme\n",
@@ -906,7 +909,9 @@ func (h *harness) sendBack(t *testing.T, it domain.Item, kind domain.EventKind, 
 	}
 
 	ctx := domain.WithOrg(t.Context(), h.org)
-	if err := h.store.AppendEvents(ctx, domain.Event{FactoryID: it.FactoryID, ItemID: it.ID, At: at, Kind: kind, Station: "build", Actor: actor, Data: data}); err != nil {
+
+	e := domain.Event{FactoryID: it.FactoryID, ItemID: it.ID, At: at, Kind: kind, Station: h.claims().Station, Actor: actor, Data: data}
+	if err := h.store.AppendEvents(ctx, e); err != nil {
 		t.Fatal(err)
 	}
 
@@ -938,8 +943,8 @@ func (h *harness) decidedProposals(t *testing.T) {
 	file := func(p string) []domain.ProposalFile { return []domain.ProposalFile{{Path: p, Content: "new\n"}} }
 
 	_, stored, err := h.store.FinishJonahReview(ctx, claimed, domain.JonahReviewResult{State: domain.JonahDone, At: now, Proposals: []domain.NewProposal{
-		{Title: "Ask for tests", Summary: "The engineer skips tests.", Files: file("rules/go-errors.md")},
-		{Title: "An old idea", Summary: "Rejected long ago.", Files: file("agents/engineer.md")},
+		{Title: "Ask for tests", Summary: "The engineer skips tests.", Files: file(jonahRule)},
+		{Title: "An old idea", Summary: "Rejected long ago.", Files: file(engineerPrompt)},
 		{Title: "Still open", Files: file("factory.yaml")},
 	}})
 	if err != nil {
@@ -985,40 +990,65 @@ func TestServeRun_JonahBundle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	j := b.Spec.Jonah
-	if j == nil {
-		t.Fatalf("spec.jonah missing: %s", body)
+	expectJonahSpec(t, b, c, it)
+	expectNoKeys(t, body)
+
+	if n := len(h.store.Events(it.ID)); n != before {
+		t.Errorf("%d events of the item, want %d: a bundle records nothing", n, before)
 	}
 
-	if j.ProposeAfter != 3 || !j.Manual {
-		t.Errorf("propose_after, manual = %d, %v; want the policy's 3 and the token's true", j.ProposeAfter, j.Manual)
-	}
-
-	ref := "#" + strconv.FormatInt(it.Number, 10)
 	wantEvents := []jonahEvent{
-		{ID: strconv.FormatInt(rejected, 10), ItemRef: ref, Title: it.Title, Station: "build", Kind: string(domain.EventRejected), Reason: "No tests."},
-		{ID: strconv.FormatInt(gate, 10), ItemRef: ref, Title: it.Title, Station: "build", Kind: string(domain.EventGateRejected)},
+		{ID: strconv.FormatInt(rejected, 10), ItemRef: "#" + strconv.FormatInt(it.Number, 10), Title: it.Title, Station: h.claims().Station, Kind: string(domain.EventRejected), Reason: "No tests."},
+		{ID: strconv.FormatInt(gate, 10), ItemRef: "#" + strconv.FormatInt(it.Number, 10), Title: it.Title, Station: h.claims().Station, Kind: string(domain.EventGateRejected)},
 	}
-	if !reflect.DeepEqual(j.Events, wantEvents) {
-		t.Errorf("events =\n %+v\nwant\n %+v", j.Events, wantEvents)
+	if !reflect.DeepEqual(b.Spec.Jonah.Events, wantEvents) {
+		t.Errorf("events =\n %+v\nwant\n %+v", b.Spec.Jonah.Events, wantEvents)
 	}
 
 	wantRejected := []jonahRejected{{
-		Title: "Ask for tests", Summary: "The engineer skips tests.", Paths: []string{"rules/go-errors.md"}, Reason: "Not for Ask for tests.",
+		Title: "Ask for tests", Summary: "The engineer skips tests.", Paths: []string{jonahRule}, Reason: "Not for Ask for tests.",
 	}}
-	if !reflect.DeepEqual(j.Rejected, wantRejected) {
-		t.Errorf("rejected =\n %+v\nwant\n %+v", j.Rejected, wantRejected)
+	if !reflect.DeepEqual(b.Spec.Jonah.Rejected, wantRejected) {
+		t.Errorf("rejected =\n %+v\nwant\n %+v", b.Spec.Jonah.Rejected, wantRejected)
+	}
+}
+
+// expectJonahSpec checks that b is a Jonah review's bundle for c: the policy's threshold and
+// model, the token's manual, agent and run, and nothing of an item's run.
+func expectJonahSpec(t *testing.T, b runBundle, c domain.TaskClaims, it domain.Item) {
+	t.Helper()
+
+	j := b.Spec.Jonah
+	if j == nil {
+		t.Fatalf("spec.jonah missing: %+v", b)
 	}
 
-	s := b.Spec
-	if s.ItemID != "" || s.Station != "" || s.Agent != "reviewer" || s.RunID != "run-jonah" || s.Model != "claude-haiku-5-5" || s.Brief != "" {
-		t.Errorf("spec = %+v; want no item, station or brief, the token's agent and run and the policy's model", s)
+	if j.ProposeAfter != 3 || j.Manual != c.Manual {
+		t.Errorf("propose_after, manual = %d, %v; want the policy's 3 and the token's %v", j.ProposeAfter, j.Manual, c.Manual)
 	}
 
-	if len(s.Connections) != 0 || len(s.Rules) != 0 || len(s.GrantedCalls) != 0 || len(s.Skills) != 0 || len(b.Files) != 0 || len(b.Git) != 0 ||
-		len(b.Tools) != 0 || b.Repository != nil {
-		t.Errorf("bundle = %+v; want no connection, rule, granted call, skill, file, git login, tool or repository", b)
+	// Everything else is an empty item-less spec: no item, station, brief, connection, rule,
+	// granted call, skill, file, git login, tool or repository.
+	want := runBundle{
+		Spec: bundleSpec{
+			FactoryID: c.FactoryID, RunID: c.RunID, Agent: c.Agent, Model: "claude-haiku-5-5", Skills: []string{}, ToolsAllow: []string{},
+			ToolsDeny: []string{}, Connections: []bundleConnection{}, Rules: []bundleRule{}, GrantedCalls: []grantedCall{},
+		},
+		Files: map[string][]byte{}, Git: []gitCredential{}, Tools: []string{},
 	}
+
+	got := b
+	got.Spec.Jonah = nil
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("bundle =\n %+v\nwant (not item %s)\n %+v", got, it.ID, want)
+	}
+}
+
+// expectNoKeys checks that a served bundle has no repository or definition and its spec no
+// knowledge_sources.
+func expectNoKeys(t *testing.T, body []byte) {
+	t.Helper()
 
 	var top, spec map[string]json.RawMessage
 	if err := json.Unmarshal(body, &top); err != nil {
@@ -1038,10 +1068,6 @@ func TestServeRun_JonahBundle(t *testing.T) {
 	if _, ok := spec["knowledge_sources"]; ok {
 		t.Error("spec has knowledge_sources, want none")
 	}
-
-	if n := len(h.store.Events(it.ID)); n != before {
-		t.Errorf("%d events of the item, want %d: a bundle records nothing", n, before)
-	}
 }
 
 // A review reads only the files a proposal may edit, factory.yaml, agents/, skills/, rules/ and
@@ -1053,14 +1079,14 @@ func TestServeRun_JonahBundleOnlyAllowlistedFiles(t *testing.T) {
 	h := newJonahHarness(t, harnessDeps{})
 	b := h.fetchBundle(t, h.runServer(t), h.jonahClaims())
 
-	want := []string{"agents/engineer.md", "contracts/change.json", config.FileName, "rules/go-errors.md", "skills/acme-conventions/SKILL.md"}
+	want := []string{engineerPrompt, "contracts/change.json", config.FileName, jonahRule, "skills/acme-conventions/SKILL.md"}
 
 	var got []string
 
 	for _, f := range b.Spec.Jonah.Files {
 		got = append(got, f.Path)
 
-		body := cmp.Or(jonahFiles[f.Path], map[string]string{"agents/engineer.md": "# engineer\n"}[f.Path])
+		body := cmp.Or(jonahFiles[f.Path], map[string]string{engineerPrompt: "# engineer\n"}[f.Path])
 		if f.Path == config.FileName {
 			body = jonahYAML
 		}
@@ -1097,7 +1123,7 @@ func TestServeRun_RefusesJonahTokens(t *testing.T) {
 		claims domain.TaskClaims
 		status int
 	}{
-		{name: "another factory's version", claims: otherFactorys, status: http.StatusForbidden},
+		{name: "a version of another factory", claims: otherFactorys, status: http.StatusForbidden},
 		{name: "another organization", claims: otherOrg, status: http.StatusForbidden},
 		{name: "names connections", claims: withConnections, status: http.StatusUnauthorized},
 		{name: "no window", claims: noWindow, status: http.StatusUnauthorized},

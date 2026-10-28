@@ -65,18 +65,25 @@ func TestRunTask_Jonah(t *testing.T) {
 	expectOnlyModelEnv(t, runs[0].Env)
 	h.expectJonahRun(t, prepares[0].Sandbox.RunID)
 
-	// The window's end is rounded up to the second, so the token's window holds the review's.
-	c := h.claims(t, runs[0].Env["GOAL_GATEWAY_TOKEN"])
-	if c.Kind != domain.TaskKindJonah || len(c.Connections) != 0 || c.ItemID != "" || c.Station != "" || !c.Manual ||
-		c.WindowStart != t0.Add(-24*time.Hour).Unix() || c.WindowEnd != t0.Add(-time.Hour).Unix()+1 {
-		t.Errorf("token claims = %+v; want a jonah token of the review's window, manual, with no item, station or connection", c)
-	}
+	expectJonahToken(t, h.claims(t, runs[0].Env["GOAL_GATEWAY_TOKEN"]))
 
 	if events := h.store.Events(""); len(events) != 0 {
 		t.Errorf("events without an item = %+v; want none", events)
 	}
 
 	h.expectSandboxes(t, 0)
+}
+
+// expectJonahToken checks a Jonah run's token: of kind jonah, manual, with no item, station or
+// connection, and jonahRequest's window with its end rounded up to the second, so the token's
+// window holds the review's.
+func expectJonahToken(t *testing.T, c domain.TaskClaims) {
+	t.Helper()
+
+	if c.Kind != domain.TaskKindJonah || len(c.Connections) != 0 || c.ItemID != "" || c.Station != "" || !c.Manual ||
+		c.WindowStart != t0.Add(-24*time.Hour).Unix() || c.WindowEnd != t0.Add(-time.Hour).Unix()+1 {
+		t.Errorf("token claims = %+v; want a jonah token of the review's window, manual, with no item, station or connection", c)
+	}
 }
 
 // RunTask refuses a Jonah request that names an item, a station, a lease, a repository or a

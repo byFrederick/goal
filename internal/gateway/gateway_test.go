@@ -31,8 +31,9 @@ const (
 	factoryID domain.FactoryID = "8d4f2b1a-3c5e-4f60-9a7b-1c2d3e4f5a6b"
 	otherID   domain.FactoryID = "5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a01"
 	itemID    domain.ItemID    = "item-1"
-	// agentEngineer is the agent of the tasks' runs.
-	agentEngineer = "engineer"
+	// agentEngineer is the agent of the tasks' runs, and engineerPrompt its prompt file.
+	agentEngineer  = "engineer"
+	engineerPrompt = "agents/engineer.md"
 )
 
 // version is the definition version the tasks' runs started on; otherVersion is a version of
@@ -197,8 +198,8 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 
 	raw := func(id domain.FactoryID) map[string][]byte {
 		files := map[string][]byte{
-			"factory.yaml":       []byte(strings.ReplaceAll(d.yaml, string(factoryID), string(id))),
-			"agents/engineer.md": []byte("# engineer\n"),
+			"factory.yaml": []byte(strings.ReplaceAll(d.yaml, string(factoryID), string(id))),
+			engineerPrompt: []byte("# engineer\n"),
 		}
 		for name, body := range d.files {
 			files[name] = []byte(body)
@@ -400,7 +401,7 @@ func (h *harness) jonahClaims() domain.TaskClaims {
 	now := h.clock.Now()
 
 	return domain.TaskClaims{
-		Kind: domain.TaskKindJonah, OrgID: h.org, FactoryID: factoryID, VersionID: version, Agent: "reviewer", RunID: "run-jonah",
+		Kind: domain.TaskKindJonah, OrgID: h.org, FactoryID: factoryID, VersionID: version, Agent: "jonah-reviewer", RunID: "run-jonah",
 		WindowStart: now.Add(-7 * 24 * time.Hour).Unix(), WindowEnd: now.Unix(), ExpiresAt: now.Add(time.Hour).Unix(),
 	}
 }
