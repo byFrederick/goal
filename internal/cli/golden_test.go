@@ -34,6 +34,7 @@ func TestRun_Golden(t *testing.T) {
 		{"status-help", "status -h"},
 		{"up-help", "up -h"},
 		{"login-help", "login -h"},
+		{"jonah-help", "jonah -h"},
 		{"spend-bad-window", "spend --window year"},
 	}
 
