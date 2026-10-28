@@ -25,6 +25,12 @@ var notifyRoles = map[domain.NotificationEvent][]string{
 	domain.NotifyBudget:   {},
 }
 
+// Keys of the outbox payloads.
+const (
+	payloadFactory = "factory_id"
+	payloadKind    = "kind"
+)
+
 // outboxEvent is one event to queue in the notification outbox.
 type outboxEvent struct {
 	id      string // event/<item event id>, andon/<pull id> or budget/<factory>/<crossing>
@@ -84,12 +90,10 @@ func itemNotifications(ctx context.Context, q *db.Queries, events []domain.Event
 			p.actor = ref
 		}
 
-		switch e.Kind {
-		case domain.EventQuestionAsked:
-			p.asked = e
-		case domain.EventWaitingHuman:
-			p.waiting = e
-		default:
+		if slot := map[domain.EventKind]**domain.Event{
+			domain.EventQuestionAsked: &p.asked, domain.EventWaitingHuman: &p.waiting,
+		}[e.Kind]; slot != nil {
+			*slot = e
 		}
 	}
 
@@ -131,7 +135,7 @@ func queueItemNotification(ctx context.Context, q *db.Queries, e domain.Event, k
 		return fmt.Errorf("the %s event of item %s: %w", e.Kind, e.ItemID, err)
 	}
 
-	payload := map[string]any{"factory_id": string(e.FactoryID), "item_id": string(e.ItemID), "station": e.Station}
+	payload := map[string]any{payloadFactory: string(e.FactoryID), "item_id": string(e.ItemID), "station": e.Station}
 	if e.RunID != "" {
 		payload["run_id"] = string(e.RunID)
 	}
@@ -143,7 +147,7 @@ func queueItemNotification(ctx context.Context, q *db.Queries, e domain.Event, k
 
 // andonNotification is the andon event of pull p, pulled by by.
 func andonNotification(p domain.AndonPull, factory uuid.UUID, by domain.Actor) outboxEvent {
-	payload := map[string]any{"factory_id": string(p.FactoryID), "andon_id": p.ID, "kind": string(p.Kind)}
+	payload := map[string]any{payloadFactory: string(p.FactoryID), "andon_id": p.ID, payloadKind: string(p.Kind)}
 	if p.Station != "" {
 		payload["station"] = p.Station
 	}
@@ -178,7 +182,7 @@ func (s *Store) QueueBudgetNotification(ctx context.Context, factory domain.Fact
 		return queueNotifications(ctx, q, outboxEvent{
 			id: "budget/" + id.String() + "/" + at.Format(time.RFC3339Nano), event: domain.NotifyBudget, factory: id, at: at,
 			payload: map[string]any{
-				"factory_id": string(factory), "spent_usd": spentUSD, "weekly_usd": weeklyUSD, "since": domain.BudgetSince(at),
+				payloadFactory: string(factory), "spent_usd": spentUSD, "weekly_usd": weeklyUSD, "since": domain.BudgetSince(at),
 			},
 		})
 	})
