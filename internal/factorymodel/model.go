@@ -197,8 +197,9 @@ func readModel(root *yaml.Node, files fs.FS) Model {
 		}
 	}
 
+	// The model reads the starter and never writes it, so its shape has no key order.
 	if n := lookup(root, []string{keyStarter}); n != nil {
-		m.Starter, _ = read(n, starterShape, files).(map[string]any)
+		m.Starter, _ = read(n, renamedShape, files).(map[string]any)
 	}
 
 	return m

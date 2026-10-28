@@ -3,9 +3,10 @@ package config
 import (
 	"strings"
 	"testing"
-
-	"github.com/byFrederick/goal/internal/core/domain"
 )
+
+// docsType is the work type starterBlock's item has.
+const docsType = "docs"
 
 // starterBlock is a valid starter item (ADR 0032) at the root of baseFactory, whose board gets
 // the work types fix and docs. Rows replace one of its lines and mark it with "#here".
@@ -32,7 +33,7 @@ func TestLoad_ParsesStarter(t *testing.T) {
 	}
 
 	want := StarterItem{
-		Title: "Add a contributing guide to the README", Type: "docs", Body: "Add a short **Contributing** section.\n",
+		Title: "Add a contributing guide to the README", Type: docsType, Body: "Add a short **Contributing** section.\n",
 	}
 	if f.Starter == nil || f.Starter.Item != want {
 		t.Errorf("starter = %+v, want item %+v", f.Starter, want)
@@ -83,34 +84,7 @@ func TestCheck_Starter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, problems := Check(checkTree(tt.doc, nil))
-
-			if tt.code == "" {
-				if len(problems) > 0 {
-					t.Fatalf("problems = %+v, want none", problems)
-				}
-
-				return
-			}
-
-			if len(problems) != 1 {
-				t.Fatalf("want one %s problem, got %+v", tt.code, problems)
-			}
-
-			p := problems[0]
-			if p.Code != tt.code || p.Severity != domain.SeverityError || p.File != FileName || p.Check == "" {
-				t.Errorf("problem = %+v, want an error %s in %s with a check", p, tt.code, FileName)
-			}
-
-			if want := markedLine(tt.doc); p.Line != want {
-				t.Errorf("problem line = %d, want %d: %+v", p.Line, want, p)
-			}
-
-			for _, m := range tt.message {
-				if !strings.Contains(p.Message, m) {
-					t.Errorf("message %q does not name %s", p.Message, m)
-				}
-			}
+			checkOneProblem(t, tt.doc, tt.code, tt.message)
 		})
 	}
 }

@@ -265,6 +265,36 @@ Each problem is located at its key under `spec.board.triggers` in `factory.yaml`
 
 The time zone check reads the host's zoneinfo, so a process without tzdata refuses every zone but `UTC`.
 
+## Starter item: `starter.item`
+
+A template can carry one small, safe first item, at the root of `factory.yaml` next to `spec` ([ADR 0032](../adr/0032-self-serve-onboarding.md), decision 3). Onboarding's last step, "Watch your first item", submits it once, through `submitItem`, to a new factory that has no items yet; a factory with items gets none. The section is optional, and the engine does nothing with it.
+
+```yaml
+starter:
+  item:
+    title: Add a contributing guide to the README
+    type: docs
+    body: |
+      Add a **Contributing** section to the README: how to set up the
+      repository, run the tests and open a pull request.
+```
+
+- `item` (required in `starter`): the only key of the section.
+- `title` (required): the item's title, 1 to 200 characters, as `submitItem` takes it.
+- `type`: one of `board.workTypes`. When absent, the item gets the first work type, as `submitItem` gives it.
+- `body`: the item's brief in markdown, at most 20000 characters.
+
+The factory model (`FactoryModel`, returned by `getTemplate`, the draft and a version) carries it as `starter` with the same keys, absent when `factory.yaml` has none. It is not a Visual editor section and has no ETag: the editor leaves it as written, and YAML mode edits it.
+
+### Starter checks
+
+Each problem is located at its key under `starter.item` in `factory.yaml`. The editor's model has no starter section, so the problems are in section `files`.
+
+| Problem | Code |
+| --- | --- |
+| The section fails the schema: no `item`, no `title`, an empty or too long `title`, a too long `body`, an unknown key | `schema-required`, `schema-invalid`, `schema-unknown-key` |
+| `type` is not in `board.workTypes`; with no `board.workTypes`, every `type` is unknown | `unknown-work-type` |
+
 ## Organization policy
 
 The organization policy ([ADR 0024](../adr/0024-organization-policy.md)) is a ceiling over every factory definition. A definition or an agent can choose less, never more. Goal applies it in two places.
