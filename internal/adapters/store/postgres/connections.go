@@ -47,6 +47,7 @@ const (
 	auditFields      = "fields"
 	auditSecrets     = "secrets"
 	auditRenamedFrom = "from"
+	auditTools       = "tools"
 )
 
 // The changes of a connection event (spec 4 §8.3), and the audit actions each is read back from.
@@ -358,6 +359,7 @@ func (c *Connections) Create(ctx context.Context, n domain.NewConnection, by dom
 	out := domain.Connection{
 		ID: domain.ConnectionID(id.String()), Name: n.Name, Kind: n.Kind, Description: n.Description, Fields: fields,
 		SecretFields: secretNames(secrets, refs), SecretRefs: refs, CreatedBy: by, UpdatedBy: by,
+		ToolModes: map[string]domain.ConnectionToolMode{},
 	}
 
 	err = c.s.inTx(ctx, func(q *db.Queries) error {
@@ -519,6 +521,10 @@ func (c *Connections) update(ctx context.Context, q *db.Queries, org domain.OrgI
 		out.Fields = setValues(p.Fields)
 	}
 
+	if p.ToolModes != nil {
+		out.ToolModes = maps.Clone(p.ToolModes)
+	}
+
 	s := sealed{keyID: r.KeyID, nonce: r.Nonce, ciphertext: r.Ciphertext}
 
 	if len(p.Secrets) > 0 {
@@ -536,9 +542,14 @@ func (c *Connections) update(ctx context.Context, q *db.Queries, org domain.OrgI
 		return domain.Connection{}, err
 	}
 
+	modes, err := json.Marshal(out.ToolModes)
+	if err != nil {
+		return domain.Connection{}, err
+	}
+
 	at, err := q.UpdateConnection(ctx, db.UpdateConnectionParams{
 		Name: out.Name, Description: out.Description, Fields: raw, SecretFields: out.SecretFields, SecretRefs: rawRefs, KeyID: s.keyID, Nonce: s.nonce,
-		Ciphertext: s.ciphertext, UpdatedBy: by.Ref(), ID: r.ID,
+		Ciphertext: s.ciphertext, ToolModes: modes, UpdatedBy: by.Ref(), ID: r.ID,
 	})
 	if violates(err, connectionNameKey) {
 		return domain.Connection{}, fmt.Errorf("connection %q: %w", out.Name, ports.ErrNameTaken)
@@ -557,7 +568,7 @@ func (c *Connections) update(ctx context.Context, q *db.Queries, org domain.OrgI
 	return out, notifyConnection(ctx, q, r.ID, out.Name, changeUpdated)
 }
 
-// checkPatch refuses a patch's malformed name or description.
+// checkPatch refuses a patch's malformed name, description or tool modes.
 func checkPatch(p domain.ConnectionPatch) error {
 	var errs []error
 
@@ -569,7 +580,7 @@ func checkPatch(p domain.ConnectionPatch) error {
 		errs = append(errs, domain.CheckConnectionDescription(*p.Description))
 	}
 
-	return errors.Join(errs...)
+	return errors.Join(append(errs, domain.CheckToolModes(p.ToolModes))...)
 }
 
 // replaceSecrets opens r's secrets, replaces those of sp (an empty value clears one, a reference
@@ -629,12 +640,17 @@ func secretNames(sealed, refs map[string]string) []string {
 }
 
 // updateAudits records an update of the connection from, now named name: connection.updated for
-// its name, description or fields, connection.secret_replaced for its secrets (names only).
+// its name, description, fields or tool modes (the tools with one), connection.secret_replaced for
+// its secrets (names only).
 func updateAudits(ctx context.Context, q *db.Queries, by domain.Actor, id uuid.UUID, from, name string, p domain.ConnectionPatch) error {
-	if p.Name != nil || p.Description != nil || p.Fields != nil {
+	if p.Name != nil || p.Description != nil || p.Fields != nil || p.ToolModes != nil {
 		data := map[string]any{auditName: name}
 		if p.Fields != nil {
 			data[auditFields] = valueNames(setValues(p.Fields))
+		}
+
+		if p.ToolModes != nil {
+			data[auditTools] = append([]string{}, slices.Sorted(maps.Keys(p.ToolModes))...)
 		}
 
 		if name != from {
@@ -654,7 +670,8 @@ func updateAudits(ctx context.Context, q *db.Queries, by domain.Actor, id uuid.U
 		map[string]any{auditName: name, auditSecrets: valueNames(p.Secrets)})
 }
 
-// Delete implements ports.Connections.
+// Delete implements ports.Connections. The connection's active standing rules are revoked in its
+// transaction.
 func (c *Connections) Delete(ctx context.Context, name string, by domain.Actor) error {
 	err := c.s.inTx(ctx, func(q *db.Queries) error {
 		r, err := q.DeleteConnection(ctx, name)
@@ -672,6 +689,10 @@ func (c *Connections) Delete(ctx context.Context, name string, by domain.Actor) 
 			return err
 		}
 
+		if err := revokeConnectionRules(ctx, q, r.ID, name, by); err != nil {
+			return err
+		}
+
 		return notifyConnection(ctx, q, r.ID, name, changeDeleted)
 	})
 	if err != nil {
@@ -681,7 +702,8 @@ func (c *Connections) Delete(ctx context.Context, name string, by domain.Actor) 
 	return nil
 }
 
-// RecordTest implements ports.Connections. A zero r.At is the database's now; a long error is cut.
+// RecordTest implements ports.Connections. A zero r.At is the database's now; a long error is cut;
+// the tools are stored sorted without repeats, NULL for none.
 func (c *Connections) RecordTest(ctx context.Context, name string, r domain.ConnectionTest, by domain.Actor) error {
 	msg := r.Error
 	if utf8.RuneCountInString(msg) > maxTestError {
@@ -689,7 +711,9 @@ func (c *Connections) RecordTest(ctx context.Context, name string, r domain.Conn
 	}
 
 	err := c.s.inTx(ctx, func(q *db.Queries) error {
-		id, err := q.RecordConnectionTest(ctx, db.RecordConnectionTestParams{At: optionalTime(r.At), Ok: r.OK, Error: optional(msg), Name: name})
+		id, err := q.RecordConnectionTest(ctx, db.RecordConnectionTestParams{
+			At: optionalTime(r.At), Ok: r.OK, Error: optional(msg), Tools: toolNames(r.Tools), Name: name,
+		})
 		if notFound(err) {
 			return ports.ErrNotFound
 		}
@@ -893,14 +917,19 @@ func connectionFrom(r db.ConnectionRow) (domain.Connection, error) {
 		return domain.Connection{}, fmt.Errorf("connection %s: secret references: %w", r.Name, err)
 	}
 
+	modes := map[string]domain.ConnectionToolMode{}
+	if err := json.Unmarshal(r.ToolModes, &modes); err != nil {
+		return domain.Connection{}, fmt.Errorf("connection %s: tool modes: %w", r.Name, err)
+	}
+
 	out := domain.Connection{
-		ID: domain.ConnectionID(r.ID.String()), Name: r.Name, Kind: r.Kind, Description: r.Description, Fields: fields,
+		ID: domain.ConnectionID(r.ID.String()), Name: r.Name, Kind: r.Kind, Description: r.Description, Fields: fields, ToolModes: modes,
 		SecretFields: slices.Clone(r.SecretFields), SecretRefs: refs, CreatedBy: namedActor(r.CreatedBy, ""), CreatedAt: r.CreatedAt.UTC(),
 		UpdatedBy: namedActor(r.UpdatedBy, ""), UpdatedAt: r.UpdatedAt.UTC(), LastUsedAt: utc(r.LastUsedAt),
 	}
 
 	if r.LastTestAt != nil && r.LastTestOk != nil {
-		out.LastTest = &domain.ConnectionTest{At: r.LastTestAt.UTC(), OK: *r.LastTestOk, Error: deref(r.LastTestError)}
+		out.LastTest = &domain.ConnectionTest{At: r.LastTestAt.UTC(), OK: *r.LastTestOk, Error: deref(r.LastTestError), Tools: toolNames(r.LastTestTools)}
 	}
 
 	return out, nil
@@ -911,7 +940,7 @@ func sealedConnection(r db.SealedConnectionsRow) db.ConnectionRow {
 	return db.ConnectionRow{
 		ID: r.ID, Name: r.Name, Kind: r.Kind, Description: r.Description, Fields: r.Fields, SecretFields: r.SecretFields,
 		SecretRefs: r.SecretRefs, CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, UpdatedBy: r.UpdatedBy, UpdatedAt: r.UpdatedAt, LastUsedAt: r.LastUsedAt,
-		LastTestAt: r.LastTestAt, LastTestOk: r.LastTestOk, LastTestError: r.LastTestError,
+		LastTestAt: r.LastTestAt, LastTestOk: r.LastTestOk, LastTestError: r.LastTestError, LastTestTools: r.LastTestTools, ToolModes: r.ToolModes,
 	}
 }
 

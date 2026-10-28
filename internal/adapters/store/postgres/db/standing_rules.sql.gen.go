@@ -76,7 +76,7 @@ func (q *Queries) InsertStandingRule(ctx context.Context, arg InsertStandingRule
 const revokeConnectionStandingRules = `-- name: RevokeConnectionStandingRules :many
 UPDATE standing_rules SET revoked_by = $1, revoked_at = now()
 WHERE connection_id = $2 AND revoked_at IS NULL
-RETURNING id, tool, agent
+RETURNING id, tool, agent, item_id
 `
 
 type RevokeConnectionStandingRulesParams struct {
@@ -85,9 +85,10 @@ type RevokeConnectionStandingRulesParams struct {
 }
 
 type RevokeConnectionStandingRulesRow struct {
-	ID    uuid.UUID
-	Tool  string
-	Agent string
+	ID     uuid.UUID
+	Tool   string
+	Agent  string
+	ItemID uuid.UUID
 }
 
 // A connection's deletion revokes its active rules.
@@ -100,7 +101,12 @@ func (q *Queries) RevokeConnectionStandingRules(ctx context.Context, arg RevokeC
 	var items []RevokeConnectionStandingRulesRow
 	for rows.Next() {
 		var i RevokeConnectionStandingRulesRow
-		if err := rows.Scan(&i.ID, &i.Tool, &i.Agent); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Tool,
+			&i.Agent,
+			&i.ItemID,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -114,7 +120,7 @@ func (q *Queries) RevokeConnectionStandingRules(ctx context.Context, arg RevokeC
 const revokeStandingRule = `-- name: RevokeStandingRule :one
 UPDATE standing_rules SET revoked_by = $1, revoked_at = now()
 WHERE id = $2 AND revoked_at IS NULL
-RETURNING connection_id, tool, agent, revoked_at
+RETURNING revoked_at
 `
 
 type RevokeStandingRuleParams struct {
@@ -122,35 +128,51 @@ type RevokeStandingRuleParams struct {
 	ID        uuid.UUID
 }
 
-type RevokeStandingRuleRow struct {
+func (q *Queries) RevokeStandingRule(ctx context.Context, arg RevokeStandingRuleParams) (*time.Time, error) {
+	row := q.db.QueryRow(ctx, revokeStandingRule, arg.RevokedBy, arg.ID)
+	var revoked_at *time.Time
+	err := row.Scan(&revoked_at)
+	return revoked_at, err
+}
+
+const standingRule = `-- name: StandingRule :one
+SELECT r.id, r.connection_id, c.name AS connection, r.tool, r.agent, r.created_by, r.created_at, r.item_id, r.revoked_by,
+       r.revoked_at
+FROM standing_rules r LEFT JOIN connections c ON c.id = r.connection_id
+WHERE r.id = $1
+FOR NO KEY UPDATE OF r
+`
+
+type StandingRuleRow struct {
+	ID           uuid.UUID
 	ConnectionID uuid.UUID
+	Connection   *string
 	Tool         string
 	Agent        string
+	CreatedBy    string
+	CreatedAt    time.Time
+	ItemID       uuid.UUID
+	RevokedBy    *string
 	RevokedAt    *time.Time
 }
 
-// No row when there is no such rule or it is revoked already; StandingRuleRevoked tells which.
-func (q *Queries) RevokeStandingRule(ctx context.Context, arg RevokeStandingRuleParams) (RevokeStandingRuleRow, error) {
-	row := q.db.QueryRow(ctx, revokeStandingRule, arg.RevokedBy, arg.ID)
-	var i RevokeStandingRuleRow
+// Rule id, locked for its revocation.
+func (q *Queries) StandingRule(ctx context.Context, id uuid.UUID) (StandingRuleRow, error) {
+	row := q.db.QueryRow(ctx, standingRule, id)
+	var i StandingRuleRow
 	err := row.Scan(
+		&i.ID,
 		&i.ConnectionID,
+		&i.Connection,
 		&i.Tool,
 		&i.Agent,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.ItemID,
+		&i.RevokedBy,
 		&i.RevokedAt,
 	)
 	return i, err
-}
-
-const standingRuleRevoked = `-- name: StandingRuleRevoked :one
-SELECT (revoked_at IS NOT NULL)::boolean AS revoked FROM standing_rules WHERE id = $1
-`
-
-func (q *Queries) StandingRuleRevoked(ctx context.Context, id uuid.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, standingRuleRevoked, id)
-	var revoked bool
-	err := row.Scan(&revoked)
-	return revoked, err
 }
 
 const standingRules = `-- name: StandingRules :many
