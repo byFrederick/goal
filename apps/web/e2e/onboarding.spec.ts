@@ -91,3 +91,31 @@ test('step 2 says GitLab is not available yet', async ({ page }) => {
 
   await expect(page.getByRole('button', { name: 'GitLab is coming.' })).toHaveAttribute('aria-disabled', 'true');
 });
+
+test('step 3 creates the factory from the first template, and step 4 shapes its line', async ({ page }) => {
+  await signIn(page.request);
+  await page.goto('/o/goal/get-started/code');
+  await page.locator('label', { hasText: 'acme/goal' }).first().getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Continue with 1 repository' }).click();
+
+  // The templates are listed by title, and the first is chosen.
+  await expect(page.getByRole('heading', { level: 1, name: 'Start your first factory' })).toBeVisible();
+  await expect(page.getByRole('radio', { name: /Start empty/ })).toBeVisible();
+  await page.getByRole('button', { name: /^Use / }).click();
+
+  await expect(page).toHaveURL(/\/o\/goal\/get-started\/line\?.*factory=/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Shape the line' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Not available yet' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(page.getByRole('link', { name: 'Continue' })).toHaveAttribute('href', /\/get-started\/budget\?factory=/);
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+});
+
+test('step 4 without a factory links back to step 3', async ({ page }) => {
+  await signIn(page.request);
+  await page.goto('/o/goal/get-started/line');
+
+  await expect(page.getByText('Choose a template first, then shape its line.')).toBeVisible();
+  await page.getByRole('link', { name: 'Back' }).click();
+  await expect(page).toHaveURL(/\/o\/goal\/get-started\/factory/);
+});

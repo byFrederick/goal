@@ -1,7 +1,7 @@
 import { createFileRoute, notFound } from '@tanstack/react-router';
 import { ensureFound, orgsQuery } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
-import { codeSearch } from '../features/onboarding/code-search';
+import { onboardingSearch } from '../features/onboarding/code-search';
 import { OnboardingStepPage } from '../features/onboarding/onboarding-step';
 import { isOrgOnboardingStep, stepLabel } from '../features/onboarding/steps';
 import { findOrg } from '../shared/org';
@@ -10,8 +10,8 @@ import { findOrg } from '../shared/org';
 // trailing underscore keeps this route out of /o/$org's layout: onboarding has no organization
 // sidebar.
 export const Route = createFileRoute('/o/$org_/get-started/$step')({
-  // The Code step's choice (connection, owner, repos) is in the URL; the other steps ignore it.
-  validateSearch: (search: Record<string, unknown>) => codeSearch(search),
+  // The Code step's choice (connection, owner, repos) and the factory step 3 made are in the URL.
+  validateSearch: (search: Record<string, unknown>) => onboardingSearch(search),
   beforeLoad: async ({ context, params }) => {
     if (!isOrgOnboardingStep(params.step)) throw notFound();
     const org = await ensureFound(context.queryClient, orgsQuery, (orgs) => findOrg(orgs, params.org));
