@@ -98,16 +98,24 @@ func Sampled(run domain.RunID, judge string, share float64) bool {
 // Run sweeps and works the queue at once and then each time every passes, until ctx ends;
 // failures are logged and retried on the next round.
 func (l *Loop) Run(ctx context.Context, every time.Duration) {
-	t := l.d.Clock.NewTicker(every)
+	rounds(ctx, l.d.Clock, every, l.log, "judge", l.Sweep, l.Work)
+}
+
+// rounds sweeps and works at once and then each time every passes, until ctx ends, logging each
+// failure as "<name> sweep" or "<name> work".
+func rounds(ctx context.Context, clock ports.Clock, every time.Duration, log *slog.Logger, name string,
+	sweep func(context.Context) error, work func(context.Context) (int, error),
+) {
+	t := clock.NewTicker(every)
 	defer t.Stop()
 
 	for {
-		if err := l.Sweep(ctx); err != nil && ctx.Err() == nil {
-			l.log.WarnContext(ctx, "judge sweep", slog.Any("error", err))
+		if err := sweep(ctx); err != nil && ctx.Err() == nil {
+			log.WarnContext(ctx, name+" sweep", slog.Any("error", err))
 		}
 
-		if _, err := l.Work(ctx); err != nil && ctx.Err() == nil {
-			l.log.WarnContext(ctx, "judge work", slog.Any("error", err))
+		if _, err := work(ctx); err != nil && ctx.Err() == nil {
+			log.WarnContext(ctx, name+" work", slog.Any("error", err))
 		}
 
 		select {
