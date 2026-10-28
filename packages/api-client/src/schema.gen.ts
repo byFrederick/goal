@@ -2206,6 +2206,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/runs/{run}/knowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The run's id */
+                run: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The knowledge documents a run used, with the verdicts given on them for it
+         * @description Its uses by time, document and kind, and the verdicts agents and people gave for the run (ADR 0027). 404 for a run of another organization.
+         */
+        get: operations["listRunKnowledge"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/items/{item}/approve": {
         parameters: {
             query?: never;
@@ -2882,6 +2907,79 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/knowledge/documents/{document}/uses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge document's id */
+                document: components["parameters"]["DocumentRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One page of the runs that used a document
+         * @description Newest first use first (ADR 0027), after the run id after; next_after, when set, is the after of the next page. Each names its run, item and factory, so a client links to them; a run of a factory the caller may not see is left out. 404 knowledge-document-not-found.
+         */
+        get: operations["listKnowledgeDocumentUses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/knowledge/documents/{document}/verdict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge document's id */
+                document: components["parameters"]["DocumentRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Say whether a document helped or misled
+         * @description The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+         */
+        put: operations["giveKnowledgeVerdict"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/knowledge/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Where a source's documents were used
+         * @description Per document of the source with a use or a verdict in the last days days (ADR 0027, decision 3): the distinct runs that used it and the verdicts given, agents' and people's apart; at most 500, the most used first, then by id. 404 knowledge-source-not-found.
+         */
+        get: operations["getKnowledgeUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/knowledge/search": {
         parameters: {
             query?: never;
@@ -2917,7 +3015,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run has no use of the document). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -5788,6 +5886,16 @@ export interface components {
                     [key: string]: unknown;
                 };
             };
+            /** @description factory.yaml's starter section (ADR 0032), absent when the YAML has none. It is not a Visual section and has no ETag: onboarding submits starter.item once, through submitItem, to a factory with no items, and YAML mode edits it. */
+            starter?: {
+                item: {
+                    title: string;
+                    /** @description One of board.workTypes; when absent, submitItem gives the first */
+                    type?: string;
+                    /** @description The item's brief, in markdown */
+                    body?: string;
+                };
+            };
         };
         /** @description The data of one `event: definition` on /v1/orgs/{org}/stream; it carries no content */
         DefinitionEvent: {
@@ -6296,6 +6404,87 @@ export interface components {
             snippet: string;
             /** Format: double */
             score: number;
+        };
+        KnowledgeUsage: {
+            /** @description The source's name */
+            source: string;
+            /** @description The window in days */
+            days: number;
+            documents: components["schemas"]["KnowledgeDocumentUsage"][];
+        };
+        /** @description One document's use over the window; getKnowledgeDocument has its url */
+        KnowledgeDocumentUsage: {
+            /** @description The document's id */
+            id: string;
+            title: string;
+            /** @description Its source's name */
+            source: string;
+            /** @description The distinct runs that used it */
+            runs: number;
+            agents_helped: number;
+            agents_misled: number;
+            people_helped: number;
+            people_misled: number;
+        };
+        /**
+         * @description search when knowledge__search returned some of its chunks, read when knowledge__read opened it
+         * @enum {string}
+         */
+        KnowledgeUseKind: "search" | "read";
+        KnowledgeDocumentUsePage: {
+            uses: components["schemas"]["KnowledgeDocumentUse"][];
+            /** @description The after of the next page; absent on the last */
+            next_after?: string;
+        };
+        /** @description One run that used a document */
+        KnowledgeDocumentUse: {
+            run_id: string;
+            item: components["schemas"]["RunItem"];
+            factory: components["schemas"]["FactoryHit"];
+            kinds: components["schemas"]["KnowledgeUseKind"][];
+            /**
+             * Format: date-time
+             * @description The run's first use of the document
+             */
+            at: string;
+        };
+        KnowledgeVerdictInput: {
+            /** @enum {string} */
+            verdict: "helped" | "misled";
+            /** @description A run of the organization that used the document */
+            run_id?: string;
+            note?: string;
+        };
+        KnowledgeVerdict: {
+            /** @description The document's id */
+            document: string;
+            /** @description Its source's name */
+            source: string;
+            /** @enum {string} */
+            verdict: "helped" | "misled";
+            run_id?: string;
+            /** @description The run's item */
+            item_id?: string;
+            note?: string;
+            by: components["schemas"]["Actor"];
+            /** Format: date-time */
+            at: string;
+        };
+        RunKnowledge: {
+            uses: components["schemas"]["RunKnowledgeUse"][];
+            /** @description The verdicts given for the run, by time */
+            verdicts: components["schemas"]["KnowledgeVerdict"][];
+        };
+        RunKnowledgeUse: {
+            /** @description The document's id */
+            document: string;
+            /** @description Its source's name */
+            source: string;
+            kind: components["schemas"]["KnowledgeUseKind"];
+            /** @description The chunk ids a search returned; none for a read */
+            chunks: number[];
+            /** Format: date-time */
+            at: string;
         };
         /** @description The data of one `event: knowledge` on /v1/orgs/{org}/stream: a source's sync started or ended */
         KnowledgeEvent: {
@@ -9389,6 +9578,32 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    listRunKnowledge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The run's id */
+                run: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run's knowledge */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunKnowledge"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     approveItem: {
         parameters: {
             query?: never;
@@ -10433,6 +10648,94 @@ export interface operations {
                 };
                 content: {
                     "application/octet-stream": string;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listKnowledgeDocumentUses: {
+        parameters: {
+            query?: {
+                /** @description The last run id of the previous page */
+                after?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge document's id */
+                document: components["parameters"]["DocumentRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocumentUsePage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    giveKnowledgeVerdict: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge document's id */
+                document: components["parameters"]["DocumentRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KnowledgeVerdictInput"];
+            };
+        };
+        responses: {
+            /** @description The verdict as stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeVerdict"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getKnowledgeUsage: {
+        parameters: {
+            query: {
+                /** @description The source's name */
+                source: string;
+                days?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The usage */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeUsage"];
                 };
             };
             default: components["responses"]["Problem"];

@@ -62,6 +62,7 @@ import { authSettings, createMockAuth } from './auth.ts';
 import { createConnections } from './connections.ts';
 import { createCredentials } from './credentials.ts';
 import { createDefinitions } from './definitions.ts';
+import { createEvals } from './evals.ts';
 import { parseFault, sleep, takeFault } from './faults.ts';
 import {
   acmeOrg,
@@ -232,6 +233,10 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     acme: acmeOrg,
   });
 
+  const evals = createEvals({
+    clock,
+    factory: (org, key) => findFactory(key, org),
+  });
   const webhooks = createWebhooks({
     clock,
     factories: (org) => state.factories.filter((f) => f.org_id === org),
@@ -1385,6 +1390,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       connections.reset(clock());
       credentials.reset(clock());
       knowledge.reset(clock());
+      evals.reset();
       webhooks.reset();
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
       const cookie = auth.reset(authSettings(body.auth));
@@ -1478,6 +1484,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await credentials.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (rest === '/search' && method === 'GET') return searchOf(org, url, forCaller(req, org), res);
+    if (await evals.handle(org, rest, method, res, () => readBody(req))) return;
     if (await spend.handle(org, rest, method, url, res)) return;
     if (await policy.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await webhooks.handle(org.id, rest, method, req, res, () => readBody(req))) return;

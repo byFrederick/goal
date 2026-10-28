@@ -1,0 +1,26 @@
+# The acme docs line with a starter item (ADR 0032): onboarding submits it once, to a new
+# factory with no items. The editor leaves the section as written.
+apiVersion: goal/v1
+kind: Factory
+metadata:
+  id: 3c9b1e2a-6d4f-4a7b-8e5c-1f2a3b4c5d6e
+  name: acme-docs
+spec:
+  runtime:
+    modelConnection: claude
+  agents:
+    - name: writer
+      prompt: ./agents/writer.md
+  board:
+    workTypes: [docs, fix]
+    stations:
+      - { id: inbox, kind: queue }
+      - { id: write, kind: agent, agent: writer }
+      - { id: done, kind: done }
+starter:
+  item:
+    title: "Add a contributing guide to the README"   # small and safe
+    type: docs
+    body: |
+      Add a **Contributing** section to the README: how to set up the
+      repository, run the tests and open a pull request.

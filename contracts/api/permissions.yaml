@@ -53,6 +53,8 @@ permissions:
   # owners, admins and keys add, sync and delete sources and documents.
   - {name: knowledge:read,     level: org, org_roles: [owner, admin, member], keys: true, pat: true}
   - {name: knowledge:manage,   level: org, org_roles: [owner, admin], keys: true}
+  # Giving a verdict on a document (ADR 0027, decision 4): members, keys and tokens may.
+  - {name: knowledge:verdict,  level: org, org_roles: [owner, admin, member], keys: true, pat: true}
   - {name: factory:create,     level: org, org_roles: [owner, admin], keys: true, pat: true}   # high impact
   - {name: factory:archive,    level: org, org_roles: [owner, admin], keys: true, pat: true}   # high impact
   - {name: factory:delete,     level: org, org_roles: [owner, admin], keys: true, pat: true}   # high impact
