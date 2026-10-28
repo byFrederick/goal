@@ -1,10 +1,18 @@
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { gitWithRetry } from './retry.js';
 import { Bundle, type GitCredential } from './spec.js';
 
-/** One command prepare runs; the result is its exit code. Its output goes to stderr, never stdout. */
-export type Exec = (command: string, args: string[], opts?: { cwd?: string }) => Promise<number>;
+/**
+ * One command prepare runs; the result is its exit code. Its output goes to stderr, never stdout.
+ * With signal, the command is ended when it fires; with stderr, its stderr is also passed there.
+ */
+export type Exec = (
+  command: string,
+  args: string[],
+  opts?: { cwd?: string; signal?: AbortSignal; stderr?: (chunk: string) => void },
+) => Promise<number>;
 
 /** One command whose stdout prepare reads; it throws when the command fails. Its stderr goes to stderr. */
 export type Output = (command: string, args: string[], opts?: { cwd?: string }) => Promise<string>;
@@ -17,7 +25,14 @@ export interface PrepareDeps {
   now: () => Date;
   /** Where the bundle's files go (/goal), the repository is cloned (/workspace) and Claude Code's config dir (claude). */
   dirs: { goal: string; workspace: string; claude: string };
+  /** The wait between attempts of a network git step; setTimeout when absent. */
+  sleep?: (ms: number) => Promise<void>;
+  /** Where a retry is logged; stderr when absent. */
+  log?: (line: string) => void;
 }
+
+/** Each network git attempt's default time limit, in seconds (GOAL_GIT_ATTEMPT_TIMEOUT). */
+const defaultAttemptTimeout = 300;
 
 /** prepare's one stdout line: what it set up, for goald's run events. */
 export interface Prepared {
@@ -55,7 +70,11 @@ type FreshBase = NonNullable<NonNullable<Bundle['repository']>['fresh_base']>;
  * go to the user-level rules in the config dir, never into /workspace, so they cannot be committed.
  * In definition mode (the bundle's definition, ADR 0021) /workspace gets the factory's draft files
  * instead, /goal/definition.json their starting sha256, and no git command runs.
- * Any failure throws; nothing is retried.
+ * The clone is partial (--filter=blob:none: history without file contents, fetched when checked
+ * out). The network git steps (the clone, and the base branch's push and fetch) run with a time limit
+ * per attempt (GOAL_GIT_ATTEMPT_TIMEOUT seconds, 300 by default); an attempt cut off at it or failed
+ * on the transport (a dropped connection, a 5xx) is retried up to 3 attempts, the clone from an
+ * empty workspace. Any other failure throws.
  */
 export async function prepare(deps: PrepareDeps): Promise<Prepared> {
   const started = deps.now();
@@ -100,7 +119,8 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
     const base = repo.base || undefined;
     await must(deps, 'git', ['check-ref-format', '--branch', repo.branch]);
     if (base) await must(deps, 'git', ['check-ref-format', '--branch', base]);
-    await must(deps, 'git', ['clone', '--quiet', '--', repo.url, ws]);
+    const clone = await network(deps, ['clone', '--quiet', '--filter=blob:none', '--', repo.url, ws], { clean: ws });
+    if (clone !== 0) throw new Error(`git clone exited ${clone}`);
     const existed = await hasRemote(deps, ws, repo.branch);
     if (base) await ensureBase(deps, ws, base);
     const start = base ? [`origin/${base}`] : [];
@@ -152,10 +172,10 @@ async function hasRemote(deps: PrepareDeps, ws: string, branch: string): Promise
 async function ensureBase(deps: PrepareDeps, ws: string, base: string): Promise<void> {
   if (await hasRemote(deps, ws, base)) return;
   await must(deps, 'git', ['branch', '--no-track', base, 'origin/HEAD'], ws);
-  const code = await deps.exec('git', ['push', '--quiet', 'origin', base], { cwd: ws });
+  const code = await network(deps, ['push', '--quiet', 'origin', base], { cwd: ws });
   if (code === 0) return;
   const tracking = `+refs/heads/${base}:refs/remotes/origin/${base}`;
-  if ((await deps.exec('git', ['fetch', '--quiet', 'origin', tracking], { cwd: ws })) !== 0) {
+  if ((await network(deps, ['fetch', '--quiet', 'origin', tracking], { cwd: ws })) !== 0) {
     throw new Error(`git push exited ${code}`);
   }
   // The local base follows the one that won, so nothing in the workspace points at the lost one.
@@ -202,6 +222,29 @@ async function fetchBundle(deps: PrepareDeps, url: URL, token: string): Promise<
     throw new Error(`GET ${url.pathname}: ${res.status}${why ? ` ${why}` : ''}`);
   }
   return Bundle.parse(await res.json());
+}
+
+/** A network git step through gitWithRetry: retried on the transport, with a time limit per attempt. */
+function network(deps: PrepareDeps, args: string[], opts: { cwd?: string; clean?: string }): Promise<number> {
+  return gitWithRetry(
+    {
+      exec: deps.exec,
+      sleep: deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
+      log: deps.log ?? ((line) => process.stderr.write(`${line}\n`)),
+      timeoutMs: attemptTimeout(deps.env) * 1000,
+    },
+    args,
+    opts,
+  );
+}
+
+function attemptTimeout(env: NodeJS.ProcessEnv): number {
+  const v = env.GOAL_GIT_ATTEMPT_TIMEOUT;
+  if (!v) return defaultAttemptTimeout;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0)
+    throw new Error(`GOAL_GIT_ATTEMPT_TIMEOUT is not a positive number of seconds: ${v}`);
+  return n;
 }
 
 async function must(deps: PrepareDeps, command: string, args: string[], cwd?: string): Promise<void> {
