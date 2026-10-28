@@ -1,17 +1,24 @@
 // Search from the sidebar (MASTER.md "The shell", shell.jpg s2): the top row becomes an input, and the
-// sidebar's body becomes the results, grouped as Items, Pages, Agents, Connections and Factories. The
-// organization's items, agents, connections and factories come from searchOrg (one read per pause in
-// typing); the pages are matched here from the screens registry (ADR 0016, decision 4).
+// sidebar's body becomes the results, grouped as Items, Pages, Agents, Connections, Factories and, last,
+// Actions. The organization's items, agents, connections and factories come from searchOrg (one read per
+// pause in typing); the pages are matched here from the screens registry (ADR 0016, decision 4). The actions
+// are New item (for any query), Pause or Resume the line for the open factory, and Approve for each item
+// waiting on the caller; each shows only when the caller holds its permission (holds, as the pages decide).
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
-import { Bot, Plug, Search, X } from 'lucide-react';
+import { Bot, Check, Pause, Play, Plug, Plus, Search, X } from 'lucide-react';
 import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { factoriesQuery, searchQuery } from '../api/queries';
 import type { OrgSearch, OrgSummary } from '../api/types';
+import { useTogglePause } from '../features/factory-settings/pause-row';
 import { factoryTitle } from '../shared/factory';
 import { humanize } from '../shared/format';
+import { useApprove } from '../shared/item-actions';
+import { decisionsFor } from '../shared/item-state';
 import { factoryMark } from '../shared/marks';
 import { useOrgGrants } from '../shared/org';
+import { holds } from '../shared/permissions';
 import { Button } from '../ui/button';
 import { cn } from '../ui/cn';
 import {
@@ -48,6 +55,15 @@ const keyCap =
 
 const badgeClass =
   'flex size-5 flex-none items-center justify-center rounded-chip bg-run text-meta font-semibold text-white';
+
+/** Whether each word of `query` starts a word of `label`: "pa line" finds "Pause the line". */
+function wordsMatch(label: string, query: string): boolean {
+  const labelWords = label.toLowerCase().split(' ');
+  return query
+    .toLowerCase()
+    .split(/\s+/)
+    .every((word) => labelWords.some((w) => w.startsWith(word)));
+}
 
 /** Ctrl+K, or Meta+K on macOS, opens search from anywhere in the organization's layout (not from the code editor). */
 export function useSearchShortcut(open: () => void) {
@@ -94,7 +110,16 @@ interface Group {
  * The sidebar while it searches. `onClose(true)` returns focus to the Search icon (Escape, Close search);
  * `onClose(false)` leaves it where the page puts it (a result opened).
  */
-export function SidebarSearch({ org, onClose }: { org: OrgSummary; onClose: (returnFocus: boolean) => void }) {
+export function SidebarSearch({
+  org,
+  onClose,
+  onNewItem,
+}: {
+  org: OrgSummary;
+  onClose: (returnFocus: boolean) => void;
+  /** Opens the sidebar's New item composer with the title (the search's New item row). */
+  onNewItem: (title: string) => void;
+}) {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const navigate = useNavigate();
@@ -102,6 +127,8 @@ export function SidebarSearch({ org, onClose }: { org: OrgSummary; onClose: (ret
   const can = useOrgGrants()?.can;
   const input = useRef<HTMLInputElement>(null);
   const listId = useId();
+  const approve = useApprove();
+  const togglePause = useTogglePause(org, (message) => toast.error(message));
 
   useEffect(() => input.current?.focus(), []);
 
@@ -239,12 +266,72 @@ export function SidebarSearch({ org, onClose }: { org: OrgSummary; onClose: (ret
       open: () => go(() => navigate({ to: '/o/$org/f/$factory', params: { org: org.slug, factory: hit.name } })),
     }));
 
+    // New item for any query, when the caller may add items to some factory. Pause or Resume the line
+    // for the open factory, when its words match and the caller may manage it. Approve for each item
+    // waiting on the caller, in a factory that holds item:decide.
+    const canCreate = list.some((f) => holds(f, 'item:create'));
+    const newItemRows: Row[] = canCreate
+      ? [
+          {
+            key: 'action-new-item',
+            label: `New item about "${q}"`,
+            content: (
+              <>
+                <Plus {...iconProps} />
+                <span className="min-w-0 flex-1 truncate">New item about "{q}"</span>
+                <kbd className={keyCap}>C</kbd>
+              </>
+            ),
+            open: () => go(() => onNewItem(q)),
+          },
+        ]
+      : [];
+    const pauseLabel = openFactory?.paused ? 'Resume the line' : 'Pause the line';
+    const pauseRows: Row[] =
+      openFactory && holds(openFactory, 'factory:manage') && wordsMatch(pauseLabel, q)
+        ? [
+            {
+              key: 'action-pause-line',
+              label: pauseLabel,
+              content: (
+                <>
+                  {openFactory.paused ? <Play {...iconProps} /> : <Pause {...iconProps} />}
+                  <span className="min-w-0 flex-1 truncate">{pauseLabel}</span>
+                  <span className="flex-none text-meta text-muted">{factoryTitle(openFactory)}</span>
+                </>
+              ),
+              open: () => go(() => togglePause.mutate(openFactory)),
+            },
+          ]
+        : [];
+    const approveRows: Row[] = answer.items.flatMap((hit) => {
+      const factory = list.find((f) => f.id === hit.factory_id);
+      const station = factory?.stations.find((s) => s.id === hit.station);
+      if (!factory || !holds(factory, 'item:decide') || !decisionsFor(hit, station).approve) return [];
+      return [
+        {
+          key: `action-approve-${hit.id}`,
+          label: `Approve #${hit.number}`,
+          content: (
+            <>
+              <Check {...iconProps} />
+              <span className="min-w-0 flex-1 truncate">Approve #{hit.number}</span>
+              <span className="flex-none text-meta text-muted">{hit.factory_name}</span>
+            </>
+          ),
+          open: () => go(() => approve.mutate({ key: hit.id, ref: `#${hit.number}`, factory: hit.factory_id })),
+        },
+      ];
+    });
+    const actions: Row[] = [...newItemRows, ...pauseRows, ...approveRows];
+
     return [
       { key: 'items', label: 'Items', rows: items },
       { key: 'pages', label: 'Pages', rows: pages },
       { key: 'agents', label: 'Agents', rows: agents },
       { key: 'connections', label: 'Connections', rows: connections },
       { key: 'factories', label: 'Factories', rows: factoryRows },
+      { key: 'actions', label: 'Actions', rows: actions },
     ].filter((group) => group.rows.length > 0);
   }
 

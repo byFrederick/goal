@@ -60,7 +60,16 @@ function NewItem({ factory, compact }: NewItemProps) {
  * With `button` false it only listens for C and renders the composer: the collapsed rail has no
  * New item button yet, but C must still open the composer there and on phones.
  */
-export function NewItemFromSidebar({ button = true }: { button?: boolean }) {
+export function NewItemFromSidebar({
+  button = true,
+  openWith,
+  onOpened,
+}: {
+  button?: boolean;
+  /** A request to open the composer with a title, from the sidebar's search; `onOpened` clears it. */
+  openWith?: { title: string } | null;
+  onOpened?: () => void;
+}) {
   const org = useOrg();
   const factories = useQuery(factoriesQuery(org.id));
   const current = useMatch({ from: '/o/$org/f/$factory', shouldThrow: false });
@@ -73,6 +82,13 @@ export function NewItemFromSidebar({ button = true }: { button?: boolean }) {
     .toSorted((a, b) => a.name.localeCompare(b.name));
   const startAt = current ? (findFactory(choices, current.params.factory)?.id ?? '') : '';
   const shown = status !== 'ready' || choices.length > 0;
+
+  useEffect(() => {
+    if (!openWith) return;
+    setPicked(startAt);
+    setOpen(true);
+    onOpened?.();
+  }, [openWith, startAt, onOpened]);
 
   useEffect(() => {
     if (!shown) return;
@@ -97,6 +113,7 @@ export function NewItemFromSidebar({ button = true }: { button?: boolean }) {
         if (next) setPicked(startAt);
         setOpen(next);
       }}
+      initialTitle={openWith?.title}
       picker={{
         status,
         factories: choices,
@@ -152,15 +169,18 @@ interface ComposerProps {
   picker?: Picker;
   /** Opens the dialog; without one the dialog opens only by the shortcut, or stays open to show its state. */
   trigger?: ReactNode;
+  /** The title the dialog opens with, from the sidebar's search; read when the dialog mounts. */
+  initialTitle?: string | undefined;
 }
 
 /** The "New item" dialog: the title, the factory (with a picker), the work type and the details. */
-function Composer({ open, onOpenChange, factory, picker, trigger }: ComposerProps) {
+function Composer({ open, onOpenChange, factory, picker, trigger, initialTitle }: ComposerProps) {
   const id = useId();
   const client = useQueryClient();
   const org = useOrg();
   const navigate = useNavigate();
-  const [title, setTitle] = useState('');
+  // The sidebar's search unmounts the sidebar's New item while it is open, so this mounts with the title it opens with.
+  const [title, setTitle] = useState(initialTitle ?? '');
   const [type, setType] = useState('');
   const [body, setBody] = useState('');
   const [touched, setTouched] = useState(false);
