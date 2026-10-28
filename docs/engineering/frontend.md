@@ -319,6 +319,8 @@ Rules the page follows:
   publishes someone else's draft. An invalid save leaves this page's own write in the draft, so that write does not
   block the fix; the page clears the mark once a save publishes or a 412 moves the draft.
 - A 412 draft conflict keeps the typed edits and reloads the draft; the user saves again.
+- The Create lane select offers Standard and Expedite, then the chosen station's route keys (`readBoard`'s `lanes`:
+  a lane is a key of the station's `route`, factory.schema.json). A lane the file names stays selectable.
 - Validation problems from `validateDraft` are placed by their line: a problem inside a trigger's key
   shows under that block, any other problem above the form. Save stays off while an error stands.
 - A name the definition does not have opens a blank trigger when the URL has `?on=<event key>` (the New
