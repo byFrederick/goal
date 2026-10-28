@@ -70,6 +70,8 @@ import type {
   SavedView,
   SavedViewChange,
   SavedViewList,
+  SignupDomain,
+  SignupDomainInput,
   ToolDecision,
   TouchMetrics,
   TouchReason,
@@ -165,6 +167,16 @@ export function getOrgSettings(org: string, signal?: AbortSignal): Promise<OrgSe
 /** Changes only the fields patch names; `slots.max: null` clears a cap. Answers the settings after it. */
 export function patchOrgSettings(org: string, patch: OrgSettingsPatch): Promise<OrgSettings> {
   return unwrap(goal.PATCH(orgPath('/settings'), { params: { path: { org } }, body: patch }));
+}
+
+/** Makes the organization's sign-up domain: the owner's own email domain, joining as join_role. Owners only, with a recent sign-in. */
+export function setSignupDomain(org: string, body: SignupDomainInput): Promise<SignupDomain> {
+  return unwrap(goal.PUT(orgPath('/settings/signup-domain'), { params: { path: { org } }, body }));
+}
+
+/** Stops sign-up by domain; members who joined by it stay. Owners only, with a recent sign-in. */
+export async function clearSignupDomain(org: string): Promise<void> {
+  await unwrap(goal.DELETE(orgPath('/settings/signup-domain'), { params: { path: { org } } }));
 }
 
 /** Deletes the organization; `confirm` must be its name. It 404s at once and is purged after purge_after. */
