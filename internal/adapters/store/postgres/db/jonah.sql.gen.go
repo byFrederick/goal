@@ -569,6 +569,86 @@ func (q *Queries) Proposals(ctx context.Context, arg ProposalsParams) ([]JonahPr
 	return items, nil
 }
 
+const sentBackBetween = `-- name: SentBackBetween :many
+SELECT t.event_id, t.item_id, w.number AS item_number, w.title AS item_title, coalesce(t.station, '')::text AS station, t.kind,
+       coalesce(e.data->>'reason', '')::text AS reason, t.at, coalesce(ls.agent, '')::text AS agent
+FROM item_touches t
+JOIN item_events e ON e.id = t.event_id
+JOIN work_items w ON w.id = t.item_id
+LEFT JOIN LATERAL (
+  SELECT l.agent FROM lease_spans l
+  WHERE l.item_id = t.item_id AND l.ended_at <= t.at
+  ORDER BY l.ended_at DESC, l.id DESC
+  LIMIT 1
+) ls ON true
+WHERE t.item_id IN (
+    SELECT r.item_id FROM item_events r
+    WHERE r.factory_id = $1 AND r.kind IN ('rejected', 'gate_rejected')
+      AND r.at >= $2::timestamptz AND r.at < $3::timestamptz)
+  AND t.factory_id = $1 AND t.kind IN ('rejected', 'gate_rejected')
+  AND t.at >= $2::timestamptz AND t.at < $3::timestamptz
+ORDER BY t.at, t.event_id
+LIMIT $4
+`
+
+type SentBackBetweenParams struct {
+	FactoryID uuid.UUID
+	Since     time.Time
+	Until     time.Time
+	MaxEvents int32
+}
+
+type SentBackBetweenRow struct {
+	EventID    int64
+	ItemID     uuid.UUID
+	ItemNumber int64
+	ItemTitle  string
+	Station    string
+	Kind       string
+	Reason     string
+	At         time.Time
+	Agent      string
+}
+
+// The factory's sent-back touches in [since, until), oldest first, at most max_events: each with
+// its item's number and title, its event's data.reason and the agent of the item's last lease
+// span that ended by then. The items are those with a rejection event in the window
+// (item_events_factory_at_idx), so item_touches is read per item.
+func (q *Queries) SentBackBetween(ctx context.Context, arg SentBackBetweenParams) ([]SentBackBetweenRow, error) {
+	rows, err := q.db.Query(ctx, sentBackBetween,
+		arg.FactoryID,
+		arg.Since,
+		arg.Until,
+		arg.MaxEvents,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SentBackBetweenRow
+	for rows.Next() {
+		var i SentBackBetweenRow
+		if err := rows.Scan(
+			&i.EventID,
+			&i.ItemID,
+			&i.ItemNumber,
+			&i.ItemTitle,
+			&i.Station,
+			&i.Kind,
+			&i.Reason,
+			&i.At,
+			&i.Agent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const sentBackSince = `-- name: SentBackSince :one
 SELECT count(*)::bigint FROM item_touches
 WHERE factory_id = $1 AND kind IN ('rejected', 'gate_rejected') AND at >= $2
@@ -582,6 +662,72 @@ type SentBackSinceParams struct {
 // The factory's sent-back touches (a person's rejected or gate_rejected) at or after since.
 func (q *Queries) SentBackSince(ctx context.Context, arg SentBackSinceParams) (int64, error) {
 	row := q.db.QueryRow(ctx, sentBackSince, arg.FactoryID, arg.Since)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const stationFlowSpans = `-- name: StationFlowSpans :one
+SELECT count(DISTINCT item_id) AS passed,
+       coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM left_at - entered_at)::float8), 0)::float8 AS p85_seconds
+FROM item_spans
+WHERE factory_id = $1 AND station = $2::text
+  AND left_at >= $3::timestamptz AND left_at < $4::timestamptz
+`
+
+type StationFlowSpansParams struct {
+	FactoryID uuid.UUID
+	Station   string
+	Since     time.Time
+	Until     time.Time
+}
+
+type StationFlowSpansRow struct {
+	Passed     int64
+	P85Seconds float64
+}
+
+// The items with a span at the station that left in [since, until), and the 85th percentile of
+// those spans' durations in seconds, interpolated between ranks (item_spans_window_idx).
+func (q *Queries) StationFlowSpans(ctx context.Context, arg StationFlowSpansParams) (StationFlowSpansRow, error) {
+	row := q.db.QueryRow(ctx, stationFlowSpans,
+		arg.FactoryID,
+		arg.Station,
+		arg.Since,
+		arg.Until,
+	)
+	var i StationFlowSpansRow
+	err := row.Scan(&i.Passed, &i.P85Seconds)
+	return i, err
+}
+
+const stationSentBack = `-- name: StationSentBack :one
+SELECT count(*)::bigint FROM item_touches t
+WHERE t.item_id IN (
+    SELECT r.item_id FROM item_events r
+    WHERE r.factory_id = $1 AND r.station = $2::text
+      AND r.kind IN ('rejected', 'gate_rejected')
+      AND r.at >= $3::timestamptz AND r.at < $4::timestamptz)
+  AND t.factory_id = $1 AND t.station = $2::text
+  AND t.kind IN ('rejected', 'gate_rejected')
+  AND t.at >= $3::timestamptz AND t.at < $4::timestamptz
+`
+
+type StationSentBackParams struct {
+	FactoryID uuid.UUID
+	Station   string
+	Since     time.Time
+	Until     time.Time
+}
+
+// The sent-back touches given at the station in [since, until), read per item as SentBackBetween.
+func (q *Queries) StationSentBack(ctx context.Context, arg StationSentBackParams) (int64, error) {
+	row := q.db.QueryRow(ctx, stationSentBack,
+		arg.FactoryID,
+		arg.Station,
+		arg.Since,
+		arg.Until,
+	)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err

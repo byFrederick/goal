@@ -93,3 +93,49 @@ WHERE factory_id = sqlc.arg(factory_id) AND kind = 'jonah' AND started_at >= sql
 -- The factory's sent-back touches (a person's rejected or gate_rejected) at or after since.
 SELECT count(*)::bigint FROM item_touches
 WHERE factory_id = sqlc.arg(factory_id) AND kind IN ('rejected', 'gate_rejected') AND at >= sqlc.arg(since);
+
+-- name: SentBackBetween :many
+-- The factory's sent-back touches in [since, until), oldest first, at most max_events: each with
+-- its item's number and title, its event's data.reason and the agent of the item's last lease
+-- span that ended by then. The items are those with a rejection event in the window
+-- (item_events_factory_at_idx), so item_touches is read per item.
+SELECT t.event_id, t.item_id, w.number AS item_number, w.title AS item_title, coalesce(t.station, '')::text AS station, t.kind,
+       coalesce(e.data->>'reason', '')::text AS reason, t.at, coalesce(ls.agent, '')::text AS agent
+FROM item_touches t
+JOIN item_events e ON e.id = t.event_id
+JOIN work_items w ON w.id = t.item_id
+LEFT JOIN LATERAL (
+  SELECT l.agent FROM lease_spans l
+  WHERE l.item_id = t.item_id AND l.ended_at <= t.at
+  ORDER BY l.ended_at DESC, l.id DESC
+  LIMIT 1
+) ls ON true
+WHERE t.item_id IN (
+    SELECT r.item_id FROM item_events r
+    WHERE r.factory_id = sqlc.arg(factory_id) AND r.kind IN ('rejected', 'gate_rejected')
+      AND r.at >= sqlc.arg(since)::timestamptz AND r.at < sqlc.arg(until)::timestamptz)
+  AND t.factory_id = sqlc.arg(factory_id) AND t.kind IN ('rejected', 'gate_rejected')
+  AND t.at >= sqlc.arg(since)::timestamptz AND t.at < sqlc.arg(until)::timestamptz
+ORDER BY t.at, t.event_id
+LIMIT sqlc.arg(max_events);
+
+-- name: StationFlowSpans :one
+-- The items with a span at the station that left in [since, until), and the 85th percentile of
+-- those spans' durations in seconds, interpolated between ranks (item_spans_window_idx).
+SELECT count(DISTINCT item_id) AS passed,
+       coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM left_at - entered_at)::float8), 0)::float8 AS p85_seconds
+FROM item_spans
+WHERE factory_id = sqlc.arg(factory_id) AND station = sqlc.arg(station)::text
+  AND left_at >= sqlc.arg(since)::timestamptz AND left_at < sqlc.arg(until)::timestamptz;
+
+-- name: StationSentBack :one
+-- The sent-back touches given at the station in [since, until), read per item as SentBackBetween.
+SELECT count(*)::bigint FROM item_touches t
+WHERE t.item_id IN (
+    SELECT r.item_id FROM item_events r
+    WHERE r.factory_id = sqlc.arg(factory_id) AND r.station = sqlc.arg(station)::text
+      AND r.kind IN ('rejected', 'gate_rejected')
+      AND r.at >= sqlc.arg(since)::timestamptz AND r.at < sqlc.arg(until)::timestamptz)
+  AND t.factory_id = sqlc.arg(factory_id) AND t.station = sqlc.arg(station)::text
+  AND t.kind IN ('rejected', 'gate_rejected')
+  AND t.at >= sqlc.arg(since)::timestamptz AND t.at < sqlc.arg(until)::timestamptz;

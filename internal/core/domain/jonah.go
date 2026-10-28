@@ -283,6 +283,39 @@ type ProposalEstimate struct {
 	CostPerItemUSD float64        `json:"cost_per_item_usd"`
 }
 
+// SentBack is one sent-back touch a review reads: a person's rejected or gate_rejected on an
+// item at Station, with the reason the event quoted ("" when none) and Agent, the agent of the
+// item's last lease that ended by then ("" when none had).
+type SentBack struct {
+	EventID    int64
+	ItemID     ItemID
+	ItemNumber int64
+	ItemTitle  string
+	Station    string
+	Agent      string
+	Kind       EventKind
+	Reason     string
+	At         time.Time
+}
+
+// StationFlow is one station's flow over a window, the `before` of a proposal's estimate:
+// Passed counts the items with a span at the station that left in it, SentBack the sent-back
+// touches given there in it, and LeadTimeP85 is the p85 of those spans' durations.
+type StationFlow struct {
+	Passed      int
+	SentBack    int
+	LeadTimeP85 time.Duration
+}
+
+// SentBackRate is SentBack over Passed; false when no item passed.
+func (f StationFlow) SentBackRate() (float64, bool) {
+	if f.Passed == 0 {
+		return 0, false
+	}
+
+	return float64(f.SentBack) / float64(f.Passed), true
+}
+
 // Proposal is one hypothesis of a review: a set of file edits to the version it was made
 // against, numbered per factory from 1.
 type Proposal struct {

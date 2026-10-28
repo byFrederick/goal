@@ -172,6 +172,18 @@ type JonahStore interface {
 	// SentBackSince counts the factory's sent-back touches (a person's rejected or
 	// gate_rejected) at or after since: the threshold's count (decision 2).
 	SentBackSince(ctx context.Context, factory domain.FactoryID, since time.Time) (int, error)
+	// SentBackBetween is the factory's sent-back touches (a person's rejected or gate_rejected)
+	// at or after since and before until, oldest first (by at, then event id), at most limit:
+	// a review's events and the evidence it may cite. Each names its item's number and title,
+	// the event's data.reason ("" when none) and the agent of the item's last lease span that
+	// ended at or before the touch, at any station ("" when none did).
+	SentBackBetween(ctx context.Context, factory domain.FactoryID, since, until time.Time, limit int) ([]domain.SentBack, error)
+	// StationFlow measures station over [since, until), an estimate's `before` (decision 3).
+	// Passed counts the distinct items with a span at the station (any state) that left in the
+	// window; SentBack counts the sent-back touches given at the station in the window; its
+	// sent-back rate is SentBack over Passed. LeadTimeP85 is the 85th percentile, interpolated
+	// between ranks as FlowMetrics does, of the durations of those spans.
+	StationFlow(ctx context.Context, factory domain.FactoryID, station string, since, until time.Time) (domain.StationFlow, error)
 }
 
 // ProposalQuery selects a factory's proposals: in State when set, numbered below Before when

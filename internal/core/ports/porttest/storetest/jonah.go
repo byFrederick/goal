@@ -1,6 +1,7 @@
 package storetest
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"strings"
@@ -26,6 +27,8 @@ var jonahTests = []struct {
 	{"Jonah_OtherOrgInvisible", testJonahTenancy},
 	{"Jonah_SpendSinceSumsJonahRuns", testJonahSpend},
 	{"Jonah_SentBackSinceCountsRejections", testJonahSentBack},
+	{"Jonah_SentBackBetweenListsWindow", testJonahSentBackBetween},
+	{"Jonah_StationFlowMeasuresStation", testJonahStationFlow},
 }
 
 // sha is a well-formed base_sha256.
@@ -433,6 +436,41 @@ func testJonahTenancy(f *fixture) {
 	if _, err := f.Jonah.JonahReviews(t.Context(), f.factory, 10); !errors.Is(err, domain.ErrNoOrg) {
 		t.Errorf("reviews without an org: %v, want ErrNoOrg", err)
 	}
+
+	f.expectFlowInvisible(t, other)
+}
+
+// expectFlowInvisible checks that other, another organization, sees none of the factory's
+// sent-back touches or spans, and that both reads refuse a ctx without an org.
+func (f *fixture) expectFlowInvisible(t *testing.T, other context.Context) {
+	t.Helper()
+
+	it := f.create(t, domain.NewItem{CreatedAt: t0})
+	_, l := f.claim(t, work, 0, t0)
+	f.move(t, next(it, l, t1))
+	f.appendEvents(t, by(it, ada, domain.EventRejected, t1, map[string]any{keyReason: "wrong file"}))
+
+	until := t1.Add(time.Hour)
+
+	if got, err := f.Jonah.SentBackBetween(f.ctx(t), f.factory, t0, until, 10); err != nil || len(got) != 1 {
+		t.Fatalf("own SentBackBetween: %+v, %v; want 1", got, err)
+	}
+
+	if got, err := f.Jonah.SentBackBetween(other, f.factory, t0, until, 10); err != nil || len(got) != 0 {
+		t.Errorf("other org's SentBackBetween: %+v, %v; want none", got, err)
+	}
+
+	if got, err := f.Jonah.StationFlow(other, f.factory, stWork, t0, until); err != nil || got != (domain.StationFlow{}) {
+		t.Errorf("other org's StationFlow: %+v, %v; want nothing measured", got, err)
+	}
+
+	if _, err := f.Jonah.SentBackBetween(t.Context(), f.factory, t0, until, 10); !errors.Is(err, domain.ErrNoOrg) {
+		t.Errorf("SentBackBetween without an org: %v, want ErrNoOrg", err)
+	}
+
+	if _, err := f.Jonah.StationFlow(t.Context(), f.factory, stWork, t0, until); !errors.Is(err, domain.ErrNoOrg) {
+		t.Errorf("StationFlow without an org: %v, want ErrNoOrg", err)
+	}
 }
 
 // kindRun records a finished run of kind on it, started at at, that cost usd.
@@ -495,5 +533,135 @@ func testJonahSentBack(f *fixture) {
 	n, err := f.Jonah.SentBackSince(f.ctx(t), f.factory, t1)
 	if err != nil || n != 2 {
 		t.Errorf("SentBackSince = %d, %v; want 2", n, err)
+	}
+}
+
+// eventAt is the id of item's event of kind at `at`.
+func (f *fixture) eventAt(t *testing.T, item domain.ItemID, kind domain.EventKind, at time.Time) int64 {
+	t.Helper()
+
+	for _, e := range f.Events(t, item) {
+		if e.Kind == kind && e.At.Equal(at) {
+			return e.ID
+		}
+	}
+
+	t.Fatalf("no %s event of item %s at %s", kind, item, at)
+
+	return 0
+}
+
+// SentBackBetween lists a person's rejected and gate_rejected touches of the factory in
+// [since, until), oldest first, at most limit, each with its item, the event's reason and the
+// agent of the item's last lease that ended by then: not touches outside the window, other
+// touches, an agent's send-back or another factory's.
+func testJonahSentBackBetween(f *fixture) {
+	t := f.t
+	since, until := t1, t1.Add(time.Hour)
+
+	a := f.create(t, domain.NewItem{Title: "Fix the login", CreatedAt: t0})
+	_, l := f.claim(t, work, 0, t0)
+	f.move(t, next(a, l, t0.Add(10*time.Minute))) // the worker's lease on a ends before the window
+
+	b := f.create(t, domain.NewItem{Title: "Add the export", CreatedAt: t0.Add(time.Minute)})
+	elsewhere := f.create(t, domain.NewItem{FactoryID: f.newFactory(t)})
+
+	f.appendEvents(t,
+		by(a, ada, domain.EventRejected, since.Add(-time.Second), map[string]any{keyReason: "early"}),
+		by(a, ada, domain.EventRejected, since, map[string]any{keyReason: "wrong file"}),
+		by(b, bob, domain.EventGateRejected, since.Add(time.Minute), nil),
+		by(b, bob, domain.EventNote, since.Add(2*time.Minute), map[string]any{keyText: "x"}),
+		agentEvent(b, agWorker, domain.EventGateRejected, since.Add(3*time.Minute)),
+		by(a, ada, domain.EventGateRejected, since.Add(4*time.Minute), map[string]any{keyReason: "still wrong"}),
+		by(a, ada, domain.EventRejected, until, map[string]any{keyReason: "late"}),
+		by(elsewhere, ada, domain.EventRejected, since, nil),
+	)
+
+	want := []domain.SentBack{
+		{
+			EventID: f.eventAt(t, a.ID, domain.EventRejected, since), ItemID: a.ID, ItemNumber: a.Number, ItemTitle: a.Title,
+			Station: stWork, Agent: agWorker, Kind: domain.EventRejected, Reason: "wrong file", At: since,
+		},
+		{
+			EventID: f.eventAt(t, b.ID, domain.EventGateRejected, since.Add(time.Minute)), ItemID: b.ID, ItemNumber: b.Number,
+			ItemTitle: b.Title, Station: stWork, Kind: domain.EventGateRejected, At: since.Add(time.Minute),
+		},
+		{
+			EventID: f.eventAt(t, a.ID, domain.EventGateRejected, since.Add(4*time.Minute)), ItemID: a.ID, ItemNumber: a.Number,
+			ItemTitle: a.Title, Station: stWork, Agent: agWorker, Kind: domain.EventGateRejected, Reason: "still wrong",
+			At: since.Add(4 * time.Minute),
+		},
+	}
+
+	got := f.sentBackBetween(t, since, until, 10)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("SentBackBetween =\n%+v\nwant\n%+v", got, want)
+	}
+
+	if got := f.sentBackBetween(t, since, until, 2); !reflect.DeepEqual(got, want[:2]) {
+		t.Errorf("SentBackBetween limit 2 =\n%+v\nwant the two oldest\n%+v", got, want[:2])
+	}
+}
+
+func (f *fixture) sentBackBetween(t *testing.T, since, until time.Time, limit int) []domain.SentBack {
+	t.Helper()
+
+	got, err := f.Jonah.SentBackBetween(f.ctx(t), f.factory, since, until, limit)
+	if err != nil {
+		t.Fatalf("SentBackBetween: %v", err)
+	}
+
+	for i := range got {
+		got[i].At = got[i].At.UTC()
+	}
+
+	return got
+}
+
+// StationFlow measures a station over [since, until): the items with a span there that left in
+// it, the sent-back touches given there in it, and the p85 of those spans' durations; not a span
+// that left before the window or is still open, a rejection at another station or by an agent,
+// or another factory's.
+func testJonahStationFlow(f *fixture) {
+	t := f.t
+	since, until := t1, t1.Add(10*time.Hour)
+	h := func(n int) time.Time { return t1.Add(time.Duration(n) * time.Hour) }
+
+	a := f.create(t, domain.NewItem{CreatedAt: h(-2)})
+	_, l := f.claim(t, work, 0, h(-1)) // a's queued span at work leaves before the window
+	f.move(t, next(a, l, h(1)))        // its in-progress span: 2 h
+
+	c := f.create(t, domain.NewItem{CreatedAt: h(2)})
+	_, l = f.claim(t, work, 0, h(3)) // c's queued span: 1 h
+	f.move(t, next(c, l, h(7)))      // its in-progress span: 4 h
+
+	d := f.create(t, domain.NewItem{CreatedAt: h(8)}) // still at work at until
+	elsewhere := f.create(t, domain.NewItem{FactoryID: f.newFactory(t), CreatedAt: h(1)})
+
+	atWork := func(it domain.Item) domain.Item { it.Station = stWork; return it }
+	atNext := func(it domain.Item) domain.Item { it.Station = stNext; return it }
+
+	f.appendEvents(t,
+		by(atWork(a), ada, domain.EventRejected, h(-1), nil), // before the window
+		by(atWork(c), ada, domain.EventRejected, h(4), map[string]any{keyReason: "no tests"}),
+		by(atWork(d), bob, domain.EventGateRejected, h(9), nil),
+		agentEvent(atWork(c), agWorker, domain.EventGateRejected, h(5)),
+		by(atNext(a), ada, domain.EventRejected, h(6), nil),
+		by(atWork(elsewhere), ada, domain.EventRejected, h(2), nil),
+	)
+
+	got, err := f.Jonah.StationFlow(f.ctx(t), f.factory, stWork, since, until)
+	if err != nil {
+		t.Fatalf("StationFlow: %v", err)
+	}
+
+	// Spans of 1 h, 2 h and 4 h: rank 1.7 lies 0.7 of the way from 2 h to 4 h.
+	want := domain.StationFlow{Passed: 2, SentBack: 2, LeadTimeP85: 3*time.Hour + 24*time.Minute}
+	if got != want {
+		t.Errorf("StationFlow at %s = %+v, want %+v", stWork, got, want)
+	}
+
+	if got, err := f.Jonah.StationFlow(f.ctx(t), f.factory, stReview, since, until); err != nil || got != (domain.StationFlow{}) {
+		t.Errorf("StationFlow at an idle station = %+v, %v; want nothing measured", got, err)
 	}
 }

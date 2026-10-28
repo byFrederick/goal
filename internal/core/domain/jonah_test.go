@@ -100,3 +100,17 @@ func TestJonahReviewResult_AndDecisionCheck(t *testing.T) {
 		}
 	}
 }
+
+// A station's sent-back rate is its rejections over the items that left it, and has no value
+// when no item left it in the window.
+func TestStationFlow_SentBackRate(t *testing.T) {
+	t.Parallel()
+
+	if rate, ok := (domain.StationFlow{Passed: 4, SentBack: 1}).SentBackRate(); !ok || rate != 0.25 {
+		t.Errorf("1 of 4: SentBackRate = %v, %v; want 0.25, true", rate, ok)
+	}
+
+	if rate, ok := (domain.StationFlow{SentBack: 2}).SentBackRate(); ok || rate != 0 {
+		t.Errorf("no item passed: SentBackRate = %v, %v; want 0, false", rate, ok)
+	}
+}
