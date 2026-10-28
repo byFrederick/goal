@@ -56,6 +56,18 @@ test.describe('the Knowledge page', () => {
     await fits(page);
   });
 
+  test('Where it was used shows the runs that opened each document, and a use opens its item', async ({ page }) => {
+    await page.goto('/o/acme/knowledge');
+    const usage = page.getByRole('region', { name: 'Where it was used' });
+    await expect(usage.getByText('Runs that opened each document, last 7 days')).toBeVisible();
+    await expect(usage.getByRole('button', { name: 'AGENTS.md' })).toBeVisible();
+    await expect(usage.getByText('MASTER.md misled 6 runs.')).toBeVisible();
+    await expect(usage.getByRole('button', { name: 'Make an item to fix it' })).toBeVisible();
+    await usage.getByRole('button', { name: 'AGENTS.md' }).click();
+    await usage.getByRole('link', { name: 'Run', exact: true }).first().click();
+    await expect(page).toHaveURL(/\/o\/acme\/f\/[^/]+\/items\/\d+#run-/);
+  });
+
   test('a factory the organization has no factory of is said, never the unfiltered list', async ({ page }) => {
     await page.goto('/o/acme/knowledge?factory=nope');
     await expect(page.getByText('Acme has no factory named nope.')).toBeVisible();
