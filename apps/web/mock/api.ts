@@ -37,6 +37,7 @@ import type {
   FactoryRole,
   Inbox,
   InboxEntry,
+  IntakeTrigger,
   Item,
   ItemCard,
   ItemEvent,
@@ -56,6 +57,7 @@ import type {
   StreamEvent,
   TouchMetrics,
 } from '@goal/api-client';
+import { parse } from 'yaml';
 import { authSettings, createMockAuth } from './auth.ts';
 import { createConnections } from './connections.ts';
 import { createDefinitions } from './definitions.ts';
@@ -72,11 +74,13 @@ import {
   trackSpan,
 } from './fixtures.ts';
 import { constraintOf, type DayRange, type FlowInput, leadTimeOf, metricsOf, rangeOf, weeklyOf } from './flow.ts';
+import { intakeOf } from './intake.ts';
 import { createKeys } from './keys.ts';
 import { createKnowledge } from './knowledge.ts';
 import { membersFor, orgCanOf } from './people.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
 import { orgRunsOf } from './runs.ts';
+import { createSpend } from './spend.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
 import { createWebhooks } from './webhooks.ts';
 
@@ -715,6 +719,16 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const last = state.andon[f.name]?.at(-1);
     return last && last.cleared_at === null ? last : null;
   };
+
+  // The spend figures: the factories the organization has, with the andon pull that stops one (spend.ts).
+  const spend = createSpend({
+    clock,
+    factoriesOf,
+    reasonOf: (_org, f) => {
+      const last = state.andon[f.name]?.at(-1);
+      return last && last.cleared_at === null ? last.reason : null;
+    },
+  });
 
   /** A pull or a clear: its audit entry and the organization's `event: factory`, as goald's trigger sends it. */
   const andonChanged = (f: Factory, pull: AndonPull) => {
@@ -1382,6 +1396,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await apiKeys.handle(forCaller(req, org), rest, method, req, res, () => readBody(req))) return;
     if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
+    if (await spend.handle(org, rest, method, url, res)) return;
     if (await webhooks.handle(org.id, rest, method, req, res, () => readBody(req))) return;
 
     if (rest === '' && method === 'GET') return json(res, 200, forCaller(req, withCount(org)));
@@ -1511,6 +1526,94 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       subscribers.add(sub);
       req.on('close', () => subscribers.delete(sub));
       return;
+    }
+
+    // GET …/intake/triggers/{trigger}: a trigger of the current version's factory.yaml, with this week's
+    // results and events. Only the Software factory's flaky-test trigger has any (trigger.jpg).
+    const trig = rest.match(/^\/factories\/([^/]+)\/intake\/triggers\/([^/]+)$/);
+    if (trig && method === 'GET') {
+      const key = decodeURIComponent(trig[1] ?? '');
+      const factory = findFactory(key, org.id);
+      if (!factory) return problem(res, 404, 'Factory not found', key);
+      const name = decodeURIComponent(trig[2] ?? '');
+      const def = state.definitions[factory.id];
+      const current = def?.versions.find((v) => v.id === def.current);
+      const bytes = current?.files.get('factory.yaml');
+      const yamlText = bytes ? new TextDecoder().decode(bytes) : '';
+      const found = (
+        parse(yamlText) as { spec?: { board?: { triggers?: { name: string }[] } } } | null
+      )?.spec?.board?.triggers?.find((t) => t.name === name);
+      if (!found) return problem(res, 404, 'Not Found', `trigger ${name}`, 'trigger-not-found');
+      const trigger = found as unknown as IntakeTrigger;
+      const flaky = name === 'flaky-test-on-main';
+      return json(res, 200, {
+        trigger: {
+          name,
+          enabled: true,
+          source: 'github',
+          on: trigger.on,
+          when: trigger.on,
+          create: {
+            type: trigger.create.type,
+            station: trigger.create.station,
+            lane: null,
+            expedite: trigger.create.expedite ?? false,
+          },
+          days: flaky ? [0, 0, 0, 0, 0, 1, 2] : [0, 0, 0, 0, 0, 0, 0],
+          problem: null,
+        },
+        week: flaky ? { created: 3, merged: 2, spend_usd: 7.8 } : { created: 0, merged: 0, spend_usd: 0 },
+        events: flaky
+          ? [
+              {
+                title: 'TestLeaseExpiry',
+                event: trigger.on,
+                at: '2026-10-27T14:05:00Z',
+                outcome: 'created',
+                item_number: 150,
+                reason: null,
+              },
+              {
+                title: 'TestBoardStream',
+                event: trigger.on,
+                at: '2026-10-26T18:20:00Z',
+                outcome: 'merged',
+                item_number: 133,
+                reason: null,
+              },
+              {
+                title: 'TestLeaseExpiry',
+                event: trigger.on,
+                at: '2026-10-23T09:00:00Z',
+                outcome: 'skipped',
+                item_number: null,
+                reason: 'once',
+              },
+              {
+                title: 'lint',
+                event: trigger.on,
+                at: '2026-10-22T11:00:00Z',
+                outcome: 'skipped',
+                item_number: 120,
+                reason: '#120 covers it',
+              },
+              {
+                title: 'TestOrgRLS',
+                event: trigger.on,
+                at: '2026-10-21T08:40:00Z',
+                outcome: 'merged',
+                item_number: 118,
+                reason: null,
+              },
+            ]
+          : [],
+      });
+    }
+    if (rest.match(/^\/factories\/[^/]+\/intake$/) && method === 'GET') {
+      const key = decodeURIComponent(rest.split('/')[2] ?? '');
+      const factory = findFactory(key, org.id);
+      if (!factory) return problem(res, 404, 'Factory not found', key);
+      return json(res, 200, intakeOf(factory.name));
     }
 
     let m = rest.match(/^\/factories\/([^/]+)\/agents\/([^/]+)\/stats$/);
