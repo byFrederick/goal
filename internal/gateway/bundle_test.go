@@ -11,10 +11,12 @@ import (
 	"os"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
@@ -867,4 +869,305 @@ func TestBundle_GrantedCallsOfTheRun(t *testing.T) {
 	if got := h.fetchBundle(t, url, c).Spec.GrantedCalls; got == nil || len(got) != 0 {
 		t.Errorf("granted_calls of a run without grants = %v, want []", got)
 	}
+}
+
+// jonahYAML is the harness's factory with a Jonah policy: threshold 3 and its own model.
+const jonahYAML = factoryYAML + `  learning:
+    jonah: { proposeAfter: 3, model: claude-haiku-5-5 }
+`
+
+// jonahRule is the rule file of jonahFiles.
+const jonahRule = "rules/go-errors.md"
+
+// jonahFiles are the version's files besides factory.yaml and the engineer's prompt: some a
+// review reads, and evals, a readme and a binary file it does not.
+var jonahFiles = map[string]string{
+	"skills/acme-conventions/SKILL.md": "---\nname: acme-conventions\n---\n",
+	jonahRule:                          "Wrap with %w.\n",
+	"contracts/change.json":            `{"type":"object"}`,
+	"evals/notes.md":                   "# What the evals cover\n",
+	"README.md":                        "# acme\n",
+	"skills/acme-conventions/logo.png": "\x89PNG\r\n\x1a\n\xff\xfe",
+}
+
+func newJonahHarness(t *testing.T, d harnessDeps) *harness {
+	t.Helper()
+
+	d.yaml, d.files = jonahYAML, jonahFiles
+
+	return newHarnessWith(t, Config{}, d)
+}
+
+// sendBack appends a person's touch of kind on it at the build station, at at, with reason, and
+// returns its event's id.
+func (h *harness) sendBack(t *testing.T, it domain.Item, kind domain.EventKind, actor, reason string, at time.Time) int64 {
+	t.Helper()
+
+	data := map[string]any{"actor": "user:" + actor}
+	if reason != "" {
+		data["reason"] = reason
+	}
+
+	ctx := domain.WithOrg(t.Context(), h.org)
+
+	e := domain.Event{FactoryID: it.FactoryID, ItemID: it.ID, At: at, Kind: kind, Station: h.claims().Station, Actor: actor, Data: data}
+	if err := h.store.AppendEvents(ctx, e); err != nil {
+		t.Fatal(err)
+	}
+
+	events := h.store.Events(it.ID)
+
+	return events[len(events)-1].ID
+}
+
+// decidedProposals stores a finished review of the harness's factory with three proposals and
+// rejects the first 10 days ago and the second 100 days ago; the third stays proposed.
+func (h *harness) decidedProposals(t *testing.T) {
+	t.Helper()
+
+	ctx := domain.WithOrg(t.Context(), h.org)
+	now := h.clock.Now()
+
+	if _, err := h.store.QueueJonahReview(ctx, domain.NewJonahReview{
+		FactoryID: factoryID, VersionID: version, Trigger: domain.JonahThreshold,
+		WindowStart: now.Add(-time.Hour), WindowEnd: now, By: domain.LocalUser, At: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	claimed, err := h.store.ClaimJonahReview(ctx, now, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	file := func(p string) []domain.ProposalFile { return []domain.ProposalFile{{Path: p, Content: "new\n"}} }
+
+	_, stored, err := h.store.FinishJonahReview(ctx, claimed, domain.JonahReviewResult{State: domain.JonahDone, At: now, Proposals: []domain.NewProposal{
+		{Title: "Ask for tests", Summary: "The engineer skips tests.", Files: file(jonahRule)},
+		{Title: "An old idea", Summary: "Rejected long ago.", Files: file(engineerPrompt)},
+		{Title: "Still open", Files: file("factory.yaml")},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i, ago := range []time.Duration{10 * 24 * time.Hour, 100 * 24 * time.Hour} {
+		if _, err := h.store.DecideProposal(ctx, factoryID, stored[i].Number, domain.ProposalDecision{
+			State: domain.ProposalRejected, RejectReason: "Not for " + stored[i].Title + ".", By: domain.LocalUser, At: now.Add(-ago),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// A Jonah review's bundle is its version's definition files, the factory's sent-back events in
+// the token's window and its proposals rejected in the last 90 days, with the policy's threshold:
+// no item, no repository, no definition, no connection, no knowledge, no rule and no file.
+func TestServeRun_JonahBundle(t *testing.T) {
+	t.Parallel()
+
+	h := newJonahHarness(t, harnessDeps{})
+	it := h.submit(t, factoryID, "Add a health endpoint", "")
+	now := h.clock.Now()
+
+	rejected := h.sendBack(t, it, domain.EventRejected, "alice", "No tests.", now.Add(-2*24*time.Hour))
+	gate := h.sendBack(t, it, domain.EventGateRejected, "bob", "", now.Add(-24*time.Hour))
+	h.sendBack(t, it, domain.EventRejected, "alice", "Too old.", now.Add(-10*24*time.Hour)) // before the window
+	h.sendBack(t, it, domain.EventNote, "carol", "", now.Add(-3*time.Hour))                 // not sent back
+	h.decidedProposals(t)
+
+	c := h.jonahClaims()
+	c.Manual = true
+	before := len(h.store.Events(it.ID))
+
+	status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, c))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (%s)", status, body)
+	}
+
+	var b runBundle
+	if err := json.Unmarshal(body, &b); err != nil {
+		t.Fatal(err)
+	}
+
+	expectJonahSpec(t, b, c, it)
+	expectNoKeys(t, body)
+
+	if n := len(h.store.Events(it.ID)); n != before {
+		t.Errorf("%d events of the item, want %d: a bundle records nothing", n, before)
+	}
+
+	wantEvents := []jonahEvent{
+		{ID: strconv.FormatInt(rejected, 10), ItemRef: "#" + strconv.FormatInt(it.Number, 10), Title: it.Title, Station: h.claims().Station, Kind: string(domain.EventRejected), Reason: "No tests."},
+		{ID: strconv.FormatInt(gate, 10), ItemRef: "#" + strconv.FormatInt(it.Number, 10), Title: it.Title, Station: h.claims().Station, Kind: string(domain.EventGateRejected)},
+	}
+	if !reflect.DeepEqual(b.Spec.Jonah.Events, wantEvents) {
+		t.Errorf("events =\n %+v\nwant\n %+v", b.Spec.Jonah.Events, wantEvents)
+	}
+
+	wantRejected := []jonahRejected{{
+		Title: "Ask for tests", Summary: "The engineer skips tests.", Paths: []string{jonahRule}, Reason: "Not for Ask for tests.",
+	}}
+	if !reflect.DeepEqual(b.Spec.Jonah.Rejected, wantRejected) {
+		t.Errorf("rejected =\n %+v\nwant\n %+v", b.Spec.Jonah.Rejected, wantRejected)
+	}
+}
+
+// expectJonahSpec checks that b is a Jonah review's bundle for c: the policy's threshold and
+// model, the token's manual, agent and run, and nothing of an item's run.
+func expectJonahSpec(t *testing.T, b runBundle, c domain.TaskClaims, it domain.Item) {
+	t.Helper()
+
+	j := b.Spec.Jonah
+	if j == nil {
+		t.Fatalf("spec.jonah missing: %+v", b)
+	}
+
+	if j.ProposeAfter != 3 || j.Manual != c.Manual {
+		t.Errorf("propose_after, manual = %d, %v; want the policy's 3 and the token's %v", j.ProposeAfter, j.Manual, c.Manual)
+	}
+
+	// Everything else is an empty item-less spec: no item, station, brief, connection, rule,
+	// granted call, skill, file, git login, tool or repository.
+	want := runBundle{
+		Spec: bundleSpec{
+			FactoryID: c.FactoryID, RunID: c.RunID, Agent: c.Agent, Model: "claude-haiku-5-5", Skills: []string{}, ToolsAllow: []string{},
+			ToolsDeny: []string{}, Connections: []bundleConnection{}, Rules: []bundleRule{}, GrantedCalls: []grantedCall{},
+		},
+		Files: map[string][]byte{}, Git: []gitCredential{}, Tools: []string{},
+	}
+
+	got := b
+	got.Spec.Jonah = nil
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("bundle =\n %+v\nwant (not item %s)\n %+v", got, it.ID, want)
+	}
+}
+
+// expectNoKeys checks that a served bundle has no repository or definition and its spec no
+// knowledge_sources.
+func expectNoKeys(t *testing.T, body []byte) {
+	t.Helper()
+
+	var top, spec map[string]json.RawMessage
+	if err := json.Unmarshal(body, &top); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := json.Unmarshal(top["spec"], &spec); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, key := range []string{"repository", "definition"} {
+		if _, ok := top[key]; ok {
+			t.Errorf("bundle has %s, want none", key)
+		}
+	}
+
+	if _, ok := spec["knowledge_sources"]; ok {
+		t.Error("spec has knowledge_sources, want none")
+	}
+}
+
+// A review reads only the files a proposal may edit, factory.yaml, agents/, skills/, rules/ and
+// contracts/, each as text under its sha256, sorted by path: never evals/, another path or a
+// file that is not text.
+func TestServeRun_JonahBundleOnlyAllowlistedFiles(t *testing.T) {
+	t.Parallel()
+
+	h := newJonahHarness(t, harnessDeps{})
+	b := h.fetchBundle(t, h.runServer(t), h.jonahClaims())
+
+	want := []string{engineerPrompt, "contracts/change.json", config.FileName, jonahRule, "skills/acme-conventions/SKILL.md"}
+
+	var got []string
+
+	for _, f := range b.Spec.Jonah.Files {
+		got = append(got, f.Path)
+
+		body := cmp.Or(jonahFiles[f.Path], map[string]string{engineerPrompt: "# engineer\n"}[f.Path])
+		if f.Path == config.FileName {
+			body = jonahYAML
+		}
+
+		if f.Content != body || f.SHA256 != string(domain.HashBlob([]byte(body))) {
+			t.Errorf("%s = %q under %s, want %q under its sha256", f.Path, f.Content, f.SHA256, body)
+		}
+	}
+
+	if !slices.Equal(got, want) {
+		t.Errorf("files = %v, want %v", got, want)
+	}
+}
+
+// A jonah token is served only its own factory's version in its own organization, names no
+// connection and needs Deps.Jonah; without Deps.Jonah other tokens are served as before.
+func TestServeRun_RefusesJonahTokens(t *testing.T) {
+	t.Parallel()
+
+	h := newJonahHarness(t, harnessDeps{})
+	url := h.runServer(t)
+
+	otherFactorys := h.jonahClaims()
+	otherFactorys.VersionID = otherVersion
+	otherOrg := h.jonahClaims()
+	otherOrg.OrgID = "01900000-0000-7000-8000-00000000beef"
+	withConnections := h.jonahClaims()
+	withConnections.Connections = []string{"docs"}
+	noWindow := h.jonahClaims()
+	noWindow.WindowStart, noWindow.WindowEnd = 0, 0
+
+	tests := []struct {
+		name   string
+		claims domain.TaskClaims
+		status int
+	}{
+		{name: "a version of another factory", claims: otherFactorys, status: http.StatusForbidden},
+		{name: "another organization", claims: otherOrg, status: http.StatusForbidden},
+		{name: "names connections", claims: withConnections, status: http.StatusUnauthorized},
+		{name: "no window", claims: noWindow, status: http.StatusUnauthorized},
+		{name: "valid", claims: h.jonahClaims(), status: http.StatusOK},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			tok, err := domain.SignTaskToken(h.key, tt.claims)
+			if err != nil {
+				// SignTaskToken refuses what VerifyTaskToken would: sign it as another issuer would.
+				tok = h.tokenFor(t, tt.claims, domain.TaskAudience)
+			}
+
+			if status, _, body := request(t, http.MethodGet, url, tok); status != tt.status {
+				t.Errorf("status = %d, want %d (%s)", status, tt.status, body)
+			}
+		})
+	}
+
+	t.Run("without Deps.Jonah", func(t *testing.T) {
+		t.Parallel()
+
+		h := newJonahHarness(t, harnessDeps{noJonah: true})
+		url := h.runServer(t)
+
+		if status, _, body := request(t, http.MethodGet, url, h.token(t, h.jonahClaims())); status != http.StatusServiceUnavailable {
+			t.Errorf("jonah token: status = %d, want 503 (%s)", status, body)
+		}
+
+		station := h.claims()
+		station.ItemID = h.submit(t, factoryID, "Write the spec", "").ID
+
+		if status, _, body := request(t, http.MethodGet, url, h.token(t, station)); status != http.StatusOK {
+			t.Errorf("station token: status = %d, want 200 (%s)", status, body)
+		}
+
+		eval := station
+		eval.Kind, eval.Connections = domain.TaskKindEval, nil
+
+		if status, _, body := request(t, http.MethodGet, url, h.token(t, eval)); status != http.StatusOK {
+			t.Errorf("eval token: status = %d, want 200 (%s)", status, body)
+		}
+	})
 }

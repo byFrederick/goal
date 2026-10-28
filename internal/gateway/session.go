@@ -22,6 +22,8 @@ type session struct {
 	// sources are the knowledge sources the run's version lists, which Goal's knowledge tools
 	// search and read; none serves no knowledge tool.
 	sources []string
+	// noTools serves no tool at all: a Jonah review's (ADR 0034 decision 1).
+	noTools bool
 }
 
 // server is the MCP server for this request. Tools are not registered with it: tools/list and
@@ -50,14 +52,16 @@ func (s *session) intercept(next mcp.MethodHandler) mcp.MethodHandler {
 }
 
 // listTools lists the tools the task may call: the knowledge tools when its version lists sources,
-// and the question tool always.
+// and the question tool always; none for a task served no tool.
 func (s *session) listTools() *mcp.ListToolsResult {
 	tools := []*mcp.Tool{}
-	if len(s.sources) > 0 {
+	if len(s.sources) > 0 && !s.noTools {
 		tools = append(tools, knowledgeTools(s.sources)...)
 	}
 
-	tools = append(tools, askTool())
+	if !s.noTools {
+		tools = append(tools, askTool())
+	}
 
 	// The list depends on the task's token, so it is private. The result bypasses the SDK's own
 	// tools/list handler, which would fill in the cache scope; clients reject an empty one.
@@ -67,11 +71,11 @@ func (s *session) listTools() *mcp.ListToolsResult {
 // callTool answers one call and records it. A tool the task may not call is a protocol error, as
 // for an unknown tool.
 func (s *session) callTool(ctx context.Context, p *mcp.CallToolParamsRaw) (*mcp.CallToolResult, error) {
-	if tool, ok := s.knowledgeTool(p.Name); ok {
+	if tool, ok := s.knowledgeTool(p.Name); ok && !s.noTools {
 		return s.callKnowledge(ctx, tool, p.Arguments), nil
 	}
 
-	if p.Name == questionServer+sep+toolAsk {
+	if p.Name == questionServer+sep+toolAsk && !s.noTools {
 		return s.callQuestion(ctx, p.Arguments), nil
 	}
 

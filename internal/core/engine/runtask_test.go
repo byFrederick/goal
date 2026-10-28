@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
@@ -17,18 +18,22 @@ import (
 const agJonah = "jonah"
 
 // jonahRequest is a Jonah review's run of the test factory: no item, station, lease, repository
-// or connection but the model's (ADR 0034 decision 1).
+// or connection but the model's (ADR 0034 decision 1), served the jonah bundle of the review's
+// window, which ends within a second.
 func jonahRequest() domain.RunRequest {
 	return domain.RunRequest{
 		OrgID: testOrg, FactoryID: factoryID, Version: v1, Kind: domain.RunKindJonah, Agent: agJonah,
 		Model: "claude-opus-5-5", Brief: "Review the sent-back runs.", ModelConnection: connModel,
+		Bundle: domain.TaskKindJonah, WindowStart: t0.Add(-24 * time.Hour), WindowEnd: t0.Add(-time.Hour + 500*time.Millisecond),
+		Manual: true,
 	}
 }
 
 // A Jonah run records a run of kind jonah without an item, prepares its sandbox without a
 // repository's git login, gives its agent only the model connection's env (no connection or
-// credential of the factory's agents, even one listed for its agent name), writes no item event,
-// returns the run's result and deletes its sandbox.
+// credential of the factory's agents, even one listed for its agent name), signs a jonah token
+// with the review's window and no connection, writes no item event, returns the run's result and
+// deletes its sandbox.
 func TestRunTask_Jonah(t *testing.T) {
 	t.Parallel()
 
@@ -60,6 +65,8 @@ func TestRunTask_Jonah(t *testing.T) {
 	expectOnlyModelEnv(t, runs[0].Env)
 	h.expectJonahRun(t, prepares[0].Sandbox.RunID)
 
+	expectJonahToken(t, h.claims(t, runs[0].Env["GOAL_GATEWAY_TOKEN"]))
+
 	if events := h.store.Events(""); len(events) != 0 {
 		t.Errorf("events without an item = %+v; want none", events)
 	}
@@ -67,18 +74,34 @@ func TestRunTask_Jonah(t *testing.T) {
 	h.expectSandboxes(t, 0)
 }
 
+// expectJonahToken checks a Jonah run's token: of kind jonah, manual, with no item, station or
+// connection, and jonahRequest's window with its end rounded up to the second, so the token's
+// window holds the review's.
+func expectJonahToken(t *testing.T, c domain.TaskClaims) {
+	t.Helper()
+
+	if c.Kind != domain.TaskKindJonah || len(c.Connections) != 0 || c.ItemID != "" || c.Station != "" || !c.Manual ||
+		c.WindowStart != t0.Add(-24*time.Hour).Unix() || c.WindowEnd != t0.Add(-time.Hour).Unix()+1 {
+		t.Errorf("token claims = %+v; want a jonah token of the review's window, manual, with no item, station or connection", c)
+	}
+}
+
 // RunTask refuses a Jonah request that names an item, a station, a lease, a repository or a
-// connection besides the model's, before it records a run or opens a sandbox.
+// connection besides the model's, or whose jonah bundle has no window that ends after it starts,
+// and a window on another bundle, before it records a run or opens a sandbox.
 func TestRunTask_RefusesWhatAJonahRunMayNotHave(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]func(*domain.RunRequest){
-		"an item":      func(r *domain.RunRequest) { r.Item = "00000000-0000-7000-8000-000000000001" },
-		"a station":    func(r *domain.RunRequest) { r.Station = stWork },
-		"a lease":      func(r *domain.RunRequest) { r.Lease = &domain.Lease{} },
-		"a repository": func(r *domain.RunRequest) { r.Repository = domain.Repository{URL: repoURL, Connection: connGit} },
-		"a connection": func(r *domain.RunRequest) { r.Connections = []string{connTracker} },
-		"no model":     func(r *domain.RunRequest) { r.ModelConnection = "" },
+		"an item":                         func(r *domain.RunRequest) { r.Item = "00000000-0000-7000-8000-000000000001" },
+		"a station":                       func(r *domain.RunRequest) { r.Station = stWork },
+		"a lease":                         func(r *domain.RunRequest) { r.Lease = &domain.Lease{} },
+		"a repository":                    func(r *domain.RunRequest) { r.Repository = domain.Repository{URL: repoURL, Connection: connGit} },
+		"a connection":                    func(r *domain.RunRequest) { r.Connections = []string{connTracker} },
+		"no model":                        func(r *domain.RunRequest) { r.ModelConnection = "" },
+		"a jonah bundle without a window": func(r *domain.RunRequest) { r.WindowStart, r.WindowEnd = time.Time{}, time.Time{} },
+		"a window ending at its start":    func(r *domain.RunRequest) { r.WindowEnd = r.WindowStart },
+		"a window on another bundle":      func(r *domain.RunRequest) { r.Bundle = domain.TaskKindEval },
 	}
 
 	for name, change := range tests {

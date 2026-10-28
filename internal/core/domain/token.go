@@ -26,6 +26,12 @@ type TaskKind string
 // outside API. The model connection reaches the agent's box apart from the token.
 const TaskKindEval TaskKind = "eval"
 
+// TaskKindJonah is a Jonah review's run (ADR 0034 decision 1). Like an eval's, its token names
+// no connection, and it carries the review's window: the gateway serves it the factory's
+// definition files, its sent-back events in that window and its recently rejected proposals,
+// and no MCP tool.
+const TaskKindJonah TaskKind = "jonah"
+
 // TaskClaims scope one agent task's access to the MCP gateway: which organization, factory,
 // definition version, item, station, agent and run it acts for, which connections it may use,
 // what the organization policy decided at run start (the model and the denied commands) and
@@ -33,7 +39,8 @@ const TaskKindEval TaskKind = "eval"
 type TaskClaims struct {
 	// Audience is always TaskAudience: SignTaskToken sets it and VerifyTaskToken requires it.
 	Audience string `json:"aud"`
-	// Kind is empty for a production task and TaskKindEval for an eval try.
+	// Kind is empty for a production task, TaskKindEval for an eval try and TaskKindJonah for a
+	// Jonah review.
 	Kind      TaskKind  `json:"k,omitempty"`
 	OrgID     OrgID     `json:"o"`
 	FactoryID FactoryID `json:"f"`
@@ -56,9 +63,15 @@ type TaskClaims struct {
 	// into, as the engine decided them at run start (RunBase). An empty Base is the default
 	// branch; tokens issued before them name neither, and the gateway then takes the item's
 	// branch and the default branch.
-	Branch    string `json:"b,omitempty"`
-	Base      string `json:"bb,omitempty"`
-	ExpiresAt int64  `json:"e"` // unix seconds
+	Branch string `json:"b,omitempty"`
+	Base   string `json:"bb,omitempty"`
+	// WindowStart and WindowEnd (unix seconds) are a Jonah review's window, whose sent-back
+	// events the gateway serves it, and Manual says a person asked for the review. Only a
+	// TaskKindJonah token carries them, and it always carries a window.
+	WindowStart int64 `json:"ws,omitempty"`
+	WindowEnd   int64 `json:"we,omitempty"`
+	Manual      bool  `json:"jm,omitempty"`
+	ExpiresAt   int64 `json:"e"` // unix seconds
 }
 
 // SignTaskToken issues a per-task gateway token for TaskAudience, whatever c.Audience says. Any
@@ -134,10 +147,18 @@ func VerifyTaskToken(key []byte, token string, now time.Time) (TaskClaims, error
 	return c, nil
 }
 
-// checkKind refuses an eval task's claims that name a connection.
+// checkKind refuses an eval or Jonah task's claims that name a connection, a Jonah task's
+// without a window, and a window or Manual on any other kind of task.
 func (c TaskClaims) checkKind() error {
-	if c.Kind == TaskKindEval && len(c.Connections) > 0 {
+	switch {
+	case c.Kind == TaskKindEval && len(c.Connections) > 0:
 		return fmt.Errorf("%w: an eval task names connections", ErrBadTaskToken)
+	case c.Kind == TaskKindJonah && len(c.Connections) > 0:
+		return fmt.Errorf("%w: a jonah task names connections", ErrBadTaskToken)
+	case c.Kind == TaskKindJonah && (c.WindowStart <= 0 || c.WindowEnd <= c.WindowStart):
+		return fmt.Errorf("%w: a jonah task needs a window that ends after it starts", ErrBadTaskToken)
+	case c.Kind != TaskKindJonah && (c.WindowStart != 0 || c.WindowEnd != 0 || c.Manual):
+		return fmt.Errorf("%w: only a jonah task has a window", ErrBadTaskToken)
 	}
 
 	return nil

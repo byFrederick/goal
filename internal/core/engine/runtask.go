@@ -9,6 +9,7 @@ import (
 	"maps"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
@@ -247,7 +248,8 @@ func failure(ctx context.Context, err error) domain.RunResult {
 }
 
 // gatewayToken signs the run's task token: what the gateway serves it (its bundle, its tools)
-// and until when.
+// and until when. A Jonah review's window is in whole seconds, its end rounded up, so the window
+// the gateway serves holds the review's.
 func (e *Engine) gatewayToken(ctx context.Context, req domain.RunRequest, runID domain.RunID) (string, error) {
 	key, err := e.secrets.Resolve(ctx, e.cfg.GatewayKeyRef)
 	if err != nil {
@@ -257,13 +259,28 @@ func (e *Engine) gatewayToken(ctx context.Context, req domain.RunRequest, runID 
 	token, err := domain.SignTaskToken([]byte(key), domain.TaskClaims{
 		Kind: req.Bundle, OrgID: req.OrgID, FactoryID: req.FactoryID, VersionID: req.Version, ItemID: req.Item, Station: req.Station,
 		Agent: req.Agent, RunID: runID, Connections: req.Connections, Model: req.Model, DeniedCommands: req.DeniedCommands,
-		Branch: req.Branch, Base: req.Base, ExpiresAt: e.clock.Now().Add(req.Timeout + e.cfg.LeaseTTL).Unix(),
+		Branch: req.Branch, Base: req.Base, WindowStart: unixSeconds(req.WindowStart, false), WindowEnd: unixSeconds(req.WindowEnd, true),
+		Manual: req.Manual, ExpiresAt: e.clock.Now().Add(req.Timeout + e.cfg.LeaseTTL).Unix(),
 	})
 	if err != nil {
 		return "", fmt.Errorf("gateway token: %w", err)
 	}
 
 	return token, nil
+}
+
+// unixSeconds is t in unix seconds, rounded up with up, and 0 for the zero time.
+func unixSeconds(t time.Time, up bool) int64 {
+	if t.IsZero() {
+		return 0
+	}
+
+	s := t.Unix()
+	if up && t.After(time.Unix(s, 0)) {
+		s++
+	}
+
+	return s
 }
 
 // heartbeat extends the lease every HeartbeatEvery until ctx ends. When the lease is lost it
