@@ -1,6 +1,14 @@
 import { QueryClient, QueryObserver, queryOptions } from '@tanstack/react-query';
 import { describe, expect, test, vi } from 'vitest';
-import { defKeys, ensureFound, keys, knowledgeDocumentUsesQuery, knowledgeUsageQuery, searchQuery, validationQuery } from './queries';
+import {
+  defKeys,
+  ensureFound,
+  keys,
+  knowledgeDocumentUsesQuery,
+  knowledgeUsageQuery,
+  searchQuery,
+  validationQuery,
+} from './queries';
 import type { Validation } from './types';
 
 // goald validates the draft as it is when the request arrives, which may be a later revision than
