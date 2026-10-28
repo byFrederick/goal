@@ -32,8 +32,10 @@ import (
 )
 
 const (
-	acmeID    = "8d4f2b1a-3c5e-4f60-9a7b-1c2d3e4f5a6b"
-	acmeItems = "/v1/orgs/acme/factories/acme/items"
+	acmeID      = "8d4f2b1a-3c5e-4f60-9a7b-1c2d3e4f5a6b"
+	acmeItems   = "/v1/orgs/acme/factories/acme/items"
+	acmeItemRef = "acme#1"
+	lineItemRef = "line#1"
 )
 
 // acme is inbox → approve (human) → done: enough to submit, read and decide on items, with an
@@ -53,6 +55,7 @@ spec:
         cron: "0 6 * * MON-FRI"
         timeZone: Europe/Berlin
         create: { type: feature, station: inbox, title: "Nightly audit" }
+        limits: { perDay: 1 }
       - name: flaky-test-on-main
         on: github.check_run.failed
         only: { dedupe: check }
@@ -424,9 +427,11 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		h.publishImport(t, authors, files)
 	}
 
+	h.intake = porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), h.store)
+
 	e, err := engine.New(engine.Deps{
 		Store: h.store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
-		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock,
+		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock, Intake: h.intake, Audit: tenancy,
 		CodeHosts:   map[string]ports.CodeHost{"github": h.codehost},
 		Connections: sharedRules{Connections: engineConnections(t, newTenancy(t)), h: h},
 		Credentials: porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), tenancy, nil),
@@ -452,7 +457,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.seam, h.tenancy = &seam{}, tenancy
 	h.skills, h.skillSource = &flakyObjects{ObjectStore: porttest.NewObjectStore()}, porttest.NewSkillSource()
 	h.builder = builder.New(h.skills, h.clock, builder.Config{
-		Models: []builder.Model{{ID: "claude-opus-5-5", Label: "Claude Opus 5.5"}, {ID: "claude-haiku-5-5", Label: "Claude Haiku 5.5"}},
+		Models: []builder.Model{{ID: "claude-opus-5-5", Label: "Claude Opus 5.5"}, {ID: modelHaiku, Label: "Claude Haiku 5.5"}},
 	})
 
 	// One identity keeps the people and the organizations' API keys: the sign-in's under
@@ -470,7 +475,6 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.platform = porttest.NewPlatform(h.keys)
 
 	connections := h.connections(t, tenancy)
-	h.intake = porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), h.store)
 
 	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,

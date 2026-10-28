@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { acmeOrg, seed } from './fixtures.ts';
-import { orgRunsOf } from './runs.ts';
+import { orgRunsOf, runsCsvOf } from './runs.ts';
 
 // A window that holds every seeded run: the mock's runs are placed within hours of `now`.
 const now = Date.parse('2026-10-27T15:00:00Z');
@@ -80,5 +80,37 @@ describe('the mock GET /v1/orgs/{org}/runs', () => {
       status: 400,
     });
     expect(orgRunsOf(state, acmeOrg, new URLSearchParams({ status: 'merged' }))).toMatchObject({ status: 400 });
+  });
+});
+
+describe('the mock GET /v1/orgs/{org}/runs/export', () => {
+  const csvLines = (params: URLSearchParams) => {
+    const result = runsCsvOf(state, acmeOrg, params);
+    if (!('csv' in result)) throw new Error(result.detail);
+    return result.csv.split('\n').filter((line) => line !== '');
+  };
+
+  it('answers the list as CSV: the header, then one row per run the list would list, over every page', () => {
+    const lines = csvLines(window);
+    const { runs } = runsFor({});
+
+    expect(lines[0]).toBe(
+      'id,factory,item_ref,item_title,station,agent,model,status,started_at,ended_at,turns,cost_usd',
+    );
+    expect(lines).toHaveLength(runs.length + 1);
+    expect(lines[1]?.split(',')[0]).toBe(runs[0]?.id);
+  });
+
+  it('takes the list filters and ignores the page', () => {
+    const failed = csvLines(new URLSearchParams({ ...Object.fromEntries(window), status: 'failed', limit: '1' }));
+    const listed = runsFor({ status: 'failed' }).runs;
+
+    expect(failed).toHaveLength(listed.length + 1);
+    expect(failed.slice(1).every((line) => line.split(',')[7] === 'failed')).toBe(true);
+  });
+
+  it('refuses a window the list refuses, with the same problem', () => {
+    const result = runsCsvOf(state, acmeOrg, new URLSearchParams({ status: 'merged' }));
+    expect(result).toMatchObject({ status: 400 });
   });
 });

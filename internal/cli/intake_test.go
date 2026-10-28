@@ -28,6 +28,12 @@ const (
 	triggerNightly = "nightly"
 	cmdTriggers    = "triggers"
 	cmdWebhooks    = "webhooks"
+	subTry         = "try"
+	flagEvent      = "--event"
+	firingCreate   = "f-create"
+	firingSkip     = "f-skip"
+	firingGone     = "f-gone"
+	firingHook     = "f-hook"
 	argExtra       = "extra"
 	answerCreated  = "created"
 	flagKind       = "--kind"
@@ -81,8 +87,8 @@ func newIntakeGoald(t *testing.T) *intakeGoald {
 	}{Kind: "missing_connection", Message: "the factory has no webhook endpoint of kind github"}
 
 	detail := gen.IntakeTriggerDetail{Trigger: nightly, Events: []gen.IntakeEvent{
-		{At: at, Event: eventSchedule, Outcome: gen.IntakeEventOutcomeMerged, Title: "Nightly docs sweep", ItemNumber: &item},
-		{At: at.Add(-24 * time.Hour), Event: eventSchedule, Outcome: gen.IntakeEventOutcomeSkipped, Title: "Nightly docs sweep", Reason: &reason},
+		{Id: firingCreate, At: at, Event: eventSchedule, Outcome: gen.IntakeEventOutcomeMerged, Title: "Nightly docs sweep", ItemNumber: &item},
+		{Id: firingSkip, At: at.Add(-24 * time.Hour), Event: eventSchedule, Outcome: gen.IntakeEventOutcomeSkipped, Title: "Nightly docs sweep", Reason: &reason},
 	}}
 	detail.Week.Created, detail.Week.Merged, detail.Week.SpendUsd = 3, 1, 4.2
 
@@ -95,6 +101,7 @@ func newIntakeGoald(t *testing.T) *intakeGoald {
 		Triggers: gh.Triggers, Days: gh.Days, CreatedAt: gh.CreatedAt, Secret: fakeHookSecret,
 	}
 	next := "cursor-2"
+	wouldCreate, skipped := tryAnswers()
 
 	g := &intakeGoald{bodies: map[string][]byte{
 		"intake":  indented(t, gen.Intake{Triggers: []gen.IntakeTrigger{nightly, ci}}),
@@ -106,6 +113,8 @@ func newIntakeGoald(t *testing.T) *intakeGoald {
 			{Id: "d1", ReceivedAt: at.Add(-time.Minute), Outcome: gen.WebhookDeliveryOutcomeRefused, Reason: "signature did not match"},
 			{Id: "d0", ReceivedAt: at.Add(-2 * time.Minute), Outcome: gen.WebhookDeliveryOutcomeAccepted},
 		}}),
+		firingCreate: indented(t, wouldCreate),
+		firingSkip:   indented(t, skipped),
 	}}
 
 	reply := func(name string, status int) http.HandlerFunc {
@@ -131,6 +140,31 @@ func newIntakeGoald(t *testing.T) *intakeGoald {
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte(`{"code":"trigger-not-found","title":"Not found","status":404,"detail":"trigger not found"}`))
 	})
+	mux.HandleFunc("POST "+base+"/intake/triggers/"+triggerNightly+"/try", func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+
+		var req gen.TriggerTryRequest
+
+		_ = json.Unmarshal(b, &req)
+
+		g.mu.Lock()
+		g.sent, g.query = b, r.URL.Query()
+		g.mu.Unlock()
+
+		switch req.Firing {
+		case firingGone:
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"code":"firing-not-found","title":"Not found","status":404,"detail":"no such event among the trigger's 20 newest"}`))
+		case firingHook:
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{"code":"event-not-stored","title":"Cannot try this event","status":422,"detail":"only schedule firings can be tried"}`))
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(g.bodies[req.Firing])
+		}
+	})
 	mux.HandleFunc("GET "+base+"/webhooks", reply(subList, http.StatusOK))
 	mux.HandleFunc("POST "+base+"/webhooks", reply(answerCreated, http.StatusCreated))
 	mux.HandleFunc("POST "+base+"/webhooks/"+intakeHookID+"/rotate", reply(answerCreated, http.StatusOK))
@@ -140,6 +174,53 @@ func newIntakeGoald(t *testing.T) *intakeGoald {
 	t.Cleanup(g.srv.Close)
 
 	return g
+}
+
+// The step outcomes a try answers.
+const (
+	stepPassed     gen.TriggerTryStepOutcome = "passed"
+	stepNotReached gen.TriggerTryStepOutcome = "not_reached"
+)
+
+// tryAnswers are goald's answers to a try of nightly: firing f-create would create an item after
+// the model check agreed, and firing f-skip is skipped by only.dedupe.
+func tryAnswers() (gen.TriggerTry, gen.TriggerTry) {
+	reason := func(s string) *string { return &s }
+
+	create := gen.TriggerTry{Firing: firingCreate, Matched: true, Outcome: gen.TriggerTryOutcome("would_create"), Steps: []gen.TriggerTryStep{
+		{Step: "when", Outcome: stepPassed, Reason: reason("the schedule fired at 2026-10-26T08:00:00Z")},
+		{Step: "only.dedupe", Outcome: stepPassed, Reason: reason("no open item has the title")},
+		{Step: "only.modelAgrees", Outcome: stepPassed, Reason: reason("the docs changed\nsince the last sweep")},
+		{Step: verbCreate, Outcome: stepPassed},
+		{Step: "limits.perDay", Outcome: stepPassed, Reason: reason("1 of 3 today")},
+		{Step: "limits.pauseOnBudget", Outcome: stepPassed, Reason: reason("$4.20 of $50.00 this week")},
+	}}
+	create.Item = &struct {
+		Brief    string  `json:"brief"`
+		Expedite bool    `json:"expedite"`
+		Lane     *string `json:"lane"`
+		Station  string  `json:"station"`
+		Title    string  `json:"title"`
+		Type     string  `json:"type"`
+	}{Brief: "Sweep the docs.", Station: "triage", Title: "Nightly docs sweep", Type: "task"}
+	create.ModelCheck = &struct {
+		CostUsd      float64 `json:"cost_usd"`
+		InputTokens  int     `json:"input_tokens"`
+		Model        string  `json:"model"`
+		OutputTokens int     `json:"output_tokens"`
+		Reason       string  `json:"reason"`
+		Worth        bool    `json:"worth"`
+	}{CostUsd: 0.0123, InputTokens: 1200, Model: "claude-haiku-5-5", OutputTokens: 40, Reason: "the docs changed\nsince the last sweep", Worth: true}
+
+	skip := gen.TriggerTry{Firing: firingSkip, Matched: true, Outcome: gen.TriggerTryOutcome("skipped"), Reason: reason("only.dedupe: an open item has the title"), Steps: []gen.TriggerTryStep{
+		{Step: "when", Outcome: stepPassed, Reason: reason("the schedule fired at 2026-10-25T08:00:00Z")},
+		{Step: "only.dedupe", Outcome: "skipped", Reason: reason("an open item has the title")},
+		{Step: "only.modelAgrees", Outcome: stepNotReached},
+		{Step: verbCreate, Outcome: stepNotReached},
+		{Step: "limits.perDay", Outcome: stepNotReached},
+	}}
+
+	return create, skip
 }
 
 // last is the body and the query of the last request goald answered.
@@ -204,6 +285,64 @@ func TestTriggers_Show(t *testing.T) {
 
 	if _, _, err := goalIntake(t, g.srv.URL, cmdTriggers, subShow, intakeFactory, "nope"); err == nil || !strings.Contains(err.Error(), "trigger not found") {
 		t.Errorf("goal triggers show of an unknown trigger = %v; want goald's trigger-not-found", err)
+	}
+}
+
+// A try posts the firing and prints what would happen: matched, every step with its reason, the
+// item, the model check's cost, and that nothing was created.
+func TestTriggers_TryWouldCreate(t *testing.T) {
+	t.Parallel()
+
+	g := newIntakeGoald(t)
+
+	out, _, err := goalIntake(t, g.srv.URL, cmdTriggers, subTry, intakeFactory, triggerNightly, flagEvent, firingCreate)
+	if err != nil {
+		t.Fatalf("goal triggers try = %v", err)
+	}
+
+	var sent gen.TriggerTryRequest
+
+	if b, _ := g.last(); json.Unmarshal(b, &sent) != nil || sent.Firing != firingCreate {
+		t.Errorf("goal triggers try sent %s; want {firing: %s}", b, firingCreate)
+	}
+
+	checkGolden(t, "triggers-try-create", out)
+}
+
+// A skipped event prints the recorded reason, the steps not reached, that no item would be
+// created and that the model check did not run, and still that nothing was created.
+func TestTriggers_TrySkipped(t *testing.T) {
+	t.Parallel()
+
+	g := newIntakeGoald(t)
+
+	out, _, err := goalIntake(t, g.srv.URL, cmdTriggers, subTry, intakeFactory, triggerNightly, flagEvent, firingSkip)
+	if err != nil {
+		t.Fatalf("goal triggers try = %v", err)
+	}
+
+	checkGolden(t, "triggers-try-skipped", out)
+}
+
+// goald's problems (an event not among the newest, one whose fields were not stored) are errors
+// carrying goald's message, and nothing is printed.
+func TestTriggers_TryProblem(t *testing.T) {
+	t.Parallel()
+
+	g := newIntakeGoald(t)
+
+	for firing, want := range map[string]string{
+		firingGone: "no such event among the trigger's 20 newest",
+		firingHook: "only schedule firings can be tried",
+	} {
+		out, _, err := goalIntake(t, g.srv.URL, cmdTriggers, subTry, intakeFactory, triggerNightly, flagEvent, firing)
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("goal triggers try --event %s = %v; want goald's %q", firing, err, want)
+		}
+
+		if out != "" {
+			t.Errorf("goal triggers try --event %s printed %q; want nothing", firing, out)
+		}
 	}
 }
 
@@ -331,7 +470,7 @@ func TestWebhooks_SecretOnlyOnCreateAndRotate(t *testing.T) {
 	}
 }
 
-// --json prints goald's answer as it came, for each of the six commands.
+// --json prints goald's answer as it came, for each of the seven commands.
 func TestIntakeCommands_JSONAsSent(t *testing.T) {
 	t.Parallel()
 
@@ -343,6 +482,7 @@ func TestIntakeCommands_JSONAsSent(t *testing.T) {
 	}{
 		{[]string{cmdTriggers, subList, intakeFactory}, "intake"},
 		{[]string{cmdTriggers, subShow, intakeFactory, triggerNightly}, "trigger"},
+		{[]string{cmdTriggers, subTry, intakeFactory, triggerNightly, flagEvent, firingCreate}, firingCreate},
 		{[]string{cmdWebhooks, subList, intakeFactory}, subList},
 		{[]string{cmdWebhooks, verbCreate, intakeFactory, intakeEndpoint}, answerCreated},
 		{[]string{cmdWebhooks, "rotate", intakeFactory, intakeEndpoint}, answerCreated},
@@ -367,6 +507,9 @@ func TestIntakeCommands_Usage(t *testing.T) {
 		{cmdTriggers, subList, intakeFactory, argExtra},
 		{cmdTriggers, subShow, intakeFactory},
 		{cmdTriggers, subShow, intakeFactory, triggerNightly, argExtra},
+		{cmdTriggers, subTry, intakeFactory, triggerNightly},
+		{cmdTriggers, subTry, intakeFactory, flagEvent, firingCreate},
+		{cmdTriggers, subTry, intakeFactory, triggerNightly, argExtra, flagEvent, firingCreate},
 		{cmdWebhooks},
 		{cmdWebhooks, "delete", intakeFactory, intakeEndpoint},
 		{cmdWebhooks, subList},

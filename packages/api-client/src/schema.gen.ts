@@ -608,6 +608,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/spend/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's spend over a window as CSV, one row per factory, agent and model
+         * @description The CSV export of getOrgSpend (ADR 0020, decision 3): the runs that started in the window's [since, until) in the factories the caller sees, summed by factory, agent and model and ordered by factory id, agent and model. The header row is factory, agent, model, cost_usd; factory is the factory's metadata.name and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early. A window outside the enum is a 400 problem.
+         */
+        get: operations["exportSpend"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/metrics/touches": {
         parameters: {
             query?: never;
@@ -1672,6 +1695,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Try the trigger with one of its past events, creating nothing
+         * @description A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+         */
+        post: operations["tryIntakeTrigger"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/metrics/lead-time": {
         parameters: {
             query?: never;
@@ -2026,6 +2076,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The factory's shared views and the caller's own
+         * @description The shared views first, then the caller's personal views, each by name (case ignored). Never another person's personal view; an API key or a personal token sees only the shared views.
+         */
+        get: operations["listSavedViews"];
+        put?: never;
+        /**
+         * Save a view
+         * @description A personal view of the caller, or a shared view of the factory, which also needs factory:manage (403 forbidden without it). 403 person-required for an API key, a personal token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60 characters, over 20 filters, over 20 values in one or a value over 200 characters; 409 view-name-taken for a name the caller's personal views (personal) or the factory's shared views (shared) already use, case ignored.
+         */
+        post: operations["createSavedView"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/views/{view}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The saved view's id */
+                view: components["parameters"]["SavedViewRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a view
+         * @description A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included).
+         */
+        delete: operations["deleteSavedView"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename a view and replace its filters
+         * @description Whether a view is shared is fixed when it is created. A shared view needs factory:manage (403 forbidden without it); 403 person-required for an API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another person's personal view included); 400 invalid-view and 409 view-name-taken as createSavedView.
+         */
+        patch: operations["updateSavedView"];
+        trace?: never;
+    };
     "/v1/orgs/{org}/stream": {
         parameters: {
             query?: never;
@@ -2263,6 +2373,29 @@ export interface paths {
          * @description The runs that started in [since, until) in the factories the caller may read, or in the one named by factory, newest first (by start, then id), paged by next_cursor. When since is absent it is the start of the current UTC day; when until is absent it is the end of that day; since must be before until. The summary covers the same factories and window whatever status and q say. A wide window is a scan of every run in it: keep it short.
          */
         get: operations["listRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/runs/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's agent runs as CSV, with the filters of listRuns
+         * @description The CSV export of listRuns (ADR 0020, decision 3): every run listRuns would list over its pages, with the same filters and the same order (newest first), one row per run and no paging. The header row is id, factory, item_ref, item_title, station, agent, model, status, started_at, ended_at, turns, cost_usd: factory is the factory's metadata.name, agent the agent's name in its factory, times are RFC 3339 in UTC (ended_at empty while the run runs) and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a 413 problem export-too-large, answered before any byte of the body; every error before the first row is a problem, and one after it ends the stream early.
+         */
+        get: operations["exportRuns"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5020,6 +5153,8 @@ export interface components {
             events: components["schemas"]["IntakeEvent"][];
         };
         IntakeEvent: {
+            /** @description The firing's id */
+            id: string;
             /** @description The event's value of the trigger's only.dedupe field, or its event key without one */
             title: string;
             /** @description The event key it matched */
@@ -5037,6 +5172,60 @@ export interface components {
              */
             item_number: number | null;
             /** @description Why it was skipped; null otherwise */
+            reason: string | null;
+        };
+        TriggerTryRequest: {
+            /** @description The id of one of the trigger's 20 newest events */
+            firing: string;
+        };
+        /** @description What the trigger would do with the event now. Every string shaped by the event (the item's title and brief, the model's reason, a step's reason) is text to show as text, never markup. */
+        TriggerTry: {
+            /** @description The firing tried */
+            firing: string;
+            /** @description The event reached the trigger (its when step passed) */
+            matched: boolean;
+            /**
+             * @description would_create when no step skips the event; skipped otherwise
+             * @enum {string}
+             */
+            outcome: "would_create" | "skipped";
+            /** @description The reason a skipped firing would record (the step, a colon and why); null for would_create */
+            reason: string | null;
+            /** @description In the order they run: when, each configured only condition (failuresInARow, dedupe, then modelAgrees), create, then each configured limit (perDay, pauseOnBudget). Steps after the one that skipped are not_reached. */
+            steps: components["schemas"]["TriggerTryStep"][];
+            /** @description The item it would create; null when the create step was not reached */
+            item: {
+                type: string;
+                station: string;
+                lane: string | null;
+                expedite: boolean;
+                /** @description create.title rendered with the event's fields */
+                title: string;
+                /** @description The item's body, create.brief rendered, then the event's fields marked as untrusted data */
+                brief: string;
+            } | null;
+            /** @description The model check's answer; null when it did not run or gave no answer */
+            model_check: {
+                /** @description The model answered yes */
+                worth: boolean;
+                /** @description The model's one-line reason */
+                reason: string;
+                model: string;
+                input_tokens: number;
+                output_tokens: number;
+                /**
+                 * Format: double
+                 * @description What the check cost
+                 */
+                cost_usd: number;
+            } | null;
+        };
+        TriggerTryStep: {
+            /** @enum {string} */
+            step: "when" | "only.failuresInARow" | "only.dedupe" | "only.modelAgrees" | "create" | "limits.perDay" | "limits.pauseOnBudget";
+            /** @enum {string} */
+            outcome: "passed" | "skipped" | "not_reached";
+            /** @description Why it passed or skipped; null when not reached or with nothing to say */
             reason: string | null;
         };
         LeadTimeBridge: {
@@ -6912,6 +7101,37 @@ export interface components {
             /** @enum {string} */
             status: "idle" | "syncing" | "failed";
         };
+        /** @description The Items page's URL search params, each key with its values in order: at most 20 keys, 20 values per key and 200 characters per value */
+        SavedViewFilters: {
+            [key: string]: string[];
+        };
+        NewSavedView: {
+            /** @description 1 to 60 characters, trimmed */
+            name: string;
+            /** @description Every reader of the factory sees it; false: only its owner */
+            shared: boolean;
+            filters: components["schemas"]["SavedViewFilters"];
+        };
+        SavedViewChange: {
+            /** @description 1 to 60 characters, trimmed */
+            name: string;
+            filters: components["schemas"]["SavedViewFilters"];
+        };
+        SavedView: {
+            id: string;
+            name: string;
+            shared: boolean;
+            filters: components["schemas"]["SavedViewFilters"];
+            /** @description The caller made it */
+            mine: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        SavedViewList: {
+            views: components["schemas"]["SavedView"][];
+        };
     };
     responses: {
         /** @description An error (RFC 9457 problem details) */
@@ -6934,6 +7154,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description The saved view's id */
+        SavedViewRef: string;
         /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
         WebhookEndpointRef: string;
         /** @description A person's user id */
@@ -7846,6 +8068,36 @@ export interface operations {
                     "application/json": components["schemas"]["OrgSpend"];
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    exportSpend: {
+        parameters: {
+            query?: {
+                /** @description As for getOrgSpend */
+                window?: components["schemas"]["SpendWindow"];
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The spend rows as CSV */
+            200: {
+                headers: {
+                    /** @description attachment; filename="spend-<yyyy-mm-dd>.csv", the UTC day of the export */
+                    "Content-Disposition": string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            413: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -9285,6 +9537,38 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    tryIntakeTrigger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TriggerTryRequest"];
+            };
+        };
+        responses: {
+            /** @description What the trigger would do with the event */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TriggerTry"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     getLeadTimeBridge: {
         parameters: {
             query?: {
@@ -9793,6 +10077,120 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    listSavedViews: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The views */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedViewList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createSavedView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewSavedView"];
+            };
+        };
+        responses: {
+            /** @description The view */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteSavedView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The saved view's id */
+                view: components["parameters"]["SavedViewRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateSavedView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The saved view's id */
+                view: components["parameters"]["SavedViewRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedViewChange"];
+            };
+        };
+        responses: {
+            /** @description The view */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     streamEvents: {
         parameters: {
             query?: {
@@ -10114,6 +10512,44 @@ export interface operations {
                     "application/json": components["schemas"]["OrgRunList"];
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    exportRuns: {
+        parameters: {
+            query?: {
+                /** @description As for listRuns */
+                factory?: string;
+                /** @description As for listRuns */
+                status?: components["schemas"]["RunStatus"];
+                /** @description As for listRuns */
+                since?: string;
+                /** @description As for listRuns */
+                until?: string;
+                /** @description As for listRuns */
+                q?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The runs as CSV */
+            200: {
+                headers: {
+                    /** @description attachment; filename="runs-<yyyy-mm-dd>.csv", the UTC day of the export */
+                    "Content-Disposition": string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            413: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };

@@ -135,7 +135,7 @@ func TestKnowledgeUses_DocumentAndRunUses(t *testing.T) {
 	}
 
 	want := gen.KnowledgeDocumentUse{
-		RunId: string(newer), Item: gen.RunItem{Id: string(guide.ID), Ref: "acme#1", Title: "Write the user guide"},
+		RunId: string(newer), Item: gen.RunItem{Id: string(guide.ID), Ref: acmeItemRef, Title: "Write the user guide"},
 		Factory: gen.FactoryHit{Id: acmeID, Name: acmeSlug, Title: page.Uses[0].Factory.Title},
 		Kinds:   []gen.KnowledgeUseKind{gen.Read}, At: page.Uses[0].At,
 	}
@@ -149,7 +149,7 @@ func TestKnowledgeUses_DocumentAndRunUses(t *testing.T) {
 		t.Fatalf("second page = %+v; want the last use", next)
 	}
 
-	if u := next.Uses[0]; u.RunId != string(older) || u.Item.Ref != "line#1" || u.Factory.Id != lineID || u.Factory.Name != lineSlug ||
+	if u := next.Uses[0]; u.RunId != string(older) || u.Item.Ref != lineItemRef || u.Factory.Id != lineID || u.Factory.Name != lineSlug ||
 		!slices.Equal(u.Kinds, []gen.KnowledgeUseKind{gen.Read, gen.Search}) {
 		t.Errorf("the older use = %s; want line#1's run, read and searched", asJSON(t, u))
 	}

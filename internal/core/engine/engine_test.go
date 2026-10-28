@@ -192,7 +192,7 @@ func (h *harness) engineWith(t *testing.T, store ports.Store, maxRuns int, lines
 		Secrets:     porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y"},
 		Connections: h.connections, Credentials: h.credentials, CodeHosts: map[string]ports.CodeHost{codeHostGitHub: h.codehost, codeHostGitLab: h.gitlab},
 		Minters: map[string]ports.Minter{mintAWS: h.minter}, Policies: h.policies, Intake: h.intake,
-		ModelCheck: h.modelCheck, Logger: slog.New(slog.NewJSONHandler(h.logs, nil)),
+		ModelCheck: h.modelCheck, Audit: h.tenancy, Logger: slog.New(slog.NewJSONHandler(h.logs, nil)),
 	}, engine.Config{
 		Lines:          lines,
 		MaxRuns:        maxRuns,

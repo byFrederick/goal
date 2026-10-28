@@ -81,6 +81,14 @@ tags:
       log of the deliveries each received, kept 30 days. Anyone who sees the factory reads them;
       its editors (and the organization's owners and admins) create, rotate and delete endpoints,
       after a recent sign-in, never with a key or a personal token.
+  - name: views
+    description: >-
+      A factory's saved views (ADR 0020 decisions 1 and 2): named sets of the Items page's URL
+      search params. A reader of the factory lists its shared views and their own personal ones,
+      and manages their own; creating, renaming or deleting a shared view also needs
+      factory:manage. Only a signed-in person owns a view, so API keys, personal tokens and
+      GOAL_AUTH=none only list, and see the shared views; their writes answer 403
+      person-required.
   - name: definitions
     description: >-
       Factory definitions: creating factories, the one shared draft per factory (Visual
@@ -859,6 +867,40 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/OrgSpend" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/spend/export:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: exportSpend
+      x-goal-scope: org:read
+      tags: [spend]
+      summary: The organization's spend over a window as CSV, one row per factory, agent and model
+      description: >-
+        The CSV export of getOrgSpend (ADR 0020, decision 3): the runs that started in the
+        window's [since, until) in the factories the caller sees, summed by factory, agent and
+        model and ordered by factory id, agent and model. The header row is factory, agent, model,
+        cost_usd; factory is the factory's metadata.name and cost_usd is decimal USD. The body is
+        streamed. More than 100000 rows is a 413 problem export-too-large, answered before any
+        byte of the body; every error before the first row is a problem, and one after it ends
+        the stream early. A window outside the enum is a 400 problem.
+      parameters:
+        - name: window
+          in: query
+          description: As for getOrgSpend
+          schema: { $ref: "#/components/schemas/SpendWindow" }
+      responses:
+        "200":
+          description: The spend rows as CSV
+          headers:
+            Content-Disposition:
+              description: attachment; filename="spend-<yyyy-mm-dd>.csv", the UTC day of the export
+              required: true
+              schema: { type: string }
+          content:
+            text/csv:
+              schema: { type: string }
+        "413": { $ref: "#/components/responses/Problem" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/metrics/touches:
     parameters:
@@ -2013,6 +2055,40 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/IntakeTriggerDetail" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - name: trigger
+        in: path
+        required: true
+        description: The trigger's name in the current definition
+        schema: { type: string }
+    post:
+      operationId: tryIntakeTrigger
+      x-goal-scope: trigger:try
+      tags: [intake]
+      summary: Try the trigger with one of its past events, creating nothing
+      description: >-
+        A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest
+        events (getIntakeTrigger's events, by id) now, as intake would, and answers each step.
+        The model check runs, and its cost is spent, as in intake. It creates no item, records no
+        event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's
+        events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a
+        name the current definition does not have; 404 firing-not-found for an id that is not
+        one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TriggerTryRequest" }
+      responses:
+        "200":
+          description: What the trigger would do with the event
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TriggerTry" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/metrics/lead-time:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -2419,6 +2495,90 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/WebhookDeliveryRequest" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/views:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: listSavedViews
+      x-goal-scope: factory:read
+      tags: [views]
+      summary: The factory's shared views and the caller's own
+      description: >-
+        The shared views first, then the caller's personal views, each by name (case ignored).
+        Never another person's personal view; an API key or a personal token sees only the shared
+        views.
+      responses:
+        "200":
+          description: The views
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SavedViewList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createSavedView
+      x-goal-scope: factory:read
+      tags: [views]
+      summary: Save a view
+      description: >-
+        A personal view of the caller, or a shared view of the factory, which also needs
+        factory:manage (403 forbidden without it). 403 person-required for an API key, a personal
+        token or GOAL_AUTH=none: only a signed-in person owns a view. 400 invalid-view for a name of 0 or over 60
+        characters, over 20 filters, over 20 values in one or a value over 200 characters; 409
+        view-name-taken for a name the caller's personal views (personal) or the factory's shared
+        views (shared) already use, case ignored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewSavedView" }
+      responses:
+        "201":
+          description: The view
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SavedView" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/views/{view}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/SavedViewRef"
+    patch:
+      operationId: updateSavedView
+      x-goal-scope: factory:read
+      tags: [views]
+      summary: Rename a view and replace its filters
+      description: >-
+        Whether a view is shared is fixed when it is created. A shared view needs factory:manage
+        (403 forbidden without it); 403 person-required for an API key, a personal token or
+        GOAL_AUTH=none; 404
+        view-not-found for a view the caller does not see (another person's personal view
+        included); 400 invalid-view and 409 view-name-taken as createSavedView.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SavedViewChange" }
+      responses:
+        "200":
+          description: The view
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SavedView" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteSavedView
+      x-goal-scope: factory:read
+      tags: [views]
+      summary: Delete a view
+      description: >-
+        A shared view needs factory:manage (403 forbidden without it); 403 person-required for an
+        API key, a personal token or GOAL_AUTH=none; 404 view-not-found for a view the caller does not see (another
+        person's personal view included).
+      responses:
+        "204": { description: Deleted }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/stream:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -2716,6 +2876,57 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/OrgRunList" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/runs/export:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: exportRuns
+      x-goal-scope: org:read
+      tags: [work]
+      summary: The organization's agent runs as CSV, with the filters of listRuns
+      description: >-
+        The CSV export of listRuns (ADR 0020, decision 3): every run listRuns would list over its
+        pages, with the same filters and the same order (newest first), one row per run and no
+        paging. The header row is id, factory, item_ref, item_title, station, agent, model,
+        status, started_at, ended_at, turns, cost_usd: factory is the factory's metadata.name,
+        agent the agent's name in its factory, times are RFC 3339 in UTC (ended_at empty while the
+        run runs) and cost_usd is decimal USD. The body is streamed. More than 100000 rows is a
+        413 problem export-too-large, answered before any byte of the body; every error before the
+        first row is a problem, and one after it ends the stream early.
+      parameters:
+        - name: factory
+          in: query
+          description: As for listRuns
+          schema: { type: string }
+        - name: status
+          in: query
+          description: As for listRuns
+          schema: { $ref: "#/components/schemas/RunStatus" }
+        - name: since
+          in: query
+          description: As for listRuns
+          schema: { type: string, format: date-time }
+        - name: until
+          in: query
+          description: As for listRuns
+          schema: { type: string, format: date-time }
+        - name: q
+          in: query
+          description: As for listRuns
+          schema: { type: string, maxLength: 200 }
+      responses:
+        "200":
+          description: The runs as CSV
+          headers:
+            Content-Disposition:
+              description: attachment; filename="runs-<yyyy-mm-dd>.csv", the UTC day of the export
+              required: true
+              schema: { type: string }
+          content:
+            text/csv:
+              schema: { type: string }
+        "413": { $ref: "#/components/responses/Problem" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/runs/{run}:
     parameters:
@@ -3866,6 +4077,12 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
 components:
   parameters:
+    SavedViewRef:
+      name: view
+      in: path
+      required: true
+      description: The saved view's id
+      schema: { type: string }
     WebhookEndpointRef:
       name: endpoint
       in: path
@@ -6229,8 +6446,9 @@ components:
           items: { $ref: "#/components/schemas/IntakeEvent" }
     IntakeEvent:
       type: object
-      required: [title, event, at, outcome, item_number, reason]
+      required: [id, title, event, at, outcome, item_number, reason]
       properties:
+        id: { type: string, description: The firing's id, the one tryIntakeTrigger names }
         title: { type: string, description: "The event's value of the trigger's only.dedupe field, or its event key without one" }
         event: { type: string, description: The event key it matched }
         at: { type: string, format: date-time }
@@ -6240,6 +6458,71 @@ components:
           description: created an item; merged once that item has been merged; skipped with the reason
         item_number: { type: integer, format: int64, nullable: true, description: The item it created; null when it created none or that item is gone }
         reason: { type: string, nullable: true, description: Why it was skipped; null otherwise }
+    TriggerTryRequest:
+      type: object
+      additionalProperties: false
+      required: [firing]
+      properties:
+        firing: { type: string, description: The id of one of the trigger's 20 newest events }
+    TriggerTry:
+      type: object
+      description: >-
+        What the trigger would do with the event now. Every string shaped by the event (the item's
+        title and brief, the model's reason, a step's reason) is text to show as text, never markup.
+      required: [firing, matched, outcome, reason, steps, item, model_check]
+      properties:
+        firing: { type: string, description: The firing tried }
+        matched: { type: boolean, description: The event reached the trigger (its when step passed) }
+        outcome:
+          type: string
+          enum: [would_create, skipped]
+          description: would_create when no step skips the event; skipped otherwise
+        reason:
+          type: string
+          nullable: true
+          description: The reason a skipped firing would record (the step, a colon and why); null for would_create
+        steps:
+          type: array
+          description: >-
+            In the order they run: when, each configured only condition (failuresInARow, dedupe,
+            then modelAgrees), create, then each configured limit (perDay, pauseOnBudget). Steps
+            after the one that skipped are not_reached.
+          items: { $ref: "#/components/schemas/TriggerTryStep" }
+        item:
+          type: object
+          nullable: true
+          description: The item it would create; null when the create step was not reached
+          required: [type, station, lane, expedite, title, brief]
+          properties:
+            type: { type: string }
+            station: { type: string }
+            lane: { type: string, nullable: true }
+            expedite: { type: boolean }
+            title: { type: string, description: create.title rendered with the event's fields }
+            brief:
+              type: string
+              description: The item's body, create.brief rendered, then the event's fields marked as untrusted data
+        model_check:
+          type: object
+          nullable: true
+          description: The model check's answer; null when it did not run or gave no answer
+          required: [worth, reason, model, input_tokens, output_tokens, cost_usd]
+          properties:
+            worth: { type: boolean, description: The model answered yes }
+            reason: { type: string, description: The model's one-line reason }
+            model: { type: string }
+            input_tokens: { type: integer }
+            output_tokens: { type: integer }
+            cost_usd: { type: number, format: double, description: What the check cost }
+    TriggerTryStep:
+      type: object
+      required: [step, outcome, reason]
+      properties:
+        step:
+          type: string
+          enum: [when, only.failuresInARow, only.dedupe, only.modelAgrees, create, limits.perDay, limits.pauseOnBudget]
+        outcome: { type: string, enum: [passed, skipped, not_reached] }
+        reason: { type: string, nullable: true, description: Why it passed or skipped; null when not reached or with nothing to say }
     LeadTimeBridge:
       type: object
       required:
@@ -8482,3 +8765,42 @@ components:
         source_id: { type: string }
         name: { type: string }
         status: { type: string, enum: [idle, syncing, failed] }
+    SavedViewFilters:
+      type: object
+      description: >-
+        The Items page's URL search params, each key with its values in order: at most 20 keys, 20
+        values per key and 200 characters per value
+      additionalProperties:
+        type: array
+        items: { type: string }
+    NewSavedView:
+      type: object
+      required: [name, shared, filters]
+      properties:
+        name: { type: string, description: "1 to 60 characters, trimmed" }
+        shared: { type: boolean, description: "Every reader of the factory sees it; false: only its owner" }
+        filters: { $ref: "#/components/schemas/SavedViewFilters" }
+    SavedViewChange:
+      type: object
+      required: [name, filters]
+      properties:
+        name: { type: string, description: "1 to 60 characters, trimmed" }
+        filters: { $ref: "#/components/schemas/SavedViewFilters" }
+    SavedView:
+      type: object
+      required: [id, name, shared, filters, mine, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        shared: { type: boolean }
+        filters: { $ref: "#/components/schemas/SavedViewFilters" }
+        mine: { type: boolean, description: The caller made it }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    SavedViewList:
+      type: object
+      required: [views]
+      properties:
+        views:
+          type: array
+          items: { $ref: "#/components/schemas/SavedView" }

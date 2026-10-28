@@ -80,7 +80,7 @@ func TestBuilder_Meta(t *testing.T) {
 
 	want := gen.BuilderMeta{
 		Models: []gen.BuilderModel{
-			{Id: "claude-opus-5-5", Label: "Claude Opus 5.5", Default: true}, {Id: "claude-haiku-5-5", Label: "Claude Haiku 5.5"},
+			{Id: "claude-opus-5-5", Label: "Claude Opus 5.5", Default: true}, {Id: modelHaiku, Label: "Claude Haiku 5.5"},
 		},
 		Limits: gen.BuilderLimits{SkillBytes: domain.MaxSkillBytes, SkillFiles: domain.MaxSkillFiles},
 	}

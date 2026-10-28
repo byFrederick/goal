@@ -235,6 +235,8 @@ const (
 	noDocument = "00000000-0000-7000-8000-fffffffffffd"
 	// probeHooks are acme's webhook endpoints.
 	probeHooks = "/v1/orgs/acme/factories/acme/webhooks"
+	// probeViews are acme's saved views.
+	probeViews = "/v1/orgs/acme/factories/acme/views"
 )
 
 var probes = map[string]probe{
@@ -270,6 +272,8 @@ var probes = map[string]probe{
 	"getOrgSpend":         {method: http.MethodGet, path: "/v1/orgs/acme/spend", org: testOrg},
 	"getInbox":            {method: http.MethodGet, path: "/v1/orgs/acme/inbox?factory=acme", org: testOrg, factory: acmeID},
 	"listRuns":            {method: http.MethodGet, path: "/v1/orgs/acme/runs?factory=acme", org: testOrg, factory: acmeID},
+	"exportRuns":          {method: http.MethodGet, path: "/v1/orgs/acme/runs/export?factory=acme", org: testOrg, factory: acmeID},
+	"exportSpend":         {method: http.MethodGet, path: "/v1/orgs/acme/spend/export", org: testOrg},
 	"listItems":           {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/items", org: testOrg, factory: acmeID},
 	"submitItem":          {method: http.MethodPost, path: acmeItems, body: submitFix, org: testOrg, factory: acmeID},
 	"getBoard":            {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/board", org: testOrg, factory: acmeID},
@@ -281,7 +285,11 @@ var probes = map[string]probe{
 	"getTouchMetrics":     {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/metrics/touches", org: testOrg, factory: acmeID},
 	"getIntake":           {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/intake", org: testOrg, factory: acmeID},
 	"getIntakeTrigger":    {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/intake/triggers/nightly-audit", org: testOrg, factory: acmeID},
-	"getOrgTouchMetrics":  {method: http.MethodGet, path: "/v1/orgs/acme/metrics/touches", org: testOrg},
+	"tryIntakeTrigger": {
+		method: http.MethodPost, path: "/v1/orgs/acme/factories/acme/intake/triggers/nightly-audit/try", body: `{"firing":"no-such-firing"}`,
+		org: testOrg, factory: acmeID,
+	},
+	"getOrgTouchMetrics": {method: http.MethodGet, path: "/v1/orgs/acme/metrics/touches", org: testOrg},
 	"setTouchReason": {
 		method: http.MethodPut, path: "/v1/orgs/acme/items/acme%231/touches/1/reason", body: `{"reason":"other"}`, org: testOrg, factory: acmeID,
 	},
@@ -360,6 +368,14 @@ var probes = map[string]probe{
 	"getWebhookDelivery": {
 		method: http.MethodGet, path: probeHooks + "/" + noDocument + "/deliveries/" + noDocument, org: testOrg, factory: acmeID,
 	},
+	"listSavedViews": {method: http.MethodGet, path: probeViews, org: testOrg, factory: acmeID},
+	"createSavedView": {
+		method: http.MethodPost, path: probeViews, body: `{"name":"mine","shared":false,"filters":{"status":["open"]}}`, org: testOrg, factory: acmeID,
+	},
+	"updateSavedView": {
+		method: http.MethodPatch, path: probeViews + "/" + noDocument, body: `{"name":"mine","filters":{}}`, org: testOrg, factory: acmeID,
+	},
+	"deleteSavedView":      {method: http.MethodDelete, path: probeViews + "/" + noDocument, org: testOrg, factory: acmeID},
 	"listKnowledgeSources": {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/sources?factory=acme", org: testOrg, factory: acmeID},
 	"createKnowledgeSource": {
 		method: http.MethodPost, path: "/v1/orgs/acme/knowledge/sources", org: testOrg, body: `{"name":"notes","title":"Notes","kind":"upload"}`,

@@ -82,6 +82,14 @@ const decode = (b: Uint8Array | undefined) => (b ? new TextDecoder().decode(b) :
 const encode = (s: string) => new TextEncoder().encode(s);
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
 const list = (v: unknown): Json[] => (Array.isArray(v) ? v.filter(isObject) : []);
+/** Every lane a station routes by, sorted and without repeats (the Set lane menu lists them). */
+const routedLanes = (model: Json): string[] => {
+  const lanes = new Set<string>();
+  for (const station of list((model.line as Json | undefined)?.stations)) {
+    for (const lane of Object.keys(isObject(station.route) ? station.route : {})) lanes.add(lane);
+  }
+  return [...lanes].sort();
+};
 const now = () => new Date().toISOString();
 
 const send = (res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) => {
@@ -779,6 +787,8 @@ export interface Definitions {
   connectionNames: (factory: Factory) => string[];
   /** The knowledge sources the factory's current version may search. */
   knowledgeSourceNames: (factory: Factory) => string[];
+  /** The lanes the current version's stations route by, sorted: the lanes an item may be set to. */
+  laneNames: (factory: Factory) => string[];
 }
 
 export function createDefinitions(deps: DefinitionsDeps): Definitions {
@@ -1773,6 +1783,10 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
     knowledgeSourceNames: (f) => {
       const read = currentModel(f);
       return read ? knowledgeSourceNames(read) : [];
+    },
+    laneNames: (f) => {
+      const read = currentModel(f);
+      return read ? routedLanes(read) : [];
     },
     faultBody: (path, fault) => {
       const status = fault.status ?? 500;

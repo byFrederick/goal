@@ -12,6 +12,7 @@ import {
   subscribe,
   unwrap,
 } from '@goal/api-client';
+import { type CsvFile, csvFileOf } from './download';
 import { sessionHandlers, withSession } from './session';
 import type {
   Activity,
@@ -50,6 +51,7 @@ import type {
   NewItem,
   NewOrg,
   NewPartRequest,
+  NewSavedView,
   NoteReceipt,
   Org,
   OrgAttention,
@@ -60,6 +62,9 @@ import type {
   OrgSummary,
   RunList,
   RunStatus,
+  SavedView,
+  SavedViewChange,
+  SavedViewList,
   ToolDecision,
   TouchMetrics,
   TouchReason,
@@ -419,6 +424,33 @@ export function addEvalCase(org: string, factory: string, from: EvalCaseFromRun)
   );
 }
 
+/** The factory's shared views, then the caller's personal ones, each by name (ADR 0020). */
+export function listSavedViews(org: string, factory: string, signal?: AbortSignal): Promise<SavedViewList> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/views'), { params: { path: { org, factory } }, ...cancel(signal) }),
+  );
+}
+
+/** 400 invalid-view; 403 forbidden for a shared view without factory:manage; 409 view-name-taken. */
+export function createSavedView(org: string, factory: string, view: NewSavedView): Promise<SavedView> {
+  return unwrap(goal.POST(orgPath('/factories/{factory}/views'), { params: { path: { org, factory } }, body: view }));
+}
+
+/** Renames a view and replaces its filters. 404 view-not-found, 403 forbidden, 400 invalid-view, 409 view-name-taken. */
+export function updateSavedView(
+  org: string,
+  factory: string,
+  view: string,
+  change: SavedViewChange,
+): Promise<SavedView> {
+  return unwrap(
+    goal.PATCH(orgPath('/factories/{factory}/views/{view}'), {
+      params: { path: { org, factory, view } },
+      body: change,
+    }),
+  );
+}
+
 /** The factory's judges of the current version, each with its last 30 days (ADR 0025). 503 judges-unavailable while goald serves none. */
 export function listJudges(org: string, factory: string, signal?: AbortSignal): Promise<JudgeList> {
   return unwrap(
@@ -434,6 +466,11 @@ export function getJudge(org: string, factory: string, judge: string, signal?: A
       ...cancel(signal),
     }),
   );
+}
+
+/** 404 view-not-found; 403 forbidden for a shared view without factory:manage. */
+export async function deleteSavedView(org: string, factory: string, view: string): Promise<void> {
+  await unwrap(goal.DELETE(orgPath('/factories/{factory}/views/{view}'), { params: { path: { org, factory, view } } }));
 }
 
 /**
@@ -558,6 +595,20 @@ export function listOrgRuns(org: string, filter: RunsFilter, signal?: AbortSigna
   );
 }
 
+/** The Runs filter without its page: the export takes every run the list would list (no limit, no cursor). */
+export type RunsExportFilter = Omit<RunsFilter, 'limit' | 'cursor'>;
+
+/** The organization's runs as CSV (GET /v1/orgs/{org}/runs/export), with the list's filters and no paging. */
+export async function exportOrgRuns(org: string, filter: RunsExportFilter, signal?: AbortSignal): Promise<CsvFile> {
+  const result = await goal.GET(orgPath('/runs/export'), {
+    params: { path: { org }, query: runsQuery(filter) },
+    parseAs: 'blob',
+    headers: { Accept: 'text/csv' },
+    ...cancel(signal),
+  });
+  return csvFileOf(result, 'runs.csv');
+}
+
 /** Leaves the local user's note for the agents working an item; the receipt says when one reads it. */
 export function noteItem(org: string, item: string, text: string): Promise<NoteReceipt> {
   return unwrap(goal.POST(orgPath('/items/{item}/notes'), { params: { path: { org, item } }, body: { text } }));
@@ -610,6 +661,11 @@ export function pauseItem(org: string, item: string, reason?: string): Promise<I
   return unwrap(
     goal.POST(orgPath('/items/{item}/pause'), { params: { path: { org, item } }, body: reason ? { reason } : {} }),
   );
+}
+
+/** Sets an open item's lane. 400 lane-required or unknown-lane; 409 item-closed, item-in-progress, item-is-assembly or same-lane. */
+export function setItemLane(org: string, item: string, lane: string): Promise<Item> {
+  return unwrap(goal.POST(orgPath('/items/{item}/lane'), { params: { path: { org, item } }, body: { lane } }));
 }
 
 /** Closes an open item as cancelled; an assembly cancels its open parts too. 409 item-closed when it is done or cancelled. */

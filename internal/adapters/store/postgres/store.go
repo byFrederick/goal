@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/byFrederick/goal/internal/adapters/store/postgres/db"
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -482,27 +483,9 @@ func (s *Store) OrgRuns(ctx context.Context, q ports.RunQuery) ([]domain.ListedR
 		return []domain.ListedRun{}, domain.RunSummary{}, nil
 	}
 
-	params := db.ListOrgRunsParams{
-		Factories: factories, Since: q.Since, Until: q.Until, Status: string(q.Status),
-		Pattern: likeEscaper.Replace(q.Text), Number: q.Number, MaxRuns: int64(q.Limit),
-	}
-
-	if q.NumberOf != "" {
-		of, err := parseID("factory", string(q.NumberOf))
-		if err != nil {
-			return nil, domain.RunSummary{}, err
-		}
-
-		params.NumberOf = &of
-	}
-
-	if q.After != nil {
-		id, err := parseID("run", string(q.After.ID))
-		if err != nil {
-			return nil, domain.RunSummary{}, err
-		}
-
-		params.Paged, params.AfterStartedAt, params.AfterID = true, q.After.StartedAt, id
+	params, err := orgRunsParams(q, factories)
+	if err != nil {
+		return nil, domain.RunSummary{}, err
 	}
 
 	var (
@@ -510,7 +493,7 @@ func (s *Store) OrgRuns(ctx context.Context, q ports.RunQuery) ([]domain.ListedR
 		sums []db.OrgRunsSummaryRow
 	)
 
-	err := s.read(ctx, func(dq *db.Queries) error {
+	err = s.read(ctx, func(dq *db.Queries) error {
 		var err error
 		if rows, err = dq.ListOrgRuns(ctx, params); err != nil {
 			return err
@@ -540,6 +523,90 @@ func (s *Store) OrgRuns(ctx context.Context, q ports.RunQuery) ([]domain.ListedR
 	}
 
 	return runs, sum, nil
+}
+
+// orgRunsParams are q's filters, limit and cursor as ListOrgRuns takes them.
+func orgRunsParams(q ports.RunQuery, factories []uuid.UUID) (db.ListOrgRunsParams, error) {
+	params := db.ListOrgRunsParams{
+		Factories: factories, Since: q.Since, Until: q.Until, Status: string(q.Status),
+		Pattern: likeEscaper.Replace(q.Text), Number: q.Number, MaxRuns: int64(q.Limit),
+	}
+
+	if q.NumberOf != "" {
+		of, err := parseID("factory", string(q.NumberOf))
+		if err != nil {
+			return params, err
+		}
+
+		params.NumberOf = &of
+	}
+
+	if q.After != nil {
+		id, err := parseID("run", string(q.After.ID))
+		if err != nil {
+			return params, err
+		}
+
+		params.Paged, params.AfterStartedAt, params.AfterID = true, q.After.StartedAt, id
+	}
+
+	return params, nil
+}
+
+// EachOrgRun implements ports.Store: in one read-only repeatable-read transaction, so the count
+// and every page read one snapshot, it counts up to max+1 matching runs, then reads them in pages
+// of s.page() by ListOrgRuns' cursor, holding one page at a time.
+func (s *Store) EachOrgRun(ctx context.Context, q ports.RunQuery, maxRows int, each func(domain.ListedRun) error) error {
+	factories := uuids(q.Factories)
+	if _, ok := domain.OrgFrom(ctx); ok && len(factories) == 0 {
+		return nil
+	}
+
+	q.After, q.Limit = nil, s.page()
+
+	params, err := orgRunsParams(q, factories)
+	if err != nil {
+		return err
+	}
+
+	err = s.orgTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(dq *db.Queries) error {
+		n, err := dq.CountOrgRuns(ctx, db.CountOrgRunsParams{
+			Factories: params.Factories, Since: params.Since, Until: params.Until, Status: params.Status,
+			Pattern: params.Pattern, Number: params.Number, NumberOf: params.NumberOf, MaxRuns: int64(maxRows) + 1,
+		})
+		if err != nil {
+			return err
+		}
+
+		if n > int64(maxRows) {
+			return fmt.Errorf("more than %d runs: %w", maxRows, ports.ErrTooMany)
+		}
+
+		for {
+			rows, err := dq.ListOrgRuns(ctx, params)
+			if err != nil {
+				return err
+			}
+
+			for _, r := range rows {
+				if err := each(domain.ListedRun{Run: runFrom(r.AgentRun), ItemNumber: r.ItemNumber, ItemTitle: r.ItemTitle}); err != nil {
+					return err
+				}
+			}
+
+			if len(rows) < int(params.MaxRuns) {
+				return nil
+			}
+
+			last := rows[len(rows)-1].AgentRun
+			params.Paged, params.AfterStartedAt, params.AfterID = true, last.StartedAt, last.ID
+		}
+	})
+	if err != nil {
+		return fmt.Errorf("export the runs of the organization: %w", err)
+	}
+
+	return nil
 }
 
 // FinishRun implements ports.Store.

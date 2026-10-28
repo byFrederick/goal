@@ -1,7 +1,7 @@
 // The bulk actions of the Items list (MASTER.md "Items"): a navy bar that shows while rows are
 // checked. Move opens the shared Move menu for every checked item; Pause pauses each one with its
-// own request; Set lane is not built yet, so it stays disabled. A refusal names its item and the
-// others still go through.
+// own request; Set lane opens the lane menu, which sets each one's lane. A refusal names its item
+// and the others still go through.
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, Pause } from 'lucide-react';
 import { useState } from 'react';
@@ -14,7 +14,7 @@ import { factoryWorkInvalidations } from '../../shared/invalidation';
 import { type Movable, MoveDialog } from '../../shared/move-menu';
 import { useOrg } from '../../shared/org';
 import { cn } from '../../ui/cn';
-import { NotAvailable } from '../../ui/not-available';
+import { SetLaneDialog } from './set-lane-menu';
 
 /** The checked items as the Move menu takes them. */
 export function movableOf(items: ItemCard[], factory: Factory): Movable[] {
@@ -73,11 +73,12 @@ export function BulkActions({
   /** The checked items, in list order. */
   items: ItemCard[];
   factory: Factory;
-  /** Whether the person may move and pause items; without it, only Clear and Set lane show. */
+  /** Whether the person may move, pause and set the lane of items; without it, only Clear shows. */
   canOperate: boolean;
   onClear: () => void;
 }) {
   const [moving, setMoving] = useState(false);
+  const [settingLane, setSettingLane] = useState(false);
   const pause = usePauseMany(factory);
   const movable = movableOf(items, factory);
 
@@ -97,16 +98,24 @@ export function BulkActions({
             <Pause size={16} strokeWidth={1.75} aria-hidden="true" />
             Pause
           </button>
+          <button type="button" className={barButton} onClick={() => setSettingLane(true)}>
+            Set lane
+          </button>
         </>
       ) : null}
-      <NotAvailable>
-        <button type="button" className={barButton}>
-          Set lane
-        </button>
-      </NotAvailable>
       <button type="button" onClick={onClear} className={cn(barButton, 'ml-auto border-transparent')}>
         Clear
       </button>
+      {settingLane ? (
+        <SetLaneDialog
+          items={movable}
+          factory={factory}
+          open
+          onOpenChange={(open) => {
+            if (!open) setSettingLane(false);
+          }}
+        />
+      ) : null}
       {moving ? (
         <MoveDialog
           items={movable}

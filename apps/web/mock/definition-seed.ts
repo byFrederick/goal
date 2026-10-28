@@ -504,6 +504,17 @@ const flakyTrigger = `    triggers:
           title: "Fix flaky {{check.name}} on main"
           brief: "{{check.name}} failed twice in a row on main. Find the cause in {{check.logs_url}}, make the test deterministic, and say in the pull request why it was flaky. Do not skip or retry the test to make it pass."
         limits: { perDay: 3, pauseOnBudget: true }
+      - name: dependency-audit
+        on: schedule
+        cron: "0 9 * * MON"
+        timeZone: UTC
+        only:
+          modelAgrees:
+            question: "Does this audit name a vulnerable direct dependency that needs an update now?"
+        create:
+          type: fix
+          station: build
+          brief: "The dependency audit reported a finding. Update the direct dependency and say in the pull request which advisory it fixes."
 `;
 
 const software = definition({

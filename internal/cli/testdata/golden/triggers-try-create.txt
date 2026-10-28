@@ -1,0 +1,14 @@
+nightly with event f-create: matched
+Outcome  would_create
+STEP                  OUTCOME  REASON
+when                  passed   the schedule fired at 2026-10-26T08:00:00Z
+only.dedupe           passed   no open item has the title
+only.modelAgrees      passed   the docs changed since the last sweep
+create                passed   -
+limits.perDay         passed   1 of 3 today
+limits.pauseOnBudget  passed   $4.20 of $50.00 this week
+Item: task at triage, lane -, expedite no
+  Title  Nightly docs sweep
+Model check: worth yes, claude-haiku-5-5, 1200 in and 40 out tokens, cost $0.0123
+  Reason  the docs changed since the last sweep
+Nothing was created: this was a dry run (a model check's cost is still spent)

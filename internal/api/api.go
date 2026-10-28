@@ -39,6 +39,7 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -78,6 +79,7 @@ type Engine interface {
 	AddPart(ctx context.Context, assembly domain.ItemID, by domain.Actor, part domain.NewPart) (domain.Item, domain.Parts, error)
 	PullAndon(ctx context.Context, f domain.FactoryID, by domain.Actor, reason string) (domain.AndonPull, error)
 	ClearAndon(ctx context.Context, f domain.FactoryID, by domain.Actor, note string) (domain.AndonPull, error)
+	TryTrigger(ctx context.Context, f domain.FactoryID, trigger, firing string, by domain.Actor) (domain.TriggerTry, error)
 }
 
 // Items reads items, their history and runs, a factory's latest milestone events, the leases on them, a factory's flow and its
@@ -93,6 +95,7 @@ type Items interface {
 	Runs(ctx context.Context, item domain.ItemID, limit int) ([]domain.Run, error)
 	Run(ctx context.Context, id domain.RunID) (domain.Run, error)
 	OrgRuns(ctx context.Context, q ports.RunQuery) ([]domain.ListedRun, domain.RunSummary, error)
+	EachOrgRun(ctx context.Context, q ports.RunQuery, maxRows int, each func(domain.ListedRun) error) error
 	ListItems(ctx context.Context, q ports.ItemQuery) ([]domain.Item, error)
 	SearchItems(ctx context.Context, q ports.ItemSearch) ([]domain.Item, error)
 	Assemblies(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID]domain.Assembly, error)
@@ -102,6 +105,8 @@ type Items interface {
 	DoneByBucket(ctx context.Context, q ports.FlowQuery, d time.Duration, n int) ([]int, error)
 	SpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
 	OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgSpend, error)
+	EachAgentModelSpend(ctx context.Context, w domain.SpendWindow, factories []domain.FactoryID, maxRows int,
+		each func(domain.AgentModelSpend) error) error
 	ItemTimes(ctx context.Context, q ports.FlowQuery, limit int) ([]domain.ItemTime, error)
 	Attention(ctx context.Context) ([]domain.Attention, error)
 	OpenToolApprovals(ctx context.Context) (map[string]int, error)
@@ -123,6 +128,10 @@ type Items interface {
 	Parts(ctx context.Context, parent domain.ItemID) (domain.Parts, error)
 	Edges(ctx context.Context, item domain.ItemID) (domain.ItemEdges, error)
 	OpenNeeds(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID][]domain.OpenNeed, error)
+	ListSavedViews(ctx context.Context, factory domain.FactoryID, viewer domain.UserID) ([]domain.SavedView, error)
+	CreateSavedView(ctx context.Context, v domain.SavedView) (domain.SavedView, error)
+	UpdateSavedView(ctx context.Context, factory domain.FactoryID, id domain.SavedViewID, name string, filters map[string][]string, at time.Time) (domain.SavedView, error)
+	DeleteSavedView(ctx context.Context, factory domain.FactoryID, id domain.SavedViewID) error
 }
 
 // Factories are the definitions goald runs; *definitions.Cache satisfies it.
@@ -198,6 +207,8 @@ type Deps struct {
 	OrgPolicies     ports.OrgPolicies
 	BoxSizes        []domain.BoxSize
 	EgressAddresses []netip.Prefix
+	// ExportMaxRows caps a CSV export (ADR 0020, decision 3); 0 is 100000.
+	ExportMaxRows int
 	// Judges serve Jonah's judges routes (judges.go). Optional: while it is nil those routes
 	// answer 503 judges-unavailable; when set, all three of its collaborators are.
 	Judges *JudgeDeps
@@ -282,7 +293,7 @@ func New(d Deps) (http.Handler, error) {
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
 		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, search: d.KnowledgeSearch, uploadMax: d.UploadMaxBytes,
 		policies: d.OrgPolicies, boxSizes: slices.Clone(d.BoxSizes), egress: slices.Clone(d.EgressAddresses),
-		judges: d.Judges, evals: d.Evals, clock: d.Clock, log: log,
+		judges: d.Judges, evals: d.Evals, clock: d.Clock, log: log, exportMax: cmp.Or(d.ExportMaxRows, defaultExportMaxRows),
 	}
 	s.inbox = append([]InboxSource{workInbox{s: s}}, d.InboxSources...)
 
@@ -410,6 +421,8 @@ type server struct {
 	uploads   KnowledgeUploads
 	search    KnowledgeSearch
 	uploadMax int64
+	// exportMax caps a CSV export.
+	exportMax int
 	// policies, boxSizes and egress serve the policy routes.
 	policies ports.OrgPolicies
 	boxSizes []domain.BoxSize
@@ -639,7 +652,7 @@ func problemOf(err error) gen.Problem {
 	// wrap ports.ErrNameTaken); the credentials' before the connections' (both wrap
 	// ports.ErrNoMasterKey).
 	for _, answer := range []func(error) (gen.Problem, bool){
-		fixedProblem, policyProblem, edgeProblem, partProblem, credentialProblem, webhookProblem, connectionProblem, knowledgeProblem, judgeProblem, evalProblem, definitionProblem,
+		fixedProblem, exportProblem, policyProblem, edgeProblem, partProblem, credentialProblem, webhookProblem, viewProblem, connectionProblem, knowledgeProblem, judgeProblem, evalProblem, definitionProblem,
 		controlProblem, questionProblem, toolApprovalProblem, agentProblem, triggerProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {
