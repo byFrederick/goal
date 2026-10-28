@@ -38,6 +38,8 @@ import type {
   ItemAnswer,
   ItemList,
   ItemState,
+  JonahOverview,
+  JonahReview,
   Judge,
   JudgeList,
   JudgeTries,
@@ -58,6 +60,8 @@ import type {
   OrgSettings,
   OrgSettingsPatch,
   OrgSummary,
+  ProposalPage,
+  ProposalState,
   RunList,
   RunStatus,
   TouchMetrics,
@@ -458,6 +462,36 @@ export function tryJudge(org: string, factory: string, judge: string): Promise<J
   return unwrap(
     goal.POST(orgPath('/factories/{factory}/judges/{judge}/try'), { params: { path: { org, factory, judge } } }),
   );
+}
+
+/** Jonah's overview: the policy, what waits for a person, this month's cost and what it noticed this week (getJonahOverview). 503 jonah-unavailable while goald runs no Jonah. */
+export function getJonahOverview(org: string, factory: string, signal?: AbortSignal): Promise<JonahOverview> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/jonah'), { params: { path: { org, factory } }, ...cancel(signal) }),
+  );
+}
+
+/** One page of the factory's proposals, newest first, only those in `state` when it is given (listProposals). */
+export function listProposals(
+  org: string,
+  factory: string,
+  filter: { state?: ProposalState | undefined } = {},
+  signal?: AbortSignal,
+): Promise<ProposalPage> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/jonah/proposals'), {
+      params: { path: { org, factory }, query: filter.state === undefined ? {} : { state: filter.state } },
+      ...cancel(signal),
+    }),
+  );
+}
+
+/**
+ * Queues a manual review of the sent-back runs (queueJonahReview). 409 review-in-flight and
+ * learning-budget-exhausted, and 404 version-not-found before the first publish, are the page's to show.
+ */
+export function queueJonahReview(org: string, factory: string): Promise<JonahReview> {
+  return unwrap(goal.POST(orgPath('/factories/{factory}/jonah/reviews'), { params: { path: { org, factory } } }));
 }
 
 export interface ItemFilter {
