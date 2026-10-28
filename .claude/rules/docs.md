@@ -1,10 +1,13 @@
 ---
 paths:
   - "docs/**"
+  - "apps/docs/**"
   - "**/*.md"
 ---
 
 # Docs
+
+The product docs site is `apps/docs/` (Astro Starlight, served at `/docs`; its tasks are in `apps/docs/Taskfile.yml`). It documents Goal as it works on `main`.
 
 Docs describe the code as built. How the repository lays out its docs: [ADR 0013](../../docs/adr/0013-repository-layout.md). The plans earlier phases were built from are in `docs/history/`; the living docs are `docs/engineering/` and `docs/reference/`.
 

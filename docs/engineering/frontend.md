@@ -13,7 +13,7 @@ goal/
   contracts/api/openapi.yaml   THE contract between goald and every TypeScript client (incl. the SSE StreamEvent)
   contracts/definitions/       factory.schema.json, evals.schema.json (judges, eval cases), connection-kind.schema.json
   package.json                 private root: pnpm only, no app code
-  pnpm-workspace.yaml          the apps (auth, web, worker) and packages/*; the catalog pins better-auth once
+  pnpm-workspace.yaml          the apps (auth, docs, web, worker) and packages/*; the catalog pins better-auth once
   apps/
     auth/                      the identity service (Node 22, Hono + Better Auth; phase 3, ADR 0007)
     web/                       the UI (React 19 + Vite)

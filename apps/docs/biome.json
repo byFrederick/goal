@@ -1,0 +1,7 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "extends": ["@goal/config/biome.json"],
+  "files": {
+    "includes": ["*.mjs", "*.ts", "*.json", "src/**/*.ts", "src/**/*.css"]
+  }
+}

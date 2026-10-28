@@ -10,7 +10,7 @@ This file is an index. Each rule lives in one place and is linked from here; the
 .claude/        rules/ (path-scoped rules), skills/ (vendored skills and our goal-* procedures)
 .githooks/      versioned git hooks (pre-push runs task check)
 .github/        CI, deploy and Terraform workflows
-apps/           auth/ (identity service, Hono + Better Auth, reached only through goald's /api/auth proxy), control-worker/ (the control Worker's code, the Cloudflare entry in front of goald, auth and the run boxes; its tasks in deploy/cloudflare/Taskfile.yml), web/ (React SPA, embedded into goald), worker/ (goal-agent, the one agent container image); each app's tasks in its Taskfile.yml
+apps/           auth/ (identity service, Hono + Better Auth, reached only through goald's /api/auth proxy), control-worker/ (the control Worker's code, the Cloudflare entry in front of goald, auth and the run boxes; its tasks in deploy/cloudflare/Taskfile.yml), web/ (React SPA, embedded into goald), worker/ (goal-agent, the one agent container image), docs/ (the product docs site, Astro Starlight at /docs); each app's tasks in its Taskfile.yml
 cmd/            binaries: goal (CLI), goald (daemon), goal-egress (egress proxy); each main.go only wires its dependencies
 contracts/      contracts/api/ (openapi.yaml, permissions.yaml, sandbox.yaml: the only contract between goald and TypeScript), contracts/definitions/ (JSON Schemas for factory, eval and connection kind files), env.yaml (every environment variable a process reads, with env.schema.json); the API generators' tasks in Taskfile.yml
 db/             the database: db/migrations/ (forward-only SQL, goose), db/queries/ (SQL for sqlc), db/sqlc.yaml and Taskfile.yml (sqlc, migrate-check)

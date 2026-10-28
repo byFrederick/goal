@@ -19,7 +19,7 @@ The owner wants a small root, one home for each kind of file, rules that load on
    skills-lock.json .mise.toml and the dotfiles
    cmd/ internal/                                        Go: cmd/ wires each binary, internal/ holds its code (internal/core: the hexagon's core; internal/cli: the goal CLI)
    tools/                                                repository tooling that is not a shipped binary
-   apps/web/ apps/auth/ apps/worker/                     the pnpm apps
+   apps/web/ apps/auth/ apps/worker/ apps/docs/          the pnpm apps (docs/: the product docs site, Astro Starlight at /docs)
    apps/control-worker/                                  the control Worker's code (see the amendment below)
    packages/api-client/ packages/config/                 shared TypeScript packages (config: see the amendment below)
    contracts/api/                                        openapi.yaml, permissions.yaml, sandbox.yaml, and events.schema.json once it exists
@@ -68,6 +68,8 @@ The owner wants a small root, one home for each kind of file, rules that load on
    *Amended 2026-10-26: the `deploy/terraform/` move is complete.* `terraform/` moved first; the SOPS creation rules followed, from the root `.sops.yaml` to `deploy/terraform/.sops.yaml`, next to the only file they govern (`deploy/terraform/secrets/production.sops.yaml`). sops finds its config only from the current directory up, so every sops call in the Taskfile passes `--config`, and `task tf:sops-test` (part of `task tf:check`) proves with a throwaway age key that the creation rule still matches the secrets file.
 
    *Amended 2026-10-26: the repository tools and old plans.* `cmd/checkplan` and `cmd/permgen` are repository tooling, not shipped binaries, so they moved to `tools/checkplan` and `tools/permgen`; `cmd/` now holds only `goal`, `goald` and `goal-egress`. The phase specs and the Jonah plan were plans that the code has since replaced, so they moved to `docs/history/` (`docs/history/specs/`, `docs/history/jonah/`), which is a record and is not updated. The living parts of the specs' README (the migration rules and the tenancy convention) moved to `docs/engineering/architecture.md`, "Migrations and tenancy". The Jonah draft `schema.sql`, which no migration applies, was deleted; it stays in git history. `docs/reference/glossary.md` defines the domain terms.
+
+   *Amended 2026-10-28: `apps/docs`.* The product documentation site is an app like the others: `apps/docs/` is an Astro Starlight site, a private pnpm workspace package (`@goal/docs`) served under the base path `/docs`. Its tasks are in `apps/docs/Taskfile.yml`, included as `docs-site` with the same flattening, so they are `docs:site:*`. The name `docs` stays with `docs/Taskfile.yml` (the generated docs check). The site reads `contracts/api/openapi.yaml` at build time to render the API reference and publish `/docs/openapi.yaml` and `/docs/openapi.json`; the contract is never copied into the app. `tools/checkplan` runs `docs:site:check` (the type check, Biome and the build) for any change under `apps/docs/` and for `packages/config/`.
 
 ## Consequences
 

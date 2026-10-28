@@ -17,6 +17,8 @@ deploy/terraform/secrets/.*.sops.*
 /goald
 node_modules/
 dist/
+# apps/docs: Astro's generated types and cache
+.astro/
 .DS_Store
 coverage.out
 coverage.html
