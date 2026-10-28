@@ -1833,7 +1833,9 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return res.end();
     }
 
-    m = rest.match(/^\/items\/([^/]+)(?:\/(events|runs|parts|notes|approve|reject|merge|retry|move|pause|cancel|answer))?$/);
+    m = rest.match(
+      /^\/items\/([^/]+)(?:\/(events|runs|parts|notes|approve|reject|merge|retry|move|pause|cancel|answer))?$/,
+    );
     if (!m) return problem(res, 404, 'Not found', path);
 
     const it = findItem(decodeURIComponent(m[1] ?? ''), org.id);
@@ -2010,7 +2012,13 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       const choices = it.question.choices;
       const index = typeof body.choice === 'number' ? body.choice : -1;
       if (hasChoice && (!Number.isInteger(index) || index < 0 || index >= choices.length)) {
-        return problem(res, 400, 'Bad Request', `choice ${String(body.choice)} is not one of the question's choices`, 'bad-choice');
+        return problem(
+          res,
+          400,
+          'Bad Request',
+          `choice ${String(body.choice)} is not one of the question's choices`,
+          'bad-choice',
+        );
       }
       const answer = hasChoice ? (choices[index] ?? '') : text;
       emit(it, 'question_answered', by, {

@@ -1808,7 +1808,13 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
           agent: step.ask.agent,
           run_id: run,
         });
-        item.question = { text: step.ask.text, choices: step.ask.choices, asked_at, agent: step.ask.agent, run_id: run };
+        item.question = {
+          text: step.ask.text,
+          choices: step.ask.choices,
+          asked_at,
+          agent: step.ask.agent,
+          run_id: run,
+        };
       } else if ('blocked' in step) {
         push('blocked', 'engine', { reason: step.blocked });
       } else {

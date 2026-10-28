@@ -92,7 +92,12 @@ export function QuestionCard({ itemKey, factory, question, className }: Props) {
             {choice}
           </Button>
         ))}
-        <Button variant="ghost" type="button" className="text-you-ink max-md:h-11" {...decision(() => setWriting(true))}>
+        <Button
+          variant="ghost"
+          type="button"
+          className="text-you-ink max-md:h-11"
+          {...decision(() => setWriting(true))}
+        >
           Write an answer
         </Button>
       </div>
@@ -132,7 +137,9 @@ export function QuestionCard({ itemKey, factory, question, className }: Props) {
       )}
       {answer.isError ? (
         <p role="alert" className="m-0 text-secondary text-rework-ink">
-          {answer.error instanceof ApiError ? (answer.error.problem.detail ?? answer.error.message) : answer.error.message}
+          {answer.error instanceof ApiError
+            ? (answer.error.problem.detail ?? answer.error.message)
+            : answer.error.message}
         </p>
       ) : null}
     </section>

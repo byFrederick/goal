@@ -90,7 +90,13 @@ describe('buildTrace', () => {
 
   it('marks the open question as asked of the person, and as Now while the item still holds it', () => {
     const trace = buildTrace(
-      [ev('question_asked', { question: 'Whole org or this factory?', agent: 'frontend-engineer' }, { actor: 'frontend-engineer' })],
+      [
+        ev(
+          'question_asked',
+          { question: 'Whole org or this factory?', agent: 'frontend-engineer' },
+          { actor: 'frontend-engineer' },
+        ),
+      ],
       [],
       true,
     );

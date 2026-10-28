@@ -121,7 +121,12 @@ describe('QuestionCard', () => {
 
   it('shows a refusal from goald inline, as its problem detail', async () => {
     vi.mocked(answerItem).mockRejectedValueOnce(
-      new ApiError({ title: 'Conflict', status: 409, code: 'no-open-question', detail: 'goal#147 has no open question' }),
+      new ApiError({
+        title: 'Conflict',
+        status: 409,
+        code: 'no-open-question',
+        detail: 'goal#147 has no open question',
+      }),
     );
     renderCard();
 

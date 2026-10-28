@@ -228,11 +228,7 @@ function applyRecord(run: RunEntry, record: Run) {
  * The item's history as people read it. `questionOpen` is whether the item still holds an open
  * question (Item.question): only then is its latest question's row marked Now.
  */
-export function buildTrace(
-  events: readonly ItemEvent[],
-  records: readonly Run[] = [],
-  questionOpen = false,
-): Trace {
+export function buildTrace(events: readonly ItemEvent[], records: readonly Run[] = [], questionOpen = false): Trace {
   const entries: Entry[] = [];
   const runs = new Map<string, RunEntry>();
   // The slot of the latest claim: every run until the next claim works in it.
@@ -333,7 +329,15 @@ export function buildTrace(
     // Only the latest question can be open, and only while the item still holds it (the caller's word).
     const open = questionOpen && e === lastAsked;
     if (n)
-      entries.push({ kind: 'note', key: `ev-${e.id}`, at: e.at, station, actor: e.actor, ...n, ...(open ? { open } : {}) });
+      entries.push({
+        kind: 'note',
+        key: `ev-${e.id}`,
+        at: e.at,
+        station,
+        actor: e.actor,
+        ...n,
+        ...(open ? { open } : {}),
+      });
   }
 
   for (const record of records) {
