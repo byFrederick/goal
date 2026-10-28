@@ -133,7 +133,7 @@ func (m *Mailer) Send(ctx context.Context, msg ports.Message) error {
 
 		return mailError("greeting", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	if err := m.deliver(c, to.Address, body); err != nil {
 		return err

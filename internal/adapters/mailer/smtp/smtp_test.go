@@ -1,6 +1,7 @@
 package smtp
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -46,7 +47,9 @@ type session struct {
 func newServer(t *testing.T, implicit *tls.Config) *server {
 	t.Helper()
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	var lc net.ListenConfig
+
+	ln, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,6 +73,7 @@ func newServer(t *testing.T, implicit *tls.Config) *server {
 
 	t.Cleanup(func() {
 		_ = ln.Close()
+
 		s.wg.Wait()
 	})
 
@@ -81,78 +85,90 @@ func (s *server) url(scheme, userinfo string) string {
 }
 
 func (s *server) serve(conn net.Conn, secure bool) {
-	defer conn.Close()
+	c := &serverConn{conn: conn, tp: textproto.NewConn(conn), sess: session{tls: secure}}
+
+	defer func() {
+		_ = c.conn.Close()
+		s.sessions <- c.sess
+	}()
 
 	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
-	tp := textproto.NewConn(conn)
-	sess := session{tls: secure}
 
-	defer func() { s.sessions <- sess }()
-
-	reply := func(lines ...string) { _ = tp.PrintfLine("%s", strings.Join(lines, "\r\n")) }
-
-	reply("220 test ESMTP")
+	c.reply("220 test ESMTP")
 
 	for {
-		line, err := tp.ReadLine()
-		if err != nil {
+		line, err := c.tp.ReadLine()
+		if err != nil || !s.handle(c, line) {
 			return
-		}
-
-		verb := strings.ToUpper(strings.SplitN(line, " ", 2)[0])
-
-		switch {
-		case verb == "EHLO":
-			lines := []string{"250-test"}
-			if s.starttls != nil && !sess.tls {
-				lines = append(lines, "250-STARTTLS")
-			}
-
-			reply(append(lines, "250 AUTH PLAIN")...)
-		case verb == "STARTTLS":
-			reply("220 go ahead")
-
-			tc := tls.Server(conn, s.starttls)
-			if err := tc.Handshake(); err != nil {
-				return
-			}
-
-			conn, sess.tls = tc, true
-			tp = textproto.NewConn(tc)
-		case verb == "AUTH":
-			raw, _ := base64.StdEncoding.DecodeString(strings.TrimPrefix(line, "AUTH PLAIN "))
-			if parts := strings.Split(string(raw), "\x00"); len(parts) == 3 {
-				sess.user = parts[1]
-			}
-
-			reply("235 OK")
-		case strings.HasPrefix(strings.ToUpper(line), "MAIL FROM:"):
-			sess.from = line[len("MAIL FROM:"):]
-
-			reply("250 OK")
-		case strings.HasPrefix(strings.ToUpper(line), "RCPT TO:"):
-			sess.rcpt = append(sess.rcpt, line[len("RCPT TO:"):])
-
-			reply(s.rcpt)
-		case verb == "DATA":
-			reply("354 go ahead")
-
-			b, err := io.ReadAll(tp.DotReader())
-			if err != nil {
-				return
-			}
-
-			sess.data = string(b)
-
-			reply("250 queued")
-		case verb == "QUIT":
-			reply("221 bye")
-
-			return
-		default:
-			reply("250 OK")
 		}
 	}
+}
+
+// serverConn is one connection the server serves.
+type serverConn struct {
+	conn net.Conn
+	tp   *textproto.Conn
+	sess session
+}
+
+func (c *serverConn) reply(lines ...string) { _ = c.tp.PrintfLine("%s", strings.Join(lines, "\r\n")) }
+
+// handle answers one command line, and reports whether the session goes on.
+func (s *server) handle(c *serverConn, line string) bool {
+	upper := strings.ToUpper(line)
+
+	switch {
+	case strings.HasPrefix(upper, "EHLO"):
+		lines := []string{"250-test"}
+		if s.starttls != nil && !c.sess.tls {
+			lines = append(lines, "250-STARTTLS")
+		}
+
+		c.reply(append(lines, "250 AUTH PLAIN")...)
+	case upper == "STARTTLS":
+		c.reply("220 go ahead")
+
+		tc := tls.Server(c.conn, s.starttls)
+		if err := tc.HandshakeContext(context.Background()); err != nil {
+			return false
+		}
+
+		c.conn, c.tp, c.sess.tls = tc, textproto.NewConn(tc), true
+	case strings.HasPrefix(upper, "AUTH PLAIN "):
+		raw, _ := base64.StdEncoding.DecodeString(line[len("AUTH PLAIN "):])
+		if parts := strings.Split(string(raw), "\x00"); len(parts) == 3 {
+			c.sess.user = parts[1]
+		}
+
+		c.reply("235 OK")
+	case strings.HasPrefix(upper, "MAIL FROM:"):
+		c.sess.from = line[len("MAIL FROM:"):]
+
+		c.reply("250 OK")
+	case strings.HasPrefix(upper, "RCPT TO:"):
+		c.sess.rcpt = append(c.sess.rcpt, line[len("RCPT TO:"):])
+
+		c.reply(s.rcpt)
+	case upper == "DATA":
+		c.reply("354 go ahead")
+
+		b, err := io.ReadAll(c.tp.DotReader())
+		if err != nil {
+			return false
+		}
+
+		c.sess.data = string(b)
+
+		c.reply("250 queued")
+	case upper == "QUIT":
+		c.reply("221 bye")
+
+		return false
+	default:
+		c.reply("250 OK")
+	}
+
+	return true
 }
 
 // await returns the first session once its connection has ended.

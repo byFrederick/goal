@@ -39,6 +39,7 @@ func Render(n ports.Notification, publicURL string) (ports.Message, error) {
 		link = itemLink
 	case domain.NotifyAndon:
 		subject = factory + " pulled the andon"
+
 		says = factory + " pulled the andon" + at(n.Station)
 		if n.AndonKind != "" {
 			says += " (" + clean(n.AndonKind) + ")"
@@ -50,6 +51,9 @@ func Render(n ports.Notification, publicURL string) (ports.Message, error) {
 		subject = factory + " passed 80% of its weekly budget"
 		says = fmt.Sprintf("%s has spent $%.2f of its $%.2f weekly budget in the last 7 days.", factory, n.SpentUSD, n.WeeklyUSD)
 		link = org + "/spend"
+	case domain.NotifyDigest:
+		// The digest is its own job's message (decision 6), never an outbox row.
+		return ports.Message{}, fmt.Errorf("render %q: %w", n.Event, ErrUnknownEvent)
 	default:
 		return ports.Message{}, fmt.Errorf("render %q: %w", n.Event, ErrUnknownEvent)
 	}

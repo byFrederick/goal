@@ -125,29 +125,39 @@ func (s *Sender) workOrg(ctx context.Context) (int, error) {
 	done := 0
 
 	for _, n := range rows {
-		if ctx.Err() != nil {
+		if err := ctx.Err(); err != nil {
 			// The lease returns the rest to the queue.
-			break
+			return done, err
 		}
 
-		o := s.deliver(ctx, n)
-
-		finished, err := s.d.Outbox.FinishNotification(ctx, n.ID, n.Attempts, o)
-		if err != nil {
-			return done, fmt.Errorf("finish notification %d: %w", n.ID, err)
+		finished, ferr := s.finish(ctx, n)
+		if ferr != nil {
+			return done, ferr
 		}
 
-		if !finished {
-			// A later claim took the row after this lease ran out; it reports the row.
-			continue
+		if finished {
+			done++
 		}
-
-		done++
-
-		s.logOutcome(ctx, n, o)
 	}
 
 	return done, nil
+}
+
+// finish delivers n and ends its claim, and reports whether the claim was still its own: a
+// later claim that took the row after this lease ran out reports it instead.
+func (s *Sender) finish(ctx context.Context, n ports.Notification) (bool, error) {
+	o := s.deliver(ctx, n)
+
+	finished, err := s.d.Outbox.FinishNotification(ctx, n.ID, n.Attempts, o)
+	if err != nil {
+		return false, fmt.Errorf("finish notification %d: %w", n.ID, err)
+	}
+
+	if finished {
+		s.logOutcome(ctx, n, o)
+	}
+
+	return finished, nil
 }
 
 // deliver sends n when its recipient still qualifies and says how its row ends.
@@ -197,7 +207,7 @@ func reason(err error) string {
 	return reasonMailError
 }
 
-// backoff is the wait after attempt attempt failed: 1, 2, 4… minutes, at most maxBackoff.
+// backoff is the wait after the given attempt failed: 1, 2, 4… minutes, at most maxBackoff.
 func backoff(attempt int) time.Duration {
 	if attempt < 1 {
 		attempt = 1

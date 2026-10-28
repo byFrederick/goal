@@ -119,15 +119,22 @@ func TestSender_SendsAndMarksSent(t *testing.T) {
 	}
 
 	logs := h.logs.String()
-	if !strings.Contains(logs, `"msg":"notify.sent"`) || !strings.Contains(logs, `"id":1,`) ||
-		!strings.Contains(logs, `"event":"approval"`) || !strings.Contains(logs, `"channel":"email"`) {
-		t.Errorf("logs lack notify.sent with its row, event and channel:\n%s", logs)
-	}
-
+	assertLogged(t, logs, `"msg":"notify.sent"`, `"id":1,`, `"event":"approval"`, `"channel":"email"`)
 	assertNothingPrivate(t, logs)
 
 	if n := h.work(t); n != 0 || len(h.mailer.Sent()) != 1 {
 		t.Fatalf("a second round finished %d rows and sent %d messages; want 0 and still 1", n, len(h.mailer.Sent()))
+	}
+}
+
+// assertLogged fails unless logs hold every one of want.
+func assertLogged(t *testing.T, logs string, want ...string) {
+	t.Helper()
+
+	for _, w := range want {
+		if !strings.Contains(logs, w) {
+			t.Errorf("logs lack %s:\n%s", w, logs)
+		}
 	}
 }
 

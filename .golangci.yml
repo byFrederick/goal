@@ -240,6 +240,15 @@ linters:
             - $gostd
             - github.com/byFrederick/goal/internal/core/domain
             - github.com/byFrederick/goal/internal/core/ports
+        notify:
+          # The notification sender reaches the outbox and the mail server through ports only
+          # (ADR 0023 decisions 3 and 4); cmd/goald wires the SMTP adapter.
+          list-mode: strict
+          files: ["**/internal/notify/**", "!$test"]
+          allow:
+            - $gostd
+            - github.com/byFrederick/goal/internal/core/domain
+            - github.com/byFrederick/goal/internal/core/ports
         builder:
           files: ["**/internal/builder/**"]
           deny:

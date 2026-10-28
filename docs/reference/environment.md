@@ -61,6 +61,9 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_SANDBOX_KEY` | secret | no | The bearer goald's calls to the control Worker's sandbox API carry; required with GOAL_SANDBOX=cloudflare. |
 | `GOAL_SANDBOX_NETWORK` | config | no | The Docker network agent containers run on, reaching out only through goal-egress. |
 | `GOAL_SANDBOX_URL` | config | no | The control Worker's sandbox API, which goald calls with GOAL_SANDBOX=cloudflare. |
+| `GOAL_SMTP_FROM` | public | no | The sender of sign-in codes, invitations and notification email. |
+| `GOAL_SMTP_PLAINTEXT` | config | no | on sends mail unencrypted, allowed only to compose's Mailpit; off loopback smtp:// must otherwise offer STARTTLS. |
+| `GOAL_SMTP_URL` | secret | no | Where sign-in codes, invitations and notification email are mailed, with user:password for a real server; the auth service defaults to compose's Mailpit, and goald sends no email while it is unset. |
 | `GOAL_TASK_ENV` | config | no | Retired: a run's model comes from its factory's model connection; goald ignores it and warns while it is set. |
 | `GOAL_TICK_EVERY` | config | no | How often goald's engine moves work along. |
 | `GOAL_TRUSTED_PROXIES` | config | no | CIDRs of the proxies in front of goald whose X-Forwarded-For names the client; the control Worker sets it. |
@@ -135,9 +138,9 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_BOOTSTRAP_OWNER_EMAIL` | config | no | The first owner's address: until someone signs in it is the only one that may, and becomes platform admin; goal up requires it under sign-in. |
 | `GOAL_PG_AUTH_PASSWORD` | secret | no | The goal_auth role's password, which goal db init sets and the auth service's default database URL uses. |
 | `GOAL_PUBLIC_URL` | public | no | The one origin people open goald at; sign-in links and cookies follow it. Required when GOAL_LISTEN is off loopback. |
-| `GOAL_SMTP_FROM` | public | no | The sender of sign-in codes and invitations. |
+| `GOAL_SMTP_FROM` | public | no | The sender of sign-in codes, invitations and notification email. |
 | `GOAL_SMTP_PLAINTEXT` | config | no | on sends mail unencrypted, allowed only to compose's Mailpit; off loopback smtp:// must otherwise offer STARTTLS. |
-| `GOAL_SMTP_URL` | secret | no | Where sign-in codes and invitations are mailed, with user:password for a real server; by default compose's Mailpit. |
+| `GOAL_SMTP_URL` | secret | no | Where sign-in codes, invitations and notification email are mailed, with user:password for a real server; the auth service defaults to compose's Mailpit, and goald sends no email while it is unset. |
 | `GOOGLE_CLIENT_ID` | secret | no | The Google OAuth client's id, for sign-in with Google. |
 | `GOOGLE_CLIENT_SECRET` | secret | no | The Google OAuth client's secret, for sign-in with Google. |
 
@@ -184,8 +187,8 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_S3_ENDPOINT` | config | no | The S3-compatible endpoint of the bucket (RustFS locally, R2 on Cloudflare); unset, AWS S3. |
 | `GOAL_S3_SECRET_KEY` | secret | no | The object storage secret key. |
 | `GOAL_SANDBOX_KEY` | secret | no | The bearer goald's calls to the control Worker's sandbox API carry; required with GOAL_SANDBOX=cloudflare. |
-| `GOAL_SMTP_FROM` | public | no | The sender of sign-in codes and invitations. |
-| `GOAL_SMTP_URL` | secret | no | Where sign-in codes and invitations are mailed, with user:password for a real server; by default compose's Mailpit. |
+| `GOAL_SMTP_FROM` | public | no | The sender of sign-in codes, invitations and notification email. |
+| `GOAL_SMTP_URL` | secret | no | Where sign-in codes, invitations and notification email are mailed, with user:password for a real server; the auth service defaults to compose's Mailpit, and goald sends no email while it is unset. |
 | `GOAL_UPLOAD_MAX_BYTES` | config | no | The largest file that may be uploaded to the knowledge base, in bytes. |
 | `GOOGLE_CLIENT_ID` | secret | no | The Google OAuth client's id, for sign-in with Google. |
 | `GOOGLE_CLIENT_SECRET` | secret | no | The Google OAuth client's secret, for sign-in with Google. |
@@ -210,7 +213,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_S3_ACCESS_KEY` | secret | no | The object storage access key. |
 | `GOAL_S3_SECRET_KEY` | secret | no | The object storage secret key. |
 | `GOAL_SANDBOX_NETWORK` | config | no | The Docker network agent containers run on, reaching out only through goal-egress. |
-| `GOAL_SMTP_FROM` | public | no | The sender of sign-in codes and invitations. |
+| `GOAL_SMTP_FROM` | public | no | The sender of sign-in codes, invitations and notification email. |
 | `GOOGLE_CLIENT_ID` | secret | no | The Google OAuth client's id, for sign-in with Google. |
 | `GOOGLE_CLIENT_SECRET` | secret | no | The Google OAuth client's secret, for sign-in with Google. |
 | `HOME` | config | no | The user's home, under which the CLI keeps its config when XDG_CONFIG_HOME is unset. |

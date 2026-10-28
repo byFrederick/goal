@@ -591,3 +591,75 @@ func TestSettings_Hosts(t *testing.T) {
 		})
 	}
 }
+
+// SMTP URLs the settings tests configure.
+const (
+	loopbackSMTP      = "smtp://127.0.0.1:1025"
+	mailpitSMTP       = "smtp://mailpit:1025"
+	smtpWithPassword  = "smtp://user:test-password@mail.example.com:587" //nolint:gosec // a test password
+	smtpsWithPassword = "smtps://user:test-password@mail.example.com"    //nolint:gosec // a test password
+)
+
+// goald reads the SMTP settings with the auth service's rules: no mailer without GOAL_SMTP_URL;
+// clear text only to a loopback host, or to compose's Mailpit with GOAL_SMTP_PLAINTEXT=on; any
+// other smtp:// server must offer STARTTLS. Errors never repeat the URL, which may hold a password.
+func TestSettings_SMTP(t *testing.T) {
+	t.Parallel()
+
+	for _, c := range []struct {
+		env       map[string]string
+		want      *smtpSettings
+		refused   string
+		plaintext bool
+	}{
+		{env: map[string]string{}, want: nil},
+		{env: map[string]string{smtpFromEnv: "goal@example.com"}, want: nil},
+		{
+			env:  map[string]string{smtpURLEnv: loopbackSMTP},
+			want: &smtpSettings{URL: loopbackSMTP, From: defaultSMTPFrom, Plaintext: true},
+		},
+		{
+			env:  map[string]string{smtpURLEnv: mailpitSMTP, smtpPlaintextEnv: "on", smtpFromEnv: "Goal <goal@example.com>"},
+			want: &smtpSettings{URL: mailpitSMTP, From: "Goal <goal@example.com>", Plaintext: true},
+		},
+		{
+			env:  map[string]string{smtpURLEnv: smtpWithPassword},
+			want: &smtpSettings{URL: smtpWithPassword, From: defaultSMTPFrom},
+		},
+		{
+			env:  map[string]string{smtpURLEnv: smtpsWithPassword},
+			want: &smtpSettings{URL: smtpsWithPassword, From: defaultSMTPFrom},
+		},
+		{env: map[string]string{smtpURLEnv: mailpitSMTP}, want: &smtpSettings{URL: mailpitSMTP, From: defaultSMTPFrom}},
+		{env: map[string]string{smtpURLEnv: "https" + strings.TrimPrefix(smtpWithPassword, "smtp")}, refused: smtpURLEnv},
+		{env: map[string]string{smtpURLEnv: smtpWithPassword, smtpPlaintextEnv: "on"}, refused: smtpPlaintextEnv},
+		{env: map[string]string{smtpURLEnv: "smtps://mailpit:1025", smtpPlaintextEnv: "on"}, refused: smtpPlaintextEnv},
+		{env: map[string]string{smtpURLEnv: loopbackSMTP, smtpPlaintextEnv: "true"}, refused: smtpPlaintextEnv},
+		{env: map[string]string{smtpURLEnv: loopbackSMTP, smtpFromEnv: "not an address"}, refused: smtpFromEnv},
+		{env: map[string]string{smtpURLEnv: loopbackSMTP, smtpFromEnv: "Goal <goal@example.com>\r\nBcc: x@example.net"}, refused: smtpFromEnv},
+	} {
+		s, err := settingsFrom(envOf(c.env))
+
+		if c.refused != "" {
+			if err == nil || !strings.Contains(err.Error(), c.refused) {
+				t.Errorf("%v: err = %v; want it refused for %s", c.env, err, c.refused)
+			}
+
+			if err != nil && strings.Contains(err.Error(), "test-password") {
+				t.Errorf("%v: the error repeats the URL's password: %v", c.env, err)
+			}
+
+			continue
+		}
+
+		if err != nil {
+			t.Errorf("%v: %v", c.env, err)
+
+			continue
+		}
+
+		if (s.SMTP == nil) != (c.want == nil) || (s.SMTP != nil && *s.SMTP != *c.want) {
+			t.Errorf("%v: smtp = %+v; want %+v", c.env, s.SMTP, c.want)
+		}
+	}
+}

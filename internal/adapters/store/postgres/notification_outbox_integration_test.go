@@ -419,6 +419,69 @@ func byUser(ns []ports.Notification) map[string]ports.Notification {
 	return out
 }
 
+// claimedRow is the delivery state of one outbox row, as the superuser reads it.
+type claimedRow struct {
+	State, LastError string
+	SentAt, Next     *time.Time
+	Lease            *time.Time
+}
+
+func (o outboxOrg) delivery(t *testing.T, id int64) claimedRow {
+	t.Helper()
+
+	var r claimedRow
+	if err := o.d.admin.QueryRow(t.Context(), `SELECT state, coalesce(last_error, ''), sent_at, next_attempt_at, lease_until
+		FROM notification_outbox WHERE id = $1`, id).Scan(&r.State, &r.LastError, &r.SentAt, &r.Next, &r.Lease); err != nil {
+		t.Fatal(err)
+	}
+
+	return r
+}
+
+// queueBudget queues the factory's budget event at at, for the owner and the admin.
+func (o outboxOrg) queueBudget(t *testing.T, at time.Time) {
+	t.Helper()
+
+	if err := o.d.s.QueueBudgetNotification(o.ctx(t), o.factory, 8.5, 10, at); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// claimN claims o's due email rows at now and fails unless there are n.
+func (o outboxOrg) claimN(t *testing.T, now time.Time, n int) map[string]ports.Notification {
+	t.Helper()
+
+	got := o.claim(t, now)
+	if len(got) != n {
+		t.Fatalf("claim at %v took %d rows; want %d", now, len(got), n)
+	}
+
+	return byUser(got)
+}
+
+// finish ends row id's claim at attempts with outcome and fails unless it lands as want says.
+func (o outboxOrg) finish(t *testing.T, id int64, attempts int, outcome ports.NotificationOutcome, want bool) {
+	t.Helper()
+
+	ok, err := o.d.s.FinishNotification(o.ctx(t), id, attempts, outcome)
+	if err != nil || ok != want {
+		t.Fatalf("finish of row %d at attempt %d = %v, %v; want %v", id, attempts, ok, err, want)
+	}
+}
+
+// wantDelivery fails unless row id has the state, the last error and the times of want, and no lease.
+func (o outboxOrg) wantDelivery(t *testing.T, id int64, want claimedRow) {
+	t.Helper()
+
+	got := o.delivery(t, id)
+
+	same := func(a, b *time.Time) bool { return (a == nil) == (b == nil) && (a == nil || a.Equal(*b)) }
+	if got.State != want.State || got.LastError != want.LastError || !same(got.SentAt, want.SentAt) ||
+		(want.Next != nil && !same(got.Next, want.Next)) || got.Lease != nil {
+		t.Fatalf("row %d = %+v; want %+v without a lease", id, got, want)
+	}
+}
+
 // A claim leases due rows with one more attempt and the message's facts; a row under a live
 // lease is not claimed again, and one whose lease ran out is.
 func TestNotificationOutbox_ClaimLeasesAndReclaims(t *testing.T) {
@@ -426,84 +489,63 @@ func TestNotificationOutbox_ClaimLeasesAndReclaims(t *testing.T) {
 
 	o := newOutboxOrg(t)
 	at := time.Now().UTC().Truncate(time.Second)
+	o.queueBudget(t, at)
 
-	if err := o.d.s.QueueBudgetNotification(o.ctx(t), o.factory, 8.5, 10, at); err != nil {
-		t.Fatal(err)
+	o.claimN(t, at.Add(-time.Second), 0)
+
+	n := o.claimN(t, at, 2)[o.owner]
+	want := ports.Notification{
+		ID: n.ID, EventID: n.EventID, Event: domain.NotifyBudget, Channel: ports.ChannelEmail, UserID: domain.UserID(o.owner),
+		Attempts: 1, At: n.At, Qualifies: true, Address: n.Address, OrgSlug: n.OrgSlug,
+		FactoryID: o.factory, FactoryName: n.FactoryName, FactoryTitle: n.FactoryTitle, SpentUSD: 8.5, WeeklyUSD: 10,
 	}
 
-	if got := o.claim(t, at.Add(-time.Second)); len(got) != 0 {
-		t.Fatalf("claimed %d rows before they were due", len(got))
-	}
-
-	first := byUser(o.claim(t, at))
-	if len(first) != 2 {
-		t.Fatalf("claimed %+v; want the owner's and the admin's budget rows", first)
-	}
-
-	n := first[o.owner]
-	if n.Attempts != 1 || n.Event != domain.NotifyBudget || !n.Qualifies || n.Address == "" || n.OrgSlug == "" ||
-		n.FactoryID != o.factory || n.FactoryName == "" || n.FactoryTitle == "" || n.SpentUSD != 8.5 || n.WeeklyUSD != 10 {
+	if n != want || n.Address == "" || n.OrgSlug == "" || n.FactoryName == "" || n.FactoryTitle == "" {
 		t.Fatalf("owner's row = %+v; want attempt 1 with the budget's facts", n)
 	}
 
-	if got := o.claim(t, at.Add(2*time.Minute-time.Second)); len(got) != 0 {
-		t.Fatalf("claimed %d rows under a live lease", len(got))
+	if r := o.delivery(t, n.ID); r.Lease == nil || !r.Lease.Equal(at.Add(2*time.Minute)) {
+		t.Fatalf("lease until %v; want %v", r.Lease, at.Add(2*time.Minute))
 	}
 
-	again := byUser(o.claim(t, at.Add(2*time.Minute)))
-	if len(again) != 2 || again[o.owner].Attempts != 2 {
+	o.claimN(t, at.Add(2*time.Minute-time.Second), 0)
+
+	if again := o.claimN(t, at.Add(2*time.Minute), 2); again[o.owner].Attempts != 2 {
 		t.Fatalf("after the lease = %+v; want both rows at attempt 2", again)
 	}
+}
 
-	// The first claim's finish is stale; the second's lands.
-	if ok, err := o.d.s.FinishNotification(o.ctx(t), n.ID, 1, ports.NotificationOutcome{State: ports.NotificationSent, At: at}); err != nil || ok {
-		t.Fatalf("stale finish = %v, %v; want false", ok, err)
-	}
+// A finish lands only under the attempt that claimed: sent sets sent_at, pending sets the next
+// attempt, and every finish releases the lease.
+func TestNotificationOutbox_FinishUnderTheClaimsAttempt(t *testing.T) {
+	t.Parallel()
+
+	o := newOutboxOrg(t)
+	at := time.Now().UTC().Truncate(time.Second)
+	o.queueBudget(t, at)
+
+	o.claim(t, at)
+	claimed := o.claimN(t, at.Add(2*time.Minute), 2)
+	owner, admin := claimed[o.owner], claimed[o.admin]
+
+	o.finish(t, owner.ID, 1, ports.NotificationOutcome{State: ports.NotificationSent, At: at}, false)
 
 	sentAt := at.Add(3 * time.Minute)
-	if ok, err := o.d.s.FinishNotification(o.ctx(t), n.ID, 2, ports.NotificationOutcome{State: ports.NotificationSent, At: sentAt}); err != nil || !ok {
-		t.Fatalf("finish = %v, %v; want true", ok, err)
-	}
+	o.finish(t, owner.ID, 2, ports.NotificationOutcome{State: ports.NotificationSent, At: sentAt}, true)
+	o.wantDelivery(t, owner.ID, claimedRow{State: "sent", SentAt: &sentAt})
 
 	retry := at.Add(time.Hour)
-	admin := again[o.admin]
+	o.finish(t, admin.ID, 2, ports.NotificationOutcome{State: ports.NotificationPending, RetryAt: retry, Reason: "smtp-dial"}, true)
+	o.wantDelivery(t, admin.ID, claimedRow{State: "pending", LastError: "smtp-dial", Next: &retry})
 
-	if ok, err := o.d.s.FinishNotification(o.ctx(t), admin.ID, 2,
-		ports.NotificationOutcome{State: ports.NotificationPending, RetryAt: retry, Reason: "smtp-dial"}); err != nil || !ok {
-		t.Fatalf("retry = %v, %v; want true", ok, err)
-	}
+	o.claimN(t, retry.Add(-time.Second), 0)
 
-	var (
-		state, lastError string
-		sent, next       *time.Time
-		lease            *time.Time
-	)
-
-	if err := o.d.admin.QueryRow(t.Context(), `SELECT state, sent_at, lease_until FROM notification_outbox WHERE id = $1`, n.ID).
-		Scan(&state, &sent, &lease); err != nil {
-		t.Fatal(err)
-	}
-
-	if state != "sent" || sent == nil || !sent.Equal(sentAt) || lease != nil {
-		t.Fatalf("sent row = %s at %v, lease %v; want sent at %v without a lease", state, sent, lease, sentAt)
-	}
-
-	if err := o.d.admin.QueryRow(t.Context(), `SELECT state, coalesce(last_error, ''), next_attempt_at, lease_until FROM notification_outbox WHERE id = $1`, admin.ID).
-		Scan(&state, &lastError, &next, &lease); err != nil {
-		t.Fatal(err)
-	}
-
-	if state != "pending" || lastError != "smtp-dial" || next == nil || !next.Equal(retry) || lease != nil {
-		t.Fatalf("retried row = %s, %q, next %v, lease %v; want pending until %v", state, lastError, next, lease, retry)
-	}
-
-	if got := o.claim(t, retry.Add(-time.Second)); len(got) != 0 {
-		t.Fatalf("claimed %d rows before the retry was due", len(got))
-	}
-
-	if got := o.claim(t, retry); len(got) != 1 || got[0].ID != admin.ID || got[0].Attempts != 3 {
+	if got := o.claimN(t, retry, 1)[o.admin]; got.ID != admin.ID || got.Attempts != 3 {
 		t.Fatalf("claim at the retry = %+v; want the admin's row at attempt 3", got)
 	}
+
+	o.finish(t, admin.ID, 3, ports.NotificationOutcome{State: ports.NotificationFailed, Reason: "smtp-rcpt-550"}, true)
+	o.wantDelivery(t, admin.ID, claimedRow{State: "failed", LastError: "smtp-rcpt-550"})
 }
 
 // The claim checks the recipient again: one who lost their factory role or their membership, or
@@ -515,7 +557,7 @@ func TestNotificationOutbox_ClaimChecksTheRecipientAgain(t *testing.T) {
 	o := newOutboxOrg(t)
 
 	at := time.Now().UTC().Truncate(time.Second)
-	if _, err := o.d.s.PullAndon(o.ctx(t), domain.AndonPull{FactoryID: o.factory, Kind: domain.AndonManual, Reason: "stop", PulledAt: at},
+	if _, err := o.d.s.PullAndon(o.ctx(t), domain.AndonPull{FactoryID: o.factory, Kind: domain.AndonManual, Reason: "halt", PulledAt: at},
 		domain.Actor{Kind: domain.ActorUser, ID: o.member, Name: "Mo"}); err != nil {
 		t.Fatal(err)
 	}
@@ -535,10 +577,8 @@ func TestNotificationOutbox_ClaimChecksTheRecipientAgain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := byUser(o.claim(t, at.Add(time.Second)))
-	if len(got) != 3 {
-		t.Fatalf("claimed %+v; want the owner's, the admin's and the editor's andon rows", got)
-	}
+	// The owner's, the admin's and the editor's andon rows.
+	got := o.claimN(t, at.Add(time.Second), 3)
 
 	if ed := got[o.editor]; !ed.Qualifies || ed.Address != "ed.alerts@example.com" || ed.AndonKind != string(domain.AndonManual) {
 		t.Errorf("editor's row = %+v; want qualifying, to the notification email", ed)
@@ -553,8 +593,7 @@ func TestNotificationOutbox_ClaimChecksTheRecipientAgain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	again := byUser(o.claim(t, at.Add(3*time.Minute)))
-	if ed, ok := again[o.editor]; !ok || ed.Qualifies {
+	if ed := o.claimN(t, at.Add(3*time.Minute), 3)[o.editor]; ed.Qualifies {
 		t.Errorf("editor's row without the role = %+v; want claimed and not qualifying", ed)
 	}
 }
