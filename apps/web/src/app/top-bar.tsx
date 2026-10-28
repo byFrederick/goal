@@ -19,6 +19,7 @@ import { FactoryBadge } from './factory-badge';
 import {
   apiKeysScreen,
   connectionsScreen,
+  credentialsScreen,
   homeScreen,
   knowledgeScreen,
   membersScreen,
@@ -67,6 +68,7 @@ const factoryRoutePages: Record<string, string> = {
   '/o/$org/f/$factory/agents/$agent': 'agents',
   '/o/$org/f/$factory/definition/': 'definition',
   '/o/$org/f/$factory/definition/$section': 'definition',
+  '/o/$org/f/$factory/intake/$trigger': 'intake',
   '/o/$org/f/$factory/settings': 'settings',
   '/o/$org/f/$factory/jonah/evals': 'jonah',
 };
@@ -74,6 +76,7 @@ const factoryRoutePages: Record<string, string> = {
 /** The organization page each organization route shows, by route id. */
 const orgRoutePages: Record<string, { label: string; to?: OrgPath }> = {
   '/o/$org/_org/': homeScreen,
+  '/account': { label: 'Your account' },
   '/o/$org/_org/api-keys': apiKeysScreen,
   '/o/$org/_org/members': membersScreen,
   '/o/$org/_org/runs': runsScreen,
@@ -81,6 +84,8 @@ const orgRoutePages: Record<string, { label: string; to?: OrgPath }> = {
   '/o/$org/_org/connections/': connectionsScreen,
   '/o/$org/_org/connections/$connection': connectionsScreen,
   '/o/$org/_org/connections/new': connectionsScreen,
+  '/o/$org/_org/credentials/': credentialsScreen,
+  '/o/$org/_org/credentials/new': credentialsScreen,
   '/o/$org/_org/knowledge/': knowledgeScreen,
   '/o/$org/_org/knowledge/$source': knowledgeScreen,
   '/o/$org/_org/knowledge/new': knowledgeScreen,

@@ -63,7 +63,7 @@ function renderAccount({ me = session, can = ['personal_token:read'] }: Setup = 
     path: '/o/$org',
     beforeLoad: () => ({ org }),
     component: () => (
-      <AccountProvider org={org}>
+      <AccountProvider>
         <AccountMenu org={org} size="sidebar" />
         <Outlet />
       </AccountProvider>
@@ -71,8 +71,13 @@ function renderAccount({ me = session, can = ['personal_token:read'] }: Setup = 
   });
   const tokens = createRoute({ getParentRoute: () => orgRoute, path: 'api-keys', component: () => <p>Keys page</p> });
   const home = createRoute({ getParentRoute: () => orgRoute, path: '/', component: () => <p>Home page</p> });
+  const account = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/account',
+    component: () => <p>Account page</p>,
+  });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([orgRoute.addChildren([home, tokens])]),
+    routeTree: rootRoute.addChildren([orgRoute.addChildren([home, tokens]), account]),
     history: createMemoryHistory({ initialEntries: ['/o/goal'] }),
   });
 
@@ -143,18 +148,18 @@ describe('the account menu', () => {
     expect(within(panel).getByRole('button', { name: /^Keyboard shortcuts/ }).textContent).toContain('?');
   });
 
-  it('opens the Edit name dialog from Profile', async () => {
+  it('links Profile to the account page, which holds the name', async () => {
     renderAccount();
     const panel = await openPanel();
-    fireEvent.click(within(panel).getByRole('button', { name: 'Profile' }));
-    expect(await screen.findByRole('dialog', { name: 'Edit name' })).toBeTruthy();
+    expect((await within(panel).findByRole('link', { name: 'Profile' })).getAttribute('href')).toBe('/account');
+    expect(screen.queryByRole('dialog', { name: 'Edit name' })).toBeNull();
   });
 
-  it('keeps Personal tokens to the API keys page for someone who may read them', async () => {
+  it('links Personal tokens to its section of the account page, for someone who may read them', async () => {
     renderAccount({ can: ['personal_token:read'] });
     const panel = await openPanel();
     expect((await within(panel).findByRole('link', { name: 'Personal tokens' })).getAttribute('href')).toBe(
-      '/o/goal/api-keys#personal-tokens',
+      '/account#personal-tokens',
     );
   });
 

@@ -10,7 +10,7 @@ const { table, scopes } = readSources();
 describe('grantsOf (contracts/api/permissions.yaml)', () => {
   it('gives each role what spec 3 §4.2 says', () => {
     const viewer = grantsOf(table, 'viewer');
-    expect(viewer.factory).toEqual(['factory:read']);
+    expect(viewer.factory).toEqual(['factory:read', 'intake:read']);
     expect(viewer.org).not.toContain('org:manage');
 
     const approver = grantsOf(table, 'approver');

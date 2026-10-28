@@ -1,8 +1,9 @@
-// Knowledge (spec 4 §10) against the mock: acme's sources (handbook and postmortems uploaded,
-// handbook listed by sre; goal-docs and runbooks synced through github, runbooks' last sync
-// failed), Try a search, a source's documents and indexed text, uploads with their refusals, New
-// source of each kind, Delete with its in-use refusal, a member's view, and the builder's picker.
-import { expect, type Page, test } from '@playwright/test';
+// Knowledge (spec 4 §10) against the mock: acme's sources (dashboards listed by sre, whose last
+// sync failed; goal-docs and support-macros synced through github), Look something up, a source's
+// documents and indexed text, uploads with their refusals, Add a source of each kind, Delete with
+// its in-use refusal, a member's view, and the builder's picker. The mock starts with no upload
+// source, so a flow that uploads creates its own, `handbook`, first.
+import { type APIRequestContext, expect, type Page, test } from '@playwright/test';
 import { status } from './editor';
 import { expectAccessible, expectNoHorizontalScroll, expectToast, isPhone, orgNav, recordToasts } from './support';
 
@@ -16,12 +17,21 @@ async function fits(page: Page) {
   await expectNoHorizontalScroll(page);
 }
 
+/** The Sources card: its heading names it, and it lists every source. */
+const sourcesCard = (page: Page) => page.getByRole('region', { name: 'Sources', exact: true });
+
 /** A source's row in the table where main is wide, its card where it is not. */
 const sourceRow = (page: Page, title: string) =>
   page
     .getByRole('row')
     .or(page.getByRole('list', { name: 'Knowledge sources of Acme' }).getByRole('listitem'))
     .filter({ has: page.getByRole('link', { name: title, exact: true }) });
+
+/** Creates an upload source through the API, as the New source page does. */
+async function createUploadSource(request: APIRequestContext, name: string, title: string) {
+  const res = await request.post('/v1/orgs/acme/knowledge/sources', { data: { name, title, kind: 'upload' } });
+  expect(res.status()).toBe(201);
+}
 
 test.describe('the Knowledge page', () => {
   test('lists each source with its kind, status, documents, sync and users; a failed sync says why', async ({
@@ -30,21 +40,18 @@ test.describe('the Knowledge page', () => {
     await page.goto('/o/acme/knowledge');
     await expect(page).toHaveTitle('Knowledge · Acme · Goal');
     await expect(page.getByRole('heading', { level: 1, name: 'Knowledge' })).toBeVisible();
-    await expect(page.getByRole('heading', { level: 2, name: '4 sources' })).toBeVisible();
-    await expect(sourceRow(page, 'Handbook')).toContainText('Indexed');
-    await expect(sourceRow(page, 'Handbook')).toContainText('Upload');
+    await expect(sourcesCard(page)).toBeVisible();
+    await expect(sourceRow(page, 'Dashboards')).toContainText('Sync failed');
     await expect(sourceRow(page, 'goal docs')).toContainText('Synced');
-    await expect(sourceRow(page, 'Runbooks')).toContainText('Sync failed');
+    await expect(sourceRow(page, 'Support macros')).toContainText('Synced');
     if (await page.getByRole('table').isVisible()) {
-      await expect(sourceRow(page, 'Handbook')).toContainText('sre');
-      await expect(sourceRow(page, 'Runbooks')).toContainText('answered 429');
+      await expect(sourceRow(page, 'Dashboards')).toContainText('sre');
+      await expect(sourceRow(page, 'Dashboards')).toContainText('the server refused the token');
       await expect(sourceRow(page, 'goal docs')).toContainText('github, acme/goal main, docs/**/*.md');
       await expect(sourceRow(page, 'goal docs')).toContainText(/Next in 1[45] min/);
-      // Beside the list, the documents of the source that failed its sync, failures first.
-      const docs = page.getByRole('region', { name: 'Runbooks' });
-      await expect(docs.getByRole('listitem').first()).toContainText('Failed: GitHub answered 429');
+      // The documents of a source are on its own page; the list only counts them.
     } else {
-      await expect(sourceRow(page, 'Handbook')).toContainText('Used by sre');
+      await expect(sourceRow(page, 'Dashboards')).toContainText('Used by sre');
     }
     await fits(page);
   });
@@ -52,31 +59,17 @@ test.describe('the Knowledge page', () => {
   test('a factory the organization has no factory of is said, never the unfiltered list', async ({ page }) => {
     await page.goto('/o/acme/knowledge?factory=nope');
     await expect(page.getByText('Acme has no factory named nope.')).toBeVisible();
-    await expect(page.getByRole('heading', { level: 2, name: '4 sources' })).toHaveCount(0);
+    await expect(sourceRow(page, 'Dashboards')).toHaveCount(0);
     await page.getByRole('link', { name: 'Show every source' }).click();
-    await expect(page.getByRole('heading', { level: 2, name: '4 sources' })).toBeVisible();
+    await expect(sourceRow(page, 'Dashboards')).toBeVisible();
     await fits(page);
   });
 
-  test('a search as a factory waits for the sources, never saying the factory lists none', async ({
-    page,
-    request,
-  }) => {
-    await request.post('/__mock/fail', {
-      data: { path: '/knowledge/sources', method: 'GET', delay_ms: 2500, times: 0 },
-    });
-    await page.goto('/o/acme/knowledge?q=deploy&as=sre');
-    await expect(page.getByText('Loading the knowledge sources…')).toBeVisible();
-    await expect(page.getByText(/lists no knowledge source/)).toHaveCount(0);
-    await expect(page.getByRole('list', { name: 'Results' }).getByRole('listitem')).toHaveCount(1, {
-      timeout: 10_000,
-    });
-  });
-
   test('the upload dialog stays open while files go up and says why', async ({ page, request }) => {
+    await createUploadSource(request, 'handbook', 'Handbook');
     await request.post('/__mock/fail', { data: { path: '/documents', method: 'POST', delay_ms: 2000 } });
     await page.goto('/o/acme/knowledge');
-    await expect(page.getByRole('heading', { level: 2, name: '4 sources' })).toBeVisible();
+    await expect(sourcesCard(page)).toBeVisible();
     test.skip(!(await page.getByRole('table').isVisible()), 'Upload… is on the table’s rows; narrower, on the source');
     await sourceRow(page, 'Handbook').getByRole('button', { name: 'Upload…, Handbook' }).click();
     const dialog = page.getByRole('dialog', { name: 'Upload to Handbook' });
@@ -95,50 +88,30 @@ test.describe('the Knowledge page', () => {
     await expect(dialog).toBeHidden();
   });
 
-  test('Sync now makes a source due, and the stream brings its new status', async ({ page }) => {
+  test('Retry now makes a failed source due, and the stream brings its new status', async ({ page }) => {
     await page.goto('/o/acme/knowledge');
-    await expect(sourceRow(page, 'Runbooks')).toContainText('Sync failed');
-    await sourceRow(page, 'Runbooks').getByRole('button', { name: 'Sync now, Runbooks' }).click();
+    await expect(sourceRow(page, 'Dashboards')).toContainText('Sync failed');
+    await sourceRow(page, 'Dashboards').getByRole('button', { name: 'Retry now, Dashboards' }).click();
     await expectToast(page, 'Runbooks syncs now');
-    await expect(sourceRow(page, 'Runbooks')).not.toContainText('Sync failed');
-    await expect(sourceRow(page, 'Runbooks')).toContainText('Synced');
+    await expect(sourceRow(page, 'Dashboards')).not.toContainText('Sync failed');
+    await expect(sourceRow(page, 'Dashboards')).toContainText('Synced');
   });
 
-  test('tries a search as a factory: ranked snippets with their words marked and links', async ({ page }) => {
+  test('looks something up: ranked snippets with their words marked and links', async ({ page }) => {
     await page.goto('/o/acme/knowledge');
-    const search = page.getByRole('search', { name: 'Try a search' });
-    await search.getByRole('searchbox', { name: 'Query' }).fill('memory task');
-    await search.getByRole('button', { name: 'Search' }).click();
-    await expect(page).toHaveURL(/q=memory\+task/);
-    const said = page.getByRole('status').filter({ hasText: /results? from/ });
-    await expect(said).toHaveText('3 results from every indexed source, ranked by meaning and keywords');
+    const search = page.getByRole('search', { name: 'Look something up' });
+    await search.getByRole('searchbox', { name: 'Search knowledge' }).fill('latency');
+    await search.getByRole('searchbox', { name: 'Search knowledge' }).press('Enter');
+    await expect(page).toHaveURL(/q=latency/);
     const results = page.getByRole('list', { name: 'Results' });
-    await expect(results.locator('mark').first()).toHaveText(/task|memory/i);
-    // A synced document links back to its source; an upload opens its indexed text.
-    await expect(results.getByRole('link', { name: /ecs-task-out-of-memory\.md/ })).toHaveAttribute(
+    await expect(results.getByRole('listitem')).toHaveCount(1, { timeout: 10_000 });
+    await expect(results.locator('mark').first()).toHaveText(/latency/i);
+    // A synced document links back to its source.
+    await expect(results.getByRole('link', { name: /api-latency\.md/ })).toHaveAttribute(
       'href',
-      'https://github.com/acme/runbooks/blob/main/ecs-task-out-of-memory.md',
-    );
-    await results.getByRole('link', { name: /checkout workers out of memory/ }).click();
-    const dialog = page.getByRole('dialog', { name: /checkout workers out of memory/ });
-    await expect(dialog).toContainText('Root cause: the image resize step');
-    await expect(dialog.getByRole('link', { name: 'Download original' })).toHaveAttribute(
-      'href',
-      /\/v1\/orgs\/[^/]+\/knowledge\/documents\/[^/]+\/content$/,
+      'https://github.com/acme/dashboards/blob/main/api-latency.md',
     );
     await fits(page);
-    await page.keyboard.press('Escape');
-    await expect(dialog).toBeHidden();
-    await expect(page).toHaveURL(/\/o\/acme\/knowledge\/postmortems$/);
-
-    // As sre: only the source sre lists.
-    await page.goto('/o/acme/knowledge?q=memory&as=sre');
-    await expect(page.getByRole('status').filter({ hasText: 'sre lists' })).toHaveText(
-      'Nothing in the 1 indexed source sre lists matches “memory”. Try fewer or other words, or search every source.',
-    );
-    await page.goto('/o/acme/knowledge?q=deploy&as=sre');
-    await expect(page.getByRole('list', { name: 'Results' }).getByRole('listitem')).toHaveCount(1);
-    await expect(page.getByRole('combobox', { name: 'As a factory' })).toHaveValue('sre');
   });
 
   test("the sidebar's Knowledge opens the organization's sources", async ({ page }) => {
@@ -146,7 +119,7 @@ test.describe('the Knowledge page', () => {
     await page.goto('/o/acme/f/sre');
     await orgNav(page).getByRole('link', { name: 'Knowledge' }).click();
     await expect(page).toHaveURL(/\/o\/acme\/knowledge$/);
-    await expect(page.getByRole('heading', { level: 2, name: '4 sources' })).toBeVisible();
+    await expect(sourcesCard(page)).toBeVisible();
     await orgNav(page).getByRole('link', { name: 'Knowledge' }).focus();
     await expect(orgNav(page).getByRole('link', { name: 'Knowledge' })).toHaveAttribute('href', '/o/acme/knowledge');
   });
@@ -161,7 +134,11 @@ test.describe('the Knowledge page', () => {
 });
 
 test.describe('a source', () => {
-  test('uploads by choosing files: each file its own row, a refused type said before it goes', async ({ page }) => {
+  test('uploads by choosing files: each file its own row, a refused type said before it goes', async ({
+    page,
+    request,
+  }) => {
+    await createUploadSource(request, 'handbook', 'Handbook');
     await page.goto('/o/acme/knowledge/handbook');
     await expect(page).toHaveTitle('Handbook · Knowledge · Acme · Goal');
     const upload = page.getByRole('region', { name: 'Upload' });
@@ -196,6 +173,7 @@ test.describe('a source', () => {
         detail: '"big.md" has more than 26214400 bytes',
       },
     });
+    await createUploadSource(request, 'handbook', 'Handbook');
     await page.goto('/o/acme/knowledge/handbook');
     const upload = page.getByRole('region', { name: 'Upload' });
     await upload.locator('input[type=file]').setInputFiles([
@@ -209,9 +187,26 @@ test.describe('a source', () => {
     await expect(files.getByRole('listitem').filter({ hasText: 'small.md' })).toContainText('Uploaded');
   });
 
-  test('a document opens its indexed text; an uploaded one downloads and deletes', async ({ page }) => {
+  test('a document opens its indexed text; an uploaded one downloads and deletes', async ({ page, request }) => {
+    await createUploadSource(request, 'handbook', 'Handbook');
     await page.goto('/o/acme/knowledge/handbook');
+    await page
+      .getByRole('region', { name: 'Upload' })
+      .locator('input[type=file]')
+      .setInputFiles([
+        {
+          name: 'deploy.md',
+          mimeType: 'text/markdown',
+          buffer: Buffer.from('# Deploy\n\nDeploys go out on Tuesdays.'),
+        },
+        {
+          name: 'oncall.md',
+          mimeType: 'text/markdown',
+          buffer: Buffer.from('# On call\n\nAcknowledge within 15 min.'),
+        },
+      ]);
     const documents = page.getByRole('list', { name: 'Documents of Handbook' });
+    await expect(documents.getByRole('link', { name: 'oncall.md' })).toBeVisible({ timeout: 10_000 });
     await documents.getByRole('link', { name: 'deploy.md' }).click();
     const dialog = page.getByRole('dialog', { name: 'deploy.md' });
     await expect(dialog.getByRole('region', { name: 'Indexed text of deploy.md' })).toContainText(
@@ -259,7 +254,7 @@ test.describe('a source', () => {
   });
 
   test('Delete is refused while a factory lists the source, and needs the name typed otherwise', async ({ page }) => {
-    await page.goto('/o/acme/knowledge/handbook');
+    await page.goto('/o/acme/knowledge/dashboards');
     await expect(page.getByRole('region', { name: 'Used by' }).getByRole('link', { name: 'sre' })).toHaveAttribute(
       'href',
       '/o/acme/f/sre/definition/connections',
@@ -271,23 +266,24 @@ test.describe('a source', () => {
     );
     await fits(page);
 
-    await page.goto('/o/acme/knowledge/postmortems');
+    // support-macros lists no factory, so it can be deleted once its name is typed.
+    await page.goto('/o/acme/knowledge/support-macros');
     await expect(page.getByRole('region', { name: 'Documents' }).getByRole('list')).toBeVisible();
     // Once it is deleted, nothing asks goald for the gone source's documents (a 404 that flashed).
     let deleted = false;
     const afterDelete: string[] = [];
     page.on('request', (r) => {
       const path = new URL(r.url()).pathname;
-      if (r.method() === 'DELETE' && path.endsWith('/knowledge/sources/postmortems')) deleted = true;
-      else if (deleted && path.includes('/knowledge/sources/postmortems')) afterDelete.push(path);
+      if (r.method() === 'DELETE' && path.endsWith('/knowledge/sources/support-macros')) deleted = true;
+      else if (deleted && path.includes('/knowledge/sources/support-macros')) afterDelete.push(path);
     });
     await page.getByRole('button', { name: 'Delete…' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Delete Postmortems?' });
-    await dialog.getByLabel(/Type postmortems to confirm/).fill('postmortems');
+    const dialog = page.getByRole('dialog', { name: 'Delete Support macros?' });
+    await dialog.getByLabel(/Type support-macros to confirm/).fill('support-macros');
     await dialog.getByRole('button', { name: 'Delete source' }).click();
-    await expectToast(page, 'Deleted Postmortems');
+    await expectToast(page, 'Deleted Support macros');
     await expect(page).toHaveURL(/\/o\/acme\/knowledge$/);
-    await expect(page.getByRole('heading', { level: 2, name: '3 sources' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: '2 sources' })).toBeVisible();
     await page.waitForLoadState('networkidle');
     expect(afterDelete).toEqual([]);
   });
@@ -295,10 +291,10 @@ test.describe('a source', () => {
   test('a member reads it all and changes nothing', async ({ page, request }) => {
     await request.post('/__mock/reset', { data: { role: 'member' } });
     await page.goto('/o/acme/knowledge');
-    await expect(page.getByRole('heading', { level: 2, name: '4 sources' })).toBeVisible();
-    await expect(page.getByRole('link', { name: /New source/ })).toHaveCount(0);
+    await expect(sourcesCard(page)).toBeVisible();
+    await expect(page.getByRole('link', { name: /Add a source/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Sync now/ })).toHaveCount(0);
-    await page.goto('/o/acme/knowledge/handbook');
+    await page.goto('/o/acme/knowledge/goal-docs');
     await expect(page.getByRole('region', { name: 'Upload' })).toHaveCount(0);
     await expect(page.getByRole('textbox', { name: 'Title' })).toHaveAttribute('readonly', '');
     await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
@@ -310,7 +306,7 @@ test.describe('a source', () => {
 test.describe('New source', () => {
   test('synced: a connection that can sync, what of it to read, a schedule', async ({ page }) => {
     await page.goto('/o/acme/knowledge');
-    await page.getByRole('link', { name: /New source/ }).click();
+    await page.getByRole('link', { name: /Add a source/ }).click();
     await expect(page).toHaveTitle('New source · Knowledge · Acme · Goal');
     await page.getByRole('radio', { name: /Synced/ }).check();
     await expect(page).toHaveURL(/kind=synced/);
@@ -342,7 +338,8 @@ test.describe('New source', () => {
     await expect(page.getByText('github, acme/infra, docs/**/*.md, runbooks/**/*.md')).toBeVisible();
   });
 
-  test('upload: files chosen here go up once the source exists', async ({ page }) => {
+  test('upload: files chosen here go up once the source exists', async ({ page, request }) => {
+    await createUploadSource(request, 'handbook', 'Handbook');
     await page.goto('/o/acme/knowledge/new');
     await expect(page.getByRole('radio', { name: /Upload/ })).toBeChecked();
     await page.getByRole('textbox', { name: 'Title' }).fill('Handbook');
@@ -385,21 +382,21 @@ test('the builder says while the organization’s sources load, never that it ha
   const knowledge = page.getByRole('region', { name: 'Knowledge sre may search' });
   await expect(knowledge.getByText('Loading Acme’s knowledge sources…')).toBeVisible();
   await expect(knowledge.getByText(/has no knowledge sources yet/)).toHaveCount(0);
-  await expect(knowledge.getByRole('checkbox', { name: /^Handbook/ })).toBeChecked({ timeout: 10_000 });
+  await expect(knowledge.getByRole('checkbox', { name: /^Dashboards/ })).toBeChecked({ timeout: 10_000 });
 });
 
 test('the builder lists the organization’s sources to tick for the factory', async ({ page }) => {
   await page.goto('/o/acme/f/sre/definition/connections');
   const knowledge = page.getByRole('region', { name: 'Knowledge sre may search' });
-  await expect(knowledge.getByRole('checkbox', { name: /^Handbook/ })).toBeChecked();
+  await expect(knowledge.getByRole('checkbox', { name: /^Dashboards/ })).toBeChecked();
   await expect(knowledge.getByRole('checkbox', { name: /^goal docs/ })).not.toBeChecked();
   await expect(knowledge).toContainText('Synced, github, acme/goal main, docs/**/*.md');
-  await knowledge.getByRole('checkbox', { name: /^Runbooks/ }).check();
+  await knowledge.getByRole('checkbox', { name: /^Support macros/ }).check();
   await expect(page.getByRole('region', { name: 'What runs get' })).toContainText('knowledge__search over 2 sources');
   await expect(status(page)).toContainText('Autosaved');
   await page.reload();
   await expect(
-    page.getByRole('region', { name: 'Knowledge sre may search' }).getByRole('checkbox', { name: /^Runbooks/ }),
+    page.getByRole('region', { name: 'Knowledge sre may search' }).getByRole('checkbox', { name: /^Support macros/ }),
   ).toBeChecked();
   await fits(page);
 });

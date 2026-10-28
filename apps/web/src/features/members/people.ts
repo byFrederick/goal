@@ -15,16 +15,6 @@ export const factoryRoleNames: Record<FactoryRole, string> = {
 /** The factory roles, lowest first: each includes the one before. */
 export const factoryRoles: readonly FactoryRole[] = ['viewer', 'approver', 'editor'];
 
-/** What each role may do (the "What each role can do" card). */
-export const roleCapabilities = (org: string): { role: string; can: string }[] => [
-  { role: 'Owner', can: `Everything in ${org}, including API keys, transferring ownership and deleting ${org}` },
-  { role: 'Admin', can: `What an owner can, except deleting or transferring ${org}; can’t change an owner` },
-  { role: 'Member', can: `Sees ${org} and its people; in factories, only what their factory roles allow` },
-  { role: 'Editor', can: 'An approver’s rights, plus editing drafts, publishing versions and pausing the factory' },
-  { role: 'Approver', can: 'A viewer’s rights, plus submitting work, deciding items, moving them and the andon cord' },
-  { role: 'Viewer', can: 'Sees the floor, board, items, traces and the definition, without changing them' },
-];
-
 /** Owners and admins hold every factory role by their organization role. */
 export const editorEverywhere = (role: OrgRole) => role === 'owner' || role === 'admin';
 
@@ -83,7 +73,7 @@ export function roleChange(
 export function countTitle(members: number, invitations: number): string {
   const people = `${members} ${members === 1 ? 'member' : 'members'}`;
   if (invitations === 0) return people;
-  return `${people}, ${invitations} ${invitations === 1 ? 'invite' : 'invites'}`;
+  return `${people}, ${invitations} ${invitations === 1 ? 'invite' : 'invites'} waiting`;
 }
 
 /** "Invited Oct 24 by M. Okafor, expires Oct 27". */

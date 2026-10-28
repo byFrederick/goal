@@ -2,7 +2,7 @@
 // goald's HTTP API, always within one organization (org.go resolves which), it changes factory definitions (factory.go: goald keeps them as
 // drafts and published versions; a folder pulled with goal factory pull is edited and sent back
 // with goal factory push, which is the one way a definition changes outside the builder),
-// manages organizations, searches one (search.go), lists its agent runs (runs.go), runs its eval cases (eval.go), reads its spend (spend.go), and submits, follows and decides on work items. It also starts the
+// manages organizations, searches one (search.go), lists its agent runs (runs.go), runs its eval cases (eval.go), reads its spend (spend.go), reads a factory's triggers and manages its webhook endpoints (intake.go), and submits, follows and decides on work items. It also starts the
 // local platform (goal up), validates folders offline (goal validate), and keeps the install's
 // skills and template catalogs in the bucket (catalog.go).
 //
@@ -43,6 +43,8 @@ const usage = `usage:
                                                   (at a station with action: merge)
   goal note <item> "<text>"                       leave a note for the agents: the item's next run
                                                   reads it
+  goal answer <item> "<text>" | --choice <n>      answer the question the item's agent asked, in
+                                                  your words or by its choice's number (from 1)
   goal move <item> <station> [--reason "..."]     put the item at another station (a reason is needed
                                                   upstream, where it counts as rework); a run in
                                                   progress is stopped
@@ -92,6 +94,13 @@ const usage = `usage:
                                                   across its factories (--max-slots 0: no cap)
   goal org delete <slug> [--yes]                  delete it after typing its name (--yes: no prompt);
                                                   it is purged after GOAL_ORG_RETENTION
+  goal policy get                                 the organization's policy: allowed models and the default,
+                                                  denied commands, tool defaults, box time limit; who uses
+                                                  each model and box size, and the egress addresses
+  goal policy set [--models M,M] [--default M] [--deny-command P]... [--box-limit 3h]
+                                                  change what the flags name (owners and admins), keeping
+                                                  the rest as read; refused when the policy changed since
+                                                  it was read (--deny-command replaces the list)
   goal key list                                   the organization's API keys: hint, scopes, factories,
                                                   ceiling, expiry, last use
   goal key create <name> --scope S [--scope S]... [--factory F]... [--role viewer|approver|editor] [--expires 90d]
@@ -167,6 +176,24 @@ const usage = `usage:
                                                   week), per merged item and on rework, and each
                                                   factory's budget: running, stopped or over_budget,
                                                   its spend today and in the last 7 days
+  goal triggers list <factory> [--json]           the factory's triggers in definition order: on or off,
+                                                  when they fire, what they create, the items they
+                                                  created in the last 7 days, and why one may not be
+                                                  creating items (triggers change in the definition)
+  goal triggers show <factory> <trigger> [--json] a trigger, what its items did in the last 7 days
+                                                  and its recent events: created, merged or skipped
+  goal webhooks list <factory> [--json]           the factory's webhook endpoints: kind, address,
+                                                  the triggers they feed, deliveries in 7 days
+                                                  (never a secret)
+  goal webhooks create <factory> <name> [--kind generic|github] [--json]
+                                                  add an endpoint (default kind generic); its signing
+                                                  secret is printed once, alone on stdout: store it in
+                                                  the sender now
+  goal webhooks rotate <factory> <name> [--json]  replace its signing secret, printed once the same
+                                                  way; the old one stops working at once
+  goal webhooks deliveries <factory> <name> [--limit N] [--after C] [--json]
+                                                  what it received, newest first: refused (and why),
+                                                  accepted or created an item
   goal connection import-env                      once, after the cutover to connections: GOAL_GITHUB_TOKEN
                                                   becomes github, CLAUDE_CODE_OAUTH_TOKEN (or ANTHROPIC_API_KEY)
                                                   claude; names that exist are left as they are
@@ -213,7 +240,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, move, pause, the decisions, status, andon, factory, connection, credential, knowledge, search, runs, eval, spend) acts in one
+Every command that talks to goald (run, follow, item, note, answer, move, pause, the decisions, status, andon, factory, policy, connection, credential, knowledge, search, runs, eval, spend, triggers, webhooks) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or
@@ -280,9 +307,10 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 
 	// The commands on one item, and the command groups, by name.
 	if handler, ok := map[string]command{
-		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbMove: moveItem, verbPause: pauseItem,
+		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbAnswer: answerItem, verbMove: moveItem, verbPause: pauseItem,
 		"status": status, "factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
-		"connection": connectionCommand, "credential": credentialCommand, "knowledge": knowledgeCommand, "search": search, "runs": runs, "eval": evalCommand, "spend": spend,
+		"connection": connectionCommand, "credential": credentialCommand, "policy": policyCommand, "knowledge": knowledgeCommand, "search": search, "runs": runs, "eval": evalCommand, "spend": spend,
+		"triggers": triggersCommand, "webhooks": webhooksCommand,
 	}[cmd]; ok {
 		return handler(ctx, out, getenv, rest)
 	}

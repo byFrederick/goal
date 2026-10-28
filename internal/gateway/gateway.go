@@ -50,6 +50,13 @@
 // record the run's use of each document they return, best effort, and knowledge__verdict records
 // the agent's verdict on a document the run used (ADR 0027).
 //
+// Every run is served question__ask (question.go, ADR 0018): the agent asks the person
+// responsible for its item a question, 1 to 500 characters, with 0 to 4 quick-answer choices of
+// 1 to 60 characters. The gateway checks the limits and passes the task's item, run and agent with
+// the question to Questions (the engine's Ask, adapted by cmd/goald), which records it and ends
+// the run; the agent is told to stop. Input outside the limits and the engine's refusals, such
+// as a second open question, are tool errors with the reason.
+//
 // # State
 //
 // None: every HTTP request is verified and served on its own (the SDK's stateless mode), so any
@@ -124,6 +131,8 @@ type Deps struct {
 	// Knowledge serves Goal's knowledge tools to runs whose factory lists knowledge sources; nil
 	// serves none.
 	Knowledge Knowledge
+	// Questions takes the questions agents ask with question__ask, which every run is served.
+	Questions Questions
 }
 
 // Config bounds the gateway. Zero values take the defaults below.
@@ -151,14 +160,15 @@ type Gateway struct {
 	clock       ports.Clock
 	log         *slog.Logger
 	knowledge   Knowledge // nil without Deps.Knowledge
+	questions   Questions
 	cfg         Config
 	mcp         http.Handler
 }
 
 // New returns a gateway; goald mounts it at its MCP path.
 func New(d Deps, cfg Config) (*Gateway, error) {
-	if d.Definitions == nil || d.Items == nil || d.Connections == nil || d.Events == nil || d.Clock == nil {
-		return nil, errors.New("gateway: Definitions, Items, Connections, Events and Clock are required")
+	if d.Definitions == nil || d.Items == nil || d.Connections == nil || d.Events == nil || d.Clock == nil || d.Questions == nil {
+		return nil, errors.New("gateway: Definitions, Items, Connections, Events, Clock and Questions are required")
 	}
 
 	if len(cfg.Key) == 0 {
@@ -169,7 +179,7 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 
 	g := &Gateway{
 		defs: d.Definitions, items: d.Items, connections: d.Connections, events: d.Events, clock: d.Clock, log: d.Logger,
-		knowledge: d.Knowledge, cfg: cfg,
+		knowledge: d.Knowledge, questions: d.Questions, cfg: cfg,
 	}
 	if g.log == nil {
 		g.log = slog.New(slog.DiscardHandler)

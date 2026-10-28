@@ -11,7 +11,6 @@ import { ResendLink } from '../../shared/resend-link';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { CodeField } from '../../ui/code-field';
-import { Field } from '../../ui/field';
 import { Spinner } from '../../ui/spinner';
 import { AuthHeading, AuthPage, LiveMessage } from './auth-page';
 
@@ -38,11 +37,11 @@ export function CodePage({ email, next }: { email: string; next: string | undefi
 
   if (signIn.signedIn) {
     return (
-      <AuthPage>
+      <AuthPage band>
         <LiveMessage>
           <Callout tone="ok">Signed in. Opening {opening ?? 'Goal'}…</Callout>
         </LiveMessage>
-        <p className="m-0 flex items-center gap-2.5 text-sm text-ink-soft">
+        <p className="m-0 flex items-center gap-2 text-body text-ink-soft">
           <Spinner tone="dark" />
           Loading your factories
         </p>
@@ -52,22 +51,23 @@ export function CodePage({ email, next }: { email: string; next: string | undefi
 
   const message: SignInMessage | null = signIn.message;
   return (
-    <AuthPage>
-      <AuthHeading>Check your email</AuthHeading>
-      <p className="m-0 text-[15px] leading-normal text-ink-soft">
-        We sent a 6-digit code to <strong className="font-medium text-ink">{email}</strong>. It expires in 5 minutes.
-      </p>
-      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-3.5">
-        <Field label="Code">
-          <CodeField
-            value={signIn.code}
-            onChange={signIn.type}
-            look={signIn.look}
-            aria-describedby={message?.tone === 'rework' ? 'code-message' : undefined}
-            // The page is for the code: it takes focus as the page opens.
-            autoFocus
-          />
-        </Field>
+    <AuthPage band>
+      <div className="flex flex-col gap-2">
+        <AuthHeading>Check your email</AuthHeading>
+        <p className="m-0 text-body text-ink-soft">
+          We sent a 6-digit code to <strong className="font-medium text-ink">{email}</strong>. It expires in 5 minutes.
+        </p>
+      </div>
+      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-3">
+        <CodeField
+          aria-label="Code"
+          value={signIn.code}
+          onChange={signIn.type}
+          look={signIn.look}
+          aria-describedby={message?.tone === 'rework' ? 'code-message' : undefined}
+          // The page is for the code: it takes focus as the page opens.
+          autoFocus
+        />
         <LiveMessage>
           {message ? (
             <Callout tone={message.tone} id="code-message">
@@ -81,27 +81,27 @@ export function CodePage({ email, next }: { email: string; next: string | undefi
           size="lg"
           aria-busy={signIn.verifying || undefined}
           disabled={signIn.usedUp}
-          className="h-12 w-full justify-center aria-busy:cursor-progress"
+          className="w-full justify-center aria-busy:cursor-progress"
         >
           {signIn.verifying ? (
             <>
               <Spinner />
-              Signing in…
+              Verifying…
             </>
           ) : (
-            'Sign in'
+            'Verify'
           )}
         </Button>
       </form>
-      <div className="flex flex-wrap justify-between gap-x-4 gap-y-2 text-sm">
-        <ResendLink at={signIn.resendAt} pending={signIn.resending} onResend={signIn.resend} />
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-body">
         <Link
           to="/sign-in"
           search={next ? { next } : {}}
-          className="inline-flex min-h-11 items-center text-ink underline underline-offset-[3px] transition-colors duration-200 hover:text-run md:min-h-6"
+          className="inline-flex min-h-11 items-center font-control text-run transition-colors duration-200 hover:text-run-ink md:min-h-6"
         >
           Use a different email
         </Link>
+        <ResendLink at={signIn.resendAt} pending={signIn.resending} onResend={signIn.resend} />
       </div>
     </AuthPage>
   );
