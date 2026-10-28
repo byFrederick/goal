@@ -1,0 +1,4 @@
+SLUG           TITLE          ENABLED  SAMPLE  PASS MARK  PASS RATE 30D  SCORED  COST
+spec-followed  Spec followed  yes      20%     50%        85%            40      $1.20
+tests-added    Tests added    no       0%      70%        -              0       $0.00
+web's judge runs cost $1.23 over the last 30 days

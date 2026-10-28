@@ -2,7 +2,7 @@
 // goald's HTTP API, always within one organization (org.go resolves which), it changes factory definitions (factory.go: goald keeps them as
 // drafts and published versions; a folder pulled with goal factory pull is edited and sent back
 // with goal factory push, which is the one way a definition changes outside the builder),
-// manages organizations, searches one (search.go), lists its agent runs (runs.go), runs its eval cases (eval.go), reads its spend (spend.go), reads a factory's triggers and manages its webhook endpoints (intake.go), and submits, follows and decides on work items. It also starts the
+// manages organizations, searches one (search.go), lists its agent runs (runs.go), runs its eval cases (eval.go), reads its spend (spend.go), lists and tries Jonah's judges (judge.go), reads a factory's triggers and manages its webhook endpoints (intake.go), and submits, follows and decides on work items. It also starts the
 // local platform (goal up), validates folders offline (goal validate), and keeps the install's
 // skills and template catalogs in the bucket (catalog.go).
 //
@@ -185,6 +185,12 @@ const usage = `usage:
                                                   week), per merged item and on rework, and each
                                                   factory's budget: running, stopped or over_budget,
                                                   its spend today and in the last 7 days
+  goal judge list [--factory F] [--json]          the factory's judges (default: the organization's only
+                                                  factory): enabled, sample, pass mark, and over the last
+                                                  30 days the pass rate, runs scored and cost; then what
+                                                  its judge runs cost (--json: goald's answer as it came)
+  goal judge try <slug> [--factory F] [--json]    queue the judge on the 10 newest finished runs of its
+                                                  agents; the tries never count in its 30-day figures
   goal triggers list <factory> [--json]           the factory's triggers in definition order: on or off,
                                                   when they fire, what they create, the items they
                                                   created in the last 7 days, and why one may not be
@@ -249,7 +255,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, the decisions, status, andon, factory, policy, connection, credential, knowledge, search, runs, eval, spend, triggers, webhooks) acts in one
+Every command that talks to goald (run, follow, item, note, answer, move, pause, the decisions, status, andon, factory, policy, connection, credential, knowledge, search, runs, eval, spend, judge, triggers, webhooks) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or
@@ -319,7 +325,7 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbAnswer: answerItem, verbMove: moveItem, verbPause: pauseItem,
 		"status": status, "factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
 		"connection": connectionCommand, "credential": credentialCommand, "policy": policyCommand, "knowledge": knowledgeCommand, "search": search, "runs": runs, "eval": evalCommand, "spend": spend,
-		"triggers": triggersCommand, "webhooks": webhooksCommand,
+		"judge": judgeCommand, "triggers": triggersCommand, "webhooks": webhooksCommand,
 	}[cmd]; ok {
 		return handler(ctx, out, getenv, rest)
 	}

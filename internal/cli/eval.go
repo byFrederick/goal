@@ -45,7 +45,7 @@ func evalRun(ctx context.Context, out *printer, getenv func(string) string, args
 		return err
 	}
 
-	f, err := evalFactory(ctx, c, *factory)
+	f, err := commandFactory(ctx, c, *factory)
 	if err != nil {
 		return err
 	}
@@ -107,7 +107,7 @@ func evalShow(ctx context.Context, out *printer, getenv func(string) string, arg
 		return err
 	}
 
-	f, err := evalFactory(ctx, c, *factory)
+	f, err := commandFactory(ctx, c, *factory)
 	if err != nil {
 		return err
 	}
@@ -194,9 +194,9 @@ func evalRunCases(r gen.EvalRun) []string {
 	return out
 }
 
-// evalFactory is the factory an eval command acts on: --factory, else the organization's only
-// factory.
-func evalFactory(ctx context.Context, c orgClient, factory string) (string, error) {
+// commandFactory is the factory an eval or judge command acts on: --factory, else the
+// organization's only factory.
+func commandFactory(ctx context.Context, c orgClient, factory string) (string, error) {
 	if factory != "" {
 		return factory, nil
 	}

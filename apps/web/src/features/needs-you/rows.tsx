@@ -16,8 +16,9 @@ export function ageOf(entry: InboxEntry, now = Date.now()): number {
   return Math.max(0, (now - Date.parse(entry.since)) / 1000);
 }
 
-/** The row's title: the item's title, or what the entry is when it is about no item. */
+/** The row's title: the asking role and its question, the item's title, or what the entry is when it is about no item. */
 export function titleOf(entry: InboxEntry): string {
+  if (entry.kind === 'question' && entry.question) return `${entry.question.agent}: ${entry.question.text}`;
   if (entry.item) return entry.item.title;
   if (entry.kind === 'andon') return 'Line stopped';
   if (entry.kind === 'rework_warning' && entry.rework) {
@@ -29,6 +30,7 @@ export function titleOf(entry: InboxEntry): string {
 /** The line under the title: the item and its station, or the factory when no item is involved. */
 function whereOf(entry: InboxEntry): string {
   const station = humanize(entry.station ?? entry.item?.station ?? '');
+  if (entry.kind === 'question' && entry.item) return `#${entry.item.number} at ${station}, run paused`;
   const about = entry.item ? entry.item.ref : (entry.factory.title ?? entry.factory.name);
   return [about, station].filter(Boolean).join(' at ');
 }
@@ -81,7 +83,12 @@ function NeedsRow({
 }) {
   const org = useOrg();
   const type = typeOf(entry);
-  const typeClass = type === 'decision' ? 'text-you-ink' : type === 'alert' ? 'text-rework-ink' : 'text-ink-soft';
+  const typeClass =
+    type === 'decision' || type === 'question'
+      ? 'text-you-ink'
+      : type === 'alert'
+        ? 'text-rework-ink'
+        : 'text-ink-soft';
   return (
     <li className="border-b border-line">
       <Link

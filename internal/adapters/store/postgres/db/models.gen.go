@@ -216,6 +216,18 @@ type Organization struct {
 	MaxSlots  *int32
 }
 
+type SavedView struct {
+	ID        uuid.UUID
+	OrgID     uuid.UUID
+	FactoryID uuid.UUID
+	OwnerID   uuid.UUID
+	Name      string
+	Shared    bool
+	Filters   []byte
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 type WorkItem struct {
 	ID                uuid.UUID
 	FactoryID         uuid.UUID

@@ -1,6 +1,6 @@
 import { QueryClient, QueryObserver, queryOptions } from '@tanstack/react-query';
 import { describe, expect, test, vi } from 'vitest';
-import { defKeys, ensureFound, knowledgeDocumentUsesQuery, knowledgeUsageQuery, validationQuery } from './queries';
+import { defKeys, ensureFound, keys, knowledgeDocumentUsesQuery, knowledgeUsageQuery, searchQuery, validationQuery } from './queries';
 import type { Validation } from './types';
 
 // goald validates the draft as it is when the request arrives, which may be a later revision than
@@ -93,5 +93,21 @@ describe('knowledge usage keys', () => {
       'd1',
       'uses',
     ]);
+  });
+});
+
+describe('the shell search', () => {
+  test('keys each debounced query and limit under the organization, so an org event can refresh them all', () => {
+    expect(keys.search('org-1', { q: 'spend', limit: 5 })).toEqual([
+      'org',
+      'org-1',
+      'search',
+      { q: 'spend', limit: 5 },
+    ]);
+    expect(searchQuery('org-1', { q: 'spend', limit: 5 }).queryKey).toEqual(
+      keys.search('org-1', { q: 'spend', limit: 5 }),
+    );
+    // A different limit is a different answer, so it is a different entry.
+    expect(keys.search('org-1', { q: 'spend', limit: 3 })).not.toEqual(keys.search('org-1', { q: 'spend', limit: 5 }));
   });
 });

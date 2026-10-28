@@ -3,6 +3,7 @@
 // decisions waiting, as on the canvas, and an empty support factory whose line is stopped by an
 // andon pull); Goal has one, empty. Times are relative to when the mock starts, so ages
 // read like a live floor.
+
 import type {
   Actor,
   AgentStats,
@@ -10,6 +11,7 @@ import type {
   AndonState,
   AuditEntry,
   ClassOfService,
+  EvalCaseEntry,
   Factory,
   GateTally,
   ItemEvent,
@@ -20,6 +22,7 @@ import type {
   Run,
   VersionRef,
 } from '@goal/api-client';
+import type { Judge } from '../src/api/types.ts';
 import {
   type MockDefinition,
   type MockSkill,
@@ -2163,3 +2166,252 @@ function fitWeeklySpend(state: MockState, names: string[], now: number, target: 
   const last = week[week.length - 1];
   if (last) last.cost_usd = (cents(last.cost_usd) + cents(target) - sum) / 100;
 }
+
+/** The Software factory's current version in the evals picture (v21). */
+export const softwareEvalVersion = 21;
+
+/**
+ * The five cases of the Jonah evals picture, newest try last in the row: 3 of 5 cases passed every try
+ * and 13 of 15 tries passed. The cost is what the latest run paid for each case.
+ */
+export const softwareEvalCases: EvalCaseEntry[] = [
+  {
+    name: 'architect-frontend-lane',
+    description: 'A request about the sidebar gets the frontend lane',
+    agent: 'architect',
+    tries: 3,
+    checked_by: { kind: 'contract' },
+    last_tries: [
+      { eval_run_id: 'run-9', try: 3, state: 'pass', cost_usd: 0.1 },
+      { eval_run_id: 'run-9', try: 2, state: 'pass', cost_usd: 0.1 },
+      { eval_run_id: 'run-9', try: 1, state: 'pass', cost_usd: 0.1 },
+    ],
+    cost_usd: 0.3,
+  },
+  {
+    name: 'architect-splits-oversized-request',
+    description: 'A 900-line request becomes an assembly of parts',
+    agent: 'architect',
+    tries: 3,
+    checked_by: { kind: 'judge', judge: 'spec-criteria-testable', title: 'Spec criteria testable' },
+    last_tries: [
+      { eval_run_id: 'run-9', try: 3, state: 'pass', cost_usd: 0.2 },
+      { eval_run_id: 'run-9', try: 2, state: 'fail', cost_usd: 0.2 },
+      { eval_run_id: 'run-9', try: 1, state: 'pass', cost_usd: 0.3 },
+    ],
+    cost_usd: 0.7,
+  },
+  {
+    name: 'backend-adds-migration-never-edits',
+    description: 'A schema change adds a migration and leaves old ones alone',
+    agent: 'backend-engineer',
+    tries: 3,
+    checked_by: { kind: 'reference_patch', path: 'evals/patches/migration.patch' },
+    last_tries: [
+      { eval_run_id: 'run-9', try: 3, state: 'pass', cost_usd: 0.3 },
+      { eval_run_id: 'run-9', try: 2, state: 'pass', cost_usd: 0.3 },
+      { eval_run_id: 'run-9', try: 1, state: 'pass', cost_usd: 0.2 },
+    ],
+    cost_usd: 0.8,
+  },
+  {
+    name: 'reviewer-approves-clean-change',
+    description: 'A change with full evidence is approved first time',
+    agent: 'reviewer',
+    tries: 3,
+    checked_by: { kind: 'contract' },
+    last_tries: [
+      { eval_run_id: 'run-9', try: 3, state: 'pass', cost_usd: 0.08 },
+      { eval_run_id: 'run-9', try: 2, state: 'pass', cost_usd: 0.08 },
+      { eval_run_id: 'run-9', try: 1, state: 'pass', cost_usd: 0.09 },
+    ],
+    cost_usd: 0.25,
+  },
+  {
+    name: 'reviewer-rejects-unevidenced-criterion',
+    description: 'A criterion without evidence is sent back with a clear reason',
+    agent: 'reviewer',
+    tries: 3,
+    checked_by: { kind: 'judge', judge: 'review-reason-actionable', title: 'Review reason actionable' },
+    last_tries: [
+      { eval_run_id: 'run-9', try: 3, state: 'fail', cost_usd: 0.12 },
+      { eval_run_id: 'run-9', try: 2, state: 'pass', cost_usd: 0.11 },
+      { eval_run_id: 'run-9', try: 1, state: 'pass', cost_usd: 0.12 },
+    ],
+    cost_usd: 0.35,
+  },
+];
+
+/** The Software factory's current version in the judges picture (v21, as its evals). */
+export const softwareJudgeVersion = 21;
+
+/** A week of daily pass rates, as the judges picture's sparklines draw them: each day's scores are seven. */
+const week = (rates: number[]) =>
+  rates.map((rate, i) => {
+    const passed = Math.round(rate * 7);
+    return { day: `2026-10-${String(22 + i).padStart(2, '0')}`, scored: 7, passed, pass_rate: passed / 7 };
+  });
+
+/**
+ * The four judges of the judges picture, each as its file reads (evals/judges/<slug>.md): the summary of its
+ * last 30 days, its newest scores and where its runs run. The review judge's figures are the picture's.
+ */
+export const softwareJudges: Judge[] = [
+  {
+    slug: 'spec-criteria-testable',
+    title: 'Spec criteria testable',
+    criterion: 'Every acceptance criterion can be checked with evidence',
+    agents: ['architect'],
+    outcomes: [
+      { score: 1, label: 'Testable', meaning: 'Each criterion names the evidence that proves it' },
+      { score: 0.5, label: 'Partly', meaning: 'Some criteria name no evidence' },
+      { score: 0, label: 'Untestable', meaning: 'Criteria are opinions or cannot be checked' },
+    ],
+    pass_mark: 0.7,
+    sample: 0.5,
+    enabled: true,
+    rubric: 'Read the spec the architect wrote. Score it by how many of its acceptance criteria name a check.',
+    version: softwareJudgeVersion,
+    summary: {
+      scored: 30,
+      passed: 28,
+      pass_rate: 0.92,
+      cost_usd: 2.8,
+      days: week([0.9, 0.88, 0.92, 0.9, 0.93, 0.95, 0.92]),
+    },
+    recent: [],
+    runs_on: { size: 'small', connections: ['github'], sees: ['spec'], inherited: true },
+  },
+  {
+    slug: 'review-reason-actionable',
+    title: 'Review reason actionable',
+    criterion: 'A sent-back reason says what to change and how to prove it',
+    agents: ['reviewer'],
+    outcomes: [
+      { score: 1, label: 'Actionable', meaning: 'Names what failed, what to change and the proof' },
+      { score: 0.5, label: 'Vague', meaning: 'Says something is wrong but not what would fix it' },
+      { score: 0, label: 'Missing', meaning: 'No reason, or only "looks wrong"' },
+    ],
+    pass_mark: 0.7,
+    sample: 0.25,
+    enabled: true,
+    rubric: [
+      "#### Read the review run's decision",
+      '',
+      'Only score runs where the reviewer sent the change back. Read the reason and the spec it reviewed.',
+      '',
+      '#### Actionable means',
+      '',
+      '- It names the criterion or rule that failed.',
+      '- It says what to change, in one or two sentences.',
+      '- It says what evidence would prove the fix, such as a command or a screenshot.',
+      '',
+      '#### Your answer',
+      '',
+      'Pick one outcome. Give the reason in one sentence that names the missing part.',
+    ].join('\n'),
+    version: softwareJudgeVersion,
+    summary: {
+      scored: 46,
+      passed: 37,
+      pass_rate: 0.81,
+      cost_usd: 3.2,
+      days: week([0.82, 0.8, 0.78, 0.81, 0.83, 0.8, 0.81]),
+    },
+    recent: [
+      {
+        id: 'score-149',
+        state: 'scored',
+        item_ref: 'software#149',
+        item_title: 'Empty state for Intake',
+        outcome: 'Vague',
+        score: 0.5,
+        passed: false,
+        reason: 'Asks for evidence but not which screens; the engineer guessed.',
+        scored_at: '2026-10-28T08:40:00Z',
+      },
+      {
+        id: 'score-141',
+        state: 'scored',
+        item_ref: 'software#141',
+        item_title: 'Retry policy for lost leases',
+        outcome: 'Actionable',
+        score: 1,
+        passed: true,
+        reason: 'Names criterion 2, the missing test and the command to prove it.',
+        scored_at: '2026-10-27T16:12:00Z',
+      },
+      {
+        id: 'score-138',
+        state: 'scored',
+        item_ref: 'software#138',
+        item_title: 'Andon dialog copy',
+        outcome: 'Actionable',
+        score: 1,
+        passed: true,
+        reason: 'Says to show both themes and where the focus ring is missing.',
+        scored_at: '2026-10-27T11:05:00Z',
+      },
+      {
+        id: 'score-127',
+        state: 'scored',
+        item_ref: 'software#127',
+        item_title: 'Board card spacing',
+        outcome: 'Missing',
+        score: 0,
+        passed: false,
+        reason: 'Only says to attach a screenshot, with no reason or criterion.',
+        scored_at: '2026-10-26T19:30:00Z',
+      },
+    ],
+    runs_on: { size: 'small', connections: ['github'], sees: ['events', 'spec', 'pull_request'], inherited: true },
+  },
+  {
+    slug: 'plain-language',
+    title: 'Plain language',
+    criterion: 'Specs, pull requests and notes read clearly to a newcomer',
+    agents: [],
+    outcomes: [
+      { score: 1, label: 'Clear', meaning: 'A newcomer follows it on one read' },
+      { score: 0, label: 'Unclear', meaning: 'A newcomer must ask what it means' },
+    ],
+    pass_mark: 0.8,
+    sample: 0.25,
+    enabled: true,
+    rubric: 'Read the text as someone new to the project would. Score whether each term is explained or known.',
+    version: softwareJudgeVersion,
+    summary: {
+      scored: 38,
+      passed: 36,
+      pass_rate: 0.96,
+      cost_usd: 3.9,
+      days: week([0.96, 0.95, 0.97, 0.96, 0.96, 0.95, 0.96]),
+    },
+    recent: [],
+    runs_on: { size: 'small', connections: ['github'], sees: ['events', 'spec'], inherited: true },
+  },
+  {
+    slug: 'efficiency',
+    title: 'Efficiency',
+    criterion: 'The run used about the turns and tools the task needed',
+    agents: ['backend-engineer', 'frontend-engineer', 'infra-engineer'],
+    outcomes: [
+      { score: 1, label: 'Lean', meaning: 'Turns and tools stayed near what the task needed' },
+      { score: 0, label: 'Wasteful', meaning: 'Repeated or unneeded turns and tools' },
+    ],
+    pass_mark: 0.6,
+    sample: 0.1,
+    enabled: true,
+    rubric: 'Count the turns and tool calls against what the task needed. Score lean when the count is close.',
+    version: softwareJudgeVersion,
+    summary: {
+      scored: 22,
+      passed: 16,
+      pass_rate: 0.74,
+      cost_usd: 1.7,
+      days: week([0.7, 0.75, 0.72, 0.74, 0.76, 0.73, 0.74]),
+    },
+    recent: [],
+    runs_on: { size: 'medium', connections: ['github'], sees: ['events'], inherited: false },
+  },
+];

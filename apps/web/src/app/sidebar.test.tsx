@@ -206,14 +206,24 @@ describe('the sidebar', () => {
     expect(await screen.findByText('Not available yet')).toBeTruthy();
   });
 
-  it('keeps Jonah disabled in the open factory', async () => {
+  it('lists Intake as a link and Jonah as a link in the open factory', async () => {
     renderSidebar({ at: '/o/acme/f/goal' });
+    const sidebar = await nav();
+
+    expect(within(sidebar).getByRole('link', { name: 'Intake' }).getAttribute('href')).toBe('/o/acme/f/goal/intake');
+    expect(within(sidebar).getByRole('link', { name: 'Jonah' }).getAttribute('href')).toBe(
+      '/o/acme/f/goal/jonah/evals',
+    );
+  });
+
+  it('keeps Jonah current on its Evals page', async () => {
+    renderSidebar({ at: '/o/acme/f/goal/jonah/evals' });
 
     expect(
       within(await nav())
-        .getByRole('button', { name: 'Jonah' })
-        .getAttribute('aria-disabled'),
-    ).toBe('true');
+        .getByRole('link', { name: 'Jonah' })
+        .getAttribute('aria-current'),
+    ).toBe('page');
   });
 
   it('lists Intake as a link between Agents and Jonah, current on its pages', async () => {
@@ -221,10 +231,9 @@ describe('the sidebar', () => {
     const sidebar = await nav();
     const link = within(sidebar).getByRole('link', { name: 'Intake' });
 
-    expect(link.getAttribute('href')).toBe('/o/acme/f/goal/intake');
     expect(link.getAttribute('aria-current')).toBe('page');
     const agents = within(sidebar).getByRole('link', { name: 'Agents' });
-    const jonah = within(sidebar).getByRole('button', { name: 'Jonah' });
+    const jonah = within(sidebar).getByRole('link', { name: 'Jonah' });
     expect(agents.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(link.compareDocumentPosition(jonah) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
