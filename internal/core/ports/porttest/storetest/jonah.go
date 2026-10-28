@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ var jonahTests = []struct {
 	// A Jonah run without an item, beside the Runs_ cases it is named with.
 	{"Runs_JonahWithoutItem", testRunsJonahWithoutItem},
 	{"Jonah_ExpiredLeaseReclaimed", testJonahLeaseReclaimed},
+	{"Jonah_ConcurrentClaimsTakeDifferentReviews", testJonahConcurrentClaims},
 	{"Jonah_ProposalsNumberedPerFactory", testJonahNumbers},
 	{"Jonah_PathOutsideAllowlistRefused", testJonahPathRefused},
 	{"Jonah_DecideProposalOnlyOnce", testJonahDecide},
@@ -168,6 +170,46 @@ func testJonahLeaseReclaimed(f *fixture) {
 	}
 
 	f.finishUnderNewLease(t, first, second)
+}
+
+// Claims that race take different reviews: a review one claim holds is skipped by the other,
+// and once both are held a third claim finds none.
+func testJonahConcurrentClaims(f *fixture) {
+	t := f.t
+	a := f.queueReview(t, f.factory, t0)
+	b := f.queueReview(t, f.newFactory(t), t0)
+
+	var (
+		wg   sync.WaitGroup
+		got  [2]domain.JonahReview
+		errs [2]error
+	)
+
+	for i := range got {
+		wg.Go(func() { got[i], errs[i] = f.Jonah.ClaimJonahReview(f.ctx(t), t1, ttl) })
+	}
+
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("claim %d: %v", i, err)
+		}
+	}
+
+	if got[0].ID == got[1].ID {
+		t.Fatalf("both claims took review %s; want %s and %s", got[0].ID, a.ID, b.ID)
+	}
+
+	for _, r := range got {
+		if (r.ID != a.ID && r.ID != b.ID) || r.State != domain.JonahRunning || r.Attempts != 1 {
+			t.Errorf("claimed %+v; want %s or %s running, attempt 1", r, a.ID, b.ID)
+		}
+	}
+
+	if _, err := f.Jonah.ClaimJonahReview(f.ctx(t), t1, ttl); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("third claim while both are held: %v, want ErrNotFound", err)
+	}
 }
 
 // finishUnderNewLease finishes a review claimed first and then second: the first claim's finish

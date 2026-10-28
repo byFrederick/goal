@@ -941,3 +941,55 @@ func TestReads_SeeOnlyTheOrgInTheirContext(t *testing.T) {
 		t.Errorf("Factories without an organization = %v, want none", fs)
 	}
 }
+
+func TestCurrentLines_AreTheOrgsCurrentLines(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.publish(t, org, acme(acmeName, noteContract))
+	v2 := h.publish(t, org, acme(acmeName, bodyContract))
+	const betaID domain.FactoryID = "5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a02"
+
+	h.publish(t, org, withID(acme("beta", noteContract), betaID)) // archived below
+	h.publish(t, other, withID(acme(acmeName, noteContract), otherID))
+	h.archive(t, org, betaID)
+
+	c := h.cache(t, nil)
+
+	lines, err := c.CurrentLines(ctxOf(t, org))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := domain.Line{OrgID: org, FactoryID: acmeID, VersionID: v2.ID, Number: 2}
+	if len(lines) != 1 || !sameVersion(lines[0], want) || lines[0].Name != acmeName {
+		t.Fatalf("current lines = %+v, want only acme's v2 in org", lines)
+	}
+
+	if _, err := c.CurrentLines(t.Context()); !errors.Is(err, domain.ErrNoOrg) {
+		t.Errorf("CurrentLines without an organization = %v, want ErrNoOrg", err)
+	}
+}
+
+func TestLine_ReadsAPinnedVersionInItsOrg(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	v1 := h.publish(t, org, acme(acmeName, noteContract))
+	v2 := h.publish(t, org, acme(acmeName, bodyContract))
+	c := h.cache(t, nil) // loads v2 only
+
+	for _, want := range []domain.Line{
+		{OrgID: org, FactoryID: acmeID, VersionID: v1.ID, Number: 1},
+		{OrgID: org, FactoryID: acmeID, VersionID: v2.ID, Number: 2},
+	} {
+		l, err := c.Line(ctxOf(t, org), want.VersionID)
+		if err != nil || !sameVersion(l, want) || len(l.Stations) != 2 {
+			t.Errorf("Line(%s) = %+v, %v; want acme's version %d", want.VersionID, l, err, want.Number)
+		}
+	}
+
+	if _, err := c.Line(ctxOf(t, other), v1.ID); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("Line from another organization = %v, want ErrNotFound", err)
+	}
+}
