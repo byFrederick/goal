@@ -90,8 +90,18 @@ func (k *Knowledge) GiveVerdict(ctx context.Context, v domain.KnowledgeVerdict) 
 		return domain.KnowledgeVerdict{}, fmt.Errorf("give knowledge verdict: %w", err)
 	}
 
+	// The audit entry and the stream's knowledge event commit with the verdict.
 	row, err := fetch(ctx, k.s.inTx, func(q *db.Queries) (db.UpsertKnowledgeVerdictRow, error) {
-		return q.UpsertKnowledgeVerdict(ctx, p)
+		row, err := q.UpsertKnowledgeVerdict(ctx, p)
+		if err != nil {
+			return row, err
+		}
+
+		if err := appendAudit(ctx, q, v.AuditEntry()); err != nil {
+			return row, err
+		}
+
+		return row, q.NotifyKnowledgeSync(ctx, row.SourceID)
 	})
 	if notFound(err) {
 		return domain.KnowledgeVerdict{}, fmt.Errorf("give knowledge verdict on %s: %w", v.Document, ports.ErrNotFound)
@@ -214,6 +224,45 @@ func (k *Knowledge) RunUses(ctx context.Context, run domain.RunID) ([]domain.Kno
 	out := make([]domain.KnowledgeUse, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, useFrom(r))
+	}
+
+	return out, nil
+}
+
+// RunVerdicts implements ports.Knowledge.
+func (k *Knowledge) RunVerdicts(ctx context.Context, run domain.RunID) ([]domain.KnowledgeVerdict, error) {
+	rid, err := uuid.Parse(string(run))
+	if err != nil {
+		if _, ok := domain.OrgFrom(ctx); !ok {
+			return nil, domain.ErrNoOrg
+		}
+
+		return nil, nil // no such run has verdicts
+	}
+
+	rows, err := fetch(ctx, k.s.read, func(q *db.Queries) ([]db.KnowledgeRunVerdictsRow, error) {
+		return q.KnowledgeRunVerdicts(ctx, &rid)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("knowledge run verdicts: %w", err)
+	}
+
+	out := make([]domain.KnowledgeVerdict, 0, len(rows))
+	for _, r := range rows {
+		v := domain.KnowledgeVerdict{
+			Document: domain.KnowledgeDocumentID(r.DocumentID.String()), Source: domain.KnowledgeSourceID(r.SourceID.String()),
+			Verdict: domain.KnowledgeVerdictKind(r.Verdict), Note: r.Note, By: namedActor(r.Actor, ""), At: r.At.UTC(),
+		}
+
+		if r.RunID != nil {
+			v.Run = domain.RunID(r.RunID.String())
+		}
+
+		if r.ItemID != nil {
+			v.Item = domain.ItemID(r.ItemID.String())
+		}
+
+		out = append(out, v)
 	}
 
 	return out, nil

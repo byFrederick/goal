@@ -94,8 +94,10 @@ type Knowledge interface {
 	RecordUse(ctx context.Context, u domain.KnowledgeUse) error
 	// GiveVerdict records v and returns it as stored, with its document's source and its time:
 	// one per actor, document and run (none counting as its own), so a later one replaces the
-	// earlier one's verdict, note, item and time. Its rules are KnowledgeVerdict.Check's
-	// (domain.ErrInvalid); ErrNotFound for an unknown document.
+	// earlier one's verdict, note, item and time. It appends domain.AuditKnowledgeVerdictGiven
+	// (its kind and run, never its note) and notifies the stream event knowledge of its source,
+	// both with the verdict. Its rules are KnowledgeVerdict.Check's (domain.ErrInvalid);
+	// ErrNotFound for an unknown document.
 	GiveVerdict(ctx context.Context, v domain.KnowledgeVerdict) (domain.KnowledgeVerdict, error)
 	// SourceUsage is the use of the source name's documents over a window of the last days (1 to
 	// domain.MaxUsageDays, else domain.ErrInvalid): per document with a use or a verdict in the
@@ -108,6 +110,9 @@ type Knowledge interface {
 	DocumentUses(ctx context.Context, document domain.KnowledgeDocumentID, after domain.RunID, limit int) ([]domain.KnowledgeRunUse, error)
 	// RunUses are a run's uses, by time, document and kind; none for an unknown run.
 	RunUses(ctx context.Context, run domain.RunID) ([]domain.KnowledgeUse, error)
+	// RunVerdicts are the verdicts given for a run, by time, document and actor; none for an
+	// unknown run.
+	RunVerdicts(ctx context.Context, run domain.RunID) ([]domain.KnowledgeVerdict, error)
 }
 
 // DropBlobs deletes the objects of uploads' contents no document holds any more. A deletion calls
