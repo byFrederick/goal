@@ -868,3 +868,147 @@ func TestBundle_GrantedCallsOfTheRun(t *testing.T) {
 		t.Errorf("granted_calls of a run without grants = %v, want []", got)
 	}
 }
+
+// draftFiles are the test factory's draft files.
+var draftFiles = map[string][]byte{
+	"factory.yaml":       []byte(factoryYAML),
+	"agents/engineer.md": []byte("# engineer\n"),
+	"rules/evidence.md":  {0xff, 0x00, 'b'},
+}
+
+// openDraft opens the test factory's draft with draftFiles and queues a draft request on factory
+// f about the engineer, returning it and the draft's revision.
+func (h *harness) openDraft(t *testing.T, f domain.FactoryID) (domain.DraftRequest, int64) {
+	t.Helper()
+
+	ctx := domain.WithOrg(t.Context(), h.org)
+
+	m, err := h.drafts.PutBlobs(ctx, draftFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, d, err := h.drafts.CreateFactory(ctx, ports.NewFactory{ID: factoryID, Name: "acme-gateway", Manifest: m, By: domain.LocalUser})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.requests.AddFactory(h.org, f)
+
+	r, err := h.requests.Create(ctx, domain.NewDraftRequest{Factory: f, Requester: domain.LocalUser, Text: "Give review a 4th reviewer", Agent: agentEngineer})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return r, d.Revision
+}
+
+// draftClaims are a draft request's task claims for r at revision.
+func (h *harness) draftClaims(r domain.DraftRequest, revision int64) domain.TaskClaims {
+	return domain.TaskClaims{
+		Kind: domain.TaskKindDraftRequest, OrgID: h.org, FactoryID: factoryID, VersionID: version, Agent: r.Agent, RunID: domain.RunID(r.ID),
+		Model: "claude-sonnet-5-5", DraftRequest: r.ID, DraftRevision: revision, ExpiresAt: h.clock.Now().Add(time.Hour).Unix(),
+	}
+}
+
+// A draft request's bundle has no repository, no git login and no connection: its spec names no
+// item and no station but the request, and its definition holds every draft file.
+func TestServeRun_DraftRequestBundle(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, Config{})
+	r, rev := h.openDraft(t, factoryID)
+
+	status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, h.draftClaims(r, rev)))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (%s)", status, body)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, ok := raw["repository"]; ok || string(raw["git_credentials"]) != "[]" || string(raw["tools"]) != "[]" {
+		t.Errorf("repository %s, git_credentials %s, tools %s; want none, [] and []", raw["repository"], raw["git_credentials"], raw["tools"])
+	}
+
+	var got runBundle
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+
+	s := got.Spec
+	if s.ItemID != "" || s.Station != "" || s.RunID != domain.RunID(r.ID) || s.FactoryID != factoryID || s.Agent != agentEngineer ||
+		len(s.Connections) != 0 || len(s.Rules) != 0 || len(s.Skills) != 0 || s.Model != "claude-sonnet-5-5" {
+		t.Errorf("spec = %+v, want the request's run with no item, station, connection, rule or skill", s)
+	}
+
+	if s.DraftRequest == nil || *s.DraftRequest != (bundleDraftRequest{ID: r.ID, Text: r.Text, Agent: agentEngineer}) {
+		t.Errorf("draft_request = %+v, want %s", s.DraftRequest, r.ID)
+	}
+
+	if got.Definition == nil || len(got.Definition.Files) != len(draftFiles) {
+		t.Fatalf("definition = %+v, want the %d draft files", got.Definition, len(draftFiles))
+	}
+
+	for p, want := range draftFiles {
+		if !bytes.Equal(got.Definition.Files[p], want) {
+			t.Errorf("definition file %s = %q, want %q", p, got.Definition.Files[p], want)
+		}
+	}
+
+	if strings.Contains(string(body), modelAPIKey) || strings.Contains(string(body), cloneToken) {
+		t.Error("the bundle holds a secret value")
+	}
+}
+
+// A draft that moved past the token's revision is 409; a request of another factory, and a
+// draft request's token at any other endpoint of the run, are 403.
+func TestServeRun_DraftRequestStaleRevision(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, Config{})
+	url := h.runServer(t)
+	r, rev := h.openDraft(t, factoryID)
+	ctx := domain.WithOrg(t.Context(), h.org)
+
+	m, err := h.drafts.PutBlobs(ctx, map[string][]byte{"agents/engineer.md": []byte("# engineer, edited\n")})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.drafts.SaveDraft(ctx, ports.DraftChange{Factory: factoryID, ExpectedRevision: rev, Set: m, By: domain.LocalUser}); err != nil {
+		t.Fatal(err)
+	}
+
+	if status, _, body := request(t, http.MethodGet, url, h.token(t, h.draftClaims(r, rev))); status != http.StatusConflict {
+		t.Errorf("stale revision: status = %d, want 409 (%s)", status, body)
+	}
+
+	if status, _, body := request(t, http.MethodGet, url, h.token(t, h.draftClaims(r, rev+1))); status != http.StatusOK {
+		t.Errorf("current revision: status = %d, want 200 (%s)", status, body)
+	}
+
+	h.requests.AddFactory(h.org, otherID)
+
+	foreign, err := h.requests.Create(ctx, domain.NewDraftRequest{Factory: otherID, Requester: domain.LocalUser, Text: "Someone else's"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	other := h.draftClaims(foreign, rev+1)
+	other.Agent = ""
+
+	if status, _, body := request(t, http.MethodGet, url, h.token(t, other)); status != http.StatusForbidden {
+		t.Errorf("another factory's request: status = %d, want 403 (%s)", status, body)
+	}
+
+	if status, _, body := request(t, http.MethodGet, url+"?notes_after=0", h.token(t, h.draftClaims(r, rev+1))); status != http.StatusForbidden {
+		t.Errorf("notes for a draft request: status = %d, want 403 (%s)", status, body)
+	}
+
+	if status, _, body := request(t, http.MethodPost, h.url, h.token(t, h.draftClaims(r, rev+1))); status != http.StatusForbidden {
+		t.Errorf("tools for a draft request: status = %d, want 403 (%s)", status, body)
+	}
+}

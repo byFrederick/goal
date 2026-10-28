@@ -124,6 +124,9 @@ type harness struct {
 	approvals *fakeToolApprovals
 	// logs hold every line the gateway logs.
 	logs *syncBuffer
+	// drafts hold the factories' drafts and requests their draft requests (bundle_test.go).
+	drafts   *porttest.Definitions
+	requests *porttest.DraftRequests
 }
 
 func newHarness(t *testing.T, cfg Config) *harness {
@@ -180,6 +183,8 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 		questions: &fakeQuestions{}, approvals: &fakeToolApprovals{}, logs: &syncBuffer{},
 	}
 	h.org, h.connections = newConnections(t, h.clock)
+	h.drafts = porttest.NewDefinitions(porttest.DefinitionsDeps{Objects: porttest.NewObjectStore(), Now: h.clock.Now})
+	h.requests = porttest.NewDraftRequests(porttest.NewTenancy(h.clock.Now), h.clock.Now)
 
 	cfg.Key = h.key
 
@@ -202,6 +207,8 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 		Clock:         h.clock,
 		Questions:     h.questions,
 		ToolApprovals: h.approvals,
+		DraftRequests: h.requests,
+		Drafts:        h.drafts,
 		Logger:        slog.New(slog.NewTextHandler(h.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}, cfg)
 	if err != nil {
