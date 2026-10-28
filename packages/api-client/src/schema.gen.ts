@@ -2278,6 +2278,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/items/{item}/lane": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set an open item's lane
+         * @description The lane picks the agent at the stations that route by lane; the item stays at its station and in its state, and a lane_set event (from, to) records the change. The lane is trimmed; when any station of the item's line routes by lane, it must be one of the lanes routed. 400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts carry their own lanes), same-lane or item-changed.
+         */
+        post: operations["setItemLane"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/items/{item}/pause": {
         parameters: {
             query?: never;
@@ -3607,6 +3632,10 @@ export interface components {
             /** @description Why; required when the station is upstream of the item's (the agent reads it) */
             reason?: string;
         };
+        SetLaneRequest: {
+            /** @description The lane to set */
+            lane: string;
+        };
         PauseRequest: {
             /** @description Why the item is paused */
             reason?: string;
@@ -3784,7 +3813,7 @@ export interface components {
              * @description The naming event; its reason is set by setTouchReason
              */
             event_id: number;
-            /** @description The naming event's kind: merged, rejected, approved, moved, paused, cancelled, retried, note, ... */
+            /** @description The naming event's kind: merged, rejected, approved, moved, paused, cancelled, retried, lane_set, note, ... */
             kind: string;
             station: string | null;
             /** Format: date-time */
@@ -9416,6 +9445,37 @@ export interface operations {
         };
         responses: {
             /** @description The item at its new station */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    setItemLane: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetLaneRequest"];
+            };
+        };
+        responses: {
+            /** @description The item with its new lane */
             200: {
                 headers: {
                     [name: string]: unknown;

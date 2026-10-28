@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/byFrederick/goal/internal/api/gen"
+	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 const acmeItem1 = "/v1/orgs/acme/items/acme%231"
@@ -110,5 +111,55 @@ func TestAPI_CancelItem(t *testing.T) {
 	var p gen.Problem
 	if code := h.call(t, http.MethodPost, acmeItem1+"/cancel", ``, &p); code != http.StatusConflict || deref(p.Code) != codeItemClosed {
 		t.Errorf("cancel of a cancelled item = %d %+v; want 409 item-closed", code, p)
+	}
+}
+
+func TestAPI_SetLane(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	queued := h.seed(t, stBuild, domain.StateQueued, t0)                                                                  // line#1, lane api
+	running := h.seed(t, stBuild, domain.StateInProgress, t0)                                                             // line#2
+	h.move(t, h.seed(t, stBuild, domain.StateQueued, t0), domain.Position{Station: stDone, State: domain.StateDone}, nil) // line#3
+
+	steps := []struct {
+		name, ref, body string
+		status          int
+		code            string
+	}{
+		{name: "a blank lane", ref: "line%231", body: `{"lane":"  "}`, status: http.StatusBadRequest, code: "lane-required"},
+		{name: "a lane no station routes", ref: "line%231", body: `{"lane":"mobile"}`, status: http.StatusBadRequest, code: "unknown-lane"},
+		{name: "the same lane", ref: "line%231", body: `{"lane":"api"}`, status: http.StatusConflict, code: "same-lane"},
+		{name: "an item in progress", ref: "line%232", body: `{"lane":"web"}`, status: http.StatusConflict, code: "item-in-progress"},
+		{name: "a done item", ref: "line%233", body: `{"lane":"web"}`, status: http.StatusConflict, code: codeItemClosed},
+		{name: "a routed lane", ref: "line%231", body: `{"lane":" web "}`, status: http.StatusOK},
+	}
+
+	for _, s := range steps {
+		var (
+			it   gen.Item
+			prob gen.Problem
+			out  any = &it
+		)
+
+		if s.status != http.StatusOK {
+			out = &prob
+		}
+
+		if got := h.call(t, http.MethodPost, "/v1/orgs/acme/items/"+s.ref+"/lane", s.body, out); got != s.status {
+			t.Fatalf("%s: lane = %d %+v; want %d", s.name, got, prob, s.status)
+		}
+
+		if s.status != http.StatusOK && deref(prob.Code) != s.code {
+			t.Errorf("%s: problem %+v; want code %s", s.name, prob, s.code)
+		}
+
+		if s.status == http.StatusOK && (deref(it.Lane) != "web" || it.Station != stBuild || it.State != gen.ItemState(queued.State)) {
+			t.Errorf("%s: item lane %q %s at %s; want lane web, still queued at build", s.name, deref(it.Lane), it.State, it.Station)
+		}
+	}
+
+	if got, err := h.store.Item(inOrg(t), running.ID); err != nil || got.Lane != laneAPI {
+		t.Errorf("the item in progress has lane %q, %v; want api unchanged", got.Lane, err)
 	}
 }
