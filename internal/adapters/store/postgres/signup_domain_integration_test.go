@@ -3,6 +3,7 @@
 package postgres
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -67,36 +68,47 @@ func TestSignupDomain_SetReadAndClearRoundTrip(t *testing.T) {
 		t.Errorf("read = %+v, %v, %v; want %+v", read, set, err, got)
 	}
 
+	changeAndClear(ctx, t, d, owner)
+	checkSignupAudit(ctx, t, d, owner)
+}
+
+// changeAndClear sets the round trip's domain again (no change), to approver, then clears it twice
+// (the second clears nothing).
+func changeAndClear(ctx context.Context, t *testing.T, d identityDB, owner domain.Actor) {
+	t.Helper()
+
 	if _, err := d.s.SetSignupDomain(ctx, owner, signupDomain, domain.FactoryViewer); err != nil {
 		t.Fatal(err)
 	}
 
-	if got, err = d.s.SetSignupDomain(ctx, owner, signupDomain, domain.FactoryApprover); err != nil || got.JoinRole != domain.FactoryApprover {
+	if got, err := d.s.SetSignupDomain(ctx, owner, signupDomain, domain.FactoryApprover); err != nil || got.JoinRole != domain.FactoryApprover {
 		t.Fatalf("change = %+v, %v; want approver", got, err)
 	}
 
-	if err := d.s.ClearSignupDomain(ctx, owner); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := d.s.ClearSignupDomain(ctx, owner); err != nil {
-		t.Fatalf("clearing nothing = %v; want no change", err)
+	for range 2 {
+		if err := d.s.ClearSignupDomain(ctx, owner); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if _, set, err := d.s.SignupDomain(ctx); err != nil || set {
 		t.Errorf("after clearing = %v, %v; want none", set, err)
 	}
+}
 
-	for action, want := range map[string]int{domain.AuditOrgSignupDomainSet: 2, domain.AuditOrgSignupDomainCleared: 1} {
-		entries, err := d.s.AuditLog(ctx, ports.AuditQuery{Action: action, Limit: 10})
-		if err != nil || len(entries) != want {
-			t.Errorf("%s entries = %d, %v; want %d", action, len(entries), err, want)
-		}
+// checkSignupAudit checks the round trip's audit: two sets (the repeat audits nothing), the latest
+// to approver by the owner, and one clear (clearing nothing audits nothing).
+func checkSignupAudit(ctx context.Context, t *testing.T, d identityDB, owner domain.Actor) {
+	t.Helper()
 
-		if action == domain.AuditOrgSignupDomainSet && len(entries) == want &&
-			(entries[0].Data["join_role"] != "approver" || entries[0].Actor.ID != owner.ID) {
-			t.Errorf("the latest %s = %+v; want approver, by the owner", action, entries[0])
-		}
+	set, err := d.s.AuditLog(ctx, ports.AuditQuery{Action: domain.AuditOrgSignupDomainSet, Limit: 10})
+	if err != nil || len(set) != 2 || set[0].Data["join_role"] != string(domain.FactoryApprover) || set[0].Actor.ID != owner.ID {
+		t.Errorf("%s entries = %+v, %v; want 2, the latest to approver by the owner", domain.AuditOrgSignupDomainSet, set, err)
+	}
+
+	cleared, err := d.s.AuditLog(ctx, ports.AuditQuery{Action: domain.AuditOrgSignupDomainCleared, Limit: 10})
+	if err != nil || len(cleared) != 1 {
+		t.Errorf("%s entries = %d, %v; want 1", domain.AuditOrgSignupDomainCleared, len(cleared), err)
 	}
 }
 
@@ -223,10 +235,41 @@ func (d identityDB) signupOrgs(email string) []string {
 	return out
 }
 
-// The auth service's side: goal_signup_domain_org admits exactly the domain, case ignored, and
-// goal_apply_signup_domain joins a verified user once, as a member with the join role on every
-// factory, audited via signup-domain; it leaves an unverified user, an invitee of the
-// organization and anyone elsewhere alone.
+// goal_signup_domain_org admits exactly the domain of the part after the last @, case and
+// surrounding spaces ignored: no subdomain, no longer name ending like it, nothing without an @.
+func TestSignupDomain_TheAuthServiceMatchesTheDomainExactly(t *testing.T) {
+	t.Parallel()
+
+	d := newIdentityDB(t)
+	acme := d.org("acme")
+
+	if _, err := d.s.SetSignupDomain(domain.WithOrg(t.Context(), acme.ID), d.owner(acme.ID, "f.cruz@"+signupDomain), signupDomain,
+		domain.FactoryViewer); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, c := range []struct {
+		email string
+		want  int
+	}{
+		{"\tAda@ACME.example.com ", 1},
+		{"ada@x@" + signupDomain, 1},
+		{"ada@eu." + signupDomain, 0},
+		{"ada@example.com", 0},
+		{"ada@" + signupDomain + ".evil", 0},
+		{"no-at-sign." + signupDomain, 0},
+		{"ada@notacme.example.com", 0},
+		{"ada@acme.example.com@gmail.com", 0},
+	} {
+		if got := d.signupOrgs(c.email); len(got) != c.want {
+			t.Errorf("goal_signup_domain_org(%q) = %v; want %d rows", c.email, got, c.want)
+		}
+	}
+}
+
+// The auth service's side: goal_apply_signup_domain joins a verified user once, as a member with
+// the join role on every factory, audited via signup-domain; it leaves an unverified user, an
+// invitee of the organization and anyone elsewhere alone.
 func TestSignupDomain_TheAuthServiceJoinsAtTheDomain(t *testing.T) {
 	t.Parallel()
 
@@ -238,21 +281,6 @@ func TestSignupDomain_TheAuthServiceJoinsAtTheDomain(t *testing.T) {
 
 	if _, err := d.s.SetSignupDomain(ctx, owner, signupDomain, domain.FactoryApprover); err != nil {
 		t.Fatal(err)
-	}
-
-	for email, want := range map[string]int{
-		" Ada@ACME.example.com ":         1,
-		"ada@eu." + signupDomain:         0,
-		"ada@example.com":                0,
-		"ada@" + signupDomain + ".evil":  0,
-		"ada@x@" + signupDomain:          1, // the part after the last @
-		"no-at-sign." + signupDomain:     0,
-		"ada@notacme.example.com":        0,
-		"ada@acme.example.com@gmail.com": 0,
-	} {
-		if got := d.signupOrgs(email); len(got) != want {
-			t.Errorf("goal_signup_domain_org(%q) = %v; want %d rows", email, got, want)
-		}
 	}
 
 	apply := func(user string) *string {

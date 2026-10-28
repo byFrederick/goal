@@ -5126,8 +5126,8 @@ type OrgSettings struct {
 	Mark string `json:"mark"`
 	Name string `json:"name"`
 
-	// SignupDomain The domain whose people may sign up without an invitation; null when none is set
-	SignupDomain *SignupDomain `json:"signup_domain"`
+	// SignupDomain The domain whose people may sign up without an invitation; absent when none is set
+	SignupDomain *SignupDomain `json:"signup_domain,omitempty"`
 
 	// Slots Slot caps: how many agents may run at once across the organization's factories (max) and in each factory. null is no cap.
 	Slots OrgSlots `json:"slots"`

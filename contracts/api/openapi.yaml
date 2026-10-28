@@ -5132,15 +5132,14 @@ components:
         purge_after: { type: string, format: date-time, description: When the purge job may remove everything }
     OrgSettings:
       type: object
-      required: [name, slug, mark, slots, signup_domain]
+      required: [name, slug, mark, slots]
       properties:
         name: { type: string }
         slug: { type: string }
         mark: { type: string }
         slots: { $ref: "#/components/schemas/OrgSlots" }
         signup_domain:
-          description: The domain whose people may sign up without an invitation; null when none is set
-          nullable: true
+          description: The domain whose people may sign up without an invitation; absent when none is set
           allOf: [{ $ref: "#/components/schemas/SignupDomain" }]
     SignupDomain:
       type: object

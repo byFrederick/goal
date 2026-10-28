@@ -4087,8 +4087,8 @@ export interface components {
             slug: string;
             mark: string;
             slots: components["schemas"]["OrgSlots"];
-            /** @description The domain whose people may sign up without an invitation; null when none is set */
-            signup_domain: components["schemas"]["SignupDomain"] | null;
+            /** @description The domain whose people may sign up without an invitation; absent when none is set */
+            signup_domain?: components["schemas"]["SignupDomain"];
         };
         /** @description Sign-up by domain (ADR 0023, decision 7): anyone whose verified email is exactly at domain may sign up, joining as a member with join_role on every factory that exists then */
         SignupDomain: {

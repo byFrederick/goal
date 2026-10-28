@@ -52,23 +52,8 @@ func (t *Tenancy) SetSignupDomain(ctx context.Context, by domain.Actor, d string
 	}
 
 	d = strings.ToLower(strings.TrimSpace(d))
-
-	email, ok := "", false
-	if t.emailOf != nil && by.Kind == domain.ActorUser {
-		email, ok = t.emailOf(domain.UserID(by.ID))
-	}
-
-	switch {
-	case !ok || domain.EmailDomain(email) != d:
-		return domain.SignupDomain{}, fmt.Errorf("set sign-up domain %q: %w", d, domain.ErrSignupDomainNotYours)
-	case t.publicDomains[d]:
-		return domain.SignupDomain{}, fmt.Errorf("set sign-up domain %q: %w", d, domain.ErrSignupDomainPublic)
-	}
-
-	for id, o := range t.orgs {
-		if id != r.org.ID && o.deleted.IsZero() && o.signup != nil && o.signup.Domain == d {
-			return domain.SignupDomain{}, fmt.Errorf("set sign-up domain %q: %w", d, domain.ErrSignupDomainTaken)
-		}
+	if err := t.checkSignupLocked(r, by, d); err != nil {
+		return domain.SignupDomain{}, fmt.Errorf("set sign-up domain %q: %w", d, err)
 	}
 
 	if old := r.signup; old != nil && old.Domain == d && old.JoinRole == role {
@@ -91,6 +76,29 @@ func (t *Tenancy) SetSignupDomain(ctx context.Context, by domain.Actor, d string
 		map[string]any{"domain": d, "join_role": string(role), "from": from}))
 
 	return *r.signup, nil
+}
+
+// checkSignupLocked is goal_set_signup_domain's refusals of d for by in r.
+func (t *Tenancy) checkSignupLocked(r *orgRow, by domain.Actor, d string) error {
+	email, ok := "", false
+	if t.emailOf != nil && by.Kind == domain.ActorUser {
+		email, ok = t.emailOf(domain.UserID(by.ID))
+	}
+
+	switch {
+	case !ok || domain.EmailDomain(email) != d:
+		return domain.ErrSignupDomainNotYours
+	case t.publicDomains[d]:
+		return domain.ErrSignupDomainPublic
+	}
+
+	for id, o := range t.orgs {
+		if id != r.org.ID && o.deleted.IsZero() && o.signup != nil && o.signup.Domain == d {
+			return domain.ErrSignupDomainTaken
+		}
+	}
+
+	return nil
 }
 
 // ClearSignupDomain implements ports.SignupDomains.
