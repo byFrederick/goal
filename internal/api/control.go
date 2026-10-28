@@ -26,6 +26,21 @@ func (s *server) MoveItem(ctx context.Context, req gen.MoveItemRequestObject) (g
 	return gen.MoveItem200JSONResponse(s.itemOf(ctx, it)), nil
 }
 
+// SetItemLane sets an open item's lane (engine.SetLane): the request's actor sets it, and the
+// item stays where it is.
+func (s *server) SetItemLane(ctx context.Context, req gen.SetItemLaneRequestObject) (gen.SetItemLaneResponseObject, error) {
+	by, it, err := s.decide(ctx, req.Item)
+	if err != nil {
+		return nil, err
+	}
+
+	if it, err = s.engine.SetLane(ctx, it.ID, req.Body.Lane, by); err != nil {
+		return nil, err
+	}
+
+	return gen.SetItemLane200JSONResponse(s.itemOf(ctx, it)), nil
+}
+
 // PauseItem stops an open item where it is until a retry (engine.Pause).
 func (s *server) PauseItem(ctx context.Context, req gen.PauseItemRequestObject) (gen.PauseItemResponseObject, error) {
 	var reason *string
@@ -74,7 +89,7 @@ func (s *server) actWithReason(ctx context.Context, ref string, reason *string,
 }
 
 // controlProblem maps the refusals of a person's control of an item to their problem details:
-// a request naming no station of the line, or lacking a reason, is 400; a state or station that
+// a request naming no station or lane of the line, or lacking a reason or a lane, is 400; a state or station that
 // does not allow it 409, each with its code.
 func controlProblem(err error) (gen.Problem, bool) {
 	refusals := []struct {
@@ -84,6 +99,11 @@ func controlProblem(err error) (gen.Problem, bool) {
 	}{
 		{engine.ErrUnknownStation, http.StatusBadRequest, "unknown-station"},
 		{engine.ErrReasonRequired, http.StatusBadRequest, "reason-required"},
+		{engine.ErrLaneRequired, http.StatusBadRequest, "lane-required"},
+		{engine.ErrUnknownLane, http.StatusBadRequest, "unknown-lane"},
+		{engine.ErrSameLane, http.StatusConflict, "same-lane"},
+		{engine.ErrItemInProgress, http.StatusConflict, "item-in-progress"},
+		{engine.ErrItemIsAssembly, http.StatusConflict, "item-is-assembly"},
 		{engine.ErrSameStation, http.StatusConflict, "same-station"},
 		{engine.ErrDoneStation, http.StatusConflict, "done-station"},
 		{engine.ErrAlreadyBlocked, http.StatusConflict, "already-blocked"},

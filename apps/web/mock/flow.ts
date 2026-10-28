@@ -44,11 +44,14 @@ interface Profile {
   drumWaitHours: number;
   rework: number;
   costUsd: number;
+  /** The share of history items with no touch at all; unset: every item keeps its seeded touches. */
+  touchless?: number;
 }
 
 const profiles: Record<string, Profile> = {
   goal: { perDay: 2.1, drumWaitHours: 14, rework: 0.22, costUsd: 1.4 },
   sre: { perDay: 6.6, drumWaitHours: 11, rework: 0.18, costUsd: 0.35 },
+  software: { perDay: 7, drumWaitHours: 59.5, rework: 0.2, costUsd: 1, touchless: 0.35 },
 };
 
 /** The key of a bridge component: `waiting:build`, `waiting_on_you:`. */
@@ -134,7 +137,10 @@ export function seedHistory(f: Factory, now: number, drum: string | null): MockD
         reworked,
         cost_usd: Math.round(profile.costUsd * (0.4 + rand() * 1.2) * 100) / 100,
         times,
-        touches: seedTouches(touchRand, humans, drum),
+        touches:
+          profile.touchless !== undefined && touchRand() < profile.touchless
+            ? []
+            : seedTouches(touchRand, humans, drum),
       });
     }
   }
@@ -362,8 +368,8 @@ export interface ConstraintInput {
 
 /** A mean lease of the mock's agents, in hours. */
 const serviceHours = 1.5;
-/** What one of the mock's agent runs costs, in dollars. */
-const runCostUsd = 0.9;
+/** What one of the mock's agent runs costs, in dollars: with 1.2, the software Floor's build adds about $18 a day. */
+const runCostUsd = 1.2;
 
 /**
  * GET …/constraint: the agent stations with a seeded busy share, busiest first, at most 3; the

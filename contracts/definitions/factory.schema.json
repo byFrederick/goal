@@ -74,6 +74,25 @@
         "board": { "$ref": "#/$defs/board" },
         "learning": { "$ref": "#/$defs/learning" }
       }
+    },
+    "starter": {
+      "type": "object",
+      "description": "What a new factory made from this definition starts with (ADR 0032). Onboarding submits starter.item once, when the factory has no items yet.",
+      "required": ["item"],
+      "additionalProperties": false,
+      "properties": {
+        "item": {
+          "type": "object",
+          "description": "A small, safe first item the person watches go through the line.",
+          "required": ["title"],
+          "additionalProperties": false,
+          "properties": {
+            "title": { "type": "string", "minLength": 1, "maxLength": 200, "description": "The item's title." },
+            "type": { "type": "string", "description": "One of board.workTypes; when absent, the item gets the first work type, as submitItem does." },
+            "body": { "type": "string", "maxLength": 20000, "description": "The item's brief, in markdown." }
+          }
+        }
+      }
     }
   },
   "$defs": {
@@ -369,6 +388,17 @@
               "type": "string",
               "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
               "description": "An event field, dotted (check.name); passes when no open item this trigger created holds the same value of it."
+            },
+            "modelAgrees": {
+              "type": "object",
+              "description": "The model check, run last: passes when a model answers yes to the question about the event, which it reads as untrusted data.",
+              "required": ["question"],
+              "additionalProperties": false,
+              "properties": {
+                "question": { "type": "string", "description": "The yes or no question the model answers about the event: not blank, at most 500 characters." },
+                "connection": { "type": "string", "description": "The organization connection that pays for the check; runtime.modelConnection when unset." },
+                "model": { "type": "string", "description": "The model asked; the connection kind's default when unset." }
+              }
             }
           }
         },

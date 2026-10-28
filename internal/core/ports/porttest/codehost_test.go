@@ -115,6 +115,50 @@ func TestCodeHost_UpdateBranchUpToDate(t *testing.T) {
 	}
 }
 
+// PendingReads makes the next reads report the mergeability as pending, then the pull request
+// as it is; Reads counts every read; RefuseMerges refuses the next merges of a mergeable one.
+func TestCodeHost_PendingReads(t *testing.T) {
+	t.Parallel()
+
+	const pr = "https://github.com/acme/app/pull/7"
+
+	conn := githubConn()
+	h := porttest.NewCodeHost()
+	h.Add(ports.PullRequest{URL: pr, Open: true, Mergeable: true, HeadSHA: "4b825dc6"})
+	h.PendingReads(pr, 2)
+
+	var pending []bool
+
+	for range 3 {
+		got, err := h.PullRequest(t.Context(), conn, pr)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		pending = append(pending, got.MergeabilityPending)
+	}
+
+	if !slices.Equal(pending, []bool{true, true, false}) {
+		t.Errorf("MergeabilityPending of three reads = %v; want pending twice, then known", pending)
+	}
+
+	if n := h.Reads(pr); n != 3 {
+		t.Errorf("Reads = %d; want 3", n)
+	}
+
+	merge := ports.Merge{Method: "squash", HeadSHA: "4b825dc6"}
+
+	h.RefuseMerges(pr, 1)
+
+	if _, err := h.Merge(t.Context(), conn, pr, merge); !errors.Is(err, ports.ErrNotMergeable) {
+		t.Errorf("Merge while refused = %v; want ErrNotMergeable", err)
+	}
+
+	if _, err := h.Merge(t.Context(), conn, pr, merge); err != nil {
+		t.Errorf("Merge after the refusal = %v; want nil", err)
+	}
+}
+
 // The fake must read heads and compare commits by the port's rules, or engine tests built on it
 // prove nothing.
 func TestCodeHost_BranchHeadAndCompare(t *testing.T) {

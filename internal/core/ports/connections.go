@@ -59,13 +59,29 @@ type Connections interface {
 	// Update renames a connection and changes its metadata and fields (connection.updated); Secrets
 	// replaces the named secret fields only (connection.secret_replaced), each one moving between
 	// sealed and a reference as its new value is one or the other, as Create. ErrNotFound when
-	// there is none, ErrNameTaken when another connection has the new name.
+	// there is none, ErrNameTaken when another connection has the new name. ToolModes replaces
+	// every tool's mode (connection.updated); an unknown mode or a malformed tool name is
+	// domain.ErrInvalid.
 	Update(ctx context.Context, name string, p domain.ConnectionPatch, by domain.Actor) (domain.Connection, error)
-	// Delete deletes a connection (connection.deleted). ErrNotFound when there is none;
-	// ErrConflict while a knowledge source uses it.
+	// Delete deletes a connection (connection.deleted) and revokes its active standing rules by
+	// the same actor (standing_rule.revoked each). ErrNotFound when there is none; ErrConflict
+	// while a knowledge source uses it.
 	Delete(ctx context.Context, name string, by domain.Actor) error
-	// RecordTest records a test's outcome (connection.tested). ErrNotFound when there is none.
+	// RecordTest records a test's outcome (connection.tested), its Tools sorted and without
+	// repeats; the tool modes stay. ErrNotFound when there is none.
 	RecordTest(ctx context.Context, name string, r domain.ConnectionTest, by domain.Actor) error
+
+	// StandingRules are the organization's standing rules (ADR 0031 decision 7), oldest first:
+	// the active ones, and the revoked ones too with includeRevoked.
+	StandingRules(ctx context.Context, includeRevoked bool) ([]domain.StandingRule, error)
+	// CreateStandingRule creates a standing rule for the connection named n.Connection
+	// (standing_rule.created). When its key (connection, tool, agent) has an active rule already,
+	// it returns that rule and audits nothing. ErrNotFound for an unknown connection;
+	// domain.ErrInvalid for a malformed n (NewStandingRule.Check).
+	CreateStandingRule(ctx context.Context, n domain.NewStandingRule, by domain.Actor) (domain.StandingRule, error)
+	// RevokeStandingRule revokes rule id (standing_rule.revoked). ErrNotFound when there is none;
+	// ErrConflict when it is revoked already.
+	RevokeStandingRule(ctx context.Context, id domain.StandingRuleID, by domain.Actor) (domain.StandingRule, error)
 
 	// Resolve opens the named connections for use (a run, a merge, a sync), audits each as
 	// connection.used by use's actor with what it is for, and sets last_used_at. ErrNotFound

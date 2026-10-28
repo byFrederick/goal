@@ -51,6 +51,7 @@ describe('what a personal token can do', () => {
         'item:decide',
         'item:operate',
         'knowledge:read',
+        'knowledge:verdict',
         'org:read',
       ].sort(),
     );

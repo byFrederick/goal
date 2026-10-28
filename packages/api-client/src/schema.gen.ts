@@ -1749,6 +1749,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/judges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The judges of the factory's current version, each with its last 30 days
+         * @description One entry per evals/judges/<slug>.md of the current version, by slug, each with its production scores of the last 30 days (runs scored, pass rate, cost and a daily pass-rate series by UTC day; tries never count). judge_cost_usd is what every judge run of the factory cost in those 30 days. Empty, with version null, before the first publish. 503 judges-unavailable when this goald does not serve judges.
+         */
+        get: operations["listJudges"];
+        put?: never;
+        /**
+         * Add a judge and publish it as the factory's next version
+         * @description Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version). When the factory has eval cases and the eval gate refuses (evals-pending, evals-failing), the draft stays open, so it publishes once its run passes. 503 judges-unavailable.
+         */
+        post: operations["createJudge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/judges/{judge}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The judge's slug: its file name in evals/judges without .md */
+                judge: components["parameters"]["JudgeRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One judge of the current version, its last 30 days, its recent scores and where it runs
+         * @description Everything in its file, its 30-day summary, its newest production scores (every state, newest first) and runs_on: the box and connections of the factory's defaults it inherits. 404 judge-not-found; 503 judges-unavailable.
+         */
+        get: operations["getJudge"];
+        /**
+         * Replace a judge's file and publish it as the factory's next version
+         * @description As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers, and the same eval gate.
+         */
+        put: operations["updateJudge"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/judges/{judge}/try": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The judge's slug: its file name in evals/judges without .md */
+                judge: components["parameters"]["JudgeRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue the judge on the 10 newest finished runs of its agents
+         * @description Each try names the run's item and is scored like any other score, but never counts in the judge's 30-day figures. Tries cost model spend, so only those who may publish queue them. 404 judge-not-found; 503 judges-unavailable.
+         */
+        post: operations["tryJudge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/andon": {
         parameters: {
             query?: never;
@@ -2206,6 +2293,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/runs/{run}/knowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The run's id */
+                run: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The knowledge documents a run used, with the verdicts given on them for it
+         * @description Its uses by time, document and kind, and the verdicts agents and people gave for the run (ADR 0027). 404 for a run of another organization.
+         */
+        get: operations["listRunKnowledge"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/items/{item}/approve": {
         parameters: {
             query?: never;
@@ -2220,7 +2332,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Approve an item waiting for a human; it moves to the next station */
+        /**
+         * Approve an item waiting for a human; it moves to the next station
+         * @description 409 tool-approval-open while the item has an open tool approval (Item.tool_approval): the item waits for a decision on the call, decided with decideToolApproval, not on the item (ADR 0031 decision 9).
+         */
         post: operations["approveItem"];
         delete?: never;
         options?: never;
@@ -2247,6 +2362,31 @@ export interface paths {
          * @description Answers the item's open question (Item.question) with one of its choices or in the caller's own words, as ADR 0018 decides. The engine records question_answered and puts the item back in its station's arrival state, rework_count unchanged; its next run's brief carries the question and the answer. Audited as item.answered with the answer's length and the choice index, never its text. 400 when the body has both answer and choice or neither, or the answer is not 1 to 2000 characters; 400 bad-choice for a choice outside the question's choices; 409 no-open-question when the item has none (none was asked, it was answered, or a move, pause or rejection withdrew it), item-closed for a done or cancelled item, item-changed when it moved meanwhile.
          */
         post: operations["answerItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/items/{item}/tool-approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or deny the tool call an item's agent asked to make
+         * @description Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs connection:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without connection:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+         */
+        post: operations["decideToolApproval"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2297,6 +2437,31 @@ export interface paths {
          * @description From any open state the item arrives at the station in that station's arrival state (an agent or queue station queues it, a human station waits for a decision). In progress, its lease is taken and its run stopped (lease_taken). Moving upstream counts as rework and needs a reason. 400 unknown-station or reason-required; 409 item-closed (done or cancelled), same-station, done-station (finish work by approving or merging it) or item-changed.
          */
         post: operations["moveItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/items/{item}/lane": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set an open item's lane
+         * @description The lane picks the agent at the stations that route by lane; the item stays at its station and in its state, and a lane_set event (from, to) records the change. The lane is trimmed; when any station of the item's line routes by lane, it must be one of the lanes routed. 400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts carry their own lanes), same-lane or item-changed.
+         */
+        post: operations["setItemLane"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2578,8 +2743,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Rename a connection, or change its description, fields or secrets
-         * @description fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
+         * Rename a connection, or change its description, fields, secrets or tool modes
+         * @description fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
          */
         patch: operations["updateConnection"];
         trace?: never;
@@ -2604,6 +2769,54 @@ export interface paths {
          */
         post: operations["testConnection"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/standing-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's standing rules
+         * @description The rules Always allow created (ADR 0031 decision 7), oldest first: each lets one agent role call one tool of one organization connection without asking, in every factory of the organization. The active ones, and the revoked ones too with revoked=true.
+         */
+        get: operations["listStandingRules"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/standing-rules/{rule}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The standing rule's id */
+                rule: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a standing rule
+         * @description The rule's agent role asks first again from its next run. A rule is never deleted: revoking sets revoked_at and revoked_by, audited as standing_rule.revoked. 404 for a rule that does not exist, 409 standing-rule-revoked for one revoked already. Needs a sign-in from the last 10 minutes.
+         */
+        delete: operations["revokeStandingRule"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2882,6 +3095,79 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/knowledge/documents/{document}/uses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge document's id */
+                document: components["parameters"]["DocumentRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One page of the runs that used a document
+         * @description Newest first use first (ADR 0027), after the run id after; next_after, when set, is the after of the next page. Each names its run, item and factory, so a client links to them; a run of a factory the caller may not see is left out. 404 knowledge-document-not-found.
+         */
+        get: operations["listKnowledgeDocumentUses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/knowledge/documents/{document}/verdict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge document's id */
+                document: components["parameters"]["DocumentRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Say whether a document helped or misled
+         * @description The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+         */
+        put: operations["giveKnowledgeVerdict"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/knowledge/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Where a source's documents were used
+         * @description Per document of the source with a use or a verdict in the last days days (ADR 0027, decision 3): the distinct runs that used it and the verdicts given, agents' and people's apart; at most 500, the most used first, then by id. 404 knowledge-source-not-found.
+         */
+        get: operations["getKnowledgeUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/knowledge/search": {
         parameters: {
             query?: never;
@@ -2917,7 +3203,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run has no use of the document). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -3632,6 +3918,10 @@ export interface components {
             /** @description Why; required when the station is upstream of the item's (the agent reads it) */
             reason?: string;
         };
+        SetLaneRequest: {
+            /** @description The lane to set */
+            lane: string;
+        };
         PauseRequest: {
             /** @description Why the item is paused */
             reason?: string;
@@ -3693,6 +3983,63 @@ export interface components {
             waiting?: components["schemas"]["ItemWaiting"];
             /** @description The question the item's agent asked a person and nobody has answered yet (ADR 0018); getItem and answerItem only, absent or null when there is none */
             question?: components["schemas"]["ItemQuestion"] | null;
+            /** @description The tool call the item's agent asked to make that waits for a person's decision (ADR 0031); getItem and decideToolApproval only, absent or null when there is none */
+            tool_approval?: components["schemas"]["ToolApproval"] | null;
+        };
+        /** @description A run's call of an Ask-first connection tool that waits for a person, read from its tool_approval_requested event */
+        ToolApproval: {
+            /**
+             * Format: int64
+             * @description The approval's id
+             */
+            id: number;
+            /** @description The organization connection's name */
+            connection: string;
+            /** @description The tool's name as the connection's MCP server lists it, as in create_comment */
+            tool: string;
+            /** @description The call's input, any JSON value, as canonical JSON (keys sorted); at most 16 KiB */
+            input: unknown;
+            /** @description The calling agent's role name, as in architect; never its copy number */
+            agent: string;
+            /** @description The run that asked; it ended when it asked */
+            run_id: string;
+            /** Format: date-time */
+            asked_at: string;
+            /** @description Whether a person may approve the call with always_allow: its ask comes from the organization connection's mode alone */
+            always_allow_offered: boolean;
+        };
+        /** @description A person's decision on an item's open tool approval */
+        ToolDecision: {
+            /** @enum {string} */
+            decision: "approve" | "deny";
+            /**
+             * @description With approve only: also let the agent role call this tool of this connection without asking from now on (a standing rule); needs connection:manage
+             * @default false
+             */
+            always_allow?: boolean;
+            /** @description With deny only, the person's reason, 1 to 2000 characters (surrounding space is trimmed) */
+            note?: string;
+        };
+        StandingRuleList: {
+            rules: components["schemas"]["StandingRule"][];
+        };
+        /** @description Lets one agent role call one tool of one organization connection without asking, in every factory of the organization (ADR 0031 decision 7) */
+        StandingRule: {
+            id: string;
+            connection_id: string;
+            /** @description The connection's name; null once the connection is deleted */
+            connection: string | null;
+            tool: string;
+            /** @description The agent's role, its name in the definition, as in architect */
+            agent: string;
+            created_by: components["schemas"]["Actor"];
+            /** Format: date-time */
+            created_at: string;
+            /** @description The item it was approved on */
+            item_id: string;
+            revoked_by: components["schemas"]["Actor"] | null;
+            /** Format: date-time */
+            revoked_at: string | null;
         };
         /** @description An agent's open question about an item, read from its question_asked event */
         ItemQuestion: {
@@ -3831,7 +4178,7 @@ export interface components {
              * @description The naming event; its reason is set by setTouchReason
              */
             event_id: number;
-            /** @description The naming event's kind: merged, rejected, approved, moved, paused, cancelled, retried, note, ... */
+            /** @description The naming event's kind: merged, rejected, approved, moved, paused, cancelled, retried, lane_set, note, ... */
             kind: string;
             station: string | null;
             /** Format: date-time */
@@ -4370,6 +4717,158 @@ export interface components {
             /** @description Lead time of each expedite item */
             expedite_lead_time_minutes: number | null;
         };
+        JudgeOutcome: {
+            /** Format: double */
+            score: number;
+            label: string;
+            meaning: string;
+        };
+        /** @description A judge's file as evals.schema.json has its front matter, with the Markdown rubric that follows it. Validated when it is published, as every definition file is. */
+        JudgeWrite: {
+            title: string;
+            /** @description What it checks */
+            criterion: string;
+            /** @description The agents whose runs it scores; empty or absent, every agent */
+            agents?: string[];
+            outcomes: components["schemas"]["JudgeOutcome"][];
+            /**
+             * Format: double
+             * @description The lowest score that passes
+             */
+            pass_mark: number;
+            /**
+             * Format: double
+             * @description The share of the agents' finished runs it scores
+             */
+            sample: number;
+            /** @description The judge run's model; absent, the factory's runtime.model */
+            model?: string;
+            /** @default true */
+            enabled?: boolean;
+            /** @description The file's Markdown body */
+            rubric: string;
+            /** @description The version the caller saw running; the publish is refused (draft-base-moved) when another one runs */
+            expected_current_version_id?: string;
+        };
+        CreateJudgeRequest: {
+            /** @description The judge's file name without .md: 3 to 40 lowercase letters, digits and hyphens, starting with a letter */
+            slug: string;
+        } & components["schemas"]["JudgeWrite"];
+        JudgeDay: {
+            /**
+             * Format: date
+             * @description The UTC day
+             */
+            day: string;
+            scored: number;
+            passed: number;
+            /** Format: double */
+            pass_rate: number;
+        };
+        /** @description A judge's production scores over the last 30 days; tries never count */
+        JudgeSummary: {
+            /** @description The runs scored */
+            scored: number;
+            passed: number;
+            /**
+             * Format: double
+             * @description Passed over scored
+             */
+            pass_rate: number;
+            /**
+             * Format: double
+             * @description What its judge runs cost
+             */
+            cost_usd: number;
+            /** @description One point per UTC day with a scored run, oldest first */
+            days: components["schemas"]["JudgeDay"][];
+        };
+        JudgeListEntry: {
+            slug: string;
+            title: string;
+            criterion: string;
+            /** @description Empty means every agent */
+            agents: string[];
+            /** Format: double */
+            sample: number;
+            /** Format: double */
+            pass_mark: number;
+            enabled: boolean;
+            summary: components["schemas"]["JudgeSummary"];
+        };
+        JudgeList: {
+            /** @description The number of the version the judges are read from; null before the first publish */
+            version: number | null;
+            /** @description By slug */
+            judges: components["schemas"]["JudgeListEntry"][];
+            /**
+             * Format: double
+             * @description What the factory's judge runs cost over the last 30 days
+             */
+            judge_cost_usd: number;
+        };
+        /** @enum {string} */
+        JudgeScoreState: "queued" | "running" | "scored" | "error";
+        /** @description One production score of a judge; outcome, score and passed once it is scored */
+        JudgeScore: {
+            id: string;
+            state: components["schemas"]["JudgeScoreState"];
+            /** @description <factory name>#<number> */
+            item_ref: string;
+            item_title: string;
+            /** @description The label of the outcome the judge gave */
+            outcome?: string;
+            /** Format: double */
+            score?: number;
+            passed?: boolean;
+            /** @description The judge's one sentence */
+            reason?: string;
+            /** Format: date-time */
+            scored_at?: string;
+        };
+        /** @description Where the judge's runs run; a judge inherits the factory's defaults */
+        JudgeRunsOn: {
+            /** @description The box: the factory's runtime.size, medium when it says none */
+            size: string;
+            /** @description The connections of the factory's current version, read only */
+            connections: string[];
+            /** @description What a judge run reads of the run it scores */
+            sees: ("events" | "spec" | "pull_request")[];
+            /** @description True while these are the factory's defaults */
+            inherited: boolean;
+        };
+        Judge: {
+            slug: string;
+            title: string;
+            criterion: string;
+            /** @description Empty means every agent */
+            agents: string[];
+            outcomes: components["schemas"]["JudgeOutcome"][];
+            /** Format: double */
+            pass_mark: number;
+            /** Format: double */
+            sample: number;
+            /** @description Absent: the factory's runtime.model */
+            model?: string;
+            enabled: boolean;
+            rubric: string;
+            /** @description The number of the version the judge is read from */
+            version: number;
+            summary: components["schemas"]["JudgeSummary"];
+            /** @description The newest production scores, newest first */
+            recent: components["schemas"]["JudgeScore"][];
+            runs_on: components["schemas"]["JudgeRunsOn"];
+        };
+        JudgeTry: {
+            id: string;
+            state: components["schemas"]["JudgeScoreState"];
+            /** @description <factory name>#<number> */
+            item_ref: string;
+            item_title: string;
+        };
+        JudgeTries: {
+            tries: components["schemas"]["JudgeTry"][];
+        };
         AgentStats: {
             agent: string;
             /** Format: date */
@@ -4701,7 +5200,7 @@ export interface components {
             run_id?: string;
             /** Format: date-time */
             at: string;
-            /** @description What happened, as in submitted, moved, note or lease_taken. question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue */
+            /** @description What happened, as in submitted, moved, note or lease_taken. question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue. tool_approval_requested: the item's agent asked to make a call of an Ask-first connection tool (data connection, tool, input, agent as the role name, run_id, always_allow_offered); the run ends and the item waits at its station. tool_approval_granted: a person approved it (data approval_id, always_allow; actor); tool_approval_denied: a person denied it (data approval_id, note when given; actor); either way the item goes back to its station's queue */
             kind: string;
             station?: string;
             actor: string;
@@ -5168,12 +5667,12 @@ export interface components {
             truncated: boolean;
         };
         /**
-         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row
+         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny
          * @enum {string}
          */
-        InboxEntryKind: "decision" | "question" | "andon" | "rework_warning" | "blocked" | "expedite";
+        InboxEntryKind: "decision" | "question" | "tool_approval" | "andon" | "rework_warning" | "blocked" | "expedite";
         InboxEntry: {
-            /** @description "<kind>:<id of what waits>": decision:, question:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station> */
+            /** @description "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station> */
             id: string;
             kind: components["schemas"]["InboxEntryKind"];
             factory: {
@@ -5183,7 +5682,7 @@ export interface components {
             };
             /**
              * Format: date-time
-             * @description Since when it waits: the item's last change (decision, question, blocked), its creation (expedite), the pull (andon), now (rework_warning)
+             * @description Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning)
              */
             since: string;
             /** @description The item it is about, or null for an entry that is about no item */
@@ -5198,6 +5697,8 @@ export interface components {
             blocked: components["schemas"]["InboxBlocked"] | null;
             /** @description A question entry's open question; absent or null for other kinds */
             question?: components["schemas"]["ItemQuestion"] | null;
+            /** @description A tool_approval entry's open tool approval; absent or null for other kinds */
+            tool_approval?: components["schemas"]["ToolApproval"] | null;
             /** @description The open pull of an andon entry; null for other kinds */
             andon: components["schemas"]["AndonPull"] | null;
             /** @description The gate tally of a rework warning; null for other kinds */
@@ -5788,6 +6289,16 @@ export interface components {
                     [key: string]: unknown;
                 };
             };
+            /** @description factory.yaml's starter section (ADR 0032), absent when the YAML has none. It is not a Visual section and has no ETag: onboarding submits starter.item once, through submitItem, to a factory with no items, and YAML mode edits it. */
+            starter?: {
+                item: {
+                    title: string;
+                    /** @description One of board.workTypes; when absent, submitItem gives the first */
+                    type?: string;
+                    /** @description The item's brief, in markdown */
+                    body?: string;
+                };
+            };
         };
         /** @description The data of one `event: definition` on /v1/orgs/{org}/stream; it carries no content */
         DefinitionEvent: {
@@ -5885,12 +6396,26 @@ export interface components {
             env?: string[];
             /** @description getConnection only, its kind's docs for agents */
             docs?: string;
+            /** @description Its tools and their modes (ADR 0031 decisions 1 and 2), sorted by name: one entry for each tool the last test listed and each tool with a mode set, a tool without a mode being allow; empty for a connection never tested and without modes */
+            tools: components["schemas"]["ConnectionTool"][];
+            /** @description The open tool approvals on this connection in the organization, by its current name; the connections list's "Writes waiting for your OK" is their sum */
+            waiting_approvals: number;
             created_by: components["schemas"]["Actor"];
             /** Format: date-time */
             created_at: string;
             updated_by: components["schemas"]["Actor"];
             /** Format: date-time */
             updated_at: string;
+        };
+        /**
+         * @description What a run may do with one tool of the connection (ADR 0031 decision 1): allow runs the call, ask pauses it for a person, off refuses it
+         * @enum {string}
+         */
+        ConnectionToolMode: "allow" | "ask" | "off";
+        ConnectionTool: {
+            /** @description The tool's name as the MCP server lists it, without the connection prefix: 1 to 128 letters, digits, underscores, dots or dashes */
+            name: string;
+            mode: components["schemas"]["ConnectionToolMode"];
         };
         /** @description What uses a connection, so it cannot be deleted or renamed meanwhile */
         ConnectionUsers: {
@@ -5927,6 +6452,8 @@ export interface components {
             secrets?: {
                 [key: string]: string;
             };
+            /** @description Every tool's mode: replaces them all, so send the full list (a tool left out goes back to allow). Only for a connection whose kind has an MCP server; a tool named twice is refused. */
+            tools?: components["schemas"]["ConnectionTool"][];
         };
         /** @description 3 to 40 lowercase letters, digits and inner dashes, starting with a letter; an agent gets it as the env variable of the name upper-cased with each - turned into _, which must not be one reserved for the platform */
         CredentialName: string;
@@ -6297,6 +6824,87 @@ export interface components {
             /** Format: double */
             score: number;
         };
+        KnowledgeUsage: {
+            /** @description The source's name */
+            source: string;
+            /** @description The window in days */
+            days: number;
+            documents: components["schemas"]["KnowledgeDocumentUsage"][];
+        };
+        /** @description One document's use over the window; getKnowledgeDocument has its url */
+        KnowledgeDocumentUsage: {
+            /** @description The document's id */
+            id: string;
+            title: string;
+            /** @description Its source's name */
+            source: string;
+            /** @description The distinct runs that used it */
+            runs: number;
+            agents_helped: number;
+            agents_misled: number;
+            people_helped: number;
+            people_misled: number;
+        };
+        /**
+         * @description search when knowledge__search returned some of its chunks, read when knowledge__read opened it
+         * @enum {string}
+         */
+        KnowledgeUseKind: "search" | "read";
+        KnowledgeDocumentUsePage: {
+            uses: components["schemas"]["KnowledgeDocumentUse"][];
+            /** @description The after of the next page; absent on the last */
+            next_after?: string;
+        };
+        /** @description One run that used a document */
+        KnowledgeDocumentUse: {
+            run_id: string;
+            item: components["schemas"]["RunItem"];
+            factory: components["schemas"]["FactoryHit"];
+            kinds: components["schemas"]["KnowledgeUseKind"][];
+            /**
+             * Format: date-time
+             * @description The run's first use of the document
+             */
+            at: string;
+        };
+        KnowledgeVerdictInput: {
+            /** @enum {string} */
+            verdict: "helped" | "misled";
+            /** @description A run of the organization that used the document */
+            run_id?: string;
+            note?: string;
+        };
+        KnowledgeVerdict: {
+            /** @description The document's id */
+            document: string;
+            /** @description Its source's name */
+            source: string;
+            /** @enum {string} */
+            verdict: "helped" | "misled";
+            run_id?: string;
+            /** @description The run's item */
+            item_id?: string;
+            note?: string;
+            by: components["schemas"]["Actor"];
+            /** Format: date-time */
+            at: string;
+        };
+        RunKnowledge: {
+            uses: components["schemas"]["RunKnowledgeUse"][];
+            /** @description The verdicts given for the run, by time */
+            verdicts: components["schemas"]["KnowledgeVerdict"][];
+        };
+        RunKnowledgeUse: {
+            /** @description The document's id */
+            document: string;
+            /** @description Its source's name */
+            source: string;
+            kind: components["schemas"]["KnowledgeUseKind"];
+            /** @description The chunk ids a search returned; none for a read */
+            chunks: number[];
+            /** Format: date-time */
+            at: string;
+        };
         /** @description The data of one `event: knowledge` on /v1/orgs/{org}/stream: a source's sync started or ended */
         KnowledgeEvent: {
             source_id: string;
@@ -6344,6 +6952,8 @@ export interface components {
         KindRef: string;
         /** @description The factory's metadata.id or metadata.name */
         FactoryRef: string;
+        /** @description The judge's slug: its file name in evals/judges without .md */
+        JudgeRef: string;
         /** @description The eval run's id */
         EvalRunRef: string;
         /** @description The first UTC day of the range; 6 days before `to` when absent */
@@ -8776,6 +9386,150 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    listJudges: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The judges */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgeList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createJudge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateJudgeRequest"];
+            };
+        };
+        responses: {
+            /** @description The judge as the new version has it */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Judge"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getJudge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The judge's slug: its file name in evals/judges without .md */
+                judge: components["parameters"]["JudgeRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The judge */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Judge"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateJudge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The judge's slug: its file name in evals/judges without .md */
+                judge: components["parameters"]["JudgeRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JudgeWrite"];
+            };
+        };
+        responses: {
+            /** @description The judge as the new version has it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Judge"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    tryJudge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The judge's slug: its file name in evals/judges without .md */
+                judge: components["parameters"]["JudgeRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The queued tries, newest run first */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgeTries"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     getAndon: {
         parameters: {
             query?: {
@@ -9389,6 +10143,32 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    listRunKnowledge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The run's id */
+                run: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run's knowledge */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunKnowledge"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     approveItem: {
         parameters: {
             query?: never;
@@ -9435,6 +10215,37 @@ export interface operations {
         };
         responses: {
             /** @description The item after the answer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    decideToolApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolDecision"];
+            };
+        };
+        responses: {
+            /** @description The item after the decision */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9497,6 +10308,37 @@ export interface operations {
         };
         responses: {
             /** @description The item at its new station */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    setItemLane: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetLaneRequest"];
+            };
+        };
+        responses: {
+            /** @description The item with its new lane */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9947,6 +10789,60 @@ export interface operations {
                     "application/json": components["schemas"]["ConnectionTestResult"];
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listStandingRules: {
+        parameters: {
+            query?: {
+                /** @description Also list the revoked rules */
+                revoked?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The rules */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandingRuleList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    revokeStandingRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The standing rule's id */
+                rule: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The revoked rule */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandingRule"];
+                };
+            };
+            409: components["responses"]["Conflict"];
             default: components["responses"]["Problem"];
         };
     };
@@ -10433,6 +11329,94 @@ export interface operations {
                 };
                 content: {
                     "application/octet-stream": string;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listKnowledgeDocumentUses: {
+        parameters: {
+            query?: {
+                /** @description The last run id of the previous page */
+                after?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge document's id */
+                document: components["parameters"]["DocumentRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocumentUsePage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    giveKnowledgeVerdict: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge document's id */
+                document: components["parameters"]["DocumentRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KnowledgeVerdictInput"];
+            };
+        };
+        responses: {
+            /** @description The verdict as stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeVerdict"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getKnowledgeUsage: {
+        parameters: {
+            query: {
+                /** @description The source's name */
+                source: string;
+                days?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The usage */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeUsage"];
                 };
             };
             default: components["responses"]["Problem"];

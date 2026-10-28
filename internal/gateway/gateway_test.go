@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -119,6 +120,10 @@ type harness struct {
 	key         []byte
 	// questions stand in for the engine behind question__ask (question_test.go).
 	questions *fakeQuestions
+	// approvals stand in for the engine behind POST /run/tool-approval (toolapproval_test.go).
+	approvals *fakeToolApprovals
+	// logs hold every line the gateway logs.
+	logs *syncBuffer
 }
 
 func newHarness(t *testing.T, cfg Config) *harness {
@@ -172,7 +177,7 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 
 	h := &harness{
 		store: porttest.NewStore(), clock: porttest.NewClock(time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)), key: []byte("gateway-test-key"),
-		questions: &fakeQuestions{},
+		questions: &fakeQuestions{}, approvals: &fakeToolApprovals{}, logs: &syncBuffer{},
 	}
 	h.org, h.connections = newConnections(t, h.clock)
 
@@ -190,12 +195,14 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 	}
 
 	h.gw, err = New(Deps{
-		Definitions: defs,
-		Items:       h.store,
-		Connections: h.connections,
-		Events:      h.store,
-		Clock:       h.clock,
-		Questions:   h.questions,
+		Definitions:   defs,
+		Items:         h.store,
+		Connections:   h.connections,
+		Events:        h.store,
+		Clock:         h.clock,
+		Questions:     h.questions,
+		ToolApprovals: h.approvals,
+		Logger:        slog.New(slog.NewTextHandler(h.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}, cfg)
 	if err != nil {
 		t.Fatal(err)

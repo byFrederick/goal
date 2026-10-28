@@ -1,14 +1,13 @@
 // Knowledge (canvas "Knowledge", ADR 0016): the organization's knowledge base. The Sources card
 // lists each source with its sync, the factories that read it and its document count; managers
 // sync, retry, upload and add from it. Below it, "Look something up" searches every source, and
-// "Where it was used" lists the documents of one source. Its runs and agents' verdicts are not
-// built yet, so their controls render as NotAvailable. ?factory= (the factory sidebar's Knowledge)
-// shows only the sources that factory's current version lists.
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+// "Where it was used" (usage-card.tsx) shows the runs that opened one source's documents. ?factory=
+// (the factory sidebar's Knowledge) shows only the sources that factory's current version lists.
+import { useQuery } from '@tanstack/react-query';
 import { Link, useSearch } from '@tanstack/react-router';
 import { BookOpen, Plus } from 'lucide-react';
 import { useState } from 'react';
-import { factoriesQuery, knowledgeDocumentsQuery, knowledgeSourcesQuery } from '../../api/queries';
+import { factoriesQuery, knowledgeSourcesQuery } from '../../api/queries';
 import type { KnowledgeSource } from '../../api/types';
 import { plural } from '../../shared/format';
 import { sourceKinds, sourceSummary } from '../../shared/knowledge';
@@ -17,10 +16,10 @@ import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
 import { EmptyState } from '../../ui/empty-state';
-import { NotAvailable } from '../../ui/not-available';
 import { StatusText, SyncNowButton, UsedBy, useSyncSource } from './parts';
 import { SearchCard } from './search-card';
 import { UploadDialog } from './upload';
+import { UsageCard } from './usage-card';
 import { sourceStatus, syncTimes } from './words';
 
 export function KnowledgePage() {
@@ -103,7 +102,7 @@ export function KnowledgePage() {
 
       <div className="grid items-start gap-4 @[960px]:grid-cols-2">
         <SearchCard sources={all} />
-        <UsageCard source={selected} />
+        <UsageCard source={selected} factories={listed.data ?? []} />
       </div>
 
       <UploadDialog source={uploading} onClose={() => setUploading(null)} />
@@ -111,10 +110,13 @@ export function KnowledgePage() {
   );
 }
 
-/** The source whose documents the usage card lists: the first that failed its sync, else the first with documents. */
+/**
+ * The source whose documents the usage card lists: the stored source with the most documents, the first
+ * of them on a tie. The usage is read per source, so one source is shown (ADR 0027, decision 3).
+ */
 function pickSource(sources: KnowledgeSource[]): KnowledgeSource | undefined {
   const stored = sources.filter((s) => s.kind !== 'live');
-  return stored.find((s) => s.status === 'failed') ?? stored.find((s) => s.documents > 0) ?? stored[0];
+  return stored.toSorted((a, b) => b.documents - a.documents)[0];
 }
 
 function SourcesCard({
@@ -303,95 +305,5 @@ function UploadButton({ source, onUpload }: { source: KnowledgeSource; onUpload:
     <Button variant="secondary" size="sm" aria-label={`Upload…, ${source.title}`} onClick={() => onUpload(source)}>
       Upload…
     </Button>
-  );
-}
-
-/**
- * Where it was used: the documents of one source, failures first, with the runs that opened each
- * and the agents' verdict. Those two are not recorded in the API yet, so their controls are
- * NotAvailable and show no count.
- */
-function UsageCard({ source }: { source: KnowledgeSource | undefined }) {
-  return (
-    <section aria-labelledby="usage-h" className="flex min-w-0 flex-col rounded-card border border-line bg-card p-5">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 pb-3">
-        <h2 id="usage-h" className="m-0 text-heading">
-          Where it was used
-        </h2>
-        <span className="text-secondary text-muted">Runs that opened each document, last 7 days</span>
-      </div>
-      {source ? (
-        <UsageRows source={source} />
-      ) : (
-        <p className="m-0 border-t border-line pt-3 text-secondary text-muted">No documents yet.</p>
-      )}
-    </section>
-  );
-}
-
-function UsageRows({ source }: { source: KnowledgeSource }) {
-  const org = useOrg();
-  const pages = useInfiniteQuery(knowledgeDocumentsQuery(org.id, source.name));
-  const first = pages.data?.pages[0]?.documents ?? [];
-  const shown = [...first].sort((a, b) => Number(b.status === 'failed') - Number(a.status === 'failed')).slice(0, 5);
-
-  if (pages.isPending) {
-    return (
-      <div aria-busy="true" className="border-t border-line pt-3">
-        <span role="status" className="sr-only">
-          Loading documents
-        </span>
-      </div>
-    );
-  }
-  if (pages.isError) {
-    return (
-      <p role="alert" className="m-0 border-t border-line pt-3 text-secondary text-rework-ink">
-        Couldn’t load the documents.
-      </p>
-    );
-  }
-  if (shown.length === 0) {
-    return <p className="m-0 border-t border-line pt-3 text-secondary text-muted">No documents yet.</p>;
-  }
-  return (
-    <>
-      <div className="grid grid-cols-[minmax(0,1fr)_72px_112px] items-center gap-4 border-t border-line py-2 font-control text-secondary text-muted">
-        <span>Document</span>
-        <span className="text-right">Runs</span>
-        <span>Agents’ verdict</span>
-      </div>
-      <ul className="m-0 flex list-none flex-col p-0">
-        {shown.map((d) => (
-          <li
-            key={d.id}
-            className="grid grid-cols-[minmax(0,1fr)_72px_112px] items-center gap-4 border-t border-line py-3 text-body"
-          >
-            <span className="font-mono text-secondary break-all text-ink">{d.title}</span>
-            <NotAvailable label="Runs">
-              <button
-                type="button"
-                aria-label={`Runs of ${d.title}`}
-                className="justify-self-end tabular-nums text-muted"
-              >
-                –
-              </button>
-            </NotAvailable>
-            <NotAvailable label="Agents’ verdict">
-              <button type="button" aria-label={`Agents’ verdict on ${d.title}`} className="text-muted">
-                –
-              </button>
-            </NotAvailable>
-          </li>
-        ))}
-      </ul>
-      <div className="flex justify-end border-t border-line pt-3">
-        <NotAvailable label="Make an item to fix it">
-          <Button variant="secondary" size="sm">
-            Make an item to fix it
-          </Button>
-        </NotAvailable>
-      </div>
-    </>
   );
 }

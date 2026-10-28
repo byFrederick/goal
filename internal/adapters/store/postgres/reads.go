@@ -245,6 +245,23 @@ func (s *Store) Attention(ctx context.Context) ([]domain.Attention, error) {
 	return out, nil
 }
 
+// OpenToolApprovals implements ports.Store.
+func (s *Store) OpenToolApprovals(ctx context.Context) (map[string]int, error) {
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.OpenToolApprovalsRow, error) {
+		return q.OpenToolApprovals(ctx)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("open tool approvals: %w", err)
+	}
+
+	out := make(map[string]int, len(rows))
+	for _, r := range rows {
+		out[r.Connection] = int(r.Open)
+	}
+
+	return out, nil
+}
+
 // InboxItems implements ports.FlowStats. A factory id that is not a UUID names no factory.
 func (s *Store) InboxItems(ctx context.Context, factories []domain.FactoryID, limit int) ([]domain.AttentionItem, error) {
 	ids := make([]uuid.UUID, 0, len(factories))

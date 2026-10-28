@@ -134,7 +134,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"AgentStats_TasksSendBacksRunsAndDenials", testAgentStats},
 		{"FlowStats_NeedAnOrgAndSeeOnlyItsItems", testFlowStatsTenancy},
 		{"Transition_TakeLeaseRemovesAnyLease", testTakeLease},
-		{"Transition_TakeLeaseRecordsTheAskedOutcome", testTakeLeaseAsked},
+		{"Transition_TakeLeaseRecordsTheAskedOutcomes", testTakeLeaseAsked},
 		{"ItemTimes_LeadTimeAndComponentsOfItemsDone", testItemTimes},
 		{"Andon_OneOpenPullPerFactoryClearedWithANote", testAndonPullAndClear},
 		{"Andon_PullsAreHistoryNewestFirst", testAndonHistory},
@@ -147,6 +147,11 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"OrgTouches_EachFactoryAndTheirTotal", testOrgTouches},
 		{"LabelTouch_OnTheNamingEventOnly", testLabelTouch},
 		{"Touches_NeedAnOrgAndSeeOnlyItsItems", testTouchesTenancy},
+		{"SavedViews_SharedFirstThenOwnByName", testSavedViewsListOrderAndVisibility},
+		{"SavedViews_NameTakenPerOwnerOrFactory", testSavedViewsNameTaken},
+		{"SavedViews_UpdateAndDelete", testSavedViewsUpdateAndDelete},
+		{"SavedViews_OtherOrgSeesNothing", testSavedViewsOtherOrgSeesNothing},
+		{"OpenToolApprovals_ByConnection", testOpenToolApprovals},
 	}
 
 	for _, tc := range tests {

@@ -965,7 +965,8 @@ func testNoOrg(f *fixture) {
 			_, err := f.Knowledge.DocumentUses(ctx, "01900000-0000-7000-8000-000000000001", "", 1)
 			return err
 		},
-		"RunUses": func() error { _, err := f.Knowledge.RunUses(ctx, newRun().run); return err },
+		"RunUses":     func() error { _, err := f.Knowledge.RunUses(ctx, newRun().run); return err },
+		"RunVerdicts": func() error { _, err := f.Knowledge.RunVerdicts(ctx, newRun().run); return err },
 	}
 
 	for name, call := range calls {

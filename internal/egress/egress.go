@@ -5,7 +5,7 @@
 //   - any destination whose resolved addresses are all public, over CONNECT or as plain-http
 //     forward requests;
 //   - goald's gateway, served as a reverse proxy at exactly its paths (GatewayPaths: the MCP
-//     gateway and the run's bundle), so a box reaches those and nothing else of goald.
+//     gateway, the run's bundle and its tool approvals), so a box reaches those and nothing else of goald.
 //
 // Every destination but the gateway is resolved by the proxy itself and dialed only at the
 // addresses it vetted, all of which must be public (Public): a name that resolves, or rebinds, to
@@ -37,12 +37,12 @@ var ErrNotPublic = errors.New("destination is not a public address")
 // DialTimeout bounds resolving and connecting to one destination.
 const DialTimeout = 10 * time.Second
 
-// gatewayPaths are goald's paths a box reaches through the proxy, exactly: the MCP gateway and
-// the run's bundle. Any other path, an encoded one included, is 404.
-var gatewayPaths = []string{"/mcp", "/run"}
+// gatewayPaths are goald's paths a box reaches through the proxy, exactly: the MCP gateway, the
+// run's bundle and its tool approvals. Any other path, an encoded one included, is 404.
+var gatewayPaths = []string{"/mcp", "/run", "/run/tool-approval"}
 
-// GatewayPaths are the paths the proxy forwards to goald's gateway (goald's api.GatewayPath and
-// api.RunPath, which cmd/goald's test holds it to).
+// GatewayPaths are the paths the proxy forwards to goald's gateway (goald's api.GatewayPath,
+// api.RunPath and api.ToolApprovalPath, which cmd/goald's test holds it to).
 func GatewayPaths() []string { return slices.Clone(gatewayPaths) }
 
 // Config is the proxy's setup.

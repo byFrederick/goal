@@ -263,7 +263,7 @@ The keys of a trigger:
 - `on` (required): the event key. One of `github.check_run.failed`, `github.issues.labeled`, `schedule`, or `webhook.<endpoint name>` with an optional `.<event>`, matched against the delivery's `event` field. Slack, Linear, Jira and Sentry keys are not accepted yet.
 - `cron` and `timeZone`: only with `on: schedule`, where `cron` is required. `cron` is five fields: minute, hour, day of month, month, day of week. A field takes numbers, `*`, ranges (`1-5`), steps (`*/15`, `0-30/10`), lists (`0,30`) and, for months and weekdays, names in any case (`JAN`, `mon`). Weekdays are 0 to 6, Sunday first. `@daily`, `?` and seconds are not accepted. `timeZone` is an IANA name and defaults to `UTC`; `Local` is refused.
 - `filter`: filters on the event's fields, all of which must match: `branch`, `repo` (owner/name), `label`, `paths` (globs; any changed path matches), `authors` (any of) and `skipBots`.
-- `only`: checks before an item is created, in this order. `failuresInARow: n` passes when the same check failed on the last n events for it. `dedupe: <field>` passes when no open item this trigger created holds the same value of that event field.
+- `only`: checks before an item is created, in this order. `failuresInARow: n` passes when the same check failed on the last n events for it. `dedupe: <field>` passes when no open item this trigger created holds the same value of that event field. `modelAgrees: {question, connection, model}` is the model check, run last and only when the other two passed (ADR 0028, decisions 3 to 5). It passes when a model answers yes to `question` (required, not blank, at most 500 characters) about the event, which the model gets as untrusted data. `connection` names the organization connection that pays for the call, `runtime.modelConnection` when unset; it must be that one or one of the factory's `connections`. `model` is the model asked, the connection kind's default when unset. A no skips the event with the model's one-line reason; any failure skips it with `Model check failed` and never lets it through. goald has no model check adapter wired yet, so today a trigger with `modelAgrees` skips every event with `Model check failed`, and no model is called.
 - `create` (required): `type` (one of `board.workTypes`) and `station` (a station id) are required. `lane` is a key of that station's `route`, `expedite: true` puts the item in the expedite flow, and `title` and `brief` are templates. A placeholder is `{{field}}` or a dotted `{{field.sub}}`, spaces inside the braces allowed, and takes the event's field. Event text reaches agents only as untrusted data (ADR 0026, decision 5).
 - `limits`: `perDay` (at most n items from this trigger since the start of the UTC day) and `pauseOnBudget` (skip events while the factory's weekly budget is spent).
 
@@ -281,8 +281,39 @@ Each problem is located at its key under `spec.board.triggers` in `factory.yaml`
 | A schedule's `cron` is not five valid fields | `cron-invalid` |
 | A schedule's `timeZone` is not an IANA time zone the host knows | `time-zone-invalid` |
 | A `{{` in `create.title` or `create.brief` is unclosed, empty or not a dotted field name | `placeholder-invalid` |
+| `only.modelAgrees.question` is blank or longer than 500 characters; a model check without `question` is `schema-required` | `model-question-invalid` |
 
 The time zone check reads the host's zoneinfo, so a process without tzdata refuses every zone but `UTC`.
+
+## Starter item: `starter.item`
+
+A template can carry one small, safe first item, at the root of `factory.yaml` next to `spec` ([ADR 0032](../adr/0032-self-serve-onboarding.md), decision 3). Onboarding's last step, "Watch your first item", submits it once, through `submitItem`, to a new factory that has no items yet; a factory with items gets none. The section is optional, and the engine does nothing with it.
+
+```yaml
+starter:
+  item:
+    title: Add a contributing guide to the README
+    type: docs
+    body: |
+      Add a **Contributing** section to the README: how to set up the
+      repository, run the tests and open a pull request.
+```
+
+- `item` (required in `starter`): the only key of the section.
+- `title` (required): the item's title, 1 to 200 characters, as `submitItem` takes it.
+- `type`: one of `board.workTypes`. When absent, the item gets the first work type, as `submitItem` gives it.
+- `body`: the item's brief in markdown, at most 20000 characters.
+
+The factory model (`FactoryModel`, returned by `getTemplate`, the draft and a version) carries it as `starter` with the same keys, absent when `factory.yaml` has none. It is not a Visual editor section and has no ETag: the editor leaves it as written, and YAML mode edits it.
+
+### Starter checks
+
+Each problem is located at its key under `starter.item` in `factory.yaml`. The editor's model has no starter section, so the problems are in section `files`.
+
+| Problem | Code |
+| --- | --- |
+| The section fails the schema: no `item`, no `title`, an empty or too long `title`, a too long `body`, an unknown key | `schema-required`, `schema-invalid`, `schema-unknown-key` |
+| `type` is not in `board.workTypes`; with no `board.workTypes`, every `type` is unknown | `unknown-work-type` |
 
 ## Organization policy
 

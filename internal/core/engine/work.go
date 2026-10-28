@@ -82,8 +82,9 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 	}
 
 	// What people said since the item's last run: their notes (a retry adds those left
-	// meanwhile) and their answers to its agents' questions (ADR 0018).
-	notes, answers, err := e.peopleSaid(ctx, it.ID)
+	// meanwhile), their answers to its agents' questions (ADR 0018) and their decisions on its
+	// agents' tool calls (ADR 0031).
+	said, err := e.peopleSaid(ctx, it.ID)
 	if err != nil {
 		e.block(ctx, log, c, err.Error())
 		return
@@ -102,7 +103,7 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 	rejection, attempt, lost := "", 1, 0
 
 	for {
-		res, chk, err := e.runOnce(ctx, c, &b, joinParts(preloaded, feedbackOf(notes, answers, rejection)))
+		res, chk, err := e.runOnce(ctx, c, &b, joinParts(preloaded, feedbackOf(said, rejection)))
 
 		if e.cut(ctx, log, c, err) {
 			return
@@ -133,7 +134,7 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 			return
 		}
 
-		if notes, err = e.withNotes(ctx, it.ID, notes); err != nil {
+		if said.notes, err = e.withNotes(ctx, it.ID, said.notes); err != nil {
 			log.WarnContext(ctx, "notes left during the run do not reach its retry", slog.Any("error", err))
 		}
 
@@ -662,9 +663,10 @@ func (e *Engine) preloaded(ctx context.Context, l domain.Line, st domain.Station
 }
 
 // feedbackOf is what goald adds to the brief for one attempt: the notes people left, their
-// answers to the agents' questions and, on a retry, why the previous attempt was rejected.
-func feedbackOf(notes []domain.Event, answers []domain.Answer, rejection string) string {
-	return joinParts(notesSection(notes), answersSection(answers), rejection)
+// answers to the agents' questions, their decisions on the agents' tool calls and, on a retry,
+// why the previous attempt was rejected.
+func feedbackOf(said saidByPeople, rejection string) string {
+	return joinParts(notesSection(said.notes), answersSection(said.answers), toolDecisionsSection(said.tools), rejection)
 }
 
 // joinParts joins the non-empty parts with a blank line.
@@ -783,7 +785,8 @@ func (e *Engine) finishRun(ctx context.Context, id domain.RunID, res domain.RunR
 // (flow.dependencies.paths), with the base commit it was planned against (baseCommit): through the gate's verdict when the
 // station has one, into state assembly when its output has a plan (assemble), otherwise to the
 // next station. An approving gate whose action is merge leaves the merge to a person when the
-// organization policy lets no agent merge (claimed.noMerge). The run was checked against the version it started on; where the item goes
+// organization policy lets no agent merge (claimed.noMerge), and goes back to its own queue when
+// a pull request is only not mergeable yet (deferMerge). The run was checked against the version it started on; where the item goes
 // next is the current line's say (chk.next), so an item finishing on v1 after v2 was published
 // moves along v2.
 func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output json.RawMessage, chk checked) {
@@ -822,6 +825,8 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output
 			err = e.advance(next, c.item, c.agent.Name, &t)
 		} else if e.conflictRework(next, c.item, err, &t) {
 			err = nil
+		} else {
+			err = e.deferMerge(ctx, log, c, err, &t)
 		}
 	default:
 		err = e.advance(next, c.item, c.agent.Name, &t)

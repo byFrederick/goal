@@ -24,7 +24,7 @@ export interface RunDeps {
  */
 export async function runTask(spec: TaskSpec, files: AgentFiles, deps: RunDeps): Promise<number> {
   const mapper = new EventMapper(deps.now, spec.skills);
-  const { prompt, options } = agentQuery(spec, files, deps.env, deps.abortController);
+  const { prompt, options } = agentQuery(spec, files, deps.env, deps.abortController, deps.fetch);
   const inbox = new PromptQueue();
   inbox.push({ type: 'user', message: { role: 'user', content: prompt }, parent_tool_use_id: null });
   const token = deps.env.GOAL_GATEWAY_TOKEN;

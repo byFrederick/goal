@@ -46,5 +46,25 @@ for (const width of [768, 1440]) {
       await expect(orgNav(page).getByRole('combobox', { name: 'Search' })).toBeHidden();
       await expect(orgNav(page).getByRole('button', { name: 'Search' })).toBeFocused();
     });
+
+    test('"spend" offers New item about it in Actions, and Enter opens the composer with the title', async ({
+      page,
+    }) => {
+      await page.goto('/o/acme/f/goal');
+      await orgNav(page).getByRole('button', { name: 'Search' }).click();
+      await orgNav(page).getByRole('combobox', { name: 'Search' }).fill('spend');
+
+      const newItem = orgNav(page).getByRole('option', { name: 'New item about "spend"' });
+      await expect(newItem).toBeVisible();
+      for (let i = 0; i < 10 && (await newItem.getAttribute('aria-selected')) !== 'true'; i++) {
+        await page.keyboard.press('ArrowDown');
+      }
+      await expect(newItem).toHaveAttribute('aria-selected', 'true');
+
+      await page.keyboard.press('Enter');
+      const dialog = page.getByRole('dialog', { name: 'New item' });
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByLabel('Title')).toHaveValue('spend');
+    });
   });
 }

@@ -34,13 +34,13 @@ SELECT goal_sync_platform_kinds(sqlc.arg(kinds)::jsonb);
 
 -- name: Connections :many
 SELECT c.id, c.name, k.name AS kind, c.description, c.fields, c.secret_fields, c.secret_refs, c.created_by, c.created_at, c.updated_by,
-       c.updated_at, c.last_used_at, c.last_test_at, c.last_test_ok, c.last_test_error
+       c.updated_at, c.last_used_at, c.last_test_at, c.last_test_ok, c.last_test_error, c.last_test_tools, c.tool_modes
 FROM connections c JOIN connection_kinds k ON k.id = c.kind_id
 ORDER BY c.name;
 
 -- name: Connection :one
 SELECT c.id, c.name, k.name AS kind, c.description, c.fields, c.secret_fields, c.secret_refs, c.created_by, c.created_at, c.updated_by,
-       c.updated_at, c.last_used_at, c.last_test_at, c.last_test_ok, c.last_test_error
+       c.updated_at, c.last_used_at, c.last_test_at, c.last_test_ok, c.last_test_error, c.last_test_tools, c.tool_modes
 FROM connections c JOIN connection_kinds k ON k.id = c.kind_id
 WHERE c.name = sqlc.arg(name);
 
@@ -49,7 +49,7 @@ WHERE c.name = sqlc.arg(name);
 -- Locked in id order, as goal db rekey locks them (StaleSealedConnections), so the two never deadlock.
 SELECT c.id, c.name, k.name AS kind, k.org_id AS kind_org_id, k.spec AS kind_spec, c.description, c.fields, c.secret_fields,
        c.secret_refs, c.key_id, c.nonce, c.ciphertext, c.created_by, c.created_at, c.updated_by, c.updated_at, c.last_used_at,
-       c.last_test_at, c.last_test_ok, c.last_test_error
+       c.last_test_at, c.last_test_ok, c.last_test_error, c.last_test_tools, c.tool_modes
 FROM connections c JOIN connection_kinds k ON k.id = c.kind_id
 WHERE c.name = ANY (sqlc.arg(names)::text[])
 ORDER BY c.id
@@ -67,7 +67,7 @@ RETURNING created_at;
 UPDATE connections
 SET name = sqlc.arg(name), description = sqlc.arg(description), fields = sqlc.arg(fields), secret_fields = sqlc.arg(secret_fields)::text[],
     secret_refs = sqlc.arg(secret_refs), key_id = sqlc.narg(key_id), nonce = sqlc.narg(nonce), ciphertext = sqlc.narg(ciphertext),
-    updated_by = sqlc.arg(updated_by), updated_at = now()
+    tool_modes = sqlc.arg(tool_modes), updated_by = sqlc.arg(updated_by), updated_at = now()
 WHERE id = sqlc.arg(id)
 RETURNING updated_at;
 
@@ -77,6 +77,10 @@ RETURNING updated_at;
 -- A name that is no credential locks nothing; a reference may name one that does not exist yet.
 SELECT id FROM credentials WHERE name = ANY (sqlc.arg(names)::text[]) ORDER BY id FOR KEY SHARE;
 
+-- name: ConnectionForRule :one
+-- The connection name's id, locked against its deletion until a standing rule for it is written.
+SELECT id FROM connections WHERE name = sqlc.arg(name) FOR KEY SHARE;
+
 -- name: DeleteConnection :one
 WITH gone AS (DELETE FROM connections c WHERE c.name = sqlc.arg(connection)::text RETURNING c.id, c.kind_id)
 SELECT gone.id, k.name AS kind FROM gone JOIN connection_kinds k ON k.id = gone.kind_id;
@@ -84,7 +88,7 @@ SELECT gone.id, k.name AS kind FROM gone JOIN connection_kinds k ON k.id = gone.
 -- name: RecordConnectionTest :one
 UPDATE connections
 SET last_test_at = coalesce(sqlc.narg(at)::timestamptz, now()), last_test_ok = sqlc.arg(ok)::boolean,
-    last_test_error = sqlc.narg(error)
+    last_test_error = sqlc.narg(error), last_test_tools = sqlc.narg(tools)::text[]
 WHERE name = sqlc.arg(name)
 RETURNING id;
 

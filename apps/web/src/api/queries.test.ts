@@ -1,6 +1,14 @@
 import { QueryClient, QueryObserver, queryOptions } from '@tanstack/react-query';
 import { describe, expect, test, vi } from 'vitest';
-import { defKeys, ensureFound, validationQuery } from './queries';
+import {
+  defKeys,
+  ensureFound,
+  keys,
+  knowledgeDocumentUsesQuery,
+  knowledgeUsageQuery,
+  searchQuery,
+  validationQuery,
+} from './queries';
 import type { Validation } from './types';
 
 // goald validates the draft as it is when the request arrives, which may be a later revision than
@@ -72,5 +80,42 @@ describe('validationQuery', () => {
     expect(client.getQueryData<Validation>(defKeys.validation(org, f, 43))?.revision).toBe(43);
     // Read again when the editor next asks about revision 42 (it has moved on by then).
     expect(new QueryObserver(client, validationQuery(org, f, 42)).getCurrentResult().isStale).toBe(true);
+  });
+});
+
+describe('knowledge usage keys', () => {
+  test('the usage of a source and the uses of a document sit under the knowledge prefix the stream refreshes', () => {
+    expect(knowledgeUsageQuery('org-1', 'goal-docs').queryKey).toEqual([
+      'org',
+      'org-1',
+      'knowledge',
+      'usage',
+      'goal-docs',
+      7,
+    ]);
+    expect(knowledgeDocumentUsesQuery('org-1', 'd1').queryKey).toEqual([
+      'org',
+      'org-1',
+      'knowledge',
+      'document',
+      'd1',
+      'uses',
+    ]);
+  });
+});
+
+describe('the shell search', () => {
+  test('keys each debounced query and limit under the organization, so an org event can refresh them all', () => {
+    expect(keys.search('org-1', { q: 'spend', limit: 5 })).toEqual([
+      'org',
+      'org-1',
+      'search',
+      { q: 'spend', limit: 5 },
+    ]);
+    expect(searchQuery('org-1', { q: 'spend', limit: 5 }).queryKey).toEqual(
+      keys.search('org-1', { q: 'spend', limit: 5 }),
+    );
+    // A different limit is a different answer, so it is a different entry.
+    expect(keys.search('org-1', { q: 'spend', limit: 3 })).not.toEqual(keys.search('org-1', { q: 'spend', limit: 5 }));
   });
 });

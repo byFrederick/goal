@@ -39,6 +39,16 @@
 // the run started is never listed. It authorizes like the bundle (401, 403) and records nothing;
 // the worker reports each note it gives the agent as a note_delivered line (domain.EventNoteDelivered).
 //
+// # Ask-first tool calls
+//
+// The bundle gives each connection the tools that ask first or are off for the run's agent
+// (tool_modes, from domain.EffectiveToolModes with the organization's standing rules) and the
+// asks that offer Always allow, and the spec the calls a person approved for the run
+// (granted_calls, domain.GrantedCalls). ServeToolApproval answers POST /run/tool-approval
+// (toolapproval.go, ADR 0031 decision 4): the run reports a call that asks first, and
+// ToolApprovals (the engine's RequestToolApproval, adapted by cmd/goald) records it and ends the
+// run. The input is never logged.
+//
 // # Goal's tools
 //
 // The endpoint serves Goal's own tools, named "<server>__<tool>" (Claude's tool names allow no
@@ -111,11 +121,13 @@ type Events interface {
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
 }
 
-// Connections reads an organization's connections and kinds without their secret values, for the
-// run bundle; ports.Connections satisfies it.
+// Connections reads an organization's connections and kinds without their secret values, and its
+// standing rules, for the run bundle; ports.Connections satisfies it.
 type Connections interface {
 	Get(ctx context.Context, name string) (domain.Connection, error)
 	Kind(ctx context.Context, name string) (domain.ConnectionKind, error)
+	// StandingRules are the organization's standing rules, the revoked ones with includeRevoked.
+	StandingRules(ctx context.Context, includeRevoked bool) ([]domain.StandingRule, error)
 }
 
 // Deps are the gateway's collaborators. Logger may be nil (logs discarded).
@@ -133,6 +145,8 @@ type Deps struct {
 	Knowledge Knowledge
 	// Questions takes the questions agents ask with question__ask, which every run is served.
 	Questions Questions
+	// ToolApprovals take the Ask-first tool calls runs report at POST /run/tool-approval.
+	ToolApprovals ToolApprovals
 }
 
 // Config bounds the gateway. Zero values take the defaults below.
@@ -161,14 +175,16 @@ type Gateway struct {
 	log         *slog.Logger
 	knowledge   Knowledge // nil without Deps.Knowledge
 	questions   Questions
+	approvals   ToolApprovals
 	cfg         Config
 	mcp         http.Handler
 }
 
 // New returns a gateway; goald mounts it at its MCP path.
 func New(d Deps, cfg Config) (*Gateway, error) {
-	if d.Definitions == nil || d.Items == nil || d.Connections == nil || d.Events == nil || d.Clock == nil || d.Questions == nil {
-		return nil, errors.New("gateway: Definitions, Items, Connections, Events, Clock and Questions are required")
+	if d.Definitions == nil || d.Items == nil || d.Connections == nil || d.Events == nil || d.Clock == nil || d.Questions == nil ||
+		d.ToolApprovals == nil {
+		return nil, errors.New("gateway: Definitions, Items, Connections, Events, Clock, Questions and ToolApprovals are required")
 	}
 
 	if len(cfg.Key) == 0 {
@@ -179,7 +195,7 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 
 	g := &Gateway{
 		defs: d.Definitions, items: d.Items, connections: d.Connections, events: d.Events, clock: d.Clock, log: d.Logger,
-		knowledge: d.Knowledge, questions: d.Questions, cfg: cfg,
+		knowledge: d.Knowledge, questions: d.Questions, approvals: d.ToolApprovals, cfg: cfg,
 	}
 	if g.log == nil {
 		g.log = slog.New(slog.DiscardHandler)

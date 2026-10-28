@@ -10,11 +10,13 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 )
 
-// GatewayPath is where goald serves the agents' MCP gateway, and RunPath the run bundle beside
-// it (GET, the same task token); they are the gateway's paths.
+// GatewayPath is where goald serves the agents' MCP gateway, RunPath the run bundle beside it
+// (GET, the same task token) and ToolApprovalPath where a run reports an Ask-first tool call
+// (POST, the same task token); they are the gateway's paths.
 const (
-	GatewayPath = "/mcp"
-	RunPath     = "/run"
+	GatewayPath      = "/mcp"
+	RunPath          = "/run"
+	ToolApprovalPath = "/run/tool-approval"
 )
 
 // healthPath is the liveness check, which load balancers call by address.
@@ -35,7 +37,7 @@ func CheckHost(hosts []string, next http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == healthPath || r.URL.Path == GatewayPath || r.URL.Path == RunPath {
+		if r.URL.Path == healthPath || r.URL.Path == GatewayPath || r.URL.Path == RunPath || r.URL.Path == ToolApprovalPath {
 			next.ServeHTTP(w, r)
 			return
 		}

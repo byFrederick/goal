@@ -326,3 +326,10 @@ SELECT factory_id, item_id, run_id, source_id, document_id, kind, chunk_ids, at
 FROM knowledge_uses
 WHERE run_id = sqlc.arg(run_id)
 ORDER BY at, document_id, kind;
+
+-- name: KnowledgeRunVerdicts :many
+-- The verdicts given for a run, by time, document and actor.
+SELECT source_id, document_id, run_id, item_id, verdict, note, actor, at
+FROM knowledge_verdicts
+WHERE run_id = sqlc.arg(run_id)
+ORDER BY at, document_id, actor;

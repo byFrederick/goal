@@ -14,6 +14,7 @@ import {
 import { getBuilderMeta, getSkillFiles, type SkillKey, searchSkills } from './builder';
 import {
   ApiError,
+  estimateEvalRun,
   type FlowRange,
   getAgentStats,
   getAttention,
@@ -25,6 +26,7 @@ import {
   getInbox,
   getItem,
   getItemParts,
+  getJudge,
   getLeadTime,
   getMe,
   getMetrics,
@@ -33,11 +35,13 @@ import {
   getTouchMetrics,
   getWeekly,
   type ItemFilter,
+  listEvals,
   listFactories,
   listInvitations,
   listItemEvents,
   listItemRuns,
   listItems,
+  listJudges,
   listMembers,
   listOrgRuns,
   listOrgs,
@@ -71,13 +75,16 @@ import { listApiKeys, listMemberTokens, listPersonalTokens } from './keys';
 import {
   getKnowledgeDocument,
   getKnowledgeSource,
+  getKnowledgeUsage,
   type KnowledgeQuery,
   type KnowledgeSourceFilter,
   listKnowledgeDocuments,
+  listKnowledgeDocumentUses,
   listKnowledgeSources,
   searchKnowledge,
 } from './knowledge';
 import { getOrgPolicy } from './policy';
+import { type SearchQuery, searchOrg } from './search';
 import { getOrgSpend } from './spend';
 import type { Factory, ItemEvent, SpendWindow } from './types';
 import { getWebhookDelivery, listWebhookDeliveries, listWebhookEndpoints } from './webhooks';
@@ -175,6 +182,12 @@ export const keys = {
   knowledgeDocuments: (org: string, name: string) => ['org', org, 'knowledge', 'source', name, 'documents'] as const,
   knowledgeDocument: (org: string, id: string) => ['org', org, 'knowledge', 'document', id] as const,
   knowledgeSearch: (org: string, query: KnowledgeQuery) => ['org', org, 'knowledge', 'search', query] as const,
+  /** Where one source's documents were used over `days` days (ADR 0027, decision 3). */
+  knowledgeUsage: (org: string, source: string, days: number) =>
+    ['org', org, 'knowledge', 'usage', source, days] as const,
+  knowledgeDocumentUses: (org: string, id: string) => ['org', org, 'knowledge', 'document', id, 'uses'] as const,
+  /** The shell's search box (sidebar-search.tsx): one entry per debounced query and limit. */
+  search: (org: string, query: SearchQuery) => ['org', org, 'search', query] as const,
   /** The prefix of every factory overview window. */
   overviews: (org: string) => ['org', org, 'overview'] as const,
   overview: (org: string, window: string) => ['org', org, 'overview', window] as const,
@@ -216,6 +229,10 @@ export const keys = {
   runs: (org: string, filter?: RunsFilter) =>
     filter ? (['org', org, 'runs', filter] as const) : (['org', org, 'runs'] as const),
   parts: (org: string, item: string) => ['org', org, 'item', item, 'parts'] as const,
+  /** The prefix of a factory's eval cases and their estimate (Jonah's Evals). A `definition` event refreshes it. */
+  evals: (org: string, factory: string) => ['org', org, 'factory', factory, 'evals'] as const,
+  /** The prefix of a factory's judges (Jonah's Judges). A `definition` event refreshes it. */
+  judges: (org: string, factory: string) => ['org', org, 'factory', factory, 'judges'] as const,
   /** The factory's intake (sources and triggers); item and definition events refresh it. */
   intake: (org: string, factory: string) => ['org', org, 'factory', factory, 'intake'] as const,
 };
@@ -386,11 +403,38 @@ export const knowledgeDocumentQuery = (org: string, id: string) =>
     retry: retryUnlessRefused,
   });
 
+/** Where a source's documents were used over the last `days` days (7 by default), the most used first. */
+export const knowledgeUsageQuery = (org: string, source: string, days = 7) =>
+  queryOptions({
+    queryKey: keys.knowledgeUsage(org, source, days),
+    queryFn: ({ signal }) => getKnowledgeUsage(org, source, days, signal),
+    staleTime: 30_000,
+  });
+
+/** The first page of the runs that used a document, newest first (the card's uses under a document). */
+export const knowledgeDocumentUsesQuery = (org: string, id: string, limit = 50) =>
+  queryOptions({
+    queryKey: keys.knowledgeDocumentUses(org, id),
+    queryFn: ({ signal }) => listKnowledgeDocumentUses(org, id, { limit }, signal),
+    staleTime: 30_000,
+    retry: retryUnlessRefused,
+  });
+
 /** What knowledge__search answers; the previous answer stays shown while the next one loads. */
 export const knowledgeSearchQuery = (org: string, query: KnowledgeQuery) =>
   queryOptions({
     queryKey: keys.knowledgeSearch(org, query),
     queryFn: ({ signal }) => searchKnowledge(org, query, signal),
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+    retry: retryUnlessRefused,
+  });
+
+/** The shell's search results; the previous answer stays shown while the next one loads. */
+export const searchQuery = (org: string, query: SearchQuery) =>
+  queryOptions({
+    queryKey: keys.search(org, query),
+    queryFn: ({ signal }) => searchOrg(org, query, signal),
     staleTime: 30_000,
     placeholderData: keepPreviousData,
     retry: retryUnlessRefused,
@@ -542,6 +586,34 @@ export const itemQuery = (org: string, item: string) =>
   queryOptions({ queryKey: keys.item(org, item), queryFn: ({ signal }) => getItem(org, item, signal) });
 
 /** An assembly's parts: under the item's key, so the stream's item events refresh them. */
+/** The factory's eval cases of the current version and their summary (listEvals). */
+export const evalsQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: [...keys.evals(org, factory), 'cases'] as const,
+    queryFn: ({ signal }) => listEvals(org, factory, signal),
+  });
+
+/** The factory's judges of the current version, each with its 30 days (listJudges). */
+export const judgesQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: [...keys.judges(org, factory), 'list'] as const,
+    queryFn: ({ signal }) => listJudges(org, factory, signal),
+  });
+
+/** One judge of the current version with its file, its scores and where it runs (getJudge). */
+export const judgeQuery = (org: string, factory: string, judge: string) =>
+  queryOptions({
+    queryKey: [...keys.judges(org, factory), 'judge', judge] as const,
+    queryFn: ({ signal }) => getJudge(org, factory, judge, signal),
+  });
+
+/** What a run of every case would cost about (estimateEvalRun): a read, so it is asked again on each refresh. */
+export const evalEstimateQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: [...keys.evals(org, factory), 'estimate'] as const,
+    queryFn: ({ signal }) => estimateEvalRun(org, factory, {}, signal),
+  });
+
 export const partsQuery = (org: string, item: string) =>
   queryOptions({ queryKey: keys.parts(org, item), queryFn: ({ signal }) => getItemParts(org, item, signal) });
 
