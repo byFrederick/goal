@@ -1093,6 +1093,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/draft/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The factory's draft requests, newest first
+         * @description The asked definition changes of the factory (ADR 0021), newest first, at most limit of them.
+         */
+        get: operations["listDraftRequests"];
+        put?: never;
+        /**
+         * Ask for a change to the factory's definition (a draft request)
+         * @description Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+         */
+        post: operations["createDraftRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/draft/requests/{draft_request}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The draft request's id */
+                draft_request: components["parameters"]["DraftRequestRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One draft request, with its result once it ended
+         * @description 404 draft-request-not-found for a request that is not the factory's.
+         */
+        get: operations["getDraftRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/versions": {
         parameters: {
             query?: never;
@@ -6369,6 +6425,40 @@ export interface components {
             connections: string;
             review: string;
         };
+        NewDraftRequest: {
+            /** @description What to change, 1 to 2000 characters once trimmed */
+            text: string;
+            /** @description The agent of the definition the request is about (Ask Jonah for a fix) */
+            agent?: string;
+        };
+        /** @description An asked change to a factory's definition (ADR 0021): queued until a goald claims it, running in a box, then done or failed with what it changed in the draft */
+        DraftRequest: {
+            id: string;
+            text: string;
+            /** @description The agent the request is about, "" for the Ask bar */
+            agent: string;
+            /** @enum {string} */
+            status: "queued" | "running" | "done" | "failed";
+            /** @description What the agent changed, or why the request failed; "" until it ends */
+            summary: string;
+            /** @description The definition paths the request wrote or deleted in the draft */
+            changed_paths: string[];
+            /** Format: double */
+            cost_usd: number;
+            turns: number;
+            /** @description What went wrong when the request failed, "" otherwise */
+            error: string;
+            requester: components["schemas"]["Actor"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            started_at?: string;
+            /** Format: date-time */
+            finished_at?: string;
+        };
+        DraftRequestList: {
+            requests: components["schemas"]["DraftRequest"][];
+        };
         DraftModel: {
             /** Format: int64 */
             revision: number;
@@ -7399,6 +7489,8 @@ export interface components {
         KindRef: string;
         /** @description The factory's metadata.id or metadata.name */
         FactoryRef: string;
+        /** @description The draft request's id */
+        DraftRequestRef: string;
         /** @description The judge's slug: its file name in evals/judges without .md */
         JudgeRef: string;
         /** @description The eval run's id */
@@ -9019,6 +9111,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Version"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listDraftRequests: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The draft requests */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRequestList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createDraftRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description The queued request */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRequest"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getDraftRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The draft request's id */
+                draft_request: components["parameters"]["DraftRequestRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The draft request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRequest"];
                 };
             };
             default: components["responses"]["Problem"];

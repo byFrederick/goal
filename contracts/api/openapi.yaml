@@ -1436,6 +1436,72 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Version" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/draft/requests:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: listDraftRequests
+      x-goal-scope: factory:read
+      tags: [definitions]
+      summary: The factory's draft requests, newest first
+      description: >-
+        The asked definition changes of the factory (ADR 0021), newest first, at most limit of
+        them.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: The draft requests
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DraftRequestList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createDraftRequest
+      x-goal-scope: definition:edit
+      tags: [definitions]
+      summary: Ask for a change to the factory's definition (a draft request)
+      description: >-
+        Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the
+        factory's draft and never publishes. agent, when set, names the agent the request is about
+        (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft
+        is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once
+        trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid
+        while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open
+        while the factory has a queued or running request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewDraftRequest" }
+      responses:
+        "201":
+          description: The queued request
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DraftRequest" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/draft/requests/{draft_request}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/DraftRequestRef"
+    get:
+      operationId: getDraftRequest
+      x-goal-scope: factory:read
+      tags: [definitions]
+      summary: One draft request, with its result once it ended
+      description: 404 draft-request-not-found for a request that is not the factory's.
+      responses:
+        "200":
+          description: The draft request
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DraftRequest" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/versions:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -4251,6 +4317,12 @@ components:
       in: path
       required: true
       description: The factory's metadata.id or metadata.name
+      schema: { type: string }
+    DraftRequestRef:
+      name: draft_request
+      in: path
+      required: true
+      description: The draft request's id
       schema: { type: string }
     JudgeRef:
       name: judge
@@ -7830,6 +7902,42 @@ components:
         agents: { type: string }
         connections: { type: string }
         review: { type: string }
+    NewDraftRequest:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, description: "What to change, 1 to 2000 characters once trimmed" }
+        agent: { type: string, description: The agent of the definition the request is about (Ask Jonah for a fix) }
+    DraftRequest:
+      type: object
+      description: >-
+        An asked change to a factory's definition (ADR 0021): queued until a goald claims it,
+        running in a box, then done or failed with what it changed in the draft
+      required: [id, text, agent, status, summary, changed_paths, cost_usd, turns, error, requester, created_at]
+      properties:
+        id: { type: string }
+        text: { type: string }
+        agent: { type: string, description: 'The agent the request is about, "" for the Ask bar' }
+        status: { type: string, enum: [queued, running, done, failed] }
+        summary: { type: string, description: 'What the agent changed, or why the request failed; "" until it ends' }
+        changed_paths:
+          type: array
+          description: The definition paths the request wrote or deleted in the draft
+          items: { type: string }
+        cost_usd: { type: number, format: double }
+        turns: { type: integer }
+        error: { type: string, description: 'What went wrong when the request failed, "" otherwise' }
+        requester: { $ref: "#/components/schemas/Actor" }
+        created_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+    DraftRequestList:
+      type: object
+      required: [requests]
+      properties:
+        requests:
+          type: array
+          items: { $ref: "#/components/schemas/DraftRequest" }
     DraftModel:
       type: object
       required: [revision, model, etags, edited, ranges]
