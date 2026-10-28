@@ -120,7 +120,9 @@ test('step 4 without a factory links back to step 3', async ({ page }) => {
   await expect(page).toHaveURL(/\/o\/goal\/get-started\/factory/);
 });
 
-test('step 4 continues to step 5, which publishes the factory, and step 6 turns on a trigger and reaches step 7', async ({ page }) => {
+test('step 4 continues to step 5, which publishes the factory, and step 6 turns on a trigger and reaches step 7', async ({
+  page,
+}) => {
   await signIn(page.request);
   await page.goto('/o/goal/get-started/code');
   await page.locator('label', { hasText: 'acme/goal' }).first().getByRole('checkbox').check();
