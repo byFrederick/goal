@@ -84,6 +84,7 @@ import { membersFor, orgCanOf } from './people.ts';
 import { createPolicy } from './policy.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
 import { orgRunsOf } from './runs.ts';
+import { type SearchSource, search } from './search.ts';
 import { createSpend } from './spend.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
 import { createWebhooks } from './webhooks.ts';
@@ -728,6 +729,53 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   };
 
   const stationsOf = (it: MockItem) => findFactory(it.factory)?.stations ?? [];
+
+  /** GET …/search (openapi.yaml searchOrg): the organization's items, agents, factories and connections. */
+  function searchOf(org: Org, url: URL, caller: Org, res: ServerResponse) {
+    const q = (url.searchParams.get('q') ?? '').trim();
+    if (q.length < 1 || q.length > 200)
+      return problem(res, 400, 'Bad Request', 'q is 1 to 200 characters once trimmed');
+    const limit = Number(url.searchParams.get('limit') ?? 5);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20)
+      return problem(res, 400, 'Bad Request', 'limit is 1 to 20');
+    const factories = factoriesOf(org.id).filter((f) => !f.archived_at);
+    const source: SearchSource = {
+      items: state.items.flatMap((it) => {
+        const f = factories.find((x) => x.name === it.factory);
+        if (!f) return [];
+        return [
+          {
+            id: it.id,
+            number: it.number,
+            factory_id: f.id,
+            factory_name: f.name,
+            title: it.title,
+            state: it.state,
+            station: it.station,
+          },
+        ];
+      }),
+      // An agent is named by its role: its copies (builder-1, builder-2) are one agent, at each station it works at.
+      agents: factories.flatMap((f) => {
+        const config = state.stations[f.name] ?? {};
+        const at = new Map<string, string[]>();
+        for (const s of f.stations) {
+          for (const copy of config[s.id]?.agents ?? []) {
+            const name = copy.replace(/-\d+$/, '');
+            const stations = at.get(name) ?? [];
+            if (!stations.includes(s.id)) stations.push(s.id);
+            at.set(name, stations);
+          }
+        }
+        return [...at].map(([name, stations]) => ({ name, stations, factory_id: f.id, factory_name: f.name }));
+      }),
+      factories: factories.map((f) => ({ id: f.id, name: f.name, title: f.title || f.name })),
+      connections: caller.can?.includes('connection:read')
+        ? connections.outlines(org.id).map((c) => ({ name: c.name, kind: c.kind }))
+        : [],
+    };
+    return json(res, 200, search(source, q, limit));
+  }
 
   /** The organization's factories by name, as goald lists them. */
   const factoriesOf = (org: string) =>
@@ -1441,6 +1489,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await credentials.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
+    if (rest === '/search' && method === 'GET') return searchOf(org, url, forCaller(req, org), res);
     if (await evals.handle(org, rest, method, res, () => readBody(req))) return;
     if (await judges.handle(org, rest, method, res, () => readBody(req))) return;
     if (await spend.handle(org, rest, method, url, res)) return;
