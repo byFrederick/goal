@@ -187,6 +187,10 @@ type harness struct {
 	evals      *porttest.Evals
 	evalJudges *porttest.Judges
 	evalLoop   *jonah.Evals
+	// judges are the versions' judges as tests set them, judgeScores their scores; tries are
+	// queued by a jonah loop over them and the store's finished runs.
+	judges      *porttest.Judges
+	judgeScores *porttest.JudgeScores
 }
 
 // acme's one prompt and its path.
@@ -482,6 +486,8 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		deps.Auth = api.AuthConfig{Mode: api.AuthSession, EmailCodes: !in.noEmailCodes, Google: in.google}
 	}
 
+	deps.Judges = h.judgeDeps(tenancy)
+
 	handler, err := api.New(h.withEvals(deps, tenancy, opts))
 	if err != nil {
 		t.Fatal(err)
@@ -533,6 +539,20 @@ func (h *harness) startFeed(t *testing.T, in *signIn) (*api.Feed, func()) {
 		if err := <-done; err != nil {
 			t.Error(err)
 		}
+	}
+}
+
+// judgeDeps are h's judges and their scores, with a jonah loop over them and the store's finished
+// runs for tries.
+func (h *harness) judgeDeps(tenancy *porttest.Tenancy) *api.JudgeDeps {
+	h.judges, h.judgeScores = porttest.NewJudges(), porttest.NewJudgeScores(h.store)
+
+	return &api.JudgeDeps{
+		Judges: h.judges, Scores: h.judgeScores,
+		Tries: jonah.New(jonah.Deps{
+			Orgs: tenancy, Runs: h.store, Finished: porttest.NewFinishedRuns(h.store), Judges: h.judges, Scores: h.judgeScores,
+			Runner: porttest.NewJudgeRunner(nil), Clock: h.clock,
+		}, jonah.Config{}),
 	}
 }
 
