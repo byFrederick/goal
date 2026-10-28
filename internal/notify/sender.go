@@ -21,6 +21,11 @@ const (
 	BatchSize = 50
 	// Lease is how long a claim holds its rows.
 	Lease = 2 * time.Minute
+	// SendTimeout is the longest one send may take, whatever the mailer's own timeout.
+	SendTimeout = 30 * time.Second
+	// finishTime is what a row's finish may take after its send, so the claim is recorded
+	// before the lease ends.
+	finishTime = 10 * time.Second
 	// MaxAttempts is how many sends a row gets before it fails.
 	MaxAttempts = 8
 	// maxBackoff caps the wait before a retry.
@@ -115,19 +120,28 @@ func (s *Sender) Work(ctx context.Context) (int, error) {
 	return done, errors.Join(errs...)
 }
 
-// workOrg claims and finishes one batch of the organization in ctx.
+// workOrg claims and finishes one batch of the organization in ctx. It starts a row only when its
+// send and finish fit inside the claim's lease, so no other instance can claim a row while this
+// one may still be mailing it; the rows it does not reach go back to the queue at once.
 func (s *Sender) workOrg(ctx context.Context) (int, error) {
-	rows, err := s.d.Outbox.ClaimNotifications(ctx, ports.ChannelEmail, s.d.Clock.Now(), Lease, BatchSize)
+	claimed := s.d.Clock.Now()
+	leaseEnd := claimed.Add(Lease)
+
+	rows, err := s.d.Outbox.ClaimNotifications(ctx, ports.ChannelEmail, claimed, Lease, BatchSize)
 	if err != nil {
 		return 0, fmt.Errorf("claim: %w", err)
 	}
 
 	done := 0
 
-	for _, n := range rows {
+	for i, n := range rows {
 		if err := ctx.Err(); err != nil {
 			// The lease returns the rest to the queue.
 			return done, err
+		}
+
+		if s.d.Clock.Now().Add(SendTimeout + finishTime).After(leaseEnd) {
+			return done, s.release(ctx, rows[i:])
 		}
 
 		finished, ferr := s.finish(ctx, n)
@@ -141,6 +155,21 @@ func (s *Sender) workOrg(ctx context.Context) (int, error) {
 	}
 
 	return done, nil
+}
+
+// release ends the claim of rows this round did not send, due again now, so the next round of any
+// instance takes them without waiting for the lease. Their claim still counted as an attempt.
+func (s *Sender) release(ctx context.Context, rows []ports.Notification) error {
+	now := s.d.Clock.Now()
+
+	for _, n := range rows {
+		o := ports.NotificationOutcome{State: ports.NotificationPending, RetryAt: now}
+		if _, err := s.d.Outbox.FinishNotification(ctx, n.ID, n.Attempts, o); err != nil {
+			return fmt.Errorf("release notification %d: %w", n.ID, err)
+		}
+	}
+
+	return nil
 }
 
 // finish delivers n and ends its claim, and reports whether the claim was still its own: a
@@ -171,7 +200,11 @@ func (s *Sender) deliver(ctx context.Context, n ports.Notification) ports.Notifi
 		return ports.NotificationOutcome{State: ports.NotificationFailed, Reason: reasonUnknownEvent}
 	}
 
-	err = s.d.Mailer.Send(ctx, m)
+	sendCtx, cancel := context.WithTimeout(ctx, SendTimeout)
+	err = s.d.Mailer.Send(sendCtx, m)
+
+	cancel()
+
 	now := s.d.Clock.Now()
 
 	switch {

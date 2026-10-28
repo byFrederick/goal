@@ -289,6 +289,63 @@ func TestSender_LeaseExpiryReclaims(t *testing.T) {
 	}
 }
 
+// A batch whose sends are slow stops before its lease could run out mid-send, so no other
+// instance can claim and mail a row this one is still sending; the rows it did not reach go
+// back to the queue at once and the next round sends them.
+func TestSender_StopsBeforeTheLeaseRunsOut(t *testing.T) {
+	t.Parallel()
+
+	h := newSender(t)
+
+	var ids []int64
+	for range 5 {
+		ids = append(ids, h.queue("org-a", itemNotification(domain.NotifyApproval)))
+	}
+
+	leaseEnd := start.Add(Lease)
+
+	var mu sync.Mutex
+
+	var lateSend bool
+
+	// Every send takes as long as one send may.
+	h.mailer.Fail = func(ports.Message) error {
+		mu.Lock()
+		defer mu.Unlock()
+
+		h.clock.Advance(SendTimeout)
+
+		if h.clock.Now().After(leaseEnd) {
+			lateSend = true
+		}
+
+		return nil
+	}
+
+	first := h.work(t)
+	if first == 0 || first == len(ids) {
+		t.Fatalf("first round finished %d rows; want some, not all %d", first, len(ids))
+	}
+
+	if lateSend {
+		t.Fatal("a send ended after the claim's lease ran out")
+	}
+
+	for _, id := range ids[first:] {
+		if r := h.row(t, id); r.State != ports.NotificationPending || !r.LeaseUntil.IsZero() || r.NextAttemptAt.After(h.clock.Now()) {
+			t.Fatalf("row not reached = %+v; want pending, due now, with no lease", r)
+		}
+	}
+
+	if n := h.work(t); n != len(ids)-first {
+		t.Fatalf("second round finished %d rows; want the %d left", n, len(ids)-first)
+	}
+
+	if got := len(h.mailer.Sent()); got != len(ids) {
+		t.Fatalf("sent %d messages; want each of the %d rows once", got, len(ids))
+	}
+}
+
 // Each organization's rows are claimed in that organization, at most BatchSize per round.
 func TestSender_ClaimsPerOrganizationInBatches(t *testing.T) {
 	t.Parallel()
