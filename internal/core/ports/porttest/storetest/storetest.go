@@ -151,6 +151,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"SavedViews_NameTakenPerOwnerOrFactory", testSavedViewsNameTaken},
 		{"SavedViews_UpdateAndDelete", testSavedViewsUpdateAndDelete},
 		{"SavedViews_OtherOrgSeesNothing", testSavedViewsOtherOrgSeesNothing},
+		{"OpenToolApprovals_ByConnection", testOpenToolApprovals},
 	}
 
 	for _, tc := range tests {
