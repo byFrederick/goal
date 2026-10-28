@@ -187,14 +187,17 @@ The kind-to-type mapping is in `features/needs-you/types.ts`, a pure function wi
 | Entry kind | Type | Shown |
 |---|---|---|
 | `decision` | Decision (violet) | Under All and Decisions |
+| `question` | Question (you-ink) | Under All and Questions |
 | `andon`, `rework_warning`, `blocked`, `expedite` | Alert (red ink) | Under All and Alerts |
 | any other kind | generic row | Under All only |
 
-Approval has no backend (tool approvals are not built), so its tab is disabled. Questions have one now (ADR 0018, the inbox's `question` entries); the Needs you page's Question tab is built by its own part, so until then (`ui/not-available.tsx`) and no entry has those types. 
+Approval has no backend (tool approvals are not built), so its tab is disabled (`ui/not-available.tsx`) and no entry has that type.
+
+A question row (ADR 0018) reads "Question" in you-ink, its title "<agent>: <question>" with the agent's role name (`question.agent`, never a copy number), and its meta "#<number> at <Station>, run paused". The detail is the item page's question card (`features/items/question-card.tsx`): one quick answer per choice and Write an answer, both through `answerItem`. The page passes the card the factory from `factoriesQuery`, because an entry's own factory carries no grants (`can`); until that query loads, or without `item:decide`, the answers are disabled and say "Approvers of <factory> decide here.". The answer invalidates the inboxes, so the answered row leaves the list.
 
 The URL holds the state: `?type=` (the tab, `decision`, `alert`, and so on; absent is All), `?factory=` (a factory's name; absent is all) and `?entry=` (the selected entry's id). A linked URL opens the same tab, factory and entry. On a phone (below 768 px) an `entry` shows the approve view with Deny, Approve and the disabled "Edit, then approve"; the list is the other view.
 
-Approve calls `approveItem`, or `mergeItem` when the entry's action is `merge`. Deny asks for a reason and calls `rejectItem`. An Alert has no decision: it shows its andon pull, rework tally or block reason, with links to the item and the factory's Floor. The keys J and K move the selection, A approves and D opens Deny; they do nothing while a field or the Deny dialog has focus.
+Approve calls `approveItem`, or `mergeItem` when the entry's action is `merge`. Deny asks for a reason and calls `rejectItem`. An Alert has no decision: it shows its andon pull, rework tally or block reason, with links to the item and the factory's Floor. The keys J and K move the selection, A approves and D opens Deny. Both act on Decisions only: on a question they do nothing, and neither does anything while a field or the Deny dialog has focus.
 
 ### The Needs you link
 

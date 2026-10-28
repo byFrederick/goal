@@ -1,23 +1,27 @@
 // The detail of the selected entry: a Decision shows its approval brief, the item's recent events and
-// the action bar (Approve, Edit then approve, Deny, Always allow); an Alert shows what pulled it or
-// blocked it, and links to the item or the factory's Floor. The phone's approve view is the same
-// content in one column (mobile/approve).
+// the action bar (Approve, Edit then approve, Deny, Always allow); a Question shows the item page's
+// question card, with its quick answers and Write an answer; an Alert shows what pulled it or blocked
+// it, and links to the item or the factory's Floor. The phone's approve view is the same content in
+// one column (mobile/approve).
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { eventsQuery } from '../../api/queries';
-import type { InboxEntry } from '../../api/types';
+import type { Factory, InboxEntry } from '../../api/types';
 import { formatAge, formatClock, formatPercent, formatUsd, humanize } from '../../shared/format';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { NotAvailable } from '../../ui/not-available';
+import { QuestionCard } from '../items/question-card';
 import { decisionOf } from './actions';
 import { ageOf } from './rows';
 import { typeLabel, typeOf } from './types';
 
 export interface DetailProps {
   entry: InboxEntry;
+  /** The entry's factory as the factories list has it, for the question card's answers; else the entry's own. */
+  factory?: Factory | undefined;
   /** The phone's approve view: one column, with the actions stacked under the brief. */
   phone?: boolean;
   pending: boolean;
@@ -25,8 +29,8 @@ export interface DetailProps {
   onDeny: () => void;
 }
 
-/** The selected entry's detail; a Decision gets Approve and Deny, an Alert gets its facts and links. */
-export function Detail({ entry, phone = false, pending, onApprove, onDeny }: DetailProps) {
+/** The selected entry's detail; a Decision gets Approve and Deny, a Question its card, an Alert its facts and links. */
+export function Detail({ entry, factory, phone = false, pending, onApprove, onDeny }: DetailProps) {
   const type = typeOf(entry);
   const station = humanize(entry.station ?? entry.item?.station ?? '');
   const age = formatAge(ageOf(entry));
@@ -34,7 +38,7 @@ export function Detail({ entry, phone = false, pending, onApprove, onDeny }: Det
     <article className="flex min-w-0 flex-col gap-5 p-4 md:p-7" aria-labelledby="detail-title">
       <header className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Chip tone={type === 'decision' ? 'you' : 'rework'} size="lg">
+          <Chip tone={type === 'decision' || type === 'question' ? 'you' : 'rework'} size="lg">
             {typeLabel[type]}
           </Chip>
           <Crumb entry={entry} station={station} />
@@ -42,11 +46,14 @@ export function Detail({ entry, phone = false, pending, onApprove, onDeny }: Det
         <h2 id="detail-title" className="m-0 text-detail-title font-semibold text-ink">
           {entry.item ? entry.item.title : kindTitle(entry)}
         </h2>
-        <p className="m-0 text-secondary text-muted">
-          {type === 'decision'
-            ? `Asked ${age} ago. The run is paused until you answer.`
-            : `${age} ago. ${alertSummary(entry, station)}`}
-        </p>
+        {/* The question card says how long ago the agent asked, so a question has no line of its own here. */}
+        {type === 'question' ? null : (
+          <p className="m-0 text-secondary text-muted">
+            {type === 'decision'
+              ? `Asked ${age} ago. The run is paused until you answer.`
+              : `${age} ago. ${alertSummary(entry, station)}`}
+          </p>
+        )}
       </header>
 
       {type === 'decision' ? (
@@ -54,6 +61,10 @@ export function Detail({ entry, phone = false, pending, onApprove, onDeny }: Det
           <Brief entry={entry} />
           <ActionBar entry={entry} phone={phone} pending={pending} onApprove={onApprove} onDeny={onDeny} />
         </>
+      ) : type === 'question' ? (
+        entry.item && entry.question ? (
+          <QuestionCard itemKey={entry.item.id} factory={factory ?? entry.factory} question={entry.question} />
+        ) : null
       ) : (
         <>
           <AlertFacts entry={entry} station={station} />
