@@ -466,11 +466,17 @@ func (t *credentialTransport) keepSessionAlive(ctx context.Context) {
 }
 
 // httpClient is the CLI's client for goald: its user agent, and cred (nil for none) on requests
-// to origin.
+// to origin. It has its own copy of http.DefaultTransport, because an httptest server closing
+// calls CloseIdleConnections on the default one and breaks a parallel test's request in flight.
 func httpClient(origin string, cred *resolved) *http.Client {
+	base := http.DefaultTransport
+	if t, ok := base.(*http.Transport); ok {
+		base = t.Clone()
+	}
+
 	return &http.Client{
 		Timeout:   30 * time.Second,
-		Transport: &credentialTransport{base: http.DefaultTransport, origin: origin, agent: userAgent(), cred: cred},
+		Transport: &credentialTransport{base: base, origin: origin, agent: userAgent(), cred: cred},
 	}
 }
 
