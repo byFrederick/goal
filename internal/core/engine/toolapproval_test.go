@@ -115,30 +115,46 @@ func TestRequestToolApproval_EndsTheRunAndWaitsForAPerson(t *testing.T) {
 				t.Errorf("runs %+v; want the one run cancelled", runs)
 			}
 
-			reqs := h.eventsOf(it.ID, domain.EventToolApprovalRequested)
-			if len(reqs) != 1 {
-				t.Fatalf("events %v; want one tool_approval_requested", h.kinds(it.ID))
-			}
-
-			a := domain.ToolApprovalOf(reqs[0])
-			if a.Connection != connTracker || a.Tool != askTool || string(a.Input) != `{"body":"LGTM","issue":7}` ||
-				a.Agent != agWorker || a.RunID != run || a.Station != stWork || !a.AlwaysAllowOffered || reqs[0].RunID != run {
-				t.Errorf("approval %+v (input %s); want the agent's call with its run, offering Always allow", a, a.Input)
-			}
-
-			if open, ok := domain.OpenToolApproval(h.store.Events(it.ID)); !ok || open.EventID != reqs[0].ID {
-				t.Errorf("open approval %+v, %v; want the one requested", open, ok)
-			}
-
-			for k, want := range map[domain.EventKind]int{
-				domain.EventLeaseTaken: 1, domain.EventWaitingHuman: 1,
-				domain.EventReleased: 0, domain.EventAgentCancelled: 0, domain.EventBlocked: 0,
-			} {
-				if n := len(h.eventsOf(it.ID, k)); n != want {
-					t.Errorf("events %v; want %d %s", h.kinds(it.ID), want, k)
-				}
-			}
+			h.expectRequested(t, it.ID, run)
 		})
+	}
+}
+
+// expectRequested checks the item's one tool_approval_requested event, left open, and the events
+// around it.
+func (h *harness) expectRequested(t *testing.T, id domain.ItemID, run domain.RunID) {
+	t.Helper()
+
+	reqs := h.eventsOf(id, domain.EventToolApprovalRequested)
+	if len(reqs) != 1 {
+		t.Fatalf("events %v; want one tool_approval_requested", h.kinds(id))
+	}
+
+	a := domain.ToolApprovalOf(reqs[0])
+	if a.Connection != connTracker || a.Tool != askTool || string(a.Input) != `{"body":"LGTM","issue":7}` ||
+		a.Agent != agWorker || a.RunID != run || a.Station != stWork || !a.AlwaysAllowOffered || reqs[0].RunID != run {
+		t.Errorf("approval %+v (input %s); want the agent's call with its run, offering Always allow", a, a.Input)
+	}
+
+	if open, ok := domain.OpenToolApproval(h.store.Events(id)); !ok || open.EventID != reqs[0].ID {
+		t.Errorf("open approval %+v, %v; want the one requested", open, ok)
+	}
+
+	h.expectEndedForAPerson(t, id)
+}
+
+// expectEndedForAPerson checks that the item's run ended for a person once: one lease_taken and
+// waiting_human, and the ended run moved the item no further.
+func (h *harness) expectEndedForAPerson(t *testing.T, id domain.ItemID) {
+	t.Helper()
+
+	for k, want := range map[domain.EventKind]int{
+		domain.EventLeaseTaken: 1, domain.EventWaitingHuman: 1,
+		domain.EventReleased: 0, domain.EventAgentCancelled: 0, domain.EventBlocked: 0,
+	} {
+		if n := len(h.eventsOf(id, k)); n != want {
+			t.Errorf("events %v; want %d %s", h.kinds(id), want, k)
+		}
 	}
 }
 
@@ -248,15 +264,14 @@ func TestDecideToolApproval_ApproveResumesWithoutRework(t *testing.T) {
 	}
 }
 
-// The run after an approval reads the granted call in its brief and is granted it; the run
-// after a denial reads the denial and its note. The run after that reads neither.
-func TestDecideToolApproval_DenyPutsTheDenialInTheNextBrief(t *testing.T) {
-	t.Parallel()
+// askingFirstTwice is a harness whose item's first two runs call askTool through the engine, as
+// the gateway passes the call on, and end when that takes their lease; the runs after them
+// succeed.
+func askingFirstTwice(t *testing.T) *harness {
+	t.Helper()
 
 	var h *harness
 
-	// The item's first two runs call askTool through the engine, as the gateway passes the call
-	// on, and end when that takes their lease; the runs after them succeed.
 	h = newHarness(t, controlLine(), func(ctx context.Context, run porttest.ExecCall, _ io.Writer) domain.RunResult {
 		ctx = domain.WithOrg(ctx, testOrg)
 
@@ -273,6 +288,51 @@ func TestDecideToolApproval_DenyPutsTheDenialInTheNextBrief(t *testing.T) {
 
 		return domain.RunResult{Status: domain.RunCancelled, Error: ctx.Err().Error()}
 	})
+
+	return h
+}
+
+// expectGranted checks that the item's second run read the approved call in its brief and was
+// granted it.
+func (h *harness) expectGranted(t *testing.T, id domain.ItemID) {
+	t.Helper()
+
+	approved := h.feedback(1)
+	if !strings.Contains(approved, approvedHeading) || !strings.Contains(approved, connTracker+" `"+askTool+"`") ||
+		!strings.Contains(approved, `{"body":"LGTM","issue":7}`) || strings.Contains(approved, deniedHeading) {
+		t.Errorf("feedback %q; want the approved call", approved)
+	}
+
+	second := h.worker.Runs()[1].Sandbox.RunID
+
+	got := domain.GrantedCalls(h.store.Events(id), second)
+	if len(got) != 1 || got[0].Connection != connTracker || got[0].Tool != askTool || string(got[0].Input) != `{"body":"LGTM","issue":7}` {
+		t.Errorf("granted calls of the second run %+v; want the approved call", got)
+	}
+}
+
+// expectDenied checks that the item is back in its queue without rework, with one denial that
+// holds the person's trimmed note.
+func (h *harness) expectDenied(t *testing.T, id domain.ItemID, note string) {
+	t.Helper()
+
+	got := h.item(t, id)
+	if got.Position() != (domain.Position{Station: stWork, State: domain.StateQueued}) || got.ReworkCount != 0 {
+		t.Errorf("item at %+v rework %d; want it queued without rework", got.Position(), got.ReworkCount)
+	}
+
+	denials := h.eventsOf(id, domain.EventToolApprovalDenied)
+	if len(denials) != 1 || denials[0].Data[domain.KeyNote] != note || denials[0].Actor != human.Name {
+		t.Errorf("denials %+v; want one with the trimmed note by the person", denials)
+	}
+}
+
+// The run after an approval reads the granted call in its brief and is granted it; the run
+// after a denial reads the denial and its note. The run after that reads neither.
+func TestDecideToolApproval_DenyPutsTheDenialInTheNextBrief(t *testing.T) {
+	t.Parallel()
+
+	h := askingFirstTwice(t)
 	h.askFirst(t)
 	it := h.at(t, h.submit(t, domain.NewItem{}), stWork, domain.StateQueued)
 
@@ -284,32 +344,13 @@ func TestDecideToolApproval_DenyPutsTheDenialInTheNextBrief(t *testing.T) {
 
 	h.step(t) // the run after the approval, which asks again
 
-	approved := h.feedback(1)
-	if !strings.Contains(approved, approvedHeading) || !strings.Contains(approved, connTracker+" `"+askTool+"`") ||
-		!strings.Contains(approved, `{"body":"LGTM","issue":7}`) || strings.Contains(approved, deniedHeading) {
-		t.Errorf("feedback %q; want the approved call", approved)
-	}
-
-	second := h.worker.Runs()[1].Sandbox.RunID
-	want := []domain.GrantedCall{{Connection: connTracker, Tool: askTool, Input: json.RawMessage(`{"body":"LGTM","issue":7}`)}}
-	if got := domain.GrantedCalls(h.store.Events(it.ID), second); len(got) != 1 || got[0].Tool != want[0].Tool ||
-		string(got[0].Input) != string(want[0].Input) {
-		t.Errorf("granted calls of the second run %+v; want %+v", got, want)
-	}
+	h.expectGranted(t, it.ID)
 
 	if _, err := h.e.DecideToolApproval(inOrg(t), it.ID, human, false, false, "  Not on a public issue.  "); err != nil {
 		t.Fatal(err)
 	}
 
-	got := h.item(t, it.ID)
-	if got.Position() != (domain.Position{Station: stWork, State: domain.StateQueued}) || got.ReworkCount != 0 {
-		t.Errorf("item at %+v rework %d; want it queued without rework", got.Position(), got.ReworkCount)
-	}
-
-	denials := h.eventsOf(it.ID, domain.EventToolApprovalDenied)
-	if len(denials) != 1 || denials[0].Data[domain.KeyNote] != "Not on a public issue." || denials[0].Actor != human.Name {
-		t.Errorf("denials %+v; want one with the trimmed note by the person", denials)
-	}
+	h.expectDenied(t, it.ID, "Not on a public issue.")
 
 	h.step(t) // the run after the denial
 
@@ -415,7 +456,14 @@ func TestDecideToolApproval_AlwaysAllowCreatesOneStandingRule(t *testing.T) {
 		t.Errorf("grants %+v; want one with always_allow", grants)
 	}
 
-	// The rule lifts the ask for that agent role; the off tool stays off.
+	h.expectRuleLiftsTheAsk(t, rules)
+}
+
+// expectRuleLiftsTheAsk checks that rules lift askTool's ask for the agent role and leave offTool
+// off.
+func (h *harness) expectRuleLiftsTheAsk(t *testing.T, rules []domain.StandingRule) {
+	t.Helper()
+
 	conn, err := h.connections.Get(inOrg(t), connTracker)
 	if err != nil {
 		t.Fatal(err)
@@ -515,20 +563,7 @@ func TestApprove_RefusedWhileAToolApprovalIsOpen(t *testing.T) {
 func TestToolApproval_WithdrawnByAPersonsControl(t *testing.T) {
 	t.Parallel()
 
-	for name, act := range map[string]control{
-		"move": func(e *engine.Engine, ctx context.Context, id domain.ItemID) (domain.Item, error) {
-			return e.Move(ctx, id, stApprove, human, "")
-		},
-		"pause": func(e *engine.Engine, ctx context.Context, id domain.ItemID) (domain.Item, error) {
-			return e.Pause(ctx, id, human, "")
-		},
-		"send back": func(e *engine.Engine, ctx context.Context, id domain.ItemID) (domain.Item, error) {
-			return e.Reject(ctx, id, human, "wrong call")
-		},
-		"cancel": func(e *engine.Engine, ctx context.Context, id domain.ItemID) (domain.Item, error) {
-			return e.Cancel(ctx, id, human, "")
-		},
-	} {
+	for name, act := range withdrawingControls("wrong call") {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 

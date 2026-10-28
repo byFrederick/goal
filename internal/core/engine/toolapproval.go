@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -117,49 +118,17 @@ func (e *Engine) RequestToolApproval(ctx context.Context, id domain.ItemID, run 
 // done or cancelled item is refused with ErrItemClosed.
 func (e *Engine) DecideToolApproval(ctx context.Context, id domain.ItemID, by domain.Actor, approve, alwaysAllow bool, note string) (domain.Item, error) {
 	note = strings.TrimSpace(note)
-
-	switch {
-	case alwaysAllow && !approve:
-		return domain.Item{}, fmt.Errorf("decide tool approval on item %s: %w: always allow only approves", id, ErrBadToolDecision)
-	case approve && note != "":
-		return domain.Item{}, fmt.Errorf("decide tool approval on item %s: %w: a note only comes with a denial", id, ErrBadToolDecision)
-	case utf8.RuneCountInString(note) > MaxDenyNoteRunes:
-		return domain.Item{}, fmt.Errorf("decide tool approval on item %s: %w: the note takes up to %d characters", id, ErrBadToolDecision, MaxDenyNoteRunes)
-	}
-
-	it, l, err := e.itemAndLine(ctx, id)
-	if err != nil {
+	if err := validToolDecision(approve, alwaysAllow, note); err != nil {
 		return domain.Item{}, fmt.Errorf("decide tool approval on item %s: %w", id, err)
 	}
 
-	if closed(it) {
-		return domain.Item{}, fmt.Errorf("decide tool approval on item %s: %w", id, ErrItemClosed)
-	}
-
-	events, err := e.itemEvents(ctx, id)
+	it, st, a, err := e.openToolApproval(ctx, id)
 	if err != nil {
 		return domain.Item{}, fmt.Errorf("decide tool approval on item %s: %w", id, err)
-	}
-
-	a, open := domain.OpenToolApproval(events)
-	if !open {
-		return domain.Item{}, fmt.Errorf("decide tool approval on item %s: %w", id, ErrNoOpenToolApproval)
 	}
 
 	if alwaysAllow && !a.AlwaysAllowOffered {
 		return domain.Item{}, fmt.Errorf("decide tool approval on item %s: %w", id, ErrAlwaysAllowNotOffered)
-	}
-
-	st, ok := l.Station(it.Station)
-	if !ok {
-		return domain.Item{}, fmt.Errorf("decide tool approval on item %s: station %q is not on the line", id, it.Station)
-	}
-
-	kind, data := domain.EventToolApprovalDenied, map[string]any{domain.KeyApprovalID: a.EventID}
-	if approve {
-		kind, data[domain.KeyAlwaysAllow] = domain.EventToolApprovalGranted, alwaysAllow
-	} else if note != "" {
-		data[domain.KeyNote] = note
 	}
 
 	// The rule comes first: an approval whose transition then fails is retried, and the retry
@@ -175,7 +144,7 @@ func (e *Engine) DecideToolApproval(ctx context.Context, id domain.ItemID, by do
 
 	got, err := e.store.Transition(ctx, ports.Transition{
 		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: st.ID, State: st.Arrival()}, At: now,
-		Events: []domain.Event{decision(it, kind, now, by, data)},
+		Events: []domain.Event{toolDecisionEvent(it, a, now, by, approve, alwaysAllow, note)},
 	})
 	if errors.Is(err, ports.ErrConflict) {
 		return domain.Item{}, fmt.Errorf("decide tool approval on item %s: %w", id, errors.Join(ErrItemChanged, err))
@@ -190,6 +159,67 @@ func (e *Engine) DecideToolApproval(ctx context.Context, id domain.ItemID, by do
 		slog.String("by", by.Ref()))
 
 	return got, nil
+}
+
+// validToolDecision refuses Always allow with a denial, a note with an approval and a note
+// outside the limits.
+func validToolDecision(approve, alwaysAllow bool, note string) error {
+	switch {
+	case alwaysAllow && !approve:
+		return fmt.Errorf("%w: always allow only approves", ErrBadToolDecision)
+	case approve && note != "":
+		return fmt.Errorf("%w: a note only comes with a denial", ErrBadToolDecision)
+	case utf8.RuneCountInString(note) > MaxDenyNoteRunes:
+		return fmt.Errorf("%w: the note takes up to %d characters", ErrBadToolDecision, MaxDenyNoteRunes)
+	default:
+		return nil
+	}
+}
+
+// openToolApproval reads an open item, its station and its open tool approval: ErrItemClosed for
+// a done or cancelled item, ErrNoOpenToolApproval without an open approval.
+func (e *Engine) openToolApproval(ctx context.Context, id domain.ItemID) (domain.Item, domain.Station, domain.ToolApproval, error) {
+	it, l, err := e.itemAndLine(ctx, id)
+	if err != nil {
+		return domain.Item{}, domain.Station{}, domain.ToolApproval{}, err
+	}
+
+	if closed(it) {
+		return domain.Item{}, domain.Station{}, domain.ToolApproval{}, ErrItemClosed
+	}
+
+	events, err := e.itemEvents(ctx, id)
+	if err != nil {
+		return domain.Item{}, domain.Station{}, domain.ToolApproval{}, err
+	}
+
+	a, open := domain.OpenToolApproval(events)
+	if !open {
+		return domain.Item{}, domain.Station{}, domain.ToolApproval{}, ErrNoOpenToolApproval
+	}
+
+	st, ok := l.Station(it.Station)
+	if !ok {
+		return domain.Item{}, domain.Station{}, domain.ToolApproval{}, fmt.Errorf("station %q is not on the line", it.Station)
+	}
+
+	return it, st, a, nil
+}
+
+// toolDecisionEvent is the person's tool_approval_granted or tool_approval_denied event on a.
+func toolDecisionEvent(it domain.Item, a domain.ToolApproval, at time.Time, by domain.Actor, approve, alwaysAllow bool, note string) domain.Event {
+	if approve {
+		return decision(it, domain.EventToolApprovalGranted, at, by, map[string]any{
+			domain.KeyApprovalID: a.EventID, domain.KeyAlwaysAllow: alwaysAllow,
+		})
+	}
+
+	data := map[string]any{domain.KeyApprovalID: a.EventID}
+	if note != "" {
+		data[domain.KeyNote] = note
+	}
+
+	return decision(it, domain.EventToolApprovalDenied, at, by, data)
 }
 
 // RevokeStandingRule ends the organization's standing rule id: its agent role asks first again
