@@ -9,6 +9,10 @@ describe('the type of an entry', () => {
     expect(typeOf(kind('decision'))).toBe('decision');
   });
 
+  it('shows a question as a Question', () => {
+    expect(typeOf(kind('question'))).toBe('question');
+  });
+
   it.each(['andon', 'rework_warning', 'blocked', 'expedite'])('shows %s as an Alert', (k) => {
     expect(typeOf(kind(k))).toBe('alert');
   });
@@ -36,8 +40,15 @@ describe('which tab an entry shows under', () => {
     expect(inTab(kind('blocked'), 'decision')).toBe(false);
   });
 
-  it('shows no entry under Approvals or Questions, which have no backend yet', () => {
+  it('shows a question under Questions only', () => {
+    expect(inTab(kind('question'), 'question')).toBe(true);
+    expect(inTab(kind('question'), 'decision')).toBe(false);
+    expect(inTab(kind('question'), 'alert')).toBe(false);
+    expect(inTab(kind('question'), 'all')).toBe(true);
+  });
+
+  it('shows no entry under Approvals, which has no backend yet', () => {
     expect(inTab(kind('decision'), 'approval')).toBe(false);
-    expect(inTab(kind('andon'), 'question')).toBe(false);
+    expect(inTab(kind('question'), 'approval')).toBe(false);
   });
 });
