@@ -93,6 +93,8 @@ type EvalResult struct {
 	Detail     []byte
 	CostUsd    float64
 	Turns      int32
+	Arm        int16
+	DurationMs int64
 }
 
 type EvalRun struct {
@@ -109,6 +111,28 @@ type EvalRun struct {
 	CreatedBy     string
 	CreatedAt     time.Time
 	FinishedAt    *time.Time
+	Kind          string
+	Station       *string
+	Agent         *string
+	TriesPerCase  *int16
+}
+
+type EvalRunArm struct {
+	EvalRunID      uuid.UUID
+	OrgID          uuid.UUID
+	Arm            int16
+	Model          string
+	IsCurrent      bool
+	SummarizedAt   *time.Time
+	Tries          *int32
+	Passed         *int32
+	Errors         *int32
+	CostPerItemUsd *float64
+	MsPerItem      *int64
+	MeanTurns      *float64
+	Judge          *string
+	JudgedShare    *float64
+	PerCase        []byte
 }
 
 type FactoryRecord struct {

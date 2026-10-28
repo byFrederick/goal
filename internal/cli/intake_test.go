@@ -210,7 +210,7 @@ func tryAnswers() (gen.TriggerTry, gen.TriggerTry) {
 		OutputTokens int     `json:"output_tokens"`
 		Reason       string  `json:"reason"`
 		Worth        bool    `json:"worth"`
-	}{CostUsd: 0.0123, InputTokens: 1200, Model: "claude-haiku-5-5", OutputTokens: 40, Reason: "the docs changed\nsince the last sweep", Worth: true}
+	}{CostUsd: 0.0123, InputTokens: 1200, Model: cliHaiku, OutputTokens: 40, Reason: "the docs changed\nsince the last sweep", Worth: true}
 
 	skip := gen.TriggerTry{Firing: firingSkip, Matched: true, Outcome: gen.TriggerTryOutcome("skipped"), Reason: reason("only.dedupe: an open item has the title"), Steps: []gen.TriggerTryStep{
 		{Step: "when", Outcome: stepPassed, Reason: reason("the schedule fired at 2026-10-25T08:00:00Z")},

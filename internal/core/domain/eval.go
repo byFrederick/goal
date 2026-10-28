@@ -26,6 +26,16 @@ const (
 	EvalOnPublish EvalTrigger = "publish"
 )
 
+// EvalRunKind is what an eval run compares. Values match eval_runs.kind (ADR 0029 decision 1).
+type EvalRunKind string
+
+// Eval run kinds: an ordinary run of a definition's cases, or a bake-off of one agent across
+// models.
+const (
+	EvalKindEval    EvalRunKind = "eval"
+	EvalKindBakeOff EvalRunKind = "bake-off"
+)
+
 // EvalRunState is where an eval run is. Values match eval_runs.state; done, failed and cancelled
 // are final, and only those have a FinishedAt.
 type EvalRunState string
@@ -154,6 +164,7 @@ func checkEvalCases(cases []EvalCase) error {
 // EvalRun is one eval run and, from GetRun, its results by case and try.
 type EvalRun struct {
 	ID            EvalRunID
+	Kind          EvalRunKind
 	FactoryID     FactoryID
 	VersionID     DefinitionVersionID
 	ContentSHA256 BlobHash
@@ -170,9 +181,11 @@ type EvalRun struct {
 	Results    []EvalResult
 }
 
-// EvalResult is one try of one case in an eval run.
+// EvalResult is one try of one case in an eval run. Arm is the bake-off arm that ran it (1 to
+// MaxBakeOffArms), or 0 in an eval run of kind eval.
 type EvalResult struct {
 	EvalRunID  EvalRunID
+	Arm        int
 	Case       string
 	CaseSHA256 BlobHash
 	Try        int
@@ -185,6 +198,8 @@ type EvalResult struct {
 	Detail    map[string]any
 	CostUSD   float64
 	Turns     int
+	// Duration is how long the try took, zero until it is recorded.
+	Duration time.Duration
 }
 
 // EvalOutcome is how a claimed try ended: pass, fail or error, with what checked it (the
@@ -196,6 +211,7 @@ type EvalOutcome struct {
 	Detail    map[string]any
 	CostUSD   float64
 	Turns     int
+	Duration  time.Duration
 }
 
 // Check reports what makes o impossible to record, wrapping ErrInvalid. Detail's size is checked
@@ -213,6 +229,10 @@ func (o EvalOutcome) Check() error {
 
 	if o.Turns < 0 {
 		errs = append(errs, fmt.Errorf("eval outcome turns %d is negative: %w", o.Turns, ErrInvalid))
+	}
+
+	if o.Duration < 0 {
+		errs = append(errs, fmt.Errorf("eval outcome duration %v is negative: %w", o.Duration, ErrInvalid))
 	}
 
 	if len(o.CheckedBy) > 200 {

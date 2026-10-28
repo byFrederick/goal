@@ -38,7 +38,7 @@ func TestRun_Golden(t *testing.T) {
 	}
 
 	// Each of these runs with no arguments, and its golden file has its name.
-	for group := range strings.FieldsSeq("version factory org policy key andon admin catalog connection credential judge knowledge db storage run search eval triggers webhooks standing-rules") {
+	for group := range strings.FieldsSeq("version factory org policy key andon admin catalog connection credential judge knowledge db storage run search eval bake-off triggers webhooks standing-rules") {
 		cases = append(cases, struct {
 			name string
 			line string

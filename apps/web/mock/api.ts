@@ -60,6 +60,7 @@ import type {
 import { parse } from 'yaml';
 import type { IntakeEvent, TriggerTry, TriggerTryStep } from '../src/api/types.ts';
 import { authSettings, createMockAuth } from './auth.ts';
+import { createBakeOffs } from './bake-offs.ts';
 import { createConnections } from './connections.ts';
 import { createCredentials } from './credentials.ts';
 import { createDefinitions } from './definitions.ts';
@@ -326,6 +327,10 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   });
 
   const evals = createEvals({
+    clock,
+    factory: (org, key) => findFactory(key, org),
+  });
+  const bakeOffs = createBakeOffs({
     clock,
     factory: (org, key) => findFactory(key, org),
   });
@@ -1515,6 +1520,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       credentials.reset(clock());
       knowledge.reset(clock());
       evals.reset();
+      bakeOffs.reset();
       judges.reset();
       views.reset();
       webhooks.reset();
@@ -1610,6 +1616,9 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await credentials.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (rest === '/search' && method === 'GET') return searchOf(org, url, forCaller(req, org), res);
+    // Bake-offs sit under /evals, and the evals handler answers every sub-path it does not know,
+    // so bake-offs must be tried first.
+    if (await bakeOffs.handle(org, rest, method, res, () => readBody(req))) return;
     if (await evals.handle(org, rest, method, res, () => readBody(req))) return;
     if (await judges.handle(org, rest, method, res, () => readBody(req))) return;
     if (await views.handle(org, rest, method, req, res, () => readBody(req))) return;

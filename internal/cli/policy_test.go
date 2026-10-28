@@ -17,6 +17,7 @@ import (
 const (
 	cliOpus   = "claude-opus-5-5"
 	cliSonnet = "claude-sonnet-5-5"
+	cliHaiku  = "claude-haiku-5-5"
 )
 
 // policyGoald serves acme's policy at revision 3 and records the save it was sent.
@@ -38,7 +39,7 @@ func newPolicyGoald(t *testing.T) *policyGoald {
 	g := &policyGoald{view: gen.OrgPolicyView{
 		Revision: 3, UpdatedAt: &at,
 		Policy: gen.OrgPolicyInput{
-			AllowedModels: []string{cliOpus, "claude-haiku-5-5"}, DefaultModel: cliOpus,
+			AllowedModels: []string{cliOpus, cliHaiku}, DefaultModel: cliOpus,
 			DeniedCommands: []string{"Bash(terraform apply:*)"}, BoxTimeLimitMinutes: 180,
 			Tools: gen.ToolPolicy{WriteOutsideBranch: "off", MergePullRequest: "review_approval", ReadWeb: "ask", UseCredentials: "attached_only"},
 		},
@@ -47,7 +48,7 @@ func newPolicyGoald(t *testing.T) *policyGoald {
 				{FactoryId: "f1", Name: "support", Agents: []string{"responder"}}, {FactoryId: "f2", Name: "web", Agents: []string{"backend", "frontend"}},
 			}},
 			{Id: cliSonnet, Label: "Claude Sonnet 5.5", UsedBy: []gen.ModelUse{}},
-			{Id: "claude-haiku-5-5", Label: "Claude Haiku 5.5", UsedBy: []gen.ModelUse{}},
+			{Id: cliHaiku, Label: "Claude Haiku 5.5", UsedBy: []gen.ModelUse{}},
 		},
 		BoxSizes: []gen.PolicyBoxSize{
 			{Size: gen.Small, Vcpu: 1, MemoryBytes: 2 << 30, Factories: []gen.SizeUse{}},
@@ -213,7 +214,7 @@ func TestPolicy_SetStaleIsGoaldsRefusal(t *testing.T) {
 	// Another save lands between this command's read and its write.
 	g.bump = true
 
-	_, err := g.goalPolicy(t, policySetVerb, "--default", "claude-haiku-5-5")
+	_, err := g.goalPolicy(t, policySetVerb, "--default", cliHaiku)
 	if err == nil || err.Error() != "Conflict: the policy changed since it was read: read it again" {
 		t.Errorf("goal policy set on a stale read = %v; want goald's conflict", err)
 	}

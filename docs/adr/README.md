@@ -32,4 +32,7 @@ One line per ADR: its number, its title and the first part of its status. To add
 - [ADR 0026](0026-intake-triggers.md): Intake triggers. Status: accepted.
 - [ADR 0027](0027-knowledge-use-and-verdicts.md): Knowledge use and verdicts. Status: proposed.
 - [ADR 0028](0028-trigger-try-and-model-check.md): Trying a trigger with a past event, and the model check in Only if. Status: proposed.
+- [ADR 0029](0029-bake-offs-are-eval-runs-of-one-agent-across-models.md): Bake-offs are eval runs of one agent across models. Status: accepted.
+- [ADR 0031](0031-tool-calls-ask-first-and-standing-rules.md): Tool calls that ask first: the run ends until a person approves, and Always allow records a standing rule. Status: accepted.
 - [ADR 0032](0032-self-serve-onboarding.md): Self-serve onboarding: anyone signed in creates an organization, and progress comes from existing data. Status: accepted.
+- [ADR 0033](0033-assembly-integration-branches.md): Assembly integration branches: an opt-in branch that collects an assembly's parts and lands at a gate. Status: accepted.
