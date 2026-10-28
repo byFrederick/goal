@@ -2,6 +2,7 @@ package config
 
 import (
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -212,6 +213,9 @@ func trigger(t Trigger) domain.Trigger {
 
 	if o := t.Only; o != nil {
 		out.Only = domain.TriggerOnly{FailuresInARow: o.FailuresInARow, Dedupe: o.Dedupe}
+		if m := o.ModelAgrees; m != nil {
+			out.Only.ModelAgrees = &domain.ModelAgrees{Question: strings.TrimSpace(m.Question), Connection: m.Connection, Model: m.Model}
+		}
 	}
 
 	if l := t.Limits; l != nil {

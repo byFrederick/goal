@@ -81,9 +81,10 @@ const (
 	codeUnknownJudge          = "unknown-judge"
 	codePatchNotFound         = "patch-not-found"
 
-	codeCronInvalid        = "cron-invalid"
-	codeTimeZoneInvalid    = "time-zone-invalid"
-	codePlaceholderInvalid = "placeholder-invalid"
+	codeCronInvalid          = "cron-invalid"
+	codeTimeZoneInvalid      = "time-zone-invalid"
+	codePlaceholderInvalid   = "placeholder-invalid"
+	codeModelQuestionInvalid = "model-question-invalid"
 )
 
 // toolSpec is a mise tool spec: an optional backend ("aqua:", "npm:"), a tool name (a path for
