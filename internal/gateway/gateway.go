@@ -112,6 +112,9 @@ type Definitions interface {
 	// Rules returns the factory rules of version id that apply to run, in declaration order,
 	// with their hash and content (definitions.Cache.Rules).
 	Rules(ctx context.Context, id domain.DefinitionVersionID, run domain.RuleTarget) ([]domain.RunRule, error)
+	// VersionFiles returns every file of version id by its path in the definition, which a
+	// Jonah review reads (definitions.Cache.VersionFiles).
+	VersionFiles(ctx context.Context, id domain.DefinitionVersionID) (map[string][]byte, error)
 }
 
 // Events records audit events and reads an item's, to record a run's rules once; ports.Store
@@ -147,6 +150,9 @@ type Deps struct {
 	Questions Questions
 	// ToolApprovals take the Ask-first tool calls runs report at POST /run/tool-approval.
 	ToolApprovals ToolApprovals
+	// Jonah reads a Jonah review's sent-back events and rejected proposals for its bundle; nil
+	// answers a jonah token's bundle with 503 and changes nothing for other tokens.
+	Jonah Jonah
 }
 
 // Config bounds the gateway. Zero values take the defaults below.
@@ -176,6 +182,7 @@ type Gateway struct {
 	knowledge   Knowledge // nil without Deps.Knowledge
 	questions   Questions
 	approvals   ToolApprovals
+	jonah       Jonah // nil without Deps.Jonah
 	cfg         Config
 	mcp         http.Handler
 }
@@ -195,7 +202,7 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 
 	g := &Gateway{
 		defs: d.Definitions, items: d.Items, connections: d.Connections, events: d.Events, clock: d.Clock, log: d.Logger,
-		knowledge: d.Knowledge, questions: d.Questions, approvals: d.ToolApprovals, cfg: cfg,
+		knowledge: d.Knowledge, questions: d.Questions, approvals: d.ToolApprovals, jonah: d.Jonah, cfg: cfg,
 	}
 	if g.log == nil {
 		g.log = slog.New(slog.DiscardHandler)
@@ -279,6 +286,11 @@ func (g *Gateway) session(ctx context.Context, c domain.TaskClaims) (*session, e
 
 	if f.Metadata.ID != string(c.FactoryID) {
 		return nil, fmt.Errorf("%w: version %s is not a version of factory %s", errForbidden, c.VersionID, c.FactoryID)
+	}
+
+	// A Jonah review's agent is not one of the factory's, and it is served no tool.
+	if c.Kind == domain.TaskKindJonah {
+		return &session{g: g, claims: c, noTools: true}, nil
 	}
 
 	if !slices.ContainsFunc(f.Spec.Agents, func(a config.Agent) bool { return a.Name == c.Agent }) {

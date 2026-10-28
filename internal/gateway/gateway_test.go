@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -109,6 +110,40 @@ func (d definitions) Rules(_ context.Context, id domain.DefinitionVersionID, run
 	return out, nil
 }
 
+// VersionFiles stands in for the definitions cache's: no file. withFiles serves the harness's.
+func (d definitions) VersionFiles(_ context.Context, id domain.DefinitionVersionID) (map[string][]byte, error) {
+	if _, ok := d[id]; !ok {
+		return nil, fmt.Errorf("definition version %s: %w", id, ports.ErrNotFound)
+	}
+
+	return map[string][]byte{}, nil
+}
+
+// withFiles is definitions whose versions hold files, by path, and are only org's, as the
+// definitions cache's are only their organization's.
+type withFiles struct {
+	Definitions
+
+	org   domain.OrgID
+	files map[domain.DefinitionVersionID]map[string][]byte
+}
+
+func (d withFiles) Version(ctx context.Context, id domain.DefinitionVersionID) (*config.Factory, error) {
+	if org, _ := domain.OrgFrom(ctx); org != d.org {
+		return nil, fmt.Errorf("definition version %s: %w", id, ports.ErrNotFound)
+	}
+
+	return d.Definitions.Version(ctx, id)
+}
+
+func (d withFiles) VersionFiles(ctx context.Context, id domain.DefinitionVersionID) (map[string][]byte, error) {
+	if _, err := d.Version(ctx, id); err != nil {
+		return nil, err
+	}
+
+	return maps.Clone(d.files[id]), nil
+}
+
 type harness struct {
 	url   string
 	gw    *Gateway
@@ -138,6 +173,8 @@ type harnessDeps struct {
 	files map[string]string
 	// schema, when set, is the output.schema.json of every agent with a contract.
 	schema string
+	// noJonah leaves Deps.Jonah nil.
+	noJonah bool
 }
 
 // withSchema is definitions whose agents with a contract get schema as their output schema.
@@ -158,13 +195,22 @@ func (d withSchema) AgentFiles(ctx context.Context, id domain.DefinitionVersionI
 func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 	t.Helper()
 
-	load := func(id domain.FactoryID) *config.Factory {
-		files := fstest.MapFS{
-			"factory.yaml":       {Data: []byte(strings.ReplaceAll(d.yaml, string(factoryID), string(id)))},
-			"agents/engineer.md": {Data: []byte("# engineer\n")},
+	raw := func(id domain.FactoryID) map[string][]byte {
+		files := map[string][]byte{
+			"factory.yaml":       []byte(strings.ReplaceAll(d.yaml, string(factoryID), string(id))),
+			"agents/engineer.md": []byte("# engineer\n"),
 		}
 		for name, body := range d.files {
-			files[name] = &fstest.MapFile{Data: []byte(body)}
+			files[name] = []byte(body)
+		}
+
+		return files
+	}
+
+	load := func(id domain.FactoryID) *config.Factory {
+		files := fstest.MapFS{}
+		for name, body := range raw(id) {
+			files[name] = &fstest.MapFile{Data: body}
 		}
 
 		f, err := config.Load(files)
@@ -194,6 +240,15 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 		defs = withSchema{definitions: base, schema: []byte(d.schema)}
 	}
 
+	defs = withFiles{Definitions: defs, org: h.org, files: map[domain.DefinitionVersionID]map[string][]byte{
+		version: raw(factoryID), otherVersion: raw(otherID),
+	}}
+
+	var jonah Jonah
+	if !d.noJonah {
+		jonah = h.store
+	}
+
 	h.gw, err = New(Deps{
 		Definitions:   defs,
 		Items:         h.store,
@@ -202,6 +257,7 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 		Clock:         h.clock,
 		Questions:     h.questions,
 		ToolApprovals: h.approvals,
+		Jonah:         jonah,
 		Logger:        slog.New(slog.NewTextHandler(h.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}, cfg)
 	if err != nil {
@@ -271,19 +327,31 @@ const legacyProtocol = "2025-06-18"
 func (h *harness) connect(t *testing.T, protocol string) *mcp.ClientSession {
 	t.Helper()
 
-	cs, err := mcp.NewClient(&mcp.Implementation{Name: "acme-agent", Version: "1"}, nil).Connect(t.Context(),
-		&mcp.StreamableClientTransport{
-			Endpoint:             h.url,
-			HTTPClient:           &http.Client{Transport: bearer(h.token(t, h.claims()))},
-			DisableStandaloneSSE: true,
-		}, &mcp.ClientSessionOptions{ProtocolVersion: protocol})
+	cs, err := h.connectAs(t, protocol, h.claims())
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	return cs
+}
+
+// connectAs opens the session of a task with claims c.
+func (h *harness) connectAs(t *testing.T, protocol string, c domain.TaskClaims) (*mcp.ClientSession, error) {
+	t.Helper()
+
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "acme-agent", Version: "1"}, nil).Connect(t.Context(),
+		&mcp.StreamableClientTransport{
+			Endpoint:             h.url,
+			HTTPClient:           &http.Client{Transport: bearer(h.token(t, c))},
+			DisableStandaloneSSE: true,
+		}, &mcp.ClientSessionOptions{ProtocolVersion: protocol})
+	if err != nil {
+		return nil, err
+	}
+
 	t.Cleanup(func() { _ = cs.Close() })
 
-	return cs
+	return cs, nil
 }
 
 func (h *harness) events() []domain.Event { return h.store.Events(itemID) }
@@ -321,6 +389,64 @@ func TestGateway_ServesNoConnectionsTools(t *testing.T) {
 			// Claude Code refuses a tools/list result without a valid cache scope, and then has no tools.
 			if protocol == "" && res.CacheScope != "private" {
 				t.Errorf("cache scope = %q, want private: the list is per task", res.CacheScope)
+			}
+		})
+	}
+}
+
+// jonahClaims are a Jonah review's of the harness's factory over the last week: no item, no
+// station, an agent the version does not declare and no connection.
+func (h *harness) jonahClaims() domain.TaskClaims {
+	now := h.clock.Now()
+
+	return domain.TaskClaims{
+		Kind: domain.TaskKindJonah, OrgID: h.org, FactoryID: factoryID, VersionID: version, Agent: "reviewer", RunID: "run-jonah",
+		WindowStart: now.Add(-7 * 24 * time.Hour).Unix(), WindowEnd: now.Unix(), ExpiresAt: now.Add(time.Hour).Unix(),
+	}
+}
+
+// A Jonah review gets no MCP tool: its session lists none, not even question__ask, and refuses
+// every call as an unknown tool. Its agent need not be one of the version's, but the version must
+// still be its factory's.
+func TestGateway_JonahTokenGetsNoTools(t *testing.T) {
+	t.Parallel()
+
+	for _, protocol := range []string{legacyProtocol, ""} {
+		t.Run("protocol "+cmp.Or(protocol, "latest"), func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarness(t, Config{})
+
+			cs, err := h.connectAs(t, protocol, h.jonahClaims())
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			res, err := cs.ListTools(t.Context(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got := toolNames(res); len(got) != 0 {
+				t.Errorf("tools = %v, want none", got)
+			}
+
+			for _, name := range []string{questionTool, "knowledge__search", "docs__search_pages"} {
+				if _, err := cs.CallTool(t.Context(), &mcp.CallToolParams{Name: name, Arguments: map[string]any{"question": "Why?"}}); err == nil ||
+					!strings.Contains(err.Error(), "is not available") {
+					t.Errorf("CallTool(%s) = %v, want it refused as an unknown tool", name, err)
+				}
+			}
+
+			if n := len(h.questions.questions()); n != 0 {
+				t.Errorf("%d questions asked, want none", n)
+			}
+
+			foreign := h.jonahClaims()
+			foreign.VersionID = otherVersion
+
+			if _, err := h.connectAs(t, protocol, foreign); err == nil || !strings.Contains(err.Error(), "403") && !strings.Contains(err.Error(), "orbidden") {
+				t.Errorf("session for another factory's version = %v, want 403", err)
 			}
 		})
 	}
