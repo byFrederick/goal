@@ -39,7 +39,11 @@ const org: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'A', fa
 const factoryId = '6f1d2c3a-4b5e-4f70-8a9b-0c1d2e3f4a5b';
 const title = 'Add a contributing guide to the README';
 
-const starter = { title, type: 'feature', body: 'Add a short contributing guide to README.md, one file and two criteria.' };
+const starter = {
+  title,
+  type: 'feature',
+  body: 'Add a short contributing guide to README.md, one file and two criteria.',
+};
 
 /** The model as the published version has it: the template's stations and its starter item. */
 function modelWith(item: typeof starter | undefined): FactoryModel {
