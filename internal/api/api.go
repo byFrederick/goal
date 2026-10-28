@@ -70,6 +70,8 @@ type Engine interface {
 	Merge(ctx context.Context, id domain.ItemID, by domain.Actor, method string) (domain.Item, error)
 	Note(ctx context.Context, id domain.ItemID, by domain.Actor, text string) (domain.Event, error)
 	Answer(ctx context.Context, id domain.ItemID, by domain.Actor, answer string, choiceIndex *int) (domain.Item, error)
+	DecideToolApproval(ctx context.Context, id domain.ItemID, by domain.Actor, approve, alwaysAllow bool, note string) (domain.Item, error)
+	RevokeStandingRule(ctx context.Context, id domain.StandingRuleID, by domain.Actor) (domain.StandingRule, error)
 	Link(ctx context.Context, id, needs domain.ItemID, by domain.Actor) (domain.Edge, error)
 	Unlink(ctx context.Context, id, needs domain.ItemID, by domain.Actor) error
 	AddPart(ctx context.Context, assembly domain.ItemID, by domain.Actor, part domain.NewPart) (domain.Item, domain.Parts, error)
@@ -494,7 +496,7 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 
 	out.Waiting = waiting[it.ID]
 
-	if out.Question, err = s.openQuestion(ctx, it.ID); err != nil {
+	if out.Question, out.ToolApproval, err = s.openAsks(ctx, it.ID); err != nil {
 		return nil, err
 	}
 
@@ -636,7 +638,7 @@ func problemOf(err error) gen.Problem {
 	// ports.ErrNoMasterKey).
 	for _, answer := range []func(error) (gen.Problem, bool){
 		fixedProblem, policyProblem, edgeProblem, partProblem, credentialProblem, webhookProblem, connectionProblem, knowledgeProblem, judgeProblem, evalProblem, definitionProblem,
-		controlProblem, questionProblem, agentProblem, triggerProblem, apiKeyProblem, personalTokenProblem,
+		controlProblem, questionProblem, toolApprovalProblem, agentProblem, triggerProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {
 			return p
