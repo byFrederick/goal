@@ -75,7 +75,8 @@ import {
   listKnowledgeSources,
   searchKnowledge,
 } from './knowledge';
-import type { ItemEvent } from './types';
+import { getOrgSpend } from './spend';
+import type { ItemEvent, SpendWindow } from './types';
 import { getWebhookDelivery, listWebhookDeliveries, listWebhookEndpoints } from './webhooks';
 
 /**
@@ -156,6 +157,8 @@ export const keys = {
    * all of it but the searches (shared/invalidation.ts).
    */
   knowledge: (org: string) => ['org', org, 'knowledge'] as const,
+  /** The spend over one window (week, month or 90d) with the factories' budgets. */
+  spend: (org: string, window: SpendWindow) => ['org', org, 'spend', window] as const,
   knowledgeSources: (org: string, filter: KnowledgeSourceFilter) =>
     ['org', org, 'knowledge', 'sources', filter] as const,
   knowledgeSource: (org: string, name: string) => ['org', org, 'knowledge', 'source', name] as const,
@@ -253,6 +256,14 @@ export const overviewQuery = (org: string, window = '7d') =>
   queryOptions({
     queryKey: keys.overview(org, window),
     queryFn: ({ signal }) => getFactoryOverview(org, window, signal),
+    staleTime: 30_000,
+  });
+
+/** The organization's spend over a window, with its factories' budgets (the spend screen). */
+export const spendQuery = (org: string, window: SpendWindow) =>
+  queryOptions({
+    queryKey: keys.spend(org, window),
+    queryFn: ({ signal }) => getOrgSpend(org, window, signal),
     staleTime: 30_000,
   });
 
