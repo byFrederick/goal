@@ -121,7 +121,7 @@ export function EvalsPage() {
   return (
     <div className="@container flex min-w-0 flex-col gap-5">
       <TopBarSlot crumb="Evals" actions={entries.length > 0 ? [addButton('add'), runAllButton] : undefined} />
-      <JonahHeader tab="evals" caseCount={entries.length} />
+      <JonahHeader tab="evals" counts={{ evals: entries.length }} />
 
       {entries.length === 0 ? (
         <EmptyState title="No eval cases yet" actions={addButton()}>

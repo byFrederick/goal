@@ -5411,6 +5411,12 @@ type SentBack struct {
 	Ratio *float64 `json:"ratio"`
 }
 
+// SetLaneRequest defines model for SetLaneRequest.
+type SetLaneRequest struct {
+	// Lane The lane to set
+	Lane string `json:"lane"`
+}
+
 // SignInMethod defines model for SignInMethod.
 type SignInMethod string
 
@@ -5649,7 +5655,7 @@ type Touch struct {
 	// EventId The naming event; its reason is set by setTouchReason
 	EventId int64 `json:"event_id"`
 
-	// Kind The naming event's kind: merged, rejected, approved, moved, paused, cancelled, retried, note, ...
+	// Kind The naming event's kind: merged, rejected, approved, moved, paused, cancelled, retried, lane_set, note, ...
 	Kind    string `json:"kind"`
 	Planned bool   `json:"planned"`
 
@@ -6577,6 +6583,9 @@ type AnswerItemJSONRequestBody = ItemAnswer
 
 // CancelItemJSONRequestBody defines body for CancelItem for application/json ContentType.
 type CancelItemJSONRequestBody = CancelRequest
+
+// SetItemLaneJSONRequestBody defines body for SetItemLane for application/json ContentType.
+type SetItemLaneJSONRequestBody = SetLaneRequest
 
 // MergeItemJSONRequestBody defines body for MergeItem for application/json ContentType.
 type MergeItemJSONRequestBody = MergeRequest
@@ -7986,6 +7995,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/events (the `ListItemEvents` operationId).
 	ListItemEvents(ctx context.Context, org OrgRef, item ItemRef, params *ListItemEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetItemLaneWithBody Set an open item's lane
+	//
+	// The lane picks the agent at the stations that route by lane; the item stays at its station and in its state, and a lane_set event (from, to) records the change. The lane is trimmed; when any station of the item's line routes by lane, it must be one of the lanes routed. 400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts carry their own lanes), same-lane or item-changed.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/lane (the `SetItemLane` operationId).
+	SetItemLaneWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetItemLane Set an open item's lane
+	//
+	// The lane picks the agent at the stations that route by lane; the item stays at its station and in its state, and a lane_set event (from, to) records the change. The lane is trimmed; when any station of the item's line routes by lane, it must be one of the lanes routed. 400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts carry their own lanes), same-lane or item-changed.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/lane (the `SetItemLane` operationId).
+	SetItemLane(ctx context.Context, org OrgRef, item ItemRef, body SetItemLaneJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// MergeItemWithBody Merge the item's pull requests, then approve it
 	//
@@ -10941,6 +10968,44 @@ func (c *Client) CancelItem(ctx context.Context, org OrgRef, item ItemRef, body 
 // Corresponds with GET /v1/orgs/{org}/items/{item}/events (the `ListItemEvents` operationId).
 func (c *Client) ListItemEvents(ctx context.Context, org OrgRef, item ItemRef, params *ListItemEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListItemEventsRequest(c.Server, org, item, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetItemLaneWithBody Set an open item's lane
+//
+// The lane picks the agent at the stations that route by lane; the item stays at its station and in its state, and a lane_set event (from, to) records the change. The lane is trimmed; when any station of the item's line routes by lane, it must be one of the lanes routed. 400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts carry their own lanes), same-lane or item-changed.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/lane (the `SetItemLane` operationId).
+func (c *Client) SetItemLaneWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetItemLaneRequestWithBody(c.Server, org, item, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetItemLane Set an open item's lane
+//
+// The lane picks the agent at the stations that route by lane; the item stays at its station and in its state, and a lane_set event (from, to) records the change. The lane is trimmed; when any station of the item's line routes by lane, it must be one of the lanes routed. 400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts carry their own lanes), same-lane or item-changed.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/lane (the `SetItemLane` operationId).
+func (c *Client) SetItemLane(ctx context.Context, org OrgRef, item ItemRef, body SetItemLaneJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetItemLaneRequest(c.Server, org, item, body)
 	if err != nil {
 		return nil, err
 	}
@@ -17908,6 +17973,60 @@ func NewListItemEventsRequest(server string, org OrgRef, item ItemRef, params *L
 	return req, nil
 }
 
+// NewSetItemLaneRequest calls the generic SetItemLane builder with application/json body
+func NewSetItemLaneRequest(server string, org OrgRef, item ItemRef, body SetItemLaneJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSetItemLaneRequestWithBody(server, org, item, "application/json", bodyReader)
+}
+
+// NewSetItemLaneRequestWithBody constructs an http.Request for the SetItemLane method, with any body, and a specified content type
+func NewSetItemLaneRequestWithBody(server string, org OrgRef, item ItemRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/lane", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewMergeItemRequest calls the generic MergeItem builder with application/json body
 func NewMergeItemRequest(server string, org OrgRef, item ItemRef, body MergeItemJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -21951,6 +22070,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/events (the `ListItemEvents` operationId).
 	ListItemEventsWithResponse(ctx context.Context, org OrgRef, item ItemRef, params *ListItemEventsParams, reqEditors ...RequestEditorFn) (*ListItemEventsResponse, error)
+
+	// SetItemLaneWithBodyWithResponse Set an open item's lane
+	//
+	// The lane picks the agent at the stations that route by lane; the item stays at its station and in its state, and a lane_set event (from, to) records the change. The lane is trimmed; when any station of the item's line routes by lane, it must be one of the lanes routed. 400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts carry their own lanes), same-lane or item-changed.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/lane (the `SetItemLane` operationId).
+	SetItemLaneWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetItemLaneResponse, error)
+
+	// SetItemLaneWithResponse Set an open item's lane
+	//
+	// The lane picks the agent at the stations that route by lane; the item stays at its station and in its state, and a lane_set event (from, to) records the change. The lane is trimmed; when any station of the item's line routes by lane, it must be one of the lanes routed. 400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts carry their own lanes), same-lane or item-changed.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/lane (the `SetItemLane` operationId).
+	SetItemLaneWithResponse(ctx context.Context, org OrgRef, item ItemRef, body SetItemLaneJSONRequestBody, reqEditors ...RequestEditorFn) (*SetItemLaneResponse, error)
 
 	// MergeItemWithBodyWithResponse Merge the item's pull requests, then approve it
 	//
@@ -27609,6 +27746,61 @@ func (r ListItemEventsResponse) ContentType() string {
 	return ""
 }
 
+type SetItemLaneResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Item
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Conflict
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SetItemLaneResponse) GetJSON200() *Item {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r SetItemLaneResponse) GetApplicationproblemJSON409() *Conflict {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SetItemLaneResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SetItemLaneResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SetItemLaneResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SetItemLaneResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SetItemLaneResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type MergeItemResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -32229,6 +32421,36 @@ func (c *ClientWithResponses) ListItemEventsWithResponse(ctx context.Context, or
 	return ParseListItemEventsResponse(rsp)
 }
 
+// SetItemLaneWithBodyWithResponse Set an open item's lane
+//
+// The lane picks the agent at the stations that route by lane; the item stays at its station and in its state, and a lane_set event (from, to) records the change. The lane is trimmed; when any station of the item's line routes by lane, it must be one of the lanes routed. 400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts carry their own lanes), same-lane or item-changed.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/lane (the `SetItemLane` operationId).
+func (c *ClientWithResponses) SetItemLaneWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetItemLaneResponse, error) {
+	rsp, err := c.SetItemLaneWithBody(ctx, org, item, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetItemLaneResponse(rsp)
+}
+
+// SetItemLaneWithResponse Set an open item's lane
+//
+// The lane picks the agent at the stations that route by lane; the item stays at its station and in its state, and a lane_set event (from, to) records the change. The lane is trimmed; when any station of the item's line routes by lane, it must be one of the lanes routed. 400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts carry their own lanes), same-lane or item-changed.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/lane (the `SetItemLane` operationId).
+func (c *ClientWithResponses) SetItemLaneWithResponse(ctx context.Context, org OrgRef, item ItemRef, body SetItemLaneJSONRequestBody, reqEditors ...RequestEditorFn) (*SetItemLaneResponse, error) {
+	rsp, err := c.SetItemLane(ctx, org, item, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetItemLaneResponse(rsp)
+}
+
 // MergeItemWithBodyWithResponse Merge the item's pull requests, then approve it
 //
 // Only for an item waiting at a human station with action merge. goald merges every pull request (GitLab merge request) the item's outputs name: the pull_request string and the pull_requests array of each station's latest output, in station order, each once. Each goes through the factory's connection whose kind has a code host and whose git login is for the URL's host; a URL on a host none serves is refused with 409 no-code-host-connection before anything is merged. It never forces: a pull request that is closed, has conflicts or failing required checks, or whose head moves meanwhile stops the merge with 409 cannot-merge naming it, and the item does not move; the ones merged before it stay merged and are skipped when the merge is asked again. After each merge it deletes the pull request's head branch (only when it lives in the repository it merged into), and once all are merged it approves the item with one merged event per pull request.
@@ -36799,6 +37021,46 @@ func ParseListItemEventsResponse(rsp *http.Response) (*ListItemEventsResponse, e
 	return response, nil
 }
 
+// ParseSetItemLaneResponse parses an HTTP response from a SetItemLaneWithResponse call
+func ParseSetItemLaneResponse(rsp *http.Response) (*SetItemLaneResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SetItemLaneResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Item
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseMergeItemResponse parses an HTTP response from a MergeItemWithResponse call
 func ParseMergeItemResponse(rsp *http.Response) (*MergeItemResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -38977,6 +39239,9 @@ type ServerInterface interface {
 	// ListItemEvents One page of an item's history, oldest first
 	// (GET /v1/orgs/{org}/items/{item}/events)
 	ListItemEvents(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef, params ListItemEventsParams)
+	// SetItemLane Set an open item's lane
+	// (POST /v1/orgs/{org}/items/{item}/lane)
+	SetItemLane(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
 	// MergeItem Merge the item's pull requests, then approve it
 	// (POST /v1/orgs/{org}/items/{item}/merge)
 	MergeItem(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
@@ -43630,6 +43895,41 @@ func (siw *ServerInterfaceWrapper) ListItemEvents(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// SetItemLane operation middleware
+func (siw *ServerInterfaceWrapper) SetItemLane(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item" -------------
+	var item ItemRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item", r.PathValue("item"), &item, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetItemLane(w, r, org, item)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // MergeItem operation middleware
 func (siw *ServerInterfaceWrapper) MergeItem(w http.ResponseWriter, r *http.Request) {
 
@@ -45975,6 +46275,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/answer", wrapper.AnswerItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/reject", wrapper.RejectItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/move", wrapper.MoveItem)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/lane", wrapper.SetItemLane)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/pause", wrapper.PauseItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/cancel", wrapper.CancelItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/retry", wrapper.RetryItem)
@@ -50336,6 +50637,63 @@ func (response ListItemEventsdefaultApplicationProblemPlusJSONResponse) VisitLis
 	return err
 }
 
+type SetItemLaneRequestObject struct {
+	Org  OrgRef  `json:"org"`
+	Item ItemRef `json:"item"`
+	Body *SetItemLaneJSONRequestBody
+}
+
+type SetItemLaneResponseObject interface {
+	VisitSetItemLaneResponse(w http.ResponseWriter) error
+}
+
+type SetItemLane200JSONResponse Item
+
+func (response SetItemLane200JSONResponse) VisitSetItemLaneResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetItemLane409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response SetItemLane409ApplicationProblemPlusJSONResponse) VisitSetItemLaneResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetItemLanedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response SetItemLanedefaultApplicationProblemPlusJSONResponse) VisitSetItemLaneResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type MergeItemRequestObject struct {
 	Org  OrgRef  `json:"org"`
 	Item ItemRef `json:"item"`
@@ -52995,6 +53353,9 @@ type StrictServerInterface interface {
 	// ListItemEvents One page of an item's history, oldest first
 	// (GET /v1/orgs/{org}/items/{item}/events)
 	ListItemEvents(ctx context.Context, request ListItemEventsRequestObject) (ListItemEventsResponseObject, error)
+	// SetItemLane Set an open item's lane
+	// (POST /v1/orgs/{org}/items/{item}/lane)
+	SetItemLane(ctx context.Context, request SetItemLaneRequestObject) (SetItemLaneResponseObject, error)
 	// MergeItem Merge the item's pull requests, then approve it
 	// (POST /v1/orgs/{org}/items/{item}/merge)
 	MergeItem(ctx context.Context, request MergeItemRequestObject) (MergeItemResponseObject, error)
@@ -56275,6 +56636,40 @@ func (sh *strictHandler) ListItemEvents(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListItemEventsResponseObject); ok {
 		if err := validResponse.VisitListItemEventsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetItemLane operation middleware
+func (sh *strictHandler) SetItemLane(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
+	var request SetItemLaneRequestObject
+
+	request.Org = org
+	request.Item = item
+
+	var body SetItemLaneJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetItemLane(ctx, request.(SetItemLaneRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetItemLane")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetItemLaneResponseObject); ok {
+		if err := validResponse.VisitSetItemLaneResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

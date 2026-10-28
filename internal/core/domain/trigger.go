@@ -55,6 +55,9 @@ type TriggerOnly struct {
 	// Dedupe is an event field: the check passes when no open item of the trigger has the same
 	// value of it; "" is no check.
 	Dedupe string
+	// ModelAgrees, run last and only when the others passed, passes when a model answers yes; nil
+	// is no check.
+	ModelAgrees *ModelAgrees
 }
 
 // TriggerCreate is the item a trigger creates. Title and Brief are templates whose {{field}}

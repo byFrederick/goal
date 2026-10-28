@@ -17,7 +17,7 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import { createContext, type ReactNode, useContext, useId, useState } from 'react';
+import { type CSSProperties, createContext, type ReactNode, useContext, useId, useState } from 'react';
 import type { Board, BoardStation, ItemCard } from '../../api/types';
 import { humanize } from '../../shared/format';
 import { cn } from '../../ui/cn';
@@ -130,10 +130,12 @@ const InstructionsId = createContext<string | undefined>(undefined);
 export function DropColumn({
   station,
   className,
+  style,
   children,
 }: {
   station: BoardStation;
   className?: string;
+  style?: CSSProperties;
   children: ReactNode;
 }) {
   const { setNodeRef, isOver, active } = useDroppable({ id: station.id, disabled: station.kind === 'done' });
@@ -142,6 +144,7 @@ export function DropColumn({
     <section
       ref={setNodeRef}
       aria-label={humanize(station.id)}
+      style={style}
       className={cn(className, isOver && from !== station.id && 'border-run shadow-[inset_0_0_0_1px_var(--color-run)]')}
     >
       {children}
