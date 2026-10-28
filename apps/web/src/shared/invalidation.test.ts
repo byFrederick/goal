@@ -268,6 +268,18 @@ describe('definitionInvalidations', () => {
   });
 });
 
+describe('the intake', () => {
+  test('an item event and a publish of the running definition re-read the factory intake, and a draft save does not', () => {
+    expect(invalidationsFor(acme, event('approved'))).toContainEqual(keys.intake(acme, goal));
+    expect(definitionInvalidations(acme, definition({ kind: 'current', number: 9 }))).toContainEqual(
+      keys.intake(acme, goal),
+    );
+    expect(definitionInvalidations(acme, definition({ kind: 'draft', number: 2 }))).not.toContainEqual(
+      keys.intake(acme, goal),
+    );
+  });
+});
+
 describe('connectionInvalidations', () => {
   test('re-reads the lists, the connection, its activity and the kinds, never a definition or the work', async () => {
     const client = definitionCache();

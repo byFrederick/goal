@@ -1,8 +1,18 @@
 // The trigger's YAML: what the page reads, the one trigger it rewrites and the rest of the file it leaves
 // as written, byte for byte, comments included (spec.board.triggers only, ADR 0026).
 import { describe, expect, it } from 'vitest';
+import { parse } from 'yaml';
 import type { Trigger } from '../../shared/definition/model';
-import { keyLines, readBoard, readTrigger, readTriggers, triggerYaml, writeTrigger } from './trigger-yaml';
+import {
+  keyLines,
+  readBoard,
+  readTrigger,
+  readTriggers,
+  TriggerNotFoundError,
+  triggerYaml,
+  withTriggerEnabled,
+  writeTrigger,
+} from './trigger-yaml';
 
 const file = `# Software: turns intake into reviewed pull requests.
 apiVersion: goal/v1
@@ -175,5 +185,54 @@ describe('showing a trigger as YAML', () => {
     expect(yaml).toContain('- name: flaky-test-on-main\n  on: github.check_run.failed\n');
     expect(yaml).toContain('  filter: { branch: main, repo: byFrederick/goal }\n');
     expect(yaml).toContain('  limits: { perDay: 3, pauseOnBudget: true }');
+  });
+});
+
+const switchFile = `# The software factory. Keep this comment.
+apiVersion: goal/v1
+kind: Factory
+metadata:
+  name: widgets
+spec:
+  board:
+    workTypes: [fix, feature]
+    triggers:
+      - name: flaky   # the first one
+        on: github.check_run.failed
+        create: { type: fix, station: build }
+      - name: deploy
+        enabled: true
+        on: schedule
+        create: { type: fix, station: spec }
+`;
+
+describe('withTriggerEnabled', () => {
+  it("sets only the named trigger's enabled and keeps every other line and comment", () => {
+    const next = withTriggerEnabled(switchFile, 'flaky', false);
+
+    expect(next).toContain('# The software factory. Keep this comment.');
+    expect(next).toContain('# the first one');
+    expect(parse(next).spec.board.triggers).toEqual([
+      { name: 'flaky', on: 'github.check_run.failed', create: { type: 'fix', station: 'build' }, enabled: false },
+      { name: 'deploy', enabled: true, on: 'schedule', create: { type: 'fix', station: 'spec' } },
+    ]);
+    const lines = (text: string) => text.split('\n');
+    expect(lines(next).filter((line) => !lines(switchFile).includes(line))).toEqual(['        enabled: false']);
+    expect(lines(switchFile).filter((line) => !lines(next).includes(line))).toEqual([]);
+  });
+
+  it('changes an enabled that is already written, in its place', () => {
+    const next = withTriggerEnabled(switchFile, 'deploy', false);
+
+    expect(parse(next).spec.board.triggers[1].enabled).toBe(false);
+    expect(next.split('\n').filter((line) => line.includes('enabled'))).toEqual(['        enabled: false']);
+  });
+
+  it('refuses a name the definition does not have', () => {
+    expect(() => withTriggerEnabled(switchFile, 'missing', false)).toThrow(TriggerNotFoundError);
+  });
+
+  it('refuses a switchFile that does not parse', () => {
+    expect(() => withTriggerEnabled('spec: [', 'flaky', false)).toThrow(/does not parse/);
   });
 });
