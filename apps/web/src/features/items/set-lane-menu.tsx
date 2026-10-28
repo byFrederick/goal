@@ -12,11 +12,11 @@ import { useRunningModel } from '../../shared/definition/agent-cards';
 import type { Model } from '../../shared/definition/model';
 import { humanize } from '../../shared/format';
 import { factoryWorkInvalidations } from '../../shared/invalidation';
-import { useOrg } from '../../shared/org';
 import type { Movable } from '../../shared/move-menu';
+import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
-import { Dialog, DialogClose, DialogContent } from '../../ui/dialog';
 import { cn } from '../../ui/cn';
+import { Dialog, DialogClose, DialogContent } from '../../ui/dialog';
 import { laneRefusalOf } from './lane-refusals';
 
 /** The lanes the line's stations route by: the sorted union of every station's route keys. */
@@ -117,8 +117,8 @@ function SetLaneForm({ items, factory, onDone }: { items: Movable[]; factory: Fa
         <p className="m-0 text-body text-muted">No station routes items by lane, so there is no lane to set.</p>
       ) : (
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-          <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
-            <legend className="mb-1.5 p-0 text-secondary text-muted">Lane</legend>
+          <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+            <legend className="mb-1 p-0 text-secondary text-muted">Lane</legend>
             {lanes.map((lane, index) => {
               const checked = lane === selected;
               return (
