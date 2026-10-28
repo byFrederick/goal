@@ -53,6 +53,8 @@ import { Route as OOrgFFactoryIntakeWebhooksRouteImport } from './routes/o.$org.
 import { Route as OOrgFFactoryItemsIndexRouteImport } from './routes/o.$org.f.$factory.items.index'
 import { Route as OOrgFFactoryItemsRefRouteImport } from './routes/o.$org.f.$factory.items.$ref'
 import { Route as OOrgFFactoryJonahEvalsRouteImport } from './routes/o.$org.f.$factory.jonah.evals'
+import { Route as OOrgFFactoryJonahJudgesIndexRouteImport } from './routes/o.$org.f.$factory.jonah.judges.index'
+import { Route as OOrgFFactoryJonahJudgesJudgeRouteImport } from './routes/o.$org.f.$factory.jonah.judges.$judge'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -278,6 +280,18 @@ const OOrgFFactoryJonahEvalsRoute = OOrgFFactoryJonahEvalsRouteImport.update({
   path: '/jonah/evals',
   getParentRoute: () => OOrgFFactoryRoute,
 } as any)
+const OOrgFFactoryJonahJudgesIndexRoute =
+  OOrgFFactoryJonahJudgesIndexRouteImport.update({
+    id: '/jonah/judges/',
+    path: '/jonah/judges/',
+    getParentRoute: () => OOrgFFactoryRoute,
+  } as any)
+const OOrgFFactoryJonahJudgesJudgeRoute =
+  OOrgFFactoryJonahJudgesJudgeRouteImport.update({
+    id: '/jonah/judges/$judge',
+    path: '/jonah/judges/$judge',
+    getParentRoute: () => OOrgFFactoryRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -323,6 +337,8 @@ export interface FileRoutesByFullPath {
   '/o/$org/f/$factory/definition/': typeof OOrgFFactoryDefinitionIndexRoute
   '/o/$org/f/$factory/intake/': typeof OOrgFFactoryIntakeIndexRoute
   '/o/$org/f/$factory/items/': typeof OOrgFFactoryItemsIndexRoute
+  '/o/$org/f/$factory/jonah/judges/$judge': typeof OOrgFFactoryJonahJudgesJudgeRoute
+  '/o/$org/f/$factory/jonah/judges/': typeof OOrgFFactoryJonahJudgesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -365,6 +381,8 @@ export interface FileRoutesByTo {
   '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionIndexRoute
   '/o/$org/f/$factory/intake': typeof OOrgFFactoryIntakeIndexRoute
   '/o/$org/f/$factory/items': typeof OOrgFFactoryItemsIndexRoute
+  '/o/$org/f/$factory/jonah/judges/$judge': typeof OOrgFFactoryJonahJudgesJudgeRoute
+  '/o/$org/f/$factory/jonah/judges': typeof OOrgFFactoryJonahJudgesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -412,6 +430,8 @@ export interface FileRoutesById {
   '/o/$org/f/$factory/definition/': typeof OOrgFFactoryDefinitionIndexRoute
   '/o/$org/f/$factory/intake/': typeof OOrgFFactoryIntakeIndexRoute
   '/o/$org/f/$factory/items/': typeof OOrgFFactoryItemsIndexRoute
+  '/o/$org/f/$factory/jonah/judges/$judge': typeof OOrgFFactoryJonahJudgesJudgeRoute
+  '/o/$org/f/$factory/jonah/judges/': typeof OOrgFFactoryJonahJudgesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -459,6 +479,8 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/definition/'
     | '/o/$org/f/$factory/intake/'
     | '/o/$org/f/$factory/items/'
+    | '/o/$org/f/$factory/jonah/judges/$judge'
+    | '/o/$org/f/$factory/jonah/judges/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -501,6 +523,8 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/definition'
     | '/o/$org/f/$factory/intake'
     | '/o/$org/f/$factory/items'
+    | '/o/$org/f/$factory/jonah/judges/$judge'
+    | '/o/$org/f/$factory/jonah/judges'
   id:
     | '__root__'
     | '/'
@@ -547,6 +571,8 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/definition/'
     | '/o/$org/f/$factory/intake/'
     | '/o/$org/f/$factory/items/'
+    | '/o/$org/f/$factory/jonah/judges/$judge'
+    | '/o/$org/f/$factory/jonah/judges/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -872,6 +898,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OOrgFFactoryJonahEvalsRouteImport
       parentRoute: typeof OOrgFFactoryRoute
     }
+    '/o/$org/f/$factory/jonah/judges/': {
+      id: '/o/$org/f/$factory/jonah/judges/'
+      path: '/jonah/judges'
+      fullPath: '/o/$org/f/$factory/jonah/judges/'
+      preLoaderRoute: typeof OOrgFFactoryJonahJudgesIndexRouteImport
+      parentRoute: typeof OOrgFFactoryRoute
+    }
+    '/o/$org/f/$factory/jonah/judges/$judge': {
+      id: '/o/$org/f/$factory/jonah/judges/$judge'
+      path: '/jonah/judges/$judge'
+      fullPath: '/o/$org/f/$factory/jonah/judges/$judge'
+      preLoaderRoute: typeof OOrgFFactoryJonahJudgesJudgeRouteImport
+      parentRoute: typeof OOrgFFactoryRoute
+    }
   }
 }
 
@@ -946,6 +986,8 @@ interface OOrgFFactoryRouteChildren {
   OOrgFFactoryAgentsIndexRoute: typeof OOrgFFactoryAgentsIndexRoute
   OOrgFFactoryIntakeIndexRoute: typeof OOrgFFactoryIntakeIndexRoute
   OOrgFFactoryItemsIndexRoute: typeof OOrgFFactoryItemsIndexRoute
+  OOrgFFactoryJonahJudgesJudgeRoute: typeof OOrgFFactoryJonahJudgesJudgeRoute
+  OOrgFFactoryJonahJudgesIndexRoute: typeof OOrgFFactoryJonahJudgesIndexRoute
 }
 
 const OOrgFFactoryRouteChildren: OOrgFFactoryRouteChildren = {
@@ -962,6 +1004,8 @@ const OOrgFFactoryRouteChildren: OOrgFFactoryRouteChildren = {
   OOrgFFactoryAgentsIndexRoute: OOrgFFactoryAgentsIndexRoute,
   OOrgFFactoryIntakeIndexRoute: OOrgFFactoryIntakeIndexRoute,
   OOrgFFactoryItemsIndexRoute: OOrgFFactoryItemsIndexRoute,
+  OOrgFFactoryJonahJudgesJudgeRoute: OOrgFFactoryJonahJudgesJudgeRoute,
+  OOrgFFactoryJonahJudgesIndexRoute: OOrgFFactoryJonahJudgesIndexRoute,
 }
 
 const OOrgFFactoryRouteWithChildren = OOrgFFactoryRoute._addFileChildren(

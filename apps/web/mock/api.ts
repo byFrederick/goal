@@ -77,6 +77,7 @@ import {
 } from './fixtures.ts';
 import { constraintOf, type DayRange, type FlowInput, leadTimeOf, metricsOf, rangeOf, weeklyOf } from './flow.ts';
 import { intakeOf } from './intake.ts';
+import { createJudges } from './judges.ts';
 import { createKeys } from './keys.ts';
 import { createKnowledge } from './knowledge.ts';
 import { membersFor, orgCanOf } from './people.ts';
@@ -234,6 +235,9 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
 
   const evals = createEvals({
     clock,
+    factory: (org, key) => findFactory(key, org),
+  });
+  const judges = createJudges({
     factory: (org, key) => findFactory(key, org),
   });
   const webhooks = createWebhooks({
@@ -1343,6 +1347,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       credentials.reset(clock());
       knowledge.reset(clock());
       evals.reset();
+      judges.reset();
       webhooks.reset();
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
       const cookie = auth.reset(authSettings(body.auth));
@@ -1436,6 +1441,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await credentials.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await evals.handle(org, rest, method, res, () => readBody(req))) return;
+    if (await judges.handle(org, rest, method, res, () => readBody(req))) return;
     if (await spend.handle(org, rest, method, url, res)) return;
     if (await policy.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await webhooks.handle(org.id, rest, method, req, res, () => readBody(req))) return;

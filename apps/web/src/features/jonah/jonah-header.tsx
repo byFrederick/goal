@@ -1,6 +1,7 @@
-// Jonah's header (MASTER.md "Jonah"): the navy mark, the name and the screen's intro, then the tabs
-// Overview, Proposals, Judges, Evals and Bake-offs. The tab the page is on is current. A tab with no
-// page yet renders through NotAvailable, so it stays in the tab order and says "Not available yet".
+// Jonah's header (MASTER.md "Jonah"): the navy mark, the name and the intro of the tab the page is on,
+// then the tabs Overview, Proposals, Judges, Evals and Bake-offs. The tab the page is on is current, and
+// each tab can show a count. A tab with no page yet renders through NotAvailable, so it stays in the tab
+// order and says "Not available yet".
 import { Link } from '@tanstack/react-router';
 import { SearchCheck } from 'lucide-react';
 import { useFactoryParams } from '../../shared/factory';
@@ -17,13 +18,22 @@ const tabLabels: Record<JonahTab, string> = {
   'bake-offs': 'Bake-offs',
 };
 
-/** The tabs in order; only Evals has a page so far. */
+/** The tabs in order; Judges and Evals have pages so far. */
 const tabOrder: readonly JonahTab[] = ['overview', 'proposals', 'judges', 'evals', 'bake-offs'];
+
+/** The intro line under the name, per tab. The tabs without a page keep the first line Jonah had. */
+const introOf: Record<JonahTab, string> = {
+  overview: 'Eval cases replay a task an agent must get right, before any change to the definition is published.',
+  proposals: 'Eval cases replay a task an agent must get right, before any change to the definition is published.',
+  judges: 'Judges read a sample of runs and score them against a rubric you write.',
+  evals: 'Eval cases replay a task an agent must get right, before any change to the definition is published.',
+  'bake-offs': 'Eval cases replay a task an agent must get right, before any change to the definition is published.',
+};
 
 const tabClass =
   '-mb-px inline-flex h-10 shrink-0 items-center gap-2 border-b-2 px-3 text-body transition-colors duration-200';
 
-export function JonahHeader({ tab, caseCount }: { tab: JonahTab; caseCount?: number | undefined }) {
+export function JonahHeader({ tab, counts = {} }: { tab: JonahTab; counts?: Partial<Record<JonahTab, number>> }) {
   const params = useFactoryParams();
   return (
     <div className="flex flex-col gap-4">
@@ -33,9 +43,7 @@ export function JonahHeader({ tab, caseCount }: { tab: JonahTab; caseCount?: num
         </span>
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="m-0 text-page-title tracking-display">Jonah</h1>
-          <p className="m-0 text-body text-ink-soft">
-            Eval cases replay a task an agent must get right, before any change to the definition is published.
-          </p>
+          <p className="m-0 text-body text-ink-soft">{introOf[tab]}</p>
         </div>
       </header>
 
@@ -46,11 +54,33 @@ export function JonahHeader({ tab, caseCount }: { tab: JonahTab; caseCount?: num
             tabClass,
             current ? 'border-run font-control text-ink' : 'border-transparent text-ink-soft hover:text-ink',
           );
+          const count = counts[t];
+          const label = (
+            <>
+              {tabLabels[t]}
+              {count === undefined ? null : (
+                <span className="ml-2 text-meta font-normal text-muted tabular-nums">{count}</span>
+              )}
+            </>
+          );
+          if (t === 'judges') {
+            return (
+              <Link
+                key={t}
+                to="/o/$org/f/$factory/jonah/judges"
+                params={params}
+                aria-current={current ? 'page' : undefined}
+                className={classes}
+              >
+                {label}
+              </Link>
+            );
+          }
           if (t !== 'evals') {
             return (
               <NotAvailable key={t} label={tabLabels[t]}>
                 <button type="button" className={cn(classes, 'cursor-not-allowed')}>
-                  {tabLabels[t]}
+                  {label}
                 </button>
               </NotAvailable>
             );
@@ -63,10 +93,7 @@ export function JonahHeader({ tab, caseCount }: { tab: JonahTab; caseCount?: num
               aria-current={current ? 'page' : undefined}
               className={classes}
             >
-              {tabLabels[t]}
-              {caseCount === undefined ? null : (
-                <span className="ml-2 text-meta font-normal text-muted tabular-nums">{caseCount}</span>
-              )}
+              {label}
             </Link>
           );
         })}
