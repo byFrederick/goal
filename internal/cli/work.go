@@ -338,7 +338,7 @@ var describers = map[string]func(gen.Event) string{
 	"check_failed": func(e gen.Event) string {
 		return fmt.Sprintf("check `%s` failed (exit %v)", str(e, "command"), e.Data["exit_code"])
 	},
-	"approved":       func(e gen.Event) string { return "approved by " + e.Actor },
+	"approved": func(e gen.Event) string { return "approved by " + e.Actor },
 	"tool_approval_requested": func(e gen.Event) string {
 		line := toolAsk(str(e, "agent"), str(e, "connection"), str(e, "tool"), e.Data["input"])
 		if offered, _ := e.Data["always_allow_offered"].(bool); offered {
@@ -645,7 +645,7 @@ func toolRefused(res *http.Response, p *gen.Problem, ref string) error {
 	case "no-open-tool-approval":
 		return fmt.Errorf("%s has no tool call waiting for a decision", ref)
 	case "always-allow-not-offered":
-		return errors.New("Always allow is not offered for this call: its Ask first comes from the factory definition")
+		return errors.New("this call does not offer Always allow: its Ask first comes from the factory definition")
 	default:
 		return problem(res, p)
 	}

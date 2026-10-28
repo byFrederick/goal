@@ -508,6 +508,11 @@ const (
 	connGitHub    = "github"
 	toolComment   = "create_comment"
 	codeToolOpen  = "tool-approval-open"
+	keyApproval   = "approval_id"
+	actorPat      = "pat"
+	flagAlways    = "--always-allow"
+	refNotOffered = "goal#5"
+	toolCalled    = "tool-approval " + notedRef
 	askedLineHead = roleArchitect + " asks to call " + connGitHub + " " + toolComment + ": "
 )
 
@@ -534,19 +539,19 @@ func TestDescribe_ToolApprovalEvents(t *testing.T) {
 			want: askedLineHead + `{}`,
 		},
 		{
-			e:    gen.Event{Kind: "tool_approval_granted", Actor: "pat", Data: map[string]any{"approval_id": 9, "always_allow": true}},
+			e:    gen.Event{Kind: "tool_approval_granted", Actor: actorPat, Data: map[string]any{keyApproval: 9, "always_allow": true}},
 			want: "tool call approved by pat, always allow",
 		},
 		{
-			e:    gen.Event{Kind: "tool_approval_granted", Actor: "pat", Data: map[string]any{"approval_id": 9, "always_allow": false}},
+			e:    gen.Event{Kind: "tool_approval_granted", Actor: actorPat, Data: map[string]any{keyApproval: 9, "always_allow": false}},
 			want: "tool call approved by pat",
 		},
 		{
-			e:    gen.Event{Kind: "tool_approval_denied", Actor: "pat", Data: map[string]any{"approval_id": 9, "note": "Not on\nthat issue"}},
+			e:    gen.Event{Kind: "tool_approval_denied", Actor: actorPat, Data: map[string]any{keyApproval: 9, "note": "Not on\nthat issue"}},
 			want: "tool call denied by pat: Not on that issue",
 		},
 		{
-			e:    gen.Event{Kind: "tool_approval_denied", Actor: "pat", Data: map[string]any{"approval_id": 9}},
+			e:    gen.Event{Kind: "tool_approval_denied", Actor: actorPat, Data: map[string]any{keyApproval: 9}},
 			want: "tool call denied by pat",
 		},
 	} {
@@ -569,7 +574,7 @@ func TestStopped_ShowsTheOpenToolApproval(t *testing.T) {
 	for _, offered := range []bool{true, false} {
 		var buf bytes.Buffer
 
-		it := &gen.Item{Ref: notedRef, State: "waiting_human", Station: "build", ToolApproval: &gen.ToolApproval{
+		it := &gen.Item{Ref: notedRef, State: "waiting_human", Station: stationSpec, ToolApproval: &gen.ToolApproval{
 			Id: 9, Agent: roleArchitect, Connection: connGitHub, Tool: toolComment, RunId: "run-1",
 			Input: map[string]any{"body": strings.Repeat("x", 500)}, AlwaysAllowOffered: offered,
 		}}
@@ -579,7 +584,7 @@ func TestStopped_ShowsTheOpenToolApproval(t *testing.T) {
 
 		got := buf.String()
 		for _, want := range []string{
-			"goal#1 is waiting_human at build", "  " + askedLineHead + `{"body":"xxx`,
+			"goal#1 is waiting_human at spec", "  " + askedLineHead + `{"body":"xxx`,
 			"goal approve goal#1 ", `goal deny goal#1 --note "..."`,
 		} {
 			if !strings.Contains(got, want) {
@@ -587,7 +592,7 @@ func TestStopped_ShowsTheOpenToolApproval(t *testing.T) {
 			}
 		}
 
-		if strings.Contains(got, "--always-allow") != offered {
+		if strings.Contains(got, flagAlways) != offered {
 			t.Errorf("offered %v: output offers --always-allow %v:\n%s", offered, !offered, got)
 		}
 
@@ -597,7 +602,7 @@ func TestStopped_ShowsTheOpenToolApproval(t *testing.T) {
 	}
 }
 
-// toolGoald plays items waiting on tool approvals: goal#1 has one open, goal#2 has none, goal#3
+// toolGoald plays items waiting on tool approvals: goal#1 has one open, goal#2 has none, goal#5
 // has one that does not offer Always allow. Approving goal#1 the item's way is refused because
 // its tool approval is open.
 type toolGoald struct {
@@ -645,7 +650,7 @@ func (g *toolGoald) serve(t *testing.T) *httptest.Server {
 		switch {
 		case r.PathValue("item") == closedRef:
 			refuse(w, http.StatusConflict, "no-open-tool-approval")
-		case r.PathValue("item") == "goal#3" && b["always_allow"] == true:
+		case r.PathValue("item") == refNotOffered && b["always_allow"] == true:
 			refuse(w, http.StatusConflict, "always-allow-not-offered")
 		default:
 			w.Header().Set("Content-Type", "application/json")
@@ -659,54 +664,66 @@ func (g *toolGoald) serve(t *testing.T) *httptest.Server {
 	return srv
 }
 
+// runLines runs each command line against env, failing the test on the first error, and returns
+// what they printed.
+func runLines(t *testing.T, env func(string) string, lines ...[]string) string {
+	t.Helper()
+
+	var out bytes.Buffer
+	for _, args := range lines {
+		if err := run(t.Context(), args, &printer{w: &out}, env, nil); err != nil {
+			t.Fatalf("goal %v: %v", args, err)
+		}
+	}
+
+	return out.String()
+}
+
+// wantRefusal fails unless the command line fails with exactly the error want.
+func wantRefusal(t *testing.T, env func(string) string, args []string, want string) {
+	t.Helper()
+
+	if err := run(t.Context(), args, &printer{w: &bytes.Buffer{}}, env, nil); err == nil || err.Error() != want {
+		t.Errorf("goal %v = %v; want %q", args, err, want)
+	}
+}
+
+// wantUsage fails for each command line that is not a usage error.
+func wantUsage(t *testing.T, env func(string) string, lines ...[]string) {
+	t.Helper()
+
+	for _, args := range lines {
+		if err := run(t.Context(), args, &printer{w: &bytes.Buffer{}}, env, nil); !errors.Is(err, errUsage) {
+			t.Errorf("goal %v = %v; want a usage error", args, err)
+		}
+	}
+}
+
 func TestApprove_ToolApproval(t *testing.T) {
 	t.Parallel()
 
 	g := &toolGoald{}
 	env := testEnv(t, g.serve(t).URL, map[string]string{envOrg: orgAcme})
 
-	var out bytes.Buffer
-	for _, args := range [][]string{
-		{verbApprove, notedRef, "--always-allow"},
-		{verbApprove, notedRef},
-		{verbApprove, "goal#4"},
-	} {
-		if err := run(t.Context(), args, &printer{w: &out}, env, nil); err != nil {
-			t.Fatalf("goal %v: %v", args, err)
-		}
-	}
+	got := runLines(t, env, []string{verbApprove, notedRef, flagAlways}, []string{verbApprove, notedRef}, []string{verbApprove, "goal#4"})
 
 	want := "✓ approved goal#1's tool call, and always allowed it; now queued at spec\n" +
 		"✓ approved goal#1's tool call; now queued at spec\n" +
 		"✓ approved goal#4; now done at done\n"
-	if out.String() != want {
-		t.Errorf("output %q; want %q", out.String(), want)
+	if got != want {
+		t.Errorf("output %q; want %q", got, want)
 	}
 
-	wantCalled := []string{"tool-approval goal#1", "approve goal#1", "tool-approval goal#1", "approve goal#4"}
-	if !slices.Equal(g.called, wantCalled) || g.bodies[0]["decision"] != "approve" || g.bodies[0]["always_allow"] != true ||
-		g.bodies[2]["decision"] != "approve" || g.bodies[2]["always_allow"] != nil || len(g.bodies[2]) != 1 {
+	wantCalled := []string{toolCalled, "approve goal#1", toolCalled, "approve goal#4"}
+	if !slices.Equal(g.called, wantCalled) || g.bodies[0]["decision"] != string(gen.Approve) || g.bodies[0]["always_allow"] != true ||
+		g.bodies[2]["decision"] != string(gen.Approve) || len(g.bodies[2]) != 1 {
 		t.Errorf("goald got %v with %v; want %v", g.called, g.bodies, wantCalled)
 	}
 
-	for _, tt := range []struct {
-		args []string
-		want string
-	}{
-		{args: []string{verbApprove, closedRef, "--always-allow"}, want: closedRef + " has no tool call waiting for a decision"},
-		{args: []string{verbApprove, "goal#3", "--always-allow"}, want: "Always allow is not offered for this call: its Ask first comes from the factory definition"},
-	} {
-		err := run(t.Context(), tt.args, &printer{w: &bytes.Buffer{}}, env, nil)
-		if err == nil || !strings.Contains(err.Error(), tt.want) || strings.Contains(err.Error(), "Refused") {
-			t.Errorf("goal %v = %v; want %q", tt.args, err, tt.want)
-		}
-	}
-
-	for _, args := range [][]string{{verbReject, notedRef, "--reason", "x", "--always-allow"}, {verbRetry, notedRef, "--always-allow"}} {
-		if err := run(t.Context(), args, &printer{w: &bytes.Buffer{}}, env, nil); !errors.Is(err, errUsage) {
-			t.Errorf("goal %v = %v; want a usage error", args, err)
-		}
-	}
+	wantRefusal(t, env, []string{verbApprove, closedRef, flagAlways}, closedRef+" has no tool call waiting for a decision")
+	wantRefusal(t, env, []string{verbApprove, refNotOffered, flagAlways},
+		"this call does not offer Always allow: its Ask first comes from the factory definition")
+	wantUsage(t, env, []string{verbMerge, notedRef, flagAlways}, []string{verbRetry, notedRef, flagAlways})
 }
 
 func TestDeny_SendsTheDecision(t *testing.T) {
@@ -715,32 +732,20 @@ func TestDeny_SendsTheDecision(t *testing.T) {
 	g := &toolGoald{}
 	env := testEnv(t, g.serve(t).URL, map[string]string{envOrg: orgAcme})
 
-	var out bytes.Buffer
-	for _, args := range [][]string{{verbDeny, notedRef, "--note", "Not on that issue"}, {verbDeny, notedRef}} {
-		if err := run(t.Context(), args, &printer{w: &out}, env, nil); err != nil {
-			t.Fatalf("goal %v: %v", args, err)
-		}
-	}
+	got := runLines(t, env, []string{verbDeny, notedRef, "--note", "Not on that issue"}, []string{verbDeny, notedRef})
 
 	line := "✓ denied goal#1's tool call; now queued at spec\n"
-	if out.String() != line+line {
-		t.Errorf("output %q; want %q twice", out.String(), line)
+	if got != line+line {
+		t.Errorf("output %q; want %q twice", got, line)
 	}
 
-	if !slices.Equal(g.called, []string{"tool-approval goal#1", "tool-approval goal#1"}) ||
-		g.bodies[0]["decision"] != "deny" || g.bodies[0]["note"] != "Not on that issue" || len(g.bodies[0]) != 2 ||
-		g.bodies[1]["decision"] != "deny" || len(g.bodies[1]) != 1 {
+	if !slices.Equal(g.called, []string{toolCalled, toolCalled}) ||
+		g.bodies[0]["decision"] != string(gen.Deny) || g.bodies[0]["note"] != "Not on that issue" || len(g.bodies[0]) != 2 ||
+		g.bodies[1]["decision"] != string(gen.Deny) || len(g.bodies[1]) != 1 {
 		t.Errorf("goald got %v with %v", g.called, g.bodies)
 	}
 
-	if err := run(t.Context(), []string{verbDeny, closedRef}, &printer{w: &bytes.Buffer{}}, env, nil); err == nil ||
-		!strings.Contains(err.Error(), closedRef+" has no tool call waiting for a decision") {
-		t.Errorf("deny with no open tool approval = %v", err)
-	}
-
-	for _, args := range [][]string{{verbDeny}, {verbDeny, notedRef, "x"}, {verbDeny, notedRef, "--always-allow"}, {verbDeny, notedRef, "--note", "  "}} {
-		if err := run(t.Context(), args, &printer{w: &bytes.Buffer{}}, env, nil); !errors.Is(err, errUsage) {
-			t.Errorf("goal %v = %v; want a usage error", args, err)
-		}
-	}
+	wantRefusal(t, env, []string{verbDeny, closedRef}, closedRef+" has no tool call waiting for a decision")
+	wantUsage(t, env, []string{verbDeny}, []string{verbDeny, notedRef, "x"}, []string{verbDeny, notedRef, flagAlways},
+		[]string{verbDeny, notedRef, "--note", "  "})
 }

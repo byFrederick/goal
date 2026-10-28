@@ -11,6 +11,12 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 )
 
+// The standing-rules group and its revoke command.
+const (
+	cmdStandingRules = "standing-rules"
+	subRevoke        = "revoke"
+)
+
 // standingRulesCommand is goal standing-rules list|revoke: the organization's standing rules,
 // each letting one agent role call one connection tool without asking (ADR 0031 decision 7).
 // They are made by Always allow on a tool call, never here.
@@ -19,7 +25,7 @@ func standingRulesCommand(ctx context.Context, out *printer, getenv func(string)
 		return errUsage
 	}
 
-	handler, ok := map[string]command{subList: standingRulesList, "revoke": standingRuleRevoke}[args[0]]
+	handler, ok := map[string]command{subList: standingRulesList, subRevoke: standingRuleRevoke}[args[0]]
 	if !ok {
 		return errUsage
 	}

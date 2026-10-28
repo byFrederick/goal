@@ -1,9 +1,7 @@
 package cli
 
 import (
-	"bytes"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -69,7 +67,7 @@ func (g *rulesGoald) serve(t *testing.T, at time.Time) *httptest.Server {
 	})
 	mux.HandleFunc("DELETE /v1/orgs/acme/standing-rules/{rule}", func(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
-		g.called = append(g.called, "revoke "+r.PathValue("rule"))
+		g.called = append(g.called, subRevoke+" "+r.PathValue("rule"))
 		g.mu.Unlock()
 
 		switch r.PathValue("rule") {
@@ -100,73 +98,36 @@ func TestStandingRules_ListAndRevoke(t *testing.T) {
 	g := &rulesGoald{}
 	env := testEnv(t, g.serve(t, at).URL, map[string]string{envOrg: orgAcme})
 
-	var out bytes.Buffer
-	if err := run(t.Context(), []string{"standing-rules", subList}, &printer{w: &out}, env, nil); err != nil {
-		t.Fatal(err)
-	}
-
 	activeLine := ruleActive + "  architect may call github create_comment  by Pat at " + when + "\n"
 	deletedLine := ruleDeleted + "  architect may call (deleted) send_message  by Sam at " + when + "\n"
 	revokedLine := ruleRevoked + "  reviewer may call github merge_pull_request  by Pat at " + when + "  revoked by Sam at " + when + "\n"
 
-	if want := activeLine + deletedLine; out.String() != want {
-		t.Errorf("list printed %q; want %q", out.String(), want)
+	if got, want := runLines(t, env, []string{cmdStandingRules, subList}), activeLine+deletedLine; got != want {
+		t.Errorf("list printed %q; want %q", got, want)
 	}
 
-	out.Reset()
-
-	if err := run(t.Context(), []string{"standing-rules", subList, "--revoked"}, &printer{w: &out}, env, nil); err != nil {
-		t.Fatal(err)
-	}
-
-	if want := activeLine + revokedLine + deletedLine; out.String() != want {
-		t.Errorf("list --revoked printed %q; want %q", out.String(), want)
-	}
-
-	out.Reset()
-
-	if err := run(t.Context(), []string{"standing-rules", subList, "--json"}, &printer{w: &out}, env, nil); err != nil {
-		t.Fatal(err)
+	if got, want := runLines(t, env, []string{cmdStandingRules, subList, "--revoked"}), activeLine+revokedLine+deletedLine; got != want {
+		t.Errorf("list --revoked printed %q; want %q", got, want)
 	}
 
 	var listed gen.StandingRuleList
-	if err := json.Unmarshal(out.Bytes(), &listed); err != nil || len(listed.Rules) != 2 {
-		t.Errorf("list --json printed %q (%v); want goald's answer", out.String(), err)
+	if got := runLines(t, env, []string{cmdStandingRules, subList, "--json"}); json.Unmarshal([]byte(got), &listed) != nil || len(listed.Rules) != 2 {
+		t.Errorf("list --json printed %q; want goald's answer", got)
 	}
 
-	out.Reset()
-
-	if err := run(t.Context(), []string{"standing-rules", "revoke", ruleActive}, &printer{w: &out}, env, nil); err != nil {
-		t.Fatal(err)
+	want := "✓ revoked " + ruleActive + ": architect asks again before calling github create_comment\n"
+	if got := runLines(t, env, []string{cmdStandingRules, subRevoke, ruleActive}); got != want {
+		t.Errorf("revoke printed %q; want %q", got, want)
 	}
 
-	if want := "✓ revoked " + ruleActive + ": architect asks again before calling github create_comment\n"; out.String() != want {
-		t.Errorf("revoke printed %q; want %q", out.String(), want)
+	wantRefusal(t, env, []string{cmdStandingRules, subRevoke, ruleGone}, "no standing rule "+ruleGone)
+	wantRefusal(t, env, []string{cmdStandingRules, subRevoke, ruleRevoked}, "standing rule "+ruleRevoked+" is already revoked")
+
+	wantCalled := []string{"list ", "list revoked=true", "list ", subRevoke + " " + ruleActive, subRevoke + " " + ruleGone, subRevoke + " " + ruleRevoked}
+	if !slices.Equal(g.called, wantCalled) {
+		t.Errorf("goald got %v; want %v", g.called, wantCalled)
 	}
 
-	for _, tt := range []struct {
-		rule string
-		want string
-	}{
-		{rule: ruleGone, want: "no standing rule " + ruleGone},
-		{rule: ruleRevoked, want: "standing rule " + ruleRevoked + " is already revoked"},
-	} {
-		err := run(t.Context(), []string{"standing-rules", "revoke", tt.rule}, &printer{w: &bytes.Buffer{}}, env, nil)
-		if err == nil || err.Error() != tt.want {
-			t.Errorf("revoke %s = %v; want %q", tt.rule, err, tt.want)
-		}
-	}
-
-	if want := []string{"list ", "list revoked=true", "list ", "revoke " + ruleActive, "revoke " + ruleGone, "revoke " + ruleRevoked}; !slices.Equal(g.called, want) {
-		t.Errorf("goald got %v; want %v", g.called, want)
-	}
-
-	for _, args := range [][]string{
-		{"standing-rules"}, {"standing-rules", "show"}, {"standing-rules", subList, "x"},
-		{"standing-rules", "revoke"}, {"standing-rules", "revoke", "a", "b"}, {"standing-rules", "revoke", "  "},
-	} {
-		if err := run(t.Context(), args, &printer{w: &bytes.Buffer{}}, env, nil); !errors.Is(err, errUsage) {
-			t.Errorf("goal %v = %v; want a usage error", args, err)
-		}
-	}
+	wantUsage(t, env, []string{cmdStandingRules}, []string{cmdStandingRules, subShow}, []string{cmdStandingRules, subList, "x"},
+		[]string{cmdStandingRules, subRevoke}, []string{cmdStandingRules, subRevoke, "a", "b"}, []string{cmdStandingRules, subRevoke, "  "})
 }
