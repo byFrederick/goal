@@ -182,7 +182,8 @@ func checkLineEntries(t *testing.T, got gen.Inbox) {
 			if e.Rework == nil || !reflect.DeepEqual(*e.Rework, want) {
 				t.Errorf("rework warning = %+v; want %+v", e.Rework, want)
 			}
-		case gen.InboxEntryKindDecision, gen.InboxEntryKindQuestion, gen.InboxEntryKindBlocked, gen.InboxEntryKindExpedite:
+		case gen.InboxEntryKindDecision, gen.InboxEntryKindQuestion, gen.InboxEntryKindToolApproval, gen.InboxEntryKindBlocked,
+			gen.InboxEntryKindExpedite:
 		}
 	}
 }

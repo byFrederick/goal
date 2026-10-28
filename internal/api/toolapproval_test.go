@@ -18,6 +18,10 @@ const (
 	approvalConnection = "repo"
 	approvalTool       = "create_comment"
 	approvalInput      = `{"body":"LGTM","issue":7}`
+	// githubTokenField is the github kind's secret field.
+	githubTokenField = "token"
+	// freshOwnerSession is the owner's session signed in just now.
+	freshOwnerSession = "fresh-owner-now"
 )
 
 // toolAsked seeds a line item whose agent asked at build to call repo's create_comment, offering
@@ -45,7 +49,7 @@ func (h *harness) withRepo(t *testing.T) {
 	t.Helper()
 
 	if _, err := h.conns.Create(inOrg(t), domain.NewConnection{
-		Name: approvalConnection, Kind: "github", Secrets: map[string]string{"token": "ghp_test"},
+		Name: approvalConnection, Kind: kindGitHub, Secrets: map[string]string{githubTokenField: "ghp_test"},
 	}, domain.LocalUser); err != nil {
 		t.Fatal(err)
 	}
@@ -53,6 +57,41 @@ func (h *harness) withRepo(t *testing.T) {
 
 func toolApprovalPath(it domain.Item) string {
 	return "/v1/orgs/acme/items/" + url.PathEscape(string(it.ID)) + "/tool-approval"
+}
+
+// signInOwnerNow gives the owner the session freshOwnerToken, signed in just now.
+func (h signedIn) signInOwnerNow() {
+	h.identity.AddSession(freshOwnerToken, ownerID, domain.Session{ID: freshOwnerSession, CreatedAt: t0, ExpiresAt: t0.Add(time.Hour), Browser: true})
+}
+
+// checkRule checks r is backend's active rule on repo's create_comment, approved on it.
+func checkRule(t *testing.T, rules []domain.StandingRule, it domain.Item) {
+	t.Helper()
+
+	if len(rules) != 1 || rules[0].Connection != approvalConnection || rules[0].Tool != approvalTool ||
+		rules[0].Agent != agBackend || rules[0].ItemID != it.ID || !rules[0].Active() {
+		t.Errorf("rules %+v; want one active rule for backend on repo's create_comment", rules)
+	}
+}
+
+// decisionData is a decision event's data without the approval id and the actor, which it
+// must have.
+func decisionData(t *testing.T, e domain.Event) string {
+	t.Helper()
+
+	if e.Data[domain.KeyApprovalID] == nil {
+		t.Errorf("event %s %v; want the approval id", e.Kind, e.Data)
+	}
+
+	data := map[string]any{}
+
+	for k, v := range e.Data {
+		if k != domain.KeyApprovalID && k != "actor" {
+			data[k] = v
+		}
+	}
+
+	return asJSON(t, data)
 }
 
 // rules are the organization's standing rules, the revoked ones too.
@@ -119,7 +158,7 @@ func TestAPI_ToolApprovalDecides(t *testing.T) {
 		data       string
 		rule       bool
 	}{
-		{name: "approve", body: `{"decision":"approve"}`, kind: domain.EventToolApprovalGranted, data: `{"always_allow":false}`},
+		{name: "approve once", body: `{"decision":"approve"}`, kind: domain.EventToolApprovalGranted, data: `{"always_allow":false}`},
 		{name: "always allow", body: `{"decision":"approve","always_allow":true}`, kind: domain.EventToolApprovalGranted, data: `{"always_allow":true}`, rule: true},
 		{name: "deny with a note", body: `{"decision":"deny","note":"  Not on that issue.  "}`, kind: domain.EventToolApprovalDenied, data: `{"note":"Not on that issue."}`},
 		{name: "deny", body: `{"decision":"deny"}`, kind: domain.EventToolApprovalDenied, data: `{}`},
@@ -139,31 +178,14 @@ func TestAPI_ToolApprovalDecides(t *testing.T) {
 					got.Station, got.State, got.ReworkCount, got.ToolApproval)
 			}
 
-			e := h.lastEvent(t, it)
-			data := map[string]any{}
-
-			for k, v := range e.Data {
-				if k != domain.KeyApprovalID && k != "actor" {
-					data[k] = v
-				}
+			if e := h.lastEvent(t, it); e.Kind != tt.kind || decisionData(t, e) != tt.data {
+				t.Errorf("event %s %v; want %s with %s", e.Kind, e.Data, tt.kind, tt.data)
 			}
 
-			if e.Kind != tt.kind || e.Data[domain.KeyApprovalID] == nil || asJSON(t, data) != tt.data {
-				t.Errorf("event %s %v; want %s with the approval id and %s", e.Kind, e.Data, tt.kind, tt.data)
-			}
-
-			rules := h.rules(t)
-			if !tt.rule {
-				if len(rules) != 0 {
-					t.Errorf("rules %+v; want none", rules)
-				}
-
-				return
-			}
-
-			if len(rules) != 1 || rules[0].Connection != approvalConnection || rules[0].Tool != approvalTool ||
-				rules[0].Agent != agBackend || rules[0].ItemID != it.ID || !rules[0].Active() {
-				t.Errorf("rules %+v; want one active rule for backend on repo's create_comment", rules)
+			if rules := h.rules(t); tt.rule {
+				checkRule(t, rules, it)
+			} else if len(rules) != 0 {
+				t.Errorf("rules %+v; want none", rules)
 			}
 		})
 	}
@@ -257,7 +279,7 @@ func TestAPI_ToolApprovalAlwaysAllowNeedsConnectionManage(t *testing.T) {
 		t.Fatalf("item %s (%v), rules %+v; refused Always allow changes nothing", got.State, err, h.rules(t))
 	}
 
-	h.identity.AddSession(freshOwnerToken, ownerID, domain.Session{ID: "fresh-owner", CreatedAt: t0, ExpiresAt: t0.Add(time.Hour), Browser: true})
+	h.signInOwnerNow()
 
 	if res := h.as(t, freshOwnerToken, http.MethodPost, toolApprovalPath(it), always); res.status != http.StatusOK {
 		t.Fatalf("the owner signed in just now allowing always = %d %s; want 200", res.status, res.body)
@@ -305,6 +327,17 @@ func (h *harness) alwaysAllowed(t *testing.T, header http.Header) gen.StandingRu
 	return list.Rules[len(list.Rules)-1]
 }
 
+// checkListedRule checks rule is the local user's active rule for backend on repo's
+// create_comment.
+func checkListedRule(t *testing.T, rule gen.StandingRule) {
+	t.Helper()
+
+	if rule.Id == "" || rule.ConnectionId == "" || deref(rule.Connection) != approvalConnection || rule.Tool != approvalTool ||
+		rule.Agent != agBackend || rule.CreatedBy.Id != domain.LocalUser.ID || rule.ItemId == "" || rule.RevokedAt != nil || rule.RevokedBy != nil {
+		t.Errorf("rule %+v; want backend's active rule on repo's create_comment", rule)
+	}
+}
+
 // The list has the active rules, and the revoked ones on request; revoking returns the rule.
 func TestAPI_StandingRulesListAndRevoke(t *testing.T) {
 	t.Parallel()
@@ -318,10 +351,7 @@ func TestAPI_StandingRulesListAndRevoke(t *testing.T) {
 	h.withRepo(t)
 	rule := h.alwaysAllowed(t, nil)
 
-	if rule.Id == "" || rule.ConnectionId == "" || deref(rule.Connection) != approvalConnection || rule.Tool != approvalTool ||
-		rule.Agent != agBackend || rule.CreatedBy.Id != domain.LocalUser.ID || rule.ItemId == "" || rule.RevokedAt != nil || rule.RevokedBy != nil {
-		t.Errorf("rule %+v; want backend's active rule on repo's create_comment", rule)
-	}
+	checkListedRule(t, rule)
 
 	revoked := decode[gen.StandingRule](t, h.request(t, http.MethodDelete, standingRulesPath+"/"+rule.Id, "", nil), http.StatusOK)
 	if revoked.Id != rule.Id || revoked.RevokedAt == nil || revoked.RevokedBy == nil || revoked.RevokedBy.Id != domain.LocalUser.ID {
@@ -343,7 +373,7 @@ func TestAPI_StandingRulesRefusals(t *testing.T) {
 
 	h := newSignedIn(t)
 	h.withRepo(t)
-	h.identity.AddSession(freshOwnerToken, ownerID, domain.Session{ID: "fresh-owner", CreatedAt: t0, ExpiresAt: t0.Add(time.Hour), Browser: true})
+	h.signInOwnerNow()
 	rule := h.alwaysAllowed(t, cookie(freshOwnerToken))
 
 	// Every member reads them; only who manages connections revokes them.
