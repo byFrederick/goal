@@ -72,6 +72,7 @@ import {
   trackSpan,
 } from './fixtures.ts';
 import { constraintOf, type DayRange, type FlowInput, leadTimeOf, metricsOf, rangeOf, weeklyOf } from './flow.ts';
+import { intakeOf } from './intake.ts';
 import { createKeys } from './keys.ts';
 import { createKnowledge } from './knowledge.ts';
 import { membersFor, orgCanOf } from './people.ts';
@@ -1523,6 +1524,13 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       subscribers.add(sub);
       req.on('close', () => subscribers.delete(sub));
       return;
+    }
+
+    if (rest.match(/^\/factories\/[^/]+\/intake$/) && method === 'GET') {
+      const key = decodeURIComponent(rest.split('/')[2] ?? '');
+      const factory = findFactory(key, org.id);
+      if (!factory) return problem(res, 404, 'Factory not found', key);
+      return json(res, 200, intakeOf(factory.name));
     }
 
     let m = rest.match(/^\/factories\/([^/]+)\/agents\/([^/]+)\/stats$/);

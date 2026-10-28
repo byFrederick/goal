@@ -218,13 +218,27 @@ describe('the sidebar', () => {
     expect(await screen.findByText('Not available yet')).toBeTruthy();
   });
 
-  it('keeps Intake and Jonah disabled in the open factory', async () => {
+  it('keeps Jonah disabled in the open factory', async () => {
     renderSidebar({ at: '/o/acme/f/goal' });
-    const sidebar = await nav();
 
-    for (const name of ['Intake', 'Jonah']) {
-      expect(within(sidebar).getByRole('button', { name }).getAttribute('aria-disabled')).toBe('true');
-    }
+    expect(
+      within(await nav())
+        .getByRole('button', { name: 'Jonah' })
+        .getAttribute('aria-disabled'),
+    ).toBe('true');
+  });
+
+  it('lists Intake as a link between Agents and Jonah, current on its pages', async () => {
+    renderSidebar({ at: '/o/acme/f/goal/intake' });
+    const sidebar = await nav();
+    const link = within(sidebar).getByRole('link', { name: 'Intake' });
+
+    expect(link.getAttribute('href')).toBe('/o/acme/f/goal/intake');
+    expect(link.getAttribute('aria-current')).toBe('page');
+    const agents = within(sidebar).getByRole('link', { name: 'Agents' });
+    const jonah = within(sidebar).getByRole('button', { name: 'Jonah' });
+    expect(agents.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(link.compareDocumentPosition(jonah) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('lists Agents as a link in the open factory, current on its index and on each agent', async () => {

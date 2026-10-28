@@ -21,6 +21,8 @@ const workKeys = [
   'touches',
   'andon',
   'agent',
+  // The intake reads the newest items' sources, so every item move can change it.
+  'intake',
   // The webhook endpoints and their deliveries: a created delivery makes an item, and the stream
   // has no event for a refused one, so a refetch on item events and on focus is what refreshes it.
   'webhooks',
@@ -121,6 +123,8 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
         defKeys.compares(org, f),
         keys.board(org, f),
         keys.overviews(org),
+        // The triggers of the running definition (what the intake shows).
+        keys.intake(org, f),
         // What uses a connection or a knowledge source is read from the current versions.
         keys.connections(org),
         keys.knowledge(org),
