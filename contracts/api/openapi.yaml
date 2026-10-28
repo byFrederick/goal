@@ -186,6 +186,48 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Me" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/me/notifications:
+    get:
+      operationId: getNotificationPreferences
+      x-goal-scope: notifications:manage
+      tags: [identity]
+      summary: The caller's own notification preferences
+      description: >-
+        Which events the signed-in person is told about on which channel, the email notifications
+        go to and the time zone of the daily digest (ADR 0023, decision 1). They hold in every
+        organization the person belongs to. A person who never saved any reads the defaults. Only
+        a signed-in person has them: an API key, a personal token and GOAL_AUTH=none's local user
+        are 403 person-required.
+      responses:
+        "200":
+          description: The preferences
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationPreferences" }
+        default: { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: putNotificationPreferences
+      x-goal-scope: notifications:manage
+      tags: [identity]
+      summary: Replace the caller's own notification preferences
+      description: >-
+        Replaces every field. An email that is not a plain address (blank is the sign-in email) is
+        400 invalid-notification-email; a time zone that is not an IANA name, or Local, is 400
+        invalid-time-zone; the digest In Goal is 400 invalid-notification-preferences. Nothing is
+        changed then. An API key, a personal token and GOAL_AUTH=none's local user are 403
+        person-required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NotificationPreferences" }
+      responses:
+        "200":
+          description: The preferences as saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationPreferences" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/platform/admins:
     get:
       operationId: listPlatformAdmins
@@ -4816,6 +4858,49 @@ components:
         session:
           allOf: [{ $ref: "#/components/schemas/MeSession" }]
           description: A signed-in person's session; absent for a key, a personal token and under mode none
+    NotificationPreferences:
+      type: object
+      description: >-
+        One person's notification preferences (ADR 0023, decision 1), in every organization they
+        belong to
+      required: [events, email, time_zone]
+      properties:
+        events: { $ref: "#/components/schemas/NotificationEvents" }
+        email:
+          type: string
+          maxLength: 320
+          description: Where email notifications go; blank is the sign-in email
+        time_zone:
+          type: string
+          maxLength: 64
+          description: The IANA time zone the daily digest goes out at 08:00 in, such as Europe/Berlin
+    NotificationEvents:
+      type: object
+      description: The channels of each event
+      required: [approval, question, andon, budget, digest]
+      properties:
+        approval:
+          allOf: [{ $ref: "#/components/schemas/NotificationChannels" }]
+          description: An agent needs the person's OK for a write
+        question:
+          allOf: [{ $ref: "#/components/schemas/NotificationChannels" }]
+          description: An agent asks the person a question
+        andon:
+          allOf: [{ $ref: "#/components/schemas/NotificationChannels" }]
+          description: A factory pulls the andon
+        budget:
+          allOf: [{ $ref: "#/components/schemas/NotificationChannels" }]
+          description: A budget passes 80%
+        digest:
+          allOf: [{ $ref: "#/components/schemas/NotificationChannels" }]
+          description: The daily digest at 08:00; in_goal is always false
+    NotificationChannels:
+      type: object
+      required: [in_goal, email, slack]
+      properties:
+        in_goal: { type: boolean, description: "The app's own badge and toast" }
+        email: { type: boolean }
+        slack: { type: boolean, description: A direct message from the organization's Slack connection }
     PlatformAdmin:
       type: object
       required: [user, added_by, added_at]

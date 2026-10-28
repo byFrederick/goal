@@ -1742,6 +1742,32 @@ getMetrics           pat-demoted      404 factory-not-found    404 org-not-found
 getMetrics           pat-removed      401 unauthenticated      401 unauthenticated
 getMetrics           pat-platform     200                      404 org-not-found
 getMetrics           pat-deleted-org  401 unauthenticated      401 unauthenticated
+getNotificationPreferences anonymous        install: 401 unauthenticated
+getNotificationPreferences owner            install: 200
+getNotificationPreferences admin            install: 200
+getNotificationPreferences viewer           install: 200
+getNotificationPreferences approver         install: 200
+getNotificationPreferences editor           install: 200
+getNotificationPreferences member-no-roles  install: 200
+getNotificationPreferences other-org-owner  install: 200
+getNotificationPreferences platform-admin   install: 200
+getNotificationPreferences stale-owner      install: 200
+getNotificationPreferences key-scoped       install: 403 forbidden
+getNotificationPreferences key-restricted   install: 403 forbidden
+getNotificationPreferences key-other-org    install: 403 forbidden
+getNotificationPreferences key-expired      install: 401 unauthenticated
+getNotificationPreferences key-revoked      install: 401 unauthenticated
+getNotificationPreferences bearer-owner     install: 200
+getNotificationPreferences pat-approver     install: 403 forbidden
+getNotificationPreferences pat-owner        install: 403 forbidden
+getNotificationPreferences pat-viewer       install: 403 forbidden
+getNotificationPreferences pat-other-org    install: 403 forbidden
+getNotificationPreferences pat-expired      install: 401 unauthenticated
+getNotificationPreferences pat-revoked      install: 401 unauthenticated
+getNotificationPreferences pat-demoted      install: 403 forbidden
+getNotificationPreferences pat-removed      install: 401 unauthenticated
+getNotificationPreferences pat-platform     install: 403 forbidden
+getNotificationPreferences pat-deleted-org  install: 401 unauthenticated
 getOrg               anonymous        401 unauthenticated      401 unauthenticated
 getOrg               owner            200                      404 org-not-found
 getOrg               admin            200                      404 org-not-found
@@ -3406,6 +3432,32 @@ putDraftFile         pat-demoted      404 factory-not-found    404 org-not-found
 putDraftFile         pat-removed      401 unauthenticated      401 unauthenticated
 putDraftFile         pat-platform     200                      404 org-not-found
 putDraftFile         pat-deleted-org  401 unauthenticated      401 unauthenticated
+putNotificationPreferences anonymous        install: 401 unauthenticated
+putNotificationPreferences owner            install: 200
+putNotificationPreferences admin            install: 200
+putNotificationPreferences viewer           install: 200
+putNotificationPreferences approver         install: 200
+putNotificationPreferences editor           install: 200
+putNotificationPreferences member-no-roles  install: 200
+putNotificationPreferences other-org-owner  install: 200
+putNotificationPreferences platform-admin   install: 200
+putNotificationPreferences stale-owner      install: 200
+putNotificationPreferences key-scoped       install: 403 forbidden
+putNotificationPreferences key-restricted   install: 403 forbidden
+putNotificationPreferences key-other-org    install: 403 forbidden
+putNotificationPreferences key-expired      install: 401 unauthenticated
+putNotificationPreferences key-revoked      install: 401 unauthenticated
+putNotificationPreferences bearer-owner     install: 200
+putNotificationPreferences pat-approver     install: 403 forbidden
+putNotificationPreferences pat-owner        install: 403 forbidden
+putNotificationPreferences pat-viewer       install: 403 forbidden
+putNotificationPreferences pat-other-org    install: 403 forbidden
+putNotificationPreferences pat-expired      install: 401 unauthenticated
+putNotificationPreferences pat-revoked      install: 401 unauthenticated
+putNotificationPreferences pat-demoted      install: 403 forbidden
+putNotificationPreferences pat-removed      install: 401 unauthenticated
+putNotificationPreferences pat-platform     install: 403 forbidden
+putNotificationPreferences pat-deleted-org  install: 401 unauthenticated
 putOrgPolicy         anonymous        401 unauthenticated      401 unauthenticated
 putOrgPolicy         owner            200                      404 org-not-found
 putOrgPolicy         admin            200                      404 org-not-found
