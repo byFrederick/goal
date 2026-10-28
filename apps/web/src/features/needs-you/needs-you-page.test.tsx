@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { approveItem, getInbox, listItemEvents, mergeItem, rejectItem } from '../../api/client';
-import { inboxQuery, keys } from '../../api/queries';
+import { answerItem, approveItem, getInbox, listItemEvents, mergeItem, rejectItem } from '../../api/client';
+import { factoriesQuery, inboxQuery, keys } from '../../api/queries';
 import type { Inbox, InboxEntry, Item, ItemCard, OrgSummary } from '../../api/types';
 import { renderOrgPage } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
@@ -15,6 +15,7 @@ vi.mock('../../api/client', async (importOriginal) => ({
   mergeItem: vi.fn(),
   rejectItem: vi.fn(),
   listItemEvents: vi.fn(),
+  answerItem: vi.fn(),
 }));
 
 afterEach(() => {
@@ -110,9 +111,18 @@ const alert: InboxEntry = {
 const entries = [decision, merge, alert];
 const inbox = (list: InboxEntry[] = entries): Inbox => ({ entries: list, truncated: false });
 
+/** The org's factories with their grants: the question's answers read `can` from here. */
+const factories = (can: string[] = ['item:decide']) => [
+  { id: 'factory-1', name: 'software', title: 'Software', can },
+  { id: 'factory-2', name: 'sre', title: 'SRE', can },
+];
+
 function renderPage({
   search,
-  seed = [[inboxQuery(org.id).queryKey, inbox()]],
+  seed = [
+    [inboxQuery(org.id).queryKey, inbox()],
+    [factoriesQuery(org.id).queryKey, factories()],
+  ],
 }: {
   search?: Record<string, string>;
   seed?: readonly (readonly [readonly unknown[], unknown])[];
@@ -310,10 +320,8 @@ describe('Needs you: controls not built yet', () => {
   it('renders the Approvals and Questions tabs disabled, with aria-disabled', async () => {
     renderPage();
 
-    for (const name of [/Approvals/, /Questions/]) {
-      const tab = await screen.findByRole('button', { name });
-      expect(tab.getAttribute('aria-disabled')).toBe('true');
-    }
+    const tab = await screen.findByRole('button', { name: /Approvals/ });
+    expect(tab.getAttribute('aria-disabled')).toBe('true');
   });
 
   it('renders Edit, then approve and the Always allow checkbox disabled', async () => {
@@ -366,5 +374,104 @@ describe('the detail', () => {
 
     expect(await screen.findByRole('heading', { name: 'Recent events on this item' })).toBeTruthy();
     expect(screen.getByText(/Checks passed at Review/)).toBeTruthy();
+  });
+});
+
+const question: InboxEntry = {
+  ...decision,
+  id: 'question:item-5',
+  kind: 'question',
+  item: card({ id: 'item-5', ref: 'software#5', number: 5, title: 'Show spend per factory', station: 'build' }),
+  station: 'build',
+  action: null,
+  approval: null,
+  question: {
+    text: 'Organization or factory spend?',
+    choices: ['Organization', 'Factory'],
+    asked_at: since,
+    agent: 'frontend-engineer',
+    run_id: 'run-5',
+  },
+};
+
+describe('Needs you: questions', () => {
+  it('enables the Questions segment and shows its count', async () => {
+    renderPage({
+      seed: [
+        [inboxQuery(org.id).queryKey, inbox([question])],
+        [factoriesQuery(org.id).queryKey, factories()],
+      ],
+    });
+
+    const tab = await screen.findByRole('button', { name: /^Questions/ });
+    expect(tab.getAttribute('aria-disabled')).toBeNull();
+    expect(tab.textContent).toContain('1');
+  });
+
+  it('draws a question row with its type, its agent and question, and its item and station', async () => {
+    renderPage({
+      seed: [
+        [inboxQuery(org.id).queryKey, inbox([question])],
+        [factoriesQuery(org.id).queryKey, factories()],
+      ],
+    });
+
+    const list = await screen.findByRole('list', { name: /Waiting on you/ });
+    expect(within(list).getByText('Question')).toBeTruthy();
+    expect(within(list).getByText('frontend-engineer: Organization or factory spend?')).toBeTruthy();
+    expect(within(list).getByText('#5 at Build, run paused')).toBeTruthy();
+  });
+
+  it('answers with a quick answer, and the answered row leaves the list', async () => {
+    vi.mocked(answerItem).mockResolvedValue({ id: 'item-5', state: 'queued' } as unknown as Item);
+    renderPage({
+      search: { type: 'question', entry: 'question:item-5' },
+      seed: [
+        [inboxQuery(org.id).queryKey, inbox([question])],
+        [factoriesQuery(org.id).queryKey, factories()],
+      ],
+    });
+    const card = await screen.findByRole('region', { name: 'frontend-engineer asks you' });
+    vi.mocked(getInbox).mockResolvedValue(inbox([]));
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Factory' }));
+
+    await waitFor(() => expect(answerItem).toHaveBeenCalledWith('org-1', 'item-5', { choice: 1 }));
+    await waitFor(() => expect(screen.queryByRole('list', { name: /Waiting on you/ })).toBeNull());
+  });
+
+  it('disables the answers and says who decides when the person lacks item:decide', async () => {
+    renderPage({
+      search: { type: 'question', entry: 'question:item-5' },
+      seed: [
+        [inboxQuery(org.id).queryKey, inbox([question])],
+        [factoriesQuery(org.id).queryKey, factories([])],
+      ],
+    });
+    const card = await screen.findByRole('region', { name: 'frontend-engineer asks you' });
+
+    const quick = within(card).getByRole('button', { name: 'Factory' });
+    expect(quick.getAttribute('aria-disabled')).toBe('true');
+    expect(within(card).getByText('Approvers of software decide here.')).toBeTruthy();
+    fireEvent.click(quick);
+    expect(answerItem).not.toHaveBeenCalled();
+  });
+
+  it('does nothing on A or D, which act on Decisions only', async () => {
+    renderPage({
+      search: { type: 'question', entry: 'question:item-5' },
+      seed: [
+        [inboxQuery(org.id).queryKey, inbox([question])],
+        [factoriesQuery(org.id).queryKey, factories()],
+      ],
+    });
+    await screen.findByRole('region', { name: 'frontend-engineer asks you' });
+
+    fireEvent.keyDown(document.body, { key: 'a' });
+    fireEvent.keyDown(document.body, { key: 'd' });
+
+    expect(approveItem).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(answerItem).not.toHaveBeenCalled();
   });
 });
