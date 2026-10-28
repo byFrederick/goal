@@ -958,8 +958,9 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
               id: `question:${it.id}`,
               kind: 'question',
               since: it.question.asked_at,
-              action: f.stations.find((s) => s.id === it.station)?.action ?? null,
-              approval: { summary: it.question.text, facts: [], pull_request: it.pr_url, spend_usd: it.cost_usd },
+              action: null,
+              approval: null,
+              question: it.question,
             },
           ];
         }

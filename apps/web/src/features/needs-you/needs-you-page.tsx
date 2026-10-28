@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { ChevronDown, Inbox } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
-import { inboxQuery } from '../../api/queries';
+import { factoriesQuery, inboxQuery } from '../../api/queries';
 import type { InboxEntry } from '../../api/types';
 import { usePhone } from '../../app/phone-chrome';
 import { useOrg } from '../../shared/org';
@@ -36,6 +36,8 @@ export function NeedsYouPage() {
   const tab = search.type ?? 'all';
   const phone = usePhone();
   const inbox = useQuery(inboxQuery(org.id));
+  // The factories carry each one's grants (`can`); an entry's own factory does not, so the question's answers read them here.
+  const factories = useQuery(factoriesQuery(org.id));
   const decide = useEntryDecision();
   const [denying, setDenying] = useState(false);
 
@@ -45,6 +47,7 @@ export function NeedsYouPage() {
   const current = decidable(selected);
   const approving = phone && visible.some((e) => e.id === search.entry);
   const counts = tabCounts(entries, search.factory);
+  const factoryOf = (entry: InboxEntry) => factories.data?.find((f) => f.id === entry.factory.id);
 
   const setSearch = (next: NeedsSearch) => navigate({ search: (prev) => ({ ...prev, ...clean(next) }) });
 
@@ -190,7 +193,14 @@ export function NeedsYouPage() {
           </Link>
           <h1 className="m-0 text-heading font-semibold text-ink">{typeLabel[typeOf(selected)]}</h1>
         </header>
-        <Detail entry={selected} phone pending={decide.isPending} onApprove={approve} onDeny={() => setDenying(true)} />
+        <Detail
+          entry={selected}
+          factory={factoryOf(selected)}
+          phone
+          pending={decide.isPending}
+          onApprove={approve}
+          onDeny={() => setDenying(true)}
+        />
         {deny}
       </>
     );
@@ -221,7 +231,13 @@ export function NeedsYouPage() {
         </section>
         <div className="min-w-0 flex-1">
           {selected ? (
-            <Detail entry={selected} pending={decide.isPending} onApprove={approve} onDeny={() => setDenying(true)} />
+            <Detail
+              entry={selected}
+              factory={factoryOf(selected)}
+              pending={decide.isPending}
+              onApprove={approve}
+              onDeny={() => setDenying(true)}
+            />
           ) : null}
         </div>
       </div>
@@ -239,7 +255,7 @@ function Kbd({ children }: { children: ReactNode }) {
   return <kbd className="font-control text-meta text-ink-soft">{children}</kbd>;
 }
 
-/** The tabs: All, Approvals, Decisions, Questions, Alerts, each with its count. Approvals and Questions are not built yet. */
+/** The tabs: All, Approvals, Decisions, Questions, Alerts, each with its count. Approvals is not built yet. */
 function TabGroup({
   counts,
   value,
@@ -269,8 +285,8 @@ function TabGroup({
             <span className="text-meta text-muted tabular-nums">{counts[tab.value]}</span>
           </button>
         );
-        // Approvals and Questions have no backend yet: their tabs show, disabled, with the tooltip.
-        const notBuilt = tab.value === 'approval' || tab.value === 'question';
+        // Approvals has no backend yet: its tab shows, disabled, with the tooltip.
+        const notBuilt = tab.value === 'approval';
         return notBuilt ? (
           <NotAvailable key={tab.value} label={tab.label}>
             {button}
