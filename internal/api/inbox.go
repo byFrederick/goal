@@ -82,18 +82,35 @@ func (w workInbox) itemEntries(ctx context.Context, byID map[domain.FactoryID]*c
 		}
 
 		for i, a := range list {
-			out = append(out, itemEntry(f, l, a, cards[i]))
+			var q *gen.ItemQuestion
+
+			// Only an item waiting for a person may have an open question.
+			if a.Item.State == domain.StateWaitingHuman {
+				if q, err = w.s.openQuestion(ctx, a.Item.ID); err != nil {
+					return nil, err
+				}
+			}
+
+			out = append(out, itemEntry(f, l, a, cards[i], q))
 		}
 	}
 
 	return out, nil
 }
 
-// itemEntry is the one entry of an item: a decision, else blocked, else expedite.
-func itemEntry(f *config.Factory, l domain.Line, a domain.AttentionItem, card gen.ItemCard) gen.InboxEntry {
+// itemEntry is the one entry of an item: its open question q, else a decision, else blocked, else
+// expedite.
+func itemEntry(f *config.Factory, l domain.Line, a domain.AttentionItem, card gen.ItemCard, q *gen.ItemQuestion) gen.InboxEntry {
 	it := a.Item
 	e := entryOf(f, gen.InboxEntryKindExpedite, string(it.ID), it.CreatedAt)
 	e.Item, e.Station = &card, optional(it.Station)
+
+	if q != nil {
+		e.Kind, e.Id, e.Since = gen.InboxEntryKindQuestion, string(gen.InboxEntryKindQuestion)+":"+string(it.ID), it.UpdatedAt
+		e.Question = q
+
+		return e
+	}
 
 	switch it.State {
 	case domain.StateWaitingHuman:

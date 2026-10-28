@@ -49,6 +49,7 @@ var operationScopes = map[string]string{
 	"addEvalCase":                 "definition:publish",
 	"addItemPart":                 "item:create",
 	"addPlatformAdmin":            "platform:manage",
+	"answerItem":                  "item:decide",
 	"approveItem":                 "item:decide",
 	"archiveFactory":              "factory:archive",
 	"cancelEvalRun":               "definition:edit",
