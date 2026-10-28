@@ -41,7 +41,7 @@ test('an agent without history says so, and an unknown agent is not found', asyn
   await expect(page.getByRole('heading', { level: 1, name: 'No such agent' })).toBeVisible();
 });
 
-test('the agent page reads as pictured: the prompt, settings and the Not available controls', async ({ page }) => {
+test('the agent page reads as pictured: the prompt, settings and the Not available control', async ({ page }) => {
   await page.goto('/o/acme/f/goal/agents/frontend-engineer');
   await expect(page.getByRole('heading', { level: 1, name: 'frontend-engineer' })).toBeVisible();
   await expect(page.getByText('Build station')).toBeVisible();
@@ -69,13 +69,24 @@ test('the agent page reads as pictured: the prompt, settings and the Not availab
     }
   }
 
-  for (const name of ['Bake off this agent', 'Ask Jonah for a fix']) {
-    const control = page.getByRole('button', { name });
-    await expect(control).toHaveAttribute('aria-disabled', 'true');
-    await control.click();
-    await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/agents\/frontend-engineer$/);
-  }
+  const askJonah = page.getByRole('button', { name: 'Ask Jonah for a fix' });
+  await expect(askJonah).toHaveAttribute('aria-disabled', 'true');
+  await askJonah.click();
+  await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/agents\/frontend-engineer$/);
 
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+});
+
+test('Bake off this agent starts a bake-off and opens the new one', async ({ page }) => {
+  await page.goto('/o/acme/f/software/agents/frontend-engineer');
+  await expect(page.getByRole('heading', { level: 1, name: 'frontend-engineer' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Bake off this agent' }).click();
+
+  await expect(page).toHaveURL(/\/o\/acme\/f\/software\/jonah\/bake-offs\/bake-off-\d+$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Which model for frontend-engineer?' })).toBeVisible();
+  await expect(page.getByText('Queued')).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });

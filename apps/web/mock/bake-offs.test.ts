@@ -103,6 +103,31 @@ describe('the mock bake-offs API', () => {
     expect(list.body.bake_offs.map((b: { id: string }) => b.id)).toEqual([started.body.bake_off.id, 'bake-off-1']);
   });
 
+  it('starts a bake-off of the agent from the agent screen: 202, queued at the front of the list', async () => {
+    const api = bakeOffs();
+    const started = await call(api, base, 'POST', { agent: 'frontend-engineer' });
+    expect(started.status).toBe(202);
+    expect(started.body.bake_off).toMatchObject({ state: 'queued', agent: 'frontend-engineer', recommended_arm: null });
+    expect(started.body.bake_off.arms.map((a: { model: string }) => a.model)).toEqual([
+      'claude-haiku-5-5',
+      'claude-sonnet-5-5',
+      'claude-opus-5-5',
+    ]);
+    expect(started.body.estimate).toEqual({ usd: 15.6, unpriced: [] });
+
+    const list = await call(api, base, 'GET');
+    expect(list.body.bake_offs.map((b: { id: string }) => b.id)).toEqual([started.body.bake_off.id, 'bake-off-1']);
+  });
+
+  it('refuses a start for an agent the mock does not have with 422 invalid-bake-off', async () => {
+    const api = bakeOffs();
+    const refused = await call(api, base, 'POST', { agent: 'nobody' });
+    expect(refused.status).toBe(422);
+    expect(refused.body.code).toBe('invalid-bake-off');
+    const list = await call(api, base, 'GET');
+    expect(list.body.bake_offs).toHaveLength(1);
+  });
+
   it('writes an arm into the draft, and refuses an arm the bake-off does not have', async () => {
     const api = bakeOffs();
     const applied = await call(api, `${base}/bake-off-1/apply`, 'POST', { arm: 1 });

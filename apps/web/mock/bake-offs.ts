@@ -1,6 +1,6 @@
 // Jonah's bake-offs in the mock API (contracts/api/openapi.yaml, tag evals; ADR 0029): a factory's bake-offs,
-// newest first, one of them with its arms, its tries per case and its recommendation, a re-run and the apply of
-// an arm. The software factory starts with the done bake-off of the bake-off picture (frontend-engineer on
+// newest first, one of them with its arms, its tries per case and its recommendation, a start (from the agent
+// screen), a re-run and the apply of an arm. The software factory starts with the done bake-off of the bake-off picture (frontend-engineer on
 // three models, $14.20); every other factory has none. A re-run is queued and stays so: the mock runs no tries.
 // Apply answers with a draft stub, because the mock keeps no draft of its own here.
 import type { ServerResponse } from 'node:http';
@@ -150,6 +150,28 @@ export function createBakeOffs({ clock, factory }: BakeOffsDeps): MockBakeOffs {
 
       if (id === undefined && method === 'GET') {
         json(res, 200, { bake_offs: list.slice(0, 20) });
+        return true;
+      }
+
+      // The mock knows one agent with eval cases, frontend-engineer of the software factory (the picture's). A
+      // start of it is queued with the picture's arms and estimate; any other agent is refused as the API refuses it.
+      if (id === undefined && method === 'POST') {
+        const body = await readBody();
+        if (f.name !== 'software' || body.agent !== 'frontend-engineer') {
+          problem(
+            res,
+            422,
+            'Invalid bake-off',
+            'invalid-bake-off',
+            `the version has no agent ${String(body.agent)} with eval cases`,
+          );
+          return true;
+        }
+        const picture = pictureBakeOff();
+        const bakeOff = queuedFrom(picture, `bake-off-${++seq}`, nowIso());
+        list.unshift(bakeOff);
+        const estimate: EvalEstimate = { usd: picture.estimate_usd, unpriced: [] };
+        json(res, 202, { bake_off: bakeOff, estimate });
         return true;
       }
 

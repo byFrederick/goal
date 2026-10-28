@@ -443,6 +443,19 @@ export function getBakeOff(org: string, factory: string, bakeOff: string, signal
   );
 }
 
+/**
+ * Queues a bake-off of one agent's eval cases on the current version, with goald's default arms. 404
+ * version-not-found; 409 learning-budget-exhausted, with the estimate; 422 invalid-bake-off; 503 evals-unavailable.
+ */
+export function startBakeOff(org: string, factory: string, agent: string): Promise<BakeOffStarted> {
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/evals/bake-offs'), {
+      params: { path: { org, factory } },
+      body: { agent },
+    }),
+  );
+}
+
 /** Queues a new bake-off of the same agent on the current version. 404 eval-run-not-found, then the refusals of a start. */
 export function rerunBakeOff(org: string, factory: string, bakeOff: string): Promise<BakeOffStarted> {
   return unwrap(

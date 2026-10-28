@@ -18,6 +18,7 @@ import { KpiTile } from '../../ui/kpi-tile';
 import { NotAvailable } from '../../ui/not-available';
 import { PromptFull, PromptPreview } from './agent-prompt';
 import { AgentSettings } from './agent-settings';
+import { BakeOffButton } from './bake-off-button';
 import { blockedSentence, reasonShare } from './sentences';
 import { type AgentView, agentViews } from './views';
 
@@ -140,11 +141,7 @@ export function AgentPage({ agent, view }: { agent: string; view: AgentView }) {
           </ol>
         </nav>
         <div className="flex flex-wrap gap-2">
-          <NotAvailable>
-            <Button variant="secondary" size="sm">
-              Bake off this agent
-            </Button>
-          </NotAvailable>
+          <BakeOffButton agent={agent} />
           <Button asChild variant="secondary" size="sm">
             <Link
               to="/o/$org/f/$factory/definition/$section"
