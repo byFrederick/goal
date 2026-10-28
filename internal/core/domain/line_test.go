@@ -128,3 +128,51 @@ func TestStation_Humanize(t *testing.T) {
 		}
 	}
 }
+
+// The landing station is integration.landAt when set, else the first merge station after the
+// planning station.
+func TestLine_LandingStation(t *testing.T) {
+	t.Parallel()
+
+	gate := &Gate{OnReject: "build"}
+	stations := []Station{
+		{ID: "inbox", Kind: KindQueue},
+		{ID: "early", Kind: KindAgent, Gate: gate, Action: ActionMerge},
+		{ID: "plan", Kind: KindAgent},
+		{ID: "build", Kind: KindAgent},
+		{ID: "review", Kind: KindAgent, Gate: gate},
+		{ID: "merge", Kind: KindAgent, Gate: gate, Action: ActionMerge},
+		{ID: "release", Kind: KindAgent, Gate: gate, Action: ActionMerge},
+		{ID: "done", Kind: KindDone},
+	}
+
+	tests := []struct {
+		name, landAt, plan, want string
+		ok                       bool
+	}{
+		{name: "landAt", landAt: "release", plan: "plan", want: "release", ok: true},
+		{name: "first merge after the plan", plan: "plan", want: "merge", ok: true},
+		{name: "merge before the plan skipped", plan: "build", want: "merge", ok: true},
+		{name: "plan at the first merge station", plan: "merge", want: "release", ok: true},
+		{name: "no merge station after the plan", plan: "release"},
+		{name: "plan not on the line", plan: "nowhere"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			l := Line{Stations: stations}
+			l.Flow.Assemblies.Integration.LandAt = tt.landAt
+
+			s, ok := l.LandingStation(tt.plan)
+			if ok != tt.ok || s.ID != tt.want {
+				t.Errorf("LandingStation(%q) = %q, %v; want %q, %v", tt.plan, s.ID, ok, tt.want, tt.ok)
+			}
+		})
+	}
+
+	if s, ok := (Line{Stations: []Station{{ID: "plan", Kind: KindAgent}, {ID: "done", Kind: KindDone}}}).LandingStation("plan"); ok {
+		t.Errorf("LandingStation on a line with no merge station = %q, want none", s.ID)
+	}
+}
