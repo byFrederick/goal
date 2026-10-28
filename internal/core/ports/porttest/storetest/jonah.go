@@ -162,6 +162,14 @@ func testJonahLeaseReclaimed(f *fixture) {
 		t.Fatalf("reclaim: %+v; want %s until %s, attempt 2", second, queued.ID, t0.Add(2*ttl))
 	}
 
+	f.finishUnderNewLease(t, first, second)
+}
+
+// finishUnderNewLease finishes a review claimed first and then second: the first claim's finish
+// is refused, the second's ends the review, and nothing is claimable after.
+func (f *fixture) finishUnderNewLease(t *testing.T, first, second domain.JonahReview) {
+	t.Helper()
+
 	done := domain.JonahReviewResult{State: domain.JonahDone, At: t0.Add(ttl + time.Second)}
 
 	if _, _, err := f.Jonah.FinishJonahReview(f.ctx(t), first, done); !errors.Is(err, ports.ErrLeaseLost) {
@@ -200,20 +208,49 @@ func testJonahNumbers(f *fixture) {
 		t.Fatalf("first review's numbers %v, want [1 2]", got)
 	}
 
-	got, err := f.Jonah.Proposal(f.ctx(t), f.factory, 1)
+	f.expectProposal(t, ps[0], review, p1)
+	f.expectObservations(t, review, ps[0].ID, it.ID)
+
+	_, ps = f.finishReview(t, f.factory, t1, domain.JonahReviewResult{Proposals: []domain.NewProposal{proposal("Again", "skills/x/SKILL.md")}})
+	if got := numbers(ps); !reflect.DeepEqual(got, []int64{3}) {
+		t.Errorf("second review's numbers %v, want [3]", got)
+	}
+
+	_, ps = f.finishReview(t, f.newFactory(t), t1, domain.JonahReviewResult{Proposals: []domain.NewProposal{proposal("Other", "contracts/c.json")}})
+	if got := numbers(ps); !reflect.DeepEqual(got, []int64{1}) {
+		t.Errorf("another factory's numbers %v, want [1]", got)
+	}
+
+	f.expectPages(t)
+}
+
+// expectProposal checks that stored, of review, reads back as the review said: n.
+func (f *fixture) expectProposal(t *testing.T, stored domain.Proposal, review domain.JonahReview, n domain.NewProposal) {
+	t.Helper()
+
+	got, err := f.Jonah.Proposal(f.ctx(t), f.factory, stored.Number)
 	if err != nil {
-		t.Fatalf("Proposal 1: %v", err)
+		t.Fatalf("Proposal %d: %v", stored.Number, err)
 	}
 
-	if got.ID != ps[0].ID || got.ReviewID != review.ID || got.VersionID != review.VersionID || got.State != domain.ProposalProposed ||
-		got.Title != p1.Title || got.Summary != p1.Summary || !reflect.DeepEqual(got.Files, p1.Files) ||
-		!reflect.DeepEqual(got.Evidence, p1.Evidence) || got.Estimate != p1.Estimate || !got.CreatedAt.Equal(t0.Add(time.Minute)) {
-		t.Errorf("proposal 1 = %+v, want what the review said: %+v", got, p1)
+	if got.ID != stored.ID || got.ReviewID != review.ID || got.VersionID != review.VersionID || got.State != domain.ProposalProposed {
+		t.Errorf("proposal %d = %+v, want %s of review %s on %s, proposed", stored.Number, got, stored.ID, review.ID, review.VersionID)
 	}
 
-	if want := []string{"agents/frontend-engineer.md", "rules/evidence.md"}; !reflect.DeepEqual(got.Paths(), want) {
-		t.Errorf("paths %v, want %v", got.Paths(), want)
+	if got.Title != n.Title || got.Summary != n.Summary || !reflect.DeepEqual(got.Files, n.Files) ||
+		!reflect.DeepEqual(got.Evidence, n.Evidence) || got.Estimate != n.Estimate || !got.CreatedAt.Equal(t0.Add(time.Minute)) {
+		t.Errorf("proposal %d = %+v, want what the review said: %+v", stored.Number, got, n)
 	}
+
+	if !reflect.DeepEqual(got.Paths(), n.Paths()) {
+		t.Errorf("paths %v, want %v", got.Paths(), n.Paths())
+	}
+}
+
+// expectObservations checks review's two observations: one proposed as proposal, on item, and
+// one watching.
+func (f *fixture) expectObservations(t *testing.T, review domain.JonahReview, proposal domain.ProposalID, item domain.ItemID) {
+	t.Helper()
 
 	obs, err := f.Jonah.Observations(f.ctx(t), f.factory, 10)
 	if err != nil || len(obs) != 2 {
@@ -225,24 +262,20 @@ func testJonahNumbers(f *fixture) {
 		byState[o.State] = o
 	}
 
-	if o := byState[domain.ObservationProposed]; o.ProposalID != ps[0].ID || o.Count != 4 || o.ReviewID != review.ID ||
-		!reflect.DeepEqual(o.ItemIDs, []domain.ItemID{it.ID}) || o.Detail != "4 of 9" {
-		t.Errorf("proposed observation %+v, want proposal %s, count 4, item %s", o, ps[0].ID, it.ID)
+	if o := byState[domain.ObservationProposed]; o.ProposalID != proposal || o.Count != 4 || o.ReviewID != review.ID ||
+		!reflect.DeepEqual(o.ItemIDs, []domain.ItemID{item}) || o.Detail != "4 of 9" {
+		t.Errorf("proposed observation %+v, want proposal %s, count 4, item %s", o, proposal, item)
 	}
 
 	if o := byState[domain.ObservationWatching]; o.ProposalID != "" || o.Count != 3 || len(o.ItemIDs) != 0 {
 		t.Errorf("watching observation %+v, want no proposal, count 3, no items", o)
 	}
+}
 
-	_, ps = f.finishReview(t, f.factory, t1, domain.JonahReviewResult{Proposals: []domain.NewProposal{proposal("Again", "skills/x/SKILL.md")}})
-	if got := numbers(ps); !reflect.DeepEqual(got, []int64{3}) {
-		t.Errorf("second review's numbers %v, want [3]", got)
-	}
-
-	_, ps = f.finishReview(t, f.newFactory(t), t1, domain.JonahReviewResult{Proposals: []domain.NewProposal{proposal("Other", "contracts/c.json")}})
-	if got := numbers(ps); !reflect.DeepEqual(got, []int64{1}) {
-		t.Errorf("another factory's numbers %v, want [1]", got)
-	}
+// expectPages checks the keyset pages and the state filter over the factory's proposals 1 to 3,
+// and that its newest review comes first.
+func (f *fixture) expectPages(t *testing.T) {
+	t.Helper()
 
 	if got := f.proposals(t, ports.ProposalQuery{Factory: f.factory, Limit: 2}); !reflect.DeepEqual(got, []int64{3, 2}) {
 		t.Errorf("first page %v, want [3 2]", got)
@@ -343,12 +376,19 @@ func testJonahDecide(f *fixture) {
 		t.Errorf("published %+v, want published as %s", p, version)
 	}
 
-	if _, err := f.Jonah.DecideProposal(f.ctx(t), f.factory, 9, domain.ProposalDecision{State: domain.ProposalApplied, By: ada, At: t1}); !errors.Is(err, ports.ErrNotFound) {
-		t.Errorf("decide proposal 9: %v, want ErrNotFound", err)
+	f.expectNoProposal(t, 9)
+}
+
+// expectNoProposal checks that the factory has no proposal of number to read or decide.
+func (f *fixture) expectNoProposal(t *testing.T, number int64) {
+	t.Helper()
+
+	if _, err := f.Jonah.DecideProposal(f.ctx(t), f.factory, number, domain.ProposalDecision{State: domain.ProposalApplied, By: ada, At: t1}); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("decide proposal %d: %v, want ErrNotFound", number, err)
 	}
 
-	if _, err := f.Jonah.Proposal(f.ctx(t), f.factory, 9); !errors.Is(err, ports.ErrNotFound) {
-		t.Errorf("Proposal 9: %v, want ErrNotFound", err)
+	if _, err := f.Jonah.Proposal(f.ctx(t), f.factory, number); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("Proposal %d: %v, want ErrNotFound", number, err)
 	}
 }
 

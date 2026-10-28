@@ -189,7 +189,7 @@ func insertReviewOutput(ctx context.Context, q *db.Queries, review db.JonahRevie
 	for _, n := range r.Observations {
 		p := db.InsertObservationParams{
 			FactoryID: review.FactoryID, ReviewID: review.ID, Summary: n.Summary, Detail: n.Detail, ItemIds: []uuid.UUID{},
-			Count: int32(min(n.Count, 1<<31-1)), State: string(domain.ObservationWatching), CreatedAt: r.At,
+			Count: clampLimit(n.Count), State: string(domain.ObservationWatching), CreatedAt: r.At,
 		}
 
 		if p.ID, err = newID(); err != nil {
@@ -255,9 +255,9 @@ func (s *Store) JonahReviews(ctx context.Context, factory domain.FactoryID, limi
 		return nil, domain.ErrNoOrg
 	}
 
-	f, err := uuid.Parse(string(factory))
+	f, err := parseID("factory", string(factory))
 	if err != nil {
-		return []domain.JonahReview{}, nil
+		return nil, fmt.Errorf("jonah reviews: %w", err)
 	}
 
 	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.JonahReview, error) {
@@ -281,9 +281,9 @@ func (s *Store) Proposals(ctx context.Context, q ports.ProposalQuery) ([]domain.
 		return nil, domain.ErrNoOrg
 	}
 
-	f, err := uuid.Parse(string(q.Factory))
+	f, err := parseID("factory", string(q.Factory))
 	if err != nil {
-		return []domain.Proposal{}, nil
+		return nil, fmt.Errorf("proposals: %w", err)
 	}
 
 	p := db.ProposalsParams{FactoryID: f, MaxProposals: clampLimit(q.Limit)}
@@ -403,9 +403,9 @@ func (s *Store) Observations(ctx context.Context, factory domain.FactoryID, limi
 		return nil, domain.ErrNoOrg
 	}
 
-	f, err := uuid.Parse(string(factory))
+	f, err := parseID("factory", string(factory))
 	if err != nil {
-		return []domain.Observation{}, nil
+		return nil, fmt.Errorf("observations: %w", err)
 	}
 
 	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.JonahObservation, error) {
@@ -538,7 +538,7 @@ func proposalFrom(r db.JonahProposal) (domain.Proposal, error) {
 	return out, nil
 }
 
-// clampLimit is limit as a query's LIMIT: never below 0.
+// clampLimit is limit as an int32 column or a query's LIMIT: never below 0.
 func clampLimit(limit int) int32 { return int32(min(max(limit, 0), 1<<31-1)) }
 
 // isCheckViolationErr reports whether a CHECK constraint refused a row.

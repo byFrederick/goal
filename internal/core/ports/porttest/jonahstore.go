@@ -80,6 +80,11 @@ func (s *Store) QueueJonahReview(ctx context.Context, n domain.NewJonahReview) (
 	return r, nil
 }
 
+// reviewClaimable reports whether r is pending, or running under a lease that ended by now.
+func reviewClaimable(r domain.JonahReview, now time.Time) bool {
+	return r.State == domain.JonahPending || r.State == domain.JonahRunning && !r.LeaseUntil.After(now)
+}
+
 func inFlight(st domain.JonahReviewState) bool {
 	return st == domain.JonahPending || st == domain.JonahRunning
 }
@@ -98,7 +103,7 @@ func (s *Store) ClaimJonahReview(ctx context.Context, now time.Time, lease time.
 
 	for i := range s.jonah.reviews {
 		r := &s.jonah.reviews[i]
-		if r.org != org || !(r.row.State == domain.JonahPending || r.row.State == domain.JonahRunning && !r.row.LeaseUntil.After(now)) {
+		if r.org != org || !reviewClaimable(r.row, now) {
 			continue
 		}
 
@@ -139,6 +144,12 @@ func (s *Store) FinishJonahReview(ctx context.Context, claimed domain.JonahRevie
 	r := &s.jonah.reviews[i].row
 	r.State, r.Error, r.RunID, r.FinishedAt, r.LeaseUntil = res.State, res.Error, res.RunID, res.At, time.Time{}
 
+	return *r, s.storeReviewOutput(org, *r, res), nil
+}
+
+// storeReviewOutput stores res's proposals, numbered after the factory's last, and its
+// observations, and returns the proposals. Callers hold s.mu.
+func (s *Store) storeReviewOutput(org domain.OrgID, r domain.JonahReview, res domain.JonahReviewResult) []domain.Proposal {
 	var last int64
 
 	for _, p := range s.jonah.proposals {
@@ -175,7 +186,7 @@ func (s *Store) FinishJonahReview(ctx context.Context, claimed domain.JonahRevie
 		s.jonah.observations = append(s.jonah.observations, jonahRow[domain.Observation]{org, o})
 	}
 
-	return *r, cloneProposals(stored), nil
+	return cloneProposals(stored)
 }
 
 // JonahReviews implements ports.JonahStore.

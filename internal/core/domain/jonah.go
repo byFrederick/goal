@@ -20,12 +20,14 @@ const (
 	RunKindJonah   RunKind = "jonah"
 )
 
-// Identifiers of Jonah's rows.
-type (
-	JonahReviewID string
-	ProposalID    string
-	ObservationID string
-)
+// JonahReviewID identifies one Jonah review.
+type JonahReviewID string
+
+// ProposalID identifies one proposal; people name it by its number in the factory.
+type ProposalID string
+
+// ObservationID identifies one observation.
+type ObservationID string
 
 // JonahTrigger is why a review was queued: a person asked, or the factory's sent-back touches
 // reached learning.jonah.proposeAfter.
@@ -315,14 +317,42 @@ func (n NewProposal) Check() error {
 		bad("summary longer than %d characters", maxProposalSummary)
 	}
 
-	if len(n.Files) == 0 {
+	checkProposalFiles(n.Files, bad)
+
+	if len(n.Evidence) > maxProposalEvidence {
+		bad("more than %d pieces of evidence", maxProposalEvidence)
+	}
+
+	for _, e := range n.Evidence {
+		if utf8.RuneCountInString(e.Quote) > maxEvidenceQuote || utf8.RuneCountInString(e.Station) > maxEvidenceQuote {
+			bad("evidence of %s longer than %d characters", e.ItemID, maxEvidenceQuote)
+		}
+	}
+
+	switch n.Estimate.Metric {
+	case "", MetricSentBackRate, MetricLeadTimeP85:
+	default:
+		bad("estimate metric %q is not sent_back_rate or lead_time_p85", n.Estimate.Metric)
+	}
+
+	if utf8.RuneCountInString(n.Estimate.Station) > 100 {
+		bad("estimate station longer than 100 characters")
+	}
+
+	return errors.Join(errs...)
+}
+
+// checkProposalFiles reports to bad what makes files impossible to store: none, a path outside
+// the allowlist or twice, a malformed base_sha256, content that is not text, or too many bytes.
+func checkProposalFiles(files []ProposalFile, bad func(format string, args ...any)) {
+	if len(files) == 0 {
 		bad("no files")
 	}
 
 	seen := map[string]bool{}
 	total := 0
 
-	for _, f := range n.Files {
+	for _, f := range files {
 		switch {
 		case !ProposalPathAllowed(f.Path):
 			bad("path %q is not one a proposal may edit", f.Path)
@@ -346,28 +376,6 @@ func (n NewProposal) Check() error {
 	if total > MaxProposalFilesBytes {
 		bad("files total %d bytes, more than %d", total, MaxProposalFilesBytes)
 	}
-
-	if len(n.Evidence) > maxProposalEvidence {
-		bad("more than %d pieces of evidence", maxProposalEvidence)
-	}
-
-	for _, e := range n.Evidence {
-		if utf8.RuneCountInString(e.Quote) > maxEvidenceQuote || utf8.RuneCountInString(e.Station) > maxEvidenceQuote {
-			bad("evidence of %s longer than %d characters", e.ItemID, maxEvidenceQuote)
-		}
-	}
-
-	switch n.Estimate.Metric {
-	case "", MetricSentBackRate, MetricLeadTimeP85:
-	default:
-		bad("estimate metric %q is not sent_back_rate or lead_time_p85", n.Estimate.Metric)
-	}
-
-	if utf8.RuneCountInString(n.Estimate.Station) > 100 {
-		bad("estimate station longer than 100 characters")
-	}
-
-	return errors.Join(errs...)
 }
 
 // ProposalDecision is a person's (or a later change's) decision on a proposed proposal: published

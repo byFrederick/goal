@@ -19,6 +19,9 @@ import (
 
 var jonahAt = time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
 
+// ruleA is the path the tests' proposals edit.
+const ruleA = "rules/a.md"
+
 // seedJonah gives a new factory of ctx's organization a finished review with one proposal and
 // one observation, and returns the factory and the review's row.
 func seedJonah(ctx context.Context, t *testing.T, s *Store) (domain.FactoryID, db.JonahReview) {
@@ -41,7 +44,7 @@ func seedJonah(ctx context.Context, t *testing.T, s *Store) (domain.FactoryID, d
 
 	if _, _, err := s.FinishJonahReview(ctx, claimed, domain.JonahReviewResult{
 		State: domain.JonahDone, At: jonahAt,
-		Proposals:    []domain.NewProposal{{Title: "a", Files: []domain.ProposalFile{{Path: "rules/a.md", Content: "x"}}}},
+		Proposals:    []domain.NewProposal{{Title: "a", Files: []domain.ProposalFile{{Path: ruleA, Content: "x"}}}},
 		Observations: []domain.NewObservation{{Summary: "seen", Count: 1, Proposal: 1}},
 	}); err != nil {
 		t.Fatal(err)
@@ -90,18 +93,20 @@ func TestJonah_ProposalChecks(t *testing.T) {
 		})
 	}
 
-	file := func(path, content string) domain.ProposalFile { return domain.ProposalFile{Path: path, Content: content} }
+	file := func(path, content string) domain.ProposalFile {
+		return domain.ProposalFile{Path: path, Content: content}
+	}
 
 	for name, tc := range map[string]struct {
 		paths []string
 		files []domain.ProposalFile
 	}{
-		"evals":         {[]string{"evals/cases/a.yaml"}, []domain.ProposalFile{file("evals/cases/a.yaml", "x")}},
-		"dot dot":       {[]string{"agents/../evals/a.md"}, []domain.ProposalFile{file("agents/../evals/a.md", "x")}},
-		"no files":      {[]string{}, []domain.ProposalFile{}},
-		"paths differ":  {[]string{"rules/a.md"}, []domain.ProposalFile{file("rules/b.md", "x")}},
-		"too big":       {[]string{"rules/a.md"}, []domain.ProposalFile{file("rules/a.md", strings.Repeat("x", domain.MaxProposalFilesBytes+1))}},
-		"bad base hash": {[]string{"rules/a.md"}, []domain.ProposalFile{{Path: "rules/a.md", BaseSHA256: "abc", Content: "x"}}},
+		"evals":          {[]string{"evals/cases/a.yaml"}, []domain.ProposalFile{file("evals/cases/a.yaml", "x")}},
+		"parent segment": {[]string{"agents/../evals/a.md"}, []domain.ProposalFile{file("agents/../evals/a.md", "x")}},
+		"no files":       {[]string{}, []domain.ProposalFile{}},
+		"paths differ":   {[]string{ruleA}, []domain.ProposalFile{file("rules/b.md", "x")}},
+		"too big":        {[]string{ruleA}, []domain.ProposalFile{file(ruleA, strings.Repeat("x", domain.MaxProposalFilesBytes+1))}},
+		"bad base hash":  {[]string{ruleA}, []domain.ProposalFile{{Path: ruleA, BaseSHA256: "abc", Content: "x"}}},
 	} {
 		if err := insert(tc.paths, tc.files); !isCheckViolationErr(err) {
 			t.Errorf("%s: insert = %v, want a check violation", name, err)
