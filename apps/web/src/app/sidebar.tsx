@@ -7,7 +7,7 @@
 // from the Goal mark (phone-chrome.tsx), so SidebarContent is the one list of entries for both.
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ChevronsUpDown, PanelLeft, Search } from 'lucide-react';
+import { ChevronsUpDown, CircleHelp, PanelLeft, Search } from 'lucide-react';
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { attentionQuery, overviewQuery } from '../api/queries';
 import type { FactoryOverviewList, OrgSummary } from '../api/types';
@@ -24,6 +24,7 @@ import { Tooltip } from '../ui/tooltip';
 import { AccountMenu } from './account-menu';
 import { CreateOrgDialog } from './create-org-dialog';
 import { OrgMenuContent } from './org-menu';
+import { docsLink } from './rail-items';
 import { screensFor, sidebarOrgScreens } from './screens';
 import { FactoryGroups, rowClass } from './sidebar-factories';
 import { SidebarRail } from './sidebar-rail';
@@ -171,6 +172,11 @@ export function SidebarContent({
             <FactoryGroups org={org} onNavigate={onNavigate} />
           </div>
           <div className="mt-auto flex flex-col gap-2 pt-4">
+            {/* A plain link out of the SPA: /docs is served by the same origin, so the same tab loads it. */}
+            <a href={docsLink.href} className={rowClass}>
+              <CircleHelp {...iconProps} className="flex-none" />
+              <span className="min-w-0 flex-1 truncate">{docsLink.label}</span>
+            </a>
             <SpendThisWeek org={org} overview={overview.data} />
             <AccountMenu org={org} />
           </div>

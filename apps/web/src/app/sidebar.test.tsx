@@ -333,6 +333,18 @@ describe('the sidebar', () => {
     expect(link.getAttribute('href')).toBe('/o/acme/spend');
   });
 
+  it('links Docs to /docs in the same tab, just above the spend', async () => {
+    renderSidebar();
+    const sidebar = await nav();
+
+    const docs = within(sidebar).getByRole('link', { name: 'Docs' });
+    expect(docs.getAttribute('href')).toBe('/docs');
+    expect(docs.getAttribute('target')).toBeNull();
+    expect(docs.getAttribute('aria-current')).toBeNull();
+    const spend = within(sidebar).getByRole('link', { name: /Spend this week/ });
+    expect(docs.compareDocumentPosition(spend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('shows the amount alone when no factory has a budget', async () => {
     renderSidebar({ overview: spend(null) });
     const sidebar = await nav();
@@ -484,7 +496,25 @@ describe('the collapsed rail', () => {
       'Knowledge',
     ]);
     expect(names.slice(8, 11).map((name) => name?.match(/, (\w+) factory/)?.[1])).toEqual(['goal', 'sre', 'support']);
-    expect(names.slice(11)).toEqual(['New factory', 'Spend this week, 37% of budget', 'FC, Freddy Cruz, account']);
+    expect(names.slice(11)).toEqual([
+      'New factory',
+      'Docs',
+      'Spend this week, 37% of budget',
+      'FC, Freddy Cruz, account',
+    ]);
+  });
+
+  it('links Docs to /docs in the same tab, above the spend', async () => {
+    renderSidebar();
+    await collapse();
+    const rail = await nav();
+    const docs = within(rail).getByRole('link', { name: 'Docs' });
+
+    expect(docs.getAttribute('href')).toBe('/docs');
+    expect(docs.getAttribute('target')).toBeNull();
+    expect(docs.getAttribute('aria-current')).toBeNull();
+    const spend = within(rail).getByRole('link', { name: /Spend this week/ });
+    expect(docs.compareDocumentPosition(spend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('links Credentials to its page for those who may read credentials', async () => {
