@@ -58,9 +58,12 @@ func (d *document) schemaProblems() []domain.DefinitionProblem {
 		return []domain.DefinitionProblem{d.schemaProblem(nil, codeSchemaInvalid, err.Error())}
 	}
 
-	var out []domain.DefinitionProblem
+	out := make([]domain.DefinitionProblem, 0, len(failed))
+
 	for _, l := range failed {
-		out = appendNew(out, d.schemaProblem(l.path, l.code, l.message))
+		p := d.schemaProblem(l.path, l.code, l.message)
+		p.Fixes = l.fixes
+		out = appendNew(out, p)
 	}
 
 	return out
@@ -94,10 +97,11 @@ func (d *document) schemaProblem(path []string, code, message string) domain.Def
 	return d.locate(path).Problem(checkSchema, code, domain.SeverityError, message)
 }
 
-// leaf is one failed schema rule: where, which code and what it says.
+// leaf is one failed schema rule: where, which code, what it says and the fixes it offers.
 type leaf struct {
 	path          []string
 	code, message string
+	fixes         []domain.ProblemFix
 }
 
 // leaves flattens a validation error into the rules that failed. A failed oneOf or anyOf is
@@ -166,7 +170,74 @@ func ruleLeaf(e *jsonschema.ValidationError) leaf {
 		return leaf{path: path, code: code, message: where(e.InstanceLocation) + msg}
 	}
 
-	return leaf{path: path, code: code, message: where(path) + msg}
+	return leaf{path: path, code: code, message: where(path) + msg, fixes: enumFixes(path, e.ErrorKind)}
+}
+
+// enumFixes offers, for a string outside an enum of strings, the allowed value nearest to it.
+func enumFixes(path []string, k jsonschema.ErrorKind) []domain.ProblemFix {
+	e, ok := k.(*kind.Enum)
+	if !ok {
+		return nil
+	}
+
+	got, ok := e.Got.(string)
+	if !ok {
+		return nil
+	}
+
+	best, ok := nearest(got, e.Want)
+	if !ok {
+		return nil
+	}
+
+	return []domain.ProblemFix{ReplaceFix("Use "+best, path, best)}
+}
+
+// nearest is the string in want closest to got by edit distance, the first on a tie; false when
+// want has no string.
+func nearest(got string, want []any) (string, bool) {
+	best, bestDistance, found := "", 0, false
+
+	for _, w := range want {
+		s, ok := w.(string)
+		if !ok {
+			continue
+		}
+
+		if d := editDistance(got, s); !found || d < bestDistance {
+			best, bestDistance, found = s, d, true
+		}
+	}
+
+	return best, found
+}
+
+// editDistance is the Levenshtein distance between a and b, in runes.
+func editDistance(a, b string) int {
+	ra, rb := []rune(a), []rune(b)
+	prev := make([]int, len(rb)+1)
+	cur := make([]int, len(rb)+1)
+
+	for j := range prev {
+		prev[j] = j
+	}
+
+	for i := 1; i <= len(ra); i++ {
+		cur[0] = i
+
+		for j := 1; j <= len(rb); j++ {
+			cost := 1
+			if ra[i-1] == rb[j-1] {
+				cost = 0
+			}
+
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+		}
+
+		prev, cur = cur, prev
+	}
+
+	return prev[len(rb)]
 }
 
 // where prefixes a message with the YAML path it is about.

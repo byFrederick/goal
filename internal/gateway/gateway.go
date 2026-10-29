@@ -158,9 +158,26 @@ type Deps struct {
 	Questions Questions
 	// ToolApprovals take the Ask-first tool calls runs report at POST /run/tool-approval.
 	ToolApprovals ToolApprovals
+	// DraftRequests and Drafts give a draft request's run its request and the factory's draft
+	// files (definitionBundle); without both, draft request tokens are refused.
+	DraftRequests DraftRequests
+	Drafts        Drafts
 	// Jonah reads a Jonah review's sent-back events and rejected proposals for its bundle; nil
 	// answers a jonah token's bundle with 503 and changes nothing for other tokens.
 	Jonah Jonah
+}
+
+// DraftRequests reads a draft request of the organization in ctx; ports.DraftRequests satisfies
+// it.
+type DraftRequests interface {
+	Get(ctx context.Context, id domain.DraftRequestID) (domain.DraftRequest, error)
+}
+
+// Drafts reads a factory's open draft and the blobs of its files, for the organization in ctx;
+// ports.DefinitionStore satisfies it. The gateway only reads them: writing a draft is authoring's.
+type Drafts interface {
+	Draft(ctx context.Context, f domain.FactoryID) (domain.DefinitionVersion, error)
+	Blob(ctx context.Context, h domain.BlobHash) ([]byte, error)
 }
 
 // Config bounds the gateway. Zero values take the defaults below.
@@ -190,9 +207,12 @@ type Gateway struct {
 	knowledge   Knowledge // nil without Deps.Knowledge
 	questions   Questions
 	approvals   ToolApprovals
-	jonah       Jonah // nil without Deps.Jonah
-	cfg         Config
-	mcp         http.Handler
+	// draftRequests and drafts are nil without Deps.DraftRequests and Deps.Drafts.
+	draftRequests DraftRequests
+	drafts        Drafts
+	jonah         Jonah // nil without Deps.Jonah
+	cfg           Config
+	mcp           http.Handler
 }
 
 // New returns a gateway; goald mounts it at its MCP path.
@@ -210,7 +230,7 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 
 	g := &Gateway{
 		defs: d.Definitions, items: d.Items, connections: d.Connections, events: d.Events, clock: d.Clock, log: d.Logger,
-		knowledge: d.Knowledge, questions: d.Questions, approvals: d.ToolApprovals, jonah: d.Jonah, cfg: cfg,
+		knowledge: d.Knowledge, questions: d.Questions, approvals: d.ToolApprovals, draftRequests: d.DraftRequests, drafts: d.Drafts, jonah: d.Jonah, cfg: cfg,
 	}
 	if g.log == nil {
 		g.log = slog.New(slog.DiscardHandler)
@@ -287,6 +307,11 @@ func (g *Gateway) authenticate(r *http.Request) (domain.TaskClaims, error) {
 
 // session resolves what the task may reach under the definition version its run started on.
 func (g *Gateway) session(ctx context.Context, c domain.TaskClaims) (*session, error) {
+	// A draft request's run reaches no MCP server: definition mode has none.
+	if c.Kind == domain.TaskKindDraftRequest {
+		return nil, fmt.Errorf("%w: a draft request's task is served no tools", errForbidden)
+	}
+
 	f, err := g.defs.Version(ctx, c.VersionID)
 	if err != nil {
 		return nil, fmt.Errorf("load factory %s version %s: %w", c.FactoryID, c.VersionID, err)

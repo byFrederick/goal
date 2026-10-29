@@ -67,12 +67,14 @@ import {
   getDraft,
   getDraftFile,
   getDraftModel,
+  getDraftRequest,
   getFactory,
   getTemplate,
   getVersion,
   getVersionFile,
   getVersionModel,
   listDraftFiles,
+  listDraftRequests,
   listTemplates,
   listVersions,
   validateDraft,
@@ -688,6 +690,9 @@ export const defKeys = {
   draftModel: (org: string, f: string) => ['org', org, 'factory', f, 'draft', 'model'] as const,
   draftFiles: (org: string, f: string) => ['org', org, 'factory', f, 'draft', 'files'] as const,
   draftFile: (org: string, f: string, path: string) => ['org', org, 'factory', f, 'draft', 'file', path] as const,
+  /** The asked definition changes (ADR 0021): under the draft, so a draft event refetches them too. */
+  draftRequests: (org: string, f: string) => ['org', org, 'factory', f, 'draft', 'requests'] as const,
+  draftRequest: (org: string, f: string, id: string) => ['org', org, 'factory', f, 'draft', 'requests', id] as const,
   validation: (org: string, f: string, revision: number) =>
     ['org', org, 'factory', f, 'draft', 'validation', revision] as const,
   versions: (org: string, f: string) => ['org', org, 'factory', f, 'versions'] as const,
@@ -767,6 +772,23 @@ export const draftModelQuery = (org: string, factory: string) =>
     queryKey: defKeys.draftModel(org, factory),
     queryFn: ({ signal }) => getDraftModel(org, factory, signal),
     retry: retryUnlessRefused,
+  });
+
+/**
+ * The factory's draft requests, newest first. No refetchInterval: a request's change reaches the
+ * screen through the stream's `definition` events (and a resync), as the rest of the draft does.
+ */
+export const draftRequestsQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: defKeys.draftRequests(org, factory),
+    queryFn: ({ signal }) => listDraftRequests(org, factory, signal),
+  });
+
+/** One draft request, by id: the one the definition screen's `?request=` names. */
+export const draftRequestQuery = (org: string, factory: string, id: string) =>
+  queryOptions({
+    queryKey: defKeys.draftRequest(org, factory, id),
+    queryFn: ({ signal }) => getDraftRequest(org, factory, id, signal),
   });
 
 export const draftFilesQuery = (org: string, factory: string) =>

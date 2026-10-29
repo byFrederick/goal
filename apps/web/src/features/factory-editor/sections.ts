@@ -53,6 +53,8 @@ export interface DefinitionSearch {
   compare?: string;
   /** Agents: open the skill picker. */
   add?: 'skill';
+  /** The draft request the Ask bar shows (its id, from Ask Jonah for a fix or an earlier ask). */
+  request?: string;
 }
 
 const text = (v: unknown): string | undefined => (typeof v === 'string' && v !== '' ? v : undefined);
@@ -64,7 +66,7 @@ export function validateDefinitionSearch(search: Record<string, unknown>): Defin
   if (search.mode === 'yaml') out.mode = 'yaml';
   if (search.add === 'skill') out.add = 'skill';
   if (Number.isInteger(line) && line > 0) out.line = line;
-  for (const key of ['file', 'agent', 'station', 'connection', 'compare'] as const) {
+  for (const key of ['file', 'agent', 'station', 'connection', 'compare', 'request'] as const) {
     const v = text(search[key]);
     if (v !== undefined) out[key] = v;
   }
