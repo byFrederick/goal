@@ -1,0 +1,71 @@
+/*
+ * Goal's theme for the docs site. The tokens are those of docs/design/MASTER.md, light and dark,
+ * mapped onto Starlight's CSS custom properties (--sl-*). No gradients.
+ */
+@import "@fontsource-variable/archivo/wdth.css";
+@import "@fontsource-variable/jetbrains-mono/wght.css";
+
+/* Dark is the default theme; Starlight sets data-theme on the root element. */
+:root {
+  --color-shell: #0e1120;
+  --color-sidebar: #13172a;
+  --color-panel: #161a2f;
+  --color-hover: #1e2340;
+  --color-line: #252a45;
+  --color-rule: #3a4066;
+  --color-ink: #eceef7;
+  --color-ink-soft: #b7bcd4;
+  --color-muted: #9096b3;
+  --color-run: #4a63f5;
+  --color-run-ink: #a3b2ff;
+  --color-run-tint: #1d2556;
+}
+
+:root[data-theme="light"] {
+  --color-shell: #ffffff;
+  --color-sidebar: #f3f4f9;
+  --color-panel: #f7f8fc;
+  --color-hover: #e9ebf4;
+  --color-line: #e3e6ef;
+  --color-rule: #cbd0df;
+  --color-ink: #14182b;
+  --color-ink-soft: #464d6a;
+  --color-muted: #626986;
+  --color-run: #2742f5;
+  --color-run-ink: #1b33c9;
+  --color-run-tint: #e8ecff;
+}
+
+:root {
+  --sl-color-black: var(--color-shell);
+  --sl-color-gray-7: var(--color-panel);
+  --sl-color-gray-6: var(--color-sidebar);
+  --sl-color-gray-5: var(--color-rule);
+  --sl-color-gray-4: var(--color-muted);
+  --sl-color-gray-3: var(--color-ink-soft);
+  --sl-color-gray-2: var(--color-ink-soft);
+  --sl-color-gray-1: var(--color-ink);
+  --sl-color-white: var(--color-ink);
+  --sl-color-bg: var(--color-shell);
+  --sl-color-bg-nav: var(--color-sidebar);
+  --sl-color-bg-sidebar: var(--color-sidebar);
+  --sl-color-hairline: var(--color-line);
+  --sl-color-hairline-light: var(--color-line);
+  --sl-color-hairline-shade: var(--color-line);
+  --sl-color-text: var(--color-ink);
+  --sl-color-text-accent: var(--color-run-ink);
+  --sl-color-accent-low: var(--color-run-tint);
+  --sl-color-accent: var(--color-run);
+  --sl-color-accent-high: var(--color-run-ink);
+  --sl-font: "Archivo Variable", system-ui, sans-serif;
+  --sl-font-system-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+  --sl-text-h1: 1.625rem;
+  --sl-text-h2: 1.375rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Expressive Code draws the tab bar's bottom line with a gradient. Draw the same line as a shadow. */
+.expressive-code .frame.has-title:not(.is-terminal) .header {
+  background: var(--ec-frm-edTabBarBg);
+  box-shadow: inset 0 calc(var(--ec-brdWd) * -1) 0 var(--ec-frm-edTabBarBrdBtmCol);
+}

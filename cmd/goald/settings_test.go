@@ -3,6 +3,8 @@ package main
 import (
 	"maps"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -99,6 +101,32 @@ func TestSettings_Knowledge(t *testing.T) {
 	for _, bad := range []string{"0", "-1", "25MiB"} {
 		if _, err := settingsFrom(envOf(map[string]string{uploadMaxEnv: bad})); err == nil || !strings.Contains(err.Error(), uploadMaxEnv) {
 			t.Errorf("%s=%s: %v; want an error naming it", uploadMaxEnv, bad, err)
+		}
+	}
+}
+
+// GOAL_DOCS_DIR names the docs build goald serves at /docs; unset, it serves none, and one that is
+// not a directory is refused at startup.
+func TestSettings_DocsDir(t *testing.T) {
+	t.Parallel()
+
+	if s, err := settingsFrom(envOf(nil)); err != nil || s.DocsDir != "" {
+		t.Fatalf("default docs dir = %q, %v; want none", s.DocsDir, err)
+	}
+
+	dir := t.TempDir()
+	if s, err := settingsFrom(envOf(map[string]string{docsDirEnv: dir})); err != nil || s.DocsDir != dir {
+		t.Errorf("%s=%s: docs dir %q, %v", docsDirEnv, dir, s.DocsDir, err)
+	}
+
+	file := filepath.Join(dir, "index.html")
+	if err := os.WriteFile(file, []byte("docs"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, bad := range []string{filepath.Join(dir, "absent"), file} {
+		if _, err := settingsFrom(envOf(map[string]string{docsDirEnv: bad})); err == nil || !strings.Contains(err.Error(), docsDirEnv) {
+			t.Errorf("%s=%s: %v; want an error naming it", docsDirEnv, bad, err)
 		}
 	}
 }

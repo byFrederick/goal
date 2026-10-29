@@ -240,7 +240,6 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	log.InfoContext(ctx, "factories loaded", slog.Int("count", len(loaded)), slog.String("bucket", objects.Bucket()))
 
 	definitionNotices := postgres.NewDefinitionNotices(store, log)
-
 	feed := newFeed(s, store, eng, log)
 
 	// No tool approval is enforced yet, so the editor warns where an agent asks for one ("Ask me").
@@ -248,6 +247,8 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	// Platform admins, the security log and the sign-in clean-up: install-level, in no organization.
 	platform := postgres.NewPlatform(store)
+	// The docs site at /docs, from GOAL_DOCS_DIR; none without it.
+	site, siteErr := docsSite(s.DocsDir)
 
 	apiHandler, err := api.New(api.Deps{
 		Engine: eng, Items: store, Factories: defs, Definitions: authors, Versions: definitionStore, Orgs: store, Audit: store, OrgRetention: s.OrgRetention,
@@ -262,11 +263,11 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		NotificationPreferences: postgres.NewNotificationPreferences(store),
 		Jonah:                   jonahDeps(store, authors, clock, log), Clock: clock, Logger: log,
 	})
-	if err != nil {
+	if err = errors.Join(err, siteErr); err != nil {
 		return err
 	}
 
-	servers := httpServers(s, proxySecret, apiHandler, gatewayHandler(gw), web.Handler(web.Options{StrictTransport: s.strictTransport()}), log)
+	servers := httpServers(s, proxySecret, apiHandler, gatewayHandler(gw), web.Handler(web.Options{StrictTransport: s.strictTransport()}), site, log)
 
 	j, err := newJobs(s, store, connections, objects, platform, clock, kb.ingestor, defs, eng, intake, log)
 	if err != nil {
@@ -486,13 +487,27 @@ func sandboxes(ctx context.Context, s settings, log *slog.Logger) (runBoxes, err
 	}, nil
 }
 
+// docsSite serves the docs build in GOAL_DOCS_DIR at /docs (api.Docs); nil without one.
+func docsSite(dir string) (http.Handler, error) {
+	if dir == "" {
+		return nil, nil
+	}
+
+	h, err := api.Docs(dir)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", docsDirEnv, err)
+	}
+
+	return h, nil
+}
+
 // httpServers are goald's HTTP servers: the main listener and, with GOAL_GATEWAY_LISTEN, the
 // gateway's own. Under GOAL_AUTH=session the main one also serves the identity service's
 // endpoints (/api/auth/*, api.AuthProxy). Every request to the main one but the health check and
 // the agents' gateway must name goald (DNS rebinding); the gateway's serves nothing that a Host
 // could matter to.
-func httpServers(s settings, proxySecret string, apiHandler, gw, spa http.Handler, log *slog.Logger) []*http.Server {
-	primary, gatewayOnly := routes(s.GatewayListen != "", apiHandler, gw, spa)
+func httpServers(s settings, proxySecret string, apiHandler, gw, spa, site http.Handler, log *slog.Logger) []*http.Server {
+	primary, gatewayOnly := routes(s.GatewayListen != "", apiHandler, gw, spa, site)
 	if s.Auth == authSession {
 		primary = api.AuthProxy(api.AuthProxyConfig{Upstream: s.AuthUpstream, TrustedProxies: s.TrustedProxies, Secret: proxySecret, Logger: log}, primary)
 	}
@@ -505,16 +520,23 @@ func httpServers(s settings, proxySecret string, apiHandler, gw, spa http.Handle
 	return servers
 }
 
-// routes are the handlers of goald's listeners: the main one serves the API, the SPA and, when
-// the gateway has no listener of its own, the agents' gateway at /mcp, /run and /run/tool-approval
-// (gw serves them all).
+// routes are the handlers of goald's listeners: the main one serves the API, the SPA, the docs
+// site at /docs and everything under it (site, from GOAL_DOCS_DIR; 404 when site is nil, never
+// the SPA's index) and, when the gateway has no listener of its own, the agents' gateway at /mcp,
+// /run and /run/tool-approval (gw serves them all).
 // With one (separate), the gateway listener serves only those (everything else 404) and the main
 // one answers them with 404, so the gateway address agents are given reaches nothing else;
 // gatewayOnly is nil without one.
-func routes(separate bool, apiHandler, gw, spa http.Handler) (primary, gatewayOnly http.Handler) {
+func routes(separate bool, apiHandler, gw, spa, site http.Handler) (primary, gatewayOnly http.Handler) {
+	if site == nil {
+		site = http.NotFoundHandler()
+	}
+
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", apiHandler)
 	mux.Handle("/", spa)
+	mux.Handle(api.DocsPath, site)
+	mux.Handle(api.DocsPath+"/", site)
 
 	gatewayPaths := []string{api.GatewayPath, api.RunPath, api.ToolApprovalPath}
 

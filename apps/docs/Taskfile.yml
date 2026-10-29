@@ -1,0 +1,36 @@
+# The product documentation site (apps/docs, Astro Starlight, served at /docs).
+# Included by the root Taskfile.yml with flatten: true and dir set to the repository root, so these
+# tasks keep their full names. Run them from the root: `task docs:site:check`.
+version: "3"
+
+tasks:
+  docs:site:install:
+    desc: Install the pnpm workspace's dependencies from the lockfile (the docs site is a member)
+    sources: [package.json, pnpm-lock.yaml, pnpm-workspace.yaml, apps/docs/package.json]
+    cmds:
+      - pnpm install --frozen-lockfile
+
+  docs:site:dev:
+    desc: Astro dev server for the docs site, at http://localhost:4321/docs/
+    deps: [docs:site:install]
+    dir: apps/docs
+    cmds:
+      - pnpm run --silent dev
+
+  docs:site:build:
+    desc: Build the docs site into apps/docs/dist (Pagefind index, llms files, the API reference and the OpenAPI contract)
+    deps: [docs:site:install]
+    dir: apps/docs
+    sources: [src/**/*, public/**/*, astro.config.mjs, package.json, ../../contracts/api/openapi.yaml]
+    generates: [dist/docs/index.html]
+    cmds:
+      - pnpm run --silent build
+
+  docs:site:check:
+    desc: Docs site typecheck (astro check), Biome lint and the build (astro build), the only docs check that runs the build
+    deps: [docs:site:install]
+    dir: apps/docs
+    cmds:
+      - pnpm run --silent check
+      - pnpm exec biome check .
+      - pnpm run --silent build

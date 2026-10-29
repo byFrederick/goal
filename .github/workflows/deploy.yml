@@ -1,5 +1,6 @@
-# Deploys production after ci passed for a push to main that changed the app: `task deploy:worker`
-# (deploy/cloudflare/scripts/deploy.sh), then `task deploy:health` (GET /v1/health on the public host
+# Deploys production after ci passed for a push to main that changed the app: `task docs:site:build`
+# (the docs site, apps/docs/dist, which wrangler deploy uploads as the control Worker's static assets
+# at /docs, ADR 0035), then `task deploy:worker` (deploy/cloudflare/scripts/deploy.sh), then `task deploy:health` (GET /v1/health on the public host
 # answers {"status":"ok"} within 5 minutes, else the job fails).
 # Images: the script builds goald, auth and goal-agent with docker buildx for linux/amd64 on
 # setup-buildx-action's docker-container builder (BuildKit pinned by digest), reproducibly: each
@@ -12,8 +13,10 @@
 # (wrangler.deploy.jsonc) that pins the three digests. The registry login is a 60-minute credential
 # wrangler mints with the deploy token, masked, and logged out at exit.
 # "Changed the app" means a file of the app paths below differs between this commit and the one the
-# last successful deploy job deployed (the run name carries it); deploy/terraform/-only or docs-only pushes
-# deploy nothing. workflow_run has no paths filter, so the `changes` job decides.
+# last successful deploy job deployed (the run name carries it); deploy/terraform/-only pushes, or ones
+# that change only docs/ or other prose outside apps/docs/, deploy nothing; apps/docs/ is the docs
+# site and counts, and so does contracts/ (the site's API reference reads contracts/api/openapi.yaml).
+# workflow_run has no paths filter, so the `changes` job decides.
 # Rollback: run this workflow by hand (workflow_dispatch) from main with the sha of an earlier commit
 # of main that ci passed for; it deploys that commit without the paths check (cloudflare-operations.md,
 # Deploys).
@@ -132,7 +135,7 @@ jobs:
             exit 0
           fi
           changed=$(git diff --name-only "$prev" "$sha" -- \
-            cmd/ internal/ apps/web/ apps/worker/ apps/auth/ apps/control-worker/ packages/ deploy/cloudflare/ db/migrations/ contracts/ \
+            cmd/ internal/ apps/web/ apps/worker/ apps/auth/ apps/control-worker/ apps/docs/ packages/ deploy/cloudflare/ db/migrations/ contracts/ \
             go.mod go.sum package.json pnpm-lock.yaml pnpm-workspace.yaml)
           if [ -z "$changed" ]; then
             echo "The app did not change between $prev and $sha: nothing to deploy"
@@ -206,6 +209,9 @@ jobs:
             echo "Waiting for deploy run $blocker of the other event"
             sleep 20
           done
+      # No Cloudflare token here: the build reads only the repository.
+      - name: Build the docs site, the control Worker's static assets
+        run: task docs:site:build
       - name: Build and push the images, deploy the control Worker (wrangler deploy)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}

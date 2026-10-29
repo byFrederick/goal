@@ -9,6 +9,7 @@ import (
 	"net/mail"
 	"net/netip"
 	"net/url"
+	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -148,6 +149,10 @@ type settings struct {
 	// UploadMaxBytes is the largest file uploaded to the knowledge base (GOAL_UPLOAD_MAX_BYTES,
 	// default 25 MiB).
 	UploadMaxBytes int64
+	// DocsDir is the docs site's build goald serves read-only at /docs (GOAL_DOCS_DIR, the
+	// directory whose files map to /docs/, apps/docs/dist/docs); empty serves none, and /docs is
+	// 404. On Cloudflare the control Worker's assets serve the docs instead.
+	DocsDir string
 }
 
 const (
@@ -156,6 +161,7 @@ const (
 	modelsEnv          = "GOAL_MODELS"
 	publicURLEnv       = "GOAL_PUBLIC_URL"
 	listenEnv          = "GOAL_LISTEN"
+	docsDirEnv         = "GOAL_DOCS_DIR"
 	gatewayEnv         = "GOAL_GATEWAY_LISTEN"
 	gatewayURLEnv      = "GOAL_GATEWAY_URL"
 	authEnv            = "GOAL_AUTH"
@@ -273,6 +279,10 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 	errs = append(errs, knowledgeSettings(&s, or)...)
 	errs = append(errs, smtpSettingsFrom(&s, or)...)
 
+	if s.DocsDir, err = docsDir(or(docsDirEnv, "")); err != nil {
+		errs = append(errs, err)
+	}
+
 	if s.MaxRuns, err = strconv.Atoi(or("GOAL_MAX_RUNS", "0")); err != nil || s.MaxRuns < 0 {
 		errs = append(errs, fmt.Errorf("GOAL_MAX_RUNS %q is not a count of runs (0 for no cap)", getenv("GOAL_MAX_RUNS")))
 	}
@@ -293,6 +303,19 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 	s.Models, err = models(or(modelsEnv, defaultModels))
 
 	return s, errors.Join(append(errs, err)...)
+}
+
+// docsDir is GOAL_DOCS_DIR, refused unless it names a directory: an empty one serves no docs.
+func docsDir(dir string) (string, error) {
+	if dir == "" {
+		return "", nil
+	}
+
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return "", fmt.Errorf("%s %q is not a directory (the docs build, apps/docs/dist/docs: task docs:build)", docsDirEnv, dir)
+	}
+
+	return dir, nil
 }
 
 // The SMTP settings goald shares with the auth service (apps/auth/src/settings.ts, parseSMTP).

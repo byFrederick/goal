@@ -122,6 +122,10 @@ includes:
     taskfile: docs/Taskfile.yml
     flatten: true
     dir: "{{.ROOT_DIR}}"
+  docs-site:
+    taskfile: apps/docs/Taskfile.yml
+    flatten: true
+    dir: "{{.ROOT_DIR}}"
 
 tasks:
   default:
@@ -286,6 +290,7 @@ tasks:
       - task: auth:check
       - task: api-client:check
       - task: web:check
+      - task: docs:site:check
       - task: cloudflare:check
       - task: validate
       - task: tf:check

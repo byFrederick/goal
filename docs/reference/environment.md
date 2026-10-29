@@ -24,6 +24,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_DATABASE_URL` | secret | no | goald's PostgreSQL URL, as goal_app under row-level security; by default compose's database with GOAL_PG_APP_PASSWORD. |
 | `GOAL_DEFAULT_AGENT_IMAGE` | config | no | Retired: GOAL_AGENT_IMAGE replaced it; goald ignores it and warns while it is set. |
 | `GOAL_DEFINITION_CACHE_BYTES` | config | no | How many bytes of no-longer-current factory definition files goald keeps for the runs pinned to them. |
+| `GOAL_DOCS_DIR` | config | no | The docs site's build (apps/docs/dist/docs) that goald serves read-only at /docs; unset, /docs is 404. goal up sets it when the build exists; on Cloudflare the control Worker's assets serve the docs instead. |
 | `GOAL_EGRESS_ADDRESSES` | public | no | The addresses agents' traffic leaves the install from, comma-separated CIDRs, shown on the organization's models and policies screen; empty by default. |
 | `GOAL_EGRESS_IMAGE` | config | no | Retired: compose's goal-egress service replaced it; goald ignores it and warns while it is set. |
 | `GOAL_EGRESS_NAME` | config | no | Retired: compose's goal-egress service replaced it; goald ignores it and warns while it is set. |
@@ -97,6 +98,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_BOOTSTRAP_OWNER_EMAIL` | config | no | The first owner's address: until someone signs in it is the only one that may, and becomes platform admin; goal up requires it under sign-in. |
 | `GOAL_DATABASE_ADMIN_URL` | secret | no | The bootstrap superuser's PostgreSQL URL that goal db init creates the roles with; by default compose's superuser. |
 | `GOAL_DATABASE_URL` | secret | no | goald's PostgreSQL URL, as goal_app under row-level security; by default compose's database with GOAL_PG_APP_PASSWORD. |
+| `GOAL_DOCS_DIR` | config | no | The docs site's build (apps/docs/dist/docs) that goald serves read-only at /docs; unset, /docs is 404. goal up sets it when the build exists; on Cloudflare the control Worker's assets serve the docs instead. |
 | `GOAL_EGRESS_GATEWAY` | config | no | goald's gateway listener as goal-egress reaches it; goal up derives it from GOAL_GATEWAY_URL or the listener. |
 | `GOAL_GATEWAY_KEY` | secret | yes | Signs the per-task MCP gateway tokens; at least 32 bytes, and it never reaches a task. |
 | `GOAL_GATEWAY_LISTEN` | config | no | The gateway's own listener, serving only /mcp and /run; required when GOAL_LISTEN is off loopback. |
@@ -206,6 +208,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_AUTH_PROXY_SECRET` | secret | yes | The secret goald sends with every request it forwards to the auth service, which refuses any other; goal up generates one per start. |
 | `GOAL_BOOTSTRAP_OWNER_EMAIL` | config | no | The first owner's address: until someone signs in it is the only one that may, and becomes platform admin; goal up requires it under sign-in. |
 | `GOAL_DOCKER_GID` | config | no | The Docker socket's group on Linux, which goald's container joins under goal up --compose. |
+| `GOAL_DOCS_DIR` | config | no | The docs site's build (apps/docs/dist/docs) that goald serves read-only at /docs; unset, /docs is 404. goal up sets it when the build exists; on Cloudflare the control Worker's assets serve the docs instead. |
 | `GOAL_EGRESS_GATEWAY` | config | no | goald's gateway listener as goal-egress reaches it; goal up derives it from GOAL_GATEWAY_URL or the listener. |
 | `GOAL_LOG_FORMAT` | config | no | goald's log format: json or text. |
 | `GOAL_PG_APP_PASSWORD` | secret | no | The goal_app role's password, which goal db init sets and goald's default database URL uses. |

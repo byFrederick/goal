@@ -1,6 +1,12 @@
-# The generated docs: docs/engineering/change-map.md and docs/adr/README.md (tools/gendocs).
-# A branch adds or edits only the entry files and never runs docs:gen: the docs-gen workflow
-# (.github/workflows/docs-gen.yml) runs it on main after the merge and commits the two files.
+# The generated docs (tools/gendocs), in two groups:
+# - the indexes docs/engineering/change-map.md and docs/adr/README.md. A branch adds or edits only
+#   their entry files and never commits them: the docs-gen workflow (.github/workflows/docs-gen.yml)
+#   runs docs:gen on main after the merge and commits the two files (AGENTS.md, ADR 0015 decision 6);
+# - the docs site's reference pages in apps/docs/src/content/docs/reference/ (CLI, factory definition,
+#   environment variables, glossary). A branch that changes one of their sources regenerates them
+#   with docs:ref:gen, which writes nothing else, as the factory's docs rule requires; that rule
+#   overrides the AGENTS.md restriction for these pages. A branch may run docs:gen instead, then
+#   discards its changes to the two indexes (git checkout -- docs/engineering/change-map.md docs/adr/README.md).
 # Included by the root Taskfile.yml with flatten: true and dir set to the repository root, so these
 # tasks keep their full names, run from the root and see the root's dotenv, env and vars. Run them
 # from the root: `task <name>`.
@@ -10,13 +16,23 @@ tasks:
   docs:gen:
     desc: >-
       Regenerate docs/engineering/change-map.md from docs/engineering/change-map/ (its _page.md and one entry file per
-      row) and docs/adr/README.md from the ADRs (tools/gendocs). The docs-gen workflow runs it on main; never in a branch
+      row), docs/adr/README.md from the ADRs and the docs site's reference pages (tools/gendocs). The docs-gen workflow
+      runs it on main; a branch that runs it discards its changes to the two indexes
     cmds:
       - go run ./tools/gendocs
 
+  docs:ref:gen:
+    desc: >-
+      Regenerate only the docs site's reference pages (apps/docs/src/content/docs/reference/: cli.md, definition.md,
+      environment.md, glossary.md) from internal/cli's usage text, contracts/definitions/factory.schema.json and
+      docs/reference/ (tools/gendocs -reference). A branch runs it after changing one of those sources
+    cmds:
+      - go run ./tools/gendocs -reference
+
   docs:check:
     desc: >-
-      Every change-map entry and ADR renders (tools/gendocs -check); it writes nothing and passes when the two generated
-      files are stale or missing
+      Every change-map entry and ADR renders and every reference page of the docs site is current (tools/gendocs -check);
+      it writes nothing, fails naming a stale reference page and task docs:ref:gen, and passes when the change map or
+      the ADR index is stale or missing
     cmds:
       - go run ./tools/gendocs -check

@@ -19,6 +19,12 @@
       "skillPath": "plugins/documentation-generation/skills/architecture-decision-records/SKILL.md",
       "computedHash": "9bf1914cbe0e0d8ded47c2e952adfafae2ffcf97ba8ebf0474619dbc141e8cdf"
     },
+    "astro": {
+      "source": "astrolicious/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/astro/SKILL.md",
+      "computedHash": "ebefe26b231d32379c14e41a46c2de7b4b0184543bedab7febdabe4fb21fba4e"
+    },
     "better-auth-best-practices": {
       "source": "better-auth/skills",
       "sourceType": "github",
@@ -60,6 +66,18 @@
       "sourceType": "github",
       "skillPath": "skills/docker-compose-patterns/SKILL.md",
       "computedHash": "391f366bb0e60f5c7c48ecc814b917e7dae797edbb58625d228cb951d7a538ee"
+    },
+    "documentation-and-adrs": {
+      "source": "addyosmani/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/documentation-and-adrs/SKILL.md",
+      "computedHash": "f1bd038e74194364c1dcdb3dd0a72194ffd3ca9d3a103c125ca1a62e801a0cc4"
+    },
+    "documenting-contracts": {
+      "source": "riekelt/technical-writer",
+      "sourceType": "github",
+      "skillPath": "plugins/technical-writer/skills/documenting-contracts/SKILL.md",
+      "computedHash": "03d0eb48fd0ed79096c0413819345d3ce172eb09d0f2f09a967719ac7509c379"
     },
     "frontend-design": {
       "source": "anthropics/skills",
@@ -217,6 +235,12 @@
       "skillPath": "plugins/database-design/skills/postgresql-table-design/SKILL.md",
       "computedHash": "c87d5cac33fbddc757fbb4b38a0098cff7dcf79201d40ddff2af76ec2724c5a1"
     },
+    "reviewing-technical-prose": {
+      "source": "riekelt/technical-writer",
+      "sourceType": "github",
+      "skillPath": "plugins/technical-writer/skills/reviewing-technical-prose/SKILL.md",
+      "computedHash": "29fd1b842c0c6517ef8c92c98ed38fd2ddcff1a97ec75c34015609258ff2b2d4"
+    },
     "security-and-hardening": {
       "source": "addyosmani/agent-skills",
       "sourceType": "github",
@@ -258,6 +282,12 @@
       "sourceType": "github",
       "skillPath": "skills/tanstack-router/SKILL.md",
       "computedHash": "659549bfcacc5767cd489fcbceb2889247bd38c82f0a37c282da754eb2603f63"
+    },
+    "technical-writing": {
+      "source": "riekelt/technical-writer",
+      "sourceType": "github",
+      "skillPath": "plugins/technical-writer/skills/technical-writing/SKILL.md",
+      "computedHash": "50a8b22b6fcc011b84802b691efbf566d8294e16513d1eed86343587114875ec"
     },
     "terraform-module-library": {
       "source": "wshobson/agents",
@@ -336,6 +366,12 @@
       "sourceType": "github",
       "skillPath": "skills/webapp-testing/SKILL.md",
       "computedHash": "ad5b1fc52807e9afa4635e59218a026b164dc58b6c3f41b0f7c644dcd6ccf572"
+    },
+    "writing-changelogs": {
+      "source": "riekelt/technical-writer",
+      "sourceType": "github",
+      "skillPath": "plugins/technical-writer/skills/writing-changelogs/SKILL.md",
+      "computedHash": "4ce85fa5602d738c6d8a0750dca9c04d3692f4b72aef83399f3eec7a6ceb5398"
     }
   }
 }

@@ -23,6 +23,11 @@ deploy:production
 deploy:worker
 docs:check
 docs:gen
+docs:ref:gen
+docs:site:build
+docs:site:check
+docs:site:dev
+docs:site:install
 e2e:auth
 egress:image
 env:check
