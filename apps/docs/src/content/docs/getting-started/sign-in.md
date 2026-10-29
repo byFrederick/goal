@@ -65,7 +65,7 @@ This ends the CLI's session and forgets it on this machine. Passing `--all` to `
 - **The code does not arrive, or sign-in says the email is not invited.** Ask an owner to invite the address, or check that you typed the address the invitation went to.
 - **The device page says the CLI was not signed in.** Run `goal login` again and approve the new code.
 
-Goal records each refused sign-up and each new session in its security log, which owners can read with `goal admin events`.
+Goal records each refused sign-up and each new session in its security log, which platform admins can read with `goal admin events`.
 
 ## Related
 

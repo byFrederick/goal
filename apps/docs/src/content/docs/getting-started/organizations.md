@@ -31,6 +31,9 @@ The CLI picks an organization in this order, and the first one it finds wins:
 1. The `--org` flag on a command.
 2. The `GOAL_ORG` environment variable.
 3. The organization set by `goal org use`, which the CLI keeps in its config file.
+4. If none of those is set, the install's only organization.
+
+A credential overrides this order. With `GOAL_API_KEY` set, or a key or personal token stored by `goal login --token`, commands act in that credential's own organization.
 
 To see the organizations you can reach, and which one is current:
 
