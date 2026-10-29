@@ -24,6 +24,7 @@ const (
 	webCheck  = "web:check"
 	cfCheck   = "cloudflare:check"
 	docsCheck = "docs:check"
+	siteCheck = "docs:site:check"
 )
 
 var (
@@ -93,7 +94,8 @@ func TestPlan(t *testing.T) {
 
 	tests := map[string]planCase{
 		"web only":                {[]string{"apps/web/src/routes/board.tsx", "apps/web/package.json"}, []string{webCheck}, "web (web:check): apps/web/src/routes/board.tsx and 1 more", ""},
-		"shared tsconfig":         {[]string{"packages/config/tsconfig.base.json"}, []string{"worker:check", "auth:check", "api-client:check", webCheck, cfCheck}, "shared by every TypeScript part", ""},
+		"shared tsconfig":         {[]string{"packages/config/tsconfig.base.json"}, []string{"worker:check", "auth:check", "api-client:check", webCheck, siteCheck, cfCheck}, "shared by every TypeScript part", ""},
+		"docs site":               {[]string{"apps/docs/astro.config.mjs"}, []string{siteCheck}, "docs-site (docs:site:check): apps/docs/astro.config.mjs", ""},
 		"go file":                 {[]string{"internal/core/engine/pull.go"}, goEnvTasks, "go (lint, test, gen:check, validate): internal/core/engine/pull.go", ""},
 		"cli command":             {[]string{"internal/cli/main.go"}, goEnvTasks, "go (lint, test, gen:check, validate): internal/cli/main.go", ""},
 		"go file outside go dirs": {[]string{"apps/web/webui.go"}, goEnvTasks, "apps/web/webui.go", ""},

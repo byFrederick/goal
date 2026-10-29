@@ -1,5 +1,6 @@
 packages:
   - apps/auth
+  - apps/docs
   - apps/control-worker
   - apps/web
   - apps/worker

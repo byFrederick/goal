@@ -10,7 +10,7 @@ import (
 // tasks is the order task check runs its tasks in; a plan keeps it.
 var tasks = []string{
 	"layout:check", "env:check", "docs:check", "lint", "test", "gen:check", "worker:check", "auth:check",
-	"api-client:check", "web:check", "cloudflare:check", "validate", "tf:check",
+	"api-client:check", "web:check", "docs:site:check", "cloudflare:check", "validate", "tf:check",
 }
 
 // A part is a piece of the repository and the tasks that check it.
@@ -31,11 +31,12 @@ var (
 	partLayout     = part{"layout", []string{"layout:check"}}
 	partEnv        = part{"env", []string{"env:check"}}
 	partDocs       = part{"docs", []string{"docs:check"}}
+	partDocsSite   = part{"docs-site", []string{"docs:site:check"}}
 	partEverything = part{"everything", tasks}
 )
 
 // parts lists every part in report order; everything comes first since it covers the rest.
-var parts = []part{partEverything, partGo, partGen, partWorker, partAuth, partAPIClient, partWeb, partCloudflare, partTerraform, partLayout, partEnv, partDocs}
+var parts = []part{partEverything, partGo, partGen, partWorker, partAuth, partAPIClient, partWeb, partDocsSite, partCloudflare, partTerraform, partLayout, partEnv, partDocs}
 
 // A rule maps the paths it matches to the parts they select; no parts means nothing to check.
 type rule struct {
@@ -110,8 +111,11 @@ var rules = []rule{
 	// web depends on @goal/api-client.
 	{under("packages/api-client"), []part{partAPIClient, partWeb}, ""},
 	// packages/config holds the Biome config and tsconfig bases every TypeScript part extends.
-	{under("packages/config"), []part{partWorker, partAuth, partAPIClient, partWeb, partCloudflare}, "shared by every TypeScript part"},
+	{under("packages/config"), []part{partWorker, partAuth, partAPIClient, partWeb, partDocsSite, partCloudflare}, "shared by every TypeScript part"},
 	{under("apps/web"), []part{partWeb}, ""},
+	// The product docs site (Astro Starlight at /docs). Its OpenAPI contract is contracts/api/openapi.yaml,
+	// already shared by every part above.
+	{under("apps/docs"), []part{partDocsSite}, ""},
 	// The control Worker's code, and its wrangler config and deploy scripts.
 	{under("apps/control-worker", "deploy/cloudflare"), []part{partCloudflare, partEnv}, ""},
 	{under("deploy/terraform"), []part{partTerraform}, ""},
