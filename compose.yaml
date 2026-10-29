@@ -116,7 +116,8 @@ services:
   # settings are .env's, with the addresses of this network; the auth service's secrets never
   # reach it (AGENTS.md rule 7), so they are blanked here. GOAL_AUTH must be session: it listens
   # off loopback inside its container. GOAL_DOCKER_GID is the socket's group on Linux
-  # (stat -c %g /var/run/docker.sock); Docker Desktop and OrbStack need 0.
+  # (stat -c %g /var/run/docker.sock); Docker Desktop and OrbStack need 0. It serves the docs
+  # build at /docs from the read-only mount of apps/docs/dist/docs (GOAL_DOCS_DIR).
   goald:
     profiles: [stack]
     image: ghcr.io/byfrederick/goald:0.1.0
@@ -139,6 +140,7 @@ services:
       GOAL_S3_ENDPOINT: http://rustfs:9000
       GOAL_SANDBOX_NETWORK: ${GOAL_SANDBOX_NETWORK:-goal_agents}
       GOAL_LOG_FORMAT: ${GOAL_LOG_FORMAT:-text}
+      GOAL_DOCS_DIR: /docs
       BETTER_AUTH_SECRET: ""
       BETTER_AUTH_SECRETS: ""
       GOAL_PG_PASSWORD: ""
@@ -151,6 +153,9 @@ services:
       GOAL_API_KEY: ""
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      # The docs build (task docs:build), served at /docs. Without one Docker creates the empty
+      # directory (root-owned on Linux) and /docs/ is 404 until the site is built.
+      - ./apps/docs/dist/docs:/docs:ro
     user: "65532:65532"
     group_add: ["${GOAL_DOCKER_GID:-0}"]
     ports:

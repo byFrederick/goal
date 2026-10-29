@@ -23,6 +23,7 @@ deploy:production
 deploy:worker
 docs:check
 docs:gen
+docs:ref:gen
 docs:site:build
 docs:site:check
 docs:site:dev
