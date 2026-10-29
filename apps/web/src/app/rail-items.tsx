@@ -8,6 +8,12 @@ import { Tooltip } from '../ui/tooltip';
 import type { FactorySquare } from './factory-squares';
 import { newFactoryScreen } from './screens';
 
+/**
+ * The product docs, a plain link out of the SPA into the same tab: /docs is served by the same origin
+ * (the control Worker or goald), so it is not a TanStack Router route. The rail and the sidebar share it.
+ */
+export const docsLink = { label: 'Docs', href: '/docs' } as const;
+
 /** A 44px target around a mark; `group` passes hover to the mark. */
 export const railItemClass =
   'group relative flex size-11 shrink-0 items-center justify-center rounded-cell text-ink no-underline';
