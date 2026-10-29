@@ -55,6 +55,10 @@ const (
 	proxySecretEnv = "GOAL_AUTH_PROXY_SECRET" //nolint:gosec // a variable name, not a credential
 	// authServer is the auth service's build (task auth:build), from the repository root.
 	authServer = "apps/auth/dist/server.js"
+	// docsBuild is the docs site's build (task docs:build), from the repository root: the
+	// directory whose files goald serves at /docs (GOAL_DOCS_DIR).
+	docsBuild  = "apps/docs/dist/docs"
+	docsDirEnv = "GOAL_DOCS_DIR"
 	// mailpitInbox is compose.yaml's Mailpit, where sign-in codes arrive locally; its UI and API
 	// take mailpitUser and the password in mailpitAuthName, beside the CLI's config.
 	mailpitInbox    = "http://127.0.0.1:8025"
@@ -218,7 +222,7 @@ func (p platform) start(ctx context.Context, out *printer, getenv func(string) s
 		out.printf("sign in at %s (codes arrive in Mailpit, %s: user %s, password in %s)\n", publicURL, mailpitInbox, mailpitUser, inbox)
 	}
 
-	return p.runGoald(ctx, out, bin, goaldEnv(environ, getenv, signIn, publicURL))
+	return p.runGoald(ctx, out, bin, withDocsDir(goaldEnv(environ, getenv, signIn, publicURL), getenv, docsBuild))
 }
 
 // startStack is goal up --compose: prepare, then Mailpit, the egress proxy, goald and the auth
@@ -615,6 +619,21 @@ func goaldEnv(environ []string, getenv func(string) string, signIn bool, publicU
 	}
 
 	return out
+}
+
+// withDocsDir adds GOAL_DOCS_DIR=dir to goald's environment, so it serves the docs build at
+// /docs, when dir is a directory and GOAL_DOCS_DIR is not set already; without a build goald
+// serves no docs.
+func withDocsDir(env []string, getenv func(string) string, dir string) []string {
+	if strings.TrimSpace(getenv(docsDirEnv)) != "" {
+		return env
+	}
+
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return env
+	}
+
+	return append(env, docsDirEnv+"="+dir)
 }
 
 // authSecrets refuses to sign people in without BETTER_AUTH_SECRET or BETTER_AUTH_SECRETS, or

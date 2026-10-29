@@ -223,7 +223,6 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	log.InfoContext(ctx, "factories loaded", slog.Int("count", len(loaded)), slog.String("bucket", objects.Bucket()))
 
 	definitionNotices := postgres.NewDefinitionNotices(store, log)
-
 	feed := newFeed(s, store, eng, log)
 
 	// No tool approval is enforced yet, so the editor warns where an agent asks for one ("Ask me").
@@ -231,6 +230,8 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	// Platform admins, the security log and the sign-in clean-up: install-level, in no organization.
 	platform := postgres.NewPlatform(store)
+	// The docs site at /docs, from GOAL_DOCS_DIR; none without it.
+	site, siteErr := docsSite(s.DocsDir)
 
 	apiHandler, err := api.New(api.Deps{
 		Engine: eng, Items: store, Factories: defs, Definitions: authors, Versions: definitionStore, Orgs: store, Audit: store, OrgRetention: s.OrgRetention,
@@ -244,12 +245,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Jonah: jonahDeps(store, authors, clock, log),
 		Clock: clock, Logger: log,
 	})
-	if err != nil {
-		return err
-	}
-
-	site, err := docsSite(s.DocsDir)
-	if err != nil {
+	if err = errors.Join(err, siteErr); err != nil {
 		return err
 	}
 

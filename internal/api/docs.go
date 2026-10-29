@@ -38,25 +38,15 @@ func (d docs) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rest, ok := strings.CutPrefix(r.URL.Path, DocsPath)
-	if !ok || (rest != "" && !strings.HasPrefix(rest, "/")) {
+	name, valid := docsName(rest)
+
+	if !ok || !valid {
 		http.NotFound(w, r)
 
 		return
 	}
 
 	dirWanted := rest == "" || strings.HasSuffix(rest, "/")
-
-	name := strings.Trim(rest, "/")
-	if name == "" {
-		name = "."
-	}
-
-	// fs.ValidPath refuses `..`, empty and doubled elements, so a request names a file in dir.
-	if !fs.ValidPath(name) {
-		http.NotFound(w, r)
-
-		return
-	}
 
 	info, err := d.root.Stat(name)
 	if err != nil {
@@ -67,7 +57,9 @@ func (d docs) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if info.IsDir() {
 		if !dirWanted || rest == "" {
-			http.Redirect(w, r, path.Join(DocsPath, name)+"/", http.StatusMovedPermanently)
+			// name passed fs.ValidPath, so the target is a path under /docs/ on this origin.
+			w.Header().Set("Location", path.Join(DocsPath, name)+"/")
+			w.WriteHeader(http.StatusMovedPermanently)
 
 			return
 		}
@@ -82,6 +74,22 @@ func (d docs) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	d.serveFile(w, r, name)
 }
 
+// docsName is the file a path under /docs names, "." for the directory itself, and whether it
+// names one: rest must be empty or start with a slash (/docsx is not the docs), and fs.ValidPath
+// refuses `..`, empty and doubled elements, so a valid name stays inside the directory.
+func docsName(rest string) (string, bool) {
+	if rest != "" && !strings.HasPrefix(rest, "/") {
+		return "", false
+	}
+
+	name := strings.Trim(rest, "/")
+	if name == "" {
+		name = "."
+	}
+
+	return name, fs.ValidPath(name)
+}
+
 // serveFile serves one regular file of the root, or 404.
 func (d docs) serveFile(w http.ResponseWriter, r *http.Request, name string) {
 	f, err := d.root.Open(name)
@@ -90,7 +98,7 @@ func (d docs) serveFile(w http.ResponseWriter, r *http.Request, name string) {
 
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	info, err := f.Stat()
 	if err != nil || !info.Mode().IsRegular() {
