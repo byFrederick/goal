@@ -18,6 +18,19 @@
   "workers_dev": false,
   "preview_urls": false,
   "observability": { "enabled": true },
+  // The docs site (apps/docs, base /docs): `task docs:site:build` writes every file under
+  // apps/docs/dist/docs/, so nothing outside /docs matches an asset. The Worker runs first for every
+  // path but /docs and /docs/*: those are served from the files before it runs, and one that matches
+  // no file reaches the Worker, whose ASSETS.fetch answers it with the site's 404.html (src/index.ts).
+  // An array also turns off the Sec-Fetch-Mode: navigate shortcut, so navigations reach goald too.
+  // ADR 0035.
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "../../apps/docs/dist",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/*", "!/docs", "!/docs/*"]
+  },
   // Every minute: goald keeps running whether or not anyone is looking.
   "triggers": { "crons": ["* * * * *"] },
   "containers": [

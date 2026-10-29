@@ -4,4 +4,6 @@
   "secrets_store_secrets": [{ "binding": "CF_SECRET", "store_id": "x", "secret_name": "y" }],
   /* a namespace, not a variable */
   "durable_objects": { "bindings": [{ "name": "AGENT_DO", "class_name": "Agent" }] },
+  /* static assets, not a variable */
+  "assets": { "binding": "SITE", "directory": "./dist" },
 }
