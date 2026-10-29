@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Factory",
+  "description": "A factory's definition.",
+  "type": "object",
+  "required": ["kind", "spec"],
+  "properties": {
+    "kind": { "const": "Factory" },
+    "spec": {
+      "type": "object",
+      "required": ["stations"],
+      "properties": {
+        "stations": {
+          "type": "array",
+          "description": "The line, in <flow> order.",
+          "items": { "$ref": "#/$defs/station" }
+        },
+        "labels": { "type": "object", "additionalProperties": { "type": "string" } },
+        "connections": { "type": "array", "items": { "$ref": "#/$defs/connection" } }
+      }
+    }
+  },
+  "$defs": {
+    "slug": { "type": "string", "pattern": "^[a-z]+$" },
+    "station": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug", "description": "The station's id." },
+        "wip": { "type": "integer", "default": 2, "description": "Items at once." },
+        "kind": { "enum": ["agent", "human"] }
+      }
+    },
+    "connection": {
+      "if": { "type": "string" },
+      "then": { "$ref": "#/$defs/slug" },
+      "else": {
+        "type": "object",
+        "required": ["name", "type"],
+        "properties": {
+          "name": { "$ref": "#/$defs/slug" },
+          "type": { "enum": ["mcp", "aws"] }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "type": { "const": "mcp" } } },
+            "then": {
+              "required": ["url"],
+              "properties": { "url": { "type": "string", "format": "uri" }, "network": { "type": "boolean", "default": false } }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
