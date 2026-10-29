@@ -349,6 +349,11 @@ function seedConnections(now: number, by: Actor): { conns: MockConnection[]; his
       description: 'status.example.com/api',
       fields: { prefix: 'STATUS', base_url: 'https://status.example.com/api' },
     }),
+    // The Slack connection the account page's Slack column needs to be live (ADR 0023, decision 5).
+    made(9, 'slack', 'slack', {
+      description: 'Slack workspace for acme',
+      secrets_set: ['token'],
+    }),
   ];
   const id = (name: string) => conns.find((c) => c.connection.name === name)?.connection.id ?? '';
   const agent = (name: string): Actor => ({ kind: 'agent', id: name, name });

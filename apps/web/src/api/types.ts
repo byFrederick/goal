@@ -222,6 +222,10 @@ export type NewCredential = Schemas['NewCredential'];
 export type CredentialImport = Schemas['CredentialImport'];
 export type CredentialImportResult = Schemas['CredentialImportResult'];
 export type CredentialImportOutcome = Schemas['CredentialImportOutcome'];
+// The signed-in person's notification preferences (ADR 0023, decision 1): the events, their channels and the email.
+export type NotificationPreferences = Schemas['NotificationPreferences'];
+export type NotificationEvents = Schemas['NotificationEvents'];
+export type NotificationChannels = Schemas['NotificationChannels'];
 // What a code host connection reaches (GET …/connections/{connection}/repositories), for the Code step.
 export type RepositoryList = Schemas['RepositoryList'];
 export type RepositoryOwner = Schemas['RepositoryOwner'];
