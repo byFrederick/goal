@@ -11,6 +11,7 @@ declare namespace Cloudflare {
     AUTH: DurableObjectNamespace<import('../src/services.js').Auth>;
     BOXES: DurableObjectNamespace<import('../src/sandbox.js').RunBox>;
     BOX_INDEX: DurableObjectNamespace<import('../src/sandbox.js').BoxIndex>;
+    ASSETS: Fetcher;
     [name: string]: unknown;
   }
   interface Exports {
