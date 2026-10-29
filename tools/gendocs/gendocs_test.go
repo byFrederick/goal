@@ -88,7 +88,7 @@ func TestGenerate_WritesBothFiles(t *testing.T) {
 
 	dir := copyRepo(t, "repo")
 
-	if err := run([]string{"-C", dir}, &bytes.Buffer{}); err != nil {
+	if err := run([]string{"-C", dir}, &bytes.Buffer{}, testUsage); err != nil {
 		t.Fatal(err)
 	}
 
@@ -167,7 +167,7 @@ func TestValidate_StaleGeneratedFilesPass(t *testing.T) {
 
 	dir := copyRepo(t, "repo")
 
-	if err := run([]string{"-C", dir}, &bytes.Buffer{}); err != nil {
+	if err := run([]string{"-C", dir}, &bytes.Buffer{}, testUsage); err != nil {
 		t.Fatal(err)
 	}
 
@@ -179,7 +179,7 @@ func TestValidate_StaleGeneratedFilesPass(t *testing.T) {
 		}
 	}
 
-	if err := run([]string{"-C", dir, "-check"}, &bytes.Buffer{}); err != nil {
+	if err := run([]string{"-C", dir, "-check"}, &bytes.Buffer{}, testUsage); err != nil {
 		t.Errorf("check with stale generated files: %v, want it to pass", err)
 	}
 
@@ -200,7 +200,7 @@ func TestValidate_MissingGeneratedFilesPass(t *testing.T) {
 
 	dir := copyRepo(t, "repo")
 
-	if err := run([]string{"-C", dir, "-check"}, &bytes.Buffer{}); err != nil {
+	if err := run([]string{"-C", dir, "-check"}, &bytes.Buffer{}, testUsage); err != nil {
 		t.Errorf("check with no generated files: %v, want it to pass", err)
 	}
 
@@ -241,7 +241,7 @@ func TestValidate_RejectsBadEntry(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			err := run([]string{"-C", dir, "-check"}, &bytes.Buffer{})
+			err := run([]string{"-C", dir, "-check"}, &bytes.Buffer{}, testUsage)
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Errorf("check = %v, want an error naming %s", err, tt.want)
 			}
