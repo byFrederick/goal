@@ -87,6 +87,7 @@ import {
   listKnowledgeSources,
   searchKnowledge,
 } from './knowledge';
+import { getNotificationPreferences } from './notifications';
 import { getOrgPolicy } from './policy';
 import { type SearchQuery, searchOrg } from './search';
 import { getOrgSpend } from './spend';
@@ -138,6 +139,8 @@ export const keys = {
   authConfig: ['auth', 'config'] as const,
   /** Who the requests act for. */
   me: ['me'] as const,
+  /** The signed-in person's notification preferences (ADR 0023): the account page's table and email. */
+  notifications: ['me', 'notifications'] as const,
   orgs: ['orgs'] as const,
   /** The prefix of everything of one organization. */
   org: (org: string) => ['org', org] as const,
@@ -273,6 +276,13 @@ export const authConfigQuery = queryOptions({
 export const meQuery = queryOptions({
   queryKey: keys.me,
   queryFn: ({ signal }) => getMe(signal),
+  staleTime: 60_000,
+});
+
+/** The signed-in person's notification preferences; read only for a person (sign-in off has none). */
+export const notificationsQuery = queryOptions({
+  queryKey: keys.notifications,
+  queryFn: ({ signal }) => getNotificationPreferences(signal),
   staleTime: 60_000,
 });
 

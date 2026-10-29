@@ -30,6 +30,8 @@ export function putConnectionKind(org: string, kind: string, file: ConnectionKin
 export interface ConnectionFilter {
   /** Only the connections this factory's current version names (its id or name). */
   factory?: string;
+  /** Only the connections of this kind, by its name (`slack`). */
+  kind?: string;
 }
 
 /** The organization's connections, by name, never a secret value. */
@@ -40,7 +42,13 @@ export async function listConnections(
 ): Promise<Connection[]> {
   const body = await unwrap(
     goal.GET(orgPath('/connections'), {
-      params: { path: { org }, query: filter.factory ? { factory: filter.factory } : {} },
+      params: {
+        path: { org },
+        query: {
+          ...(filter.factory ? { factory: filter.factory } : {}),
+          ...(filter.kind ? { kind: filter.kind } : {}),
+        },
+      },
       ...cancel(signal),
     }),
   );
