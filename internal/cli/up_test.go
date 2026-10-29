@@ -181,6 +181,43 @@ func TestUp_EachProcessGetsItsOwnVariables(t *testing.T) {
 	}
 }
 
+// goal up serves the docs build at /docs when it exists (task docs:build) and GOAL_DOCS_DIR does
+// not name another; without a build goald gets no GOAL_DOCS_DIR and /docs is 404.
+func TestUp_GoaldServesTheDocsBuildWhenThereIsOne(t *testing.T) {
+	t.Parallel()
+
+	const path = "PATH=/usr/bin"
+
+	built, absent := t.TempDir(), filepath.Join(t.TempDir(), "dist", "docs")
+
+	environ := []string{path}
+	none := func(string) string { return "" }
+	set := func(name string) string {
+		if name == docsDirEnv {
+			return "/srv/docs"
+		}
+
+		return ""
+	}
+
+	tests := []struct {
+		name   string
+		getenv func(string) string
+		dir    string
+		want   []string
+	}{
+		{name: "a build", getenv: none, dir: built, want: []string{path, docsDirEnv + "=" + built}},
+		{name: "no build", getenv: none, dir: absent, want: []string{path}},
+		{name: "GOAL_DOCS_DIR already set", getenv: set, dir: built, want: []string{path}},
+	}
+
+	for _, tt := range tests {
+		if got := withDocsDir(environ, tt.getenv, tt.dir); !slices.Equal(got, tt.want) {
+			t.Errorf("%s: goald env = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
 // Review 3, L4: goald and the auth service get one shared secret, the one the auth service
 // requires of every request: .env's, else a new one per goal up, never two different ones.
 func TestUp_GoaldAndTheAuthServiceShareAProxySecret(t *testing.T) {

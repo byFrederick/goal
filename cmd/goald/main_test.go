@@ -44,12 +44,12 @@ func TestRoutes_TheGatewayListenerServesOnlyTheGateway(t *testing.T) {
 
 	paths := []string{"/mcp", "/run", "/run/tool-approval", "/v1/health", "/v1/orgs", "/", "/board"}
 
-	one, none := routes(false, named(toAPI), named(toGateway), named(toSPA))
+	one, none := routes(false, named(toAPI), named(toGateway), named(toSPA), nil)
 	if none != nil {
 		t.Fatal("no GOAL_GATEWAY_LISTEN, yet a gateway listener")
 	}
 
-	primary, gatewayOnly := routes(true, named(toAPI), named(toGateway), named(toSPA))
+	primary, gatewayOnly := routes(true, named(toAPI), named(toGateway), named(toSPA), nil)
 
 	tests := []struct {
 		name string
@@ -59,6 +59,54 @@ func TestRoutes_TheGatewayListenerServesOnlyTheGateway(t *testing.T) {
 		{name: "one listener", h: one, want: []string{toGateway, toGateway, toGateway, toAPI, toAPI, toSPA, toSPA}},
 		{name: "main listener beside a gateway listener", h: primary, want: []string{notFound, notFound, notFound, toAPI, toAPI, toSPA, toSPA}},
 		{name: "gateway listener", h: gatewayOnly, want: []string{toGateway, toGateway, toGateway, notFound, notFound, notFound, notFound}},
+	}
+
+	for _, tt := range tests {
+		for i, path := range paths {
+			if got := served(tt.h, path); got != tt.want[i] {
+				t.Errorf("%s: %s served by %s, want %s", tt.name, path, got, tt.want[i])
+			}
+		}
+	}
+}
+
+// With GOAL_DOCS_DIR the main listener serves /docs and everything under it from the docs
+// handler; without it they answer 404, never the SPA's index page. Every other path keeps its
+// handler, and the gateway listener never serves the docs.
+func TestRoutes_DocsOnlyFromGOAL_DOCS_DIR(t *testing.T) {
+	t.Parallel()
+
+	const toAPI, toGateway, toSPA, toDocs, notFound = "api", "gateway", "spa", "docs", "404"
+
+	named := func(name string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(name)) })
+	}
+
+	served := func(h http.Handler, path string) string {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil))
+
+		if rec.Code == http.StatusNotFound {
+			return notFound
+		}
+
+		return rec.Body.String()
+	}
+
+	paths := []string{"/docs", "/docs/", "/docs/guides/", "/docs/pagefind/pagefind.js", "/docsx", "/", "/board", "/v1/health", "/mcp"}
+
+	withDocs, _ := routes(false, named(toAPI), named(toGateway), named(toSPA), named(toDocs))
+	without, _ := routes(false, named(toAPI), named(toGateway), named(toSPA), nil)
+	_, gatewayOnly := routes(true, named(toAPI), named(toGateway), named(toSPA), named(toDocs))
+
+	tests := []struct {
+		name string
+		h    http.Handler
+		want []string // for paths, in order
+	}{
+		{name: "GOAL_DOCS_DIR set", h: withDocs, want: []string{toDocs, toDocs, toDocs, toDocs, toSPA, toSPA, toSPA, toAPI, toGateway}},
+		{name: "GOAL_DOCS_DIR unset", h: without, want: []string{notFound, notFound, notFound, notFound, toSPA, toSPA, toSPA, toAPI, toGateway}},
+		{name: "gateway listener", h: gatewayOnly, want: []string{notFound, notFound, notFound, notFound, notFound, notFound, notFound, notFound, toGateway}},
 	}
 
 	for _, tt := range tests {
@@ -114,7 +162,7 @@ func TestHTTPServers_ProxyAuthOnlyUnderSession(t *testing.T) {
 		hits.Store(0)
 
 		s := settings{Listen: defaultListen, Auth: tt.mode, AuthUpstream: u}
-		main := httpServers(s, "proxy-secret-for-tests-only-0123456789", stub, stub, ui, nil)[0]
+		main := httpServers(s, "proxy-secret-for-tests-only-0123456789", stub, stub, ui, nil, nil)[0]
 
 		r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/auth/get-session", nil)
 		r.Host = defaultListen
