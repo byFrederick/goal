@@ -68,6 +68,18 @@ describe('deployConfig', () => {
     assert.equal(config.containers[0].image, '../../cmd/goald/Dockerfile', 'config itself is left as it was');
   });
 
+  it("keeps the docs site's static assets as wrangler.jsonc has them", () => {
+    const assets = {
+      binding: 'ASSETS',
+      directory: '../../apps/docs/dist',
+      html_handling: 'auto-trailing-slash',
+      not_found_handling: '404-page',
+      run_worker_first: ['/*', '!/docs', '!/docs/*'],
+    };
+    assert.deepEqual(config.assets, assets);
+    assert.deepEqual(out.assets, assets);
+  });
+
   it('refuses a missing reference, a tag, or a digest of another repository', () => {
     assert.throws(() => deployConfig(config, { ...refs, 'goal-auth': undefined }), /no image reference for goal-auth/);
     assert.throws(
