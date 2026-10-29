@@ -229,7 +229,7 @@ func (s *Sender) finish(ctx context.Context, n ports.Notification, token *tokenO
 	}
 
 	if finished {
-		s.logOutcome(ctx, n, o)
+		logOutcome(ctx, s.log, n.ID, string(n.Event), n.Channel, n.Attempts, o)
 	}
 
 	return finished, nil
@@ -255,15 +255,20 @@ func (s *Sender) deliver(ctx context.Context, n ports.Notification, token *token
 
 	cancel()
 
-	now := s.d.Clock.Now()
+	return sendOutcome(n.Channel, n.Attempts, err, s.d.Clock.Now())
+}
 
+// sendOutcome is how a row of channel ends after the send of its attempt-th claim returned err
+// at now: sent, failed when the error is permanent or the attempts are spent, else back to
+// pending after the backoff.
+func sendOutcome(channel string, attempt int, err error, now time.Time) ports.NotificationOutcome {
 	switch {
 	case err == nil:
 		return ports.NotificationOutcome{State: ports.NotificationSent, At: now}
-	case errors.Is(err, ports.ErrMailPermanent) || errors.Is(err, ports.ErrDMPermanent) || n.Attempts >= MaxAttempts:
-		return ports.NotificationOutcome{State: ports.NotificationFailed, Reason: reason(n.Channel, err)}
+	case errors.Is(err, ports.ErrMailPermanent) || errors.Is(err, ports.ErrDMPermanent) || attempt >= MaxAttempts:
+		return ports.NotificationOutcome{State: ports.NotificationFailed, Reason: reason(channel, err)}
 	default:
-		return ports.NotificationOutcome{State: ports.NotificationPending, RetryAt: now.Add(backoff(n.Attempts)), Reason: reason(n.Channel, err)}
+		return ports.NotificationOutcome{State: ports.NotificationPending, RetryAt: now.Add(backoff(attempt)), Reason: reason(channel, err)}
 	}
 }
 
@@ -329,14 +334,14 @@ func slackTokenOf(ctx context.Context, conns SlackConnections) (string, error) {
 
 // logOutcome logs a sent or failed row by its id, event and channel only: never an address, a
 // message or the error's text, which may quote the server's reply.
-func (s *Sender) logOutcome(ctx context.Context, n ports.Notification, o ports.NotificationOutcome) {
-	attrs := []any{slog.Int64("id", n.ID), slog.String("event", string(n.Event)), slog.String("channel", n.Channel)}
+func logOutcome(ctx context.Context, log *slog.Logger, id int64, event, channel string, attempts int, o ports.NotificationOutcome) {
+	attrs := []any{slog.Int64("id", id), slog.String("event", event), slog.String("channel", channel)}
 
 	switch o.State {
 	case ports.NotificationSent:
-		s.log.InfoContext(ctx, "notify.sent", attrs...)
+		log.InfoContext(ctx, "notify.sent", attrs...)
 	case ports.NotificationFailed, ports.NotificationPending:
-		s.log.WarnContext(ctx, "notify.failed", append(attrs, slog.String("reason", o.Reason), slog.Int("attempts", n.Attempts),
+		log.WarnContext(ctx, "notify.failed", append(attrs, slog.String("reason", o.Reason), slog.Int("attempts", attempts),
 			slog.Bool("retry", o.State == ports.NotificationPending))...)
 	}
 }

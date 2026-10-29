@@ -291,20 +291,10 @@ func valueOr(b *bool, def bool) bool {
 
 // FinishNotification implements ports.NotificationDeliveries.
 func (s *Store) FinishNotification(ctx context.Context, id int64, attempts int, o ports.NotificationOutcome) (bool, error) {
-	p := db.FinishNotificationParams{State: o.State, ID: id, Attempts: int32(attempts)} //nolint:gosec // attempts come from a claim's int32
-
-	switch o.State {
-	case ports.NotificationSent:
-		at := o.At
-		p.SentAt = &at
-	case ports.NotificationPending:
-		at := o.RetryAt
-		p.NextAttemptAt = &at
-	}
-
-	if o.Reason != "" {
-		reason := o.Reason
-		p.LastError = &reason
+	c := outcomeColumnsOf(o)
+	p := db.FinishNotificationParams{
+		State: o.State, ID: id, Attempts: int32(attempts), //nolint:gosec // attempts come from a claim's int32
+		SentAt: c.sentAt, NextAttemptAt: c.nextAttemptAt, LastError: c.lastError,
 	}
 
 	var n int64
@@ -321,4 +311,33 @@ func (s *Store) FinishNotification(ctx context.Context, id int64, attempts int, 
 	}
 
 	return n == 1, nil
+}
+
+// outcomeColumns are the columns a claim's outcome sets besides its state, NULL where it sets
+// none: an outbox row's and a digest's alike.
+type outcomeColumns struct {
+	sentAt, nextAttemptAt *time.Time
+	lastError             *string
+}
+
+// outcomeColumnsOf is o's columns: sent_at when sent, next_attempt_at when back to pending, and
+// last_error with a reason.
+func outcomeColumnsOf(o ports.NotificationOutcome) outcomeColumns {
+	var c outcomeColumns
+
+	switch o.State {
+	case ports.NotificationSent:
+		at := o.At
+		c.sentAt = &at
+	case ports.NotificationPending:
+		at := o.RetryAt
+		c.nextAttemptAt = &at
+	}
+
+	if o.Reason != "" {
+		reason := o.Reason
+		c.lastError = &reason
+	}
+
+	return c
 }

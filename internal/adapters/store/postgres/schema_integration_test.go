@@ -39,6 +39,7 @@ var withoutOrgID = map[string]string{
 	"auth_events":              "install-level security log (sign-ins, codes, devices); reached only through definers",
 	"notification_preferences": "a person's own, in every organization (ADR 0023); every statement filters by user_id",
 	"notification_settings":    "a person's own, in every organization (ADR 0023); every statement filters by user_id",
+	"digests":                  "a person's daily digests, the email one across every organization (00082); every statement names its rows, content is read under each organization's RLS",
 	"public_email_domains":     "install-level list of webmail domains no organization may claim for sign-up (00078); read only by definers",
 }
 

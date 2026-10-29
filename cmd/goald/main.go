@@ -80,6 +80,10 @@ const scheduleEvery = time.Minute
 // claims' leases keeping them apart.
 const notifyEvery = 10 * time.Second
 
+// digestEvery is how often each goald tries a round of the daily digest; one instance at a time
+// runs it, under the digest lock, and the others skip it.
+const digestEvery = 5 * time.Minute
+
 func main() { os.Exit(goald()) }
 
 // goald runs the daemon and returns its exit code: 2 for bad configuration, 1 for a failure.
@@ -264,7 +268,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 func newJobs(s settings, store *postgres.Store, connections *postgres.Connections, objects ports.ObjectStore, platform ports.Platform,
 	clock ports.Clock, ingestor *knowledge.Ingestor, log *slog.Logger,
 ) (jobs, error) {
-	sender, err := notificationSender(s, store, connections, clock, log)
+	sender, digest, err := notificationJobs(s, store, connections, clock, log)
 	if err != nil {
 		return jobs{}, err
 	}
@@ -272,16 +276,17 @@ func newJobs(s settings, store *postgres.Store, connections *postgres.Connection
 	return jobs{
 		// Deleted organizations go, rows and bucket objects, once their retention has passed.
 		purger:   retention.New(store, objects, clock, s.OrgRetention, log),
-		platform: platform, clock: clock, identity: newIdentityWatch(s, store), ingestor: ingestor, notify: sender,
+		platform: platform, clock: clock, identity: newIdentityWatch(s, store), ingestor: ingestor, notify: sender, digest: digest,
 	}, nil
 }
 
-// notificationSender is the job that sends the notification outbox's rows (ADR 0023, decisions 4
-// and 5): Slack rows as direct messages with each organization's Slack connection, always, over
-// a transport that dials public addresses only; email rows through the SMTP server of
-// GOAL_SMTP_URL, and without one no email goes out and email rows stay queued.
-func notificationSender(s settings, store *postgres.Store, connections *postgres.Connections, clock ports.Clock, log *slog.Logger,
-) (*notify.Sender, error) {
+// notificationJobs are the job that sends the notification outbox's rows (ADR 0023, decisions 4
+// and 5) and the daily digest job (decision 6), over one mailer and one Slack sender: Slack
+// messages as direct messages with each organization's Slack connection, always, over a
+// transport that dials public addresses only; email through the SMTP server of GOAL_SMTP_URL,
+// and without one no email goes out, email rows stay queued and no email digest is queued.
+func notificationJobs(s settings, store *postgres.Store, connections *postgres.Connections, clock ports.Clock, log *slog.Logger,
+) (*notify.Sender, *notify.DigestJob, error) {
 	d := notify.Deps{
 		Orgs: store, Outbox: store, Clock: clock, PublicURL: s.PublicURL, Log: log,
 		Slack: slack.New(slack.Config{Transport: connectionTransport(false)}), Connections: connections,
@@ -290,13 +295,18 @@ func notificationSender(s settings, store *postgres.Store, connections *postgres
 	if s.SMTP != nil {
 		mailer, err := smtp.New(smtp.Config{URL: s.SMTP.URL, From: s.SMTP.From, Plaintext: s.SMTP.Plaintext})
 		if err != nil {
-			return nil, fmt.Errorf("mailer: %w", err)
+			return nil, nil, fmt.Errorf("mailer: %w", err)
 		}
 
 		d.Mailer = mailer
 	}
 
-	return notify.New(d), nil
+	digest := notify.NewDigestJob(notify.DigestDeps{
+		Orgs: store, Digests: postgres.NewDigests(store), Preferences: postgres.NewNotificationPreferences(store),
+		Mailer: d.Mailer, Slack: d.Slack, Connections: connections, Clock: clock, PublicURL: s.PublicURL, Log: log,
+	})
+
+	return notify.New(d), digest, nil
 }
 
 // knowledgeBase is the knowledge base as goald wires it (spec 4 §4.8): its sources and documents
@@ -569,8 +579,8 @@ func (a engineToolApprovals) RequestToolApproval(ctx context.Context, c gateway.
 }
 
 // jobs are goald's scheduled jobs: the purge of deleted organizations, the sign-in clean-up, the
-// knowledge base's ingestion, under GOAL_AUTH=session the startup watch of the identity service
-// and the notification sender (email only with GOAL_SMTP_URL).
+// knowledge base's ingestion, under GOAL_AUTH=session the startup watch of the identity service,
+// the notification sender and the daily digest (email only with GOAL_SMTP_URL).
 type jobs struct {
 	purger   *retention.Purger
 	platform ports.Platform
@@ -578,6 +588,7 @@ type jobs struct {
 	identity *identityWatch
 	ingestor *knowledge.Ingestor
 	notify   *notify.Sender
+	digest   *notify.DigestJob
 }
 
 // serve runs the HTTP servers, the engine, the stream feed, the definitions reloads and the
@@ -638,6 +649,10 @@ func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Se
 
 	if j.notify != nil {
 		wg.Go(func() { j.notify.Run(ctx, notifyEvery) })
+	}
+
+	if j.digest != nil {
+		wg.Go(func() { j.digest.Run(ctx, digestEvery) })
 	}
 
 	wg.Go(func() {
