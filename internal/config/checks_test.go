@@ -113,7 +113,7 @@ var locatedCases = []struct {
 	},
 	{
 		name: "value not allowed", doc: edited("        kind: agent\n", "        kind: robot #here\n", workAgentLine, ""),
-		code: "schema-enum", section: domain.SectionLine, pointer: "/line/stations/1/kind",
+		code: "schema-enum", section: domain.SectionLine, pointer: "/line/stations/1/kind", wantFixes: 1,
 	},
 	{
 		name: "wrong type", doc: edited(workAgentLine, workAgentLine+"        agents: two #here\n"),

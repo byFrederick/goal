@@ -1,45 +1,61 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { TooltipProvider } from '../../../ui/tooltip';
+import { cleanup, fireEvent, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createDraftRequest } from '../../../api/definitions';
+import type { Factory, OrgSummary } from '../../../api/types';
+import { renderFactoryPage } from '../../../test/route';
 import { AskBar } from './ask-bar';
 
-afterEach(() => {
-  cleanup();
-  vi.restoreAllMocks();
+vi.mock('../../../api/definitions', async (original) => ({
+  ...(await original<typeof import('../../../api/definitions')>()),
+  createDraftRequest: vi.fn(),
+}));
+
+afterEach(cleanup);
+beforeEach(() => {
+  vi.mocked(createDraftRequest).mockReset();
 });
 
-function renderBar() {
-  render(
-    <TooltipProvider>
-      <AskBar />
-    </TooltipProvider>,
-  );
+const org: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'A', factory_count: 1, role: 'owner' };
+const factory: Factory = {
+  id: 'factory-1',
+  org_id: 'org-1',
+  name: 'goal',
+  title: 'Goal',
+  work_types: ['feature'],
+  stations: [],
+  current: null,
+  draft: null,
+  paused: false,
+  created_at: '2026-10-01T00:00:00Z',
+  role: 'editor',
+  can: ['definition:edit'],
+};
+
+async function renderBar() {
+  renderFactoryPage({ page: () => <AskBar />, path: 'definition/line', org, factory });
+  // The router mounts the page after its match: the bar is there once its input is.
+  return screen.findByRole('textbox', { name: 'Ask the factory to change its definition' });
 }
 
-describe('AskBar', () => {
-  it('renders the input and Ask disabled with aria-disabled, not removed from the tab order', () => {
-    renderBar();
-    const input = screen.getByRole('textbox', { name: 'Ask the factory to change it' });
+describe('the Ask the factory bar, not built yet', () => {
+  it('shows the input disabled, with its placeholder', async () => {
+    const input = await renderBar();
+    expect((input as HTMLInputElement).disabled).toBe(true);
+    expect(input.getAttribute('placeholder')).toBe(
+      'Ask the factory to change it, for example: give Review a 4th reviewer',
+    );
+  });
+
+  it('keeps Ask "Not available yet" and sends no request', async () => {
+    await renderBar();
     const ask = screen.getByRole('button', { name: 'Ask' });
-    expect(input.getAttribute('aria-disabled')).toBe('true');
     expect(ask.getAttribute('aria-disabled')).toBe('true');
-    expect((ask as HTMLButtonElement).disabled).toBe(false);
-    input.focus();
-    expect(document.activeElement).toBe(input);
-  });
 
-  it('shows "Not available yet" on focus', async () => {
-    renderBar();
-    screen.getByRole('button', { name: 'Ask' }).focus();
+    fireEvent.click(ask);
+    fireEvent.keyDown(ask, { key: 'Enter' });
+    expect(createDraftRequest).not.toHaveBeenCalled();
+    ask.focus();
     expect((await screen.findAllByText('Not available yet')).length).toBeGreaterThan(0);
-  });
-
-  it('sends no request when Ask is pressed or Enter is pressed in the input', () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    renderBar();
-    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
-    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Ask the factory to change it' }), { key: 'Enter' });
-    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

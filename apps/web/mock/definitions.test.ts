@@ -379,3 +379,71 @@ describe('the stream', () => {
     expect(chunk).toContain('"revision":43');
   });
 });
+
+describe('draft requests (ADR 0021)', () => {
+  const post = (body: unknown) =>
+    call<Record<string, unknown>>(`${goal}/draft/requests`, { method: 'POST', body: JSON.stringify(body) });
+  /** The mock runs a request in two steps: running at 300 ms, then done (or failed) at 1.5 s. */
+  const settled = () => new Promise((resolve) => setTimeout(resolve, 1700));
+
+  it('queues a request as 201, and ends it done with a summary once the box has run it', async () => {
+    const created = await post({ text: '  give Review a 4th reviewer  ' });
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({
+      text: 'give Review a 4th reviewer',
+      agent: '',
+      status: 'queued',
+      summary: '',
+    });
+
+    await settled();
+    const list = await call<{ requests: Record<string, unknown>[] }>(`${goal}/draft/requests`);
+    expect(list.body.requests[0]).toMatchObject({ id: created.body.id, status: 'done' });
+    expect(String(list.body.requests[0]?.summary)).toContain('Changed the draft');
+  });
+
+  it('refuses a second request while one is queued or running with 409 draft-request-open', async () => {
+    const first = await post({ text: 'rename Build' });
+    const second = await post({ text: 'give Review a 4th reviewer' });
+    expect(second.status).toBe(409);
+    expect(second.body.code).toBe('draft-request-open');
+    expect(first.status).toBe(201);
+  });
+
+  it('refuses text that is blank once trimmed with 422 draft-request-text-invalid', async () => {
+    const res = await post({ text: '   ' });
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe('draft-request-text-invalid');
+  });
+
+  it('refuses an agent the definition does not have with 404 agent-not-found', async () => {
+    const res = await post({ text: 'fix it', agent: 'no-such-agent' });
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('agent-not-found');
+  });
+
+  it('asks about an agent of the definition, and says so on the request', async () => {
+    const res = await post({ text: 'Fix the agent frontend-engineer', agent: 'frontend-engineer' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ agent: 'frontend-engineer' });
+  });
+
+  it('answers the request by id, and 404 draft-request-not-found for an id the factory does not have', async () => {
+    const created = await post({ text: 'rename Build' });
+    const found = await call<Record<string, unknown>>(`${goal}/draft/requests/${created.body.id}`);
+    expect(found.status).toBe(200);
+    expect(found.body).toMatchObject({ id: created.body.id, text: 'rename Build' });
+
+    const missing = await call<Record<string, unknown>>(`${goal}/draft/requests/no-such-request`);
+    expect(missing.status).toBe(404);
+    expect(missing.body.code).toBe('draft-request-not-found');
+  });
+
+  it('ends a request whose text says fail as failed, with its error and no summary', async () => {
+    const created = await post({ text: 'fail on purpose' });
+    await settled();
+    const found = await call<Record<string, unknown>>(`${goal}/draft/requests/${created.body.id}`);
+    expect(found.body).toMatchObject({ status: 'failed', summary: '' });
+    expect(String(found.body.error)).toContain('stopped before it changed the draft');
+  });
+});

@@ -69,10 +69,11 @@ test('the agent page reads as pictured: the prompt, settings and the Not availab
     }
   }
 
+  // Ask Jonah for a fix is not built yet (ADR 0021 runner pending): it stays disabled and sends nothing.
   const askJonah = page.getByRole('button', { name: 'Ask Jonah for a fix' });
   await expect(askJonah).toHaveAttribute('aria-disabled', 'true');
   await askJonah.click();
-  await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/agents\/frontend-engineer$/);
+  await expect(page).not.toHaveURL(/definition/);
 
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);

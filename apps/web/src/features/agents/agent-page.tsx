@@ -15,9 +15,9 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { Meter } from '../../ui/hatch';
 import { KpiTile } from '../../ui/kpi-tile';
-import { NotAvailable } from '../../ui/not-available';
 import { PromptFull, PromptPreview } from './agent-prompt';
 import { AgentSettings } from './agent-settings';
+import { AskJonahButton } from './ask-jonah-button';
 import { BakeOffButton } from './bake-off-button';
 import { blockedSentence, reasonShare } from './sentences';
 import { type AgentView, agentViews } from './views';
@@ -74,13 +74,7 @@ function SendBackReasons({ stats }: { stats: AgentStats }) {
     <SectionCard
       title="Why review sent work back"
       description={`${stats.sent_back.count} times in the last 7 days`}
-      aside={
-        <NotAvailable>
-          <Button variant="secondary" size="sm">
-            Ask Jonah for a fix
-          </Button>
-        </NotAvailable>
-      }
+      aside={<AskJonahButton />}
     >
       {stats.reasons.length === 0 ? (
         <p className="m-0 text-body text-muted">Nothing was sent back in the last 7 days.</p>

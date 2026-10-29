@@ -28,6 +28,7 @@
 package definitions
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"errors"
@@ -367,6 +368,59 @@ func (c *Cache) Version(ctx context.Context, id domain.DefinitionVersionID) (*co
 	}
 
 	return v.factory, nil
+}
+
+// VersionFiles returns every file of a published definition version of the organization in ctx,
+// by its path in the definition, or an error wrapping ports.ErrNotFound: what a Jonah review of
+// that version reads (gateway.Definitions). The map and its contents are the caller's own.
+func (c *Cache) VersionFiles(ctx context.Context, id domain.DefinitionVersionID) (map[string][]byte, error) {
+	v, err := c.version(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make(map[string][]byte, len(v.files))
+	for p, b := range v.files {
+		out[p] = bytes.Clone(b)
+	}
+
+	return out, nil
+}
+
+// CurrentLines returns the lines of the current versions of the organization in ctx, ordered by
+// name, but for archived factories' (jonah.ReviewDefinitions).
+func (c *Cache) CurrentLines(ctx context.Context) ([]domain.Line, error) {
+	org, ok := domain.OrgFrom(ctx)
+	if !ok {
+		return nil, fmt.Errorf("current lines: %w", domain.ErrNoOrg)
+	}
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return linesOf(maps.Collect(func(yield func(domain.FactoryID, current) bool) {
+		for id, cur := range c.current {
+			if cur.org == org && !yield(id, cur) {
+				return
+			}
+		}
+	})), nil
+}
+
+// Line returns the line of a published definition version of the organization in ctx, current
+// or not, paused when its factory is, or an error wrapping ports.ErrNotFound
+// (jonah.ReviewDefinitions).
+func (c *Cache) Line(ctx context.Context, id domain.DefinitionVersionID) (domain.Line, error) {
+	v, err := c.version(ctx, id)
+	if err != nil {
+		return domain.Line{}, err
+	}
+
+	c.mu.RLock()
+	cur, ok := c.current[domain.FactoryID(v.factory.Metadata.ID)]
+	c.mu.RUnlock()
+
+	return current{version: v, paused: ok && cur.org == v.org && cur.paused}.line(), nil
 }
 
 // Factories returns the current definitions of the organization in ctx, ordered by name; none

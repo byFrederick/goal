@@ -270,7 +270,7 @@ type SetSignupDomainParams struct {
 }
 
 // Sets (a domain) or clears (null) the transaction's organization's sign-up domain for the owner
-// acting_user, audited (goal_set_signup_domain, 00078).
+// acting_user, audited (goal_set_signup_domain, 00081).
 func (q *Queries) SetSignupDomain(ctx context.Context, arg SetSignupDomainParams) error {
 	_, err := q.db.Exec(ctx, setSignupDomain,
 		arg.ActingUser,

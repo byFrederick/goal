@@ -16,7 +16,7 @@ import (
 
 var _ ports.Digests = (*Digests)(nil)
 
-// Digests implements ports.Digests over 00082's digests table, which belongs to the person and
+// Digests implements ports.Digests over 00084's digests table, which belongs to the person and
 // has no row-level security, so its own statements run in transactions bound to no organization
 // (as NotificationPreferences does); the recipients and the content run in the organization's
 // transaction, under its row-level security (db/queries/digests.sql).

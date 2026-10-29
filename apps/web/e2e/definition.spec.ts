@@ -197,3 +197,12 @@ test('the YAML editor at 375 px: the file tree waits behind Files, and the Outli
   await expect(page.getByRole('navigation', { name: 'Definition files' })).toBeVisible();
   await expectAccessible(page);
 });
+
+test('Ask the factory is not built yet: the input is disabled and Ask stays unavailable', async ({ page }) => {
+  await page.goto(basics);
+  const input = page.getByRole('textbox', { name: 'Ask the factory to change its definition' });
+  await expect(input).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Ask', exact: true })).toHaveAttribute('aria-disabled', 'true');
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+});

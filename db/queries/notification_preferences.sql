@@ -1,4 +1,4 @@
--- Each person's notification preferences (ports.NotificationPreferences; migration 00080). The
+-- Each person's notification preferences (ports.NotificationPreferences; migration 00082). The
 -- tables belong to no organization and have no row-level security: every statement filters by
 -- the person's user id, and no other statement may read them.
 

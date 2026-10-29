@@ -1,5 +1,5 @@
 // Goal's side of the database for the auth service: the definer functions of migration 00044
-// (the security log, its counts, the bootstrap claim, invitations' factory roles), of 00078 (sign-up
+// (the security log, its counts, the bootstrap claim, invitations' factory roles), of 00081 (sign-up
 // by domain) and the few reads
 // and stamps of Better Auth's own rows that Goal's rules need. Every query is static and
 // parameterized; nothing here returns a code, a token or a hash.
@@ -106,7 +106,7 @@ export class GoalDatabase {
 
   /**
    * signupDomainOrg is the live organization whose sign-up domain is exactly email's domain, with
-   * its join role (goal_signup_domain_org, 00078); null for any other address, a webmail domain or
+   * its join role (goal_signup_domain_org, 00081); null for any other address, a webmail domain or
    * a deleted organization.
    */
   async signupDomainOrg(email: string): Promise<{ org: string; joinRole: string } | null> {
@@ -120,7 +120,7 @@ export class GoalDatabase {
 
   /**
    * applySignupDomain joins user, by their verified email, to the organization of its sign-up
-   * domain with its join role (goal_apply_signup_domain, 00078) and returns that organization; null
+   * domain with its join role (goal_apply_signup_domain, 00081) and returns that organization; null
    * when there is none, they are invited to it, or they are already a member. Idempotent.
    */
   async applySignupDomain(user: string): Promise<string | null> {

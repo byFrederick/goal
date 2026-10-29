@@ -1,4 +1,4 @@
--- The notification outbox (migration 00081; ADR 0023, decision 3), under row-level security:
+-- The notification outbox (migration 00083; ADR 0023, decision 3), under row-level security:
 -- every statement runs in the transaction of the event's organization.
 
 -- name: QueueNotifications :execrows

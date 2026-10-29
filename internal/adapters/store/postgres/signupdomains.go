@@ -16,7 +16,7 @@ import (
 var _ ports.SignupDomains = (*Store)(nil)
 
 // Sign-up by domain (ADR 0023, decision 7): goald reads the organization's row of
-// org_signup_domains under row-level security and changes it only through 00078's
+// org_signup_domains under row-level security and changes it only through 00081's
 // goal_set_signup_domain, which checks the owner, their own email, the webmail list and other
 // organizations' claims in the same transaction as the change and its audit entry.
 

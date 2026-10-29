@@ -10,7 +10,7 @@
 // or expired token, or one for no or another audience, gets 401 with no detail. goald's API
 // refuses task tokens, so they work only here. The
 // claims name the factory, its definition version, the agent and the run; that version must
-// declare the agent, otherwise 403.
+// declare the agent, otherwise 403, except a Jonah review's (below).
 //
 // # Run bundle
 //
@@ -67,6 +67,14 @@
 // the run; the agent is told to stop. Input outside the limits and the engine's refusals, such
 // as a second open question, are tool errors with the reason.
 //
+// # Jonah reviews
+//
+// A token of kind domain.TaskKindJonah is a Jonah review's run (ADR 0034 decision 1, jonah.go).
+// Its bundle's spec.jonah holds the version's files a proposal may edit, the factory's sent-back
+// events in the token's window and its proposals rejected in the last 90 days, read through
+// Deps.Jonah (503 when nil); it names no item, repository, connection, rule or knowledge source.
+// Its MCP session needs no agent of the version, lists no tool and refuses every call.
+//
 // # State
 //
 // None: every HTTP request is verified and served on its own (the SDK's stateless mode), so any
@@ -112,6 +120,9 @@ type Definitions interface {
 	// Rules returns the factory rules of version id that apply to run, in declaration order,
 	// with their hash and content (definitions.Cache.Rules).
 	Rules(ctx context.Context, id domain.DefinitionVersionID, run domain.RuleTarget) ([]domain.RunRule, error)
+	// VersionFiles returns every file of version id by its path in the definition, which a
+	// Jonah review reads (definitions.Cache.VersionFiles).
+	VersionFiles(ctx context.Context, id domain.DefinitionVersionID) (map[string][]byte, error)
 }
 
 // Events records audit events and reads an item's, to record a run's rules once; ports.Store
@@ -147,6 +158,26 @@ type Deps struct {
 	Questions Questions
 	// ToolApprovals take the Ask-first tool calls runs report at POST /run/tool-approval.
 	ToolApprovals ToolApprovals
+	// DraftRequests and Drafts give a draft request's run its request and the factory's draft
+	// files (definitionBundle); without both, draft request tokens are refused.
+	DraftRequests DraftRequests
+	Drafts        Drafts
+	// Jonah reads a Jonah review's sent-back events and rejected proposals for its bundle; nil
+	// answers a jonah token's bundle with 503 and changes nothing for other tokens.
+	Jonah Jonah
+}
+
+// DraftRequests reads a draft request of the organization in ctx; ports.DraftRequests satisfies
+// it.
+type DraftRequests interface {
+	Get(ctx context.Context, id domain.DraftRequestID) (domain.DraftRequest, error)
+}
+
+// Drafts reads a factory's open draft and the blobs of its files, for the organization in ctx;
+// ports.DefinitionStore satisfies it. The gateway only reads them: writing a draft is authoring's.
+type Drafts interface {
+	Draft(ctx context.Context, f domain.FactoryID) (domain.DefinitionVersion, error)
+	Blob(ctx context.Context, h domain.BlobHash) ([]byte, error)
 }
 
 // Config bounds the gateway. Zero values take the defaults below.
@@ -176,8 +207,12 @@ type Gateway struct {
 	knowledge   Knowledge // nil without Deps.Knowledge
 	questions   Questions
 	approvals   ToolApprovals
-	cfg         Config
-	mcp         http.Handler
+	// draftRequests and drafts are nil without Deps.DraftRequests and Deps.Drafts.
+	draftRequests DraftRequests
+	drafts        Drafts
+	jonah         Jonah // nil without Deps.Jonah
+	cfg           Config
+	mcp           http.Handler
 }
 
 // New returns a gateway; goald mounts it at its MCP path.
@@ -195,7 +230,7 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 
 	g := &Gateway{
 		defs: d.Definitions, items: d.Items, connections: d.Connections, events: d.Events, clock: d.Clock, log: d.Logger,
-		knowledge: d.Knowledge, questions: d.Questions, approvals: d.ToolApprovals, cfg: cfg,
+		knowledge: d.Knowledge, questions: d.Questions, approvals: d.ToolApprovals, draftRequests: d.DraftRequests, drafts: d.Drafts, jonah: d.Jonah, cfg: cfg,
 	}
 	if g.log == nil {
 		g.log = slog.New(slog.DiscardHandler)
@@ -272,6 +307,11 @@ func (g *Gateway) authenticate(r *http.Request) (domain.TaskClaims, error) {
 
 // session resolves what the task may reach under the definition version its run started on.
 func (g *Gateway) session(ctx context.Context, c domain.TaskClaims) (*session, error) {
+	// A draft request's run reaches no MCP server: definition mode has none.
+	if c.Kind == domain.TaskKindDraftRequest {
+		return nil, fmt.Errorf("%w: a draft request's task is served no tools", errForbidden)
+	}
+
 	f, err := g.defs.Version(ctx, c.VersionID)
 	if err != nil {
 		return nil, fmt.Errorf("load factory %s version %s: %w", c.FactoryID, c.VersionID, err)
@@ -279,6 +319,11 @@ func (g *Gateway) session(ctx context.Context, c domain.TaskClaims) (*session, e
 
 	if f.Metadata.ID != string(c.FactoryID) {
 		return nil, fmt.Errorf("%w: version %s is not a version of factory %s", errForbidden, c.VersionID, c.FactoryID)
+	}
+
+	// A Jonah review's agent is not one of the factory's, and it is served no tool.
+	if c.Kind == domain.TaskKindJonah {
+		return &session{g: g, claims: c, noTools: true}, nil
 	}
 
 	if !slices.ContainsFunc(f.Spec.Agents, func(a config.Agent) bool { return a.Name == c.Agent }) {

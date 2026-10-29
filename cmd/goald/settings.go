@@ -22,6 +22,7 @@ import (
 	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/definitions"
+	"github.com/byFrederick/goal/internal/jonah"
 	"github.com/byFrederick/goal/internal/knowledge"
 )
 
@@ -91,6 +92,13 @@ type settings struct {
 	// DefinitionCacheBytes bounds the files of the definition versions kept for runs that started
 	// on a version no longer current (GOAL_DEFINITION_CACHE_BYTES, default 64 MiB).
 	DefinitionCacheBytes int64
+	// JonahReviewEvery is how often goald sweeps for Jonah threshold reviews and works the queued
+	// reviews (GOAL_JONAH_REVIEW_EVERY, default 1m). JonahReview bounds one review run
+	// (GOAL_JONAH_REVIEW_TIMEOUT, default 30m) and the time its lease adds beyond the run
+	// (GOAL_JONAH_REVIEW_LEASE_MARGIN, default 5m): a review whose goald died is claimed again
+	// once both have passed.
+	JonahReviewEvery time.Duration
+	JonahReview      jonah.ReviewConfig
 	// MaxRuns caps the agent runs this goald has in flight at once (GOAL_MAX_RUNS, default 0:
 	// no cap). With a cap, claims are shared out fairly across organizations.
 	MaxRuns int
@@ -260,6 +268,7 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 	}
 
 	errs = append(errs, definitionSettings(&s, or)...)
+	errs = append(errs, jonahSettings(&s, or)...)
 	errs = append(errs, upstreamSettings(&s, or)...)
 	errs = append(errs, knowledgeSettings(&s, or)...)
 	errs = append(errs, smtpSettingsFrom(&s, or)...)
@@ -486,6 +495,24 @@ func definitionSettings(s *settings, or func(name, def string) string) []error {
 	if s.DefinitionCacheBytes, err = strconv.ParseInt(cacheBytes, 10, 64); err != nil || s.DefinitionCacheBytes <= 0 {
 		errs = append(errs, fmt.Errorf("GOAL_DEFINITION_CACHE_BYTES %q is not a positive number of bytes", cacheBytes))
 	}
+
+	return errs
+}
+
+// jonahSettings reads the Jonah review loop's times, each a positive duration.
+func jonahSettings(s *settings, or func(name, def string) string) []error {
+	var errs []error
+
+	read := func(name, raw string, into *time.Duration) {
+		var err error
+		if *into, err = duration(raw); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", name, err))
+		}
+	}
+
+	read("GOAL_JONAH_REVIEW_EVERY", or("GOAL_JONAH_REVIEW_EVERY", "1m"), &s.JonahReviewEvery)
+	read("GOAL_JONAH_REVIEW_TIMEOUT", or("GOAL_JONAH_REVIEW_TIMEOUT", "30m"), &s.JonahReview.Timeout)
+	read("GOAL_JONAH_REVIEW_LEASE_MARGIN", or("GOAL_JONAH_REVIEW_LEASE_MARGIN", "5m"), &s.JonahReview.Margin)
 
 	return errs
 }

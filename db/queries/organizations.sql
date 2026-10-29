@@ -54,6 +54,6 @@ SELECT domain, join_role, set_by, set_at FROM org_signup_domains WHERE org_id = 
 
 -- name: SetSignupDomain :exec
 -- Sets (a domain) or clears (null) the transaction's organization's sign-up domain for the owner
--- acting_user, audited (goal_set_signup_domain, 00078).
+-- acting_user, audited (goal_set_signup_domain, 00081).
 SELECT goal_set_signup_domain(sqlc.arg(acting_user)::uuid, sqlc.narg(domain)::text, sqlc.arg(join_role)::text,
                               sqlc.arg(by_ref)::text, sqlc.narg(request_id)::text);

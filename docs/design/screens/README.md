@@ -63,8 +63,8 @@ How to use them:
 | Screen | Route | Status | Not built yet |
 |---|---|---|---|
 | `agents`: the line with each station's agents, factory defaults | `…/agents` | new (agents exist) | New agent |
-| `agent`: overview, prompt, tools and access, runs | `…/agents/$agent` | restyle | Bake off this agent, Ask Jonah for a fix |
-| `definition`: files, tabs, YAML editor, problems, outline, draft banner | `…/definition` | restyle (Monaco and the sections exist) | Ask the factory to change it, quick fixes |
+| `agent`: overview, prompt, tools and access, runs | `…/agents/$agent` | restyle | Bake off this agent |
+| `definition`: files, tabs, YAML editor, problems, outline, draft banner | `…/definition` | restyle (Monaco and the sections exist) | quick fixes |
 | `definition-publish`: changes by section, checks, versions | `…/definition/publish` | restyle | evals before publish |
 | `factory-settings` | `…/settings` | restyle | per-factory roles |
 

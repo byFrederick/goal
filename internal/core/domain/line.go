@@ -76,6 +76,28 @@ type Line struct {
 	// connection-inline-removed). Such a version loads, so its items stay visible, but it does
 	// not run (Refusal).
 	Removed []string
+	// Jonah is learning.jonah, the policy of the reviews that turn sent-back runs into
+	// proposals (ADR 0034), with DefaultJonahPolicy's values for the keys a definition leaves out.
+	Jonah JonahPolicy
+}
+
+// JonahPolicy is when and how a factory's Jonah reviews run (ADR 0034).
+type JonahPolicy struct {
+	// Enabled says whether sent-back runs queue reviews at all.
+	Enabled bool
+	// ProposeAfter is both the number of sent-back touches that queue a review and the number of
+	// times an observation is seen before it becomes a proposal.
+	ProposeAfter int
+	// WeeklyUSD caps what the review runs cost over the last 7 days.
+	WeeklyUSD float64
+	// Model is the review run's model: learning.jonah.model, else runtime.model; empty when both
+	// are, and the run then takes the organization's default model, as an agent without one does.
+	Model string
+}
+
+// DefaultJonahPolicy is the policy of a factory whose definition sets no learning.jonah key.
+func DefaultJonahPolicy() JonahPolicy {
+	return JonahPolicy{Enabled: true, ProposeAfter: 5, WeeklyUSD: 10}
 }
 
 // Refusal is why no run of the line can start, "" when runs can: since the cutover to

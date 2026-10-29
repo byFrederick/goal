@@ -10,6 +10,7 @@ import {
   invalidationsFor,
   isOverviewKey,
   knowledgeInvalidations,
+  learningInvalidations,
   resyncInvalidations,
 } from './invalidation';
 
@@ -182,6 +183,8 @@ function definitionCache() {
   client.setQueryData(defKeys.factory(acme, goal), {});
   client.setQueryData(defKeys.draft(acme, goal), {});
   client.setQueryData(defKeys.draftModel(acme, goal), {});
+  client.setQueryData(defKeys.draftRequests(acme, goal), {});
+  client.setQueryData(defKeys.draftRequest(acme, goal, 'request-1'), {});
   client.setQueryData(defKeys.draftFile(acme, goal, 'factory.yaml'), {});
   client.setQueryData(defKeys.validation(acme, goal, 4), {});
   client.setQueryData(defKeys.versions(acme, goal), {});
@@ -281,6 +284,17 @@ describe('definitionInvalidations', () => {
     expect(stale).not.toContainEqual(defKeys.draft(acme, goal));
   });
 
+  test("a draft event re-reads the factory's draft requests, which sit under the draft and never poll", async () => {
+    const stale = await staleAfter(
+      definitionCache(),
+      definitionInvalidations(acme, definition({ revision: saved.revision + 1, by: 'user:local' })),
+    );
+
+    expect(stale).toEqual(
+      expect.arrayContaining([defKeys.draftRequests(acme, goal), defKeys.draftRequest(acme, goal, 'request-1')]),
+    );
+  });
+
   test('ignores data that is no definition event', () => {
     expect(definitionInvalidations(acme, { kind: 'draft' })).toEqual([]);
     expect(definitionInvalidations(acme, null)).toEqual([]);
@@ -324,6 +338,30 @@ describe('connectionInvalidations', () => {
   test('a publish re-reads what uses each connection', () => {
     expect(definitionInvalidations(acme, definition({ kind: 'current', number: 9 }))).toContainEqual(
       keys.connections(acme),
+    );
+  });
+});
+
+describe('Jonah reads', () => {
+  test("a learning event re-reads the factory's Jonah overview and proposals, and nothing of another factory", async () => {
+    const client = new QueryClient();
+    client.setQueryData([...keys.jonah(acme, goal), 'overview'], {});
+    client.setQueryData([...keys.jonah(acme, goal), 'proposals', { state: 'proposed' }], []);
+    client.setQueryData([...keys.jonah(acme, sre), 'overview'], {});
+    client.setQueryData(keys.judges(acme, goal), {});
+
+    const stale = await staleAfter(client, learningInvalidations(acme, { factory_id: goal }));
+
+    expect(stale).toEqual([
+      [...keys.jonah(acme, goal), 'overview'],
+      [...keys.jonah(acme, goal), 'proposals', { state: 'proposed' }],
+    ]);
+  });
+
+  test('a learning event with no factory names no key, and a publish re-reads the policy the overview shows', async () => {
+    expect(learningInvalidations(acme, {})).toEqual([]);
+    expect(definitionInvalidations(acme, definition({ kind: 'current', number: 9 }))).toContainEqual(
+      keys.jonah(acme, goal),
     );
   });
 });

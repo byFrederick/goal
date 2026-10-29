@@ -28,12 +28,14 @@ import {
   getInbox,
   getItem,
   getItemParts,
+  getJonahOverview,
   getJudge,
   getLeadTime,
   getMe,
   getMetrics,
   getOrg,
   getOrgSettings,
+  getProposal,
   getTouchMetrics,
   getWeekly,
   type ItemFilter,
@@ -48,6 +50,7 @@ import {
   listMembers,
   listOrgRuns,
   listOrgs,
+  listProposals,
   listSavedViews,
   type RunsFilter,
 } from './client';
@@ -64,12 +67,14 @@ import {
   getDraft,
   getDraftFile,
   getDraftModel,
+  getDraftRequest,
   getFactory,
   getTemplate,
   getVersion,
   getVersionFile,
   getVersionModel,
   listDraftFiles,
+  listDraftRequests,
   listTemplates,
   listVersions,
   validateDraft,
@@ -91,7 +96,7 @@ import { getNotificationPreferences } from './notifications';
 import { getOrgPolicy } from './policy';
 import { type SearchQuery, searchOrg } from './search';
 import { getOrgSpend } from './spend';
-import type { Factory, ItemEvent, SpendWindow } from './types';
+import type { Factory, ItemEvent, ProposalState, SpendWindow } from './types';
 import { getWebhookDelivery, listWebhookDeliveries, listWebhookEndpoints } from './webhooks';
 
 /**
@@ -246,6 +251,8 @@ export const keys = {
   bakeOffs: (org: string, factory: string) => [...keys.evals(org, factory), 'bake-offs'] as const,
   /** The prefix of a factory's judges (Jonah's Judges). A `definition` event refreshes it. */
   judges: (org: string, factory: string) => ['org', org, 'factory', factory, 'judges'] as const,
+  /** The prefix of a factory's Jonah reads: the overview and the proposals. A `learning` or `definition` event refreshes it. */
+  jonah: (org: string, factory: string) => ['org', org, 'factory', factory, 'jonah'] as const,
   /** The factory's intake (sources and triggers); item and definition events refresh it. */
   intake: (org: string, factory: string) => ['org', org, 'factory', factory, 'intake'] as const,
   /** The factory's saved views (ADR 0020): the Items page's nav. Its mutations invalidate it. */
@@ -650,6 +657,27 @@ export const judgeQuery = (org: string, factory: string, judge: string) =>
     queryFn: ({ signal }) => getJudge(org, factory, judge, signal),
   });
 
+/** Jonah's overview: the policy, the proposals waiting, this month's cost and the week's observations (getJonahOverview). */
+export const jonahOverviewQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: [...keys.jonah(org, factory), 'overview'] as const,
+    queryFn: ({ signal }) => getJonahOverview(org, factory, signal),
+  });
+
+/** The factory's proposals, newest first, in one state or all of them (listProposals). */
+export const proposalsQuery = (org: string, factory: string, state?: ProposalState) =>
+  queryOptions({
+    queryKey: [...keys.jonah(org, factory), 'proposals', { state }] as const,
+    queryFn: ({ signal }) => listProposals(org, factory, { state }, signal),
+  });
+
+/** One proposal with its files and evidence (getProposal), under its number beside the lists. */
+export const proposalQuery = (org: string, factory: string, number: number) =>
+  queryOptions({
+    queryKey: [...keys.jonah(org, factory), 'proposals', number] as const,
+    queryFn: ({ signal }) => getProposal(org, factory, number, signal),
+  });
+
 /** What a run of every case would cost about (estimateEvalRun): a read, so it is asked again on each refresh. */
 export const evalEstimateQuery = (org: string, factory: string) =>
   queryOptions({
@@ -672,6 +700,9 @@ export const defKeys = {
   draftModel: (org: string, f: string) => ['org', org, 'factory', f, 'draft', 'model'] as const,
   draftFiles: (org: string, f: string) => ['org', org, 'factory', f, 'draft', 'files'] as const,
   draftFile: (org: string, f: string, path: string) => ['org', org, 'factory', f, 'draft', 'file', path] as const,
+  /** The asked definition changes (ADR 0021): under the draft, so a draft event refetches them too. */
+  draftRequests: (org: string, f: string) => ['org', org, 'factory', f, 'draft', 'requests'] as const,
+  draftRequest: (org: string, f: string, id: string) => ['org', org, 'factory', f, 'draft', 'requests', id] as const,
   validation: (org: string, f: string, revision: number) =>
     ['org', org, 'factory', f, 'draft', 'validation', revision] as const,
   versions: (org: string, f: string) => ['org', org, 'factory', f, 'versions'] as const,
@@ -751,6 +782,23 @@ export const draftModelQuery = (org: string, factory: string) =>
     queryKey: defKeys.draftModel(org, factory),
     queryFn: ({ signal }) => getDraftModel(org, factory, signal),
     retry: retryUnlessRefused,
+  });
+
+/**
+ * The factory's draft requests, newest first. No refetchInterval: a request's change reaches the
+ * screen through the stream's `definition` events (and a resync), as the rest of the draft does.
+ */
+export const draftRequestsQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: defKeys.draftRequests(org, factory),
+    queryFn: ({ signal }) => listDraftRequests(org, factory, signal),
+  });
+
+/** One draft request, by id: the one the definition screen's `?request=` names. */
+export const draftRequestQuery = (org: string, factory: string, id: string) =>
+  queryOptions({
+    queryKey: defKeys.draftRequest(org, factory, id),
+    queryFn: ({ signal }) => getDraftRequest(org, factory, id, signal),
   });
 
 export const draftFilesQuery = (org: string, factory: string) =>

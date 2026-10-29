@@ -546,6 +546,30 @@ func (e DefinitionProblemSeverity) Valid() bool {
 	}
 }
 
+// Defines values for DraftRequestStatus.
+const (
+	DraftRequestStatusDone    DraftRequestStatus = "done"
+	DraftRequestStatusFailed  DraftRequestStatus = "failed"
+	DraftRequestStatusQueued  DraftRequestStatus = "queued"
+	DraftRequestStatusRunning DraftRequestStatus = "running"
+)
+
+// Valid indicates whether the value is a known member of the DraftRequestStatus enum.
+func (e DraftRequestStatus) Valid() bool {
+	switch e {
+	case DraftRequestStatusDone:
+		return true
+	case DraftRequestStatusFailed:
+		return true
+	case DraftRequestStatusQueued:
+		return true
+	case DraftRequestStatusRunning:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for EvalCheckedByKind.
 const (
 	EvalCheckedByKindContract       EvalCheckedByKind = "contract"
@@ -921,6 +945,66 @@ func (e ItemWaitingKind) Valid() bool {
 	}
 }
 
+// Defines values for JonahObservationState.
+const (
+	JonahObservationStateProposed JonahObservationState = "proposed"
+	JonahObservationStateWatching JonahObservationState = "watching"
+)
+
+// Valid indicates whether the value is a known member of the JonahObservationState enum.
+func (e JonahObservationState) Valid() bool {
+	switch e {
+	case JonahObservationStateProposed:
+		return true
+	case JonahObservationStateWatching:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for JonahReviewState.
+const (
+	JonahReviewStateDone    JonahReviewState = "done"
+	JonahReviewStateFailed  JonahReviewState = "failed"
+	JonahReviewStatePending JonahReviewState = "pending"
+	JonahReviewStateRunning JonahReviewState = "running"
+)
+
+// Valid indicates whether the value is a known member of the JonahReviewState enum.
+func (e JonahReviewState) Valid() bool {
+	switch e {
+	case JonahReviewStateDone:
+		return true
+	case JonahReviewStateFailed:
+		return true
+	case JonahReviewStatePending:
+		return true
+	case JonahReviewStateRunning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for JonahReviewTrigger.
+const (
+	JonahReviewTriggerManual    JonahReviewTrigger = "manual"
+	JonahReviewTriggerThreshold JonahReviewTrigger = "threshold"
+)
+
+// Valid indicates whether the value is a known member of the JonahReviewTrigger enum.
+func (e JonahReviewTrigger) Valid() bool {
+	switch e {
+	case JonahReviewTriggerManual:
+		return true
+	case JonahReviewTriggerThreshold:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for JudgeRunsOnSees.
 const (
 	Events      JudgeRunsOnSees = "events"
@@ -1257,6 +1341,51 @@ func (e PolicyBoxSizeSize) Valid() bool {
 	case Medium:
 		return true
 	case Small:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProposalEstimateMetric.
+const (
+	LeadTimeP85  ProposalEstimateMetric = "lead_time_p85"
+	SentBackRate ProposalEstimateMetric = "sent_back_rate"
+)
+
+// Valid indicates whether the value is a known member of the ProposalEstimateMetric enum.
+func (e ProposalEstimateMetric) Valid() bool {
+	switch e {
+	case LeadTimeP85:
+		return true
+	case SentBackRate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProposalState.
+const (
+	ProposalStateApplied    ProposalState = "applied"
+	ProposalStateProposed   ProposalState = "proposed"
+	ProposalStatePublished  ProposalState = "published"
+	ProposalStateRejected   ProposalState = "rejected"
+	ProposalStateSuperseded ProposalState = "superseded"
+)
+
+// Valid indicates whether the value is a known member of the ProposalState enum.
+func (e ProposalState) Valid() bool {
+	switch e {
+	case ProposalStateApplied:
+		return true
+	case ProposalStateProposed:
+		return true
+	case ProposalStatePublished:
+		return true
+	case ProposalStateRejected:
+		return true
+	case ProposalStateSuperseded:
 		return true
 	default:
 		return false
@@ -3181,6 +3310,40 @@ type DraftRef struct {
 	UpdatedBy Actor `json:"updated_by"`
 }
 
+// DraftRequest An asked change to a factory's definition (ADR 0021): queued until a goald claims it, running in a box, then done or failed with what it changed in the draft
+type DraftRequest struct {
+	// Agent The agent the request is about, "" for the Ask bar
+	Agent string `json:"agent"`
+
+	// ChangedPaths The definition paths the request wrote or deleted in the draft
+	ChangedPaths []string  `json:"changed_paths"`
+	CostUsd      float64   `json:"cost_usd"`
+	CreatedAt    time.Time `json:"created_at"`
+
+	// Error What went wrong when the request failed, "" otherwise
+	Error      string     `json:"error"`
+	FinishedAt *time.Time `json:"finished_at,omitempty"`
+	Id         string     `json:"id"`
+
+	// Requester Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	Requester Actor              `json:"requester"`
+	StartedAt *time.Time         `json:"started_at,omitempty"`
+	Status    DraftRequestStatus `json:"status"`
+
+	// Summary What the agent changed, or why the request failed; "" until it ends
+	Summary string `json:"summary"`
+	Text    string `json:"text"`
+	Turns   int    `json:"turns"`
+}
+
+// DraftRequestStatus defines model for DraftRequest.Status.
+type DraftRequestStatus string
+
+// DraftRequestList defines model for DraftRequestList.
+type DraftRequestList struct {
+	Requests []DraftRequest `json:"requests"`
+}
+
 // DraftTree defines model for DraftTree.
 type DraftTree struct {
 	// ExpectedRevision Refuse (412) when the draft is at another revision
@@ -4127,6 +4290,80 @@ type ItemsAtRemovedStations struct {
 	Unmapped []ItemAt `json:"unmapped"`
 }
 
+// JonahObservation defines model for JonahObservation.
+type JonahObservation struct {
+	// Count How often the pattern was seen
+	Count     int       `json:"count"`
+	CreatedAt time.Time `json:"created_at"`
+	Detail    string    `json:"detail"`
+	Id        string    `json:"id"`
+
+	// ItemRefs The items it rests on, as <factory name>#<number>
+	ItemRefs []string `json:"item_refs"`
+
+	// Proposal The number of the proposal it became
+	Proposal *int64 `json:"proposal,omitempty"`
+
+	// ProposeAfter The count at which it becomes a proposal
+	ProposeAfter int                   `json:"propose_after"`
+	State        JonahObservationState `json:"state"`
+	Summary      string                `json:"summary"`
+}
+
+// JonahObservationState defines model for JonahObservation.State.
+type JonahObservationState string
+
+// JonahOverview defines model for JonahOverview.
+type JonahOverview struct {
+	LastReview *JonahReview `json:"last_review,omitempty"`
+
+	// MonthCostUsd What the factory's jonah runs cost since the first of this UTC month
+	MonthCostUsd float64 `json:"month_cost_usd"`
+
+	// Observations The observations made since Monday 00:00 UTC, newest first
+	Observations []JonahObservation `json:"observations"`
+
+	// Policy The current version's learning.jonah, with its defaults where it sets none
+	Policy JonahPolicy `json:"policy"`
+
+	// Waiting Proposals still proposed
+	Waiting int `json:"waiting"`
+}
+
+// JonahPolicy The current version's learning.jonah, with its defaults where it sets none
+type JonahPolicy struct {
+	// ApproverRoles The roles holding definition:publish: organization roles first, then factory roles
+	ApproverRoles []string `json:"approver_roles"`
+	Enabled       bool     `json:"enabled"`
+
+	// Model The review run's model: learning.jonah.model, else runtime.model; absent when neither is set
+	Model *string `json:"model,omitempty"`
+
+	// ProposeAfter Sent-back touches that queue a review, and how often an observation is seen before it is proposed
+	ProposeAfter int `json:"propose_after"`
+
+	// WeeklyUsd What review runs may cost over 7 days
+	WeeklyUsd float64 `json:"weekly_usd"`
+}
+
+// JonahReview defines model for JonahReview.
+type JonahReview struct {
+	CreatedAt time.Time `json:"created_at"`
+
+	// Error Why a failed review failed
+	Error      *string            `json:"error,omitempty"`
+	FinishedAt *time.Time         `json:"finished_at,omitempty"`
+	Id         string             `json:"id"`
+	State      JonahReviewState   `json:"state"`
+	Trigger    JonahReviewTrigger `json:"trigger"`
+}
+
+// JonahReviewState defines model for JonahReview.State.
+type JonahReviewState string
+
+// JonahReviewTrigger defines model for JonahReview.Trigger.
+type JonahReviewTrigger string
+
 // Judge defines model for Judge.
 type Judge struct {
 	// Agents Empty means every agent
@@ -4860,6 +5097,15 @@ type NewCredential struct {
 	Value *string `json:"value,omitempty"`
 }
 
+// NewDraftRequest defines model for NewDraftRequest.
+type NewDraftRequest struct {
+	// Agent The agent of the definition the request is about (Ask Jonah for a fix)
+	Agent *string `json:"agent,omitempty"`
+
+	// Text What to change, 1 to 2000 characters once trimmed
+	Text string `json:"text"`
+}
+
 // NewFactoryRequest defines model for NewFactoryRequest.
 type NewFactoryRequest struct {
 	// Name Required except for an import, where factory.yaml's metadata.name is used when it is absent
@@ -5456,6 +5702,117 @@ type ProblemFix struct {
 	Patch   []PatchOp `json:"patch"`
 	Section string    `json:"section"`
 }
+
+// Proposal defines model for Proposal.
+type Proposal struct {
+	// Agents The agents whose prompt it edits (agents/<name>.md), in path order
+	Agents    []string   `json:"agents"`
+	CreatedAt time.Time  `json:"created_at"`
+	DecidedAt *time.Time `json:"decided_at,omitempty"`
+
+	// DecidedBy The actor ref of who decided it
+	DecidedBy *string `json:"decided_by,omitempty"`
+
+	// Estimate The metric the proposal should move at one station; before is computed from the recorded events
+	Estimate      *ProposalEstimate  `json:"estimate,omitempty"`
+	Evidence      []ProposalEvidence `json:"evidence"`
+	EvidenceCount int                `json:"evidence_count"`
+	Files         []ProposalFile     `json:"files"`
+
+	// MadeAgainstVersion The number of the version the review read
+	MadeAgainstVersion int      `json:"made_against_version"`
+	Number             int64    `json:"number"`
+	Paths              []string `json:"paths"`
+
+	// PublishedVersion The version Approve published
+	PublishedVersion *int `json:"published_version,omitempty"`
+
+	// PublishesAsVersion The number Approve would publish it as
+	PublishesAsVersion int           `json:"publishes_as_version"`
+	RejectReason       *string       `json:"reject_reason,omitempty"`
+	State              ProposalState `json:"state"`
+	Summary            string        `json:"summary"`
+	Title              string        `json:"title"`
+}
+
+// ProposalDecided defines model for ProposalDecided.
+type ProposalDecided struct {
+	// DraftRevision The draft's revision after Edit
+	DraftRevision *int64        `json:"draft_revision,omitempty"`
+	Number        int64         `json:"number"`
+	State         ProposalState `json:"state"`
+
+	// Version The version Approve published
+	Version *int `json:"version,omitempty"`
+}
+
+// ProposalEntry defines model for ProposalEntry.
+type ProposalEntry struct {
+	// Agents The agents whose prompt it edits (agents/<name>.md), in path order
+	Agents    []string  `json:"agents"`
+	CreatedAt time.Time `json:"created_at"`
+
+	// Estimate The metric the proposal should move at one station; before is computed from the recorded events
+	Estimate      *ProposalEstimate `json:"estimate,omitempty"`
+	EvidenceCount int               `json:"evidence_count"`
+	Number        int64             `json:"number"`
+	Paths         []string          `json:"paths"`
+	State         ProposalState     `json:"state"`
+	Title         string            `json:"title"`
+}
+
+// ProposalEstimate The metric the proposal should move at one station; before is computed from the recorded events
+type ProposalEstimate struct {
+	After  float64 `json:"after"`
+	Before float64 `json:"before"`
+
+	// CostPerItemUsd The change in cost per item
+	CostPerItemUsd float64                `json:"cost_per_item_usd"`
+	Metric         ProposalEstimateMetric `json:"metric"`
+	Station        string                 `json:"station"`
+}
+
+// ProposalEstimateMetric defines model for ProposalEstimate.Metric.
+type ProposalEstimateMetric string
+
+// ProposalEvidence defines model for ProposalEvidence.
+type ProposalEvidence struct {
+	// ItemRef <factory name>#<number>, or the item's id when it is gone
+	ItemRef   string `json:"item_ref"`
+	ItemTitle string `json:"item_title"`
+
+	// Quote The quoted reason it was sent back
+	Quote   string  `json:"quote"`
+	Station *string `json:"station,omitempty"`
+}
+
+// ProposalFile defines model for ProposalFile.
+type ProposalFile struct {
+	// BaseContent The file in the version the proposal was made against; empty for a new file
+	BaseContent string `json:"base_content"`
+
+	// BaseSha256 The SHA-256 of the file the review read; empty for a new file
+	BaseSha256 string `json:"base_sha256"`
+
+	// Content The file's new content
+	Content string `json:"content"`
+	Path    string `json:"path"`
+}
+
+// ProposalPage defines model for ProposalPage.
+type ProposalPage struct {
+	// Next The after of the next page; absent on the last
+	Next      *int64          `json:"next,omitempty"`
+	Proposals []ProposalEntry `json:"proposals"`
+}
+
+// ProposalReject defines model for ProposalReject.
+type ProposalReject struct {
+	Reason string `json:"reason"`
+}
+
+// ProposalState defines model for ProposalState.
+type ProposalState string
 
 // PublishRequest defines model for PublishRequest.
 type PublishRequest struct {
@@ -6596,6 +6953,9 @@ type CredentialRef = string
 // DocumentRef defines model for DocumentRef.
 type DocumentRef = string
 
+// DraftRequestRef defines model for DraftRequestRef.
+type DraftRequestRef = string
+
 // EvalRunRef defines model for EvalRunRef.
 type EvalRunRef = string
 
@@ -6622,6 +6982,9 @@ type KindRef = string
 
 // OrgRef defines model for OrgRef.
 type OrgRef = string
+
+// ProposalNumber defines model for ProposalNumber.
+type ProposalNumber = int64
 
 // RangeFrom defines model for RangeFrom.
 type RangeFrom = openapi_types.Date
@@ -6772,6 +7135,11 @@ type RevertDraftSectionParams struct {
 	IfMatch *IfMatch `json:"If-Match,omitempty"`
 }
 
+// ListDraftRequestsParams defines parameters for ListDraftRequests.
+type ListDraftRequestsParams struct {
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // GetIntakeParams defines parameters for GetIntake.
 type GetIntakeParams struct {
 	// Items How many of the newest items the sources count (default 48)
@@ -6789,6 +7157,16 @@ type ListItemsParams struct {
 
 	// After The next_after of the previous page; items listed after it (numbered below it)
 	After *int64 `form:"after,omitempty" json:"after,omitempty"`
+}
+
+// ListProposalsParams defines parameters for ListProposals.
+type ListProposalsParams struct {
+	// State Only proposals in this state
+	State *ProposalState `form:"state,omitempty" json:"state,omitempty"`
+
+	// After The keyset of the next page; only proposals numbered below it (next of the page before)
+	After *int64 `form:"after,omitempty" json:"after,omitempty"`
+	Limit *int   `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // GetMetricsParams defines parameters for GetMetrics.
@@ -7084,6 +7462,9 @@ type RevertDraftSectionJSONRequestBody = RevertRequest
 // PublishDraftJSONRequestBody defines body for PublishDraft for application/json ContentType.
 type PublishDraftJSONRequestBody = PublishRequest
 
+// CreateDraftRequestJSONRequestBody defines body for CreateDraftRequest for application/json ContentType.
+type CreateDraftRequestJSONRequestBody = NewDraftRequest
+
 // ReplaceDraftTreeJSONRequestBody defines body for ReplaceDraftTree for application/json ContentType.
 type ReplaceDraftTreeJSONRequestBody = DraftTree
 
@@ -7110,6 +7491,9 @@ type TryIntakeTriggerJSONRequestBody = TriggerTryRequest
 
 // SubmitItemJSONRequestBody defines body for SubmitItem for application/json ContentType.
 type SubmitItemJSONRequestBody = NewItem
+
+// RejectProposalJSONRequestBody defines body for RejectProposal for application/json ContentType.
+type RejectProposalJSONRequestBody = ProposalReject
 
 // CreateJudgeJSONRequestBody defines body for CreateJudge for application/json ContentType.
 type CreateJudgeJSONRequestBody = CreateJudgeRequest
@@ -8113,6 +8497,38 @@ type ClientInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/publish (the `PublishDraft` operationId).
 	PublishDraft(ctx context.Context, org OrgRef, factory FactoryRef, body PublishDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListDraftRequests The factory's draft requests, newest first
+	//
+	// The asked definition changes of the factory (ADR 0021), newest first, at most limit of them.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/requests (the `ListDraftRequests` operationId).
+	ListDraftRequests(ctx context.Context, org OrgRef, factory FactoryRef, params *ListDraftRequestsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateDraftRequestWithBody Ask for a change to the factory's definition (a draft request)
+	//
+	// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/requests (the `CreateDraftRequest` operationId).
+	CreateDraftRequestWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateDraftRequest Ask for a change to the factory's definition (a draft request)
+	//
+	// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/requests (the `CreateDraftRequest` operationId).
+	CreateDraftRequest(ctx context.Context, org OrgRef, factory FactoryRef, body CreateDraftRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetDraftRequest One draft request, with its result once it ended
+	//
+	// 404 draft-request-not-found for a request that is not the factory's.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/requests/{draft_request} (the `GetDraftRequest` operationId).
+	GetDraftRequest(ctx context.Context, org OrgRef, factory FactoryRef, draftRequest DraftRequestRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ReplaceDraftTreeWithBody Make files the draft's whole tree (goal factory push)
 	//
 	// With expected_revision, a draft at another revision is 412 draft-conflict; without it the latest draft is replaced. 422 bad-path; 413 too-large (over 1,000 files or 16 MiB).
@@ -8331,6 +8747,64 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
 	SubmitItem(ctx context.Context, org OrgRef, factory FactoryRef, body SubmitItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetJonahOverview What Jonah noticed this week, its policy, its proposals waiting and its cost
+	//
+	// The policy is the current version's learning.jonah (its defaults where it sets none) with the roles that may approve a proposal (those holding definition:publish). waiting counts the proposals still proposed; month_cost_usd is what the factory's jonah runs cost since the first of this UTC month; observations are those made since Monday 00:00 UTC, newest first; last_review is the newest review, absent before the first. 503 jonah-unavailable.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/jonah (the `GetJonahOverview` operationId).
+	GetJonahOverview(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListProposals The factory's proposals, newest (highest number) first
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/jonah/proposals (the `ListProposals` operationId).
+	ListProposals(ctx context.Context, org OrgRef, factory FactoryRef, params *ListProposalsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetProposal One proposal with its files, its evidence and the versions it moves between
+	//
+	// Each file has its content in the version the proposal was made against (empty for a new file) and its new content; the client renders the diff. 404 proposal-not-found.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number} (the `GetProposal` operationId).
+	GetProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ApproveProposal Publish the proposal as a new version, as the caller (ADR 0034 decision 7)
+	//
+	// Opens a draft from the current version, writes the proposal's files and publishes it through the usual validation and gates. 409 draft-open when the factory already has an open draft (it is left untouched); proposal-stale when a file's current SHA-256 is not its base_sha256 (no draft is left); proposal-decided when it is no longer proposed; the publish's own refusals (definition-invalid, evals-pending, evals-failing; the eval gate keeps the draft open). 404 proposal-not-found.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/approve (the `ApproveProposal` operationId).
+	ApproveProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EditProposal Write the proposal's files into the draft, opening one if none is open (decision 8)
+	//
+	// Sets the proposal applied; the caller continues in the builder. 409 draft-conflict when the draft's copy of a file is not its base_sha256 (nothing is written); proposal-decided when it is no longer proposed. 404 proposal-not-found.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/edit (the `EditProposal` operationId).
+	EditProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RejectProposalWithBody Reject the proposal with a reason, which later reviews read (decision 9)
+	//
+	// 400 invalid-request for a missing or blank reason or one over 2000 characters; 409 proposal-decided when it is no longer proposed. 404 proposal-not-found.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject (the `RejectProposal` operationId).
+	RejectProposalWithBody(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RejectProposal Reject the proposal with a reason, which later reviews read (decision 9)
+	//
+	// 400 invalid-request for a missing or blank reason or one over 2000 characters; 409 proposal-decided when it is no longer proposed. 404 proposal-not-found.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject (the `RejectProposal` operationId).
+	RejectProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, body RejectProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// QueueJonahReview Queue a manual review of the factory's sent-back runs (decision 2)
+	//
+	// The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. 409 review-loop-not-running while no review loop runs (none does until software#344 ships): nothing is queued. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/reviews (the `QueueJonahReview` operationId).
+	QueueJonahReview(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListJudges The judges of the factory's current version, each with its last 30 days
 	//
@@ -10688,6 +11162,78 @@ func (c *Client) PublishDraft(ctx context.Context, org OrgRef, factory FactoryRe
 	return c.Client.Do(req)
 }
 
+// ListDraftRequests The factory's draft requests, newest first
+//
+// The asked definition changes of the factory (ADR 0021), newest first, at most limit of them.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/requests (the `ListDraftRequests` operationId).
+func (c *Client) ListDraftRequests(ctx context.Context, org OrgRef, factory FactoryRef, params *ListDraftRequestsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListDraftRequestsRequest(c.Server, org, factory, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateDraftRequestWithBody Ask for a change to the factory's definition (a draft request)
+//
+// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/requests (the `CreateDraftRequest` operationId).
+func (c *Client) CreateDraftRequestWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateDraftRequestRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateDraftRequest Ask for a change to the factory's definition (a draft request)
+//
+// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/requests (the `CreateDraftRequest` operationId).
+func (c *Client) CreateDraftRequest(ctx context.Context, org OrgRef, factory FactoryRef, body CreateDraftRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateDraftRequestRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetDraftRequest One draft request, with its result once it ended
+//
+// 404 draft-request-not-found for a request that is not the factory's.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/requests/{draft_request} (the `GetDraftRequest` operationId).
+func (c *Client) GetDraftRequest(ctx context.Context, org OrgRef, factory FactoryRef, draftRequest DraftRequestRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDraftRequestRequest(c.Server, org, factory, draftRequest)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // ReplaceDraftTreeWithBody Make files the draft's whole tree (goal factory push)
 //
 // With expected_revision, a draft at another revision is 412 draft-conflict; without it the latest draft is replaced. 422 bad-path; 413 too-large (over 1,000 files or 16 MiB).
@@ -11167,6 +11713,144 @@ func (c *Client) SubmitItemWithBody(ctx context.Context, org OrgRef, factory Fac
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
 func (c *Client) SubmitItem(ctx context.Context, org OrgRef, factory FactoryRef, body SubmitItemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSubmitItemRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetJonahOverview What Jonah noticed this week, its policy, its proposals waiting and its cost
+//
+// The policy is the current version's learning.jonah (its defaults where it sets none) with the roles that may approve a proposal (those holding definition:publish). waiting counts the proposals still proposed; month_cost_usd is what the factory's jonah runs cost since the first of this UTC month; observations are those made since Monday 00:00 UTC, newest first; last_review is the newest review, absent before the first. 503 jonah-unavailable.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/jonah (the `GetJonahOverview` operationId).
+func (c *Client) GetJonahOverview(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetJonahOverviewRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListProposals The factory's proposals, newest (highest number) first
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/jonah/proposals (the `ListProposals` operationId).
+func (c *Client) ListProposals(ctx context.Context, org OrgRef, factory FactoryRef, params *ListProposalsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListProposalsRequest(c.Server, org, factory, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetProposal One proposal with its files, its evidence and the versions it moves between
+//
+// Each file has its content in the version the proposal was made against (empty for a new file) and its new content; the client renders the diff. 404 proposal-not-found.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number} (the `GetProposal` operationId).
+func (c *Client) GetProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetProposalRequest(c.Server, org, factory, number)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ApproveProposal Publish the proposal as a new version, as the caller (ADR 0034 decision 7)
+//
+// Opens a draft from the current version, writes the proposal's files and publishes it through the usual validation and gates. 409 draft-open when the factory already has an open draft (it is left untouched); proposal-stale when a file's current SHA-256 is not its base_sha256 (no draft is left); proposal-decided when it is no longer proposed; the publish's own refusals (definition-invalid, evals-pending, evals-failing; the eval gate keeps the draft open). 404 proposal-not-found.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/approve (the `ApproveProposal` operationId).
+func (c *Client) ApproveProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewApproveProposalRequest(c.Server, org, factory, number)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EditProposal Write the proposal's files into the draft, opening one if none is open (decision 8)
+//
+// Sets the proposal applied; the caller continues in the builder. 409 draft-conflict when the draft's copy of a file is not its base_sha256 (nothing is written); proposal-decided when it is no longer proposed. 404 proposal-not-found.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/edit (the `EditProposal` operationId).
+func (c *Client) EditProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEditProposalRequest(c.Server, org, factory, number)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RejectProposalWithBody Reject the proposal with a reason, which later reviews read (decision 9)
+//
+// 400 invalid-request for a missing or blank reason or one over 2000 characters; 409 proposal-decided when it is no longer proposed. 404 proposal-not-found.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject (the `RejectProposal` operationId).
+func (c *Client) RejectProposalWithBody(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRejectProposalRequestWithBody(c.Server, org, factory, number, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RejectProposal Reject the proposal with a reason, which later reviews read (decision 9)
+//
+// 400 invalid-request for a missing or blank reason or one over 2000 characters; 409 proposal-decided when it is no longer proposed. 404 proposal-not-found.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject (the `RejectProposal` operationId).
+func (c *Client) RejectProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, body RejectProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRejectProposalRequest(c.Server, org, factory, number, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// QueueJonahReview Queue a manual review of the factory's sent-back runs (decision 2)
+//
+// The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. 409 review-loop-not-running while no review loop runs (none does until software#344 ships): nothing is queued. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/reviews (the `QueueJonahReview` operationId).
+func (c *Client) QueueJonahReview(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewQueueJonahReviewRequest(c.Server, org, factory)
 	if err != nil {
 		return nil, err
 	}
@@ -16434,6 +17118,176 @@ func NewPublishDraftRequestWithBody(server string, org OrgRef, factory FactoryRe
 	return req, nil
 }
 
+// NewListDraftRequestsRequest constructs an http.Request for the ListDraftRequests method
+func NewListDraftRequestsRequest(server string, org OrgRef, factory FactoryRef, params *ListDraftRequestsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/requests", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateDraftRequestRequest calls the generic CreateDraftRequest builder with application/json body
+func NewCreateDraftRequestRequest(server string, org OrgRef, factory FactoryRef, body CreateDraftRequestJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateDraftRequestRequestWithBody(server, org, factory, "application/json", bodyReader)
+}
+
+// NewCreateDraftRequestRequestWithBody constructs an http.Request for the CreateDraftRequest method, with any body, and a specified content type
+func NewCreateDraftRequestRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/requests", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetDraftRequestRequest constructs an http.Request for the GetDraftRequest method
+func NewGetDraftRequestRequest(server string, org OrgRef, factory FactoryRef, draftRequest DraftRequestRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "draft_request", draftRequest, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/requests/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewReplaceDraftTreeRequest calls the generic ReplaceDraftTree builder with application/json body
 func NewReplaceDraftTreeRequest(server string, org OrgRef, factory FactoryRef, body ReplaceDraftTreeJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -17424,6 +18278,385 @@ func NewSubmitItemRequestWithBody(server string, org OrgRef, factory FactoryRef,
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetJonahOverviewRequest constructs an http.Request for the GetJonahOverview method
+func NewGetJonahOverviewRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/jonah", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListProposalsRequest constructs an http.Request for the ListProposals method
+func NewListProposalsRequest(server string, org OrgRef, factory FactoryRef, params *ListProposalsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/jonah/proposals", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.State != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "state", *params.State, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.After != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetProposalRequest constructs an http.Request for the GetProposal method
+func NewGetProposalRequest(server string, org OrgRef, factory FactoryRef, number ProposalNumber) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "number", number, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: "int64"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/jonah/proposals/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewApproveProposalRequest constructs an http.Request for the ApproveProposal method
+func NewApproveProposalRequest(server string, org OrgRef, factory FactoryRef, number ProposalNumber) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "number", number, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: "int64"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/jonah/proposals/%s/approve", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewEditProposalRequest constructs an http.Request for the EditProposal method
+func NewEditProposalRequest(server string, org OrgRef, factory FactoryRef, number ProposalNumber) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "number", number, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: "int64"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/jonah/proposals/%s/edit", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRejectProposalRequest calls the generic RejectProposal builder with application/json body
+func NewRejectProposalRequest(server string, org OrgRef, factory FactoryRef, number ProposalNumber, body RejectProposalJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRejectProposalRequestWithBody(server, org, factory, number, "application/json", bodyReader)
+}
+
+// NewRejectProposalRequestWithBody constructs an http.Request for the RejectProposal method, with any body, and a specified content type
+func NewRejectProposalRequestWithBody(server string, org OrgRef, factory FactoryRef, number ProposalNumber, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "number", number, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: "int64"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/jonah/proposals/%s/reject", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewQueueJonahReviewRequest constructs an http.Request for the QueueJonahReview method
+func NewQueueJonahReviewRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/jonah/reviews", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -23467,6 +24700,42 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/publish (the `PublishDraft` operationId).
 	PublishDraftWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body PublishDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*PublishDraftResponse, error)
 
+	// ListDraftRequestsWithResponse The factory's draft requests, newest first
+	//
+	// The asked definition changes of the factory (ADR 0021), newest first, at most limit of them.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/requests (the `ListDraftRequests` operationId).
+	ListDraftRequestsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *ListDraftRequestsParams, reqEditors ...RequestEditorFn) (*ListDraftRequestsResponse, error)
+
+	// CreateDraftRequestWithBodyWithResponse Ask for a change to the factory's definition (a draft request)
+	//
+	// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/requests (the `CreateDraftRequest` operationId).
+	CreateDraftRequestWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateDraftRequestResponse, error)
+
+	// CreateDraftRequestWithResponse Ask for a change to the factory's definition (a draft request)
+	//
+	// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/requests (the `CreateDraftRequest` operationId).
+	CreateDraftRequestWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body CreateDraftRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateDraftRequestResponse, error)
+
+	// GetDraftRequestWithResponse One draft request, with its result once it ended
+	//
+	// 404 draft-request-not-found for a request that is not the factory's.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/requests/{draft_request} (the `GetDraftRequest` operationId).
+	GetDraftRequestWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, draftRequest DraftRequestRef, reqEditors ...RequestEditorFn) (*GetDraftRequestResponse, error)
+
 	// ReplaceDraftTreeWithBodyWithResponse Make files the draft's whole tree (goal factory push)
 	//
 	// With expected_revision, a draft at another revision is 412 draft-conflict; without it the latest draft is replaced. 422 bad-path; 413 too-large (over 1,000 files or 16 MiB).
@@ -23703,6 +24972,76 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
 	SubmitItemWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body SubmitItemJSONRequestBody, reqEditors ...RequestEditorFn) (*SubmitItemResponse, error)
+
+	// GetJonahOverviewWithResponse What Jonah noticed this week, its policy, its proposals waiting and its cost
+	//
+	// The policy is the current version's learning.jonah (its defaults where it sets none) with the roles that may approve a proposal (those holding definition:publish). waiting counts the proposals still proposed; month_cost_usd is what the factory's jonah runs cost since the first of this UTC month; observations are those made since Monday 00:00 UTC, newest first; last_review is the newest review, absent before the first. 503 jonah-unavailable.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/jonah (the `GetJonahOverview` operationId).
+	GetJonahOverviewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*GetJonahOverviewResponse, error)
+
+	// ListProposalsWithResponse The factory's proposals, newest (highest number) first
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/jonah/proposals (the `ListProposals` operationId).
+	ListProposalsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *ListProposalsParams, reqEditors ...RequestEditorFn) (*ListProposalsResponse, error)
+
+	// GetProposalWithResponse One proposal with its files, its evidence and the versions it moves between
+	//
+	// Each file has its content in the version the proposal was made against (empty for a new file) and its new content; the client renders the diff. 404 proposal-not-found.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number} (the `GetProposal` operationId).
+	GetProposalWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*GetProposalResponse, error)
+
+	// ApproveProposalWithResponse Publish the proposal as a new version, as the caller (ADR 0034 decision 7)
+	//
+	// Opens a draft from the current version, writes the proposal's files and publishes it through the usual validation and gates. 409 draft-open when the factory already has an open draft (it is left untouched); proposal-stale when a file's current SHA-256 is not its base_sha256 (no draft is left); proposal-decided when it is no longer proposed; the publish's own refusals (definition-invalid, evals-pending, evals-failing; the eval gate keeps the draft open). 404 proposal-not-found.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/approve (the `ApproveProposal` operationId).
+	ApproveProposalWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*ApproveProposalResponse, error)
+
+	// EditProposalWithResponse Write the proposal's files into the draft, opening one if none is open (decision 8)
+	//
+	// Sets the proposal applied; the caller continues in the builder. 409 draft-conflict when the draft's copy of a file is not its base_sha256 (nothing is written); proposal-decided when it is no longer proposed. 404 proposal-not-found.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/edit (the `EditProposal` operationId).
+	EditProposalWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*EditProposalResponse, error)
+
+	// RejectProposalWithBodyWithResponse Reject the proposal with a reason, which later reviews read (decision 9)
+	//
+	// 400 invalid-request for a missing or blank reason or one over 2000 characters; 409 proposal-decided when it is no longer proposed. 404 proposal-not-found.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject (the `RejectProposal` operationId).
+	RejectProposalWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RejectProposalResponse, error)
+
+	// RejectProposalWithResponse Reject the proposal with a reason, which later reviews read (decision 9)
+	//
+	// 400 invalid-request for a missing or blank reason or one over 2000 characters; 409 proposal-decided when it is no longer proposed. 404 proposal-not-found.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject (the `RejectProposal` operationId).
+	RejectProposalWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, body RejectProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*RejectProposalResponse, error)
+
+	// QueueJonahReviewWithResponse Queue a manual review of the factory's sent-back runs (decision 2)
+	//
+	// The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. 409 review-loop-not-running while no review loop runs (none does until software#344 ships): nothing is queued. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/reviews (the `QueueJonahReview` operationId).
+	QueueJonahReviewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*QueueJonahReviewResponse, error)
 
 	// ListJudgesWithResponse The judges of the factory's current version, each with its last 30 days
 	//
@@ -27676,6 +29015,150 @@ func (r PublishDraftResponse) ContentType() string {
 	return ""
 }
 
+type ListDraftRequestsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *DraftRequestList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListDraftRequestsResponse) GetJSON200() *DraftRequestList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListDraftRequestsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListDraftRequestsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListDraftRequestsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListDraftRequestsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListDraftRequestsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateDraftRequestResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *DraftRequest
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateDraftRequestResponse) GetJSON201() *DraftRequest {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateDraftRequestResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateDraftRequestResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateDraftRequestResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateDraftRequestResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateDraftRequestResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetDraftRequestResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *DraftRequest
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetDraftRequestResponse) GetJSON200() *DraftRequest {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetDraftRequestResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetDraftRequestResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDraftRequestResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDraftRequestResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetDraftRequestResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ReplaceDraftTreeResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -28541,6 +30024,342 @@ func (r SubmitItemResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r SubmitItemResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetJonahOverviewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *JonahOverview
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetJonahOverviewResponse) GetJSON200() *JonahOverview {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetJonahOverviewResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetJonahOverviewResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetJonahOverviewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetJonahOverviewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetJonahOverviewResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListProposalsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ProposalPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListProposalsResponse) GetJSON200() *ProposalPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListProposalsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListProposalsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListProposalsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListProposalsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListProposalsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetProposalResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Proposal
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetProposalResponse) GetJSON200() *Proposal {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetProposalResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetProposalResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetProposalResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetProposalResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetProposalResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ApproveProposalResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ProposalDecided
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ApproveProposalResponse) GetJSON200() *ProposalDecided {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ApproveProposalResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ApproveProposalResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ApproveProposalResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ApproveProposalResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ApproveProposalResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type EditProposalResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ProposalDecided
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EditProposalResponse) GetJSON200() *ProposalDecided {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EditProposalResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EditProposalResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EditProposalResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EditProposalResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EditProposalResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RejectProposalResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ProposalDecided
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RejectProposalResponse) GetJSON200() *ProposalDecided {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RejectProposalResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RejectProposalResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RejectProposalResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RejectProposalResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RejectProposalResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type QueueJonahReviewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *JonahReview
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r QueueJonahReviewResponse) GetJSON202() *JonahReview {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r QueueJonahReviewResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r QueueJonahReviewResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r QueueJonahReviewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r QueueJonahReviewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r QueueJonahReviewResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -34401,6 +36220,66 @@ func (c *ClientWithResponses) PublishDraftWithResponse(ctx context.Context, org 
 	return ParsePublishDraftResponse(rsp)
 }
 
+// ListDraftRequestsWithResponse The factory's draft requests, newest first
+//
+// The asked definition changes of the factory (ADR 0021), newest first, at most limit of them.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/requests (the `ListDraftRequests` operationId).
+func (c *ClientWithResponses) ListDraftRequestsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *ListDraftRequestsParams, reqEditors ...RequestEditorFn) (*ListDraftRequestsResponse, error) {
+	rsp, err := c.ListDraftRequests(ctx, org, factory, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListDraftRequestsResponse(rsp)
+}
+
+// CreateDraftRequestWithBodyWithResponse Ask for a change to the factory's definition (a draft request)
+//
+// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/requests (the `CreateDraftRequest` operationId).
+func (c *ClientWithResponses) CreateDraftRequestWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateDraftRequestResponse, error) {
+	rsp, err := c.CreateDraftRequestWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateDraftRequestResponse(rsp)
+}
+
+// CreateDraftRequestWithResponse Ask for a change to the factory's definition (a draft request)
+//
+// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/requests (the `CreateDraftRequest` operationId).
+func (c *ClientWithResponses) CreateDraftRequestWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body CreateDraftRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateDraftRequestResponse, error) {
+	rsp, err := c.CreateDraftRequest(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateDraftRequestResponse(rsp)
+}
+
+// GetDraftRequestWithResponse One draft request, with its result once it ended
+//
+// 404 draft-request-not-found for a request that is not the factory's.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/requests/{draft_request} (the `GetDraftRequest` operationId).
+func (c *ClientWithResponses) GetDraftRequestWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, draftRequest DraftRequestRef, reqEditors ...RequestEditorFn) (*GetDraftRequestResponse, error) {
+	rsp, err := c.GetDraftRequest(ctx, org, factory, draftRequest, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDraftRequestResponse(rsp)
+}
+
 // ReplaceDraftTreeWithBodyWithResponse Make files the draft's whole tree (goal factory push)
 //
 // With expected_revision, a draft at another revision is 412 draft-conflict; without it the latest draft is replaced. 422 bad-path; 413 too-large (over 1,000 files or 16 MiB).
@@ -34798,6 +36677,124 @@ func (c *ClientWithResponses) SubmitItemWithResponse(ctx context.Context, org Or
 		return nil, err
 	}
 	return ParseSubmitItemResponse(rsp)
+}
+
+// GetJonahOverviewWithResponse What Jonah noticed this week, its policy, its proposals waiting and its cost
+//
+// The policy is the current version's learning.jonah (its defaults where it sets none) with the roles that may approve a proposal (those holding definition:publish). waiting counts the proposals still proposed; month_cost_usd is what the factory's jonah runs cost since the first of this UTC month; observations are those made since Monday 00:00 UTC, newest first; last_review is the newest review, absent before the first. 503 jonah-unavailable.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/jonah (the `GetJonahOverview` operationId).
+func (c *ClientWithResponses) GetJonahOverviewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*GetJonahOverviewResponse, error) {
+	rsp, err := c.GetJonahOverview(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetJonahOverviewResponse(rsp)
+}
+
+// ListProposalsWithResponse The factory's proposals, newest (highest number) first
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/jonah/proposals (the `ListProposals` operationId).
+func (c *ClientWithResponses) ListProposalsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *ListProposalsParams, reqEditors ...RequestEditorFn) (*ListProposalsResponse, error) {
+	rsp, err := c.ListProposals(ctx, org, factory, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListProposalsResponse(rsp)
+}
+
+// GetProposalWithResponse One proposal with its files, its evidence and the versions it moves between
+//
+// Each file has its content in the version the proposal was made against (empty for a new file) and its new content; the client renders the diff. 404 proposal-not-found.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number} (the `GetProposal` operationId).
+func (c *ClientWithResponses) GetProposalWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*GetProposalResponse, error) {
+	rsp, err := c.GetProposal(ctx, org, factory, number, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetProposalResponse(rsp)
+}
+
+// ApproveProposalWithResponse Publish the proposal as a new version, as the caller (ADR 0034 decision 7)
+//
+// Opens a draft from the current version, writes the proposal's files and publishes it through the usual validation and gates. 409 draft-open when the factory already has an open draft (it is left untouched); proposal-stale when a file's current SHA-256 is not its base_sha256 (no draft is left); proposal-decided when it is no longer proposed; the publish's own refusals (definition-invalid, evals-pending, evals-failing; the eval gate keeps the draft open). 404 proposal-not-found.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/approve (the `ApproveProposal` operationId).
+func (c *ClientWithResponses) ApproveProposalWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*ApproveProposalResponse, error) {
+	rsp, err := c.ApproveProposal(ctx, org, factory, number, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseApproveProposalResponse(rsp)
+}
+
+// EditProposalWithResponse Write the proposal's files into the draft, opening one if none is open (decision 8)
+//
+// Sets the proposal applied; the caller continues in the builder. 409 draft-conflict when the draft's copy of a file is not its base_sha256 (nothing is written); proposal-decided when it is no longer proposed. 404 proposal-not-found.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/edit (the `EditProposal` operationId).
+func (c *ClientWithResponses) EditProposalWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*EditProposalResponse, error) {
+	rsp, err := c.EditProposal(ctx, org, factory, number, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEditProposalResponse(rsp)
+}
+
+// RejectProposalWithBodyWithResponse Reject the proposal with a reason, which later reviews read (decision 9)
+//
+// 400 invalid-request for a missing or blank reason or one over 2000 characters; 409 proposal-decided when it is no longer proposed. 404 proposal-not-found.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject (the `RejectProposal` operationId).
+func (c *ClientWithResponses) RejectProposalWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RejectProposalResponse, error) {
+	rsp, err := c.RejectProposalWithBody(ctx, org, factory, number, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRejectProposalResponse(rsp)
+}
+
+// RejectProposalWithResponse Reject the proposal with a reason, which later reviews read (decision 9)
+//
+// 400 invalid-request for a missing or blank reason or one over 2000 characters; 409 proposal-decided when it is no longer proposed. 404 proposal-not-found.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject (the `RejectProposal` operationId).
+func (c *ClientWithResponses) RejectProposalWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, body RejectProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*RejectProposalResponse, error) {
+	rsp, err := c.RejectProposal(ctx, org, factory, number, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRejectProposalResponse(rsp)
+}
+
+// QueueJonahReviewWithResponse Queue a manual review of the factory's sent-back runs (decision 2)
+//
+// The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. 409 review-loop-not-running while no review loop runs (none does until software#344 ships): nothing is queued. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/reviews (the `QueueJonahReview` operationId).
+func (c *ClientWithResponses) QueueJonahReviewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*QueueJonahReviewResponse, error) {
+	rsp, err := c.QueueJonahReview(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseQueueJonahReviewResponse(rsp)
 }
 
 // ListJudgesWithResponse The judges of the factory's current version, each with its last 30 days
@@ -38663,6 +40660,105 @@ func ParsePublishDraftResponse(rsp *http.Response) (*PublishDraftResponse, error
 	return response, nil
 }
 
+// ParseListDraftRequestsResponse parses an HTTP response from a ListDraftRequestsWithResponse call
+func ParseListDraftRequestsResponse(rsp *http.Response) (*ListDraftRequestsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListDraftRequestsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DraftRequestList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateDraftRequestResponse parses an HTTP response from a CreateDraftRequestWithResponse call
+func ParseCreateDraftRequestResponse(rsp *http.Response) (*CreateDraftRequestResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateDraftRequestResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest DraftRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetDraftRequestResponse parses an HTTP response from a GetDraftRequestWithResponse call
+func ParseGetDraftRequestResponse(rsp *http.Response) (*GetDraftRequestResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDraftRequestResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DraftRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseReplaceDraftTreeResponse parses an HTTP response from a ReplaceDraftTreeWithResponse call
 func ParseReplaceDraftTreeResponse(rsp *http.Response) (*ReplaceDraftTreeResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -39251,6 +41347,237 @@ func ParseSubmitItemResponse(rsp *http.Response) (*SubmitItemResponse, error) {
 			return nil, err
 		}
 		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetJonahOverviewResponse parses an HTTP response from a GetJonahOverviewWithResponse call
+func ParseGetJonahOverviewResponse(rsp *http.Response) (*GetJonahOverviewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetJonahOverviewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest JonahOverview
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListProposalsResponse parses an HTTP response from a ListProposalsWithResponse call
+func ParseListProposalsResponse(rsp *http.Response) (*ListProposalsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListProposalsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ProposalPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetProposalResponse parses an HTTP response from a GetProposalWithResponse call
+func ParseGetProposalResponse(rsp *http.Response) (*GetProposalResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetProposalResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Proposal
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseApproveProposalResponse parses an HTTP response from a ApproveProposalWithResponse call
+func ParseApproveProposalResponse(rsp *http.Response) (*ApproveProposalResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ApproveProposalResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ProposalDecided
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseEditProposalResponse parses an HTTP response from a EditProposalWithResponse call
+func ParseEditProposalResponse(rsp *http.Response) (*EditProposalResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EditProposalResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ProposalDecided
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRejectProposalResponse parses an HTTP response from a RejectProposalWithResponse call
+func ParseRejectProposalResponse(rsp *http.Response) (*RejectProposalResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RejectProposalResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ProposalDecided
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseQueueJonahReviewResponse parses an HTTP response from a QueueJonahReviewWithResponse call
+func ParseQueueJonahReviewResponse(rsp *http.Response) (*QueueJonahReviewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &QueueJonahReviewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest JonahReview
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Problem
@@ -42784,6 +45111,15 @@ type ServerInterface interface {
 	// PublishDraft Publish the open draft as the factory's next version
 	// (POST /v1/orgs/{org}/factories/{factory}/draft/publish)
 	PublishDraft(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// ListDraftRequests The factory's draft requests, newest first
+	// (GET /v1/orgs/{org}/factories/{factory}/draft/requests)
+	ListDraftRequests(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params ListDraftRequestsParams)
+	// CreateDraftRequest Ask for a change to the factory's definition (a draft request)
+	// (POST /v1/orgs/{org}/factories/{factory}/draft/requests)
+	CreateDraftRequest(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// GetDraftRequest One draft request, with its result once it ended
+	// (GET /v1/orgs/{org}/factories/{factory}/draft/requests/{draft_request})
+	GetDraftRequest(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, draftRequest DraftRequestRef)
 	// ReplaceDraftTree Make files the draft's whole tree (goal factory push)
 	// (PUT /v1/orgs/{org}/factories/{factory}/draft/tree)
 	ReplaceDraftTree(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
@@ -42838,6 +45174,27 @@ type ServerInterface interface {
 	// SubmitItem Submit a work item to a factory's first station
 	// (POST /v1/orgs/{org}/factories/{factory}/items)
 	SubmitItem(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// GetJonahOverview What Jonah noticed this week, its policy, its proposals waiting and its cost
+	// (GET /v1/orgs/{org}/factories/{factory}/jonah)
+	GetJonahOverview(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// ListProposals The factory's proposals, newest (highest number) first
+	// (GET /v1/orgs/{org}/factories/{factory}/jonah/proposals)
+	ListProposals(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params ListProposalsParams)
+	// GetProposal One proposal with its files, its evidence and the versions it moves between
+	// (GET /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number})
+	GetProposal(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, number ProposalNumber)
+	// ApproveProposal Publish the proposal as a new version, as the caller (ADR 0034 decision 7)
+	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/approve)
+	ApproveProposal(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, number ProposalNumber)
+	// EditProposal Write the proposal's files into the draft, opening one if none is open (decision 8)
+	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/edit)
+	EditProposal(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, number ProposalNumber)
+	// RejectProposal Reject the proposal with a reason, which later reviews read (decision 9)
+	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject)
+	RejectProposal(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, number ProposalNumber)
+	// QueueJonahReview Queue a manual review of the factory's sent-back runs (decision 2)
+	// (POST /v1/orgs/{org}/factories/{factory}/jonah/reviews)
+	QueueJonahReview(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
 	// ListJudges The judges of the factory's current version, each with its last 30 days
 	// (GET /v1/orgs/{org}/factories/{factory}/judges)
 	ListJudges(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
@@ -45452,6 +47809,136 @@ func (siw *ServerInterfaceWrapper) PublishDraft(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// ListDraftRequests operation middleware
+func (siw *ServerInterfaceWrapper) ListDraftRequests(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListDraftRequestsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListDraftRequests(w, r, org, factory, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateDraftRequest operation middleware
+func (siw *ServerInterfaceWrapper) CreateDraftRequest(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateDraftRequest(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDraftRequest operation middleware
+func (siw *ServerInterfaceWrapper) GetDraftRequest(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "draft_request" -------------
+	var draftRequest DraftRequestRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "draft_request", r.PathValue("draft_request"), &draftRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "draft_request", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDraftRequest(w, r, org, factory, draftRequest)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ReplaceDraftTree operation middleware
 func (siw *ServerInterfaceWrapper) ReplaceDraftTree(w http.ResponseWriter, r *http.Request) {
 
@@ -46207,6 +48694,329 @@ func (siw *ServerInterfaceWrapper) SubmitItem(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SubmitItem(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetJonahOverview operation middleware
+func (siw *ServerInterfaceWrapper) GetJonahOverview(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetJonahOverview(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListProposals operation middleware
+func (siw *ServerInterfaceWrapper) ListProposals(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListProposalsParams
+
+	// ------------- Optional query parameter "state" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "state", r.URL.Query(), &params.State, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "state"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "after" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "after", r.URL.Query(), &params.After, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListProposals(w, r, org, factory, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetProposal operation middleware
+func (siw *ServerInterfaceWrapper) GetProposal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "number" -------------
+	var number ProposalNumber
+
+	err = runtime.BindStyledParameterWithOptions("simple", "number", r.PathValue("number"), &number, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "number", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetProposal(w, r, org, factory, number)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApproveProposal operation middleware
+func (siw *ServerInterfaceWrapper) ApproveProposal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "number" -------------
+	var number ProposalNumber
+
+	err = runtime.BindStyledParameterWithOptions("simple", "number", r.PathValue("number"), &number, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "number", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApproveProposal(w, r, org, factory, number)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// EditProposal operation middleware
+func (siw *ServerInterfaceWrapper) EditProposal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "number" -------------
+	var number ProposalNumber
+
+	err = runtime.BindStyledParameterWithOptions("simple", "number", r.PathValue("number"), &number, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "number", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.EditProposal(w, r, org, factory, number)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RejectProposal operation middleware
+func (siw *ServerInterfaceWrapper) RejectProposal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "number" -------------
+	var number ProposalNumber
+
+	err = runtime.BindStyledParameterWithOptions("simple", "number", r.PathValue("number"), &number, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "number", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RejectProposal(w, r, org, factory, number)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// QueueJonahReview operation middleware
+func (siw *ServerInterfaceWrapper) QueueJonahReview(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.QueueJonahReview(w, r, org, factory)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -50516,6 +53326,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/tree", wrapper.ReplaceDraftTree)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/validate", wrapper.ValidateDraft)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/publish", wrapper.PublishDraft)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/requests", wrapper.ListDraftRequests)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/requests", wrapper.CreateDraftRequest)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/requests/{draft_request}", wrapper.GetDraftRequest)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/versions", wrapper.ListVersions)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/versions/{version}", wrapper.GetVersion)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/versions/{version}/model", wrapper.GetVersionModel)
@@ -50555,6 +53368,13 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/judges/{judge}", wrapper.GetJudge)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/judges/{judge}", wrapper.UpdateJudge)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/judges/{judge}/try", wrapper.TryJudge)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah", wrapper.GetJonahOverview)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/proposals", wrapper.ListProposals)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}", wrapper.GetProposal)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/approve", wrapper.ApproveProposal)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/edit", wrapper.EditProposal)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject", wrapper.RejectProposal)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/reviews", wrapper.QueueJonahReview)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.GetAndon)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.PullAndon)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon/clear", wrapper.ClearAndon)
@@ -53065,6 +55885,129 @@ func (response PublishDraftdefaultApplicationProblemPlusJSONResponse) VisitPubli
 	return err
 }
 
+type ListDraftRequestsRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Params  ListDraftRequestsParams
+}
+
+type ListDraftRequestsResponseObject interface {
+	VisitListDraftRequestsResponse(w http.ResponseWriter) error
+}
+
+type ListDraftRequests200JSONResponse DraftRequestList
+
+func (response ListDraftRequests200JSONResponse) VisitListDraftRequestsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListDraftRequestsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListDraftRequestsdefaultApplicationProblemPlusJSONResponse) VisitListDraftRequestsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateDraftRequestRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Body    *CreateDraftRequestJSONRequestBody
+}
+
+type CreateDraftRequestResponseObject interface {
+	VisitCreateDraftRequestResponse(w http.ResponseWriter) error
+}
+
+type CreateDraftRequest201JSONResponse DraftRequest
+
+func (response CreateDraftRequest201JSONResponse) VisitCreateDraftRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateDraftRequestdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateDraftRequestdefaultApplicationProblemPlusJSONResponse) VisitCreateDraftRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDraftRequestRequestObject struct {
+	Org          OrgRef          `json:"org"`
+	Factory      FactoryRef      `json:"factory"`
+	DraftRequest DraftRequestRef `json:"draft_request"`
+}
+
+type GetDraftRequestResponseObject interface {
+	VisitGetDraftRequestResponse(w http.ResponseWriter) error
+}
+
+type GetDraftRequest200JSONResponse DraftRequest
+
+func (response GetDraftRequest200JSONResponse) VisitGetDraftRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDraftRequestdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetDraftRequestdefaultApplicationProblemPlusJSONResponse) VisitGetDraftRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ReplaceDraftTreeRequestObject struct {
 	Org     OrgRef     `json:"org"`
 	Factory FactoryRef `json:"factory"`
@@ -53808,6 +56751,292 @@ type SubmitItemdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response SubmitItemdefaultApplicationProblemPlusJSONResponse) VisitSubmitItemResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetJonahOverviewRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type GetJonahOverviewResponseObject interface {
+	VisitGetJonahOverviewResponse(w http.ResponseWriter) error
+}
+
+type GetJonahOverview200JSONResponse JonahOverview
+
+func (response GetJonahOverview200JSONResponse) VisitGetJonahOverviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetJonahOverviewdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetJonahOverviewdefaultApplicationProblemPlusJSONResponse) VisitGetJonahOverviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListProposalsRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Params  ListProposalsParams
+}
+
+type ListProposalsResponseObject interface {
+	VisitListProposalsResponse(w http.ResponseWriter) error
+}
+
+type ListProposals200JSONResponse ProposalPage
+
+func (response ListProposals200JSONResponse) VisitListProposalsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListProposalsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListProposalsdefaultApplicationProblemPlusJSONResponse) VisitListProposalsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetProposalRequestObject struct {
+	Org     OrgRef         `json:"org"`
+	Factory FactoryRef     `json:"factory"`
+	Number  ProposalNumber `json:"number"`
+}
+
+type GetProposalResponseObject interface {
+	VisitGetProposalResponse(w http.ResponseWriter) error
+}
+
+type GetProposal200JSONResponse Proposal
+
+func (response GetProposal200JSONResponse) VisitGetProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetProposaldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetProposaldefaultApplicationProblemPlusJSONResponse) VisitGetProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveProposalRequestObject struct {
+	Org     OrgRef         `json:"org"`
+	Factory FactoryRef     `json:"factory"`
+	Number  ProposalNumber `json:"number"`
+}
+
+type ApproveProposalResponseObject interface {
+	VisitApproveProposalResponse(w http.ResponseWriter) error
+}
+
+type ApproveProposal200JSONResponse ProposalDecided
+
+func (response ApproveProposal200JSONResponse) VisitApproveProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveProposaldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ApproveProposaldefaultApplicationProblemPlusJSONResponse) VisitApproveProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EditProposalRequestObject struct {
+	Org     OrgRef         `json:"org"`
+	Factory FactoryRef     `json:"factory"`
+	Number  ProposalNumber `json:"number"`
+}
+
+type EditProposalResponseObject interface {
+	VisitEditProposalResponse(w http.ResponseWriter) error
+}
+
+type EditProposal200JSONResponse ProposalDecided
+
+func (response EditProposal200JSONResponse) VisitEditProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EditProposaldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response EditProposaldefaultApplicationProblemPlusJSONResponse) VisitEditProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RejectProposalRequestObject struct {
+	Org     OrgRef         `json:"org"`
+	Factory FactoryRef     `json:"factory"`
+	Number  ProposalNumber `json:"number"`
+	Body    *RejectProposalJSONRequestBody
+}
+
+type RejectProposalResponseObject interface {
+	VisitRejectProposalResponse(w http.ResponseWriter) error
+}
+
+type RejectProposal200JSONResponse ProposalDecided
+
+func (response RejectProposal200JSONResponse) VisitRejectProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RejectProposaldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RejectProposaldefaultApplicationProblemPlusJSONResponse) VisitRejectProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type QueueJonahReviewRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type QueueJonahReviewResponseObject interface {
+	VisitQueueJonahReviewResponse(w http.ResponseWriter) error
+}
+
+type QueueJonahReview202JSONResponse JonahReview
+
+func (response QueueJonahReview202JSONResponse) VisitQueueJonahReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type QueueJonahReviewdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response QueueJonahReviewdefaultApplicationProblemPlusJSONResponse) VisitQueueJonahReviewResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -58218,6 +61447,15 @@ type StrictServerInterface interface {
 	// PublishDraft Publish the open draft as the factory's next version
 	// (POST /v1/orgs/{org}/factories/{factory}/draft/publish)
 	PublishDraft(ctx context.Context, request PublishDraftRequestObject) (PublishDraftResponseObject, error)
+	// ListDraftRequests The factory's draft requests, newest first
+	// (GET /v1/orgs/{org}/factories/{factory}/draft/requests)
+	ListDraftRequests(ctx context.Context, request ListDraftRequestsRequestObject) (ListDraftRequestsResponseObject, error)
+	// CreateDraftRequest Ask for a change to the factory's definition (a draft request)
+	// (POST /v1/orgs/{org}/factories/{factory}/draft/requests)
+	CreateDraftRequest(ctx context.Context, request CreateDraftRequestRequestObject) (CreateDraftRequestResponseObject, error)
+	// GetDraftRequest One draft request, with its result once it ended
+	// (GET /v1/orgs/{org}/factories/{factory}/draft/requests/{draft_request})
+	GetDraftRequest(ctx context.Context, request GetDraftRequestRequestObject) (GetDraftRequestResponseObject, error)
 	// ReplaceDraftTree Make files the draft's whole tree (goal factory push)
 	// (PUT /v1/orgs/{org}/factories/{factory}/draft/tree)
 	ReplaceDraftTree(ctx context.Context, request ReplaceDraftTreeRequestObject) (ReplaceDraftTreeResponseObject, error)
@@ -58272,6 +61510,27 @@ type StrictServerInterface interface {
 	// SubmitItem Submit a work item to a factory's first station
 	// (POST /v1/orgs/{org}/factories/{factory}/items)
 	SubmitItem(ctx context.Context, request SubmitItemRequestObject) (SubmitItemResponseObject, error)
+	// GetJonahOverview What Jonah noticed this week, its policy, its proposals waiting and its cost
+	// (GET /v1/orgs/{org}/factories/{factory}/jonah)
+	GetJonahOverview(ctx context.Context, request GetJonahOverviewRequestObject) (GetJonahOverviewResponseObject, error)
+	// ListProposals The factory's proposals, newest (highest number) first
+	// (GET /v1/orgs/{org}/factories/{factory}/jonah/proposals)
+	ListProposals(ctx context.Context, request ListProposalsRequestObject) (ListProposalsResponseObject, error)
+	// GetProposal One proposal with its files, its evidence and the versions it moves between
+	// (GET /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number})
+	GetProposal(ctx context.Context, request GetProposalRequestObject) (GetProposalResponseObject, error)
+	// ApproveProposal Publish the proposal as a new version, as the caller (ADR 0034 decision 7)
+	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/approve)
+	ApproveProposal(ctx context.Context, request ApproveProposalRequestObject) (ApproveProposalResponseObject, error)
+	// EditProposal Write the proposal's files into the draft, opening one if none is open (decision 8)
+	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/edit)
+	EditProposal(ctx context.Context, request EditProposalRequestObject) (EditProposalResponseObject, error)
+	// RejectProposal Reject the proposal with a reason, which later reviews read (decision 9)
+	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject)
+	RejectProposal(ctx context.Context, request RejectProposalRequestObject) (RejectProposalResponseObject, error)
+	// QueueJonahReview Queue a manual review of the factory's sent-back runs (decision 2)
+	// (POST /v1/orgs/{org}/factories/{factory}/jonah/reviews)
+	QueueJonahReview(ctx context.Context, request QueueJonahReviewRequestObject) (QueueJonahReviewResponseObject, error)
 	// ListJudges The judges of the factory's current version, each with its last 30 days
 	// (GET /v1/orgs/{org}/factories/{factory}/judges)
 	ListJudges(ctx context.Context, request ListJudgesRequestObject) (ListJudgesResponseObject, error)
@@ -60344,6 +63603,96 @@ func (sh *strictHandler) PublishDraft(w http.ResponseWriter, r *http.Request, or
 	}
 }
 
+// ListDraftRequests operation middleware
+func (sh *strictHandler) ListDraftRequests(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params ListDraftRequestsParams) {
+	var request ListDraftRequestsRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListDraftRequests(ctx, request.(ListDraftRequestsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListDraftRequests")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListDraftRequestsResponseObject); ok {
+		if err := validResponse.VisitListDraftRequestsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateDraftRequest operation middleware
+func (sh *strictHandler) CreateDraftRequest(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request CreateDraftRequestRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	var body CreateDraftRequestJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateDraftRequest(ctx, request.(CreateDraftRequestRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateDraftRequest")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateDraftRequestResponseObject); ok {
+		if err := validResponse.VisitCreateDraftRequestResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetDraftRequest operation middleware
+func (sh *strictHandler) GetDraftRequest(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, draftRequest DraftRequestRef) {
+	var request GetDraftRequestRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.DraftRequest = draftRequest
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetDraftRequest(ctx, request.(GetDraftRequestRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetDraftRequest")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetDraftRequestResponseObject); ok {
+		if err := validResponse.VisitGetDraftRequestResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ReplaceDraftTree operation middleware
 func (sh *strictHandler) ReplaceDraftTree(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
 	var request ReplaceDraftTreeRequestObject
@@ -60898,6 +64247,207 @@ func (sh *strictHandler) SubmitItem(w http.ResponseWriter, r *http.Request, org 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SubmitItemResponseObject); ok {
 		if err := validResponse.VisitSubmitItemResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetJonahOverview operation middleware
+func (sh *strictHandler) GetJonahOverview(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request GetJonahOverviewRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetJonahOverview(ctx, request.(GetJonahOverviewRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetJonahOverview")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetJonahOverviewResponseObject); ok {
+		if err := validResponse.VisitGetJonahOverviewResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListProposals operation middleware
+func (sh *strictHandler) ListProposals(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params ListProposalsParams) {
+	var request ListProposalsRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListProposals(ctx, request.(ListProposalsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListProposals")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListProposalsResponseObject); ok {
+		if err := validResponse.VisitListProposalsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetProposal operation middleware
+func (sh *strictHandler) GetProposal(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, number ProposalNumber) {
+	var request GetProposalRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Number = number
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetProposal(ctx, request.(GetProposalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetProposal")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetProposalResponseObject); ok {
+		if err := validResponse.VisitGetProposalResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ApproveProposal operation middleware
+func (sh *strictHandler) ApproveProposal(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, number ProposalNumber) {
+	var request ApproveProposalRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Number = number
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ApproveProposal(ctx, request.(ApproveProposalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ApproveProposal")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ApproveProposalResponseObject); ok {
+		if err := validResponse.VisitApproveProposalResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// EditProposal operation middleware
+func (sh *strictHandler) EditProposal(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, number ProposalNumber) {
+	var request EditProposalRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Number = number
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.EditProposal(ctx, request.(EditProposalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "EditProposal")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(EditProposalResponseObject); ok {
+		if err := validResponse.VisitEditProposalResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RejectProposal operation middleware
+func (sh *strictHandler) RejectProposal(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, number ProposalNumber) {
+	var request RejectProposalRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Number = number
+
+	var body RejectProposalJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RejectProposal(ctx, request.(RejectProposalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RejectProposal")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RejectProposalResponseObject); ok {
+		if err := validResponse.VisitRejectProposalResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// QueueJonahReview operation middleware
+func (sh *strictHandler) QueueJonahReview(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request QueueJonahReviewRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.QueueJonahReview(ctx, request.(QueueJonahReviewRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "QueueJonahReview")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(QueueJonahReviewResponseObject); ok {
+		if err := validResponse.VisitQueueJonahReviewResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

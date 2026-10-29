@@ -1,6 +1,6 @@
 ## When you change
 
-Sign-up by domain: `db/migrations/00078_signup_domains.sql` (`org_signup_domains`, `public_email_domains`, `goal_set_signup_domain`, `goal_signup_domain_org`, `goal_apply_signup_domain`, or a later migration that replaces them), the sign-up gate `allowOnlyInvitedOrBootstrap`, `recordUser` or `known` in `apps/auth/src/signin.ts`, or the signup-domain operations in `contracts/api/openapi.yaml`
+Sign-up by domain: `db/migrations/00081_signup_domains.sql` (`org_signup_domains`, `public_email_domains`, `goal_set_signup_domain`, `goal_signup_domain_org`, `goal_apply_signup_domain`, or a later migration that replaces them), the sign-up gate `allowOnlyInvitedOrBootstrap`, `recordUser` or `known` in `apps/auth/src/signin.ts`, or the signup-domain operations in `contracts/api/openapi.yaml`
 
 ## Also change
 

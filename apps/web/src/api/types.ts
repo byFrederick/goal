@@ -65,6 +65,8 @@ export type {
   Draft,
   DraftModel,
   DraftRef,
+  DraftRequest,
+  DraftRequestList,
   DraftTree,
   EvalCaseEntry,
   EvalCaseFromRun,
@@ -131,6 +133,7 @@ export type {
   MetricsSummary,
   NewApiKey,
   NewConnection,
+  NewDraftRequest,
   NewFactoryRequest,
   NewItem,
   NewKnowledgeSource,
@@ -268,5 +271,17 @@ export type JudgeDay = Schemas['JudgeDay'];
 export type JudgeScore = Schemas['JudgeScore'];
 export type JudgeRunsOn = Schemas['JudgeRunsOn'];
 export type JudgeTries = Schemas['JudgeTries'];
+export type JonahOverview = Schemas['JonahOverview'];
+export type JonahPolicy = Schemas['JonahPolicy'];
+export type JonahObservation = Schemas['JonahObservation'];
+export type JonahReview = Schemas['JonahReview'];
+export type ProposalState = Schemas['ProposalState'];
+export type ProposalEntry = Schemas['ProposalEntry'];
+export type ProposalEstimate = Schemas['ProposalEstimate'];
+export type ProposalPage = Schemas['ProposalPage'];
+export type Proposal = Schemas['Proposal'];
+export type ProposalFile = Schemas['ProposalFile'];
+export type ProposalEvidence = Schemas['ProposalEvidence'];
+export type ProposalDecided = Schemas['ProposalDecided'];
 export type TriggerTry = Schemas['TriggerTry'];
 export type TriggerTryStep = Schemas['TriggerTryStep'];

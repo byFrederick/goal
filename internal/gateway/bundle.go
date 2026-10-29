@@ -37,6 +37,23 @@ type runBundle struct {
 	// Tools are mise tool specs installed after the repository's own: the runtime's, then the CLI
 	// tools of the agent's connections.
 	Tools []string `json:"tools"`
+	// Definition is a draft request's draft (definitionBundle), written into the workspace
+	// instead of a repository; nil for every other run.
+	Definition *bundleDefinition `json:"definition,omitempty"`
+}
+
+// bundleDefinition is the factory's draft at the revision a draft request read: every file by
+// its definition path, base64 in JSON.
+type bundleDefinition struct {
+	Files map[string][]byte `json:"files"`
+}
+
+// bundleDraftRequest is the draft request a definition-mode run carries out: what was asked and,
+// for Ask Jonah for a fix, the agent it is about.
+type bundleDraftRequest struct {
+	ID    domain.DraftRequestID `json:"id"`
+	Text  string                `json:"text"`
+	Agent string                `json:"agent,omitempty"`
 }
 
 // bundleSpec is the task as the worker reads it from /goal/spec.json, less the gateway's URL,
@@ -69,6 +86,11 @@ type bundleSpec struct {
 	// GrantedCalls are the Ask-first calls a person approved for this run (ADR 0031 decision 5),
 	// which the worker allows once each when connection, tool and canonical input match.
 	GrantedCalls []grantedCall `json:"granted_calls"`
+	// DraftRequest is the request of a draft request's run; nil for every other run.
+	DraftRequest *bundleDraftRequest `json:"draft_request,omitempty"`
+	// Jonah is a Jonah review's definition files, events and rejected proposals (jonah.go); nil
+	// for every other run.
+	Jonah *bundleJonah `json:"jonah,omitempty"`
 }
 
 // grantedCall is one call approved for the run, its input as canonical JSON.
@@ -131,7 +153,10 @@ type gitCredential struct {
 // ServeRun serves GET /run: the bundle of the run whose task token the request carries, from
 // the definition version the run started on and the item it works on, or with notes_after the
 // notes left since the run started (serveNotes). A token that does not verify is 401; one whose
-// factory, agent, station or item the version or the organization does not have is 403.
+// factory, agent, station or item the version or the organization does not have is 403. A draft
+// request's token gets its definition bundle (definitionBundle), 409 once the draft moved past
+// the token's revision. A jonah token is served a Jonah review's bundle (jonahBundle), and 503
+// without Deps.Jonah.
 func (g *Gateway) ServeRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
@@ -153,8 +178,13 @@ func (g *Gateway) ServeRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	b, err := g.bundle(ctx, claims)
+	b, err := g.bundleOf(ctx, claims)
 	switch {
+	case errors.Is(err, errStaleDraft):
+		g.log.InfoContext(ctx, "run bundle of a stale draft", claimAttrs(claims, "reason", err)...)
+		http.Error(w, "the draft changed", http.StatusConflict)
+
+		return
 	case errors.Is(err, errForbidden) || errors.Is(err, ports.ErrNotFound):
 		g.log.WarnContext(ctx, "run bundle forbidden", claimAttrs(claims, "reason", err)...)
 		http.Error(w, "forbidden", http.StatusForbidden)
@@ -178,6 +208,20 @@ func (g *Gateway) ServeRun(w http.ResponseWriter, r *http.Request) {
 	g.log.InfoContext(ctx, "run bundle served", claimAttrs(claims, "files", len(b.Files))...)
 }
 
+// bundleOf is the bundle of the run c names: a Jonah review's for a TaskKindJonah token, a draft
+// request's definition bundle for a TaskKindDraftRequest one, and the run's bundle otherwise.
+func (g *Gateway) bundleOf(ctx context.Context, c domain.TaskClaims) (runBundle, error) {
+	if c.Kind == domain.TaskKindJonah {
+		return g.jonahBundle(ctx, c)
+	}
+
+	if c.Kind == domain.TaskKindDraftRequest {
+		return g.definitionBundle(ctx, c)
+	}
+
+	return g.bundle(ctx, c)
+}
+
 // taskRun is what a task token names, checked against its definition version and organization.
 type taskRun struct {
 	line    domain.Line
@@ -190,6 +234,10 @@ type taskRun struct {
 // station, and its item must be of that factory in the token's organization (ctx). Anything else
 // wraps errForbidden or ports.ErrNotFound.
 func (g *Gateway) run(ctx context.Context, c domain.TaskClaims) (taskRun, error) {
+	if c.Kind == domain.TaskKindDraftRequest {
+		return taskRun{}, fmt.Errorf("%w: a draft request's task has no item", errForbidden)
+	}
+
 	f, err := g.defs.Version(ctx, c.VersionID)
 	if err != nil {
 		return taskRun{}, fmt.Errorf("load factory %s version %s: %w", c.FactoryID, c.VersionID, err)
@@ -217,6 +265,89 @@ func (g *Gateway) run(ctx context.Context, c domain.TaskClaims) (taskRun, error)
 	}
 
 	return taskRun{line: line, agent: agent, station: station, item: it}, nil
+}
+
+// errStaleDraft means the factory's draft is no longer at the revision a draft request's token
+// names: it was saved, discarded or published since the request read it.
+var errStaleDraft = errors.New("the draft moved past the request's revision")
+
+// definitionBundle is a draft request's bundle (ADR 0021 decision 2; apps/worker/README.md,
+// "Definition mode"): its spec names no item and no station but the request, with the model and
+// limits of the line's version and no skill, tool rule, connection or rule; its definition holds
+// every file of the factory's draft at the token's revision. It has no repository, no git login
+// and no tools. A request of another factory, or about another agent, wraps errForbidden; a draft
+// at another revision, or none, wraps errStaleDraft.
+func (g *Gateway) definitionBundle(ctx context.Context, c domain.TaskClaims) (runBundle, error) {
+	if g.draftRequests == nil || g.drafts == nil {
+		return runBundle{}, fmt.Errorf("%w: this gateway serves no draft request", errForbidden)
+	}
+
+	f, err := g.defs.Version(ctx, c.VersionID)
+	if err != nil {
+		return runBundle{}, fmt.Errorf("load factory %s version %s: %w", c.FactoryID, c.VersionID, err)
+	}
+
+	if f.Metadata.ID != string(c.FactoryID) {
+		return runBundle{}, fmt.Errorf("%w: version %s is not a version of factory %s", errForbidden, c.VersionID, c.FactoryID)
+	}
+
+	req, err := g.draftRequests.Get(ctx, c.DraftRequest)
+	if err != nil {
+		return runBundle{}, fmt.Errorf("draft request %s: %w", c.DraftRequest, err)
+	}
+
+	if req.Factory != c.FactoryID || req.Agent != c.Agent {
+		return runBundle{}, fmt.Errorf("%w: draft request %s is not factory %s's about agent %q", errForbidden, req.ID, c.FactoryID, c.Agent)
+	}
+
+	files, err := g.draftFiles(ctx, c)
+	if err != nil {
+		return runBundle{}, err
+	}
+
+	line := f.Line()
+	maxTurns, maxUSD := domain.AgentSpec{}.Limits(line.Runtime)
+
+	return runBundle{
+		Spec: bundleSpec{
+			FactoryID: c.FactoryID, RunID: c.RunID, Agent: req.Agent, Model: cmp.Or(c.Model, line.Runtime.Model),
+			Skills: []string{}, ToolsAllow: []string{}, ToolsDeny: withDenied(nil, c.DeniedCommands), Purpose: line.Purpose,
+			Brief: req.Text, MaxTurns: maxTurns, MaxUSD: maxUSD,
+			Connections: []bundleConnection{}, Rules: []bundleRule{}, GrantedCalls: []grantedCall{},
+			DraftRequest: &bundleDraftRequest{ID: req.ID, Text: req.Text, Agent: req.Agent},
+		},
+		Files:      map[string][]byte{},
+		Git:        []gitCredential{},
+		Tools:      []string{},
+		Definition: &bundleDefinition{Files: files},
+	}, nil
+}
+
+// draftFiles are the files of c's factory's draft, by path, when it is at c's revision.
+func (g *Gateway) draftFiles(ctx context.Context, c domain.TaskClaims) (map[string][]byte, error) {
+	d, err := g.drafts.Draft(ctx, c.FactoryID)
+
+	switch {
+	case errors.Is(err, ports.ErrNotFound):
+		return nil, fmt.Errorf("factory %s has no open draft: %w", c.FactoryID, errStaleDraft)
+	case err != nil:
+		return nil, fmt.Errorf("draft of factory %s: %w", c.FactoryID, err)
+	case d.Revision != c.DraftRevision:
+		return nil, fmt.Errorf("the draft of factory %s is at revision %d, not %d: %w", c.FactoryID, d.Revision, c.DraftRevision, errStaleDraft)
+	}
+
+	files := make(map[string][]byte, len(d.Manifest))
+
+	for p, h := range d.Manifest {
+		body, err := g.drafts.Blob(ctx, h)
+		if err != nil {
+			return nil, fmt.Errorf("draft file %s: %w", p, err)
+		}
+
+		files[p] = body
+	}
+
+	return files, nil
 }
 
 func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, error) {

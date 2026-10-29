@@ -135,8 +135,8 @@ export function NewItemFromSidebar({
             className="flex h-9 w-full items-center gap-2 rounded-control bg-run pr-2 pl-3 font-control text-white"
           >
             <Plus size={16} strokeWidth={1.5} aria-hidden="true" />
-            <span className="flex-1 text-left text-body">New item</span>
-            <kbd className="grid size-5 place-items-center rounded-chip border border-white/40 text-meta font-semibold">
+            <span className="min-w-0 flex-1 truncate text-left text-body">New item</span>
+            <kbd className="grid size-5 flex-none place-items-center rounded-chip border border-white/40 text-meta font-semibold">
               C
             </kbd>
           </button>

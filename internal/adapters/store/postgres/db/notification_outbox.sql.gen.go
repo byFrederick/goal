@@ -250,7 +250,7 @@ type QueueNotificationsParams struct {
 	Actor        string
 }
 
-// The notification outbox (migration 00081; ADR 0023, decision 3), under row-level security:
+// The notification outbox (migration 00083; ADR 0023, decision 3), under row-level security:
 // every statement runs in the transaction of the event's organization.
 // Queues one pending row per recipient and per channel that is on, for event event_id of kind
 // event at factory. The recipients are the organization's owners and admins plus the members

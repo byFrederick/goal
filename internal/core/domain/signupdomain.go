@@ -21,7 +21,7 @@ var (
 	ErrSignupDomainTaken = fmt.Errorf("another organization holds the domain: %w", ErrInvalid)
 )
 
-// The audit actions of a sign-up domain (goal_set_signup_domain, 00078): set {domain, join_role,
+// The audit actions of a sign-up domain (goal_set_signup_domain, 00081): set {domain, join_role,
 // from: the previous {domain, join_role} or null} and cleared {domain}.
 const (
 	AuditOrgSignupDomainSet     = "org.signup_domain_set"

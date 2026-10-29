@@ -13,7 +13,7 @@ import (
 
 var _ ports.NotificationPreferences = (*NotificationPreferences)(nil)
 
-// NotificationPreferences implements ports.NotificationPreferences over 00080's tables. They
+// NotificationPreferences implements ports.NotificationPreferences over 00082's tables. They
 // belong to a person, not an organization, and have no row-level security, so its transactions
 // bind no organization and every statement names the person (db/queries/notification_preferences.sql).
 type NotificationPreferences struct {

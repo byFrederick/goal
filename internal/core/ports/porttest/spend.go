@@ -62,7 +62,7 @@ func (s *Store) runSpend(org domain.OrgID, from, since, until time.Time) domain.
 	var f domain.SpendFacts
 
 	for _, r := range s.runs {
-		if _, ok := s.visible(r.ItemID, org); !ok || !inWindow(r.StartedAt, from, until) {
+		if !s.runVisible(r, org) || !inWindow(r.StartedAt, from, until) {
 			continue
 		}
 

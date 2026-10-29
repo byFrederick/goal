@@ -50,6 +50,33 @@ func TestSettings_Defaults(t *testing.T) {
 	if s.DefinitionCacheBytes != 64<<20 {
 		t.Errorf("definition cache %d bytes; want 64 MiB", s.DefinitionCacheBytes)
 	}
+
+	if s.JonahReviewEvery != time.Minute || s.JonahReview.Timeout != 30*time.Minute || s.JonahReview.Margin != 5*time.Minute {
+		t.Errorf("jonah reviews every %s, timeout %s, margin %s; want 1m, 30m and 5m",
+			s.JonahReviewEvery, s.JonahReview.Timeout, s.JonahReview.Margin)
+	}
+}
+
+// The Jonah review loop's times are read from the environment, and one that is not positive is
+// refused by name.
+func TestSettings_JonahReviews(t *testing.T) {
+	t.Parallel()
+
+	s, err := settingsFrom(envOf(map[string]string{
+		"GOAL_JONAH_REVIEW_EVERY": "2m", "GOAL_JONAH_REVIEW_TIMEOUT": "1h", "GOAL_JONAH_REVIEW_LEASE_MARGIN": "10m",
+	}))
+	if err != nil || s.JonahReviewEvery != 2*time.Minute || s.JonahReview.Timeout != time.Hour || s.JonahReview.Margin != 10*time.Minute {
+		t.Fatalf("jonah reviews every %s, timeout %s, margin %s (%v); want 2m, 1h and 10m",
+			s.JonahReviewEvery, s.JonahReview.Timeout, s.JonahReview.Margin, err)
+	}
+
+	for _, name := range []string{"GOAL_JONAH_REVIEW_EVERY", "GOAL_JONAH_REVIEW_TIMEOUT", "GOAL_JONAH_REVIEW_LEASE_MARGIN"} {
+		for _, bad := range []string{"0s", "-1m", "soon"} {
+			if _, err := settingsFrom(envOf(map[string]string{name: bad})); err == nil || !strings.Contains(err.Error(), name) {
+				t.Errorf("%s=%s: %v; want an error naming it", name, bad, err)
+			}
+		}
+	}
 }
 
 // Without GOAL_EMBED_URL the knowledge base searches by keywords; with it the model defaults to

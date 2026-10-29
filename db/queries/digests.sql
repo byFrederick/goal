@@ -1,4 +1,4 @@
--- The daily digests (ports.Digests; migration 00082; ADR 0023, decision 6). The digests table
+-- The daily digests (ports.Digests; migration 00084; ADR 0023, decision 6). The digests table
 -- belongs to the person and has no row-level security: its statements bind no organization and
 -- name the rows they touch. The recipients and each digest's content are read per organization,
 -- under its row-level security, in a transaction bound to it.

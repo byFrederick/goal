@@ -1,6 +1,6 @@
 ## When you change
 
-The daily digest ([ADR 0023](../../adr/0023-notifications-and-sign-up-by-domain.md) decision 6): the `digests` table (`db/migrations/00082_digests.sql`), its queries (`db/queries/digests.sql`), the port `ports.Digests` (`internal/core/ports/notifications.go`), its adapter `internal/adapters/store/postgres/digests.go`, or the job and its message in `internal/notify/digest.go` (`DigestJob`, `RenderDigest`, `DigestHour`)
+The daily digest ([ADR 0023](../../adr/0023-notifications-and-sign-up-by-domain.md) decision 6): the `digests` table (`db/migrations/00084_digests.sql`), its queries (`db/queries/digests.sql`), the port `ports.Digests` (`internal/core/ports/notifications.go`), its adapter `internal/adapters/store/postgres/digests.go`, or the job and its message in `internal/notify/digest.go` (`DigestJob`, `RenderDigest`, `DigestHour`)
 
 ## Also change
 
