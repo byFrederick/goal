@@ -82,7 +82,7 @@ func scanRepo(r repo) ([]read, wrangler, error) {
 		return nil, wrangler{}, err
 	}
 
-	// A Durable Object namespace on env is a binding, not a variable.
+	// A Durable Object namespace or the assets binding on env is a binding, not a variable.
 	bindings := w.bindings()
 	reads = slices.DeleteFunc(reads, func(rd read) bool { return rd.reader == readerControlWorker && bindings[rd.name] })
 	reads = append(reads, w.reads()...)

@@ -4,6 +4,14 @@
   "name": "goal-test",
   "main": "worker.ts",
   "compatibility_date": "2026-10-01",
+  // A stand-in for the docs build (apps/docs/dist), served as deploy/cloudflare/wrangler.jsonc serves it.
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "assets",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/*", "!/docs", "!/docs/*"]
+  },
   "durable_objects": {
     "bindings": [
       { "name": "GOALD", "class_name": "Goald" },

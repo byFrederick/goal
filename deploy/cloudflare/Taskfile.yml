@@ -50,7 +50,8 @@ tasks:
       Production deploy from deploy/cloudflare (scripts/deploy.sh): builds the goald, auth and goal-agent images with
       docker buildx for linux/amd64 (reproducible: SOURCE_DATE_EPOCH from each image's inputs), pushes them to
       Cloudflare's registry and runs wrangler deploy with a generated config pinning their digests
-      (wrangler.deploy.jsonc, git-ignored); passes GOAL_BOOTSTRAP_OWNER_EMAIL as a --var when it is set; retries once,
+      (wrangler.deploy.jsonc, git-ignored), which uploads the docs build (apps/docs/dist, task docs:site:build first) as
+      the Worker's static assets; passes GOAL_BOOTSTRAP_OWNER_EMAIL as a --var when it is set; retries once,
       only when wrangler timed out preparing the container image on Cloudflare's network. GOAL_IMAGE_CACHE=registry or
       gha adds a layer cache (CI); none, the default, locally
     deps: [worker:install]
@@ -60,6 +61,8 @@ tasks:
         msg: "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are not set: the deploy token and the account (docs/engineering/cloudflare-operations.md, Deploys)"
       - sh: docker buildx version >/dev/null 2>&1 && docker info >/dev/null 2>&1
         msg: "Docker with buildx is not running: the deploy builds the container images with it"
+      - sh: test -f ../../apps/docs/dist/docs/index.html
+        msg: "No docs build in apps/docs/dist: run task docs:site:build first; wrangler deploy uploads it as the Worker's static assets"
     cmds:
       - sh scripts/deploy.sh
 
