@@ -307,6 +307,10 @@ With sign-in on (GOAL_AUTH=session), commands send GOAL_API_KEY (an API key goal
 personal token goal_pat_…) when it is set, else what goal login stored for goald's origin, and
 only over https or to this machine; a refused credential or permission exits 77`
 
+// Usage returns the CLI's usage text, the one table of its commands and flags; tools/gendocs
+// renders the docs site's CLI reference from it.
+func Usage() string { return usage }
+
 // errUsage marks a command line that names no valid command; Run returns 2 for it.
 var errUsage = errors.New(usage)
 
