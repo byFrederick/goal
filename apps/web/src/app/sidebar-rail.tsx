@@ -7,7 +7,7 @@
 // on the rail expands the sidebar into search, so the shortcut never opens search out of sight.
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { PanelLeft, Plus } from 'lucide-react';
+import { CircleHelp, PanelLeft, Plus } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import { attentionQuery, overviewQuery } from '../api/queries';
 import type { FactoryOverviewList, OrgSummary } from '../api/types';
@@ -19,7 +19,7 @@ import { NotAvailable } from '../ui/not-available';
 import { Tooltip } from '../ui/tooltip';
 import { AccountMenu } from './account-menu';
 import { useFactorySquares } from './factory-squares';
-import { FactorySquareLink, NewFactoryLink } from './rail-items';
+import { docsLink, FactorySquareLink, NewFactoryLink } from './rail-items';
 import { screensFor, sidebarOrgScreens } from './screens';
 import { useSearchShortcut } from './sidebar-search';
 
@@ -101,6 +101,11 @@ export function SidebarRail({ org, busy, focusOnMount, onExpand }: SidebarRailPr
         <RailFactories org={org} mayCreate={mayCreate} />
       </ul>
       <div className="mt-auto flex flex-col items-center gap-1 pt-4">
+        <Tooltip label={docsLink.label}>
+          <a href={docsLink.href} aria-label={docsLink.label} className={railButton}>
+            <CircleHelp {...iconProps} />
+          </a>
+        </Tooltip>
         <SpendRing org={org} overview={overview.data} />
         <AccountMenu org={org} size="rail" />
       </div>
