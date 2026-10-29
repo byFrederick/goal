@@ -100,3 +100,33 @@ describe('routing', () => {
     expect(c.running).toBe(true);
   });
 });
+
+describe('docs', () => {
+  it('still sends /v1/health to goald', async () => {
+    echo(goald());
+    const res = await exports.default.fetch('https://goal.example.com/v1/health');
+    expect(await res.json()).toMatchObject({ port: 8080, path: '/v1/health' });
+  });
+
+  it('answers /docs/ from the static assets, not goald', async () => {
+    const c = goald();
+    c.port = async () => new Response('goald', { status: 500 });
+    const res = await exports.default.fetch('https://goal.example.com/docs/');
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('docs index stand-in');
+  });
+
+  it('answers a missing docs page with the site’s 404 page, never goald', async () => {
+    const c = goald();
+    c.port = async () => new Response('goald', { status: 500 });
+    const res = await exports.default.fetch('https://goal.example.com/docs/missing');
+    expect(res.status).toBe(404);
+    expect(await res.text()).toContain('docs 404 stand-in');
+  });
+
+  it('leaves a path that only starts like /docs to goald', async () => {
+    echo(goald());
+    const res = await exports.default.fetch('https://goal.example.com/docsearch');
+    expect(await res.json()).toMatchObject({ port: 8080, path: '/docsearch' });
+  });
+});

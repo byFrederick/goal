@@ -13,6 +13,8 @@ export interface Env {
   AUTH: DurableObjectNamespace<Auth>;
   BOXES: DurableObjectNamespace<RunBox>;
   BOX_INDEX: DurableObjectNamespace<BoxIndex>;
+  /** The docs site's build (apps/docs/dist, every file under docs/), the Worker's static assets. */
+  ASSETS: Fetcher;
   /** The bearer goald's sandbox API calls carry (goald gets the same value as GOAL_SANDBOX_KEY). */
   GOAL_SANDBOX_KEY?: Setting;
   /** Every other setting, under the name the container reads it by. */

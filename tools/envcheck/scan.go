@@ -247,6 +247,9 @@ type wrangler struct {
 			Name string `json:"name"`
 		} `json:"bindings"`
 	} `json:"durable_objects"`
+	Assets struct {
+		Binding string `json:"binding"`
+	} `json:"assets"`
 }
 
 // parseWrangler reads wrangler.jsonc: JSON with comments and trailing commas.
@@ -274,11 +277,16 @@ func (w wrangler) reads() []read {
 	return reads
 }
 
-// bindings are names on env that are not variables (Durable Object namespaces).
+// bindings are names on env that are not variables (Durable Object namespaces and the static
+// assets binding).
 func (w wrangler) bindings() map[string]bool {
 	m := map[string]bool{}
 	for _, b := range w.DurableObjects.Bindings {
 		m[b.Name] = true
+	}
+
+	if w.Assets.Binding != "" {
+		m[w.Assets.Binding] = true
 	}
 
 	return m
