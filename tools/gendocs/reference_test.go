@@ -14,6 +14,9 @@ import (
 // testUsage is a CLI usage text with each shape the real one has: a description continued on the
 // next lines, a signature too long for its column, two forms of one command, an alternative
 // (| --choice) and a signature that ends one column before its description.
+// checkFlag is gendocs's flag that checks and writes nothing.
+const checkFlag = "-check"
+
 const testUsage = `usage:
   goal up [--compose]                             start it; --compose runs goald as
                                                   compose services too
@@ -175,7 +178,7 @@ func staleCheck(t *testing.T, page string) {
 		t.Fatal(err)
 	}
 
-	err := run([]string{"-C", dir, "-check"}, &bytes.Buffer{}, testUsage)
+	err := run([]string{"-C", dir, checkFlag}, &bytes.Buffer{}, testUsage)
 	if err == nil || !strings.Contains(err.Error(), page) || !strings.Contains(err.Error(), "task docs:ref:gen") {
 		t.Fatalf("check with a stale %s = %v, want an error naming it and task docs:ref:gen", page, err)
 	}
@@ -184,7 +187,7 @@ func staleCheck(t *testing.T, page string) {
 		t.Fatal(err)
 	}
 
-	if err := run([]string{"-C", dir, "-check"}, &bytes.Buffer{}, testUsage); err != nil {
+	if err := run([]string{"-C", dir, checkFlag}, &bytes.Buffer{}, testUsage); err != nil {
 		t.Errorf("check after regenerating: %v, want it to pass", err)
 	}
 }
@@ -208,7 +211,7 @@ func TestReference_MissingPageFailsCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := run([]string{"-C", dir, "-check"}, &bytes.Buffer{}, testUsage)
+	err := run([]string{"-C", dir, checkFlag}, &bytes.Buffer{}, testUsage)
 	if err == nil || !strings.Contains(err.Error(), glossaryPage) {
 		t.Errorf("check without %s = %v, want an error naming it", glossaryPage, err)
 	}
@@ -244,7 +247,7 @@ func TestReference_WritesOnlyTheReferencePages(t *testing.T) {
 func TestReference_TheFixturePagesAreCurrent(t *testing.T) {
 	t.Parallel()
 
-	if err := run([]string{"-C", "testdata/repo", "-check"}, &bytes.Buffer{}, testUsage); err != nil {
+	if err := run([]string{"-C", "testdata/repo", checkFlag}, &bytes.Buffer{}, testUsage); err != nil {
 		t.Errorf("check of the fixture repository: %v; regenerate its pages with the test usage", err)
 	}
 }

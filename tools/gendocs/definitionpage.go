@@ -147,6 +147,9 @@ func (s definitionSchema) resolve(n *node) (*node, []string, error) {
 	return n, refs, nil
 }
 
+// typeObject is the type of a schema with properties.
+const typeObject = "object"
+
 // typeOf names the type of schema n in words: string, array of object, map of string, one of `"a"`, `"b"`.
 func (s definitionSchema) typeOf(n *node, depth int) (string, error) {
 	n, _, err := s.resolve(n)
@@ -155,38 +158,50 @@ func (s definitionSchema) typeOf(n *node, depth int) (string, error) {
 	}
 
 	if depth > 8 {
-		return "object", nil
+		return typeObject, nil
 	}
 
+	if literal := literalType(n); literal != "" {
+		return literal, nil
+	}
+
+	switch t := n.get("type"); {
+	case t != nil && t.array:
+		names := make([]string, len(t.items))
+		for i, item := range t.items {
+			names[i] = item.json()
+		}
+
+		return strings.ReplaceAll(strings.Join(names, " or "), `"`, ""), nil
+	case t != nil:
+		return s.namedType(n, n.str("type"), depth)
+	case n.get("properties") != nil:
+		return typeObject, nil
+	}
+
+	return s.variantTypes(n, depth)
+}
+
+// literalType names a const or an enum's values, or is empty.
+func literalType(n *node) string {
 	switch {
 	case n.get("const") != nil:
-		return "`" + n.get("const").json() + "`", nil
+		return "`" + n.get("const").json() + "`"
 	case n.get("enum") != nil:
 		values := make([]string, len(n.get("enum").items))
 		for i, v := range n.get("enum").items {
 			values[i] = "`" + v.json() + "`"
 		}
 
-		return "one of " + strings.Join(values, ", "), nil
+		return "one of " + strings.Join(values, ", ")
 	}
 
-	var names []string
+	return ""
+}
 
-	switch t := n.get("type"); {
-	case t != nil && t.array:
-		for _, item := range t.items {
-			names = append(names, item.json())
-		}
-
-		return strings.ReplaceAll(strings.Join(names, " or "), `"`, ""), nil
-	case t != nil:
-		return s.namedType(n, n.str("type"), depth)
-	}
-
-	if n.get("properties") != nil {
-		return "object", nil
-	}
-
+// variantTypes names the types of a schema without a type of its own: those of its oneOf, anyOf
+// or if's then and else, joined by or.
+func (s definitionSchema) variantTypes(n *node, depth int) (string, error) {
 	var branches []*node
 
 	for _, key := range []string{"oneOf", "anyOf"} {
@@ -198,6 +213,8 @@ func (s definitionSchema) typeOf(n *node, depth int) (string, error) {
 	if n.get("if") != nil {
 		branches = append(branches, n.get("then"), n.get("else"))
 	}
+
+	var names []string
 
 	for _, b := range branches {
 		if b == nil {
@@ -231,14 +248,14 @@ func (s definitionSchema) namedType(n *node, t string, depth int) (string, error
 		of, err := s.typeOf(n.get("items"), depth+1)
 
 		return "array of " + of, err
-	case "object":
+	case typeObject:
 		if ap := n.get("additionalProperties"); ap != nil && ap.object && n.get("properties") == nil {
 			of, err := s.typeOf(ap, depth+1)
 
 			return "map of " + of, err
 		}
 
-		return "object", nil
+		return typeObject, nil
 	case "string":
 		switch {
 		case n.str("pattern") != "":
@@ -268,68 +285,93 @@ func (s definitionSchema) fields(n *node, seen []string) ([]field, error) {
 	}
 
 	seen = append(slices.Clone(seen), refs...)
-
-	var out []field
-
-	add := func(fs []field, condition string) {
-		for _, f := range fs {
-			if slices.ContainsFunc(out, func(o field) bool { return o.name == f.name }) {
-				continue
-			}
-
-			if condition != "" && f.condition == "" {
-				f.condition = condition
-			}
-
-			out = append(out, f)
-		}
-	}
-
-	if props := n.get("properties"); props != nil {
-		required := stringList(n.get("required"))
-		for _, name := range props.keys {
-			add([]field{{name: name, schema: props.fields[name], required: slices.Contains(required, name)}}, "")
-		}
-	}
-
-	var variants []*node
-
-	for _, key := range []string{"oneOf", "anyOf", "allOf"} {
-		if n.get(key) != nil {
-			variants = append(variants, n.get(key).items...)
-		}
-	}
-
-	variants = append(variants, n.get("else"), n.get("items"))
-
-	if ap := n.get("additionalProperties"); ap != nil && ap.object {
-		variants = append(variants, ap)
-	}
+	out := ownFields(n)
 
 	// The fields of then apply when its if holds; else's and the others' always may.
-	if then := n.get("then"); then != nil {
-		fs, err := s.fields(then, seen)
-		if err != nil {
-			return nil, err
-		}
+	branches := []struct {
+		schema    *node
+		condition string
+	}{{n.get("then"), condition(n.get("if"))}}
 
-		add(fs, condition(n.get("if")))
+	for _, v := range variants(n) {
+		branches = append(branches, struct {
+			schema    *node
+			condition string
+		}{v, ""})
 	}
 
-	for _, v := range variants {
-		if v == nil {
+	for _, b := range branches {
+		if b.schema == nil {
 			continue
 		}
 
-		fs, err := s.fields(v, seen)
+		fs, err := s.fields(b.schema, seen)
 		if err != nil {
 			return nil, err
 		}
 
-		add(fs, "")
+		out = addFields(out, fs, b.condition)
 	}
 
 	return out, nil
+}
+
+// ownFields are the properties of n, in order.
+func ownFields(n *node) []field {
+	props := n.get("properties")
+	if props == nil {
+		return nil
+	}
+
+	required := stringList(n.get("required"))
+	out := make([]field, len(props.keys))
+
+	for i, name := range props.keys {
+		out[i] = field{name: name, schema: props.fields[name], required: slices.Contains(required, name)}
+	}
+
+	return out
+}
+
+// addFields adds to out each of fs whose name it lacks, applying when condition holds.
+func addFields(out, fs []field, condition string) []field {
+	for _, f := range fs {
+		if slices.ContainsFunc(out, func(o field) bool { return o.name == f.name }) {
+			continue
+		}
+
+		if f.condition == "" {
+			f.condition = condition
+		}
+
+		out = append(out, f)
+	}
+
+	return out
+}
+
+// variants are the schemas whose fields a value of n may also have, besides its then: its oneOf,
+// anyOf and allOf entries, its else, its array's elements and its map's values.
+func variants(n *node) []*node {
+	var out []*node
+
+	for _, key := range []string{"oneOf", "anyOf", "allOf"} {
+		if n.get(key) != nil {
+			out = append(out, n.get(key).items...)
+		}
+	}
+
+	if ap := n.get("additionalProperties"); ap != nil && ap.object {
+		out = append(out, ap)
+	}
+
+	for _, v := range []*node{n.get("else"), n.get("items")} {
+		if v != nil {
+			out = append(out, v)
+		}
+	}
+
+	return out
 }
 
 // condition says in words when an if of the form {properties: {k: {const: v}}} holds, or is empty.

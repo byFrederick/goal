@@ -95,9 +95,10 @@ func TestPlan(t *testing.T) {
 	tests := map[string]planCase{
 		"web only":                {[]string{"apps/web/src/routes/board.tsx", "apps/web/package.json"}, []string{webCheck}, "web (web:check): apps/web/src/routes/board.tsx and 1 more", ""},
 		"shared tsconfig":         {[]string{"packages/config/tsconfig.base.json"}, []string{"worker:check", "auth:check", "api-client:check", webCheck, siteCheck, cfCheck}, "shared by every TypeScript part", ""},
-		"docs site":               {[]string{"apps/docs/astro.config.mjs"}, []string{siteCheck}, "docs-site (docs:site:check): apps/docs/astro.config.mjs", ""},
+		"docs site":               {[]string{"apps/docs/astro.config.mjs"}, []string{docsCheck, siteCheck}, "docs (docs:check): apps/docs/astro.config.mjs", ""},
+		"glossary":                {[]string{"docs/reference/glossary.md"}, []string{docsCheck}, "docs (docs:check): docs/reference/glossary.md", ""},
 		"go file":                 {[]string{"internal/core/engine/pull.go"}, goEnvTasks, "go (lint, test, gen:check, validate): internal/core/engine/pull.go", ""},
-		"cli command":             {[]string{"internal/cli/main.go"}, goEnvTasks, "go (lint, test, gen:check, validate): internal/cli/main.go", ""},
+		"cli command":             {[]string{"internal/cli/main.go"}, append([]string{envCheck, docsCheck}, goTasks...), "docs (docs:check): internal/cli/main.go", ""},
 		"go file outside go dirs": {[]string{"apps/web/webui.go"}, goEnvTasks, "apps/web/webui.go", ""},
 		"go fixture":              {[]string{"internal/config/testdata/acme/factory.yaml"}, goTasks, "go (", ""},
 		"queries":                 {[]string{"db/queries/items.sql"}, goTasks, "db/queries/items.sql", ""},
@@ -151,7 +152,7 @@ func TestPlan(t *testing.T) {
 			[]string{"tools/permgen/table.go", "tools/checkplan/testdata/x.txt"},
 			goEnvTasks, "env (env:check): tools/permgen/table.go", "",
 		},
-		"env reference":     {[]string{"docs/reference/environment.md"}, envTasks, "env (env:check): docs/reference/environment.md", ""},
+		"env reference":     {[]string{"docs/reference/environment.md"}, []string{envCheck, docsCheck}, "env (env:check): docs/reference/environment.md", ""},
 		"wrangler bindings": {[]string{"deploy/cloudflare/wrangler.jsonc"}, []string{envCheck, cfCheck}, "env (env:check): deploy/cloudflare/wrangler.jsonc", ""},
 		"nothing to check": {
 			[]string{"docs/engineering/architecture.md", "docs/design/MASTER.md", ".claude/skills/x/SKILL.md", ".github/workflows/ci.yml", ".githooks/pre-push", "README.md", "skills-lock.json"},
@@ -166,18 +167,8 @@ func TestPlan(t *testing.T) {
 
 	maps.Copy(tests, sharedCases(t, tasks))
 
-	tests["contract api"] = struct {
-		changed []string
-		want    []string
-		reason  string
-		note    string
-	}{[]string{"contracts/api/openapi.yaml"}, tasks, "everything (" + strings.Join(tasks, ", ") + "): contracts/api/openapi.yaml (a contract", ""}
-	tests["contract schema"] = struct {
-		changed []string
-		want    []string
-		reason  string
-		note    string
-	}{[]string{"contracts/definitions/factory.schema.json"}, tasks, "contracts/definitions/factory.schema.json (a contract", ""}
+	tests["contract api"] = planCase{[]string{"contracts/api/openapi.yaml"}, tasks, "everything (" + strings.Join(tasks, ", ") + "): contracts/api/openapi.yaml (a contract", ""}
+	tests["contract schema"] = planCase{[]string{"contracts/definitions/factory.schema.json"}, tasks, "contracts/definitions/factory.schema.json (a contract", ""}
 
 	for _, unknown := range []string{"Makefile", "packages/ui/src/button.tsx", "deploy/aws/main.tf", ".editorconfig"} {
 		tests["unknown "+unknown] = planCase{[]string{unknown}, tasks, "everything (" + strings.Join(tasks, ", ") + "): " + unknown + " (matches no rule)", ""}

@@ -89,7 +89,9 @@ var rules = []rule{
 	// tools/envcheck is Go, and the environment check it runs.
 	{under("tools/envcheck"), []part{partGo, partEnv}, ""},
 	// The files tools/envcheck compares with contracts/env.yaml, besides the code below.
-	{exact("docs/reference/environment.md"), []part{partEnv}, ""},
+	// It and the glossary are also sources of the docs site's reference pages (tools/gendocs).
+	{exact("docs/reference/environment.md"), []part{partEnv, partDocs}, ""},
+	{under("docs/reference"), []part{partDocs}, ""},
 	{exact("deploy/cloudflare/wrangler.jsonc"), []part{partCloudflare, partEnv}, ""},
 	// tools/gendocs is Go, and the check of the docs it generates.
 	{under("tools/gendocs"), []part{partGo, partDocs}, ""},
@@ -98,6 +100,8 @@ var rules = []rule{
 	// The descriptions of the layout that tools/layoutcheck compares with the tracked files.
 	{exact("AGENTS.md"), []part{partLayout}, ""},
 	{under(".claude/rules"), []part{partLayout}, ""},
+	// The CLI's commands: Go, and the source of the docs site's CLI reference page (tools/gendocs).
+	{under("internal/cli"), []part{partGo, partEnv, partDocs}, ""},
 	// Go code anywhere, and the files Go embeds (go:embed) or its tests read. Go code may read
 	// the environment, which tools/envcheck checks.
 	{goFile, []part{partGo, partEnv}, ""},
@@ -114,8 +118,8 @@ var rules = []rule{
 	{under("packages/config"), []part{partWorker, partAuth, partAPIClient, partWeb, partDocsSite, partCloudflare}, "shared by every TypeScript part"},
 	{under("apps/web"), []part{partWeb}, ""},
 	// The product docs site (Astro Starlight at /docs). Its OpenAPI contract is contracts/api/openapi.yaml,
-	// already shared by every part above.
-	{under("apps/docs"), []part{partDocsSite}, ""},
+	// already shared by every part above; its reference pages are generated (tools/gendocs).
+	{under("apps/docs"), []part{partDocs, partDocsSite}, ""},
 	// The control Worker's code, and its wrangler config and deploy scripts.
 	{under("apps/control-worker", "deploy/cloudflare"), []part{partCloudflare, partEnv}, ""},
 	{under("deploy/terraform"), []part{partTerraform}, ""},

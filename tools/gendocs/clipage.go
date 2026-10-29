@@ -34,7 +34,7 @@ var (
 func parseUsage(usage string) ([]*command, []string, error) {
 	lines := strings.Split(usage, "\n")
 	if len(lines) == 0 || lines[0] != "usage:" {
-		return nil, nil, fmt.Errorf("%w: its first line is not usage:", errUsageText)
+		return nil, nil, fmt.Errorf("%w: its first line is not the usage line", errUsageText)
 	}
 
 	var (

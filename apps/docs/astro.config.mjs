@@ -44,7 +44,18 @@ export default defineConfig({
         { label: 'Getting started', items: [{ autogenerate: { directory: 'getting-started' } }] },
         { label: 'Concepts', items: [{ autogenerate: { directory: 'concepts' } }] },
         { label: 'Guides', items: [{ autogenerate: { directory: 'guides' } }] },
-        { label: 'Reference', items: [{ slug: 'reference' }, ...openAPISidebarGroups] },
+        // The generated reference pages (tools/gendocs, task docs:ref:gen), then the API reference.
+        {
+          label: 'Reference',
+          items: [
+            { slug: 'reference' },
+            { slug: 'reference/cli' },
+            { slug: 'reference/definition' },
+            { slug: 'reference/environment' },
+            { slug: 'reference/glossary' },
+            ...openAPISidebarGroups,
+          ],
+        },
         { label: 'Changelog', items: [{ autogenerate: { directory: 'changelog' } }] },
       ],
     }),
