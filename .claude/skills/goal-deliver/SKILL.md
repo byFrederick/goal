@@ -17,7 +17,7 @@ One item, one branch, one small pull request (AGENTS.md, "Changes"). What a chan
    ```sh
    git push -u origin HEAD
    ```
-   Never push to `main` or to another branch, and never with `--force`. Never push with `--no-verify` unless the pull request says that you did and why.
+   Never push to `main` or to another branch, and never with `--force`. After you merge or rebase onto your base, run `task docs:gen` and commit `docs/engineering/change-map.md` and `docs/adr/README.md` when they changed. Resolve a conflict on either of those two files by running `task docs:gen`, never by editing it by hand. Never push with `--no-verify` unless the pull request says that you did and why.
 4. **Open a draft pull request on the first push:**
    ```sh
    gh pr create --draft --base <the base your workspace note names> --title "<the item's title>" --body-file <file>
