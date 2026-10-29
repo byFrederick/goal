@@ -54,6 +54,7 @@ import type {
   PartOf,
   PartsSummary,
   RunList,
+  SignupDomain,
   StreamEvent,
   TouchMetrics,
 } from '@goal/api-client';
@@ -717,7 +718,14 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       .filter((f) => f.org_id === o.id)
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((f) => ({ factory_id: f.id, name: f.name, max: slots.factories[f.id] ?? null }));
-    return { name: o.name, slug: o.slug, mark: o.mark, slots: { max: slots.max, factories } };
+    const signup = state.signupDomains[o.id];
+    return {
+      name: o.name,
+      slug: o.slug,
+      mark: o.mark,
+      slots: { max: slots.max, factories },
+      ...(signup ? { signup_domain: signup } : {}),
+    };
   };
 
   const audit = (org: Org, action: string, data: Record<string, unknown>) =>
@@ -737,6 +745,89 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       entry: { id: state.nextAuditId++, at: new Date(at).toISOString(), actor: by, action, target, data },
     });
   }
+
+  /** Webmail providers a sign-up domain may not be (goald's list is in the database; this is a sample of it). */
+  const publicDomains = ['gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'icloud.com', 'proton.me'];
+  const joinRoles = ['viewer', 'approver', 'editor'];
+  const domainShape = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+
+  /**
+   * PUT /settings/signup-domain as goald applies it: owners only, then a recent sign-in, then the
+   * domain's rules in order (malformed, not the caller's, public, held by another organization).
+   * Setting what is already set changes nothing.
+   */
+  const setSignupDomain = async (req: IncomingMessage, res: ServerResponse, org: Org) => {
+    const who = auth.who(req);
+    if (!who || roleIn(req, org.id) !== 'owner')
+      return problem(res, 403, 'Forbidden', 'only a signed-in owner can do this', 'forbidden');
+    if (stale(req, res)) return;
+    const body = await readBody(req);
+    const domain = typeof body.domain === 'string' ? body.domain.trim().toLowerCase() : '';
+    const joinRole = body.join_role ?? 'viewer';
+    if (
+      domain.length > 253 ||
+      !domainShape.test(domain) ||
+      typeof joinRole !== 'string' ||
+      !joinRoles.includes(joinRole)
+    )
+      return problem(res, 400, 'Bad Request', `"${domain}" is not a sign-up domain`);
+    if (domain !== who.person.email.split('@')[1]) {
+      return problem(
+        res,
+        400,
+        'Bad Request',
+        `${domain} is not the domain of your sign-in email`,
+        'signup-domain-not-yours',
+      );
+    }
+    if (publicDomains.includes(domain)) {
+      return problem(res, 400, 'Bad Request', `${domain} is a public email provider`, 'signup-domain-public');
+    }
+    const held = Object.entries(state.signupDomains).some(([id, d]) => id !== org.id && d.domain === domain);
+    if (held) return problem(res, 409, 'Conflict', `${domain} is held by another organization`, 'signup-domain-taken');
+    const before = state.signupDomains[org.id];
+    if (before?.domain === domain && before.join_role === joinRole) return json(res, 200, before);
+    const set: SignupDomain = {
+      domain,
+      join_role: joinRole as SignupDomain['join_role'],
+      set_by: { kind: 'user', id: who.person.id, name: who.person.name },
+      set_at: new Date(clock()).toISOString(),
+    };
+    state.signupDomains[org.id] = set;
+    auditAs(
+      org.id,
+      set.set_by,
+      'org.signup_domain_set',
+      { kind: 'org', id: org.id },
+      {
+        domain,
+        join_role: set.join_role,
+        from: before ? { domain: before.domain, join_role: before.join_role } : null,
+      },
+    );
+    return json(res, 200, set);
+  };
+
+  /** DELETE /settings/signup-domain as goald applies it: owners only, a recent sign-in; nothing set is no change. */
+  const clearSignupDomain = (req: IncomingMessage, res: ServerResponse, org: Org) => {
+    const who = auth.who(req);
+    if (!who || roleIn(req, org.id) !== 'owner')
+      return problem(res, 403, 'Forbidden', 'only a signed-in owner can do this', 'forbidden');
+    if (stale(req, res)) return;
+    const before = state.signupDomains[org.id];
+    if (before) {
+      delete state.signupDomains[org.id];
+      auditAs(
+        org.id,
+        { kind: 'user', id: who.person.id, name: who.person.name },
+        'org.signup_domain_cleared',
+        { kind: 'org', id: org.id },
+        { domain: before.domain },
+      );
+    }
+    res.writeHead(204);
+    return res.end();
+  };
 
   /** PATCH /settings as goald applies it: every rule checked first, then one org.updated. */
   const patchSettings = (org: Org, body: Record<string, unknown>, res: ServerResponse) => {
@@ -1655,6 +1746,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (rest === '/settings' && method === 'PATCH') {
       return patchSettings(org, await readBody(req), res);
     }
+    if (rest === '/settings/signup-domain' && method === 'PUT') return setSignupDomain(req, res, org);
+    if (rest === '/settings/signup-domain' && method === 'DELETE') return clearSignupDomain(req, res, org);
     if (await people(req, res, org, rest, method)) return;
     if (rest === '/audit' && method === 'GET') {
       const q = url.searchParams;

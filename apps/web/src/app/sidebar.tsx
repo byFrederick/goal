@@ -1,5 +1,5 @@
-// The sidebar (≥ 768 px, MASTER.md "The shell"): 256 px, pinned left at full height beside the content
-// on every organization page and on the New factory wizard. Top to bottom: the Goal mark and the
+// The sidebar (≥ 768 px, MASTER.md "The shell"): 256 px by default, resizable from 216 to 400 px, or the
+// 60 px rail, pinned left at full height beside the content on every organization page and on the New factory wizard. Top to bottom: the Goal mark and the
 // organization's name (its menu), Search (sidebar-search.tsx) and Collapse (the 60 px rail: sidebar-rail.tsx);
 // New item (new-item.tsx, with C); the organization-wide pages; Factories (sidebar-factories.tsx); and at the
 // bottom the spend this week and the person (account-menu.tsx). Search replaces that body with its input and
@@ -8,14 +8,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ChevronsUpDown, CircleHelp, PanelLeft, Search } from 'lucide-react';
-import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { attentionQuery, overviewQuery } from '../api/queries';
 import type { FactoryOverviewList, OrgSummary } from '../api/types';
 import { useConnectionTrouble } from '../shared/connections';
 import { formatUsdCompact } from '../shared/format';
 import { NewItemFromSidebar } from '../shared/new-item';
 import { useOrgGrants } from '../shared/org';
-import { useSidebarCollapsed } from '../shared/sidebar-choice';
+import { useSidebarSize } from '../shared/sidebar-choice';
+import { shownWidth } from '../shared/sidebar-width';
 import { Count } from '../ui/count';
 import { GoalMark } from '../ui/goal-mark';
 import { Menu, MenuTrigger } from '../ui/menu';
@@ -28,17 +29,21 @@ import { docsLink } from './rail-items';
 import { screensFor, sidebarOrgScreens } from './screens';
 import { FactoryGroups, rowClass } from './sidebar-factories';
 import { SidebarRail } from './sidebar-rail';
+import { SidebarResizeHandle, sidebarWidthVar } from './sidebar-resize-handle';
 import { iconButton, SidebarSearch, useSearchShortcut } from './sidebar-search';
 
 const iconProps = { size: 18, strokeWidth: 1.5, 'aria-hidden': true } as const;
 
 /**
- * The 256 px sidebar from 768 px, or the 60 px rail once Collapse folds it (the choice is saved:
- * sidebar-choice.ts). Its content is SidebarContent, which the phone's drawer renders too.
+ * The sidebar from 768 px: 256 px by default, resizable from 216 to 400 px by its right edge, or the 60 px
+ * rail once it folds (the size is saved: sidebar-choice.ts). Its content is SidebarContent, which the
+ * phone's drawer renders too. The column keeps the same element whether it shows the sidebar or the rail,
+ * so the resize handle stays mounted across the swap.
  */
 export function Sidebar({ org }: { org: OrgSummary }) {
   const busy = useSidebarBusy(org.id);
-  const [collapsed, setCollapsed] = useSidebarCollapsed();
+  const [size, setSize] = useSidebarSize();
+  const column = useRef<HTMLDivElement>(null);
   // The control that was pressed hands focus to its counterpart, so the keyboard does not fall to the page.
   const focus = useRef<'rail' | 'top' | null>(null);
   // Command K on the rail expands the sidebar straight into search.
@@ -48,39 +53,44 @@ export function Sidebar({ org }: { org: OrgSummary }) {
     (search: boolean) => {
       focus.current = 'top';
       setSearchOnExpand(search);
-      setCollapsed(false);
+      setSize({ ...size, collapsed: false });
     },
-    [setCollapsed],
+    [size, setSize],
   );
   const collapse = useCallback(() => {
     focus.current = 'rail';
     setSearchOnExpand(false);
-    setCollapsed(true);
-  }, [setCollapsed]);
-
-  if (collapsed) {
-    return (
-      <>
-        {/* C keeps working with the rail shown, and on phones where the sidebar is hidden. */}
-        <NewItemFromSidebar button={false} />
-        <SidebarRail org={org} busy={busy} focusOnMount={focus.current === 'rail'} onExpand={expand} />
-      </>
-    );
-  }
+    setSize({ ...size, collapsed: true });
+  }, [size, setSize]);
 
   return (
-    <nav
-      aria-label="Organization and factories"
-      aria-busy={busy}
-      className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col overflow-y-auto border-r border-line bg-sidebar px-2 pt-2 pb-3 md:flex"
-    >
-      <SidebarContent
-        org={org}
-        onCollapse={collapse}
-        focusCollapse={focus.current === 'top'}
-        startSearching={searchOnExpand}
-      />
-    </nav>
+    <>
+      {/* C keeps working with the rail shown, and on phones where the sidebar is hidden. */}
+      {size.collapsed ? <NewItemFromSidebar button={false} /> : null}
+      <div
+        ref={column}
+        className="sticky top-0 hidden h-dvh shrink-0 transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex"
+        style={{ width: `var(${sidebarWidthVar})`, [sidebarWidthVar]: `${shownWidth(size)}px` } as CSSProperties}
+      >
+        {size.collapsed ? (
+          <SidebarRail org={org} busy={busy} focusOnMount={focus.current === 'rail'} onExpand={expand} />
+        ) : (
+          <nav
+            aria-label="Organization and factories"
+            aria-busy={busy}
+            className="flex h-full min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto border-r border-line bg-sidebar px-2 pt-2 pb-3"
+          >
+            <SidebarContent
+              org={org}
+              onCollapse={collapse}
+              focusCollapse={focus.current === 'top'}
+              startSearching={searchOnExpand}
+            />
+          </nav>
+        )}
+        <SidebarResizeHandle size={size} column={column} onChange={setSize} />
+      </div>
+    </>
   );
 }
 
@@ -339,10 +349,10 @@ function SpendThisWeek({ org, overview }: { org: OrgSummary; overview: FactoryOv
       <Link
         to="/o/$org/spend"
         params={{ org: org.slug }}
-        className="flex items-baseline justify-between gap-2 rounded-cell border border-line bg-card p-3 text-meta text-muted"
+        className="flex flex-wrap items-baseline justify-between gap-x-2 rounded-cell border border-line bg-card p-3 text-meta text-muted"
       >
-        <span>Spend this week</span>
-        <span className="text-secondary font-semibold text-ink">{spent}</span>
+        <span className="min-w-0 truncate">Spend this week</span>
+        <span className="whitespace-nowrap text-secondary font-semibold text-ink">{spent}</span>
       </Link>
     );
   }
@@ -354,9 +364,9 @@ function SpendThisWeek({ org, overview }: { org: OrgSummary; overview: FactoryOv
       params={{ org: org.slug }}
       className="flex flex-col gap-2 rounded-cell border border-line bg-card p-3"
     >
-      <div className="flex items-baseline justify-between gap-2 text-meta text-muted">
-        <span>Spend this week</span>
-        <span className="text-secondary font-semibold text-ink">{of}</span>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-meta text-muted">
+        <span className="min-w-0 truncate">Spend this week</span>
+        <span className="whitespace-nowrap text-secondary font-semibold text-ink">{of}</span>
       </div>
       {/* Decorative: the amount above says the same in words. */}
       <div aria-hidden="true" className="h-1.5 overflow-hidden rounded-chip bg-hover">

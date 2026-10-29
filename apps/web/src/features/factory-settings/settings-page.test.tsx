@@ -77,21 +77,24 @@ describe('Factory settings page', () => {
   });
 
   it('lists each member with the role the organization gives them', async () => {
-    await renderSettings({ members: [member('Freddy Cruz', 'owner'), member('Jon Lee', 'member')] });
+    const viewer = {
+      ...member('Jon Lee', 'member'),
+      factory_roles: [{ factory_id: factory.id, role: 'viewer' as const }],
+    };
+    await renderSettings({ members: [member('Freddy Cruz', 'owner'), viewer] });
 
     const people = screen.getByRole('region', { name: 'People with access' });
     expect(within(people).getByText('Freddy Cruz')).toBeTruthy();
-    expect(within(people).getByText('jon.lee@example.com')).toBeTruthy();
-    expect(within(people).getByRole('button', { name: 'Owner' })).toBeTruthy();
+    expect(within(people).getByText('Organization owner')).toBeTruthy();
+    expect(within(people).getByText('Owner')).toBeTruthy();
+    expect(within(people).getByText('Jon Lee')).toBeTruthy();
+    expect(within(people).getByText('Viewer')).toBeTruthy();
   });
 
-  it('disables Add people and the role control until factory roles are built', async () => {
+  it('disables Add people for a caller who may not manage members', async () => {
     await renderSettings({ members: [member('Freddy Cruz', 'owner')] });
-
     const add = screen.getByRole('button', { name: 'Add people' });
-    expect(add.getAttribute('aria-disabled')).toBe('true');
-    const role = screen.getByRole('button', { name: 'Owner' });
-    expect(role.getAttribute('aria-disabled')).toBe('true');
+    expect((add as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('shows the section empty line when no one has access', async () => {

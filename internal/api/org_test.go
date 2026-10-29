@@ -247,6 +247,9 @@ var probes = map[string]probe{
 	"listOrgs":         {method: http.MethodGet, path: orgsPath},
 	"createOrg":        {method: http.MethodPost, path: orgsPath, body: `{"name":"Acme Two","slug":"acme-two"}`},
 
+	"getNotificationPreferences": {method: http.MethodGet, path: notificationsPath},
+	"putNotificationPreferences": {method: http.MethodPut, path: notificationsPath, body: ownNotifications},
+
 	"listPlatformAdmins":  {method: http.MethodGet, path: "/v1/platform/admins"},
 	"addPlatformAdmin":    {method: http.MethodPost, path: "/v1/platform/admins", body: `{"email":"nobody@example.com"}`},
 	"removePlatformAdmin": {method: http.MethodDelete, path: "/v1/platform/admins/019a3002-0000-7000-8000-000000000001"},
@@ -262,6 +265,8 @@ var probes = map[string]probe{
 	"removeFactoryRole":   {method: http.MethodDelete, path: "/v1/orgs/acme/members/x/factory-roles/acme", org: testOrg, factory: acmeID},
 	"transferOwnership":   {method: http.MethodPost, path: "/v1/orgs/acme/transfer", body: `{"to":"x","confirm":"nope"}`, org: testOrg},
 	"updateOrgSettings":   {method: http.MethodPatch, path: "/v1/orgs/acme/settings", body: `{"mark":"AC"}`, org: testOrg},
+	"setSignupDomain":     {method: http.MethodPut, path: "/v1/orgs/acme/settings/signup-domain", body: ownDomain, org: testOrg},
+	"clearSignupDomain":   {method: http.MethodDelete, path: "/v1/orgs/acme/settings/signup-domain", org: testOrg},
 	"getOrgPolicy":        {method: http.MethodGet, path: "/v1/orgs/acme/policy", org: testOrg},
 	"putOrgPolicy":        {method: http.MethodPut, path: "/v1/orgs/acme/policy", body: `{}`, org: testOrg, header: staleMatch},
 	"listAudit":           {method: http.MethodGet, path: "/v1/orgs/acme/audit?factory=acme", org: testOrg, factory: acmeID},
@@ -447,6 +452,9 @@ var probes = map[string]probe{
 	"replaceDraftTree":   {method: http.MethodPut, path: acmeDraft + "/tree", body: `{"files":{}}`, org: testOrg, factory: acmeID},
 	"validateDraft":      {method: http.MethodPost, path: acmeDraft + "/validate", body: `{}`, org: testOrg, factory: acmeID},
 	"publishDraft":       {method: http.MethodPost, path: acmeDraft + "/publish", body: `{"revision":1,"expected_current_version_id":null}`, org: testOrg, factory: acmeID},
+	"createDraftRequest": {method: http.MethodPost, path: acmeDraft + "/requests", body: `{"text":"add a reviewer"}`, org: testOrg, factory: acmeID},
+	"listDraftRequests":  {method: http.MethodGet, path: acmeDraft + "/requests", org: testOrg, factory: acmeID},
+	"getDraftRequest":    {method: http.MethodGet, path: acmeDraft + "/requests/00000000-0000-0000-0000-000000000000", org: testOrg, factory: acmeID},
 	"listVersions":       {method: http.MethodGet, path: acmeFactory + "/versions", org: testOrg, factory: acmeID},
 	"getVersion":         {method: http.MethodGet, path: acmeFactory + "/versions/1", org: testOrg, factory: acmeID},
 	"getVersionModel":    {method: http.MethodGet, path: acmeFactory + "/versions/1/model", org: testOrg, factory: acmeID},

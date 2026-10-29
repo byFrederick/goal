@@ -650,3 +650,82 @@ describe('the collapsed rail', () => {
     ).toEqual(['New factory']);
   });
 });
+
+describe('the sidebar’s resize handle', () => {
+  const handle = () => screen.findByRole('separator', { name: 'Resize sidebar' });
+
+  it('is a focusable vertical separator that reports its width between the rail and 400 px', async () => {
+    renderSidebar();
+    const sep = await handle();
+
+    expect(sep.getAttribute('aria-orientation')).toBe('vertical');
+    expect(sep.getAttribute('aria-valuenow')).toBe('256');
+    expect(sep.getAttribute('aria-valuemin')).toBe('60');
+    expect(sep.getAttribute('aria-valuemax')).toBe('400');
+    expect(sep.tabIndex).toBe(0);
+  });
+
+  it('moves the width 16 px per ArrowRight and saves it for the next visit', async () => {
+    renderSidebar();
+    const sep = await handle();
+
+    fireEvent.keyDown(sep, { key: 'ArrowRight' });
+    fireEvent.keyDown(sep, { key: 'ArrowRight' });
+
+    expect(sep.getAttribute('aria-valuenow')).toBe('288');
+    expect(window.localStorage.getItem('goal.sidebar.width')).toBe('288');
+  });
+
+  it('collapses to the rail with Home, keeping the same handle mounted', async () => {
+    renderSidebar();
+    const sep = await handle();
+
+    fireEvent.keyDown(sep, { key: 'Home' });
+
+    expect(await screen.findByRole('button', { name: 'Expand sidebar' })).toBeTruthy();
+    expect(screen.getByRole('separator', { name: 'Resize sidebar' })).toBe(sep);
+    expect(sep.getAttribute('aria-valuenow')).toBe('60');
+    expect(window.localStorage.getItem('goal.sidebar')).toBe('collapsed');
+  });
+
+  it('sets 400 px with End and resets to 256 px with Enter', async () => {
+    renderSidebar();
+    const sep = await handle();
+
+    fireEvent.keyDown(sep, { key: 'End' });
+    expect(sep.getAttribute('aria-valuenow')).toBe('400');
+    fireEvent.keyDown(sep, { key: 'Enter' });
+    expect(sep.getAttribute('aria-valuenow')).toBe('256');
+  });
+
+  it('resets to 256 px on a double-click', async () => {
+    window.localStorage.setItem('goal.sidebar.width', '340');
+    renderSidebar();
+    const sep = await handle();
+    expect(sep.getAttribute('aria-valuenow')).toBe('340');
+
+    fireEvent.doubleClick(sep);
+
+    expect(sep.getAttribute('aria-valuenow')).toBe('256');
+  });
+
+  it('opens the rail at the saved width when ArrowRight is pressed on it', async () => {
+    window.localStorage.setItem('goal.sidebar', 'collapsed');
+    window.localStorage.setItem('goal.sidebar.width', '300');
+    renderSidebar();
+    const sep = await handle();
+    expect(sep.getAttribute('aria-valuenow')).toBe('60');
+
+    fireEvent.keyDown(sep, { key: 'ArrowRight' });
+
+    expect(sep.getAttribute('aria-valuenow')).toBe('300');
+    expect(await screen.findByRole('button', { name: 'Collapse sidebar' })).toBeTruthy();
+  });
+
+  it('reads a corrupt saved width as the default', async () => {
+    window.localStorage.setItem('goal.sidebar.width', 'wide');
+    renderSidebar();
+
+    expect((await handle()).getAttribute('aria-valuenow')).toBe('256');
+  });
+});

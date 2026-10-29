@@ -32,7 +32,7 @@ func TestPlatform(t *testing.T) {
 
 	want := []string{
 		"anthropic", "aws", "bedrock", kindSubscription, "confluence", "datadog", "github", "gitlab", "http-api-key",
-		"jira", "mcp-server", "pagerduty",
+		"jira", "mcp-server", "pagerduty", "slack",
 	}
 	if !slices.Equal(names, want) {
 		t.Errorf("platform kinds %v; want %v", names, want)

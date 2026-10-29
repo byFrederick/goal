@@ -80,7 +80,7 @@ test('an owner sees everyone, why a role cannot change, and changes factory role
     await expect(own).toBeDisabled();
     await expect(own).toHaveAccessibleDescription('Acme needs at least one owner');
     await expect(page.getByRole('combobox', { name: 'Role of M. Okafor in Acme' })).toBeEnabled();
-    await expect(personOf(page, 'J. Lindqvist')).toContainText('goal editor, sre editor');
+    await expect(personOf(page, 'J. Lindqvist')).toContainText('goal approver, sre editor');
   }
   await expect(page.getByRole('region', { name: /Waiting to join/ })).toContainText('d.ross@example.com');
 
@@ -136,6 +136,34 @@ test('an owner invites people with factory roles, resends and cancels an invitat
   await expect(page.getByText('4 members, 2 invites waiting')).toBeVisible();
 });
 
+test('an owner turns sign-up by domain on and off; a member sees the switch disabled', async ({ page }) => {
+  await signedInAs(page.request);
+  await page.goto('/o/acme/members');
+  const domain = page.getByRole('switch', { name: 'Restrict sign-up to a domain' });
+  await expect(domain).toHaveAttribute('aria-checked', 'false');
+  await expect(page.getByText('Anyone at example.com joins as a Viewer')).toBeVisible();
+
+  await domain.click();
+  await expect(domain).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByText('Anyone at example.com joins as a Viewer')).toBeVisible();
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+
+  await domain.click();
+  await expect(domain).toHaveAttribute('aria-checked', 'false');
+  // The join link is not in the API: its controls stay unavailable.
+  await expect(page.getByRole('button', { name: 'Copy' })).toHaveAttribute('aria-disabled', 'true');
+});
+
+test('a member sees sign-up by domain disabled and nothing else changes', async ({ page }) => {
+  await signedInAs(page.request, 'a.ortiz@example.com');
+  await page.goto('/o/acme/members');
+  const domain = page.getByRole('switch', { name: 'Restrict sign-up to a domain' });
+  await expect(domain).toHaveAttribute('aria-disabled', 'true');
+  await expect(domain).toHaveAttribute('aria-checked', 'false');
+  await expect(page.getByRole('region', { name: 'Invite link' })).toHaveCount(0);
+});
+
 test('an owner makes someone an admin and removes someone, after confirming', async ({ page }) => {
   await signedInAs(page.request);
   await page.goto('/o/acme/members');
@@ -164,13 +192,13 @@ test('a change with an old sign-in asks to confirm it’s you, then goes through
   await signedInAs(page.request, 'f.cruz@example.com', false);
   await page.goto('/o/acme/members');
   const details = await openPerson(page, 'A. Ortiz');
-  await details.getByRole('group', { name: 'goal: role of A. Ortiz' }).getByText('Viewer').click();
+  await details.getByRole('group', { name: 'sre: role of A. Ortiz' }).getByText('Viewer').click();
   const reauth = page.getByRole('dialog', { name: 'Confirm it’s you' });
   await reauth.getByRole('button', { name: 'Email me a code' }).click();
   await reauth.getByLabel('Code').fill('000000');
   await expect(reauth).toBeHidden();
   await page.keyboard.press('Escape');
-  await expect(personOf(page, 'A. Ortiz')).toContainText('goal viewer, support viewer');
+  await expect(personOf(page, 'A. Ortiz')).toContainText('sre viewer, support viewer');
 });
 
 test('a member sees everyone read-only, and leaves', async ({ page }) => {

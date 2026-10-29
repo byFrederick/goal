@@ -27,12 +27,18 @@ import (
 	"syscall"
 	"time"
 
+	// The runtime image has no zone database: embed it, so every IANA time zone a person picks
+	// for their digest (ADR 0023, decision 1) loads.
+	_ "time/tzdata"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/moby/moby/client"
 
 	"github.com/byFrederick/goal/apps/web"
 	"github.com/byFrederick/goal/internal/adapters/clock/sys"
+	"github.com/byFrederick/goal/internal/adapters/directmessage/slack"
 	"github.com/byFrederick/goal/internal/adapters/embedder/openai"
+	"github.com/byFrederick/goal/internal/adapters/mailer/smtp"
 	"github.com/byFrederick/goal/internal/adapters/masterkey/masterkey"
 	"github.com/byFrederick/goal/internal/adapters/minter/awssts"
 	"github.com/byFrederick/goal/internal/adapters/objectstore/s3"
@@ -54,6 +60,7 @@ import (
 	"github.com/byFrederick/goal/internal/gateway"
 	"github.com/byFrederick/goal/internal/jonah"
 	"github.com/byFrederick/goal/internal/knowledge"
+	"github.com/byFrederick/goal/internal/notify"
 	"github.com/byFrederick/goal/internal/retention"
 )
 
@@ -77,6 +84,14 @@ const purgeEvery = time.Hour
 // scheduleEvery is how often goald fires the schedule triggers that are due and prunes old
 // webhook deliveries; one instance at a time does, under the schedule lock.
 const scheduleEvery = time.Minute
+
+// notifyEvery is how often each goald claims due notifications; every instance does, the
+// claims' leases keeping them apart.
+const notifyEvery = 10 * time.Second
+
+// digestEvery is how often each goald tries a round of the daily digest; one instance at a time
+// runs it, under the digest lock, and the others skip it.
+const digestEvery = 5 * time.Minute
 
 func main() { os.Exit(goald()) }
 
@@ -189,9 +204,11 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return eng.SetLines(lines)
 	}, definitions.Config{CacheBytes: s.DefinitionCacheBytes}, log)
 
+	// A draft request's box (ADR 0021) gets its request and the factory's draft from the gateway's
+	// bundle; the engine's RunDefinition signs its token.
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Connections: connections, Events: store, Clock: clock, Logger: log,
-		Knowledge: kb.searcher, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store,
+		Knowledge: kb.searcher, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore,
 	}, gateway.Config{Key: []byte(key)})
 	if err != nil {
 		return err
@@ -207,7 +224,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
 		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, CodeHosts: hosts, Clock: clock,
-		Minters: minters(s), Policies: policies, Intake: intake, Audit: store, Logger: log,
+		Minters: minters(s), Policies: policies, Intake: intake, Audit: store, NotificationOutbox: store, Logger: log,
 	}, engine.Config{
 		TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: boxes.gateway, GatewayKeyRef: s.GatewayKeyRef, MaxRuns: s.MaxRuns,
 	})
@@ -239,11 +256,12 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 			Mode: api.AuthMode(s.Auth), EmailCodes: s.EmailCodes, Google: s.Google, SecureCookies: s.strictTransport(),
 		},
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
-		Connections: connections, Credentials: credentials, Intake: intake, ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
+		Connections: connections, Credentials: credentials, Intake: intake, DraftRequests: postgres.NewDraftRequests(store),
+		ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
-		Jonah: jonahDeps(store, authors, clock, log),
-		Clock: clock, Logger: log,
+		NotificationPreferences: postgres.NewNotificationPreferences(store),
+		Jonah:                   jonahDeps(store, authors, clock, log), Clock: clock, Logger: log,
 	})
 	if err = errors.Join(err, siteErr); err != nil {
 		return err
@@ -251,14 +269,60 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	servers := httpServers(s, proxySecret, apiHandler, gatewayHandler(gw), web.Handler(web.Options{StrictTransport: s.strictTransport()}), site, log)
 
-	// Deleted organizations go, rows and bucket objects, once their retention has passed.
-	purger := retention.New(store, objects, clock, s.OrgRetention, log)
+	j, err := newJobs(s, store, connections, objects, platform, clock, kb.ingestor, defs, eng, intake, log)
+	if err != nil {
+		return err
+	}
 
-	return serve(ctx, log, s, servers, eng, defs, definitionNotices, feed,
-		jobs{
-			purger: purger, platform: platform, clock: clock, identity: newIdentityWatch(s, store), ingestor: kb.ingestor,
-			reviews: jonahReviewLoop(s, store, defs, eng, clock, log), scheduleLock: intake,
-		})
+	return serve(ctx, log, s, servers, eng, defs, definitionNotices, feed, j)
+}
+
+// newJobs builds goald's scheduled jobs: the purge, the identity watch, the knowledge base's
+// ingestion, the notification sender and digest, and the Jonah reviews, which the goald holding
+// the schedule lock sweeps.
+func newJobs(s settings, store *postgres.Store, connections *postgres.Connections, objects ports.ObjectStore, platform ports.Platform,
+	clock ports.Clock, ingestor *knowledge.Ingestor, defs *definitions.Cache, eng *engine.Engine, intake scheduleLock, log *slog.Logger,
+) (jobs, error) {
+	sender, digest, err := notificationJobs(s, store, connections, clock, log)
+	if err != nil {
+		return jobs{}, err
+	}
+
+	return jobs{
+		// Deleted organizations go, rows and bucket objects, once their retention has passed.
+		purger:   retention.New(store, objects, clock, s.OrgRetention, log),
+		platform: platform, clock: clock, identity: newIdentityWatch(s, store), ingestor: ingestor, notify: sender, digest: digest,
+		reviews: jonahReviewLoop(s, store, defs, eng, clock, log), scheduleLock: intake,
+	}, nil
+}
+
+// notificationJobs are the job that sends the notification outbox's rows (ADR 0023, decisions 4
+// and 5) and the daily digest job (decision 6), over one mailer and one Slack sender: Slack
+// messages as direct messages with each organization's Slack connection, always, over a
+// transport that dials public addresses only; email through the SMTP server of GOAL_SMTP_URL,
+// and without one no email goes out, email rows stay queued and no email digest is queued.
+func notificationJobs(s settings, store *postgres.Store, connections *postgres.Connections, clock ports.Clock, log *slog.Logger,
+) (*notify.Sender, *notify.DigestJob, error) {
+	d := notify.Deps{
+		Orgs: store, Outbox: store, Clock: clock, PublicURL: s.PublicURL, Log: log,
+		Slack: slack.New(slack.Config{Transport: connectionTransport(false)}), Connections: connections,
+	}
+
+	if s.SMTP != nil {
+		mailer, err := smtp.New(smtp.Config{URL: s.SMTP.URL, From: s.SMTP.From, Plaintext: s.SMTP.Plaintext})
+		if err != nil {
+			return nil, nil, fmt.Errorf("mailer: %w", err)
+		}
+
+		d.Mailer = mailer
+	}
+
+	digest := notify.NewDigestJob(notify.DigestDeps{
+		Orgs: store, Digests: postgres.NewDigests(store), Preferences: postgres.NewNotificationPreferences(store),
+		Mailer: d.Mailer, Slack: d.Slack, Connections: connections, Clock: clock, PublicURL: s.PublicURL, Log: log,
+	})
+
+	return notify.New(d), digest, nil
 }
 
 // knowledgeBase is the knowledge base as goald wires it (spec 4 §4.8): its sources and documents
@@ -552,14 +616,17 @@ func (a engineToolApprovals) RequestToolApproval(ctx context.Context, c gateway.
 }
 
 // jobs are goald's scheduled jobs: the purge of deleted organizations, the sign-in clean-up, the
-// knowledge base's ingestion, the Jonah reviews (swept under the schedule lock) and under
-// GOAL_AUTH=session the startup watch of the identity service.
+// knowledge base's ingestion, under GOAL_AUTH=session the startup watch of the identity service,
+// the notification sender and the daily digest (email only with GOAL_SMTP_URL), and the Jonah
+// reviews, which the goald holding the schedule lock sweeps.
 type jobs struct {
 	purger       *retention.Purger
 	platform     ports.Platform
 	clock        ports.Clock
 	identity     *identityWatch
 	ingestor     *knowledge.Ingestor
+	notify       *notify.Sender
+	digest       *notify.DigestJob
 	reviews      *jonah.Reviews
 	scheduleLock scheduleLock
 }
@@ -619,6 +686,14 @@ func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Se
 
 	if j.identity != nil {
 		wg.Go(func() { j.identity.run(ctx, log) })
+	}
+
+	if j.notify != nil {
+		wg.Go(func() { j.notify.Run(ctx, notifyEvery) })
+	}
+
+	if j.digest != nil {
+		wg.Go(func() { j.digest.Run(ctx, digestEvery) })
 	}
 
 	wg.Go(func() {

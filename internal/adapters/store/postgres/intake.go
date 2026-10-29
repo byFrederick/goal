@@ -474,13 +474,20 @@ func (in *Intake) FailureStreak(ctx context.Context, factory domain.FactoryID, t
 const scheduleLock = "SELECT pg_try_advisory_lock(hashtext('goal.intake.schedules.' || current_schema()))"
 
 // WithScheduleLock implements ports.Intake. The lock is a session advisory lock on a connection
-// of its own, opened from the pool's config and not taken from the pool, straight to PostgreSQL
-// (ADR 0026 decision 4: a pooler that drops session locks must not sit between); closing that
-// connection frees it, even if goald dies while fn runs.
-func (in *Intake) WithScheduleLock(ctx context.Context, fn func(ctx context.Context) error) (ran bool, err error) {
-	conn, err := pgx.ConnectConfig(ctx, in.s.pool.Config().ConnConfig.Copy())
+// of its own (withSessionLock).
+func (in *Intake) WithScheduleLock(ctx context.Context, fn func(ctx context.Context) error) (bool, error) {
+	return withSessionLock(ctx, in.s, scheduleLock, "schedule lock", fn)
+}
+
+// withSessionLock runs fn when the advisory lock query lock (a pg_try_advisory_lock) takes its
+// lock, and reports whether it did. The lock is taken on a connection of its own, opened from
+// the pool's config and not taken from the pool, straight to PostgreSQL (ADR 0026 decision 4: a
+// pooler that drops session locks must not sit between); closing that connection frees it, even
+// if goald dies while fn runs.
+func withSessionLock(ctx context.Context, s *Store, lock, name string, fn func(ctx context.Context) error) (ran bool, err error) {
+	conn, err := pgx.ConnectConfig(ctx, s.pool.Config().ConnConfig.Copy())
 	if err != nil {
-		return false, fmt.Errorf("schedule lock: connect: %w", err)
+		return false, fmt.Errorf("%s: connect: %w", name, err)
 	}
 
 	defer func() {
@@ -488,13 +495,13 @@ func (in *Intake) WithScheduleLock(ctx context.Context, fn func(ctx context.Cont
 		defer cancel()
 
 		if cerr := conn.Close(closeCtx); cerr != nil {
-			err = errors.Join(err, fmt.Errorf("schedule lock: close: %w", cerr))
+			err = errors.Join(err, fmt.Errorf("%s: close: %w", name, cerr))
 		}
 	}()
 
 	var held bool
-	if err := conn.QueryRow(ctx, scheduleLock).Scan(&held); err != nil {
-		return false, fmt.Errorf("schedule lock: %w", err)
+	if err := conn.QueryRow(ctx, lock).Scan(&held); err != nil {
+		return false, fmt.Errorf("%s: %w", name, err)
 	}
 
 	if !held {

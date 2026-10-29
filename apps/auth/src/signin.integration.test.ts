@@ -7,9 +7,9 @@ import pg from 'pg';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { emailSubject, GoalDatabase } from './goal.js';
 import { MemoryMailer } from './mail/memory.js';
-import { limits } from './signin.js';
+import { limits, SignIn } from './signin.js';
 import { createTestDatabase, type TestDatabase } from './testing/database.js';
-import { cookieHeader, Fixtures, type HarnessOptions, harness } from './testing/service.js';
+import { cookieHeader, Fixtures, type HarnessOptions, harness, silent } from './testing/service.js';
 
 let db: TestDatabase;
 let pool: pg.Pool;
@@ -314,6 +314,109 @@ describe('sign-up', () => {
     expect((await fx.events('sign_up.refused')).filter((e) => e.subject === emailSubject(email))).toEqual([
       expect.objectContaining({ data: { method: 'email_code' } }),
     ]);
+  });
+});
+
+describe('sign-up by domain (ADR 0023, decision 7)', () => {
+  let byDomain: string;
+  let factory: string;
+  const at = (name: string) => `${name}-${++n}-${randomUUID().slice(0, 8)}@acme.example.com`;
+
+  beforeAll(async () => {
+    byDomain = await fx.org(`domain-${randomUUID().slice(0, 8)}`, 'Acme by domain');
+    factory = await fx.factory(byDomain, 'line');
+    await fx.signupDomain(byDomain, 'acme.example.com', 'approver');
+  });
+
+  async function membership(email: string) {
+    const { rows } = await admin.query<{ role: string; factory_role: string | null }>(
+      `SELECT m.role, (SELECT r.role FROM factory_roles r WHERE r.user_id = u.id AND r.factory_id = $3) AS factory_role
+       FROM auth."user" u JOIN auth.member m ON m."userId" = u.id AND m."organizationId" = $2 WHERE u.email = $1`,
+      [email, byDomain, factory],
+    );
+    return rows;
+  }
+
+  it('admits a verified email at the domain, sends it a code, and joins it with the join role', async () => {
+    const email = at('ada');
+    const mailer = new MemoryMailer();
+
+    const { res } = await app({ mailer }).signIn(email);
+
+    expect(res.status).toBe(200);
+    expect(mailer.sent.filter((m) => m.to === email)).toHaveLength(1);
+    expect(await membership(email)).toEqual([{ role: 'member', factory_role: 'approver' }]);
+    const { rows } = await admin.query(
+      `SELECT data->>'via' AS via FROM audit_log a JOIN auth."user" u ON a.target_id = u.id::text
+       WHERE u.email = $1 AND a.action = 'member.added'`,
+      [email],
+    );
+    expect(rows).toEqual([{ via: 'signup-domain' }]);
+  });
+
+  it.each([
+    ['another domain', () => address('stranger')],
+    ['a subdomain', () => `eu-${++n}-${randomUUID().slice(0, 8)}@eu.acme.example.com`],
+    ['a domain that only ends like it', () => `x-${++n}-${randomUUID().slice(0, 8)}@notacme.example.com`],
+  ])('refuses %s, even with the right code', async (_, make) => {
+    const email = make();
+    const h = app();
+
+    const res = await h.post('/sign-in/email-otp', { email, otp: await codeFor(h, email) });
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: 'SIGN_UP_NOT_ALLOWED' });
+    expect(await users(email)).toBe(0);
+    expect((await fx.events('sign_up.refused')).filter((e) => e.subject === emailSubject(email))).toEqual([
+      expect.objectContaining({ data: { method: 'email_code' } }),
+    ]);
+  });
+
+  it('refuses an email at the domain that is not verified', async () => {
+    // Google's unverified emails stop before the hook, and every other way in verifies the email,
+    // so the gate is called as Better Auth would call it.
+    const email = at('unverified');
+    const gate = new SignIn({
+      db: goal,
+      mailer: undefined,
+      log: silent,
+      clock: () => new Date(),
+      bootstrapOwnerEmail: undefined,
+    });
+
+    await expect(
+      gate.allowOnlyInvitedOrBootstrap(
+        { email, emailVerified: false } as Parameters<typeof gate.allowOnlyInvitedOrBootstrap>[0],
+        null,
+      ),
+    ).rejects.toMatchObject({ body: { code: 'SIGN_UP_NOT_ALLOWED' } });
+    expect((await fx.events('sign_up.refused')).filter((e) => e.subject === emailSubject(email))).toHaveLength(1);
+  });
+
+  it('refuses the domain of a deleted organization', async () => {
+    const gone = await fx.org(`gone-${randomUUID().slice(0, 8)}`, 'Gone');
+    await fx.signupDomain(gone, 'gone.example.com');
+    await admin.query(`UPDATE organizations SET deleted_at = now() WHERE id = $1`, [gone]);
+    const email = `ada-${++n}@gone.example.com`;
+    const h = app();
+
+    const res = await h.post('/sign-in/email-otp', { email, otp: await codeFor(h, email) });
+
+    expect(res.status).toBe(403);
+    expect(await users(email)).toBe(0);
+    expect((await fx.events('sign_up.refused')).filter((e) => e.subject === emailSubject(email))).toHaveLength(1);
+  });
+
+  it('still admits an invitee at the domain by the invitation, with its role', async () => {
+    const email = at('invitee');
+    await fx.invitation(byDomain, email, inviter, { role: 'admin' });
+
+    const { res } = await app().signIn(email);
+
+    expect(res.status).toBe(200);
+    expect(await membership(email)).toEqual([]);
+    const { rows } = await admin.query(`SELECT status FROM auth.invitation WHERE email = $1`, [email]);
+    expect(rows).toEqual([{ status: 'pending' }]);
   });
 });
 

@@ -25,7 +25,7 @@ test.describe('the Connections page', () => {
     const failed = page.getByRole('region', { name: 'pagerduty failed its test' });
     await expect(failed).toContainText('answered 401');
     await expect(failed).toContainText('sre’s runs still get PAGERDUTY_API_TOKEN');
-    await expect(page.getByRole('heading', { level: 2, name: '8 connections' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: '9 connections' })).toBeVisible();
 
     // A table where main is wide, cards where it is not: whichever shows.
     const list = page.getByRole('row').or(page.getByRole('listitem'));
@@ -46,10 +46,10 @@ test.describe('the Connections page', () => {
     await page.goto('/o/acme/connections');
     await page.getByRole('combobox', { name: 'Kind' }).selectOption({ label: 'GitHub' });
     await expect(page).toHaveURL(/kind=github/);
-    await expect(page.getByRole('heading', { level: 2, name: '1 of 8 connections' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: '1 of 9 connections' })).toBeVisible();
     await page.getByRole('combobox', { name: 'Kind' }).selectOption({ label: 'All kinds' });
     await page.getByRole('searchbox', { name: 'Find a connection' }).fill('aws');
-    await expect(page.getByRole('heading', { level: 2, name: '1 of 8 connections' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: '1 of 9 connections' })).toBeVisible();
 
     // The factory's own filter (Connections of sre) is not on the phone; the drawer's Connections is the organization's.
     if (isPhone(page)) return;
@@ -64,9 +64,9 @@ test.describe('the Connections page', () => {
     await page.goto('/o/acme/connections?factory=nope');
     await expect(page.getByText('Acme has no factory named nope.')).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'Factory' })).toHaveValue('nope');
-    await expect(page.getByRole('heading', { level: 2, name: /8 connections/ })).toHaveCount(0);
+    await expect(page.getByRole('heading', { level: 2, name: /9 connections/ })).toHaveCount(0);
     await page.getByRole('button', { name: 'Show every connection' }).click();
-    await expect(page.getByRole('heading', { level: 2, name: '8 connections' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: '9 connections' })).toBeVisible();
     await fits(page);
   });
 
@@ -97,7 +97,7 @@ test.describe('the Connections page', () => {
   test('a member reads connections but changes nothing', async ({ page }) => {
     await page.request.post('/__mock/reset', { data: { role: 'member' } });
     await page.goto('/o/acme/connections');
-    await expect(page.getByRole('heading', { level: 2, name: '8 connections' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: '9 connections' })).toBeVisible();
     await expect(page.getByRole('link', { name: /Add connection/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Replace secret…' })).toHaveCount(0);
     // The audit log is for owners and admins.
@@ -239,7 +239,7 @@ test.describe('a connection’s page', () => {
     await dialog.getByLabel(/Type gitlab-infra to confirm/).fill('gitlab-infra');
     await dialog.getByRole('button', { name: 'Delete connection' }).click();
     await expect(page).toHaveURL(/\/o\/acme\/connections$/);
-    await expect(page.getByRole('heading', { level: 2, name: '7 connections' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: '8 connections' })).toBeVisible();
   });
 
   test('replacing a secret keeps the field edits not saved yet', async ({ page }) => {

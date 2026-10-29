@@ -81,6 +81,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's own notification preferences
+         * @description Which events the signed-in person is told about on which channel, the email notifications go to and the time zone of the daily digest (ADR 0023, decision 1). They hold in every organization the person belongs to. A person who never saved any reads the defaults. Only a signed-in person has them: an API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+         */
+        get: operations["getNotificationPreferences"];
+        /**
+         * Replace the caller's own notification preferences
+         * @description Replaces every field. An email that is not a plain address (blank is the sign-in email) is 400 invalid-notification-email; a time zone that is not an IANA name, or Local, is 400 invalid-time-zone; the digest In Goal is 400 invalid-notification-preferences. Nothing is changed then. An API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+         */
+        put: operations["putNotificationPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/platform/admins": {
         parameters: {
             query?: never;
@@ -218,6 +242,33 @@ export interface paths {
          * @description Every field is optional and changes only what it names, in one transaction audited as one org.updated entry (none when nothing changes). A new slug resolves at once and the old one is 404. A taken slug is 409 with code slug-taken; a reserved or malformed slug, name or mark, or a slot cap outside 1 to 1000, is 409. A factory that is not the organization's is 404. Per-factory caps may add up to more than the organization's.
          */
         patch: operations["updateOrgSettings"];
+        trace?: never;
+    };
+    "/v1/orgs/{org}/settings/signup-domain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Let anyone with a verified email at a domain sign up and join
+         * @description Sets the organization's one sign-up domain (ADR 0023, decision 7). From then on a person whose verified sign-in email is exactly at the domain (subdomains not included) may sign up without an invitation and joins as a member with join_role on every factory that exists then. Only an owner may set it, with a sign-in from the last 10 minutes, and only to the domain of their own sign-in email. Audited as org.signup_domain_set; setting what is already set changes nothing. A malformed domain or an unknown role is 400; a domain the caller's email is not at is 400 signup-domain-not-yours; a public webmail domain is 400 signup-domain-public; a domain another live organization holds is 409 signup-domain-taken.
+         */
+        put: operations["setSignupDomain"];
+        post?: never;
+        /**
+         * Stop sign-up by domain
+         * @description Clears the sign-up domain: from then on only invited people sign up. Members who joined by the domain stay. Audited as org.signup_domain_cleared; nothing to clear is no change. Needs a sign-in from the last 10 minutes.
+         */
+        delete: operations["clearSignupDomain"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/orgs/{org}/policy": {
@@ -1087,6 +1138,62 @@ export interface paths {
          * @description One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken, and with eval cases evals-pending or evals-failing (the eval gate, with eval_run_id; the draft stays open).
          */
         post: operations["publishDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/draft/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The factory's draft requests, newest first
+         * @description The asked definition changes of the factory (ADR 0021), newest first, at most limit of them.
+         */
+        get: operations["listDraftRequests"];
+        put?: never;
+        /**
+         * Ask for a change to the factory's definition (a draft request)
+         * @description Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+         */
+        post: operations["createDraftRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/draft/requests/{draft_request}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The draft request's id */
+                draft_request: components["parameters"]["DraftRequestRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One draft request, with its result once it ended
+         * @description 404 draft-request-not-found for a request that is not the factory's.
+         */
+        get: operations["getDraftRequest"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3996,6 +4103,34 @@ export interface components {
             /** @description A signed-in person's session; absent for a key, a personal token and under mode none */
             session?: components["schemas"]["MeSession"];
         };
+        /** @description One person's notification preferences (ADR 0023, decision 1), in every organization they belong to */
+        NotificationPreferences: {
+            events: components["schemas"]["NotificationEvents"];
+            /** @description Where email notifications go; blank is the sign-in email */
+            email: string;
+            /** @description The IANA time zone the daily digest goes out at 08:00 in, such as Europe/Berlin */
+            time_zone: string;
+        };
+        /** @description The channels of each event */
+        NotificationEvents: {
+            /** @description An agent needs the person's OK for a write */
+            approval: components["schemas"]["NotificationChannels"];
+            /** @description An agent asks the person a question */
+            question: components["schemas"]["NotificationChannels"];
+            /** @description A factory pulls the andon */
+            andon: components["schemas"]["NotificationChannels"];
+            /** @description A budget passes 80% */
+            budget: components["schemas"]["NotificationChannels"];
+            /** @description The daily digest at 08:00; in_goal is always false */
+            digest: components["schemas"]["NotificationChannels"];
+        };
+        NotificationChannels: {
+            /** @description The app's own badge and toast */
+            in_goal: boolean;
+            email: boolean;
+            /** @description A direct message from the organization's Slack connection */
+            slack: boolean;
+        };
         PlatformAdmin: {
             user: components["schemas"]["User"];
             /** @description Who made them one: a platform admin, system bootstrap (the first sign-in) or system recovery (goal db recover-admin) */
@@ -4240,6 +4375,23 @@ export interface components {
             slug: string;
             mark: string;
             slots: components["schemas"]["OrgSlots"];
+            /** @description The domain whose people may sign up without an invitation; absent when none is set */
+            signup_domain?: components["schemas"]["SignupDomain"];
+        };
+        /** @description Sign-up by domain (ADR 0023, decision 7): anyone whose verified email is exactly at domain may sign up, joining as a member with join_role on every factory that exists then */
+        SignupDomain: {
+            /** @description Lower case */
+            domain: string;
+            join_role: components["schemas"]["FactoryRole"];
+            set_by: components["schemas"]["Actor"];
+            /** Format: date-time */
+            set_at: string;
+        };
+        SignupDomainInput: {
+            /** @description A domain such as example.com; case is ignored */
+            domain: string;
+            /** @description The factory role people who join get; viewer when absent */
+            join_role?: components["schemas"]["FactoryRole"];
         };
         /** @description Slot caps: how many agents may run at once across the organization's factories (max) and in each factory. null is no cap. */
         OrgSlots: {
@@ -6696,6 +6848,40 @@ export interface components {
             connections: string;
             review: string;
         };
+        NewDraftRequest: {
+            /** @description What to change, 1 to 2000 characters once trimmed */
+            text: string;
+            /** @description The agent of the definition the request is about (Ask Jonah for a fix) */
+            agent?: string;
+        };
+        /** @description An asked change to a factory's definition (ADR 0021): queued until a goald claims it, running in a box, then done or failed with what it changed in the draft */
+        DraftRequest: {
+            id: string;
+            text: string;
+            /** @description The agent the request is about, "" for the Ask bar */
+            agent: string;
+            /** @enum {string} */
+            status: "queued" | "running" | "done" | "failed";
+            /** @description What the agent changed, or why the request failed; "" until it ends */
+            summary: string;
+            /** @description The definition paths the request wrote or deleted in the draft */
+            changed_paths: string[];
+            /** Format: double */
+            cost_usd: number;
+            turns: number;
+            /** @description What went wrong when the request failed, "" otherwise */
+            error: string;
+            requester: components["schemas"]["Actor"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            started_at?: string;
+            /** Format: date-time */
+            finished_at?: string;
+        };
+        DraftRequestList: {
+            requests: components["schemas"]["DraftRequest"][];
+        };
         DraftModel: {
             /** Format: int64 */
             revision: number;
@@ -7726,6 +7912,8 @@ export interface components {
         KindRef: string;
         /** @description The factory's metadata.id or metadata.name */
         FactoryRef: string;
+        /** @description The draft request's id */
+        DraftRequestRef: string;
         /** @description The judge's slug: its file name in evals/judges without .md */
         JudgeRef: string;
         /** @description The proposal's number in its factory, from 1 */
@@ -7839,6 +8027,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Me"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The preferences */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferences"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    putNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationPreferences"];
+            };
+        };
+        responses: {
+            /** @description The preferences as saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferences"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -8085,6 +8319,56 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["OrgSettings"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    setSignupDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignupDomainInput"];
+            };
+        };
+        responses: {
+            /** @description The sign-up domain now set */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupDomain"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    clearSignupDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cleared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };
@@ -9348,6 +9632,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Version"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listDraftRequests: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The draft requests */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRequestList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createDraftRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description The queued request */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRequest"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getDraftRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The draft request's id */
+                draft_request: components["parameters"]["DraftRequestRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The draft request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRequest"];
                 };
             };
             default: components["responses"]["Problem"];

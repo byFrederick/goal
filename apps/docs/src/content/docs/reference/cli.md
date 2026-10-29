@@ -282,6 +282,16 @@ delete an archived factory for good, with its items, runs and versions, after ty
 
 Flags: `--yes`.
 
+## goal factory ask
+
+```text
+goal factory ask <factory> "<text>" [--agent A] [--wait]
+```
+
+ask goald to change the factory's draft (a draft request, about agent A with --agent); it never publishes. --wait waits until it is done or failed and prints what it changed
+
+Flags: `--agent A`, `--wait`.
+
 ## goal org list
 
 ```text

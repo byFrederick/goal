@@ -192,6 +192,48 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Me" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/me/notifications:
+    get:
+      operationId: getNotificationPreferences
+      x-goal-scope: notifications:manage
+      tags: [identity]
+      summary: The caller's own notification preferences
+      description: >-
+        Which events the signed-in person is told about on which channel, the email notifications
+        go to and the time zone of the daily digest (ADR 0023, decision 1). They hold in every
+        organization the person belongs to. A person who never saved any reads the defaults. Only
+        a signed-in person has them: an API key, a personal token and GOAL_AUTH=none's local user
+        are 403 person-required.
+      responses:
+        "200":
+          description: The preferences
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationPreferences" }
+        default: { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: putNotificationPreferences
+      x-goal-scope: notifications:manage
+      tags: [identity]
+      summary: Replace the caller's own notification preferences
+      description: >-
+        Replaces every field. An email that is not a plain address (blank is the sign-in email) is
+        400 invalid-notification-email; a time zone that is not an IANA name, or Local, is 400
+        invalid-time-zone; the digest In Goal is 400 invalid-notification-preferences. Nothing is
+        changed then. An API key, a personal token and GOAL_AUTH=none's local user are 403
+        person-required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NotificationPreferences" }
+      responses:
+        "200":
+          description: The preferences as saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationPreferences" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/platform/admins:
     get:
       operationId: listPlatformAdmins
@@ -391,6 +433,48 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/OrgSettings" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/settings/signup-domain:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    put:
+      operationId: setSignupDomain
+      x-goal-scope: org:signup_domain
+      tags: [orgs]
+      summary: Let anyone with a verified email at a domain sign up and join
+      description: >-
+        Sets the organization's one sign-up domain (ADR 0023, decision 7). From then on a person
+        whose verified sign-in email is exactly at the domain (subdomains not included) may sign
+        up without an invitation and joins as a member with join_role on every factory that
+        exists then. Only an owner may set it, with a sign-in from the last 10 minutes, and only
+        to the domain of their own sign-in email. Audited as org.signup_domain_set; setting what
+        is already set changes nothing. A malformed domain or an unknown role is 400; a domain
+        the caller's email is not at is 400 signup-domain-not-yours; a public webmail domain is
+        400 signup-domain-public; a domain another live organization holds is 409
+        signup-domain-taken.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SignupDomainInput" }
+      responses:
+        "200":
+          description: The sign-up domain now set
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SignupDomain" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: clearSignupDomain
+      x-goal-scope: org:signup_domain
+      tags: [orgs]
+      summary: Stop sign-up by domain
+      description: >-
+        Clears the sign-up domain: from then on only invited people sign up. Members who joined
+        by the domain stay. Audited as org.signup_domain_cleared; nothing to clear is no change.
+        Needs a sign-in from the last 10 minutes.
+      responses:
+        "204": { description: Cleared }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/policy:
     parameters:
@@ -1441,6 +1525,72 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Version" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/draft/requests:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: listDraftRequests
+      x-goal-scope: factory:read
+      tags: [definitions]
+      summary: The factory's draft requests, newest first
+      description: >-
+        The asked definition changes of the factory (ADR 0021), newest first, at most limit of
+        them.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: The draft requests
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DraftRequestList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createDraftRequest
+      x-goal-scope: definition:edit
+      tags: [definitions]
+      summary: Ask for a change to the factory's definition (a draft request)
+      description: >-
+        Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the
+        factory's draft and never publishes. agent, when set, names the agent the request is about
+        (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft
+        is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once
+        trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid
+        while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open
+        while the factory has a queued or running request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewDraftRequest" }
+      responses:
+        "201":
+          description: The queued request
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DraftRequest" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/draft/requests/{draft_request}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/DraftRequestRef"
+    get:
+      operationId: getDraftRequest
+      x-goal-scope: factory:read
+      tags: [definitions]
+      summary: One draft request, with its result once it ended
+      description: 404 draft-request-not-found for a request that is not the factory's.
+      responses:
+        "200":
+          description: The draft request
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DraftRequest" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/versions:
     parameters:
@@ -4421,6 +4571,12 @@ components:
       required: true
       description: The factory's metadata.id or metadata.name
       schema: { type: string }
+    DraftRequestRef:
+      name: draft_request
+      in: path
+      required: true
+      description: The draft request's id
+      schema: { type: string }
     JudgeRef:
       name: judge
       in: path
@@ -4949,6 +5105,49 @@ components:
         session:
           allOf: [{ $ref: "#/components/schemas/MeSession" }]
           description: A signed-in person's session; absent for a key, a personal token and under mode none
+    NotificationPreferences:
+      type: object
+      description: >-
+        One person's notification preferences (ADR 0023, decision 1), in every organization they
+        belong to
+      required: [events, email, time_zone]
+      properties:
+        events: { $ref: "#/components/schemas/NotificationEvents" }
+        email:
+          type: string
+          maxLength: 320
+          description: Where email notifications go; blank is the sign-in email
+        time_zone:
+          type: string
+          maxLength: 64
+          description: The IANA time zone the daily digest goes out at 08:00 in, such as Europe/Berlin
+    NotificationEvents:
+      type: object
+      description: The channels of each event
+      required: [approval, question, andon, budget, digest]
+      properties:
+        approval:
+          allOf: [{ $ref: "#/components/schemas/NotificationChannels" }]
+          description: An agent needs the person's OK for a write
+        question:
+          allOf: [{ $ref: "#/components/schemas/NotificationChannels" }]
+          description: An agent asks the person a question
+        andon:
+          allOf: [{ $ref: "#/components/schemas/NotificationChannels" }]
+          description: A factory pulls the andon
+        budget:
+          allOf: [{ $ref: "#/components/schemas/NotificationChannels" }]
+          description: A budget passes 80%
+        digest:
+          allOf: [{ $ref: "#/components/schemas/NotificationChannels" }]
+          description: The daily digest at 08:00; in_goal is always false
+    NotificationChannels:
+      type: object
+      required: [in_goal, email, slack]
+      properties:
+        in_goal: { type: boolean, description: "The app's own badge and toast" }
+        email: { type: boolean }
+        slack: { type: boolean, description: A direct message from the organization's Slack connection }
     PlatformAdmin:
       type: object
       required: [user, added_by, added_at]
@@ -5271,6 +5470,28 @@ components:
         slug: { type: string }
         mark: { type: string }
         slots: { $ref: "#/components/schemas/OrgSlots" }
+        signup_domain:
+          description: The domain whose people may sign up without an invitation; absent when none is set
+          allOf: [{ $ref: "#/components/schemas/SignupDomain" }]
+    SignupDomain:
+      type: object
+      description: >-
+        Sign-up by domain (ADR 0023, decision 7): anyone whose verified email is exactly at domain
+        may sign up, joining as a member with join_role on every factory that exists then
+      required: [domain, join_role, set_by, set_at]
+      properties:
+        domain: { type: string, description: Lower case, matched exactly; subdomains are not included }
+        join_role: { $ref: "#/components/schemas/FactoryRole" }
+        set_by: { $ref: "#/components/schemas/Actor" }
+        set_at: { type: string, format: date-time }
+    SignupDomainInput:
+      type: object
+      required: [domain]
+      properties:
+        domain: { type: string, minLength: 1, maxLength: 253, description: "A domain such as example.com; case is ignored" }
+        join_role:
+          description: The factory role people who join get; viewer when absent
+          allOf: [{ $ref: "#/components/schemas/FactoryRole" }]
     OrgSlots:
       type: object
       description: >-
@@ -8144,6 +8365,42 @@ components:
         agents: { type: string }
         connections: { type: string }
         review: { type: string }
+    NewDraftRequest:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, description: "What to change, 1 to 2000 characters once trimmed" }
+        agent: { type: string, description: The agent of the definition the request is about (Ask Jonah for a fix) }
+    DraftRequest:
+      type: object
+      description: >-
+        An asked change to a factory's definition (ADR 0021): queued until a goald claims it,
+        running in a box, then done or failed with what it changed in the draft
+      required: [id, text, agent, status, summary, changed_paths, cost_usd, turns, error, requester, created_at]
+      properties:
+        id: { type: string }
+        text: { type: string }
+        agent: { type: string, description: 'The agent the request is about, "" for the Ask bar' }
+        status: { type: string, enum: [queued, running, done, failed] }
+        summary: { type: string, description: 'What the agent changed, or why the request failed; "" until it ends' }
+        changed_paths:
+          type: array
+          description: The definition paths the request wrote or deleted in the draft
+          items: { type: string }
+        cost_usd: { type: number, format: double }
+        turns: { type: integer }
+        error: { type: string, description: 'What went wrong when the request failed, "" otherwise' }
+        requester: { $ref: "#/components/schemas/Actor" }
+        created_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+    DraftRequestList:
+      type: object
+      required: [requests]
+      properties:
+        requests:
+          type: array
+          items: { $ref: "#/components/schemas/DraftRequest" }
     DraftModel:
       type: object
       required: [revision, model, etags, edited, ranges]

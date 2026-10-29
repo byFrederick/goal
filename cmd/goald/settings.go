@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/mail"
 	"net/netip"
 	"net/url"
 	"os"
@@ -62,6 +63,9 @@ type settings struct {
 	// EmailCodes offers signing in by an emailed code (GOAL_AUTH_EMAIL: on or off, default on);
 	// off, on an install without a mail server, Google is the only way in.
 	EmailCodes bool
+	// SMTP is the mail server notifications go out through (ADR 0023, decision 4); nil while
+	// GOAL_SMTP_URL is unset, and goald then sends no email.
+	SMTP *smtpSettings
 	// AuthUpstream is the identity service that /api/auth/* is proxied to under session
 	// (GOAL_AUTH_UPSTREAM, default http://127.0.0.1:8081; http on a loopback address only).
 	AuthUpstream *url.URL
@@ -273,6 +277,7 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 	errs = append(errs, jonahSettings(&s, or)...)
 	errs = append(errs, upstreamSettings(&s, or)...)
 	errs = append(errs, knowledgeSettings(&s, or)...)
+	errs = append(errs, smtpSettingsFrom(&s, or)...)
 
 	if s.DocsDir, err = docsDir(or(docsDirEnv, "")); err != nil {
 		errs = append(errs, err)
@@ -311,6 +316,86 @@ func docsDir(dir string) (string, error) {
 	}
 
 	return dir, nil
+}
+
+// The SMTP settings goald shares with the auth service (apps/auth/src/settings.ts, parseSMTP).
+const (
+	smtpURLEnv       = "GOAL_SMTP_URL"
+	smtpFromEnv      = "GOAL_SMTP_FROM"
+	smtpPlaintextEnv = "GOAL_SMTP_PLAINTEXT"
+	defaultSMTPFrom  = "Goal <goal@localhost>"
+	// composeMailpit is Mailpit's service name in compose.yaml. Any other name without dots may
+	// be a host of the LAN through a DNS search domain, so only this one may get clear text.
+	composeMailpit = "mailpit"
+)
+
+// smtpSettings are where notification email goes and who sends it.
+type smtpSettings struct {
+	// URL is smtp:// or smtps://, with user:password for a real server (GOAL_SMTP_URL, a secret:
+	// never repeated in an error or a log).
+	URL string
+	// From is the sender, an address or "Name <address>" (GOAL_SMTP_FROM, default
+	// Goal <goal@localhost>).
+	From string
+	// Plaintext lets smtp:// stay unencrypted: always to a loopback host, and to compose's
+	// Mailpit with GOAL_SMTP_PLAINTEXT=on. Every other smtp:// server must offer STARTTLS.
+	Plaintext bool
+}
+
+// smtpSettingsFrom reads GOAL_SMTP_URL, GOAL_SMTP_FROM and GOAL_SMTP_PLAINTEXT under the auth
+// service's rules. Without GOAL_SMTP_URL there is no mailer and the other two are not checked.
+func smtpSettingsFrom(s *settings, or func(name, def string) string) []error {
+	raw := or(smtpURLEnv, "")
+	if raw == "" {
+		return nil
+	}
+
+	var errs []error
+
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "smtp" && u.Scheme != "smtps") || u.Hostname() == "" {
+		// The value is never repeated: it may hold the server's password.
+		return []error{fmt.Errorf("%s must be an smtp:// or smtps:// URL with a host", smtpURLEnv)}
+	}
+
+	from := or(smtpFromEnv, defaultSMTPFrom)
+	if _, err := mail.ParseAddress(from); err != nil || strings.ContainsAny(from, "\r\n") {
+		errs = append(errs, fmt.Errorf(`%s must be an address or "Name <address>"`, smtpFromEnv))
+	}
+
+	plaintext, err := smtpPlaintext(u, or(smtpPlaintextEnv, "off"))
+	if err != nil {
+		errs = append(errs, err)
+	}
+
+	if len(errs) > 0 {
+		return errs
+	}
+
+	s.SMTP = &smtpSettings{URL: raw, From: from, Plaintext: plaintext}
+
+	return nil
+}
+
+// smtpPlaintext is whether mail to u may stay unencrypted under GOAL_SMTP_PLAINTEXT=mode: an
+// smtp:// URL on loopback always may; mode on allows compose's Mailpit too, and nothing else.
+func smtpPlaintext(u *url.URL, mode string) (bool, error) {
+	if mode != "on" && mode != "off" {
+		return false, fmt.Errorf("%s %q is not on or off", smtpPlaintextEnv, mode)
+	}
+
+	host := u.Hostname()
+	if u.Scheme != "smtp" {
+		host = ""
+	}
+
+	allowed := isLoopback(host) || (host == composeMailpit && mode == "on")
+	if mode == "on" && !allowed {
+		return false, fmt.Errorf("%s=on needs an smtp:// %s on loopback or compose's Mailpit (%s); any other server must offer STARTTLS",
+			smtpPlaintextEnv, smtpURLEnv, composeMailpit)
+	}
+
+	return allowed, nil
 }
 
 // knowledgeSettings reads the embedding model, GOAL_KB_WORKERS and GOAL_UPLOAD_MAX_BYTES.

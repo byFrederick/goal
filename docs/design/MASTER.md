@@ -89,7 +89,15 @@ Rules:
 ## The shell
 
 - The app fills the viewport. The sidebar is pinned left at full height, and the content sits beside it. There is no framed shell and no outer margin.
-- **Sidebar** (256px; collapses to a 60px rail):
+- **Sidebar** (256px by default; resizable; collapses to a 60px rail):
+  - **Resizing** (from 768px; below it there is no handle, and the phone drawer is unchanged):
+    - The sidebar is 216px to 400px wide, 256px by default. Drag its right edge to set the width.
+    - The handle is a 6px hit area centred on the right border. On hover and while dragging, the border shows as a 2px cobalt line. The cursor is col-resize.
+    - Releasing below 160px folds the sidebar into the 60px rail. Dragging the rail's edge out past 160px expands it again, to the width dragged and clamped to 216–400px.
+    - Double-clicking the handle resets the width to 256px.
+    - Keyboard: the handle is focusable (`role="separator"`, labelled "Resize sidebar", with its value). ArrowRight and ArrowLeft change the width by 16px; Home collapses to the rail; End sets 400px; Enter resets to 256px. ArrowRight on the rail expands it at its last width.
+    - Labels truncate with an ellipsis at every width and never wrap. The content beside the sidebar takes the width left over.
+    - Motion: no animation while dragging. Snapping between the sidebar and the rail takes 200ms, and none under reduced motion.
   - **Top row:**
     - The Goal mark and the organization's name open the **organization menu**:
       - the organizations, with factory count and role (organizations have no image or letter square);

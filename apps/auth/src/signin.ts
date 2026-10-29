@@ -92,8 +92,9 @@ export class SignIn {
 
   /**
    * allowOnlyInvitedOrBootstrap is the single sign-up gate, for codes and Google alike: a user is
-   * created only for a verified email with a pending, unexpired invitation, or for the bootstrap
-   * owner's email while no user exists. Anyone else is refused and logged.
+   * created only for a verified email with a pending, unexpired invitation, for the bootstrap
+   * owner's email while no user exists, or for an email exactly at a live organization's sign-up
+   * domain (ADR 0023, decision 7), in that order. Anyone else is refused and logged.
    */
   allowOnlyInvitedOrBootstrap: NonNullable<UserCreate['before']> = async (user, ctx) => {
     const { db, clock, bootstrapOwnerEmail } = this.deps;
@@ -101,6 +102,7 @@ export class SignIn {
     if (user.emailVerified === true) {
       if (await db.isInvitee(email, clock())) return;
       if (email === bootstrapOwnerEmail && !(await db.hasUsers())) return;
+      if (await db.signupDomainOrg(email)) return;
     }
     await db.record({
       kind: 'sign_up.refused',
@@ -111,8 +113,21 @@ export class SignIn {
     throw new APIError('FORBIDDEN', { code: 'SIGN_UP_NOT_ALLOWED', message: 'Only invited people can sign up' });
   };
 
+  /**
+   * recordUser logs the new user and, when they were admitted by a sign-up domain, joins them to
+   * its organization with its join role. A failed join is logged by its error code only (pg errors
+   * can repeat the email) and never undoes the sign-up; the person can then be invited.
+   */
   recordUser: NonNullable<UserCreate['after']> = async (user, ctx) => {
-    await this.deps.db.record({
+    const { db, log } = this.deps;
+    try {
+      const org = await db.applySignupDomain(user.id);
+      if (org) log.log('info', 'signup_domain.joined', { user_id: user.id, org_id: org });
+    } catch (e) {
+      const code = typeof e === 'object' && e !== null && 'code' in e ? String(e.code) : 'unknown';
+      log.log('error', 'signup_domain.join_failed', { user_id: user.id, code });
+    }
+    await db.record({
       kind: 'user.created',
       user: user.id,
       ...client(ctx ?? undefined),
@@ -122,7 +137,7 @@ export class SignIn {
 
   /**
    * sendCodeIfAllowed is email OTP's sender, run in the background: it mails a sign-in code only
-   * to a user or a pending invitee, at most codesPerHour an hour, and never to a locked address.
+   * to a user, a pending invitee or an address at a sign-up domain (known), at most codesPerHour an hour, and never to a locked address.
    * Otherwise it records why (otp.suppressed) and voids the code Better Auth stored, so the only
    * usable codes are ones that were sent.
    */
@@ -213,11 +228,15 @@ export class SignIn {
     }
   };
 
-  /** known: a user, a pending invitee, or the bootstrap owner while no user exists. */
+  /**
+   * known: a user, a pending invitee, the bootstrap owner while no user exists, or an address at a
+   * live organization's sign-up domain.
+   */
   private async known(email: string): Promise<boolean> {
     const { db, clock, bootstrapOwnerEmail } = this.deps;
     if ((await db.isUser(email)) || (await db.isInvitee(email, clock()))) return true;
-    return email.trim().toLowerCase() === bootstrapOwnerEmail && !(await db.hasUsers());
+    if (email.trim().toLowerCase() === bootstrapOwnerEmail && !(await db.hasUsers())) return true;
+    return (await db.signupDomainOrg(email)) !== null;
   }
 
   private async locked(subject: string): Promise<boolean> {
