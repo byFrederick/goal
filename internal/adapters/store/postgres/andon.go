@@ -15,8 +15,9 @@ import (
 // openAndonKey is the unique index that keeps one open pull per factory (migration 00001).
 const openAndonKey = "andon_pulls_open_key"
 
-// PullAndon implements ports.Store: the pull and its audit entry in one transaction, whose commit
-// notifies the stream (the andon_pulls trigger of migration 00032).
+// PullAndon implements ports.Store: the pull, its audit entry and its notifications in the outbox
+// (ADR 0023, decision 3) in one transaction, whose commit notifies the stream (the andon_pulls
+// trigger of migration 00032).
 func (s *Store) PullAndon(ctx context.Context, p domain.AndonPull, by domain.Actor) (domain.AndonPull, error) {
 	factory, err := parseID("factory", string(p.FactoryID))
 	if err != nil {
@@ -59,7 +60,11 @@ func (s *Store) PullAndon(ctx context.Context, p domain.AndonPull, by domain.Act
 			return err
 		}
 
-		return appendAudit(ctx, q, andonAuditEntry(domain.AuditAndonPulled, out, by, out.PulledAt))
+		if err := appendAudit(ctx, q, andonAuditEntry(domain.AuditAndonPulled, out, by, out.PulledAt)); err != nil {
+			return err
+		}
+
+		return queueNotifications(ctx, q, andonNotification(out, factory, by))
 	})
 	if err != nil {
 		return domain.AndonPull{}, fmt.Errorf("pull the andon of factory %s: %w", p.FactoryID, err)

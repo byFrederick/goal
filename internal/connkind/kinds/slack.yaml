@@ -1,0 +1,13 @@
+apiVersion: goal/v1
+kind: ConnectionKind
+metadata:
+  name: slack
+  title: Slack
+  description: A Slack bot token, which goald uses to send notifications as direct messages.
+spec:
+  fields:
+    - {name: token, title: Bot token, description: "A bot token (xoxb-…) with the users:read.email, im:write and chat:write scopes.", secret: true, required: true}
+  env:
+    SLACK_BOT_TOKEN: "{{token}}"
+  test: {method: POST, url: "https://slack.com/api/auth.test", headers: {Authorization: "Bearer {{token}}"}, expect: 200}
+  docs: "Call the Slack Web API at https://slack.com/api with the header Authorization: Bearer $SLACK_BOT_TOKEN."

@@ -210,7 +210,12 @@ func (mxOrgs) UpdateOrg(context.Context, domain.Actor, ports.OrgUpdate) (domain.
 
 func (mxOrgs) DeleteOrg(context.Context, domain.Actor, time.Time) error { panic(errReached) }
 
-func (mxOrgs) FactorySlots(context.Context) (map[domain.FactoryID]int, error) { panic(errReached) }
+func (mxOrgs) FactorySlots(context.Context) (map[domain.FactoryID]int, error)  { panic(errReached) }
+func (mxOrgs) SignupDomain(context.Context) (domain.SignupDomain, bool, error) { panic(errReached) }
+func (mxOrgs) SetSignupDomain(context.Context, domain.Actor, string, domain.FactoryRole) (domain.SignupDomain, error) {
+	panic(errReached)
+}
+func (mxOrgs) ClearSignupDomain(context.Context, domain.Actor) error { panic(errReached) }
 
 func (mxOrgs) Org(_ context.Context, ref string) (domain.Org, error) {
 	for _, o := range []domain.Org{{ID: mxAcme, Slug: "acme", Name: "Acme"}, {ID: mxOther, Slug: "other", Name: "Other"}} {
@@ -255,6 +260,18 @@ func (mxAudit) AuditLog(context.Context, ports.AuditQuery) ([]domain.AuditEntry,
 // mxPlatform is every platform route's collaborator: reaching it is passing authorization.
 type mxPlatform struct{ Platform }
 
+// mxNotifications is the notification routes' collaborator: reaching it is passing
+// authorization. It cannot embed its port, whose method has the port's name.
+type mxNotifications struct{}
+
+func (mxNotifications) NotificationPreferences(context.Context, domain.UserID) (domain.NotificationPreferences, error) {
+	panic("reached")
+}
+
+func (mxNotifications) SetNotificationPreferences(context.Context, domain.UserID, domain.NotificationPreferences) error {
+	panic("reached")
+}
+
 type mxDefinitions struct{ Definitions }
 
 func (mxDefinitions) Factory(ctx context.Context, ref string) (ports.FactoryRecord, error) {
@@ -291,6 +308,7 @@ func mxServer(t *testing.T, identity Identity) *httptest.Server {
 		ConnectionTransport: http.DefaultTransport, Knowledge: struct{ ports.Knowledge }{}, KnowledgeUploads: struct{ KnowledgeUploads }{},
 		KnowledgeSearch: struct{ KnowledgeSearch }{}, UploadMaxBytes: 1 << 20, Clock: clock,
 		OrgPolicies: struct{ ports.OrgPolicies }{}, BoxSizes: []domain.BoxSize{{Size: domain.SandboxMedium}},
+		NotificationPreferences: mxNotifications{},
 	})
 	if err != nil {
 		t.Fatal(err)

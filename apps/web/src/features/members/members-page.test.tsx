@@ -10,15 +10,51 @@ import {
 } from '@tanstack/react-router';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { setFactoryRole } from '../../api/client';
-import { authConfigQuery, factoriesQuery, invitationsQuery, membersQuery, orgQuery } from '../../api/queries';
-import type { Factory, Invitation, Member, Org, OrgSummary } from '../../api/types';
+import { ApiError, clearSignupDomain, setFactoryRole, setSignupDomain } from '../../api/client';
+import {
+  authConfigQuery,
+  factoriesQuery,
+  invitationsQuery,
+  membersQuery,
+  meQuery,
+  orgQuery,
+  settingsQuery,
+} from '../../api/queries';
+import type { Factory, Invitation, Member, Org, OrgSettings, OrgSummary, SignupDomain } from '../../api/types';
 import { TooltipProvider } from '../../ui/tooltip';
 import { MembersPage } from './members-page';
+
+/** The settings the mocked API serves: a failure or a hang makes the switch's query fail or wait. */
+const served = vi.hoisted(() => ({
+  settings: undefined as OrgSettings | undefined,
+  fail: false,
+  hang: false,
+}));
 
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
   setFactoryRole: vi.fn(async () => undefined),
+  getOrgSettings: vi.fn(async () => {
+    if (served.fail) throw new TypeError('Failed to fetch');
+    if (served.hang) return new Promise<OrgSettings>(() => {});
+    return served.settings;
+  }),
+  setSignupDomain: vi.fn(
+    async (_org: string, body: { domain: string; join_role?: 'viewer' | 'approver' | 'editor' }) => {
+      const set: SignupDomain = {
+        domain: body.domain,
+        join_role: body.join_role ?? 'viewer',
+        set_by: { kind: 'user', id: 'u1', name: 'Freddy Cruz' },
+        set_at: '2026-10-28T09:00:00Z',
+      };
+      served.settings = { ...served.settings, signup_domain: set } as OrgSettings;
+      return set;
+    },
+  ),
+  clearSignupDomain: vi.fn(async () => {
+    const { signup_domain: _cleared, ...rest } = served.settings as OrgSettings;
+    served.settings = rest;
+  }),
 }));
 
 const org: OrgSummary = { id: 'org-acme', slug: 'acme', name: 'Acme', mark: 'Ac', factory_count: 3, role: 'owner' };
@@ -94,6 +130,9 @@ interface Setup {
   members?: Member[];
   invitations?: Invitation[];
   state?: 'ready' | 'loading' | 'error';
+  /** The sign-up domain goald holds, if any; the settings' own states are `settings`. */
+  signupDomain?: SignupDomain;
+  settings?: 'ready' | 'loading' | 'error';
 }
 
 function renderMembers({
@@ -102,6 +141,8 @@ function renderMembers({
   members = seedMembers,
   invitations = seedInvitations,
   state = 'ready',
+  signupDomain,
+  settings = 'ready',
 }: Setup = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   const detail = {
@@ -118,6 +159,22 @@ function renderMembers({
   client.setQueryData(factoriesQuery(org.id).queryKey, factories);
   client.setQueryData(invitationsQuery(org.id).queryKey, invitations);
   if (state === 'ready') client.setQueryData(membersQuery(org.id).queryKey, members);
+  client.setQueryData(meQuery.queryKey, {
+    kind: 'user',
+    mode: 'session',
+    user: { id: 'u1', name: 'Freddy Cruz', email: 'freddy@example.com' },
+    platform_admin: false,
+  });
+  served.fail = settings === 'error';
+  served.hang = settings === 'loading';
+  served.settings = {
+    name: org.name,
+    slug: org.slug,
+    mark: org.mark,
+    slots: { max: null, factories: [] },
+    ...(signupDomain ? { signup_domain: signupDomain } : {}),
+  };
+  if (settings === 'ready') client.setQueryData(settingsQuery(org.id).queryKey, served.settings);
   if (state === 'loading') vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(() => {}));
   if (state === 'error') vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
 
@@ -162,6 +219,13 @@ function stubMatchMedia() {
     }) as MediaQueryList;
 }
 
+const sign = (domain: string): SignupDomain => ({
+  domain,
+  join_role: 'viewer',
+  set_by: { kind: 'user', id: 'u1', name: 'Freddy Cruz' },
+  set_at: '2026-10-20T09:00:00Z',
+});
+
 const membersCard = () => screen.getByRole('region', { name: 'Members' });
 
 beforeEach(stubMatchMedia);
@@ -170,6 +234,8 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.mocked(setFactoryRole).mockClear();
+  vi.mocked(setSignupDomain).mockClear();
+  vi.mocked(clearSignupDomain).mockClear();
 });
 
 describe('members and roles, ready', () => {
@@ -202,11 +268,8 @@ describe('members and roles, ready', () => {
     expect((await screen.findAllByText('Not available yet')).length).toBeGreaterThan(0);
     fireEvent.click(copy);
 
-    const domain = screen.getByRole('switch', { name: 'Restrict sign-up to a domain' });
-    expect(domain?.getAttribute('aria-disabled')).toBe('true');
-    fireEvent.click(domain);
-    expect(domain?.getAttribute('aria-checked')).toBe('false');
     expect(setFactoryRole).not.toHaveBeenCalled();
+    expect(setSignupDomain).not.toHaveBeenCalled();
   });
 
   it('lists the organization role matrix with a mark for each yes and no', async () => {
@@ -247,6 +310,88 @@ describe('members and roles, ready', () => {
     expect(screen.queryByRole('button', { name: /^Invite/ })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Invite link' })).toBeNull();
     expect(screen.queryByRole('region', { name: /Waiting to join/ })).toBeNull();
+  });
+});
+
+describe('sign-up by domain', () => {
+  const sw = () => screen.findByRole('switch', { name: 'Restrict sign-up to a domain' });
+  const checked = () =>
+    screen.getByRole('switch', { name: 'Restrict sign-up to a domain' }).getAttribute('aria-checked');
+
+  it('turns the switch on for the owner’s email domain, joining as a viewer', async () => {
+    renderMembers();
+    const domain = await sw();
+    expect(domain.getAttribute('aria-disabled')).toBeNull();
+    expect(domain.getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByText('Anyone at example.com joins as a Viewer')).toBeTruthy();
+
+    fireEvent.click(domain);
+    await waitFor(() => expect(checked()).toBe('true'));
+    expect(setSignupDomain).toHaveBeenCalledWith('org-acme', { domain: 'example.com', join_role: 'viewer' });
+  });
+
+  it('turns the switch off, which clears the domain', async () => {
+    renderMembers({ signupDomain: sign('example.com') });
+    const domain = await sw();
+    expect(domain.getAttribute('aria-checked')).toBe('true');
+
+    fireEvent.click(domain);
+    await waitFor(() => expect(checked()).toBe('false'));
+    expect(clearSignupDomain).toHaveBeenCalledWith('org-acme');
+  });
+
+  it('shows a refusal under the switch and leaves the switch as it was', async () => {
+    vi.mocked(setSignupDomain).mockRejectedValueOnce(
+      new ApiError({ title: 'Bad Request', status: 400, code: 'signup-domain-not-yours' } as never),
+    );
+    renderMembers();
+    fireEvent.click(await sw());
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Your sign-in email is not at that domain');
+    expect(checked()).toBe('false');
+  });
+
+  it('shows a public email provider and a domain another organization holds as refusals', async () => {
+    vi.mocked(setSignupDomain).mockRejectedValueOnce(
+      new ApiError({ title: 'Bad Request', status: 400, code: 'signup-domain-public' } as never),
+    );
+    renderMembers();
+    fireEvent.click(await sw());
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'A public email provider cannot be a sign-up domain',
+    );
+  });
+
+  it('shows an admin the switch disabled, as stored, and sends nothing', async () => {
+    renderMembers({ role: 'admin', signupDomain: sign('example.com') });
+    const domain = await sw();
+    expect(domain.getAttribute('aria-disabled')).toBe('true');
+    expect(domain.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(domain);
+    expect(setSignupDomain).not.toHaveBeenCalled();
+    expect(clearSignupDomain).not.toHaveBeenCalled();
+  });
+
+  it('shows a member the switch disabled and as stored, under a Sign-up card', async () => {
+    renderMembers({ role: 'member', invitations: [], signupDomain: sign('example.com') });
+    const domain = await sw();
+    expect(domain.getAttribute('aria-disabled')).toBe('true');
+    expect(domain.getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('region', { name: 'Sign-up' })).toBeTruthy();
+    fireEvent.click(domain);
+    expect(clearSignupDomain).not.toHaveBeenCalled();
+  });
+
+  it('shows the switch busy while the settings load', async () => {
+    renderMembers({ settings: 'loading' });
+    const domain = await sw();
+    expect(domain.getAttribute('aria-busy')).toBe('true');
+    expect(screen.getByText('Loading', { selector: 'span.sr-only' })).toBeTruthy();
+  });
+
+  it('says the switch could not load when the settings fail', async () => {
+    renderMembers({ settings: 'error' });
+    expect((await screen.findByRole('alert')).textContent).toContain('Sign-up by domain could not load.');
   });
 });
 

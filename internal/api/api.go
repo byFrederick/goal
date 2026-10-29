@@ -209,6 +209,9 @@ type Deps struct {
 	OrgPolicies     ports.OrgPolicies
 	BoxSizes        []domain.BoxSize
 	EgressAddresses []netip.Prefix
+	// NotificationPreferences keeps each signed-in person's own notification preferences
+	// (ADR 0023, decision 1), served on /v1/me/notifications.
+	NotificationPreferences ports.NotificationPreferences
 	// ExportMaxRows caps a CSV export (ADR 0020, decision 3); 0 is 100000.
 	ExportMaxRows int
 	// Judges serve Jonah's judges routes (judges.go). Optional: while it is nil those routes
@@ -233,7 +236,7 @@ func (d Deps) complete() bool {
 		d.Audit == nil, d.Access == nil, d.Authorizer == nil, d.Platform == nil, d.Feed == nil, d.Builder == nil, d.Clock == nil,
 		d.Connections == nil, d.Credentials == nil, d.Intake == nil, d.DraftRequests == nil, d.ParseKind == nil, d.ConnectionTransport == nil, d.OrgRetention <= 0,
 		d.Knowledge == nil, d.KnowledgeUploads == nil, d.KnowledgeSearch == nil, d.UploadMaxBytes <= 0,
-		d.OrgPolicies == nil, len(d.BoxSizes) == 0,
+		d.OrgPolicies == nil, len(d.BoxSizes) == 0, d.NotificationPreferences == nil,
 		d.Judges != nil && (d.Judges.Judges == nil || d.Judges.Scores == nil || d.Judges.Tries == nil),
 		d.Evals != nil && (d.Evals.Runs == nil || d.Evals.Loop == nil || d.Evals.Judges == nil),
 		d.Jonah != nil && (d.Jonah.Store == nil || d.Jonah.Decisions == nil),
@@ -278,7 +281,7 @@ var errInvalid = errors.New("invalid request")
 func New(d Deps) (http.Handler, error) {
 	if !d.complete() {
 		return nil, errors.New("api: Engine, Items, Factories, Definitions, Versions, Orgs, Audit, Access, Authorizer, Platform, Feed, Builder, Clock, " +
-			"Connections, Credentials, Intake, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeSearch, OrgPolicies, BoxSizes, " +
+			"Connections, Credentials, Intake, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeSearch, OrgPolicies, BoxSizes, NotificationPreferences, " +
 			"a positive UploadMaxBytes and a positive OrgRetention are required, Judges, when set, needs Judges, Scores and Tries, " +
 			"Evals, when set, needs Runs, Loop and Judges, and Jonah, when set, needs Store and Decisions")
 	}
@@ -298,7 +301,7 @@ func New(d Deps) (http.Handler, error) {
 		builder: d.Builder, connections: d.Connections, credentials: d.Credentials, intake: d.Intake, draftRequests: d.DraftRequests, parseKind: d.ParseKind, codehosts: d.CodeHosts,
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
 		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, search: d.KnowledgeSearch, uploadMax: d.UploadMaxBytes,
-		policies: d.OrgPolicies, boxSizes: slices.Clone(d.BoxSizes), egress: slices.Clone(d.EgressAddresses),
+		policies: d.OrgPolicies, notifications: d.NotificationPreferences, boxSizes: slices.Clone(d.BoxSizes), egress: slices.Clone(d.EgressAddresses),
 		judges: d.Judges, evals: d.Evals, jonah: d.Jonah, clock: d.Clock, log: log, exportMax: cmp.Or(d.ExportMaxRows, defaultExportMaxRows),
 	}
 	s.inbox = append([]InboxSource{workInbox{s: s}}, d.InboxSources...)
@@ -435,6 +438,8 @@ type server struct {
 	policies ports.OrgPolicies
 	boxSizes []domain.BoxSize
 	egress   []netip.Prefix
+	// notifications keeps each person's notification preferences (notifications.go).
+	notifications ports.NotificationPreferences
 	// judges serve the judges routes; nil when this goald does not.
 	judges *JudgeDeps
 	// evals serve the evals routes; nil when this goald does not run evals.
@@ -662,7 +667,7 @@ func problemOf(err error) gen.Problem {
 	// wrap ports.ErrNameTaken); the credentials' before the connections' (both wrap
 	// ports.ErrNoMasterKey).
 	for _, answer := range []func(error) (gen.Problem, bool){
-		fixedProblem, exportProblem, policyProblem, edgeProblem, partProblem, credentialProblem, webhookProblem, viewProblem, connectionProblem, knowledgeProblem, judgeProblem, evalProblem, jonahProblem, definitionProblem,
+		fixedProblem, exportProblem, policyProblem, notificationProblem, signupDomainProblem, edgeProblem, partProblem, credentialProblem, webhookProblem, viewProblem, connectionProblem, knowledgeProblem, judgeProblem, evalProblem, jonahProblem, definitionProblem,
 		controlProblem, questionProblem, toolApprovalProblem, agentProblem, draftRequestProblem, triggerProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {

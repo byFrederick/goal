@@ -136,6 +136,34 @@ test('an owner invites people with factory roles, resends and cancels an invitat
   await expect(page.getByText('4 members, 2 invites waiting')).toBeVisible();
 });
 
+test('an owner turns sign-up by domain on and off; a member sees the switch disabled', async ({ page }) => {
+  await signedInAs(page.request);
+  await page.goto('/o/acme/members');
+  const domain = page.getByRole('switch', { name: 'Restrict sign-up to a domain' });
+  await expect(domain).toHaveAttribute('aria-checked', 'false');
+  await expect(page.getByText('Anyone at example.com joins as a Viewer')).toBeVisible();
+
+  await domain.click();
+  await expect(domain).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByText('Anyone at example.com joins as a Viewer')).toBeVisible();
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+
+  await domain.click();
+  await expect(domain).toHaveAttribute('aria-checked', 'false');
+  // The join link is not in the API: its controls stay unavailable.
+  await expect(page.getByRole('button', { name: 'Copy' })).toHaveAttribute('aria-disabled', 'true');
+});
+
+test('a member sees sign-up by domain disabled and nothing else changes', async ({ page }) => {
+  await signedInAs(page.request, 'a.ortiz@example.com');
+  await page.goto('/o/acme/members');
+  const domain = page.getByRole('switch', { name: 'Restrict sign-up to a domain' });
+  await expect(domain).toHaveAttribute('aria-disabled', 'true');
+  await expect(domain).toHaveAttribute('aria-checked', 'false');
+  await expect(page.getByRole('region', { name: 'Invite link' })).toHaveCount(0);
+});
+
 test('an owner makes someone an admin and removes someone, after confirming', async ({ page }) => {
   await signedInAs(page.request);
   await page.goto('/o/acme/members');

@@ -5225,6 +5225,47 @@ type NoteReceipt struct {
 // NoteReceiptDelivery next_run, the next run's brief carries it (live, to a running agent, comes later)
 type NoteReceiptDelivery string
 
+// NotificationChannels defines model for NotificationChannels.
+type NotificationChannels struct {
+	Email bool `json:"email"`
+
+	// InGoal The app's own badge and toast
+	InGoal bool `json:"in_goal"`
+
+	// Slack A direct message from the organization's Slack connection
+	Slack bool `json:"slack"`
+}
+
+// NotificationEvents The channels of each event
+type NotificationEvents struct {
+	// Andon A factory pulls the andon
+	Andon NotificationChannels `json:"andon"`
+
+	// Approval An agent needs the person's OK for a write
+	Approval NotificationChannels `json:"approval"`
+
+	// Budget A budget passes 80%
+	Budget NotificationChannels `json:"budget"`
+
+	// Digest The daily digest at 08:00; in_goal is always false
+	Digest NotificationChannels `json:"digest"`
+
+	// Question An agent asks the person a question
+	Question NotificationChannels `json:"question"`
+}
+
+// NotificationPreferences One person's notification preferences (ADR 0023, decision 1), in every organization they belong to
+type NotificationPreferences struct {
+	// Email Where email notifications go; blank is the sign-in email
+	Email string `json:"email"`
+
+	// Events The channels of each event
+	Events NotificationEvents `json:"events"`
+
+	// TimeZone The IANA time zone the daily digest goes out at 08:00 in, such as Europe/Berlin
+	TimeZone string `json:"time_zone"`
+}
+
 // OpenDraftRequest defines model for OpenDraftRequest.
 type OpenDraftRequest struct {
 	// Base A published version (a number or current); current when absent
@@ -5371,6 +5412,9 @@ type OrgSearch struct {
 type OrgSettings struct {
 	Mark string `json:"mark"`
 	Name string `json:"name"`
+
+	// SignupDomain The domain whose people may sign up without an invitation; absent when none is set
+	SignupDomain *SignupDomain `json:"signup_domain,omitempty"`
 
 	// Slots Slot caps: how many agents may run at once across the organization's factories (max) and in each factory. null is no cap.
 	Slots OrgSlots `json:"slots"`
@@ -6082,6 +6126,28 @@ type SetLaneRequest struct {
 
 // SignInMethod defines model for SignInMethod.
 type SignInMethod string
+
+// SignupDomain Sign-up by domain (ADR 0023, decision 7): anyone whose verified email is exactly at domain may sign up, joining as a member with join_role on every factory that exists then
+type SignupDomain struct {
+	// Domain Lower case
+	Domain string `json:"domain"`
+
+	// JoinRole A ladder, each including the one before
+	JoinRole FactoryRole `json:"join_role"`
+	SetAt    time.Time   `json:"set_at"`
+
+	// SetBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	SetBy Actor `json:"set_by"`
+}
+
+// SignupDomainInput defines model for SignupDomainInput.
+type SignupDomainInput struct {
+	// Domain A domain such as example.com; case is ignored
+	Domain string `json:"domain"`
+
+	// JoinRole The factory role people who join get; viewer when absent
+	JoinRole *FactoryRole `json:"join_role,omitempty"`
+}
 
 // SizeUse defines model for SizeUse.
 type SizeUse struct {
@@ -7342,6 +7408,9 @@ type ListAuthEventsParams struct {
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty"`
 }
 
+// PutNotificationPreferencesJSONRequestBody defines body for PutNotificationPreferences for application/json ContentType.
+type PutNotificationPreferencesJSONRequestBody = NotificationPreferences
+
 // CreateOrgJSONRequestBody defines body for CreateOrg for application/json ContentType.
 type CreateOrgJSONRequestBody = NewOrg
 
@@ -7503,6 +7572,9 @@ type PutOrgPolicyJSONRequestBody = OrgPolicyInput
 
 // UpdateOrgSettingsJSONRequestBody defines body for UpdateOrgSettings for application/json ContentType.
 type UpdateOrgSettingsJSONRequestBody = OrgSettingsPatch
+
+// SetSignupDomainJSONRequestBody defines body for SetSignupDomain for application/json ContentType.
+type SetSignupDomainJSONRequestBody = SignupDomainInput
 
 // TransferOwnershipJSONRequestBody defines body for TransferOwnership for application/json ContentType.
 type TransferOwnershipJSONRequestBody = TransferRequest
@@ -7844,6 +7916,31 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/me (the `GetMe` operationId).
 	GetMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetNotificationPreferences The caller's own notification preferences
+	//
+	// Which events the signed-in person is told about on which channel, the email notifications go to and the time zone of the daily digest (ADR 0023, decision 1). They hold in every organization the person belongs to. A person who never saved any reads the defaults. Only a signed-in person has them: an API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+	//
+	// Corresponds with GET /v1/me/notifications (the `GetNotificationPreferences` operationId).
+	GetNotificationPreferences(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutNotificationPreferencesWithBody Replace the caller's own notification preferences
+	//
+	// Replaces every field. An email that is not a plain address (blank is the sign-in email) is 400 invalid-notification-email; a time zone that is not an IANA name, or Local, is 400 invalid-time-zone; the digest In Goal is 400 invalid-notification-preferences. Nothing is changed then. An API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/me/notifications (the `PutNotificationPreferences` operationId).
+	PutNotificationPreferencesWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutNotificationPreferences Replace the caller's own notification preferences
+	//
+	// Replaces every field. An email that is not a plain address (blank is the sign-in email) is 400 invalid-notification-email; a time zone that is not an IANA name, or Local, is 400 invalid-time-zone; the digest In Goal is 400 invalid-notification-preferences. Nothing is changed then. An API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/me/notifications (the `PutNotificationPreferences` operationId).
+	PutNotificationPreferences(ctx context.Context, body PutNotificationPreferencesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListOrgs The caller's organizations, by name
 	//
@@ -9549,6 +9646,31 @@ type ClientInterface interface {
 	// Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
 	UpdateOrgSettings(ctx context.Context, org OrgRef, body UpdateOrgSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ClearSignupDomain Stop sign-up by domain
+	//
+	// Clears the sign-up domain: from then on only invited people sign up. Members who joined by the domain stay. Audited as org.signup_domain_cleared; nothing to clear is no change. Needs a sign-in from the last 10 minutes.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/settings/signup-domain (the `ClearSignupDomain` operationId).
+	ClearSignupDomain(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetSignupDomainWithBody Let anyone with a verified email at a domain sign up and join
+	//
+	// Sets the organization's one sign-up domain (ADR 0023, decision 7). From then on a person whose verified sign-in email is exactly at the domain (subdomains not included) may sign up without an invitation and joins as a member with join_role on every factory that exists then. Only an owner may set it, with a sign-in from the last 10 minutes, and only to the domain of their own sign-in email. Audited as org.signup_domain_set; setting what is already set changes nothing. A malformed domain or an unknown role is 400; a domain the caller's email is not at is 400 signup-domain-not-yours; a public webmail domain is 400 signup-domain-public; a domain another live organization holds is 409 signup-domain-taken.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/settings/signup-domain (the `SetSignupDomain` operationId).
+	SetSignupDomainWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetSignupDomain Let anyone with a verified email at a domain sign up and join
+	//
+	// Sets the organization's one sign-up domain (ADR 0023, decision 7). From then on a person whose verified sign-in email is exactly at the domain (subdomains not included) may sign up without an invitation and joins as a member with join_role on every factory that exists then. Only an owner may set it, with a sign-in from the last 10 minutes, and only to the domain of their own sign-in email. Audited as org.signup_domain_set; setting what is already set changes nothing. A malformed domain or an unknown role is 400; a domain the caller's email is not at is 400 signup-domain-not-yours; a public webmail domain is 400 signup-domain-public; a domain another live organization holds is 409 signup-domain-taken.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/settings/signup-domain (the `SetSignupDomain` operationId).
+	SetSignupDomain(ctx context.Context, org OrgRef, body SetSignupDomainJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetOrgSpend What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
 	//
 	// A run counts on the UTC day it started, with its cost so far (a running run counts). Only the factories the caller sees are shown and summed. When a factory the caller does not see spent since the start of last month or of the weekly series, complete is false and the figures the store does not split by factory (this_month_usd, last_month_usd, by_model, merged, cost_per_merged_usd, weekly, rework_usd and rework_share) are null or empty, so they never show what a hidden factory spent. A window outside the enum is a 400 problem.
@@ -9710,6 +9832,61 @@ func (c *Client) GetHealth(ctx context.Context, reqEditors ...RequestEditorFn) (
 // Corresponds with GET /v1/me (the `GetMe` operationId).
 func (c *Client) GetMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetMeRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetNotificationPreferences The caller's own notification preferences
+//
+// Which events the signed-in person is told about on which channel, the email notifications go to and the time zone of the daily digest (ADR 0023, decision 1). They hold in every organization the person belongs to. A person who never saved any reads the defaults. Only a signed-in person has them: an API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+//
+// Corresponds with GET /v1/me/notifications (the `GetNotificationPreferences` operationId).
+func (c *Client) GetNotificationPreferences(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetNotificationPreferencesRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PutNotificationPreferencesWithBody Replace the caller's own notification preferences
+//
+// Replaces every field. An email that is not a plain address (blank is the sign-in email) is 400 invalid-notification-email; a time zone that is not an IANA name, or Local, is 400 invalid-time-zone; the digest In Goal is 400 invalid-notification-preferences. Nothing is changed then. An API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/me/notifications (the `PutNotificationPreferences` operationId).
+func (c *Client) PutNotificationPreferencesWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutNotificationPreferencesRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PutNotificationPreferences Replace the caller's own notification preferences
+//
+// Replaces every field. An email that is not a plain address (blank is the sign-in email) is 400 invalid-notification-email; a time zone that is not an IANA name, or Local, is 400 invalid-time-zone; the digest In Goal is 400 invalid-notification-preferences. Nothing is changed then. An API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/me/notifications (the `PutNotificationPreferences` operationId).
+func (c *Client) PutNotificationPreferences(ctx context.Context, body PutNotificationPreferencesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutNotificationPreferencesRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -13604,6 +13781,61 @@ func (c *Client) UpdateOrgSettings(ctx context.Context, org OrgRef, body UpdateO
 	return c.Client.Do(req)
 }
 
+// ClearSignupDomain Stop sign-up by domain
+//
+// Clears the sign-up domain: from then on only invited people sign up. Members who joined by the domain stay. Audited as org.signup_domain_cleared; nothing to clear is no change. Needs a sign-in from the last 10 minutes.
+//
+// Corresponds with DELETE /v1/orgs/{org}/settings/signup-domain (the `ClearSignupDomain` operationId).
+func (c *Client) ClearSignupDomain(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewClearSignupDomainRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetSignupDomainWithBody Let anyone with a verified email at a domain sign up and join
+//
+// Sets the organization's one sign-up domain (ADR 0023, decision 7). From then on a person whose verified sign-in email is exactly at the domain (subdomains not included) may sign up without an invitation and joins as a member with join_role on every factory that exists then. Only an owner may set it, with a sign-in from the last 10 minutes, and only to the domain of their own sign-in email. Audited as org.signup_domain_set; setting what is already set changes nothing. A malformed domain or an unknown role is 400; a domain the caller's email is not at is 400 signup-domain-not-yours; a public webmail domain is 400 signup-domain-public; a domain another live organization holds is 409 signup-domain-taken.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/settings/signup-domain (the `SetSignupDomain` operationId).
+func (c *Client) SetSignupDomainWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetSignupDomainRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetSignupDomain Let anyone with a verified email at a domain sign up and join
+//
+// Sets the organization's one sign-up domain (ADR 0023, decision 7). From then on a person whose verified sign-in email is exactly at the domain (subdomains not included) may sign up without an invitation and joins as a member with join_role on every factory that exists then. Only an owner may set it, with a sign-in from the last 10 minutes, and only to the domain of their own sign-in email. Audited as org.signup_domain_set; setting what is already set changes nothing. A malformed domain or an unknown role is 400; a domain the caller's email is not at is 400 signup-domain-not-yours; a public webmail domain is 400 signup-domain-public; a domain another live organization holds is 409 signup-domain-taken.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/settings/signup-domain (the `SetSignupDomain` operationId).
+func (c *Client) SetSignupDomain(ctx context.Context, org OrgRef, body SetSignupDomainJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetSignupDomainRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetOrgSpend What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
 //
 // A run counts on the UTC day it started, with its cost so far (a running run counts). Only the factories the caller sees are shown and summed. When a factory the caller does not see spent since the start of last month or of the weekly series, complete is false and the figures the store does not split by factory (this_month_usd, last_month_usd, by_model, merged, cost_per_merged_usd, weekly, rework_usd and rework_share) are null or empty, so they never show what a hidden factory spent. A window outside the enum is a 400 problem.
@@ -13959,6 +14191,73 @@ func NewGetMeRequest(server string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewGetNotificationPreferencesRequest constructs an http.Request for the GetNotificationPreferences method
+func NewGetNotificationPreferencesRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/me/notifications")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutNotificationPreferencesRequest calls the generic PutNotificationPreferences builder with application/json body
+func NewPutNotificationPreferencesRequest(server string, body PutNotificationPreferencesJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutNotificationPreferencesRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPutNotificationPreferencesRequestWithBody constructs an http.Request for the PutNotificationPreferences method, with any body, and a specified content type
+func NewPutNotificationPreferencesRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/me/notifications")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -22977,6 +23276,87 @@ func NewUpdateOrgSettingsRequestWithBody(server string, org OrgRef, contentType 
 	return req, nil
 }
 
+// NewClearSignupDomainRequest constructs an http.Request for the ClearSignupDomain method
+func NewClearSignupDomainRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/settings/signup-domain", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSetSignupDomainRequest calls the generic SetSignupDomain builder with application/json body
+func NewSetSignupDomainRequest(server string, org OrgRef, body SetSignupDomainJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSetSignupDomainRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewSetSignupDomainRequestWithBody constructs an http.Request for the SetSignupDomain method, with any body, and a specified content type
+func NewSetSignupDomainRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/settings/signup-domain", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewGetOrgSpendRequest constructs an http.Request for the GetOrgSpend method
 func NewGetOrgSpendRequest(server string, org OrgRef, params *GetOrgSpendParams) (*http.Request, error) {
 	var err error
@@ -23667,6 +24047,33 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/me (the `GetMe` operationId).
 	GetMeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMeResponse, error)
+
+	// GetNotificationPreferencesWithResponse The caller's own notification preferences
+	//
+	// Which events the signed-in person is told about on which channel, the email notifications go to and the time zone of the daily digest (ADR 0023, decision 1). They hold in every organization the person belongs to. A person who never saved any reads the defaults. Only a signed-in person has them: an API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/me/notifications (the `GetNotificationPreferences` operationId).
+	GetNotificationPreferencesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetNotificationPreferencesResponse, error)
+
+	// PutNotificationPreferencesWithBodyWithResponse Replace the caller's own notification preferences
+	//
+	// Replaces every field. An email that is not a plain address (blank is the sign-in email) is 400 invalid-notification-email; a time zone that is not an IANA name, or Local, is 400 invalid-time-zone; the digest In Goal is 400 invalid-notification-preferences. Nothing is changed then. An API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/me/notifications (the `PutNotificationPreferences` operationId).
+	PutNotificationPreferencesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutNotificationPreferencesResponse, error)
+
+	// PutNotificationPreferencesWithResponse Replace the caller's own notification preferences
+	//
+	// Replaces every field. An email that is not a plain address (blank is the sign-in email) is 400 invalid-notification-email; a time zone that is not an IANA name, or Local, is 400 invalid-time-zone; the digest In Goal is 400 invalid-notification-preferences. Nothing is changed then. An API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/me/notifications (the `PutNotificationPreferences` operationId).
+	PutNotificationPreferencesWithResponse(ctx context.Context, body PutNotificationPreferencesJSONRequestBody, reqEditors ...RequestEditorFn) (*PutNotificationPreferencesResponse, error)
 
 	// ListOrgsWithResponse The caller's organizations, by name
 	//
@@ -25590,6 +25997,33 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
 	UpdateOrgSettingsWithResponse(ctx context.Context, org OrgRef, body UpdateOrgSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateOrgSettingsResponse, error)
 
+	// ClearSignupDomainWithResponse Stop sign-up by domain
+	//
+	// Clears the sign-up domain: from then on only invited people sign up. Members who joined by the domain stay. Audited as org.signup_domain_cleared; nothing to clear is no change. Needs a sign-in from the last 10 minutes.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/settings/signup-domain (the `ClearSignupDomain` operationId).
+	ClearSignupDomainWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ClearSignupDomainResponse, error)
+
+	// SetSignupDomainWithBodyWithResponse Let anyone with a verified email at a domain sign up and join
+	//
+	// Sets the organization's one sign-up domain (ADR 0023, decision 7). From then on a person whose verified sign-in email is exactly at the domain (subdomains not included) may sign up without an invitation and joins as a member with join_role on every factory that exists then. Only an owner may set it, with a sign-in from the last 10 minutes, and only to the domain of their own sign-in email. Audited as org.signup_domain_set; setting what is already set changes nothing. A malformed domain or an unknown role is 400; a domain the caller's email is not at is 400 signup-domain-not-yours; a public webmail domain is 400 signup-domain-public; a domain another live organization holds is 409 signup-domain-taken.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/settings/signup-domain (the `SetSignupDomain` operationId).
+	SetSignupDomainWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetSignupDomainResponse, error)
+
+	// SetSignupDomainWithResponse Let anyone with a verified email at a domain sign up and join
+	//
+	// Sets the organization's one sign-up domain (ADR 0023, decision 7). From then on a person whose verified sign-in email is exactly at the domain (subdomains not included) may sign up without an invitation and joins as a member with join_role on every factory that exists then. Only an owner may set it, with a sign-in from the last 10 minutes, and only to the domain of their own sign-in email. Audited as org.signup_domain_set; setting what is already set changes nothing. A malformed domain or an unknown role is 400; a domain the caller's email is not at is 400 signup-domain-not-yours; a public webmail domain is 400 signup-domain-public; a domain another live organization holds is 409 signup-domain-taken.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/settings/signup-domain (the `SetSignupDomain` operationId).
+	SetSignupDomainWithResponse(ctx context.Context, org OrgRef, body SetSignupDomainJSONRequestBody, reqEditors ...RequestEditorFn) (*SetSignupDomainResponse, error)
+
 	// GetOrgSpendWithResponse What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
 	//
 	// A run counts on the UTC day it started, with its cost so far (a running run counts). Only the factories the caller sees are shown and summed. When a factory the caller does not see spent since the start of last month or of the weekly series, complete is false and the figures the store does not split by factory (this_month_usd, last_month_usd, by_model, merged, cost_per_merged_usd, weekly, rework_usd and rework_share) are null or empty, so they never show what a hidden factory spent. A window outside the enum is a 400 problem.
@@ -25887,6 +26321,102 @@ func (r GetMeResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetMeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetNotificationPreferencesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *NotificationPreferences
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetNotificationPreferencesResponse) GetJSON200() *NotificationPreferences {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetNotificationPreferencesResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetNotificationPreferencesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetNotificationPreferencesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetNotificationPreferencesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetNotificationPreferencesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PutNotificationPreferencesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *NotificationPreferences
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PutNotificationPreferencesResponse) GetJSON200() *NotificationPreferences {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PutNotificationPreferencesResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PutNotificationPreferencesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PutNotificationPreferencesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutNotificationPreferencesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PutNotificationPreferencesResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -33871,6 +34401,95 @@ func (r UpdateOrgSettingsResponse) ContentType() string {
 	return ""
 }
 
+type ClearSignupDomainResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ClearSignupDomainResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ClearSignupDomainResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ClearSignupDomainResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ClearSignupDomainResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ClearSignupDomainResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SetSignupDomainResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SignupDomain
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SetSignupDomainResponse) GetJSON200() *SignupDomain {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SetSignupDomainResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SetSignupDomainResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SetSignupDomainResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SetSignupDomainResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SetSignupDomainResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetOrgSpendResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -34503,6 +35122,51 @@ func (c *ClientWithResponses) GetMeWithResponse(ctx context.Context, reqEditors 
 		return nil, err
 	}
 	return ParseGetMeResponse(rsp)
+}
+
+// GetNotificationPreferencesWithResponse The caller's own notification preferences
+//
+// Which events the signed-in person is told about on which channel, the email notifications go to and the time zone of the daily digest (ADR 0023, decision 1). They hold in every organization the person belongs to. A person who never saved any reads the defaults. Only a signed-in person has them: an API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/me/notifications (the `GetNotificationPreferences` operationId).
+func (c *ClientWithResponses) GetNotificationPreferencesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetNotificationPreferencesResponse, error) {
+	rsp, err := c.GetNotificationPreferences(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetNotificationPreferencesResponse(rsp)
+}
+
+// PutNotificationPreferencesWithBodyWithResponse Replace the caller's own notification preferences
+//
+// Replaces every field. An email that is not a plain address (blank is the sign-in email) is 400 invalid-notification-email; a time zone that is not an IANA name, or Local, is 400 invalid-time-zone; the digest In Goal is 400 invalid-notification-preferences. Nothing is changed then. An API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/me/notifications (the `PutNotificationPreferences` operationId).
+func (c *ClientWithResponses) PutNotificationPreferencesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutNotificationPreferencesResponse, error) {
+	rsp, err := c.PutNotificationPreferencesWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutNotificationPreferencesResponse(rsp)
+}
+
+// PutNotificationPreferencesWithResponse Replace the caller's own notification preferences
+//
+// Replaces every field. An email that is not a plain address (blank is the sign-in email) is 400 invalid-notification-email; a time zone that is not an IANA name, or Local, is 400 invalid-time-zone; the digest In Goal is 400 invalid-notification-preferences. Nothing is changed then. An API key, a personal token and GOAL_AUTH=none's local user are 403 person-required.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/me/notifications (the `PutNotificationPreferences` operationId).
+func (c *ClientWithResponses) PutNotificationPreferencesWithResponse(ctx context.Context, body PutNotificationPreferencesJSONRequestBody, reqEditors ...RequestEditorFn) (*PutNotificationPreferencesResponse, error) {
+	rsp, err := c.PutNotificationPreferences(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutNotificationPreferencesResponse(rsp)
 }
 
 // ListOrgsWithResponse The caller's organizations, by name
@@ -37735,6 +38399,51 @@ func (c *ClientWithResponses) UpdateOrgSettingsWithResponse(ctx context.Context,
 	return ParseUpdateOrgSettingsResponse(rsp)
 }
 
+// ClearSignupDomainWithResponse Stop sign-up by domain
+//
+// Clears the sign-up domain: from then on only invited people sign up. Members who joined by the domain stay. Audited as org.signup_domain_cleared; nothing to clear is no change. Needs a sign-in from the last 10 minutes.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/settings/signup-domain (the `ClearSignupDomain` operationId).
+func (c *ClientWithResponses) ClearSignupDomainWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ClearSignupDomainResponse, error) {
+	rsp, err := c.ClearSignupDomain(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseClearSignupDomainResponse(rsp)
+}
+
+// SetSignupDomainWithBodyWithResponse Let anyone with a verified email at a domain sign up and join
+//
+// Sets the organization's one sign-up domain (ADR 0023, decision 7). From then on a person whose verified sign-in email is exactly at the domain (subdomains not included) may sign up without an invitation and joins as a member with join_role on every factory that exists then. Only an owner may set it, with a sign-in from the last 10 minutes, and only to the domain of their own sign-in email. Audited as org.signup_domain_set; setting what is already set changes nothing. A malformed domain or an unknown role is 400; a domain the caller's email is not at is 400 signup-domain-not-yours; a public webmail domain is 400 signup-domain-public; a domain another live organization holds is 409 signup-domain-taken.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/settings/signup-domain (the `SetSignupDomain` operationId).
+func (c *ClientWithResponses) SetSignupDomainWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetSignupDomainResponse, error) {
+	rsp, err := c.SetSignupDomainWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetSignupDomainResponse(rsp)
+}
+
+// SetSignupDomainWithResponse Let anyone with a verified email at a domain sign up and join
+//
+// Sets the organization's one sign-up domain (ADR 0023, decision 7). From then on a person whose verified sign-in email is exactly at the domain (subdomains not included) may sign up without an invitation and joins as a member with join_role on every factory that exists then. Only an owner may set it, with a sign-in from the last 10 minutes, and only to the domain of their own sign-in email. Audited as org.signup_domain_set; setting what is already set changes nothing. A malformed domain or an unknown role is 400; a domain the caller's email is not at is 400 signup-domain-not-yours; a public webmail domain is 400 signup-domain-public; a domain another live organization holds is 409 signup-domain-taken.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/settings/signup-domain (the `SetSignupDomain` operationId).
+func (c *ClientWithResponses) SetSignupDomainWithResponse(ctx context.Context, org OrgRef, body SetSignupDomainJSONRequestBody, reqEditors ...RequestEditorFn) (*SetSignupDomainResponse, error) {
+	rsp, err := c.SetSignupDomain(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetSignupDomainResponse(rsp)
+}
+
 // GetOrgSpendWithResponse What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
 //
 // A run counts on the UTC day it started, with its cost so far (a running run counts). Only the factories the caller sees are shown and summed. When a factory the caller does not see spent since the start of last month or of the weekly series, complete is false and the figures the store does not split by factory (this_month_usd, last_month_usd, by_model, merged, cost_per_merged_usd, weekly, rework_usd and rework_share) are null or empty, so they never show what a hidden factory spent. A window outside the enum is a 400 problem.
@@ -38044,6 +38753,72 @@ func ParseGetMeResponse(rsp *http.Response) (*GetMeResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Me
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetNotificationPreferencesResponse parses an HTTP response from a GetNotificationPreferencesWithResponse call
+func ParseGetNotificationPreferencesResponse(rsp *http.Response) (*GetNotificationPreferencesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetNotificationPreferencesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest NotificationPreferences
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutNotificationPreferencesResponse parses an HTTP response from a PutNotificationPreferencesWithResponse call
+func ParsePutNotificationPreferencesResponse(rsp *http.Response) (*PutNotificationPreferencesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutNotificationPreferencesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest NotificationPreferences
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -43687,6 +44462,68 @@ func ParseUpdateOrgSettingsResponse(rsp *http.Response) (*UpdateOrgSettingsRespo
 	return response, nil
 }
 
+// ParseClearSignupDomainResponse parses an HTTP response from a ClearSignupDomainWithResponse call
+func ParseClearSignupDomainResponse(rsp *http.Response) (*ClearSignupDomainResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ClearSignupDomainResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSetSignupDomainResponse parses an HTTP response from a SetSignupDomainWithResponse call
+func ParseSetSignupDomainResponse(rsp *http.Response) (*SetSignupDomainResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SetSignupDomainResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SignupDomain
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetOrgSpendResponse parses an HTTP response from a GetOrgSpendWithResponse call
 func ParseGetOrgSpendResponse(rsp *http.Response) (*GetOrgSpendResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -44106,6 +44943,12 @@ type ServerInterface interface {
 	// GetMe Who the request acts for
 	// (GET /v1/me)
 	GetMe(w http.ResponseWriter, r *http.Request)
+	// GetNotificationPreferences The caller's own notification preferences
+	// (GET /v1/me/notifications)
+	GetNotificationPreferences(w http.ResponseWriter, r *http.Request)
+	// PutNotificationPreferences Replace the caller's own notification preferences
+	// (PUT /v1/me/notifications)
+	PutNotificationPreferences(w http.ResponseWriter, r *http.Request)
 	// ListOrgs The caller's organizations, by name
 	// (GET /v1/orgs)
 	ListOrgs(w http.ResponseWriter, r *http.Request)
@@ -44601,6 +45444,12 @@ type ServerInterface interface {
 	// UpdateOrgSettings Change the organization's settings
 	// (PATCH /v1/orgs/{org}/settings)
 	UpdateOrgSettings(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// ClearSignupDomain Stop sign-up by domain
+	// (DELETE /v1/orgs/{org}/settings/signup-domain)
+	ClearSignupDomain(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// SetSignupDomain Let anyone with a verified email at a domain sign up and join
+	// (PUT /v1/orgs/{org}/settings/signup-domain)
+	SetSignupDomain(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// GetOrgSpend What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
 	// (GET /v1/orgs/{org}/spend)
 	GetOrgSpend(w http.ResponseWriter, r *http.Request, org OrgRef, params GetOrgSpendParams)
@@ -44707,6 +45556,34 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNotificationPreferences operation middleware
+func (siw *ServerInterfaceWrapper) GetNotificationPreferences(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNotificationPreferences(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutNotificationPreferences operation middleware
+func (siw *ServerInterfaceWrapper) PutNotificationPreferences(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutNotificationPreferences(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -51795,6 +52672,58 @@ func (siw *ServerInterfaceWrapper) UpdateOrgSettings(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// ClearSignupDomain operation middleware
+func (siw *ServerInterfaceWrapper) ClearSignupDomain(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ClearSignupDomain(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetSignupDomain operation middleware
+func (siw *ServerInterfaceWrapper) SetSignupDomain(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetSignupDomain(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetOrgSpend operation middleware
 func (siw *ServerInterfaceWrapper) GetOrgSpend(w http.ResponseWriter, r *http.Request) {
 
@@ -52338,6 +53267,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/auth/config", wrapper.GetAuthConfig)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/auth/device/{user_code}", wrapper.GetDeviceRequest)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/me", wrapper.GetMe)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/me/notifications", wrapper.GetNotificationPreferences)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/me/notifications", wrapper.PutNotificationPreferences)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/platform/admins", wrapper.ListPlatformAdmins)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/platform/admins", wrapper.AddPlatformAdmin)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/platform/admins/{user}", wrapper.RemovePlatformAdmin)
@@ -52348,6 +53279,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}", wrapper.GetOrg)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/settings", wrapper.GetOrgSettings)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/settings", wrapper.UpdateOrgSettings)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/settings/signup-domain", wrapper.ClearSignupDomain)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/settings/signup-domain", wrapper.SetSignupDomain)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/policy", wrapper.GetOrgPolicy)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/policy", wrapper.PutOrgPolicy)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/audit", wrapper.ListAudit)
@@ -52631,6 +53564,83 @@ type GetMedefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetMedefaultApplicationProblemPlusJSONResponse) VisitGetMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotificationPreferencesRequestObject struct {
+}
+
+type GetNotificationPreferencesResponseObject interface {
+	VisitGetNotificationPreferencesResponse(w http.ResponseWriter) error
+}
+
+type GetNotificationPreferences200JSONResponse NotificationPreferences
+
+func (response GetNotificationPreferences200JSONResponse) VisitGetNotificationPreferencesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotificationPreferencesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetNotificationPreferencesdefaultApplicationProblemPlusJSONResponse) VisitGetNotificationPreferencesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutNotificationPreferencesRequestObject struct {
+	Body *PutNotificationPreferencesJSONRequestBody
+}
+
+type PutNotificationPreferencesResponseObject interface {
+	VisitPutNotificationPreferencesResponse(w http.ResponseWriter) error
+}
+
+type PutNotificationPreferences200JSONResponse NotificationPreferences
+
+func (response PutNotificationPreferences200JSONResponse) VisitPutNotificationPreferencesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutNotificationPreferencesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response PutNotificationPreferencesdefaultApplicationProblemPlusJSONResponse) VisitPutNotificationPreferencesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -59640,6 +60650,79 @@ func (response UpdateOrgSettingsdefaultApplicationProblemPlusJSONResponse) Visit
 	return err
 }
 
+type ClearSignupDomainRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type ClearSignupDomainResponseObject interface {
+	VisitClearSignupDomainResponse(w http.ResponseWriter) error
+}
+
+type ClearSignupDomain204Response struct {
+}
+
+func (response ClearSignupDomain204Response) VisitClearSignupDomainResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ClearSignupDomaindefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ClearSignupDomaindefaultApplicationProblemPlusJSONResponse) VisitClearSignupDomainResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetSignupDomainRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *SetSignupDomainJSONRequestBody
+}
+
+type SetSignupDomainResponseObject interface {
+	VisitSetSignupDomainResponse(w http.ResponseWriter) error
+}
+
+type SetSignupDomain200JSONResponse SignupDomain
+
+func (response SetSignupDomain200JSONResponse) VisitSetSignupDomainResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetSignupDomaindefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response SetSignupDomaindefaultApplicationProblemPlusJSONResponse) VisitSetSignupDomainResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetOrgSpendRequestObject struct {
 	Org    OrgRef `json:"org"`
 	Params GetOrgSpendParams
@@ -60196,6 +61279,12 @@ type StrictServerInterface interface {
 	// GetMe Who the request acts for
 	// (GET /v1/me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
+	// GetNotificationPreferences The caller's own notification preferences
+	// (GET /v1/me/notifications)
+	GetNotificationPreferences(ctx context.Context, request GetNotificationPreferencesRequestObject) (GetNotificationPreferencesResponseObject, error)
+	// PutNotificationPreferences Replace the caller's own notification preferences
+	// (PUT /v1/me/notifications)
+	PutNotificationPreferences(ctx context.Context, request PutNotificationPreferencesRequestObject) (PutNotificationPreferencesResponseObject, error)
 	// ListOrgs The caller's organizations, by name
 	// (GET /v1/orgs)
 	ListOrgs(ctx context.Context, request ListOrgsRequestObject) (ListOrgsResponseObject, error)
@@ -60691,6 +61780,12 @@ type StrictServerInterface interface {
 	// UpdateOrgSettings Change the organization's settings
 	// (PATCH /v1/orgs/{org}/settings)
 	UpdateOrgSettings(ctx context.Context, request UpdateOrgSettingsRequestObject) (UpdateOrgSettingsResponseObject, error)
+	// ClearSignupDomain Stop sign-up by domain
+	// (DELETE /v1/orgs/{org}/settings/signup-domain)
+	ClearSignupDomain(ctx context.Context, request ClearSignupDomainRequestObject) (ClearSignupDomainResponseObject, error)
+	// SetSignupDomain Let anyone with a verified email at a domain sign up and join
+	// (PUT /v1/orgs/{org}/settings/signup-domain)
+	SetSignupDomain(ctx context.Context, request SetSignupDomainRequestObject) (SetSignupDomainResponseObject, error)
 	// GetOrgSpend What the organization's agent runs cost, and each factory's budget, for the Spend and billing screen
 	// (GET /v1/orgs/{org}/spend)
 	GetOrgSpend(ctx context.Context, request GetOrgSpendRequestObject) (GetOrgSpendResponseObject, error)
@@ -60859,6 +61954,61 @@ func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetMeResponseObject); ok {
 		if err := validResponse.VisitGetMeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNotificationPreferences operation middleware
+func (sh *strictHandler) GetNotificationPreferences(w http.ResponseWriter, r *http.Request) {
+	var request GetNotificationPreferencesRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNotificationPreferences(ctx, request.(GetNotificationPreferencesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNotificationPreferences")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNotificationPreferencesResponseObject); ok {
+		if err := validResponse.VisitGetNotificationPreferencesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutNotificationPreferences operation middleware
+func (sh *strictHandler) PutNotificationPreferences(w http.ResponseWriter, r *http.Request) {
+	var request PutNotificationPreferencesRequestObject
+
+	var body PutNotificationPreferencesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutNotificationPreferences(ctx, request.(PutNotificationPreferencesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutNotificationPreferences")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutNotificationPreferencesResponseObject); ok {
+		if err := validResponse.VisitPutNotificationPreferencesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -65749,6 +66899,65 @@ func (sh *strictHandler) UpdateOrgSettings(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateOrgSettingsResponseObject); ok {
 		if err := validResponse.VisitUpdateOrgSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ClearSignupDomain operation middleware
+func (sh *strictHandler) ClearSignupDomain(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request ClearSignupDomainRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ClearSignupDomain(ctx, request.(ClearSignupDomainRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ClearSignupDomain")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ClearSignupDomainResponseObject); ok {
+		if err := validResponse.VisitClearSignupDomainResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetSignupDomain operation middleware
+func (sh *strictHandler) SetSignupDomain(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request SetSignupDomainRequestObject
+
+	request.Org = org
+
+	var body SetSignupDomainJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetSignupDomain(ctx, request.(SetSignupDomainRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetSignupDomain")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetSignupDomainResponseObject); ok {
+		if err := validResponse.VisitSetSignupDomainResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

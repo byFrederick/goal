@@ -22,6 +22,7 @@
 // touch or make an owner, an organization keeps an owner, an invitation is its recipient's only.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Actor, AuthConfig, DeviceRequest, FactoryRole, Me, OrgRole } from '@goal/api-client';
+import type { NotificationPreferences } from '../src/api/types.ts';
 import { invitationLifetimeMs, type MockInvitation, type MockPeople, type MockPerson } from './people.ts';
 
 type Json = Record<string, unknown>;
@@ -136,6 +137,58 @@ export interface MockDirectory {
 const alnum = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 const randomToken = () => Array.from({ length: 32 }, () => alnum[Math.floor(Math.random() * alnum.length)]).join('');
 
+/** The picture's boxes (docs/design/screens/account/account.html) and a UTC time zone: nothing saved yet. */
+function seedPreferences(): NotificationPreferences {
+  return {
+    events: {
+      approval: { in_goal: true, email: false, slack: true },
+      question: { in_goal: true, email: false, slack: true },
+      andon: { in_goal: true, email: true, slack: true },
+      budget: { in_goal: true, email: true, slack: false },
+      digest: { in_goal: false, email: true, slack: false },
+    },
+    email: '',
+    time_zone: 'UTC',
+  };
+}
+
+/** The 400 goald answers for preferences it would refuse (the codes of the contract), or undefined. */
+function refusedPreferences(
+  body: Record<string, unknown>,
+): { title: string; status: number; code: string } | undefined {
+  const problem = (title: string, code: string) => ({ title, status: 400, code });
+  const email = typeof body.email === 'string' ? body.email : '';
+  if (email !== '' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return problem('Enter one email address, or leave it blank', 'invalid-notification-email');
+  }
+  const zone = typeof body.time_zone === 'string' ? body.time_zone : '';
+  let valid = zone !== 'Local';
+  try {
+    if (valid) new Intl.DateTimeFormat('en-US', { timeZone: zone });
+  } catch {
+    valid = false;
+  }
+  if (!valid) return problem('The time zone is not an IANA name', 'invalid-time-zone');
+  const events = (typeof body.events === 'object' && body.events !== null ? body.events : {}) as Record<
+    string,
+    Record<string, unknown>
+  >;
+  const names = ['approval', 'question', 'andon', 'budget', 'digest'];
+  if (
+    names.some(
+      (n) =>
+        typeof events[n]?.in_goal !== 'boolean' ||
+        typeof events[n]?.email !== 'boolean' ||
+        typeof events[n]?.slack !== 'boolean',
+    )
+  ) {
+    return problem('Every event needs its three channels', 'invalid-notification-preferences');
+  }
+  if (events.digest?.in_goal === true)
+    return problem('The daily digest has no In Goal channel', 'invalid-notification-preferences');
+  return undefined;
+}
+
 const send = (res: ServerResponse, status: number, body: unknown, headers: Record<string, string | string[]> = {}) => {
   res.statusCode = status;
   for (const [name, value] of Object.entries(headers)) res.setHeader(name, value);
@@ -175,6 +228,8 @@ const clearCookie = `${sessionCookie}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=
 export function createMockAuth(clock: () => number, dir: MockDirectory): MockAuth {
   let settings = authSettings(undefined);
   let sessions = new Map<string, MockSession>();
+  /** Each person's notification preferences (ADR 0023): every organization they belong to shares them. */
+  let notifications = new Map<string, NotificationPreferences>();
   let codes = new Map<string, MockCode>();
   let googleStates = new Map<string, { callbackURL: string; errorCallbackURL: string }>();
   let devices = new Map<string, MockDevice>();
@@ -632,6 +687,7 @@ export function createMockAuth(clock: () => number, dir: MockDirectory): MockAut
       const owner = dir.people().people.find((p) => p.email === ownerEmail);
       if (owner) owner.platformAdmin = settings.ownerIsPlatformAdmin;
       sessions = new Map();
+      notifications = new Map();
       codes = new Map();
       googleStates = new Map();
       devices = new Map();
@@ -642,6 +698,31 @@ export function createMockAuth(clock: () => number, dir: MockDirectory): MockAut
     async handle(req, res, path, method) {
       if (path === '/v1/auth/config' && method === 'GET') {
         send(res, 200, config());
+        return true;
+      }
+      if (path === '/v1/me/notifications' && (method === 'GET' || method === 'PUT')) {
+        // Only a person has preferences: under GOAL_AUTH=none the local user is refused (person-required).
+        if (settings.mode === 'none') {
+          send(res, 403, { title: 'Forbidden', status: 403, code: 'person-required' });
+          return true;
+        }
+        const now = current(req);
+        if (!now) {
+          unauthenticated(res);
+          return true;
+        }
+        const id = now.user.id;
+        if (method === 'GET') {
+          send(res, 200, notifications.get(id) ?? seedPreferences());
+          return true;
+        }
+        const body = (await readJson(req)) as Record<string, unknown>;
+        const refused = refusedPreferences(body);
+        if (refused) send(res, 400, refused);
+        else {
+          notifications.set(id, body as unknown as NotificationPreferences);
+          send(res, 200, body);
+        }
         return true;
       }
       if (path === '/v1/me' && method === 'GET') {

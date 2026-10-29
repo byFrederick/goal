@@ -20,7 +20,8 @@ import (
 var orgTables = []string{
 	"factories", "work_items", "leases", "agent_runs", "item_events", "andon_pulls", "audit_log", "item_spans", "lease_spans",
 	"factory_roles", "connection_kinds", "connections", "item_touch_labels", "credentials", "judge_scores", "eval_runs", "eval_results", "eval_run_arms", "org_policies",
-	"webhook_endpoints", "webhook_deliveries", "trigger_firings", "knowledge_uses", "knowledge_verdicts", "standing_rules", "draft_requests",
+	"webhook_endpoints", "webhook_deliveries", "trigger_firings", "knowledge_uses", "knowledge_verdicts", "standing_rules",
+	"org_signup_domains", "draft_requests",
 	"jonah_reviews", "jonah_proposals", "jonah_observations",
 }
 
@@ -33,10 +34,14 @@ var withPlatformRows = map[string]string{
 // withoutOrgID are the tables that carry no org_id, and why. A phase that adds a table without
 // org_id adds it here in the same pull request, with its reason.
 var withoutOrgID = map[string]string{
-	"goose_db_version": "the migration log, goal_owner's alone",
-	"organizations":    "the tenant itself; its policy compares id with goal_org()",
-	"platform_admins":  "install-level: who may create organizations; reached only through definers",
-	"auth_events":      "install-level security log (sign-ins, codes, devices); reached only through definers",
+	"goose_db_version":         "the migration log, goal_owner's alone",
+	"organizations":            "the tenant itself; its policy compares id with goal_org()",
+	"platform_admins":          "install-level: who may create organizations; reached only through definers",
+	"auth_events":              "install-level security log (sign-ins, codes, devices); reached only through definers",
+	"notification_preferences": "a person's own, in every organization (ADR 0023); every statement filters by user_id",
+	"notification_settings":    "a person's own, in every organization (ADR 0023); every statement filters by user_id",
+	"digests":                  "a person's daily digests, the email one across every organization (00084); every statement names its rows, content is read under each organization's RLS",
+	"public_email_domains":     "install-level list of webmail domains no organization may claim for sign-up (00081); read only by definers",
 }
 
 // The tenancy kit, checked on the fully migrated schema: every table with org_id has row-level

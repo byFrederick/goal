@@ -82,8 +82,10 @@ type harness struct {
 	intake *porttest.Intake
 	// modelCheck answers triggers' model checks; nil builds the engine without one.
 	modelCheck ports.ModelCheck
-	line       domain.Line
-	logs       *logBuffer // what every engine of the harness logs
+	// outbox queues the budget notifications every engine of the harness raises.
+	outbox *porttest.NotificationOutbox
+	line   domain.Line
+	logs   *logBuffer // what every engine of the harness logs
 
 	mu sync.Mutex
 	// ticking, while step's tick runs, is closed when it returns; every agent run waits for it
@@ -122,6 +124,7 @@ func newHarness(t *testing.T, line domain.Line, run porttest.AgentFunc) *harness
 		contracts: porttest.NewContracts(),
 		codehost:  porttest.NewCodeHost(),
 		gitlab:    porttest.NewCodeHost(),
+		outbox:    porttest.NewNotificationOutbox(),
 		line:      line,
 		logs:      &logBuffer{},
 	}
@@ -192,7 +195,7 @@ func (h *harness) engineWith(t *testing.T, store ports.Store, maxRuns int, lines
 		Secrets:     porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y"},
 		Connections: h.connections, Credentials: h.credentials, CodeHosts: map[string]ports.CodeHost{codeHostGitHub: h.codehost, codeHostGitLab: h.gitlab},
 		Minters: map[string]ports.Minter{mintAWS: h.minter}, Policies: h.policies, Intake: h.intake,
-		ModelCheck: h.modelCheck, Audit: h.tenancy, Logger: slog.New(slog.NewJSONHandler(h.logs, nil)),
+		ModelCheck: h.modelCheck, Audit: h.tenancy, NotificationOutbox: h.outbox, Logger: slog.New(slog.NewJSONHandler(h.logs, nil)),
 	}, engine.Config{
 		Lines:          lines,
 		MaxRuns:        maxRuns,

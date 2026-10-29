@@ -149,6 +149,19 @@ func (i *Identity) AddUser(u IdentityUser) error {
 	return nil
 }
 
+// Email is the sign-in email of user, and false for no such user.
+func (i *Identity) Email(user domain.UserID) (string, bool) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	u, ok := i.users[user]
+	if !ok {
+		return "", false
+	}
+
+	return u.Email, true
+}
+
 // AddSession signs user in with token.
 func (i *Identity) AddSession(token string, user domain.UserID, s domain.Session) {
 	i.mu.Lock()

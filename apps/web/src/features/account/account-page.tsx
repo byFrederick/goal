@@ -1,17 +1,18 @@
 // Your account (docs/design/screens/account/account.jpg, ADR 0016): the person's profile, the theme,
 // notifications, personal tokens, connected apps and sessions, under a left section nav. Live here:
-// the name (Save changes), the theme, the personal tokens and Sign out everywhere. Disabled with
-// "Not available yet", because goald has no endpoint for them yet: the email for notifications, the
-// notification table, connected apps and the session list with per-session sign-out
-// (docs/design/screens/README.md, "Not built yet"). With sign-in off it names the local user and has
-// no Save or sign-out actions.
+// the name and the email for notifications (Save changes), the theme, the notification table
+// (notifications-section.tsx), the personal tokens and Sign out everywhere. Disabled with
+// "Not available yet", because goald has no endpoint for them yet: connected apps and the session list
+// with per-session sign-out (docs/design/screens/README.md, "Not built yet"). With sign-in off it names
+// the local user, has no Save or sign-out actions, and has no notification preferences to change.
 import { useQuery } from '@tanstack/react-query';
 import { Link, useLocation } from '@tanstack/react-router';
 import { SquareTerminal } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
-import { meQuery } from '../../api/queries';
-import type { Me, OrgSummary } from '../../api/types';
+import { ApiError } from '../../api/client';
+import { meQuery, notificationsQuery } from '../../api/queries';
+import type { Me, NotificationPreferences, OrgSummary } from '../../api/types';
 import { useAccount } from '../../app/account-menu';
 import { AppearanceChoice } from '../../app/appearance-choice';
 import { TopBarSlot } from '../../app/top-bar';
@@ -23,6 +24,8 @@ import { Chip } from '../../ui/chip';
 import { Field, Input } from '../../ui/field';
 import { Avatar } from '../../ui/mark';
 import { NotAvailable } from '../../ui/not-available';
+import { useSaveNotifications } from './notification-preferences';
+import { NotificationsTable } from './notifications-section';
 import { PersonalTokensSection } from './personal-tokens';
 
 /** The sections of the left nav, in the picture's order. The ids are the anchors the nav links to. */
@@ -37,15 +40,6 @@ const sections = [
 
 /** The form the top bar's Save changes submits. */
 const profileForm = 'account-profile';
-
-/** The notification rules of the picture; the table's rows are not built, so no box is checked. */
-const notificationRules = [
-  'An agent needs your OK for a write',
-  'An agent asks you a question',
-  'A factory pulls the andon',
-  'A budget passes 80%',
-] as const;
-const channels = ['In Goal', 'Email', 'Slack'] as const;
 
 export function AccountPage() {
   const org = useOrg();
@@ -70,10 +64,12 @@ function AccountContent({ me, org }: { me: Me; org: OrgSummary }) {
   const hash = useLocation({ select: (l) => l.hash.replace(/^#/, '') });
   const active = sections.some((s) => s.id === hash) ? hash : 'profile';
   const update = useUpdateName();
+  const preferences = useQuery({ ...notificationsQuery, enabled: person !== undefined });
+  const save = useSaveNotifications();
 
   return (
     <>
-      <TopBarSlot actions={person ? <SaveChanges pending={update.isPending} /> : undefined} />
+      <TopBarSlot actions={person ? <SaveChanges pending={update.isPending || save.isPending} /> : undefined} />
       <h1 className="m-0 text-page-title tracking-display">Your account</h1>
       <div className="grid gap-8 md:grid-cols-[200px_minmax(0,1fr)]">
         <nav aria-label="Account sections" className="flex flex-col gap-1">
@@ -91,9 +87,14 @@ function AccountContent({ me, org }: { me: Me; org: OrgSummary }) {
         </nav>
 
         <div className="flex min-w-0 flex-col gap-4">
-          <ProfileSection person={person} org={org} update={update} />
+          <ProfileSection person={person} org={org} update={update} saved={preferences.data} save={save} />
           <AppearanceSection />
-          <NotificationsSection />
+          <section id="notifications" aria-labelledby="notifications-heading" className={card}>
+            <h2 id="notifications-heading" className="m-0 text-lg font-medium">
+              Notifications
+            </h2>
+            <NotificationsTable org={org.id} signedIn={person !== undefined} />
+          </section>
           <PersonalTokensSection org={org} />
           <ConnectedAppsSection />
           <SessionsSection signedIn={person !== undefined} />
@@ -110,10 +111,15 @@ function ProfileSection({
   person,
   org,
   update,
+  saved,
+  save,
 }: {
   person: Me['user'] | undefined;
   org: OrgSummary;
   update: ReturnType<typeof useUpdateName>;
+  /** The saved notification preferences; undefined until they load, and without a person. */
+  saved: NotificationPreferences | undefined;
+  save: ReturnType<typeof useSaveNotifications>;
 }) {
   const role = roleLine(org.role, org.name);
   return (
@@ -129,7 +135,17 @@ function ProfileSection({
         </div>
         {role ? <Chip tone={org.role === 'owner' ? 'ok' : org.role === 'admin' ? 'you' : 'plain'}>{role}</Chip> : null}
       </div>
-      {person ? <NameForm name={person.name} update={update} /> : null}
+      {person ? (
+        // Keyed by whether the saved email has loaded, so the email field starts from it.
+        <NameForm
+          key={saved ? 'saved' : 'loading'}
+          name={person.name}
+          signInEmail={person.email}
+          saved={saved}
+          update={update}
+          save={save}
+        />
+      ) : null}
     </section>
   );
 }
@@ -150,9 +166,34 @@ function saveFailure(err: unknown): string {
     : 'Goal couldn’t save that name. A name is 1 to 80 characters.';
 }
 
-function NameForm({ name, update }: { name: string; update: ReturnType<typeof useUpdateName> }) {
+/** Why the notification email was not saved: goald refused the address, or it was not reached. */
+function emailFailure(err: unknown): string {
+  return err instanceof ApiError && err.code === 'invalid-notification-email'
+    ? 'Enter one email address, or leave it blank to use your sign-in email.'
+    : 'Goal couldn’t save it. Check your connection and try again.';
+}
+
+/**
+ * The name and the email for notifications. Save changes saves the name, and the email when it changed.
+ * The email is disabled until the saved preferences load.
+ */
+function NameForm({
+  name,
+  signInEmail,
+  saved,
+  update,
+  save,
+}: {
+  name: string;
+  signInEmail: string;
+  saved: NotificationPreferences | undefined;
+  update: ReturnType<typeof useUpdateName>;
+  save: ReturnType<typeof useSaveNotifications>;
+}) {
   const [value, setValue] = useState(name);
   const [invalid, setInvalid] = useState<string>();
+  const [email, setEmail] = useState(saved?.email ?? '');
+  const [emailInvalid, setEmailInvalid] = useState<string>();
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -165,6 +206,14 @@ function NameForm({ name, update }: { name: string; update: ReturnType<typeof us
     update.mutate(next, {
       onSuccess: () => toast.success('Name saved'),
     });
+    const address = email.trim();
+    if (saved && address !== saved.email) {
+      setEmailInvalid(undefined);
+      save.mutate((current) => ({ ...current, email: address }), {
+        onSuccess: () => toast.success('Email for notifications saved'),
+        onError: (err) => setEmailInvalid(emailFailure(err)),
+      });
+    }
   };
 
   return (
@@ -172,10 +221,15 @@ function NameForm({ name, update }: { name: string; update: ReturnType<typeof us
       <Field label="Name" error={invalid ?? (update.isError ? saveFailure(update.error) : undefined)}>
         <Input value={value} maxLength={80} autoComplete="name" onChange={(e) => setValue(e.target.value)} />
       </Field>
-      <Field label="Email for notifications">
-        <NotAvailable label="Email for notifications">
-          <Input readOnly placeholder="you@example.com" />
-        </NotAvailable>
+      <Field label="Email for notifications" error={emailInvalid}>
+        <Input
+          type="email"
+          value={email}
+          disabled={!saved}
+          placeholder={signInEmail}
+          autoComplete="email"
+          onChange={(e) => setEmail(e.target.value)}
+        />
       </Field>
     </form>
   );
@@ -188,56 +242,6 @@ function AppearanceSection() {
         Appearance
       </h2>
       <AppearanceChoice layout="cards" />
-    </section>
-  );
-}
-
-/** The table of the picture: every rule by channel, all disabled until goald has notification preferences. */
-function NotificationsSection() {
-  return (
-    <section id="notifications" aria-labelledby="notifications-heading" className={card}>
-      <h2 id="notifications-heading" className="m-0 text-lg font-medium">
-        Notifications
-      </h2>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[480px] border-collapse text-sm">
-          <thead>
-            <tr className="text-left text-meta text-muted [&>th]:pb-2 [&>th]:font-normal">
-              <th scope="col">When</th>
-              {channels.map((c) => (
-                <th key={c} scope="col" className="text-center">
-                  {c}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {notificationRules.map((rule) => (
-              <tr key={rule} className="border-t border-line [&>td]:py-3">
-                <td>{rule}</td>
-                {channels.map((c) => (
-                  <td key={c} className="text-center">
-                    <NotAvailable label={`${rule}, ${c}`}>
-                      <input type="checkbox" aria-label={`${rule}, ${c}`} readOnly className="size-4" />
-                    </NotAvailable>
-                  </td>
-                ))}
-              </tr>
-            ))}
-            <tr className="border-t border-line [&>td]:py-3">
-              <td>Daily digest at 08:00</td>
-              <td className="text-center text-muted">None</td>
-              {channels.slice(1).map((c) => (
-                <td key={c} className="text-center">
-                  <NotAvailable label={`Daily digest at 08:00, ${c}`}>
-                    <input type="checkbox" aria-label={`Daily digest at 08:00, ${c}`} readOnly className="size-4" />
-                  </NotAvailable>
-                </td>
-              ))}
-            </tr>
-          </tbody>
-        </table>
-      </div>
     </section>
   );
 }

@@ -480,6 +480,25 @@ type Tenancy interface {
 	PurgeOrg(ctx context.Context, org domain.OrgID, cutoff time.Time, also func(context.Context, domain.OrgID) error) (bool, error)
 }
 
+// SignupDomains keep each organization's one sign-up domain (ADR 0023, decision 7): who may sign
+// up without an invitation. Every method acts on the organization in ctx (domain.WithOrg) and
+// fails with an error wrapping ports.ErrNotFound when it is not live. The auth service reads the
+// domains and joins people through definer functions of its own, not through this port.
+type SignupDomains interface {
+	// SignupDomain returns the organization's sign-up domain, and false when none is set.
+	SignupDomain(ctx context.Context) (domain.SignupDomain, bool, error)
+	// SetSignupDomain sets the sign-up domain (already checked with domain.CheckSignupDomain and
+	// domain.CheckJoinRole) for the owner by, a user, and appends org.signup_domain_set; setting
+	// what is set changes nothing. It refuses a domain by's own sign-in email is not at
+	// (domain.ErrSignupDomainNotYours), a public webmail domain (domain.ErrSignupDomainPublic) and
+	// one another live organization holds (domain.ErrSignupDomainTaken); a deleted
+	// organization's claim is taken over.
+	SetSignupDomain(ctx context.Context, by domain.Actor, d string, role domain.FactoryRole) (domain.SignupDomain, error)
+	// ClearSignupDomain removes the sign-up domain and appends org.signup_domain_cleared; none
+	// set changes nothing.
+	ClearSignupDomain(ctx context.Context, by domain.Actor) error
+}
+
 // NewOrg is an organization to create.
 type NewOrg struct {
 	Slug, Name, Mark string

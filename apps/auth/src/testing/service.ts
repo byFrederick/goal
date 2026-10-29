@@ -177,6 +177,15 @@ export class Fixtures {
     }
   }
 
+  /** signupDomain sets org's sign-up domain, as goal_set_signup_domain would for one of its owners. */
+  async signupDomain(org: string, domain: string, joinRole = 'viewer'): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO org_signup_domains (org_id, domain, join_role, set_by) VALUES ($1, $2, $3, 'system:test')
+       ON CONFLICT (org_id) DO UPDATE SET domain = EXCLUDED.domain, join_role = EXCLUDED.join_role`,
+      [org, domain, joinRole],
+    );
+  }
+
   /** age makes every session of user look signed in that many milliseconds ago. */
   async age(user: string, ms: number): Promise<void> {
     await this.pool.query(

@@ -170,6 +170,8 @@ type harness struct {
 	// platform keeps the platform admins of the people signed in (an identity of its own under
 	// GOAL_AUTH=none).
 	platform *porttest.Platform
+	// notifications keeps each person's notification preferences.
+	notifications *porttest.NotificationPreferences
 	// conns keeps the organizations' connections, sealed under key k1, with goald's platform
 	// kinds. Connection tests dial through egress.PublicDialer, private addresses (the tests'
 	// servers) allowed unless publicOnly is set.
@@ -481,6 +483,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.keys.AddFactory(testOrg, lineID)
 
 	h.platform = porttest.NewPlatform(h.keys)
+	h.notifications = porttest.NewNotificationPreferences()
 
 	connections := h.connections(t, tenancy)
 
@@ -492,7 +495,8 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()},
 		Knowledge: h.kb, KnowledgeUploads: h.uploads, KnowledgeSearch: knowledge.NewSearcher(h.kb, nil, nil), UploadMaxBytes: testUploadMax, Clock: h.clock,
 		OrgPolicies: porttest.NewOrgPolicies([]string{modelOpus, modelHaiku}, tenancy, h.clock.Now), BoxSizes: testBoxSizes, EgressAddresses: testEgressAddresses,
-		DraftRequests: h.drafts,
+		NotificationPreferences: h.notifications,
+		DraftRequests:           h.drafts,
 	}
 	if in != nil {
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity
