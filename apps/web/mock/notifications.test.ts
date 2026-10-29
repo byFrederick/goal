@@ -1,7 +1,8 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { Connection, NotificationPreferences, Problem } from '@goal/api-client';
+import type { Connection, Problem } from '@goal/api-client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { NotificationPreferences } from '../src/api/types.ts';
 import { createMockApi, type MockApi } from './api.ts';
 
 // The mock answers GET and PUT /v1/me/notifications the way goald does (ADR 0023, decision 1): a person's
