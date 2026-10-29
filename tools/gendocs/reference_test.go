@@ -223,6 +223,12 @@ func TestReference_WritesOnlyTheReferencePages(t *testing.T) {
 	dir := copyRepo(t, "repo")
 	root := openRoot(t, dir)
 
+	for _, file := range generatedFiles {
+		if err := root.Remove(file); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	for _, page := range referencePages {
 		if err := root.WriteFile(page, []byte("stale\n"), 0o600); err != nil {
 			t.Fatal(err)

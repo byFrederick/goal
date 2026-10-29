@@ -8,9 +8,9 @@
 //   - docs/adr/README.md, one line per ADR (docs/adr/NNNN-<slug>.md): its number, the title of its
 //     "# ADR NNNN — <title>" heading and the first " · " part of its "Status:" line.
 //
-// A branch adds or edits only their entry files and never edits or regenerates the two indexes:
-// the docs-gen workflow (.github/workflows/docs-gen.yml) runs gendocs on main after a merge and
-// commits them.
+// A branch that adds or edits an entry file regenerates the two indexes with gendocs (task docs:gen)
+// and commits them; it never edits them by hand. A conflict on an index, after merging or rebasing
+// onto the base, is resolved by regenerating it (ADR 0015, decision 6, amended 2026-10-29).
 //
 // The reference pages of the docs site (apps/docs/src/content/docs/reference/, reference.go): the
 // CLI from internal/cli's usage text, the factory definition from
@@ -18,12 +18,13 @@
 // docs/reference/. A branch that changes a source regenerates them with gendocs -reference (task
 // docs:ref:gen), which writes nothing else.
 //
-// gendocs -check writes nothing. It fails on a malformed entry or ADR but not when the two indexes
-// are stale or missing, and it fails when a reference page differs from what its source
-// generates. `task docs:gen`, `task docs:ref:gen` and `task docs:check` run it.
+// gendocs -check writes nothing. It fails on a malformed entry or ADR, when an index is stale or
+// missing (naming it and task docs:gen), and when a reference page differs from what its source
+// generates (naming it and task docs:ref:gen). `task docs:gen`, `task docs:ref:gen` and `task docs:check` run it.
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -58,7 +59,7 @@ func run(args []string, stdout io.Writer, usage string) error {
 	flags.SetOutput(io.Discard)
 
 	dir := flags.String("C", ".", "the repository")
-	check := flags.Bool("check", false, "write nothing; fail when an entry file or ADR does not render or a reference page is stale")
+	check := flags.Bool("check", false, "write nothing; fail when an entry file or ADR does not render or a generated file is stale")
 	referenceOnly := flags.Bool("reference", false, "write only the reference pages of the docs site")
 
 	if err := flags.Parse(args); err != nil {
@@ -90,7 +91,11 @@ func run(args []string, stdout io.Writer, usage string) error {
 	}
 
 	if *check {
-		if err := checkReference(root.FS(), pages); err != nil {
+		if err := checkFiles(root.FS(), generatedFiles, files, errStaleGenerated, "task docs:gen"); err != nil {
+			return err
+		}
+
+		if err := checkFiles(root.FS(), referencePages, pages, errStaleReference, "task docs:ref:gen"); err != nil {
 			return err
 		}
 
@@ -121,26 +126,29 @@ func write(root *os.Root, names []string, files map[string]string) error {
 	return nil
 }
 
-// checkReference fails, naming each one, when a reference page differs from pages, what its
-// source generates.
-func checkReference(fsys fs.FS, pages map[string]string) error {
+// checkFiles fails with errStale, naming each file and the task that regenerates them, when a file
+// of names differs from want, what its source generates.
+func checkFiles(fsys fs.FS, names []string, want map[string]string, errStale error, task string) error {
 	var stale []string
 
-	for _, name := range referencePages {
+	for _, name := range names {
 		got, err := fs.ReadFile(fsys, name)
-		if err != nil || string(got) != pages[name] {
+		if err != nil || string(got) != want[name] {
 			stale = append(stale, name)
 		}
 	}
 
 	if len(stale) > 0 {
-		return fmt.Errorf("%w: %s; run task docs:ref:gen", errStaleReference, strings.Join(stale, ", "))
+		return fmt.Errorf("%w: %s; run %s", errStale, strings.Join(stale, ", "), task)
 	}
 
 	return nil
 }
 
-// generatedFiles are the two indexes gendocs writes, in report order; -check is lenient about them.
+// errStaleGenerated is the error of -check when an index differs from what its entry files generate.
+var errStaleGenerated = errors.New("the change map or ADR index differs from what its entry files generate")
+
+// generatedFiles are the two indexes gendocs writes, in report order.
 var generatedFiles = []string{changeMapFile, adrIndexFile}
 
 // render renders every generated file from the repository fsys, by its slash-separated path.

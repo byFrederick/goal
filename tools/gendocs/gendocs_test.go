@@ -162,15 +162,26 @@ func TestParseADR_Rejects(t *testing.T) {
 	}
 }
 
-func TestValidate_StaleGeneratedFilesPass(t *testing.T) {
+// wantGeneratedCheck asserts that err, from -check, fails naming each generated file and the
+// task to run.
+func wantGeneratedCheck(t *testing.T, err error, what string) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatalf("check with %s passed, want an error", what)
+	}
+
+	for _, want := range append([]string{"task docs:gen"}, generatedFiles...) {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("check with %s = %v, want an error naming %s", what, err, want)
+		}
+	}
+}
+
+func TestValidate_StaleGeneratedFilesFail(t *testing.T) {
 	t.Parallel()
 
 	dir := copyRepo(t, "repo")
-
-	if err := run([]string{"-C", dir}, &bytes.Buffer{}, testUsage); err != nil {
-		t.Fatal(err)
-	}
-
 	root := openRoot(t, dir)
 
 	for _, file := range generatedFiles {
@@ -179,9 +190,7 @@ func TestValidate_StaleGeneratedFilesPass(t *testing.T) {
 		}
 	}
 
-	if err := run([]string{"-C", dir, checkFlag}, &bytes.Buffer{}, testUsage); err != nil {
-		t.Errorf("check with stale generated files: %v, want it to pass", err)
-	}
+	wantGeneratedCheck(t, run([]string{"-C", dir, checkFlag}, &bytes.Buffer{}, testUsage), "stale generated files")
 
 	for _, file := range generatedFiles {
 		got, err := root.ReadFile(file)
@@ -193,19 +202,32 @@ func TestValidate_StaleGeneratedFilesPass(t *testing.T) {
 			t.Errorf("check rewrote %s, want it to write nothing", file)
 		}
 	}
+
+	if err := run([]string{"-C", dir}, &bytes.Buffer{}, testUsage); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := run([]string{"-C", dir, checkFlag}, &bytes.Buffer{}, testUsage); err != nil {
+		t.Errorf("check after regenerating: %v, want it to pass", err)
+	}
 }
 
-func TestValidate_MissingGeneratedFilesPass(t *testing.T) {
+func TestValidate_MissingGeneratedFilesFail(t *testing.T) {
 	t.Parallel()
 
 	dir := copyRepo(t, "repo")
-
-	if err := run([]string{"-C", dir, checkFlag}, &bytes.Buffer{}, testUsage); err != nil {
-		t.Errorf("check with no generated files: %v, want it to pass", err)
-	}
+	root := openRoot(t, dir)
 
 	for _, file := range generatedFiles {
-		if _, err := openRoot(t, dir).Stat(file); err == nil {
+		if err := root.Remove(file); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	wantGeneratedCheck(t, run([]string{"-C", dir, checkFlag}, &bytes.Buffer{}, testUsage), "no generated files")
+
+	for _, file := range generatedFiles {
+		if _, err := root.Stat(file); err == nil {
 			t.Errorf("check wrote %s, want it to write nothing", file)
 		}
 	}
