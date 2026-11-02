@@ -77,6 +77,10 @@ Publishing runs the validation again, and the new version runs from then on. If 
 goal factory push ./acme-line --publish --move build-old=build
 ```
 
+## Review in the editor
+
+In the Definition editor, Review and publish shows, beside the changes of the open draft, the checks of the draft, or of the version that runs when no draft is open, and the four newest versions with a link to all of them. Evals before publish is not available yet. Budgets are not part of this page; set them in Factory settings under Budgets and targets.
+
 ## Edit the line in the app
 
 You can also change the line in the draft's form: open the factory's Definition and choose Line. The stations are one table, in the order work moves through them. Each row has its number, its name with its id under it, its kind (Queue, Agent, Human or Done), its WIP limit, who works there, and the Order buttons. On a narrow screen the table scrolls sideways inside its own box.
@@ -92,7 +96,7 @@ You can also change the line in the draft's form: open the factory's Definition 
 goal factory versions acme-line
 ```
 
-The published version that runs is marked with `*`. To run an earlier version again, use `goal factory restore acme-line N`; it publishes version N as a new version, so the history keeps every step.
+The published version that runs is marked with `*`. To run an earlier version again, use `goal factory restore acme-line N`; it makes version N the one that runs again and keeps every version number.
 
 ## Related
 
