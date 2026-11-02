@@ -469,7 +469,7 @@ describe('the desktop Board, as the screen draws it', () => {
     const columns = await screen.findByRole('region', { name: 'Stations' });
     const investigate = within(columns).getByRole('region', { name: 'Investigate' });
     expect(investigate.querySelector('[aria-hidden="true"].min-h-\\[1lh\\]')).toBeNull();
-    expect(investigate.querySelector('[class*="min-h-[199px]"]')).toBeNull();
+    expect(investigate.innerHTML).not.toMatch(/min-h-\[\d{3}px\]/);
     expect(within(investigate).queryByText('In progress')).toBeNull();
   });
 });
