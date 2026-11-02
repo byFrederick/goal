@@ -149,14 +149,17 @@ function StationTabs({
             data-station={s.id}
             className={cn(
               'flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-dialog border border-line bg-card px-4 text-sm font-medium text-ink-soft',
-              'data-[state=active]:border-ink data-[state=active]:bg-ink data-[state=active]:text-white',
+              'transition-[background-color,border-color,color] duration-(--duration-fast) ease-(--ease-out) motion-reduce:transition-colors',
+              'data-[state=active]:border-transparent data-[state=active]:bg-hover data-[state=active]:text-ink',
             )}
           >
             {s.id === board.constraint ? (
               <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-amber" />
             ) : null}
             {humanize(s.id)}
-            <span className="tabular-nums opacity-80">{columnCount(s)}</span>
+            <span className="tabular-nums opacity-80 transition-opacity duration-(--duration-quick) ease-(--ease-out) motion-reduce:transition-none">
+              {columnCount(s)}
+            </span>
           </Tabs.Trigger>
         ))}
       </Tabs.List>
