@@ -453,7 +453,7 @@ export function RunsPage() {
                           />
                           <span className="sr-only">{run.factory.title || humanize(run.factory.name)}</span>
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-2 lg:w-full lg:min-w-40 lg:max-w-0">
                           <Link
                             to="/o/$org/f/$factory/items/$ref"
                             params={{ org: org.slug, factory: run.factory.name, ref: refParam(run.item.ref) }}
@@ -487,7 +487,7 @@ export function RunsPage() {
                       {run.status === 'failed' ? (
                         <tr className="bg-rework-tint/50">
                           <td />
-                          <td colSpan={9} className="px-3 pb-3">
+                          <td colSpan={9} className="whitespace-normal break-words px-3 pb-3 lg:max-w-0">
                             <div className="flex flex-wrap items-center gap-3 text-secondary">
                               {run.error ? <span className="text-rework-ink">{run.error}</span> : null}
                               <span className="ml-auto flex gap-3">

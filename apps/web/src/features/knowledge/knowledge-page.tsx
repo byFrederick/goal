@@ -3,24 +3,27 @@
 // sync, retry, upload and add from it. Below it, "Look something up" searches every source, and
 // "Where it was used" (usage-card.tsx) shows the runs that opened one source's documents. ?factory=
 // (the factory sidebar's Knowledge) shows only the sources that factory's current version lists.
+
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearch } from '@tanstack/react-router';
-import { BookOpen, Plus } from 'lucide-react';
+import { BookOpen } from 'lucide-react';
 import { useState } from 'react';
-import { factoriesQuery, knowledgeSourcesQuery } from '../../api/queries';
+import { connectionsQuery, factoriesQuery, knowledgeSourcesQuery } from '../../api/queries';
 import type { KnowledgeSource } from '../../api/types';
-import { plural } from '../../shared/format';
+import { TopBarSlot } from '../../app/top-bar';
+import { formatClock, plural } from '../../shared/format';
 import { sourceKinds, sourceSummary } from '../../shared/knowledge';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
+import { ConnectionGlyph } from '../../ui/connection-glyph';
 import { EmptyState } from '../../ui/empty-state';
 import { StatusText, SyncNowButton, UsedBy, useSyncSource } from './parts';
 import { SearchCard } from './search-card';
 import { UploadDialog } from './upload';
 import { UsageCard } from './usage-card';
-import { sourceStatus, syncTimes } from './words';
+import { everyLabel, sourceStatus, syncTimes } from './words';
 
 export function KnowledgePage() {
   const org = useOrg();
@@ -37,6 +40,10 @@ export function KnowledgePage() {
     enabled: !search.factory || factory !== undefined,
   });
   const sync = useSyncSource(org.id);
+  // A source holds only its connection's name; a member who can read connections gets the kind's glyph.
+  const readConnections = useOrgHolds('connection:read');
+  const connections = useQuery({ ...connectionsQuery(org.id), enabled: readConnections }).data ?? [];
+  const connectionKind = (s: KnowledgeSource) => connections.find((c) => c.name === s.connection)?.kind ?? s.kind;
   const [uploading, setUploading] = useState<KnowledgeSource | null>(null);
   const now = Date.now();
 
@@ -45,24 +52,21 @@ export function KnowledgePage() {
   const selected = pickSource(sources);
 
   const addSource = manage ? (
-    <Button asChild variant="primary" className="h-11 md:h-10">
+    <Button asChild variant="primary" className="h-11 md:h-8.5">
       <Link to="/o/$org/knowledge/new" params={{ org: org.slug }}>
-        <Plus size={16} strokeWidth={1.5} aria-hidden="true" />
-        Add a source
+        <span aria-hidden="true">+</span> Add a source
       </Link>
     </Button>
   ) : null;
 
   return (
     <>
-      <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="m-0 text-page-title tracking-display">Knowledge</h1>
-          <p className="m-0 text-body text-ink-soft">
-            What agents can look up before they act: synced documents, searched on every run.
-          </p>
-        </div>
-        {addSource}
+      <TopBarSlot crumb="Knowledge" actions={addSource} />
+      <header className="flex flex-col gap-1">
+        <h1 className="m-0 text-page-title">Knowledge</h1>
+        <p className="m-0 text-body text-muted">
+          What agents can look up before they act: synced documents, searched on every run.
+        </p>
       </header>
 
       {list.isPending && !missing ? (
@@ -95,6 +99,7 @@ export function KnowledgePage() {
           missing={missing}
           manage={manage}
           sync={sync}
+          connectionKind={connectionKind}
           onUpload={setUploading}
           now={now}
         />
@@ -125,6 +130,7 @@ function SourcesCard({
   missing,
   manage,
   sync,
+  connectionKind,
   onUpload,
   now,
 }: {
@@ -134,6 +140,7 @@ function SourcesCard({
   missing: boolean;
   manage: boolean;
   sync: ReturnType<typeof useSyncSource>;
+  connectionKind: (s: KnowledgeSource) => string;
   onUpload: (s: KnowledgeSource) => void;
   now: number;
 }) {
@@ -186,35 +193,30 @@ function SourcesCard({
               {sources.map((s) => {
                 const status = sourceStatus(s);
                 const times = syncTimes(s, now);
-                const Icon = sourceKinds[s.kind].icon;
                 return (
                   <tr key={s.id} className="align-top [&>td]:border-t [&>td]:border-line [&>td]:px-4 [&>td]:py-3">
                     <td className="min-w-0">
                       <span className="flex min-w-0 items-center gap-3">
-                        <span
-                          aria-hidden="true"
-                          className="grid size-9 shrink-0 place-items-center rounded-cell bg-ink text-shell"
-                        >
-                          <Icon size={18} strokeWidth={1.5} />
-                        </span>
+                        <ConnectionGlyph kind={connectionKind(s)} title={sourceKinds[s.kind].label} />
                         <span className="flex min-w-0 flex-col">
                           <Link
                             to="/o/$org/knowledge/$source"
                             params={{ org: org.slug, source: s.name }}
-                            className="font-control text-ink underline-offset-3 break-words hover:underline"
+                            translate="no"
+                            className="font-mono text-body text-ink underline-offset-3 break-words hover:underline"
                           >
-                            {s.title}
+                            {s.name}
                           </Link>
-                          <span translate="no" className="text-meta break-words text-muted">
-                            {sourceSummary(s)}
+                          <span className="text-meta break-words text-muted">
+                            {s.title}, {sourceSummary(s)}
                           </span>
                         </span>
                       </span>
                     </td>
                     <td className="min-w-0">
                       <span className="flex flex-col items-start gap-1">
-                        <StatusText line={status} busy={s.status === 'syncing'} />
-                        <span className="text-secondary text-muted">{times.next ?? times.last}</span>
+                        <StatusText line={status} time={syncedAt(s, now)} busy={s.status === 'syncing'} />
+                        <span className="text-secondary text-muted">{scheduleText(s, times)}</span>
                         {manage && s.kind === 'synced' ? (
                           <SyncNowButton
                             source={s}
@@ -260,25 +262,33 @@ function SourcesCard({
             {sources.map((s) => {
               const status = sourceStatus(s);
               const times = syncTimes(s, now);
-              const readers = s.used_by.factories.map((f) => f.name);
               return (
                 <li key={s.id} className="flex flex-col gap-2 rounded-card border border-line px-3 py-3">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <Link
-                      to="/o/$org/knowledge/$source"
-                      params={{ org: org.slug, source: s.name }}
-                      className="min-w-0 font-control text-ink break-words underline-offset-3 hover:underline"
-                    >
-                      {s.title}
-                    </Link>
-                    {s.kind === 'live' ? null : (
-                      <span className="shrink-0 text-secondary text-muted">{plural(s.documents, 'document')}</span>
-                    )}
+                  <div className="flex items-center gap-3">
+                    <ConnectionGlyph kind={connectionKind(s)} title={sourceKinds[s.kind].label} />
+                    <div className="flex min-w-0 flex-1 items-baseline justify-between gap-3">
+                      <Link
+                        to="/o/$org/knowledge/$source"
+                        params={{ org: org.slug, source: s.name }}
+                        translate="no"
+                        className="min-w-0 font-mono text-body text-ink break-words underline-offset-3 hover:underline"
+                      >
+                        {s.name}
+                      </Link>
+                      {s.kind === 'live' ? null : (
+                        <span className="shrink-0 text-secondary text-muted">{plural(s.documents, 'document')}</span>
+                      )}
+                    </div>
                   </div>
-                  <StatusText line={status} busy={s.status === 'syncing'} className="text-secondary" />
-                  <span className="text-secondary text-muted">{times.next ?? times.last}</span>
-                  <span className="text-secondary text-muted">
-                    Read by {readers.length > 0 ? readers.join(', ') : 'no factory yet'}
+                  <StatusText
+                    line={status}
+                    time={syncedAt(s, now)}
+                    busy={s.status === 'syncing'}
+                    className="text-secondary"
+                  />
+                  <span className="text-secondary text-muted">{scheduleText(s, times)}</span>
+                  <span className="flex flex-wrap items-center gap-x-2 text-secondary text-muted">
+                    Read by <UsedBy source={s} />
                   </span>
                   {manage && s.kind === 'synced' ? (
                     <SyncNowButton
@@ -306,4 +316,17 @@ function UploadButton({ source, onUpload }: { source: KnowledgeSource; onUpload:
       Upload…
     </Button>
   );
+}
+
+/** "14:00" for a source that has synced; nothing before its first sync or while it syncs. */
+function syncedAt(s: KnowledgeSource, now: number): string | undefined {
+  if (s.kind === 'live' || s.status === 'syncing' || !s.last_synced_at) return undefined;
+  return formatClock(s.last_synced_at, new Date(now));
+}
+
+/** Under the status: "Every hour" for a synced source, else when it next runs or what it does. */
+function scheduleText(s: KnowledgeSource, times: ReturnType<typeof syncTimes>): string {
+  if (s.kind === 'synced' && s.status !== 'syncing')
+    return `Every ${everyLabel(s.sync_every_seconds).replace(/^1 /, '')}`;
+  return times.next ?? times.last;
 }

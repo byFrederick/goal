@@ -4,6 +4,7 @@
 import { useId } from 'react';
 import type { ToolPolicy } from '../../api/types';
 import { SectionCard } from '../../ui/card';
+import { cn } from '../../ui/cn';
 import { NativeSelect } from '../../ui/field';
 import { type PolicyForm, toolOptions } from './form';
 
@@ -70,7 +71,11 @@ function ToolRow({
         aria-describedby={`${id}-help`}
         value={value}
         onChange={(e) => onChange(e.target.value as ToolPolicy[keyof ToolPolicy])}
-        className="h-11 w-auto shrink-0 md:h-8 md:text-secondary"
+        className={cn(
+          'h-11 w-auto shrink-0 md:h-8 md:text-secondary',
+          value === 'ask' && 'text-you-ink',
+          value === 'allowed' && 'text-ok-ink',
+        )}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>

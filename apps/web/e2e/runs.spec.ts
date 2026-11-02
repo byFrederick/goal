@@ -1,7 +1,7 @@
 // The Runs page (/o/acme/runs) against the mock: the pictured rows, the URL filters and the controls
-// that are not built yet. Not run in the box (no browser): CI runs it with the mock server.
+// that are not built yet. Not run in the box (no browser): run it against the mock server outside the box.
 import { expect, type Page, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll } from './support';
+import { expectAccessible, expectNoHorizontalScroll, lengthenTitles } from './support';
 
 const runs = '/o/acme/runs';
 
@@ -110,3 +110,22 @@ test('renders in dark mode', async ({ page }) => {
 
   await expectAccessible(page);
 });
+
+for (const { width, height } of [
+  { width: 1280, height: 900 },
+  { width: 1440, height: 1000 },
+]) {
+  test(`shows every column without sideways scroll at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await lengthenTitles(page, /\/v1\/orgs\/[^/]+\/runs(\?|$)/);
+    await openRuns(page);
+
+    const table = page.getByRole('table');
+    await expect(table.getByRole('columnheader', { name: 'Outcome' })).toBeVisible();
+    const fits = await table.evaluate((t) => {
+      const box = t.parentElement as HTMLElement;
+      return t.scrollWidth <= box.clientWidth && box.scrollWidth <= box.clientWidth;
+    });
+    expect(fits).toBe(true);
+  });
+}

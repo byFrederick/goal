@@ -169,6 +169,13 @@ describe('the Runs page states', () => {
     expect(await screen.findByRole('table')).toBeTruthy();
   });
 
+  it('keeps the full item title in the link, so a cut-off title stays readable', async () => {
+    renderRuns();
+
+    const link = await screen.findByRole('link', { name: /Check the budget before each run$/ });
+    expect(link.getAttribute('title')).toBe(link.textContent);
+  });
+
   it('shows the ready state with the pictured rows, the KPI tiles and the footer', async () => {
     renderRuns();
 

@@ -155,7 +155,8 @@ export function ItemTableRow({
         <Link
           to="/o/$org/f/$factory/items/$ref"
           params={{ ...params, ref: refParam(item.ref) }}
-          className="font-medium text-ink no-underline hover:text-run-ink"
+          title={item.title}
+          className="block font-medium text-ink no-underline hover:text-run-ink lg:truncate"
         >
           {item.title}
         </Link>
