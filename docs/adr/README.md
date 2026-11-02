@@ -38,3 +38,4 @@ One line per ADR: its number, its title and the first part of its status. To add
 - [ADR 0033](0033-assembly-integration-branches.md): Assembly integration branches: an opt-in branch that collects an assembly's parts and lands at a gate. Status: accepted.
 - [ADR 0034](0034-jonah-proposals.md): Jonah proposals: reviews of sent-back runs propose definition changes, approved by publishing. Status: accepted.
 - [ADR 0035](0035-docs-site-from-the-control-workers-static-assets.md): The docs site is served from the control Worker's static assets on Cloudflare. Status: accepted.
+- [ADR 0036](0036-design-system-v3-plain-and-motion-binding.md): Design system v3 "Plain" and MOTION.md are binding. Status: accepted.

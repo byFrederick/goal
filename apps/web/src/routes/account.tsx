@@ -2,6 +2,7 @@ import { createFileRoute, redirect } from '@tanstack/react-router';
 import { ensureLoaded, factoriesQuery, meQuery, orgQuery, orgsQuery } from '../api/queries';
 import { AppShell, ShellFrame } from '../app/app-shell';
 import { pageTitle } from '../app/route-focus';
+import { PendingScreen } from '../app/states';
 import { AccountPage } from '../features/account/account-page';
 import { defaultOrg, OrgContext } from '../shared/org';
 import { OrgStream } from '../shared/stream';
@@ -11,6 +12,7 @@ import { OrgStream } from '../shared/stream';
 // would open), and its personal tokens are that organization's. Without an organization `/` explains
 // how to make one.
 export const Route = createFileRoute('/account')({
+  pendingComponent: PendingScreen,
   loader: async ({ context: { queryClient } }) => {
     const org = defaultOrg(await ensureLoaded(queryClient, orgsQuery));
     if (!org) throw redirect({ to: '/', replace: true });

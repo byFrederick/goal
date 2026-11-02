@@ -27,6 +27,7 @@ import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { EmptyState } from '../../ui/empty-state';
 import { NotAvailable } from '../../ui/not-available';
+import { Skeleton, SkeletonRows } from '../../ui/skeleton';
 import { Switch } from '../../ui/switch';
 import { RecentEvents, weekLine } from './trigger-events';
 import { type BlockProblems, TriggerForm } from './trigger-form';
@@ -349,7 +350,7 @@ function TriggerEditor({ org, factory, text, saved, blank, board, detail }: Edit
                 </Link>
               </div>
               {saved ? (
-                <pre className="m-0 overflow-x-auto rounded-cell bg-andon p-3 font-mono text-meta leading-relaxed text-andon-text">
+                <pre className="m-0 overflow-x-auto rounded-cell bg-panel p-3 font-mono text-meta leading-relaxed text-ink-soft">
                   {triggerYaml(saved)}
                 </pre>
               ) : (
@@ -368,9 +369,9 @@ function TriggerEditor({ org, factory, text, saved, blank, board, detail }: Edit
 
 function Loading() {
   return (
-    <div aria-busy="true" className="min-h-40">
-      <span className="sr-only">Loading</span>
-    </div>
+    <Skeleton ready={false} placeholder={<SkeletonRows rows={4} className="min-h-40" />}>
+      <span />
+    </Skeleton>
   );
 }
 

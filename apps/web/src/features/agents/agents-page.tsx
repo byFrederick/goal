@@ -3,7 +3,7 @@
 // comes from the running version; the statistics are one request per agent.
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { Check, Code, Plus } from 'lucide-react';
+import { ChevronRight, Code, Plus } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { agentStatsQuery, versionModelQuery } from '../../api/queries';
 import type { AgentStats } from '../../api/types';
@@ -187,10 +187,6 @@ function Line({ model, statsByAgent }: { model: Model; statsByAgent: Map<string,
   return (
     <div className="-mx-4 overflow-x-auto px-4 md:-mx-7 md:px-7">
       <div className="relative md:min-w-max">
-        <span
-          aria-hidden="true"
-          className="hidden md:absolute md:inset-x-16 md:top-5 md:block md:h-0.5 md:bg-run-soft"
-        />
         <ol className="m-0 flex list-none flex-col gap-6 p-0 md:flex-row md:gap-4">
           {stations.map((station, index) => {
             const staffed = staffingOf(station, agents);
@@ -204,7 +200,7 @@ function Line({ model, statsByAgent }: { model: Model; statsByAgent: Map<string,
                   station.route ? 'md:w-80' : station.kind === 'agent' ? 'md:w-64' : 'md:w-44',
                 )}
               >
-                <StationHead station={station} isConstraint={isConstraint} />
+                <StationHead station={station} isConstraint={isConstraint} first={index === 0} />
                 <StationBody
                   station={station}
                   staffed={staffed}
@@ -222,15 +218,16 @@ function Line({ model, statsByAgent }: { model: Model; statsByAgent: Map<string,
   );
 }
 
-function StationHead({ station, isConstraint }: { station: ModelStation; isConstraint: boolean }) {
+function StationHead({
+  station,
+  isConstraint,
+  first,
+}: {
+  station: ModelStation;
+  isConstraint: boolean;
+  first: boolean;
+}) {
   const done = station.kind === 'done';
-  const ring = isConstraint
-    ? 'border-amber'
-    : done
-      ? 'border-ok'
-      : station.kind === 'agent'
-        ? 'border-run'
-        : 'border-rule';
   const subtitle = [
     station.wip === undefined ? null : `WIP ${station.wip}`,
     station.buffer ? `buffer ${station.buffer}` : null,
@@ -238,21 +235,21 @@ function StationHead({ station, isConstraint }: { station: ModelStation; isConst
     .filter(Boolean)
     .join(', ');
   return (
-    <div className="flex flex-col items-center gap-2 text-center md:relative md:z-10 md:mb-4">
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2 text-secondary font-control text-ink">
+        {first ? null : <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-muted" />}
+        <h2 className="m-0 flex items-center gap-2 text-secondary font-control">
+          {station.name ?? station.id}
+          {isConstraint ? <Chip tone="constraint">Constraint</Chip> : null}
+          {done ? <span aria-hidden="true" className="size-1.5 rounded-full bg-ok" /> : null}
+        </h2>
+        <span aria-hidden="true" className="h-px min-w-4 flex-1 bg-line" />
+      </div>
+      <p className="m-0 text-page-title tabular-nums">{done ? '' : (station.wip ?? '')}</p>
       <span
         aria-hidden="true"
-        className={cn(
-          'grid size-11 place-items-center rounded-full border-2 bg-card text-heading font-control',
-          ring,
-          done && 'bg-ok-tint',
-        )}
-      >
-        {done ? <Check className="text-ok-ink" /> : (station.wip ?? '')}
-      </span>
-      <h2 className="m-0 flex flex-wrap items-center justify-center gap-2 text-heading">
-        {station.name ?? station.id}
-        {isConstraint ? <Chip tone="constraint">Constraint</Chip> : null}
-      </h2>
+        className={cn('h-1 rounded-full bg-hover', isConstraint && 'bg-amber', done && 'bg-ok')}
+      />
       {subtitle ? <p className="m-0 text-meta text-muted">{subtitle}</p> : null}
     </div>
   );
@@ -358,7 +355,7 @@ function AgentCard({
       <span className="flex items-center gap-2">
         <span
           aria-hidden="true"
-          className="grid size-8 shrink-0 place-items-center rounded-control bg-run text-meta font-control text-white"
+          className="grid size-8 shrink-0 place-items-center rounded-full bg-hover text-meta font-control text-ink-soft"
         >
           {initialsOf(agent.name)}
         </span>

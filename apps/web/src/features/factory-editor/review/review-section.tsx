@@ -11,6 +11,7 @@ import type { Version } from '../../../api/types';
 import { plural } from '../../../shared/format';
 import { SectionCard } from '../../../ui/card';
 import { Chip } from '../../../ui/chip';
+import { Skeleton, SkeletonRows } from '../../../ui/skeleton';
 import { useModel } from '../draft/use-draft';
 import { useValidation } from '../frame/use-editor';
 import { SectionLink } from '../search-link';
@@ -54,11 +55,19 @@ export function ReviewSection({ place, search }: SectionViewProps) {
         <h2 data-route-focus="" tabIndex={-1} className="m-0 text-page-title tracking-display">
           {hasDraft ? `Publish v${next}` : 'Review and publish'}
         </h2>
-        {hasDraft && changes !== undefined ? <Chip tone="plain">{plural(changes, 'change')}</Chip> : null}
+        {hasDraft && changes !== undefined ? (
+          <Chip tone="plain" size="lg">
+            {plural(changes, 'change')}
+          </Chip>
+        ) : null}
         {validation && errors.length > 0 ? (
-          <Chip tone="rework">{plural(errors.length, 'problem')}</Chip>
+          <Chip tone="rework" size="lg">
+            {plural(errors.length, 'problem')}
+          </Chip>
         ) : allPass ? (
-          <Chip tone="ok">All checks pass</Chip>
+          <Chip tone="ok" size="lg" dot>
+            All checks pass
+          </Chip>
         ) : null}
       </div>
       <ProblemAlert errors={errors} next={next} model={model} />
@@ -136,20 +145,23 @@ function History({
   draftUpdated: string | undefined;
 }) {
   const { org, factory } = useEditorFacts();
-  const versions = useQuery(versionsQuery(org, factory)).data?.versions ?? [];
+  const query = useQuery(versionsQuery(org, factory));
+  const versions = query.data?.versions ?? [];
   const [restoring, setRestoring] = useState<Version | null>(null);
   return (
     <SectionCard title="Versions">
-      <ul className="m-0 list-none p-0 [&>li:first-child]:border-t-0">
-        {hasDraft ? <DraftRow label={`Draft of v${next}`} detail={draftDetail(draftUpdated)} /> : null}
-        {versions.slice(0, 4).map((v) => (
-          <VersionRow key={v.id} version={v} comparing={compare} onRestore={setRestoring} />
-        ))}
-      </ul>
+      <Skeleton ready={!query.isPending} placeholder={<SkeletonRows rows={3} />}>
+        <ul className="m-0 list-none p-0 [&>li:first-child]:border-t-0">
+          {hasDraft ? <DraftRow label={`Draft of v${next}`} detail={draftDetail(draftUpdated)} /> : null}
+          {versions.slice(0, 4).map((v) => (
+            <VersionRow key={v.id} version={v} comparing={compare} onRestore={setRestoring} />
+          ))}
+        </ul>
+      </Skeleton>
       <SectionLink
         section="versions"
         patch={{}}
-        className="block border-t border-line py-3 text-secondary font-medium underline underline-offset-3 transition-colors duration-200 hover:text-run"
+        className="block border-t border-line py-3 text-secondary font-medium transition-colors duration-(--duration-quick) hover:text-run"
       >
         {allVersionsText(versions)}
       </SectionLink>

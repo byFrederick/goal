@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SegmentedControl } from './segmented-control';
 
@@ -28,6 +29,31 @@ describe('SegmentedControl', () => {
     const onChange = vi.fn();
     render(<SegmentedControl label="View" options={options} value="all" onChange={onChange} />);
     fireEvent.click(radio('Mine 3'));
+    expect(onChange).toHaveBeenCalledWith('mine');
+  });
+
+  it('moves one sliding pill to the chosen option, with the fast ease-out slide', () => {
+    const { container, rerender } = render(
+      <SegmentedControl label="View" options={options} value="all" onChange={() => {}} />,
+    );
+    const pill = container.querySelector('[aria-hidden="true"]');
+    expect(Array.from(pill?.classList ?? [])).toEqual(
+      expect.arrayContaining(['transition-[transform,width]', 'duration-(--duration-fast)', 'ease-out']),
+    );
+    expect(Array.from(radio('All').closest('label')?.classList ?? [])).toEqual(expect.arrayContaining(['text-ink']));
+    expect(Array.from(radio('All').closest('label')?.classList ?? [])).not.toContain('bg-card');
+
+    rerender(<SegmentedControl label="View" options={options} value="mine" onChange={() => {}} />);
+    expect(container.querySelectorAll('[aria-hidden="true"]')).toHaveLength(1);
+    expect(radio('Mine 3').checked).toBe(true);
+  });
+
+  it('moves the choice with the arrow keys, as in any radio group', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<SegmentedControl label="View" options={options} value="all" onChange={onChange} />);
+    radio('All').focus();
+    await user.keyboard('{ArrowLeft}');
     expect(onChange).toHaveBeenCalledWith('mine');
   });
 

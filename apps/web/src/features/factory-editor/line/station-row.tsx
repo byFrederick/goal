@@ -57,7 +57,7 @@ export const lineColumns =
   '@[960px]:grid-cols-[32px_minmax(170px,1.1fr)_268px_132px_minmax(170px,1fr)_124px] @[960px]:gap-x-3';
 
 const iconButton =
-  'inline-flex size-11 shrink-0 items-center justify-center rounded-control border border-line bg-card text-ink transition-colors duration-200 hover:bg-shell md:size-9 aria-disabled:cursor-not-allowed aria-disabled:opacity-45 aria-disabled:hover:bg-card';
+  'inline-flex size-11 shrink-0 items-center justify-center rounded-control border border-line bg-card text-ink transition-colors duration-(--duration-quick) hover:bg-shell md:size-9 aria-disabled:cursor-not-allowed aria-disabled:opacity-45 aria-disabled:hover:bg-card';
 
 export function StationRow({ station, index, selected }: { station: ModelStation; index: number; selected: boolean }) {
   const editor = useLineEditor();
@@ -157,7 +157,7 @@ export function StationRow({ station, index, selected }: { station: ModelStation
         editor.lastFocused.current = station.id;
       }}
       className={cn(
-        'grid grid-cols-[32px_minmax(0,1fr)] items-center gap-x-2.5 gap-y-2.5 rounded-control border bg-card p-3 transition-[border-color,box-shadow,opacity] duration-200 @[960px]:px-4 @[960px]:py-3.5',
+        'grid grid-cols-[32px_minmax(0,1fr)] items-center gap-x-2.5 gap-y-2.5 rounded-control border bg-card p-3 transition-[border-color,box-shadow,opacity] duration-(--duration-quick) @[960px]:px-4 @[960px]:py-3.5',
         lineColumns,
         selected ? 'border-ink shadow-[0_0_0_1px_var(--color-ink)]' : 'border-line focus-within:border-rule',
         problems.length > 0 && !selected && 'border-rework focus-within:border-rework',
@@ -170,7 +170,7 @@ export function StationRow({ station, index, selected }: { station: ModelStation
           type="button"
           {...drag.handle}
           aria-label={`Drag ${label}, station ${n} of ${stations.length}`}
-          className="group/handle flex h-11 w-8 touch-none items-center justify-center rounded-chip bg-shell text-[13px] font-semibold tabular-nums transition-colors duration-200 hover:bg-panel md:h-7 md:w-7 md:cursor-grab"
+          className="group/handle flex h-11 w-8 touch-none items-center justify-center rounded-chip bg-shell text-[13px] font-semibold tabular-nums transition-colors duration-(--duration-quick) hover:bg-panel md:h-7 md:w-7 md:cursor-grab"
         >
           <span className="group-hover/handle:hidden">{n}</span>
           <GripVertical size={14} strokeWidth={1.5} aria-hidden="true" className="hidden group-hover/handle:block" />
@@ -197,7 +197,7 @@ export function StationRow({ station, index, selected }: { station: ModelStation
           autoComplete="off"
           placeholder={station.id}
           className={cn(
-            'h-11 w-full min-w-0 rounded-control border border-rule bg-card px-3 text-base text-ink transition-colors duration-200 placeholder:text-muted hover:border-muted aria-[invalid=true]:border-rework md:h-9 md:text-[15px]',
+            'h-11 w-full min-w-0 rounded-control border border-rule bg-card px-3 text-base text-ink transition-colors duration-(--duration-quick) placeholder:text-muted hover:border-muted aria-[invalid=true]:border-rework md:h-9 md:text-[15px]',
             readOnlyControl,
           )}
         />
@@ -488,7 +488,7 @@ export function WipStepper({
         readOnly={readOnly}
         autoComplete="off"
         className={cn(
-          'h-11 w-12 rounded-control border border-rule bg-card text-center text-base text-ink tabular-nums transition-colors duration-200 placeholder:text-muted hover:border-muted aria-[invalid=true]:border-rework md:h-9 md:text-[15px]',
+          'h-11 w-12 rounded-control border border-rule bg-card text-center text-base text-ink tabular-nums transition-colors duration-(--duration-quick) placeholder:text-muted hover:border-muted aria-[invalid=true]:border-rework md:h-9 md:text-[15px]',
           readOnlyControl,
         )}
       />
@@ -530,7 +530,7 @@ function RowEdited({ index, label }: { index: number; label: string }) {
         type="button"
         onClick={() => void undo()}
         aria-label={`Undo the changes to ${fields} of ${label}`}
-        className="inline-flex min-h-6 items-center rounded-chip px-1 text-ink underline underline-offset-3 transition-colors duration-200 hover:text-run"
+        className="inline-flex min-h-6 items-center rounded-chip px-1 text-ink underline underline-offset-3 transition-colors duration-(--duration-quick) hover:text-run"
       >
         Undo
       </button>

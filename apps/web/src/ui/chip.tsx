@@ -1,23 +1,24 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { cn } from './cn';
 
-// MASTER.md, Components: chips are 22 px (28 px large) with the chip radius, a tint fill and the
-// tone's ink text. Neutral chips are panel-coloured with a line border. A status dot takes the
-// tone's colour; only the running dot pulses, and reduced motion turns the pulse off.
+// MASTER.md, Components: chips are 22 px (28 px large) with the chip radius, white (panel) with a line
+// border, and a 6 px status dot in the tone's colour. Only "needs you" and "sent back" take a tint fill,
+// because they ask for action. Only the running dot pulses, and reduced motion turns the pulse off.
+// When the text changes in place, the new text rises in (MOTION.md, A status changes in place).
 const tones = {
   plain: { chip: 'border-line bg-panel text-ink', dot: 'bg-muted' },
   quiet: { chip: 'border-line bg-panel text-ink', dot: 'bg-muted' },
   run: {
-    chip: 'border-transparent bg-run-tint text-run-ink',
+    chip: 'border-line bg-panel text-ink',
     dot: 'bg-run animate-pulse-dot motion-reduce:animate-none',
   },
   you: { chip: 'border-transparent bg-you-tint text-you-ink', dot: 'bg-you' },
   rework: { chip: 'border-transparent bg-rework-tint text-rework-ink', dot: 'bg-rework' },
   /** The constraint (the drum): yellow. */
-  constraint: { chip: 'border-transparent bg-amber-tint text-amber-ink', dot: 'bg-amber' },
+  constraint: { chip: 'border-line bg-panel text-ink', dot: 'bg-amber' },
   /** Expedite lane: yellow, like the constraint, so the two read as one kind of urgency. */
-  expedite: { chip: 'border-transparent bg-amber-tint text-amber-ink', dot: 'bg-amber' },
-  ok: { chip: 'border-transparent bg-ok-tint text-ok-ink', dot: 'bg-ok' },
+  expedite: { chip: 'border-line bg-panel text-ink', dot: 'bg-amber' },
+  ok: { chip: 'border-line bg-panel text-ink', dot: 'bg-ok' },
 } as const;
 
 export type ChipTone = keyof typeof tones;
@@ -51,8 +52,29 @@ export function Chip({
         className,
       )}
     >
-      {dot ? <Dot className={tones[tone].dot} /> : null}
-      {children}
+      {dot ? <Dot className={cn('size-1.5', tones[tone].dot)} /> : null}
+      {typeof children === 'string' || typeof children === 'number' ? <ChipText text={String(children)} /> : children}
+    </span>
+  );
+}
+
+/**
+ * The chip's text. When it changes in place, the new text is drawn again with the swap animation; the
+ * first draw does not animate, so a list of chips does not move when it first appears.
+ */
+function ChipText({ text }: { text: string }) {
+  const [seen, setSeen] = useState({ text, generation: 0 });
+  let { generation } = seen;
+  if (seen.text !== text) {
+    generation += 1;
+    setSeen({ text, generation });
+  }
+  return (
+    <span
+      key={generation}
+      className={cn(generation > 0 && 'motion-safe:animate-text-states-swap motion-reduce:animate-fade-in')}
+    >
+      {text}
     </span>
   );
 }

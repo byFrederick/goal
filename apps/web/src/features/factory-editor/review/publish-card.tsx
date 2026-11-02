@@ -6,6 +6,7 @@
 // revision and the version it saw running, and on success closes the draft.
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
+import { Check } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '../../../api/client';
@@ -14,8 +15,9 @@ import { defKeys, keys } from '../../../api/queries';
 import type { ItemsAtRemovedStations, Validation } from '../../../api/types';
 import { useOrg } from '../../../shared/org';
 import { Button } from '../../../ui/button';
-import { SectionCard, Stat, StatGrid } from '../../../ui/card';
+import { SectionCard } from '../../../ui/card';
 import { Field, Input, NativeSelect } from '../../../ui/field';
+import { StatStrip } from '../../../ui/stat-strip';
 import { useDraftSession, useModel } from '../draft/use-draft';
 import { SearchLink } from '../search-link';
 import { blockedSentence, defaultMessage, type MoveNeed, mergeMoveNeeds, publishExplainer } from './review';
@@ -53,6 +55,8 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
   const [start, setStart] = useState(false);
   const [pending, setPending] = useState(false);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
+  // The version this card published: its check shows after the draft closes (MOTION.md, Approve, publish, merge succeed).
+  const [published, setPublished] = useState<number | null>(null);
   const [rows, setRows] = useState<MoveNeed[]>([]);
   const reason = useId();
 
@@ -102,6 +106,7 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
         ...(first ? { start } : {}),
       });
       session.closeDraft();
+      setPublished(version.number);
       onMoves({});
       setRows([]);
       setMessage(null);
@@ -151,9 +156,22 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
   if (!hasDraft) {
     return (
       <SectionCard title="Publish">
-        <p className="m-0 text-body">
-          {current ? `No draft. v${current.number} is running.` : 'Nothing to publish yet.'}
-        </p>
+        {published !== null ? (
+          // The Publish button's label swaps for a check (MOTION.md, Approve, publish, merge succeed).
+          <>
+            <Button variant="primary" size="lg" className="w-full justify-center" aria-disabled="true">
+              <Check size={16} strokeWidth={1.5} aria-hidden="true" className="motion-safe:animate-success-check" />
+              Published
+            </Button>
+            <p role="status" className="m-0 text-body">
+              v{published} is published and running.
+            </p>
+          </>
+        ) : (
+          <p className="m-0 text-body">
+            {current ? `No draft. v${current.number} is running.` : 'Nothing to publish yet.'}
+          </p>
+        )}
         <p className="m-0 text-secondary text-muted">Your first change in any section opens a draft of v{next}.</p>
       </SectionCard>
     );
@@ -162,20 +180,15 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
   return (
     <SectionCard title="Publish">
       {place === 'wizard' ? (
-        <StatGrid>
-          <Stat label="Stations">
-            <dd className="m-0 text-detail-title tabular-nums">{counts?.stations ?? '–'}</dd>
-          </Stat>
-          <Stat label="Agents">
-            <dd className="m-0 text-detail-title tabular-nums">{counts?.agents ?? '–'}</dd>
-          </Stat>
-          <Stat label="Connections">
-            <dd className="m-0 text-detail-title tabular-nums">{counts?.connections ?? '–'}</dd>
-          </Stat>
-          <Stat label="Skills">
-            <dd className="m-0 text-detail-title tabular-nums">{counts?.skills ?? '–'}</dd>
-          </Stat>
-        </StatGrid>
+        <StatStrip
+          label="What publishing creates"
+          stats={[
+            { label: 'Stations', value: counts?.stations ?? null },
+            { label: 'Agents', value: counts?.agents ?? null },
+            { label: 'Connections', value: counts?.connections ?? null },
+            { label: 'Skills', value: counts?.skills ?? null },
+          ]}
+        />
       ) : null}
       <Field label="What changed, in one line">
         <Input value={note} maxLength={200} onChange={(e) => setMessage(e.target.value)} />

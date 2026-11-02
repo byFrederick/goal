@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Factory, OrgSummary } from '../../api/types';
 import { renderFactoryPage } from '../../test/route';
@@ -86,5 +86,37 @@ describe('New trigger picker', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/f/widgets/intake/new/schedule'));
     expect(new URLSearchParams(router.state.location.search).get('on')).toBe('schedule');
+  });
+
+  it('offers the suggested triggers under "Or start from a suggestion"', async () => {
+    renderPicker();
+    await screen.findByRole('dialog', { name: 'New trigger' });
+
+    expect(screen.getByRole('heading', { name: 'Or start from a suggestion' })).toBeTruthy();
+    const row = screen.getByText('Fix failing checks on pull requests').parentElement as HTMLElement;
+    expect(within(row).getByText('Build')).toBeTruthy();
+    expect(within(row).getByRole('button', { name: 'Use' }).hasAttribute('disabled')).toBe(false);
+  });
+
+  it('uses a suggestion: goes to its trigger page with its event in the address', async () => {
+    const { router } = renderPicker();
+    await screen.findByRole('dialog', { name: 'New trigger' });
+
+    const row = screen.getByText('Weekly vulnerability sweep').parentElement as HTMLElement;
+    fireEvent.click(within(row).getByRole('button', { name: 'Use' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/f/widgets/intake/new/schedule'));
+    expect(new URLSearchParams(router.state.location.search).get('on')).toBe('schedule');
+  });
+
+  it('disables Use for a suggestion whose event the schema does not accept', async () => {
+    const { router } = renderPicker();
+    await screen.findByRole('dialog', { name: 'New trigger' });
+
+    const row = screen.getByText('Answer review comments by people').parentElement as HTMLElement;
+    const use = within(row).getByRole('button', { name: 'Use' }) as HTMLButtonElement;
+    expect(use.disabled).toBe(true);
+    fireEvent.click(use);
+    expect(router.state.location.pathname).toBe('/o/acme/f/widgets/intake/new');
   });
 });

@@ -272,11 +272,12 @@ function WorkCard({
     <article
       ref={drag?.ref}
       data-card={item.id}
+      data-card-ref={item.ref}
       onPointerDown={drag?.onPointerDown}
       onKeyDown={moveKeys(onMove, drag)}
       style={drag?.style}
       className={cn(
-        'relative flex flex-col gap-2 rounded-control border bg-card p-3 transition-[border-color,box-shadow,opacity] duration-200',
+        'relative flex flex-col gap-2 rounded-control border bg-card p-3 transition-[border-color,box-shadow,opacity] duration-(--duration-quick)',
         'hover:border-muted has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-run',
         expedite ? 'border-rework-tint bg-rework-tint' : 'border-line',
         drag?.dragging && 'opacity-40',
@@ -339,7 +340,7 @@ function PlanBar({ plan }: { plan: ItemCard['plan_steps'] }) {
 
 const planTones: Record<PlanSegment, string> = {
   done: 'border-run bg-run',
-  current: 'border-run bg-run-soft',
+  current: 'border-run bg-run',
   todo: 'border-rule bg-card',
 };
 
@@ -368,11 +369,12 @@ function WaitingRow({
     <article
       ref={drag?.ref}
       data-card={item.id}
+      data-card-ref={item.ref}
       onPointerDown={drag?.onPointerDown}
       onKeyDown={moveKeys(onMove, drag)}
       style={drag?.style}
       className={cn(
-        'relative flex items-center gap-2 rounded-control border bg-card px-3 py-2 transition-[border-color,box-shadow,opacity] duration-200',
+        'relative flex items-center gap-2 rounded-control border bg-card px-3 py-2 transition-[border-color,box-shadow,opacity] duration-(--duration-quick)',
         'hover:border-muted has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-run',
         expedite
           ? 'border-rework-tint bg-rework-tint'

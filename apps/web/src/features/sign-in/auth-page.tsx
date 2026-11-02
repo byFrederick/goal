@@ -21,7 +21,7 @@ const line: Station[] = [
 
 function SignInLine() {
   return (
-    <div aria-hidden="true" className="hidden bg-andon px-7 pt-7 pb-5 sm:block">
+    <div aria-hidden="true" className="hidden bg-panel px-7 pt-7 pb-5 sm:block">
       <div className="relative flex justify-between">
         <span className="absolute inset-x-9 top-4.5 h-0.75 bg-run" />
         {line.map((station) => {
@@ -31,15 +31,15 @@ function SignInLine() {
             <div key={station.name} className="relative flex w-18 flex-col items-center gap-2">
               <span
                 className={cn(
-                  'flex size-9.5 items-center justify-center rounded-full border-2 bg-andon text-white',
-                  queued && 'border-andon-text',
+                  'flex size-9.5 items-center justify-center rounded-full border-2 bg-panel text-ink',
+                  queued && 'border-rule',
                   !queued && !done && 'border-run',
                   done && 'border-ok text-ok',
                 )}
               >
                 {done ? <Check size={16} strokeWidth={2.4} /> : null}
               </span>
-              <span className="text-meta text-white">{station.name}</span>
+              <span className="text-meta text-ink">{station.name}</span>
               {'slots' in station && station.slots.length > 0 ? (
                 <span className="flex gap-1">
                   {station.slots.map((on, i) => (
@@ -47,7 +47,7 @@ function SignInLine() {
                       // The slots are a fixed row: their position is their identity.
                       // biome-ignore lint/suspicious/noArrayIndexKey: a fixed row of squares
                       key={i}
-                      className={cn('size-2 rounded-chip border', on ? 'border-run bg-run' : 'border-andon-text')}
+                      className={cn('size-2 rounded-chip border', on ? 'border-run bg-run' : 'border-rule')}
                     />
                   ))}
                 </span>

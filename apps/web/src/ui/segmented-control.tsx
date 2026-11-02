@@ -4,7 +4,10 @@
 // tooltip and in its accessible description; the arrow keys skip it. `readOnly` shows the choice
 // without letting it change (a view-only editor): every option is disabled, the chosen one drawn
 // as chosen.
-import { useId } from 'react';
+// The chosen option sits on one white pill that slides to the new option (MOTION.md, Tabs and
+// segmented controls). The pill is measured from the options, so it is placed before the first
+// paint without a slide, and it slides only when the choice changes.
+import { useId, useLayoutEffect, useRef } from 'react';
 import { cn } from './cn';
 import { Tooltip } from './tooltip';
 
@@ -40,25 +43,66 @@ export function SegmentedControl<T extends string>({
   className,
 }: SegmentedControlProps<T>) {
   const name = useId();
+  const pill = useRef<HTMLSpanElement>(null);
+  const labels = useRef<(HTMLLabelElement | null)[]>([]);
+  const placed = useRef(false);
+
+  // Moves the pill to the chosen option. The first placement, and a resize, snap; a new choice slides.
+  useLayoutEffect(() => {
+    const place = (animate: boolean) => {
+      const el = pill.current;
+      if (!el) return;
+      const chosen = labels.current[options.findIndex((o) => o.value === value)];
+      if (!chosen) {
+        el.style.opacity = '0';
+        return;
+      }
+      if (!animate) el.style.transition = 'none';
+      el.style.opacity = '1';
+      el.style.width = `${chosen.offsetWidth}px`;
+      el.style.transform = `translateX(${chosen.offsetLeft}px)`;
+      if (!animate) {
+        void el.offsetWidth;
+        el.style.transition = '';
+      }
+    };
+    place(placed.current);
+    placed.current = true;
+    const onResize = () => place(false);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [options, value]);
+
   return (
     <fieldset
       aria-describedby={describedBy}
-      className={cn('m-0 inline-flex shrink-0 gap-px rounded-control border border-line bg-panel p-1', className)}
+      className={cn(
+        'relative m-0 inline-flex shrink-0 gap-px rounded-control border border-line bg-panel p-1',
+        className,
+      )}
     >
       <legend className="sr-only">{label}</legend>
+      <span
+        ref={pill}
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-1 left-0 rounded-chip bg-card opacity-0 shadow-raised transition-[transform,width] duration-(--duration-fast) ease-out"
+      />
       {options.map((o, i) => {
         const checked = o.value === value;
         const reasonId = `${name}-${i}-reason`;
         const option = (
           <label
             key={o.value}
+            ref={(el) => {
+              labels.current[i] = el;
+            }}
             className={cn(
-              'relative inline-flex h-11 cursor-pointer items-center gap-1 rounded-chip px-3 text-secondary whitespace-nowrap text-muted transition-colors duration-200 hover:text-ink md:h-7.5',
+              'relative inline-flex h-11 items-center gap-1 rounded-chip px-3 text-secondary whitespace-nowrap text-muted md:h-7.5',
+              readOnly ? 'cursor-default' : 'press cursor-pointer hover:text-ink',
               'has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-run',
-              readOnly
-                ? 'cursor-default hover:text-muted'
-                : 'has-[:disabled]:cursor-not-allowed has-[:disabled]:text-muted has-[:disabled]:hover:text-muted',
-              checked && 'bg-card font-control text-ink shadow-raised hover:text-ink',
+              !readOnly &&
+                'has-[:disabled]:cursor-not-allowed has-[:disabled]:text-muted has-[:disabled]:hover:text-muted',
+              checked && 'font-control text-ink',
             )}
           >
             <input

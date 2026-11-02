@@ -3,7 +3,7 @@ import { cn } from './cn';
 
 const palettes = {
   /** Actual: teal on pale teal. */
-  run: { stripe: 'var(--color-run)', ground: 'var(--color-run-soft)' },
+  run: { stripe: 'var(--color-run)', ground: 'var(--color-run-tint)' },
   /** Delay, loss, rework: rust. */
   rework: { stripe: 'var(--color-rework)', ground: 'var(--color-rework-tint)' },
   /** Waiting on a human: violet. */

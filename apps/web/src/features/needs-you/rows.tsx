@@ -1,6 +1,6 @@
 // The Needs you list (MASTER.md, "Needs you list"): one row per entry with its factory badge, its type
-// in its colour, its title, its item and station, and its age. The selected row is violet-tinted with
-// a violet edge and says so with aria-current. Rows are links, so the selection lives in the URL.
+// in its colour, its title, its item and station, and its age. The selected row has the orange tint, no edge bar,
+// and says so with aria-current. Rows are links, so the selection lives in the URL.
 import { Link } from '@tanstack/react-router';
 import type { InboxEntry } from '../../api/types';
 import { FactoryBadge } from '../../app/factory-badge';
@@ -105,13 +105,10 @@ function NeedsRow({
         search={{ ...search, entry: entry.id }}
         activeOptions={{ exact: true, includeSearch: true }}
         className={cn(
-          'relative flex items-start gap-3 px-4 py-3 text-ink no-underline hover:bg-panel hover:text-ink',
+          'flex items-start gap-3 px-4 py-3 text-ink no-underline transition-colors duration-(--duration-quick) hover:bg-panel hover:text-ink',
           current && 'bg-you-tint hover:bg-you-tint',
         )}
       >
-        {current ? (
-          <span aria-hidden="true" className="absolute inset-y-2 left-0 w-0.75 rounded-r-chip bg-you" />
-        ) : null}
         <FactoryBadge mark={mark} />
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className={cn('text-meta font-semibold', typeClass)}>{typeLabel[type]}</span>

@@ -305,9 +305,11 @@ describe('the bake-offs tab', () => {
     });
   };
 
-  it('opens the newest bake-off', async () => {
-    const { router } = renderIndex(listOf(done()));
-    await waitFor(() => expect(router.state.location.pathname).toBe(bakeOffUrl('bake-off-1')));
+  it('lists the bake-offs, each linking to its page', async () => {
+    renderIndex(listOf(done()));
+    const list = await screen.findByRole('list', { name: 'Bake-offs' });
+    const link = within(list).getByRole('link', { name: /Which model for frontend-engineer\?/ });
+    expect(link.getAttribute('href')).toBe(bakeOffUrl('bake-off-1'));
   });
 
   it('shows an empty state when the factory has no bake-off', async () => {
@@ -319,6 +321,7 @@ describe('the bake-offs tab', () => {
   it('shows the loading state while the list is read', async () => {
     renderIndex(new Promise(() => {}));
     expect(await screen.findByText('Loading')).toBeTruthy();
+    expect(document.querySelector('[aria-busy="true"]')).toBeTruthy();
   });
 
   it('shows an error with Try again when the list fails', async () => {

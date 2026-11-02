@@ -1,13 +1,14 @@
 // The Definition's two states of a section while the draft loads or fails (the four states of
-// every screen: loading and error here; empty and ready in the views). Loading is the app
-// background with an sr-only "Loading" and aria-busy, never placeholder shapes (web rule).
+// every screen: loading and error here; empty and ready in the views). Loading is a skeleton of
+// the section's rows with an sr-only "Loading" and aria-busy, never a blank page (web rule).
 import { Button } from '../../../ui/button';
+import { Skeleton, SkeletonRows } from '../../../ui/skeleton';
 
 export function DraftLoading() {
   return (
-    <div aria-busy="true" className="min-h-64">
-      <span className="sr-only">Loading</span>
-    </div>
+    <Skeleton ready={false} placeholder={<SkeletonRows rows={6} className="min-h-64" />}>
+      <span />
+    </Skeleton>
   );
 }
 
