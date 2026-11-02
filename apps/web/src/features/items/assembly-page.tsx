@@ -56,6 +56,7 @@ function ProgressCard({ item, assembly, className }: { item: Item; assembly: Ass
       </div>
       <p className="m-0 text-[15px] tabular-nums">{merged}</p>
       <StatStrip
+        narrow
         label="Assembly figures"
         stats={[
           { label: 'Lead time', value: formatDuration(assembly.lead_time_seconds * 1000) },
@@ -181,19 +182,19 @@ function PartsTable({
               <th scope="col" className="py-2 pr-3 font-normal whitespace-nowrap">
                 Part
               </th>
-              <th scope="col" className="py-2 pr-3 font-normal max-md:hidden">
+              <th scope="col" className="py-2 pr-3 font-normal max-xl:hidden">
                 Ref
               </th>
               <th scope="col" className="py-2 pr-3 font-normal">
                 Title
               </th>
-              <th scope="col" className="py-2 pr-3 font-normal whitespace-nowrap max-md:hidden">
+              <th scope="col" className="py-2 pr-3 font-normal whitespace-nowrap max-xl:hidden">
                 Station
               </th>
               <th scope="col" className="py-2 pr-3 font-normal whitespace-nowrap">
                 State
               </th>
-              <th scope="col" className="py-2 pr-3 text-right font-normal whitespace-nowrap max-md:hidden">
+              <th scope="col" className="py-2 pr-3 text-right font-normal whitespace-nowrap max-xl:hidden">
                 Cost
               </th>
               <th scope="col" className="py-2 font-normal whitespace-nowrap max-md:hidden">
@@ -207,8 +208,8 @@ function PartsTable({
                 <td className="py-2.5 pr-3 whitespace-nowrap text-muted tabular-nums">
                   {part.index} of {total}
                 </td>
-                <td className="py-2.5 pr-3 whitespace-nowrap text-muted max-md:hidden">{part.ref}</td>
-                <td className="w-full max-w-0 py-2.5 pr-3">
+                <td className="py-2.5 pr-3 whitespace-nowrap text-muted max-xl:hidden">{part.ref}</td>
+                <td className="w-full max-w-0 min-w-24 py-2.5 pr-3">
                   <Link
                     to="/o/$org/f/$factory/items/$ref"
                     params={link(part)}
@@ -218,9 +219,9 @@ function PartsTable({
                     {part.title}
                   </Link>
                 </td>
-                <td className="py-2.5 pr-3 whitespace-nowrap max-md:hidden">{humanize(part.station)}</td>
+                <td className="py-2.5 pr-3 whitespace-nowrap max-xl:hidden">{humanize(part.station)}</td>
                 <td className="py-2.5 pr-3 whitespace-nowrap">{stateNames[part.state]}</td>
-                <td className="py-2.5 pr-3 text-right whitespace-nowrap tabular-nums max-md:hidden">
+                <td className="py-2.5 pr-3 text-right whitespace-nowrap tabular-nums max-xl:hidden">
                   {formatUsd(part.cost_usd)}
                 </td>
                 <td className="py-2.5 whitespace-nowrap max-md:hidden">

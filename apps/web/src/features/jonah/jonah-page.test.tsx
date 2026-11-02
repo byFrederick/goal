@@ -391,6 +391,9 @@ describe('Look for improvements now', () => {
     const look = screen.getByRole('button', { name: 'Look for improvements now' });
     expect(look.getAttribute('aria-disabled')).toBe('true');
     expect(look.className).toContain('border-rule');
+    expect(look.getAttribute('aria-label')).toBe('Look for improvements now');
+    expect(look.querySelector('.max-md\\:hidden')?.textContent).toBe('Look for improvements now');
+    expect(look.querySelector('.max-md\\:sr-only')).toBeNull();
     expect(screen.queryByText("Reviews start when Jonah's review loop ships")).toBeNull();
     fireEvent.click(look);
     await waitFor(() => expect(queueJonahReview).not.toHaveBeenCalled());
