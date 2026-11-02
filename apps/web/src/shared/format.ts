@@ -27,8 +27,25 @@ export function formatDuration(ms: number): string {
   return h % 24 ? `${d} d ${h % 24} h` : `${d} d`;
 }
 
+/** A compact duration for Teardown, as the canvas draws it: "45 s", "38 m", "3 h 10 m", "2 d 4 h". */
+export function formatDurationCompact(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `${s} s`;
+  const min = Math.floor(s / 60);
+  if (min < 60) return `${min} m`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return min % 60 ? `${h} h ${min % 60} m` : `${h} h`;
+  const d = Math.floor(h / 24);
+  return h % 24 ? `${d} d ${h % 24} h` : `${d} d`;
+}
+
 export function formatUsd(n: number): string {
   return usd.format(n);
+}
+
+/** A cost for Teardown: "$2.40", "$0.00" for none, "<$0.01" for anything above zero under a cent. */
+export function formatUsdCost(n: number): string {
+  return n > 0 && n < 0.01 ? '<$0.01' : usd.format(n);
 }
 
 /** Whole dollars without cents, as budgets are set: "$60", "$60.50". */
