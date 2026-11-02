@@ -26,16 +26,25 @@ export interface Stat {
   note?: string | undefined;
 }
 
+/** Columns from `md` up: one per figure. Below `md` the strip is two columns, so four figures sit two by two. */
+const mdColumns: Record<number, string> = {
+  1: 'md:grid-cols-1',
+  2: 'md:grid-cols-2',
+  3: 'md:grid-cols-3',
+  4: 'md:grid-cols-4',
+};
+
 export function StatStrip({ stats, label, className }: { stats: readonly Stat[]; label: string; className?: string }) {
   const shown = stats.slice(0, maxStats);
   return (
-    <section aria-label={label} className={cn('flex flex-wrap gap-y-4', className)}>
+    <section aria-label={label} className={cn('grid grid-cols-2 gap-y-4', mdColumns[shown.length], className)}>
       {shown.map((stat, i) => (
         <div
           key={stat.label}
           className={cn(
-            'flex min-w-36 flex-1 basis-36 flex-col gap-1 px-5 first:pl-0',
-            i > 0 && 'border-l border-line',
+            'flex min-w-0 flex-col gap-1 pr-5',
+            i % 2 === 1 ? 'border-l border-line pl-5' : i > 0 ? 'pl-0' : '',
+            i > 0 && 'md:border-l md:border-line md:pl-5',
           )}
         >
           <span className="text-meta text-muted">{stat.label}</span>

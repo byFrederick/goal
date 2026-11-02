@@ -26,12 +26,14 @@ export function PageHeader({
 }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
-      <div className="flex min-w-0 flex-col gap-1 md:gap-2">
+      <div className="flex min-w-0 flex-1 flex-col gap-1 md:gap-2">
         {eyebrow}
-        <h1 className="m-0 text-[34px] leading-[1.05] font-normal tracking-display md:text-5xl">{title}</h1>
+        <h1 className="m-0 text-balance break-words text-[34px] leading-[1.05] font-normal tracking-display md:text-5xl">
+          {title}
+        </h1>
         {description}
       </div>
-      {actions}
+      {actions ? <div className="shrink-0">{actions}</div> : null}
     </header>
   );
 }
