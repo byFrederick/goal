@@ -69,6 +69,11 @@ test('the agent page reads as pictured: the prompt, settings and the Not availab
     }
   }
 
+  // Reset to default sits beside the prompt header and Edit prompt.
+  const promptRegion = page.getByRole('region', { name: 'Prompt' });
+  await expect(promptRegion.getByRole('button', { name: 'Reset to default' })).toBeVisible();
+  await expect(promptRegion.getByRole('link', { name: 'Edit prompt' })).toBeVisible();
+
   // Ask Jonah for a fix is not built yet (ADR 0021 runner pending): it stays disabled and sends nothing.
   const askJonah = page.getByRole('button', { name: 'Ask Jonah for a fix' });
   await expect(askJonah).toHaveAttribute('aria-disabled', 'true');
@@ -91,3 +96,17 @@ test('Bake off this agent starts a bake-off and opens the new one', async ({ pag
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
+
+// The pictures for the pull request: this screen at the project's width, in both themes. They are
+// attached to the report, not compared; the design exports are the reference.
+for (const theme of ['light', 'dark'] as const) {
+  test('agent screenshot, ' + theme, async ({ page }, testInfo) => {
+    await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+    await page.goto('/o/acme/f/goal/agents/frontend-engineer');
+    await expect(page.getByRole('heading', { level: 1, name: 'frontend-engineer' })).toBeVisible();
+    await testInfo.attach('agent-' + theme, {
+      body: await page.screenshot({ fullPage: true }),
+      contentType: 'image/png',
+    });
+  });
+}
