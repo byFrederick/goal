@@ -1,4 +1,4 @@
-// Settings of a factory (canvas "Settings"): the title and Save changes, then General, Repository, Runtime,
+// Settings of a factory (canvas "Settings"): the title, with Save changes in the top bar, then General, Repository, Runtime,
 // Budgets and targets, Flow, People with access and the Danger zone, with a list of the sections at the right
 // from 1024 px. The four groups between General and People edit the factory definition through a draft
 // session, the same one the Definition editor uses, and Save changes publishes it. The Danger zone shows the rows the caller may use:
@@ -7,7 +7,10 @@
 // least one row does. The factory is the detail goald answers, so archived and paused stay current after an
 // action; the sidebar's factory list leaves archived factories out.
 import { useQuery } from '@tanstack/react-query';
+import { type ReactNode, useEffect, useState } from 'react';
 import { factoryQuery } from '../../api/queries';
+import type { Factory } from '../../api/types';
+import { TopBarSlot } from '../../app/top-bar';
 import { useFactory } from '../../shared/factory';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { holds } from '../../shared/permissions';
@@ -21,7 +24,7 @@ import { PauseRow } from './pause-row';
 import { PeopleCard } from './people';
 import { RepositorySection } from './repository-section';
 import { RuntimeSection } from './runtime-section';
-import { SaveChanges } from './save-changes';
+import { SaveChangesAction, SaveRefusal, useSaveChanges } from './save-changes';
 
 const sections = [
   { id: 'general', label: 'General' },
@@ -32,6 +35,33 @@ const sections = [
   { id: 'people', label: 'People with access' },
   { id: 'danger', label: 'Danger zone' },
 ];
+
+/** The id of the section in view: the topmost one crossing the upper part of the viewport; the first without IntersectionObserver. */
+function useSectionInView(ids: string[]): string {
+  const [active, setActive] = useState(ids[0] ?? '');
+  const key = ids.join(',');
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return;
+    const visible = new Set<string>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) visible.add(entry.target.id);
+          else visible.delete(entry.target.id);
+        }
+        const first = key.split(',').find((id) => visible.has(id));
+        if (first) setActive(first);
+      },
+      { rootMargin: '0px 0px -60% 0px' },
+    );
+    for (const id of key.split(',')) {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    }
+    return () => observer.disconnect();
+  }, [key]);
+  return active;
+}
 
 export function FactorySettingsPage() {
   const org = useOrg();
@@ -47,48 +77,70 @@ export function FactorySettingsPage() {
 
   return (
     <DraftSessionProvider key={`${factory.id}:${canEdit}`} org={org.id} factory={factory.id} readOnly={!canEdit}>
-      <div className="flex max-w-6xl flex-col gap-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <h1 className="m-0 text-page-title">Settings</h1>
-          {canEdit ? <SaveChanges org={org.id} factory={factory} /> : null}
-        </div>
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_200px] lg:gap-10">
-          <div className="flex min-w-0 flex-col gap-4">
-            <GeneralCard factory={factory} />
-            <RepositorySection />
-            <RuntimeSection />
-            <BudgetsSection />
-            <FlowSection />
-            <PeopleCard org={org} factory={factory} />
-            {showDanger ? (
-              <SectionCard
-                id="danger"
-                title={<span className="text-rework-ink">Danger zone</span>}
-                className="border-rework/40"
-              >
-                {mayPause ? <PauseRow org={org} factory={factory} /> : null}
-                <DangerZone org={org} factory={factory} archives={mayArchive} deletes={mayDelete} />
-              </SectionCard>
-            ) : null}
-          </div>
-          <nav
-            aria-label="On this page"
-            className="hidden lg:sticky lg:top-6 lg:flex lg:flex-col lg:gap-1 lg:self-start lg:border-l lg:border-line lg:pl-4"
-          >
-            {sections
-              .filter((section) => section.id !== 'danger' || showDanger)
-              .map((section) => (
-                <a
-                  key={section.id}
-                  href={`#${section.id}`}
-                  className="py-1 text-secondary text-ink-soft hover:text-ink"
-                >
-                  {section.label}
-                </a>
-              ))}
-          </nav>
-        </div>
-      </div>
+      <SettingsBody org={org} factory={factory} canEdit={canEdit} showDanger={showDanger}>
+        {mayPause ? <PauseRow org={org} factory={factory} /> : null}
+        <DangerZone org={org} factory={factory} archives={mayArchive} deletes={mayDelete} />
+      </SettingsBody>
     </DraftSessionProvider>
+  );
+}
+
+function SettingsBody({
+  org,
+  factory,
+  canEdit,
+  showDanger,
+  children,
+}: {
+  org: ReturnType<typeof useOrg>;
+  factory: Factory;
+  canEdit: boolean;
+  showDanger: boolean;
+  children: ReactNode;
+}) {
+  const save = useSaveChanges(org.id, factory);
+  const visible = sections.filter((section) => section.id !== 'danger' || showDanger);
+  const active = useSectionInView(visible.map((section) => section.id));
+  return (
+    <div className="flex max-w-6xl flex-col gap-4">
+      {/* The top bar renders outside the draft provider, so the action carries the state read here. */}
+      <TopBarSlot actions={canEdit ? <SaveChangesAction state={save} /> : undefined} />
+      <h1 className="m-0 text-page-title">Settings</h1>
+      <SaveRefusal refusal={save.refusal} />
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_200px] lg:gap-10">
+        <div className="flex min-w-0 flex-col gap-4">
+          <GeneralCard factory={factory} />
+          <RepositorySection />
+          <RuntimeSection />
+          <BudgetsSection />
+          <FlowSection />
+          <PeopleCard org={org} factory={factory} />
+          {showDanger ? (
+            <SectionCard
+              id="danger"
+              title={<span className="text-rework-ink">Danger zone</span>}
+              className="border-rework/40"
+            >
+              {children}
+            </SectionCard>
+          ) : null}
+        </div>
+        <nav
+          aria-label="On this page"
+          className="hidden lg:sticky lg:top-6 lg:flex lg:flex-col lg:gap-1 lg:self-start lg:border-l lg:border-line lg:pl-4"
+        >
+          {visible.map((section) => (
+            <a
+              key={section.id}
+              href={`#${section.id}`}
+              aria-current={active === section.id ? 'true' : undefined}
+              className="py-1 text-secondary text-ink-soft hover:text-ink aria-[current=true]:font-medium aria-[current=true]:text-ink"
+            >
+              {section.label}
+            </a>
+          ))}
+        </nav>
+      </div>
+    </div>
   );
 }
