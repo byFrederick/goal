@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { connectionActivityQuery, connectionKindsQuery, connectionsQuery, factoriesQuery, keys } from '../api/queries';
 import type { Org } from '../api/types';
 import { pageTitle } from '../app/route-focus';
+import { ListPageSkeleton } from '../app/route-skeletons';
 import { ConnectionsPage } from '../features/connections/connections-page';
 import { type ConnectionsSearch, connectionsSearch } from '../features/connections/search';
 
@@ -11,6 +12,7 @@ import { type ConnectionsSearch, connectionsSearch } from '../features/connectio
 // it fails the page keeps its header and New connection. The audit entries load only for those
 // who may read the audit log (owners and admins).
 export const Route = createFileRoute('/o/$org/_org/connections/')({
+  pendingComponent: ListPageSkeleton,
   validateSearch: (search: Record<string, unknown>): ConnectionsSearch => connectionsSearch(search),
   loaderDeps: ({ search }) => ({ factory: search.factory }),
   loader: ({ context: { queryClient, org }, deps }) => {

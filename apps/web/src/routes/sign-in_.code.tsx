@@ -1,6 +1,7 @@
 import { createFileRoute, redirect, useLocation } from '@tanstack/react-router';
 import { safeNext } from '../api/session';
 import { pageTitle } from '../app/route-focus';
+import { PendingScreen } from '../app/states';
 import { CodePage } from '../features/sign-in/code-page';
 
 declare module '@tanstack/react-router' {
@@ -13,6 +14,7 @@ declare module '@tanstack/react-router' {
 // The emailed code (spec 3 §10.1). Without the address in the page's state (a link, a new tab),
 // it asks for the email again.
 export const Route = createFileRoute('/sign-in_/code')({
+  pendingComponent: PendingScreen,
   // Always set, undefined when refused: the raw search of the URL would otherwise show through.
   validateSearch: (search: Record<string, unknown>): { next?: string | undefined } => ({ next: safeNext(search.next) }),
   beforeLoad: ({ location, search }) => {
