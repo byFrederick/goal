@@ -73,7 +73,8 @@ const pages: { name: string; open: (page: Page) => Promise<void> }[] = [
     name: 'Definition line',
     open: async (page) => {
       await page.goto('/o/acme/f/software/definition/line');
-      await expect(page.getByRole('main').filter({ visible: true }).first()).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1, name: 'Definition' })).toBeVisible();
+      await expect(page.getByRole('list', { name: 'Stations, in order' })).toBeVisible();
     },
   },
   {
@@ -130,7 +131,7 @@ const pages: { name: string; open: (page: Page) => Promise<void> }[] = [
     name: 'GitHub connection',
     open: async (page) => {
       await page.goto('/o/acme/connections/github');
-      await expect(page.getByRole('main').filter({ visible: true }).first()).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1, name: /github/i })).toBeVisible();
     },
   },
   {
@@ -142,7 +143,7 @@ const pages: { name: string; open: (page: Page) => Promise<void> }[] = [
       });
       expect(created.status()).toBe(201);
       await page.goto('/o/acme/knowledge/handbook');
-      await expect(page.getByRole('main').filter({ visible: true }).first()).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1, name: /Handbook/ })).toBeVisible();
     },
   },
   {
