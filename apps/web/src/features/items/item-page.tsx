@@ -16,7 +16,7 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { NotAvailable } from '../../ui/not-available';
 import { Stepper } from '../../ui/stepper';
-import { ItemTabs } from './item-tabs';
+import { ItemTabs, panelId, tabId } from './item-tabs';
 import { NoteComposer } from './note-composer';
 import { OutputsCard } from './outputs';
 import { QuestionCard } from './question-card';
@@ -211,17 +211,25 @@ export function ItemPage() {
             <Link
               to="/o/$org/f/$factory/items/$ref"
               params={{ ...params, ref: refParam(item.assembly.ref) }}
-              className="no-underline hover:text-run"
+              aria-label={`${item.assembly.title}, part ${item.assembly.part} of ${item.assembly.parts}`}
+              className="min-w-0 max-w-full no-underline hover:text-run"
             >
-              <Chip tone="plain">
-                <LayoutGrid size={12} strokeWidth={1.75} aria-hidden="true" />
-                {item.assembly.title}, part {item.assembly.part} of {item.assembly.parts}
+              <Chip tone="plain" className="max-w-full">
+                <LayoutGrid size={12} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+                <span className="truncate">
+                  {item.assembly.title}, part {item.assembly.part} of {item.assembly.parts}
+                </span>
               </Chip>
             </Link>
           ) : null}
         </div>
         <h1 className="m-0 text-page-title tracking-display text-balance">{item.title}</h1>
-        <Stepper label="Progress through the line" steps={steps} waiting={item.state === 'waiting_human'} />
+        <Stepper
+          label="Progress through the line"
+          steps={steps}
+          waiting={item.state === 'waiting_human'}
+          compact={phone}
+        />
         {phone ? (
           <p className="m-0 text-center text-secondary text-muted">
             {summaryOf({ item, flow: item.flow ?? noFlow, now: Date.now() })}
@@ -229,8 +237,101 @@ export function ItemPage() {
         ) : null}
       </header>
 
-      <div className="flex flex-col gap-3 @[720px]:grid @[720px]:grid-cols-3 @[720px]:items-start @[720px]:gap-4">
-        <div className="contents @[720px]:flex @[720px]:flex-col @[720px]:gap-4">
+      <div className="flex flex-col gap-3 @[1100px]:grid @[1100px]:grid-cols-[minmax(0,1fr)_336px] @[1100px]:items-start @[1100px]:gap-4">
+        <div className="contents @[1100px]:flex @[1100px]:flex-col @[1100px]:gap-4">
+          {item.question ? (
+            <QuestionCard
+              itemKey={key}
+              factory={factory}
+              question={item.question}
+              className="order-2 @[720px]:order-none"
+            />
+          ) : null}
+          {fullTrace ? null : phone ? (
+            <LatestInRun trace={trace} onShowAll={() => setFullTrace(true)} className="order-3 @[720px]:hidden" />
+          ) : (
+            <LatestSteps
+              trace={trace}
+              onShowAll={() => setFullTrace(true)}
+              className={cn(deciding ? 'order-4' : 'order-3', '@[720px]:hidden')}
+            />
+          )}
+          <ItemTabs tab={tab} files={files} checks={checks.length} className="order-5 @[720px]:order-none" />
+          {tab === 'timeline' ? (
+            <section
+              id={panelId}
+              role="tabpanel"
+              aria-labelledby={tabId('timeline')}
+              className={cn(
+                'order-6 flex animate-fade-in flex-col gap-4 @[720px]:order-none',
+                !fullTrace && 'hidden @[720px]:flex',
+              )}
+            >
+              <p aria-live="polite" className="m-0 inline-flex items-center gap-2 text-sm text-run">
+                {run ? (
+                  <>
+                    <span aria-hidden="true" className="size-2 rounded-full bg-run ring-4 ring-run-tint" />
+                    {runRole(run)} working, {run.tools.length} tool calls
+                  </>
+                ) : null}
+              </p>
+              <TraceList entries={trace.entries} itemState={item.state} status={runsStatus} />
+            </section>
+          ) : null}
+          {tab === 'spec' ? (
+            <div
+              id={panelId}
+              role="tabpanel"
+              aria-labelledby={tabId('spec')}
+              className="order-6 flex animate-fade-in flex-col gap-4 @[720px]:order-none"
+            >
+              {item.body ? (
+                <SectionCard title="Request">
+                  <p className="m-0 text-body leading-relaxed whitespace-pre-wrap">{item.body}</p>
+                </SectionCard>
+              ) : null}
+              <SpecCriteria criteria={criteriaOf(item.outputs.spec)} />
+            </div>
+          ) : null}
+          {tab === 'changes' ? (
+            <div
+              id={panelId}
+              role="tabpanel"
+              aria-labelledby={tabId('changes')}
+              className="order-6 flex animate-fade-in flex-col gap-4 @[720px]:order-none"
+            >
+              {Object.keys(item.outputs).length > 0 ? (
+                <OutputsCard factory={factory} outputs={item.outputs} />
+              ) : (
+                <p className="m-0 text-body text-muted">Nothing has been produced yet.</p>
+              )}
+            </div>
+          ) : null}
+          {tab === 'checks' ? (
+            <div
+              id={panelId}
+              role="tabpanel"
+              aria-labelledby={tabId('checks')}
+              className="order-6 animate-fade-in @[720px]:order-none"
+            >
+              <SectionCard title="Checks">
+                {checks.length > 0 ? (
+                  <EventList entries={checks} />
+                ) : (
+                  <p className="m-0 text-body text-muted">No checks have run yet.</p>
+                )}
+              </SectionCard>
+            </div>
+          ) : null}
+          <NoteComposer
+            itemKey={key}
+            factory={factory}
+            state={item.state}
+            fieldRef={noteField}
+            className="hidden @[720px]:flex"
+          />
+        </div>
+        <div className="contents @[1100px]:flex @[1100px]:flex-col @[1100px]:gap-4">
           {/* Only on a phone: the top bar holds these actions from 768 px, so they never show twice. */}
           {phone ? (
             <ItemDecisionsCard
@@ -263,80 +364,6 @@ export function ItemPage() {
             className="order-4 @[720px]:order-none"
           />
         </div>
-        <div className="contents @[720px]:col-span-2 @[720px]:flex @[720px]:flex-col @[720px]:gap-4">
-          {item.question ? (
-            <QuestionCard
-              itemKey={key}
-              factory={factory}
-              question={item.question}
-              className="order-2 @[720px]:order-none"
-            />
-          ) : null}
-          {fullTrace ? null : phone ? (
-            <LatestInRun trace={trace} onShowAll={() => setFullTrace(true)} className="order-3 @[720px]:hidden" />
-          ) : (
-            <LatestSteps
-              trace={trace}
-              onShowAll={() => setFullTrace(true)}
-              className={cn(deciding ? 'order-4' : 'order-3', '@[720px]:hidden')}
-            />
-          )}
-          <ItemTabs tab={tab} files={files} checks={checks.length} className="order-5 @[720px]:order-none" />
-          {tab === 'timeline' ? (
-            <section
-              aria-label="Timeline"
-              className={cn(
-                'order-6 flex animate-fade-in flex-col gap-4 @[720px]:order-none',
-                !fullTrace && 'hidden @[720px]:flex',
-              )}
-            >
-              <p aria-live="polite" className="m-0 inline-flex items-center gap-2 text-sm text-run">
-                {run ? (
-                  <>
-                    <span aria-hidden="true" className="size-2 rounded-full bg-run ring-4 ring-run-tint" />
-                    {runRole(run)} working, {run.tools.length} tool calls
-                  </>
-                ) : null}
-              </p>
-              <TraceList entries={trace.entries} itemState={item.state} status={runsStatus} />
-            </section>
-          ) : null}
-          {tab === 'spec' ? (
-            <div className="order-6 flex animate-fade-in flex-col gap-4 @[720px]:order-none">
-              {item.body ? (
-                <SectionCard title="Request">
-                  <p className="m-0 text-body leading-relaxed whitespace-pre-wrap">{item.body}</p>
-                </SectionCard>
-              ) : null}
-              <SpecCriteria criteria={criteriaOf(item.outputs.spec)} />
-            </div>
-          ) : null}
-          {tab === 'changes' ? (
-            <div className="order-6 flex animate-fade-in flex-col gap-4 @[720px]:order-none">
-              {Object.keys(item.outputs).length > 0 ? (
-                <OutputsCard factory={factory} outputs={item.outputs} />
-              ) : (
-                <p className="m-0 text-body text-muted">Nothing has been produced yet.</p>
-              )}
-            </div>
-          ) : null}
-          {tab === 'checks' ? (
-            <SectionCard title="Checks" className="order-6 animate-fade-in @[720px]:order-none">
-              {checks.length > 0 ? (
-                <EventList entries={checks} />
-              ) : (
-                <p className="m-0 text-body text-muted">No checks have run yet.</p>
-              )}
-            </SectionCard>
-          ) : null}
-          <NoteComposer
-            itemKey={key}
-            factory={factory}
-            state={item.state}
-            fieldRef={noteField}
-            className="hidden @[720px]:flex"
-          />
-        </div>
         <NoteComposer
           itemKey={key}
           factory={factory}
@@ -346,7 +373,7 @@ export function ItemPage() {
           className="order-8 @[720px]:hidden max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(4rem_+_env(safe-area-inset-bottom))] max-md:z-20 max-md:border-t max-md:border-line max-md:bg-card max-md:px-4 max-md:py-2"
         />
         {/* Keeps the end of the page clear of the pinned note field and the tab bar on a phone. */}
-        <div aria-hidden="true" className="h-[calc(6rem_+_env(safe-area-inset-bottom))] @[720px]:hidden" />
+        <div aria-hidden="true" className="order-10 h-[calc(6rem_+_env(safe-area-inset-bottom))] @[720px]:hidden" />
       </div>
     </>
   );

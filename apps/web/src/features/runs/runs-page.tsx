@@ -8,9 +8,10 @@ import { ChevronDown, Download, Search } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { exportOrgRuns, type RunsExportFilter } from '../../api/client';
 import { exportFailure, saveCsv } from '../../api/download';
-import { factoriesQuery, runsQuery } from '../../api/queries';
+import { attentionQuery, factoriesQuery, runsQuery } from '../../api/queries';
 import type { OrgRun, RunStatus } from '../../api/types';
 import { FactoryBadge } from '../../app/factory-badge';
+import { usePhone } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
 import { factoryTitle, refParam } from '../../shared/factory';
 import { formatClock, formatDuration, formatUsdCompact, humanize } from '../../shared/format';
@@ -97,6 +98,8 @@ export function RunsPage() {
   const search = useSearch({ from: '/o/$org/_org/runs' });
   const navigate = useNavigate({ from: '/o/$org/runs' });
   const factories = useQuery(factoriesQuery(org.id));
+  const attention = useQuery(attentionQuery(org.id));
+  const phone = usePhone();
   const [text, setText] = useState(search.q ?? '');
   const searchId = useId();
 
@@ -141,14 +144,14 @@ export function RunsPage() {
     ? factoryTitle(factories.data?.find((f) => f.name === search.factory) ?? { name: search.factory })
     : 'All factories';
 
-  // The top bar's menus. Memoised: the bar stores what it is given, and a new element each render
-  // would set it again each render.
-  const actions = useMemo(
+  // The factory and range menus: the top bar's actions from 768 px, a row in the page on a phone.
+  // Memoised: the bar stores what it is given, and a new element each render would set it again each render.
+  const menus = useMemo(
     () => (
       <>
         <Menu>
           <MenuTrigger asChild>
-            <Button variant="secondary">
+            <Button variant="secondary" className="max-md:h-11 max-md:flex-1 max-md:justify-between">
               {factoryLabel}
               <ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" />
             </Button>
@@ -169,7 +172,7 @@ export function RunsPage() {
         </Menu>
         <Menu>
           <MenuTrigger asChild>
-            <Button variant="secondary">
+            <Button variant="secondary" className="max-md:h-11 max-md:flex-1 max-md:justify-between">
               {rangeKey === 'yesterday' ? 'Yesterday' : 'Today'}
               <ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" />
             </Button>
@@ -184,21 +187,46 @@ export function RunsPage() {
             </MenuRadioGroup>
           </MenuContent>
         </Menu>
-        <Button
-          variant="secondary"
-          aria-busy={exporting || undefined}
-          onClick={() => {
-            if (!exporting) exportRuns.mutate();
-          }}
-          className="aria-busy:cursor-progress"
-        >
-          {exporting ? <Spinner tone="dark" /> : <Download size={14} strokeWidth={1.75} aria-hidden="true" />}
-          Export CSV
-        </Button>
       </>
     ),
+    [factoryLabel, factoryKey, rangeKey, factories.data, setSearch],
+  );
+  const exportButton = useMemo(() => {
+    const busy = exporting || undefined;
+    const run = () => {
+      if (!exporting) exportRuns.mutate();
+    };
+    const icon = exporting ? <Spinner tone="dark" /> : <Download size={14} strokeWidth={1.75} aria-hidden="true" />;
+    return phone ? (
+      <Button
+        variant="secondary"
+        size="icon"
+        aria-label="Export CSV"
+        aria-busy={busy}
+        onClick={run}
+        className="size-11 aria-busy:cursor-progress"
+      >
+        {icon}
+      </Button>
+    ) : (
+      <Button variant="secondary" aria-busy={busy} onClick={run} className="aria-busy:cursor-progress">
+        {icon}
+        Export CSV
+      </Button>
+    );
     // exportRuns.mutate is stable; exporting changes the button's busy state.
-    [factoryLabel, factoryKey, rangeKey, factories.data, setSearch, exporting, exportRuns.mutate],
+  }, [phone, exporting, exportRuns.mutate]);
+  const actions = useMemo(
+    () =>
+      phone ? (
+        exportButton
+      ) : (
+        <>
+          {menus}
+          {exportButton}
+        </>
+      ),
+    [phone, menus, exportButton],
   );
 
   const summary = runs.data?.summary;
@@ -208,7 +236,7 @@ export function RunsPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <TopBarSlot actions={actions} />
+      <TopBarSlot crumb={phone ? 'Runs' : undefined} actions={actions} />
       <div className="flex flex-col gap-1">
         <h1 className="m-0 text-page-title tracking-display">Runs</h1>
         <p className="m-0 text-body text-muted">Every time an agent worked on an item, in all factories.</p>
@@ -219,6 +247,8 @@ export function RunsPage() {
           <Callout tone="rework">{exportFailure(exportRuns.error, 'runs')}</Callout>
         </div>
       ) : null}
+
+      {phone ? <div className="flex gap-2">{menus}</div> : null}
 
       {runs.isPending ? (
         <Skeleton ready={false} placeholder={<RunsPlaceholder />}>
@@ -244,8 +274,13 @@ export function RunsPage() {
                 value: summary?.total ?? 0,
                 note: `${summary?.running ?? 0} running now`,
               },
-              { label: 'Failed', value: summary?.failed ?? 0, note: 'Each one starts over' },
-              { label: 'Waiting on you', value: null, note: 'Not available yet' },
+              { label: 'Failed', value: summary?.failed ?? 0, note: 'Each one starts over', tone: 'rework' },
+              {
+                label: 'Waiting on you',
+                value: attention.data?.waiting_on_you ?? null,
+                note: 'Paused until you answer',
+                tone: 'you',
+              },
               {
                 label: 'Spend today',
                 value: formatUsdCompact(summary?.spend_usd ?? 0),
@@ -265,7 +300,7 @@ export function RunsPage() {
                     <NotAvailable key={o.label} label={o.label}>
                       <button
                         type="button"
-                        className="inline-flex h-8 items-center gap-2 rounded-control border border-rule bg-card px-3 text-secondary font-control text-ink-soft"
+                        className="inline-flex h-11 items-center gap-2 rounded-control border border-rule bg-card px-3 text-secondary font-control text-ink-soft md:h-7"
                       >
                         <span className="size-2 rounded-full bg-you" aria-hidden="true" />
                         {o.label}
@@ -289,8 +324,10 @@ export function RunsPage() {
                     aria-pressed={active}
                     onClick={() => setSearch({ status: o.status })}
                     className={cn(
-                      'inline-flex h-8 items-center gap-2 rounded-control border px-3 text-secondary font-control',
-                      active ? 'border-ink bg-ink text-shell' : 'border-rule bg-card text-ink-soft hover:bg-panel',
+                      'press inline-flex h-11 items-center gap-2 rounded-control border px-3 text-secondary font-control md:h-7',
+                      active
+                        ? 'border-transparent bg-hover text-ink'
+                        : 'border-rule bg-card text-ink-soft hover:bg-hover',
                     )}
                   >
                     {o.tone !== 'plain' ? (
@@ -314,7 +351,7 @@ export function RunsPage() {
                 );
               })}
             </fieldset>
-            <div className="relative ml-auto w-full min-w-0 sm:w-60">
+            <div className="relative w-full min-w-0 md:ml-auto md:w-60">
               <label htmlFor={searchId} className="sr-only">
                 Search runs
               </label>
@@ -331,7 +368,7 @@ export function RunsPage() {
                 placeholder="Item, agent or model"
                 autoComplete="off"
                 onChange={(e) => setText(e.target.value)}
-                className="pl-9"
+                className="pl-9 max-md:h-11"
               />
             </div>
           </div>
@@ -365,7 +402,7 @@ export function RunsPage() {
             </EmptyState>
           ) : (
             <div className="overflow-x-auto rounded-card border border-line">
-              <table className="w-full min-w-max border-collapse text-secondary whitespace-nowrap lg:min-w-0">
+              <table className="w-full border-collapse text-secondary">
                 <thead>
                   <tr className="bg-panel text-left text-muted">
                     <th scope="col" className="px-3 py-2 font-medium">
@@ -380,7 +417,7 @@ export function RunsPage() {
                     <th scope="col" className="px-3 py-2 font-medium">
                       Agent
                     </th>
-                    <th scope="col" className="px-3 py-2 font-medium">
+                    <th scope="col" className="hidden px-3 py-2 font-medium lg:table-cell">
                       Model
                     </th>
                     <th scope="col" className="px-3 py-2 font-medium">
@@ -389,7 +426,7 @@ export function RunsPage() {
                     <th scope="col" className="px-3 py-2 text-right font-medium">
                       Duration
                     </th>
-                    <th scope="col" className="px-3 py-2 text-right font-medium">
+                    <th scope="col" className="hidden px-3 py-2 text-right font-medium xl:table-cell">
                       Turns
                     </th>
                     <th scope="col" className="px-3 py-2 text-right font-medium">
@@ -418,7 +455,7 @@ export function RunsPage() {
                             to="/o/$org/f/$factory/items/$ref"
                             params={{ org: org.slug, factory: run.factory.name, ref: refParam(run.item.ref) }}
                             title={`${numberOf(run.item.ref)} ${run.item.title}`}
-                            className="block font-medium text-ink no-underline hover:text-run-ink lg:truncate"
+                            className="block max-w-57.5 truncate font-medium text-ink no-underline hover:text-run-ink"
                           >
                             {numberOf(run.item.ref)} {run.item.title}
                           </Link>
@@ -435,10 +472,10 @@ export function RunsPage() {
                             {run.agent}
                           </span>
                         </td>
-                        <td className="px-3 py-2 text-muted">{run.model}</td>
+                        <td className="hidden px-3 py-2 text-muted lg:table-cell">{run.model}</td>
                         <td className="px-3 py-2 text-muted">{formatClock(run.started_at)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{durationOf(run, now)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{run.turns}</td>
+                        <td className="hidden px-3 py-2 text-right tabular-nums xl:table-cell">{run.turns}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{formatUsdCompact(run.cost_usd)}</td>
                         <td className="px-3 py-2">
                           <Outcome status={run.status} />
@@ -491,6 +528,12 @@ function RunsPlaceholder() {
         {Array.from({ length: 4 }, (_, i) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: placeholder rows are fixed in number and never reorder
           <span key={i} className="block h-14 rounded-control bg-hover" />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {Array.from({ length: 4 }, (_, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: placeholder rows are fixed in number and never reorder
+          <span key={i} className="block h-11 w-28 rounded-control bg-hover md:h-7" />
         ))}
       </div>
       <div className="flex flex-col gap-2">

@@ -100,7 +100,7 @@ describe('the Archived filter on the Factories home', () => {
     const { router } = renderHome({ can: ['factory:archive'], archivedList: [archived], showArchived: false });
 
     expect(screen.queryByRole('link', { name: 'SRE' })).toBeNull();
-    fireEvent.click(await screen.findByRole('radio', { name: 'Archived' }));
+    fireEvent.click(await screen.findByRole('link', { name: 'Archived factories' }));
 
     await screen.findByRole('link', { name: 'SRE' });
     expect(router.state.location.search).toEqual({ archived: true });

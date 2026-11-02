@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -194,6 +194,36 @@ describe('the item page header', () => {
   });
 });
 
+describe('the item layout', () => {
+  function stubWidth(phone: boolean) {
+    window.matchMedia = (query: string) =>
+      ({
+        matches: phone && query === '(max-width: 767px)',
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }) as unknown as MediaQueryList;
+  }
+
+  it('puts the timeline before the Details card, with the tabs as tabs', async () => {
+    stubWidth(false);
+    renderPage(item());
+
+    const panel = await screen.findByRole('tabpanel', { name: 'Timeline' });
+    const details = screen.getByRole('heading', { name: 'Details' });
+    expect(panel.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs.find((t) => t.getAttribute('aria-selected') === 'true')?.textContent).toBe('Timeline');
+  });
+
+  it('shows the loading skeleton as busy, with the same column order', async () => {
+    const { ItemSkeleton } = await import('../../app/route-skeletons');
+    const { container } = render(<ItemSkeleton />);
+    expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(screen.getByText('Loading')).toBeTruthy();
+  });
+});
+
 describe('the item decisions at each width', () => {
   // The top bar holds the decisions from 768 px; a phone has them in a card under the title. Never both.
   function stubWidth(phone: boolean) {
@@ -260,7 +290,7 @@ describe('the item decisions at each width', () => {
     const latest = await screen.findByRole('heading', { name: 'Latest in this run' });
     const section = latest.closest('section') as HTMLElement;
     fireEvent.click(within(section).getByRole('button', { name: /^All \d+ events$/ }));
-    expect(await screen.findByRole('region', { name: 'Timeline' })).toBeTruthy();
+    expect(await screen.findByRole('tabpanel', { name: 'Timeline' })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Latest in this run' })).toBeNull();
   });
 

@@ -1,10 +1,11 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { useSearch } from '@tanstack/react-router';
-import { boardQuery, constraintQuery, metricsQuery, overviewQuery } from '../../api/queries';
+import { boardQuery, constraintQuery, itemsQuery, metricsQuery, overviewQuery } from '../../api/queries';
+import { TopBarSlot } from '../../app/top-bar';
 import { useFactory } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
 import { ActivityCard } from './activity-card';
-import { FloorHeader, floorRoute } from './floor-header';
+import { FloorHeader, FloorTopBarActions, floorRoute } from './floor-header';
 import { FlowStats } from './flow-stats';
 import { LineNow } from './line-now';
 import { NeedsYouCard } from './needs-you-card';
@@ -38,32 +39,37 @@ export function FloorPage() {
 
   return (
     <div className="flex flex-col gap-4 md:gap-5">
-      <FloorHeader factory={factory} board={board} metrics={metrics} />
+      <TopBarSlot actions={<FloorTopBarActions factory={factory} board={board} metrics={metrics} />} />
+      <FloorHeader board={board} metrics={metrics} />
 
-      <div className="grid gap-4 md:gap-5 xl:grid-cols-3">
-        <div className="flex min-w-0 flex-col gap-4 md:gap-5 xl:col-span-2">
-          <LineNow
-            factory={factory}
-            board={board}
-            constraint={constraint.constraint ?? board.constraint}
-            doneThisWeek={doneThisWeek}
-          />
-          <FlowStats metrics={metrics} />
+      <LineNow board={board} constraint={constraint.constraint ?? board.constraint} doneThisWeek={doneThisWeek} />
+      <FlowStats metrics={metrics} />
+      <NewFactoryRow />
 
-          <div className={grid}>
-            <NeedsYouCard />
-            <WaitsCard range={range} leadTimeP85={leadTimeP85} />
-            <WeeklyCard range={range} />
-            <ActivityCard />
-          </div>
-        </div>
-
-        {/* The setup checklist and how work gets in: beside the figures from xl, below them under it (ready.jpg). */}
-        <aside className="flex min-w-0 flex-col gap-4 md:gap-5">
-          <SetupCard />
-          <WaysInCard />
-        </aside>
+      <div className={grid}>
+        <NeedsYouCard />
+        <WaitsCard range={range} leadTimeP85={leadTimeP85} />
+        <WeeklyCard range={range} />
+        <ActivityCard />
       </div>
+    </div>
+  );
+}
+
+/**
+ * The setup checklist and how work gets in, while the factory is new: until its first item merges (the
+ * "First item merged" row of setup-progress.ts). A factory with a merged item never shows them. Nothing
+ * renders until the query answers, so the row never pushes the cards down after they show.
+ */
+function NewFactoryRow() {
+  const org = useOrg();
+  const factory = useFactory();
+  const finished = useQuery(itemsQuery(org.id, factory.id, { state: 'done', limit: 1 }));
+  if (!finished.data || finished.data.items.length > 0) return null;
+  return (
+    <div className={grid}>
+      <SetupCard />
+      <WaysInCard />
     </div>
   );
 }

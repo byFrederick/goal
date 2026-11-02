@@ -14,6 +14,14 @@ const palettes = {
 
 export type HatchTone = keyof typeof palettes;
 
+/** The solid fill of each tone, for Meter's `solid` variant. */
+const solidFill: Record<HatchTone, string> = {
+  run: 'bg-run',
+  rework: 'bg-rework',
+  you: 'bg-you',
+  target: 'bg-muted',
+};
+
 /**
  * Fills its box with the design system's 135° hatch (MASTER.md data marks), drawn as an SVG
  * pattern so no gradient is involved. Decorative: the caller labels the value in text.
@@ -45,6 +53,7 @@ export function Meter({
   target,
   tone = 'run',
   label,
+  variant = 'hatch',
   className,
 }: {
   value: number;
@@ -52,6 +61,8 @@ export function Meter({
   target?: number;
   tone?: HatchTone;
   label?: string;
+  /** `solid` is a plain bar in the tone's colour whose width animates (MOTION.md, A meter fills); the default is hatched. */
+  variant?: 'hatch' | 'solid';
   className?: string;
 }) {
   const pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
@@ -66,7 +77,15 @@ export function Meter({
     : { 'aria-hidden': true };
   return (
     <div {...meter} className={cn('relative h-2.5 rounded-[3px] bg-card', className)}>
-      {pct > 0 ? (
+      {variant === 'solid' ? (
+        <div
+          className={cn(
+            'h-full w-full origin-left rounded-chip transition-transform duration-(--duration-fast) ease-(--ease-out) motion-reduce:transition-none',
+            solidFill[tone],
+          )}
+          style={{ transform: `scaleX(${pct / 100})` }}
+        />
+      ) : pct > 0 ? (
         <div className="h-full overflow-hidden rounded-[3px]" style={{ width: `${pct}%` }}>
           <Hatch tone={tone} />
         </div>

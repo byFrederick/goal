@@ -3,6 +3,7 @@
 // cards. The drum's column lists its In progress cards first and the buffer's Ready cards below them, dimmed;
 // every column's In progress group ends in "Show N more" past a few cards. The columns have no fixed heights:
 // a body starts directly under its header.
+import { Zap } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import type { Board, BoardStation, ItemCard, PartsSummary } from '../../api/types';
 import { formatDuration, humanize, plural } from '../../shared/format';
@@ -18,14 +19,22 @@ function ColumnCard({
   onMove,
   draggable,
   assemblyParts,
+  arrived,
 }: {
   item: ItemCard;
   onMove: ((item: ItemCard) => void) | undefined;
   draggable: boolean;
   assemblyParts: PartsSummary | undefined;
+  arrived: boolean;
 }) {
   const card = (drag: CardDrag | undefined) => (
-    <BoardCard item={item} onMove={onMove && (() => onMove(item))} drag={drag} assemblyParts={assemblyParts} />
+    <BoardCard
+      item={item}
+      onMove={onMove && (() => onMove(item))}
+      drag={drag}
+      assemblyParts={assemblyParts}
+      arrived={arrived}
+    />
   );
   return draggable ? <DraggableCard item={item}>{card}</DraggableCard> : card(undefined);
 }
@@ -92,7 +101,7 @@ function ColumnHeader({
         <h2 className="m-0 min-w-0 truncate text-heading font-semibold">{humanize(station.id)}</h2>
         {constraint ? (
           <span className="inline-flex items-center gap-2 text-meta font-medium text-ink-soft">
-            <i aria-hidden="true" className="block size-1.5 rounded-chip bg-amber" />
+            <i aria-hidden="true" className="block size-1.5 rounded-none bg-amber" />
             Constraint
           </span>
         ) : null}
@@ -129,6 +138,10 @@ export interface StationColumnProps {
   draggable: boolean;
   /** Items the line finished this week: the Done column's "this week" count. */
   finishedThisWeek: number;
+  /** The expedite row's caption ("Expedite, 1 of 1 in use, jumps every queue"); the desktop gives it to one column only. */
+  expediteCaption?: string | undefined;
+  /** A test for the cards that arrived after the board first had cards. */
+  arrived?: ((id: string) => boolean) | undefined;
 }
 
 /** One desktop column: its header, its expedite zone, and its standard zone (the drum's split into buffer and work). */
@@ -140,6 +153,8 @@ export function StationColumn({
   onMove,
   draggable,
   finishedThisWeek,
+  expediteCaption,
+  arrived,
 }: StationColumnProps) {
   const constraint = station.id === board.constraint;
   const partsOf = (id: string | undefined) => board.assemblies.find((a) => a.id === id)?.parts ?? undefined;
@@ -150,6 +165,7 @@ export function StationColumn({
       onMove={onMove}
       draggable={draggable}
       assemblyParts={partsOf(item.assembly?.id)}
+      arrived={arrived?.(item.id) ?? false}
     />
   );
 
@@ -166,7 +182,16 @@ export function StationColumn({
     <DropColumn station={station} className="flex min-w-0 flex-col gap-2">
       <ColumnHeader station={station} constraint={constraint} decides={decides} finishedThisWeek={finishedThisWeek} />
       {showExpedite ? (
-        <div className={cn('flex min-h-10 flex-col gap-2 rounded-cell p-2', expedite.length > 0 && 'bg-amber-tint')}>
+        <div
+          data-zone="expedite"
+          className="flex min-h-10 flex-col gap-2 rounded-cell bg-amber-tint p-2 transition-colors duration-(--duration-quick)"
+        >
+          {expediteCaption ? (
+            <p className="m-0 flex items-start gap-2 px-1 text-meta font-medium text-amber-ink">
+              <Zap size={12} strokeWidth={1.75} aria-hidden="true" className="mt-1 shrink-0" />
+              {expediteCaption}
+            </p>
+          ) : null}
           {expedite.map(card)}
         </div>
       ) : null}
