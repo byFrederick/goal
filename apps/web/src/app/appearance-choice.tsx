@@ -16,9 +16,10 @@ const options: readonly SegmentedOption<ThemeChoice>[] = [
 
 /** The account page's cards: the label is the picture's, and each swatch is a light and a dark half. */
 const cards: readonly { value: ThemeChoice; label: string; halves: [string, string] }[] = [
-  { value: 'system', label: 'Match device', halves: ['bg-hover', 'bg-panel'] },
-  { value: 'light', label: 'Light', halves: ['bg-hover', 'bg-white'] },
-  { value: 'dark', label: 'Dark', halves: ['bg-panel', 'bg-hover'] },
+  // Fixed swatch tokens (styles.css): each swatch depicts its theme, whichever theme is on.
+  { value: 'system', label: 'Match device', halves: ['bg-swatch-light', 'bg-swatch-dark'] },
+  { value: 'light', label: 'Light', halves: ['bg-swatch-light-panel flex-1', 'bg-swatch-light flex-2'] },
+  { value: 'dark', label: 'Dark', halves: ['bg-swatch-dark-panel flex-1', 'bg-swatch-dark flex-2'] },
 ];
 
 export function AppearanceChoice({ layout = 'inline' }: { layout?: 'inline' | 'cards' }) {

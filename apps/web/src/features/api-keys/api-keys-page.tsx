@@ -103,7 +103,7 @@ export function ApiKeysPage() {
                 </Button>
               </div>
             ) : live.length === 0 && revoked.length === 0 ? (
-              <EmptyState icon={<SquareTerminal size={20} strokeWidth={1.5} />} title="No keys yet" actions={newKey}>
+              <EmptyState icon={<SquareTerminal size={20} strokeWidth={1.5} />} title="No keys yet">
                 Create one for CI or a script.
               </EmptyState>
             ) : (
@@ -234,12 +234,12 @@ export function ApiKeysPage() {
               </h2>
               <p className="m-0 text-secondary text-ink-soft">People sign in as themselves instead of using a key.</p>
               <pre className="m-0 overflow-x-auto rounded-cell bg-panel p-3 font-mono text-secondary leading-relaxed whitespace-pre text-ink-soft">
-                <span aria-hidden="true" className="text-run">
+                <span aria-hidden="true" className="text-muted">
                   ${' '}
                 </span>
                 goal login
                 {'\n'}
-                <span aria-hidden="true" className="text-run">
+                <span aria-hidden="true" className="text-muted">
                   ${' '}
                 </span>
                 goal item create --factory {sample}

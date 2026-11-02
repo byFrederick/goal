@@ -24,6 +24,9 @@ test('the keys are listed with what each can do, and the page fits the screen', 
   await page.goto('/o/acme/api-keys');
   await expect(heading(page)).toBeVisible();
   await expect(page).toHaveTitle('API keys · Acme · Goal');
+  const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
+  await expect(crumbs.getByRole('link', { name: 'Acme' })).toBeVisible();
+  await expect(crumbs.getByText('API keys')).toHaveAttribute('aria-current', 'page');
   await expect(keysHeading(page)).toBeVisible();
 
   const ci = keyEntry(page, 'ci-items');
@@ -136,6 +139,7 @@ test('an organization without keys says so', async ({ page }) => {
   await page.goto('/o/goal/api-keys');
   await expect(page.getByRole('heading', { name: 'No keys yet' })).toBeVisible();
   await expect(page.getByText('Create one for CI or a script.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'New key' })).toHaveCount(1);
   await expectAccessible(page);
 });
 
