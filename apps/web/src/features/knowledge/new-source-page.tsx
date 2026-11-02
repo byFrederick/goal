@@ -19,7 +19,7 @@ import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { cn } from '../../ui/cn';
 import { Field, Input, NativeSelect } from '../../ui/field';
-import { descriptionClass, PageHeader } from '../../ui/page-header';
+import { descriptionClass, PageHeader, sectionHeadingClass } from '../../ui/page-header';
 import { type Config, ConfigFields, configErrors, readerOf, trimmed } from './config-fields';
 import { DropZone, UploadRows, useUploader } from './upload';
 import { nameFor, refusalText, sourceName, syncChoices } from './words';
@@ -74,7 +74,7 @@ export function NewSourcePage() {
         <div className="flex max-w-[980px] flex-col gap-4">
           <section aria-labelledby={id} className={card}>
             <fieldset className="m-0 min-w-0 border-0 p-0">
-              <legend id={id} className="mb-3 p-0 text-lg font-medium">
+              <legend id={id} className={cn(sectionHeadingClass, 'mb-3 p-0')}>
                 Kind
               </legend>
               <div className="grid gap-3 @[720px]:grid-cols-3">
@@ -204,7 +204,7 @@ function SourceForm({ kind }: { kind: KnowledgeSourceKind }) {
   return (
     <form onSubmit={submit} noValidate aria-labelledby={id} className="flex flex-col gap-4">
       <section className={card}>
-        <h2 id={id} className="m-0 text-lg font-medium">
+        <h2 id={id} className={sectionHeadingClass}>
           {heading}
         </h2>
         {kind !== 'upload' && usable.length === 0 ? (

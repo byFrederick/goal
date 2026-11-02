@@ -10,6 +10,7 @@ import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { cn } from '../../ui/cn';
+import { sectionHeadingClass } from '../../ui/page-header';
 import { refusalText } from './words';
 
 /** One tool of the connection and its mode, as the contract names them. */
@@ -43,7 +44,7 @@ export function ToolsCard({ connection: c, manage }: { connection: Connection; m
       aria-labelledby={`${id}-tools`}
       className="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-card p-4 md:p-5"
     >
-      <h2 id={`${id}-tools`} className="m-0 text-lg font-medium">
+      <h2 id={`${id}-tools`} className={sectionHeadingClass}>
         Tools agents may use <span className="text-secondary font-medium text-muted">{c.tools.length} found</span>
       </h2>
       {save.error ? (
