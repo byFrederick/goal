@@ -304,13 +304,17 @@
    with one iteration. Opacity fades and colour changes stay, at --duration-quick, so every state
    change still happens. The running dot and the spinners stop altogether. */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  /* Only elements that already transition keep their state change, as a quick fade: the movement goes. */
+  [class*="transition"] {
     transition-property:
       opacity, color, background-color, border-color, outline-color, fill, stroke, text-decoration-color;
     transition-duration: var(--duration-quick);
     transition-delay: 0s;
+  }
+
+  *,
+  *::before,
+  *::after {
     animation-duration: var(--duration-quick);
     animation-iteration-count: 1;
     scroll-behavior: auto;

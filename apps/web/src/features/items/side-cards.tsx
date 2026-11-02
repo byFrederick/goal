@@ -177,7 +177,7 @@ function CostBar({
       {segments.map((s, i) => (
         <span
           key={s.id}
-          className={cn('h-full', i % 2 === 0 ? 'bg-run' : 'bg-run')}
+          className={cn('h-full', i % 2 === 0 ? 'bg-run' : 'bg-run-ink')}
           style={{ width: `${(s.cost / cap) * 100}%` }}
         />
       ))}

@@ -134,7 +134,7 @@ function LastWeek({ days, items }: { days: readonly number[]; items: number }) {
             // The seven days are a fixed window: their position is their identity.
             // biome-ignore lint/suspicious/noArrayIndexKey: a day's position is its identity
             key={i}
-            className={cn('w-1.5', i === days.length - 1 ? 'bg-run' : 'bg-run')}
+            className={cn('w-1.5', i === days.length - 1 ? 'bg-run' : 'bg-rule')}
             style={{ height: `${(n / top) * 100}%` }}
           />
         ))}
