@@ -8,6 +8,7 @@ import { factoriesQuery } from '../api/queries';
 import type { Factory } from '../api/types';
 import { Button } from '../ui/button';
 import { Dialog, DialogClose, DialogContent, DialogTrigger } from '../ui/dialog';
+import { Select } from '../ui/select';
 import { findFactory, refParam } from './factory';
 import { humanize } from './format';
 import { factoryWorkInvalidations } from './invalidation';
@@ -264,18 +265,12 @@ function Composer({ open, onOpenChange, factory, picker, trigger, initialTitle }
               <label htmlFor={`${id}-type`} className="text-sm text-muted">
                 Work type
               </label>
-              <select
+              <Select
                 id={`${id}-type`}
                 value={workType}
-                onChange={(e) => setType(e.target.value)}
-                className={`${field} h-11`}
-              >
-                {workTypes.map((t) => (
-                  <option key={t} value={t}>
-                    {humanize(t)}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setType}
+                options={workTypes.map((t) => ({ value: t, label: humanize(t) }))}
+              />
             </div>
           ) : null}
           <div className="flex flex-col gap-1">
@@ -334,29 +329,24 @@ function FactoryField({ id, picker, missing }: { id: string; picker: Picker; mis
       <label htmlFor={`${id}-factory`} className="text-sm text-muted">
         Factory
       </label>
-      <select
+      <Select
         id={`${id}-factory`}
         value={loading ? '' : picker.value}
-        onChange={(e) => picker.onChange(e.target.value)}
+        onValueChange={picker.onChange}
         disabled={loading}
         aria-busy={loading}
         aria-invalid={missing}
         aria-describedby={missing ? `${id}-factory-error` : undefined}
-        className={`${field} h-11`}
-      >
-        {loading ? (
-          <option value="">Loading…</option>
-        ) : (
-          <>
-            <option value="">Choose a factory</option>
-            {picker.factories.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name}
-              </option>
-            ))}
-          </>
-        )}
-      </select>
+        placeholder={loading ? 'Loading…' : undefined}
+        options={
+          loading
+            ? []
+            : [
+                { value: '', label: 'Choose a factory' },
+                ...picker.factories.map((f) => ({ value: f.id, label: f.name })),
+              ]
+        }
+      />
       {missing ? (
         <p id={`${id}-factory-error`} className="m-0 text-sm text-rework">
           Choose a factory for the item.

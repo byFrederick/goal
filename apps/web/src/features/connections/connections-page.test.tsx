@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { connectionKindsQuery } from '../../api/queries';
 import type { Connection, ConnectionKind, OrgSummary } from '../../api/types';
 import { connectionFixture, kindFixture, renderConnectionsRoute } from '../../test/connections-route';
+import { choose } from '../../test/select';
 import { ConnectionsPage } from './connections-page';
 
 // The list reads its connections and kinds from the API; a test sets what they hold, or makes them
@@ -155,7 +156,7 @@ describe('the Connections list', () => {
   it('filters by the kind chosen in the URL and says how many match', async () => {
     const { router } = renderList();
     await screen.findByRole('heading', { level: 2, name: '5 connections' });
-    fireEvent.change(screen.getByRole('combobox', { name: 'Kind' }), { target: { value: 'datadog' } });
+    await choose('Kind', 'Datadog');
     await waitFor(() => expect(router.state.location.search).toMatchObject({ kind: 'datadog' }));
     expect(await screen.findByRole('heading', { level: 2, name: '2 of 5 connections' })).toBeTruthy();
   });

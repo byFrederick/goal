@@ -14,8 +14,8 @@ import { factoryMark } from '../../shared/marks';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Checkbox } from '../../ui/checkbox';
-import { cn } from '../../ui/cn';
 import { Field, Input } from '../../ui/field';
+import { Select } from '../../ui/select';
 import { agentNamesOf } from '../agents/agents-line';
 import { SecretInput } from '../connections/secret-input';
 import { refusalText } from '../connections/words';
@@ -23,10 +23,7 @@ import { nameProblem, remindOptions, similarName, typeLabels } from './words';
 
 const types = Object.keys(typeLabels) as CredentialType[];
 
-const selectClass =
-  'h-11 w-full min-w-0 rounded-control border border-rule bg-card px-3 text-base text-ink md:h-10 md:text-body';
-
-/** A native select with its label and help line wired for screen readers; `Field` wires only its own inputs. */
+/** A select with its label and help line wired for screen readers; `Field` wires only its own inputs. */
 function SelectField({
   label,
   help,
@@ -159,19 +156,13 @@ export function CreateCredentialCard({ org, slug, factories }: { org: string; sl
         </Field>
         <SelectField label="Type" help="The type decides how runs receive it">
           {(control) => (
-            <select
+            <Select
               id={control.id}
               aria-describedby={control.describedBy}
               value={type}
-              onChange={(e) => setType(e.target.value as CredentialType)}
-              className={selectClass}
-            >
-              {types.map((t) => (
-                <option key={t} value={t}>
-                  {typeLabels[t]}
-                </option>
-              ))}
-            </select>
+              onValueChange={(next) => setType(next as CredentialType)}
+              options={types.map((t) => ({ value: t, label: typeLabels[t] }))}
+            />
           )}
         </SelectField>
       </div>
@@ -285,20 +276,14 @@ export function CreateCredentialCard({ org, slug, factories }: { org: string; sl
         </Field>
         <SelectField label="Remind me to rotate it">
           {(control) => (
-            <select
+            <Select
               id={control.id}
               aria-describedby={control.describedBy}
-              value={remind}
+              value={String(remind)}
               disabled={!expires}
-              onChange={(e) => setRemind(Number(e.target.value))}
-              className={cn(selectClass, !expires && 'opacity-60')}
-            >
-              {remindOptions.map((o) => (
-                <option key={o.days} value={o.days}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+              onValueChange={(next) => setRemind(Number(next))}
+              options={remindOptions.map((o) => ({ value: String(o.days), label: o.label }))}
+            />
           )}
         </SelectField>
       </div>

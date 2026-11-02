@@ -420,8 +420,8 @@ describe('the sidebar', () => {
       await nav();
       fireEvent.keyDown(document.body, { key: 'c' });
 
-      const picker = (await screen.findByRole('combobox', { name: 'Factory' })) as HTMLSelectElement;
-      expect(picker.value).toBe('goal-id');
+      const picker = await screen.findByRole('combobox', { name: 'Factory' });
+      expect(picker.textContent).toBe('goal');
     });
 
     it('starts the picker empty when C is pressed elsewhere', async () => {
@@ -429,8 +429,8 @@ describe('the sidebar', () => {
       await nav();
       fireEvent.keyDown(document.body, { key: 'c' });
 
-      const picker = (await screen.findByRole('combobox', { name: 'Factory' })) as HTMLSelectElement;
-      expect(picker.value).toBe('');
+      const picker = await screen.findByRole('combobox', { name: 'Factory' });
+      expect(picker.textContent).toBe('Choose a factory');
     });
 
     it('opens the composer with C', async () => {

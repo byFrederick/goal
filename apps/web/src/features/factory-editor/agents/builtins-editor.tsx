@@ -144,7 +144,7 @@ function CustomRules({ agent, index }: { agent: ModelAgent; index: number }) {
           Open in YAML
         </SearchLink>
         {viewOnly ? null : (
-          <Button variant="white" size="sm" className="h-11 md:h-8" onClick={() => setConfirming(true)}>
+          <Button variant="white" size="sm" onClick={() => setConfirming(true)}>
             Switch to simple settings…
           </Button>
         )}
@@ -212,11 +212,9 @@ function CommandsDialog({
           </Field>
           <div className="flex flex-wrap justify-end gap-2">
             <DialogClose asChild>
-              <Button variant="secondary" size="lg" className="md:h-10 md:text-sm">
-                Cancel
-              </Button>
+              <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" size="lg" className="md:h-10 md:text-sm">
+            <Button type="submit" variant="primary">
               Save commands
             </Button>
           </div>

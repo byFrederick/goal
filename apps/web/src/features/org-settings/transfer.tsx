@@ -156,17 +156,9 @@ function TransferDialog({
           ) : null}
           <div className="flex flex-wrap justify-end gap-2">
             <DialogClose asChild>
-              <Button variant="secondary" size="lg" className="md:h-10 md:text-sm">
-                Cancel
-              </Button>
+              <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button
-              type="submit"
-              variant="rework"
-              size="lg"
-              className="md:h-10 md:text-sm"
-              disabled={typed !== name || transfer.isPending}
-            >
+            <Button type="submit" variant="rework" disabled={typed !== name || transfer.isPending}>
               {transfer.isPending ? 'Transferring…' : 'Transfer ownership'}
             </Button>
           </div>

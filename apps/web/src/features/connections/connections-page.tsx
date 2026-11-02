@@ -20,8 +20,9 @@ import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { EmptyState } from '../../ui/empty-state';
-import { Field, Input, NativeSelect } from '../../ui/field';
+import { Field, Input } from '../../ui/field';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../ui/menu';
+import { Select } from '../../ui/select';
 import { Skeleton } from '../../ui/skeleton';
 import { Monogram, Status } from './parts';
 import { ReplaceSecretDialog } from './replace-secret-dialog';
@@ -99,7 +100,7 @@ export function ConnectionsPage() {
   };
 
   const addConnection = manage ? (
-    <Button asChild variant="primary" className="h-11 md:h-8.5">
+    <Button asChild variant="primary">
       <Link to="/o/$org/connections/new" params={{ org: org.slug }}>
         <span aria-hidden="true">+</span> Add connection
       </Link>
@@ -133,7 +134,7 @@ export function ConnectionsPage() {
             </span>
           </p>
           {manage ? (
-            <Button variant="white" className="h-11 md:h-8.5 shrink-0" onClick={() => replaceSecret(c)}>
+            <Button variant="white" className="shrink-0" onClick={() => replaceSecret(c)}>
               Replace secret…
             </Button>
           ) : null}
@@ -217,31 +218,25 @@ export function ConnectionsPage() {
                   </span>
                 </Field>
                 <Field label={<span className="sr-only">Kind</span>}>
-                  <NativeSelect
+                  <Select
                     value={search.kind ?? ''}
-                    onChange={(e) => setSearch({ kind: e.target.value || undefined })}
-                  >
-                    <option value="">All kinds</option>
-                    {kindChoices.map((k) => (
-                      <option key={k.name} value={k.name}>
-                        {k.title}
-                      </option>
-                    ))}
-                  </NativeSelect>
+                    onValueChange={(kind) => setSearch({ kind: kind || undefined })}
+                    options={[
+                      { value: '', label: 'All kinds' },
+                      ...kindChoices.map((k) => ({ value: k.name, label: k.title })),
+                    ]}
+                  />
                 </Field>
                 <Field label={<span className="sr-only">Factory</span>}>
-                  <NativeSelect
+                  <Select
                     value={search.factory ?? ''}
-                    onChange={(e) => setSearch({ factory: e.target.value || undefined })}
-                  >
-                    <option value="">All factories</option>
-                    {missing ? <option value={search.factory}>{search.factory}</option> : null}
-                    {factories.map((f) => (
-                      <option key={f.id} value={f.name}>
-                        {f.name}
-                      </option>
-                    ))}
-                  </NativeSelect>
+                    onValueChange={(factory) => setSearch({ factory: factory || undefined })}
+                    options={[
+                      { value: '', label: 'All factories' },
+                      ...(missing && search.factory ? [{ value: search.factory, label: search.factory }] : []),
+                      ...factories.map((f) => ({ value: f.name, label: f.name })),
+                    ]}
+                  />
                 </Field>
               </div>
             </div>

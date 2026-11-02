@@ -32,7 +32,7 @@ export function ArchivedBanner() {
         {mayRestore ? (
           <Button
             variant="raised"
-            className="h-11 border border-line shadow-none md:h-10"
+            className="border border-line shadow-none"
             disabled={restore.isPending}
             onClick={() => restore.mutate()}
           >

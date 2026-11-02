@@ -49,8 +49,10 @@ test('the line is accessible and fits the screen', async ({ page }) => {
   await expect(row(page, 'Build')).toHaveAccessibleName('4. Build, agent station');
   await expect(row(page, 'Build').getByRole('radio', { name: 'Agent' })).toBeChecked();
   await expect(row(page, 'Build').getByText('Constraint', { exact: false })).toBeVisible();
-  await expect(row(page, 'Build').getByRole('combobox', { name: 'Who works at Build' })).toHaveValue('__route');
-  await expect(row(page, 'Review').getByRole('combobox', { name: 'If rejected, send back to' })).toHaveValue('build');
+  await expect(row(page, 'Build').getByRole('combobox', { name: 'Who works at Build' })).toContainText(
+    'routed by lane',
+  );
+  await expect(row(page, 'Review').getByRole('combobox', { name: 'If rejected, send back to' })).toHaveText('Build');
   await expect(row(page, 'Merge').getByRole('switch', { name: 'Merge step at Merge' })).toHaveAttribute(
     'aria-checked',
     'true',

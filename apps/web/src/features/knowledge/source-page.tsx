@@ -92,11 +92,7 @@ export function SourcePage() {
             </p>
           </div>
         }
-        actions={
-          manage && source.kind === 'synced' ? (
-            <SyncNowButton source={source} sync={sync} className="h-11 md:h-10" />
-          ) : null
-        }
+        actions={manage && source.kind === 'synced' ? <SyncNowButton source={source} sync={sync} /> : null}
       />
 
       {created ? (
@@ -165,7 +161,7 @@ function UploadCard({ source }: { source: KnowledgeSource }) {
           Upload
         </h2>
         {over && !uploader.busy ? (
-          <Button variant="ghost" className="h-11 md:h-8" onClick={uploader.clear}>
+          <Button variant="ghost" onClick={uploader.clear}>
             Clear the list
           </Button>
         ) : null}
@@ -268,7 +264,7 @@ function SettingsCard({ source: s, manage }: { source: KnowledgeSource; manage: 
       ) : null}
       {manage ? (
         <div className="flex justify-end border-t border-line pt-4">
-          <Button type="submit" variant="primary" className="h-11 md:h-10" disabled={!dirty || save.isPending}>
+          <Button type="submit" variant="primary" disabled={!dirty || save.isPending}>
             {save.isPending ? 'Saving…' : 'Save changes'}
           </Button>
         </div>
@@ -356,7 +352,6 @@ function DeleteCard({ source: s }: { source: KnowledgeSource }) {
       </div>
       <Button
         variant="rework"
-        className="h-11 md:h-10"
         aria-disabled={users.length > 0 || undefined}
         aria-describedby={reasonId}
         onClick={() => {
