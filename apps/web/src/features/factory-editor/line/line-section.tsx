@@ -16,17 +16,17 @@ import { LinePreview } from './line-preview';
 import { PresetControl } from './model-preset-control';
 import { ModelsBox } from './models-box';
 import { StationDnd } from './station-dnd';
-import { lineColumns, StationRow } from './station-row';
+import { lineColumns, lineTableWidth, StationRow } from './station-row';
 
 export function LineSection({ place, search }: SectionViewProps) {
   return (
     <LineEditorProvider place={place}>
       <Stations selected={search.station} />
       {place === 'wizard' ? <ModelsBox preset={<PresetControl />} /> : null}
+      <LineChecks />
       <div className="flex flex-col gap-4">
         <LinePreview />
         <FlowPanel />
-        <LineChecks />
       </div>
     </LineEditorProvider>
   );
@@ -45,6 +45,12 @@ function Stations({ selected }: { selected: string | undefined }) {
       : place === 'wizard'
         ? ' Agents pull work when a station is under its WIP limit; nobody assigns it.'
         : '';
+
+  // Rows that appear after the table did (an inserted station) fade in; the first render does not.
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+  }, []);
 
   // ?station= scrolls to its row and puts focus on its name, once.
   const focused = useRef<string | undefined>(undefined);
@@ -71,30 +77,40 @@ function Stations({ selected }: { selected: string | undefined }) {
       }
       aside={editor.viewOnly ? null : <AddStationMenu />}
     >
-      <div className="@container -mx-1 min-w-0 overflow-hidden rounded-cell border border-line md:mx-0">
-        <div
-          aria-hidden="true"
-          className={`hidden gap-y-0 bg-panel px-3 py-2 text-xs font-medium text-muted @[960px]:grid ${lineColumns}`}
-        >
-          <span />
-          <span>Station</span>
-          <span>Kind</span>
-          <span>WIP limit</span>
-          <span>Who works here</span>
-          <span className="text-right">{editor.viewOnly ? null : 'Order'}</span>
-        </div>
+      <div className="flex min-w-0 flex-col gap-2">
         {stations.length === 0 ? (
-          <p className="m-0 px-4 py-3.5 text-sm text-muted">
+          <p className="m-0 rounded-control border border-dashed border-rule px-4 py-3.5 text-sm text-muted">
             No stations yet. Add a queue where work arrives, the stations that work on it, then Done.
           </p>
         ) : (
-          <StationDnd>
-            <ol aria-label="Stations, in order" aria-describedby={help} className="m-0 flex list-none flex-col p-0">
-              {stations.map((s, i) => (
-                <StationRow key={editor.keyOf(s.id)} station={s} index={i} selected={s.id === selected} />
-              ))}
-            </ol>
-          </StationDnd>
+          <div className="min-w-0 overflow-x-auto rounded-control border border-line">
+            <div className={lineTableWidth}>
+              <div
+                aria-hidden="true"
+                className={`${lineColumns} items-center border-b border-line bg-panel px-3 py-2 text-xs font-medium text-muted`}
+              >
+                <span />
+                <span>Station</span>
+                <span>Kind</span>
+                <span>WIP limit</span>
+                <span>Who works here</span>
+                <span className="text-right">{editor.viewOnly ? null : 'Order'}</span>
+              </div>
+              <StationDnd>
+                <ol aria-label="Stations, in order" aria-describedby={help} className="m-0 list-none p-0">
+                  {stations.map((s, i) => (
+                    <StationRow
+                      key={editor.keyOf(s.id)}
+                      station={s}
+                      index={i}
+                      selected={s.id === selected}
+                      entering={mounted.current}
+                    />
+                  ))}
+                </ol>
+              </StationDnd>
+            </div>
+          </div>
         )}
         <p role="status" className="sr-only">
           {editor.announcement}

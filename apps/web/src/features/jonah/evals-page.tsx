@@ -6,8 +6,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Play, Plus } from 'lucide-react';
 import { useState } from 'react';
-import { ApiError, startEvalRun } from '../../api/client';
+import { startEvalRun } from '../../api/client';
 import { evalEstimateQuery, evalsQuery, keys } from '../../api/queries';
+import { isUnavailable } from '../../api/retry';
 import type { EvalSummary } from '../../api/types';
 import { PendingSkeleton } from '../../app/route-skeletons';
 import { TopBarSlot } from '../../app/top-bar';
@@ -18,6 +19,7 @@ import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
 import { EmptyState } from '../../ui/empty-state';
+import { NotAvailable } from '../../ui/not-available';
 import { NumberRoll } from '../../ui/number-roll';
 import { Skeleton } from '../../ui/skeleton';
 import { type Stat, StatStrip } from '../../ui/stat-strip';
@@ -110,15 +112,24 @@ export function EvalsPage() {
 
   if (cases.isPending) return <Loading />;
 
-  const addButton = (key?: string) => (
-    <Button key={key} variant="secondary" disabled={!canAdd} onClick={() => setAdding(true)}>
-      <Plus aria-hidden="true" />
-      Add a case from a past run
-    </Button>
-  );
+  const addButton = (key?: string) =>
+    cases.isError ? (
+      <NotAvailable>
+        <Button key={key} variant="secondary" disabled>
+          <Plus aria-hidden="true" />
+          Add a case from a past run
+        </Button>
+      </NotAvailable>
+    ) : (
+      <Button key={key} variant="secondary" disabled={!canAdd} onClick={() => setAdding(true)}>
+        <Plus aria-hidden="true" />
+        Add a case from a past run
+      </Button>
+    );
 
-  if (cases.isError) {
-    const unavailable = cases.error instanceof ApiError && cases.error.code === 'evals-unavailable';
+  // A goald built without evals answers 503 evals-unavailable: the page is the empty one, adding not available yet.
+  const unavailable = cases.isError && isUnavailable(cases.error);
+  if (cases.isError && !unavailable) {
     return (
       <div className="flex min-w-0 flex-col gap-5">
         <TopBarSlot crumb="Evals" />
@@ -131,15 +142,14 @@ export function EvalsPage() {
             </Button>
           }
         >
-          {unavailable
-            ? 'Evals are not available on this goald yet.'
-            : 'goald is not answering. Try again in a moment.'}
+          goald is not answering. Try again in a moment.
         </EmptyState>
       </div>
     );
   }
 
-  const { summary, cases: entries } = cases.data;
+  const summary = cases.data?.summary;
+  const entries = cases.data?.cases ?? [];
   const runAll = estimate.data === undefined ? 'Run all' : `Run all, about ${formatUsd(estimate.data.usd)}`;
   const runAllButton = (
     <Button key="run" variant="primary" disabled={!canRun || run.isPending} onClick={() => run.mutate(undefined)}>
@@ -153,7 +163,7 @@ export function EvalsPage() {
       <TopBarSlot crumb="Evals" actions={entries.length > 0 ? [addButton('add'), runAllButton] : undefined} />
       <JonahHeader tab="evals" counts={{ evals: entries.length }} />
 
-      {entries.length === 0 ? (
+      {summary === undefined || entries.length === 0 ? (
         <EmptyState title="No eval cases yet" actions={addButton()}>
           Add a case from a past run, where an agent got something wrong. Every publish then tests it before the new
           version runs.

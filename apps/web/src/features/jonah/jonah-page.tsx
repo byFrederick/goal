@@ -101,30 +101,28 @@ export function JonahError({ error, retry }: { error: unknown; retry: () => void
 }
 
 /**
- * The header's "Look for improvements now" stays disabled until Jonah's review loop ships: a review queued
- * now would wait for a loop that never claims it, so this page never calls the review API.
+ * The header's "Look for improvements now" is not available until Jonah's review loop ships: a review queued
+ * now would wait for a loop that never claims it, so this page never calls the review API. On a phone the
+ * two actions show their icons only, so they fit beside the page title.
  */
 function topBarActions(params: { org: string; factory: string }) {
   const settings = (
     <Button key="settings" asChild variant="secondary">
       <Link to="/o/$org/f/$factory/settings" params={params}>
         <Settings aria-hidden="true" />
-        Settings
+        <span className="max-md:sr-only">Settings</span>
       </Link>
     </Button>
   );
   const look = (
-    <Button key="look" variant="primary" disabled aria-describedby="look-meta">
-      <Play aria-hidden="true" />
-      Look for improvements now
-    </Button>
+    <NotAvailable key="look">
+      <Button variant="secondary" disabled>
+        <Play aria-hidden="true" />
+        <span className="max-md:sr-only">Look for improvements now</span>
+      </Button>
+    </NotAvailable>
   );
-  const meta = (
-    <span key="look-meta" id="look-meta" className="text-meta text-muted">
-      Reviews start when Jonah's review loop ships
-    </span>
-  );
-  return [settings, look, meta];
+  return [settings, look];
 }
 
 /** One row of the policy card: a label and its value. */
@@ -263,7 +261,7 @@ export function JonahOverviewPage() {
   if (overview.isError) {
     return (
       <div className="flex min-w-0 flex-col gap-5">
-        <TopBarSlot crumb="Jonah" actions={actions} />
+        <TopBarSlot actions={actions} />
         <JonahHeader tab="overview" />
         <JonahError error={overview.error} retry={() => void overview.refetch()} />
       </div>
@@ -277,7 +275,7 @@ export function JonahOverviewPage() {
 
   return (
     <div className="@container flex min-w-0 flex-col gap-5">
-      <TopBarSlot crumb="Jonah" actions={actions} />
+      <TopBarSlot actions={actions} />
       <JonahHeader tab="overview" counts={{ proposals: data.waiting }} />
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         {empty ? (
@@ -340,7 +338,7 @@ export function JonahProposalsPage({ state }: { state?: ProposalState | undefine
   if (list.isError) {
     return (
       <div className="flex min-w-0 flex-col gap-5">
-        <TopBarSlot crumb="Jonah" actions={actions} />
+        <TopBarSlot actions={actions} />
         <JonahHeader tab="proposals" counts={counts} />
         <JonahError error={list.error} retry={() => void list.refetch()} />
       </div>
@@ -356,7 +354,7 @@ export function JonahProposalsPage({ state }: { state?: ProposalState | undefine
 
   return (
     <div className="@container flex min-w-0 flex-col gap-5">
-      <TopBarSlot crumb="Jonah" actions={actions} />
+      <TopBarSlot actions={actions} />
       <JonahHeader tab="proposals" counts={counts} />
       <SegmentedControl
         label="Proposal state"

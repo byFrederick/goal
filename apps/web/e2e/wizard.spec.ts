@@ -100,6 +100,7 @@ test('a factory from a template, step by step (flow 1)', async ({ page }) => {
   await expect(row('Security review')).toHaveAccessibleName('4. Security review, agent station');
   await row('Propose').getByRole('button', { name: 'Raise the WIP limit of Propose' }).click();
   await expect(row('Propose').getByRole('textbox', { name: 'WIP limit of Propose' })).toHaveValue('2');
+  await row('Approve').getByRole('button', { name: 'Rules of Approve' }).click();
   const merge = row('Approve').getByRole('switch', { name: 'Merge step at Approve' });
   await merge.click();
   await expect(merge).toHaveAttribute('aria-checked', 'true');

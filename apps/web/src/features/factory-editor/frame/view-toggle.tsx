@@ -1,18 +1,16 @@
 // Form | YAML (screens build/definition): a segmented control of the two views of the draft. The
 // entity stays across the views; from YAML, Form opens the entity at the cursor's line (`?line=`,
 // kept by the YAML view), or the agent whose prompt is open. YAML is Later while no YAML view is
-// registered. The shared SegmentedControl (a radio group with a sliding pill); a choice navigates like a link would.
+// registered. A SegmentedControl: the pill slides to the chosen view, and choosing one navigates.
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { laterText } from '../../../app/screens';
 import { placeAtLine } from '../../../shared/definition/place';
 import { useFactoryParams } from '../../../shared/factory';
-import { SegmentedControl, type SegmentedOption } from '../../../ui/segmented-control';
+import { SegmentedControl } from '../../../ui/segmented-control';
 import { useDraft, useModel } from '../draft/use-draft';
 import { yamlView } from '../section-views';
 import type { EditorSection } from '../sections';
 import { validateDefinitionSearch } from '../sections';
-
-type View = 'form' | 'yaml';
 
 export function ViewToggle({ section, yaml }: { section: EditorSection; yaml: boolean }) {
   const params = useFactoryParams();
@@ -39,15 +37,14 @@ export function ViewToggle({ section, yaml }: { section: EditorSection; yaml: bo
       search: { ...entity, mode: 'yaml' } as never,
     });
 
-  const options: SegmentedOption<View>[] = [
-    { value: 'form', label: 'Form' },
-    { value: 'yaml', label: 'YAML', ...(yamlView ? {} : { disabledReason: laterText }) },
-  ];
   return (
     <SegmentedControl
       label="Editor view"
-      options={options}
       value={showYaml ? 'yaml' : 'form'}
+      options={[
+        { value: 'form', label: 'Form' },
+        { value: 'yaml', label: 'YAML', disabledReason: yamlView ? undefined : laterText },
+      ]}
       onChange={(v) => void (v === 'yaml' ? toYaml() : toForm())}
     />
   );

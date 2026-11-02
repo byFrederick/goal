@@ -1,7 +1,7 @@
-// One station of the line (D §10.6): its number (the drag handle), name and id, kind, WIP limit,
-// who works there, ↑ ↓ and More, then its detail strip and B's problems with their fixes. Six
-// columns once the list is 960 px wide; below that the row stacks (name; kind; WIP and who; the
-// order buttons). Alt+ArrowUp/Down anywhere in the row moves the station.
+// One station of the line (D §10.6, design v3): a row of the stations table with its number (the drag
+// handle), name and id, kind, WIP limit, who works there, ↑ ↓ and More, then its rules behind a
+// disclosure and B's problems with their fixes. The columns never stack: the table scrolls sideways in
+// its own box on a narrow screen. Alt+ArrowUp/Down anywhere in the row moves the station.
 import { ArrowDown, ArrowUp, GripVertical, MoreHorizontal, TriangleAlert } from 'lucide-react';
 import { type KeyboardEvent, useId, useState } from 'react';
 import { toast } from 'sonner';
@@ -11,6 +11,7 @@ import { Button } from '../../../ui/button';
 import { Chip } from '../../../ui/chip';
 import { cn } from '../../../ui/cn';
 import { ConfirmDialog } from '../../../ui/confirm-dialog';
+import { Disclosure } from '../../../ui/disclosure';
 import { readOnlyControl } from '../../../ui/field';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '../../../ui/menu';
 import { SegmentedControl } from '../../../ui/segmented-control';
@@ -53,13 +54,27 @@ const fieldWords: Record<string, string> = {
 const and = (words: string[]) =>
   words.length < 2 ? (words[0] ?? '') : `${words.slice(0, -1).join(', ')} and ${words.at(-1)}`;
 
-export const lineColumns =
-  '@[960px]:grid-cols-[36px_minmax(170px,1.3fr)_268px_128px_minmax(170px,1fr)_92px] @[960px]:gap-x-3';
+/** The table's columns, shared by its header and its rows: handle and number, station, kind, WIP, who, order. */
+export const lineColumns = 'grid grid-cols-[44px_minmax(170px,1.3fr)_268px_132px_minmax(150px,1fr)_112px] gap-x-3';
+/** The table's width: its box scrolls sideways below it. */
+export const lineTableWidth = 'min-w-[960px]';
 
 const iconButton =
-  'inline-flex size-11 shrink-0 items-center justify-center rounded-control border border-line bg-card text-ink transition-colors duration-(--duration-quick) hover:bg-shell md:size-9 aria-disabled:cursor-not-allowed aria-disabled:opacity-45 aria-disabled:hover:bg-card';
+  'inline-flex size-11 shrink-0 items-center justify-center rounded-control border border-line bg-card text-ink transition-colors duration-(--duration-quick) hover:bg-shell md:size-8 aria-disabled:cursor-not-allowed aria-disabled:opacity-45 aria-disabled:hover:bg-card';
 
-export function StationRow({ station, index, selected }: { station: ModelStation; index: number; selected: boolean }) {
+export function StationRow({
+  station,
+  index,
+  selected,
+  entering = false,
+}: {
+  station: ModelStation;
+  index: number;
+  selected: boolean;
+  /** The row appears after the table did (an inserted station): it fades in and rises. */
+  entering?: boolean;
+}) {
+  const [enter] = useState(entering);
   const editor = useLineEditor();
   const session = useDraftSession();
   const { line, stations } = editor;
@@ -157,90 +172,91 @@ export function StationRow({ station, index, selected }: { station: ModelStation
         editor.lastFocused.current = station.id;
       }}
       className={cn(
-        'grid grid-cols-[32px_minmax(0,1fr)] items-center gap-x-2.5 gap-y-2.5 border-t border-line bg-card p-3 transition-[background-color,opacity] duration-(--duration-quick) first:border-t-0 @[960px]:px-3 @[960px]:py-2.5',
-        lineColumns,
-        selected && 'bg-run-tint',
-        drag.over && 'bg-hover',
+        'border-t border-line first:border-t-0 transition-[background-color,box-shadow,opacity] duration-(--duration-quick)',
+        enter && 'motion-safe:animate-row-in motion-reduce:animate-fade-in',
+        selected && 'bg-shell',
+        problems.length > 0 && 'shadow-[inset_0_0_0_1px_var(--color-rework)]',
+        drag.over && 'shadow-[inset_0_0_0_1px_var(--color-run)]',
         drag.dragging && 'opacity-50',
       )}
     >
-      {drag.handle && !editor.viewOnly ? (
-        <button
-          type="button"
-          {...drag.handle}
-          aria-label={`Drag ${label}, station ${n} of ${stations.length}`}
-          className="group/handle flex h-11 w-8 touch-none items-center justify-center rounded-chip bg-shell text-[13px] font-semibold tabular-nums transition-colors duration-(--duration-quick) hover:bg-panel md:h-7 md:w-7 md:cursor-grab"
-        >
-          <span className="group-hover/handle:hidden">{n}</span>
-          <GripVertical size={14} strokeWidth={1.5} aria-hidden="true" className="hidden group-hover/handle:block" />
-        </button>
-      ) : (
-        <span
-          aria-hidden="true"
-          className="flex h-11 w-8 items-center justify-center rounded-chip bg-shell text-[13px] font-semibold tabular-nums md:h-7 md:w-7"
-        >
-          {n}
-        </span>
-      )}
-
-      <div className="flex min-w-0 flex-col gap-1">
-        <input
-          data-station-name=""
-          value={station.name ?? ''}
-          aria-label={`Name of station ${n}`}
-          aria-describedby={nameDescribedBy}
-          aria-invalid={invalid('name') || undefined}
-          onChange={(e) => setName(e.target.value)}
-          onBlur={editor.flush}
-          readOnly={editor.viewOnly}
-          autoComplete="off"
-          placeholder={station.id}
-          className={cn(
-            'h-11 w-full min-w-0 rounded-control border border-rule bg-card px-3 text-base text-ink transition-colors duration-(--duration-quick) placeholder:text-muted hover:border-muted aria-[invalid=true]:border-rework md:h-9 md:text-[15px]',
-            readOnlyControl,
-          )}
-        />
-        <span className="group/id flex flex-wrap items-center gap-1.5">
-          <span translate="no" className="font-mono text-xs text-muted">
-            id: {station.id}
+      <div className={cn(lineColumns, 'items-center px-3 py-2.5')}>
+        {drag.handle && !editor.viewOnly ? (
+          <button
+            type="button"
+            {...drag.handle}
+            aria-label={`Drag ${label}, station ${n} of ${stations.length}`}
+            className="group/handle flex h-11 w-10 touch-none items-center justify-center rounded-chip bg-shell text-[13px] font-semibold tabular-nums transition-colors duration-(--duration-quick) hover:bg-panel md:h-7 md:cursor-grab"
+          >
+            <span className="group-hover/handle:hidden">{n}</span>
+            <GripVertical size={14} strokeWidth={1.5} aria-hidden="true" className="hidden group-hover/handle:block" />
+          </button>
+        ) : (
+          <span
+            aria-hidden="true"
+            className="flex h-11 w-10 items-center justify-center rounded-chip bg-shell text-[13px] font-semibold tabular-nums md:h-7"
+          >
+            {n}
           </span>
-          {isConstraint ? (
-            <Chip tone="constraint" className="h-5 text-[11px]">
-              {typeof busy === 'number' ? `Constraint, busy ${Math.round(busy * 100)}%` : 'Constraint'}
-            </Chip>
-          ) : null}
-          {newHere ? (
-            <Chip tone="ok" className="h-5 border-ok-tint bg-ok-tint text-[11px] text-ok-ink">
-              New<span className="sr-only"> in this draft</span>
-            </Chip>
-          ) : (
-            <RowEdited index={index} label={label} />
-          )}
-          <span id={`${id}-id`} className="sr-only">
-            {isNew
-              ? 'The id follows the name until this station is published.'
-              : 'The id stays the same so items keep their place.'}
+        )}
+
+        <div className="flex min-w-0 flex-col gap-1">
+          <input
+            data-station-name=""
+            value={station.name ?? ''}
+            aria-label={`Name of station ${n}`}
+            aria-describedby={nameDescribedBy}
+            aria-invalid={invalid('name') || undefined}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={editor.flush}
+            readOnly={editor.viewOnly}
+            autoComplete="off"
+            placeholder={station.id}
+            className={cn(
+              'h-11 w-full min-w-0 rounded-control border border-rule bg-card px-3 text-base text-ink transition-colors duration-(--duration-quick) placeholder:text-muted hover:border-muted aria-[invalid=true]:border-rework md:h-8 md:text-sm',
+              readOnlyControl,
+            )}
+          />
+          <span className="group/id flex flex-wrap items-center gap-1.5">
+            <span translate="no" className="font-mono text-xs text-muted">
+              id: {station.id}
+            </span>
+            {isConstraint ? (
+              <Chip tone="constraint" className="h-5 text-[11px]">
+                {typeof busy === 'number' ? `Constraint, busy ${Math.round(busy * 100)}%` : 'Constraint'}
+              </Chip>
+            ) : null}
+            {newHere ? (
+              <Chip tone="ok" className="h-5 border-ok-tint bg-ok-tint text-[11px] text-ok-ink">
+                New<span className="sr-only"> in this draft</span>
+              </Chip>
+            ) : (
+              <RowEdited index={index} label={label} />
+            )}
+            <span id={`${id}-id`} className="sr-only">
+              {isNew
+                ? 'The id follows the name until this station is published.'
+                : 'The id stays the same so items keep their place.'}
+            </span>
           </span>
-        </span>
-      </div>
+        </div>
 
-      <div className="col-span-full min-w-0 @[960px]:col-span-1">
-        <SegmentedControl
-          label={`Kind of ${label}`}
-          className="flex w-full [&>label]:min-w-0 [&>label]:flex-1 [&>label]:justify-center"
-          value={station.kind}
-          onChange={setKind}
-          readOnly={editor.viewOnly}
-          options={kinds.map((k) => ({
-            value: k,
-            label: kindLabel[k],
-            disabledReason:
-              k === 'done' && !last && station.kind !== 'done' ? 'Only the last station can be Done' : undefined,
-          }))}
-        />
-      </div>
+        <div className="min-w-0">
+          <SegmentedControl
+            label={`Kind of ${label}`}
+            className="flex w-full [&>label]:min-w-0 [&>label]:flex-1 [&>label]:justify-center md:[&>label]:h-6 md:[&>label]:px-2 md:[&>label]:text-xs"
+            value={station.kind}
+            onChange={setKind}
+            readOnly={editor.viewOnly}
+            options={kinds.map((k) => ({
+              value: k,
+              label: kindLabel[k],
+              disabledReason:
+                k === 'done' && !last && station.kind !== 'done' ? 'Only the last station can be Done' : undefined,
+            }))}
+          />
+        </div>
 
-      <div className="col-span-full flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 @[960px]:contents">
         <div className="min-w-0">
           {station.kind === 'agent' || station.kind === 'human' ? (
             <WipStepper
@@ -256,12 +272,12 @@ export function StationRow({ station, index, selected }: { station: ModelStation
             <span className="text-sm text-muted">Not limited</span>
           )}
         </div>
-        <div className="min-w-[130px] flex-1 @[960px]:min-w-0">
+        <div className="min-w-0 text-sm">
           <WhoWorks station={station} invalid={invalid('who')} describedBy={describedBy('who')} />
         </div>
         {/* Beside WIP and who works when the row has room, on a line of their own when not. */}
         {editor.viewOnly ? null : (
-          <div className="ml-auto flex justify-end gap-1.5">
+          <div className="flex justify-end gap-1">
             <OrderButton dir={-1} label={label} blocked={up} onStep={step} />
             <OrderButton dir={1} label={label} blocked={down} onStep={step} />
             <Menu>
@@ -301,10 +317,18 @@ export function StationRow({ station, index, selected }: { station: ModelStation
         )}
       </div>
 
-      <StationRules station={station} index={index} invalid={invalid} describedBy={describedBy} />
+      <div className="pl-14 pr-3">
+        <Disclosure
+          defaultOpen={selected || problems.length > 0}
+          summary={<span className="text-[13px] text-muted">Rules of {label}</span>}
+          triggerClassName="min-h-9 px-0 md:min-h-8"
+        >
+          <StationRules station={station} index={index} invalid={invalid} describedBy={describedBy} />
+        </Disclosure>
+      </div>
 
       {problems.length > 0 ? (
-        <ul id={problemId} className="col-span-full m-0 flex list-none flex-col gap-2 p-0 @[960px]:col-start-2">
+        <ul id={problemId} className="m-0 flex list-none flex-col gap-2 px-3 pb-3 pl-14">
           {problems.map((p) => (
             <li key={`${p.code}-${p.pointer}`} className="flex flex-col gap-1.5 text-[13px] leading-snug">
               <span className="flex items-start gap-1.5 text-rework-ink">

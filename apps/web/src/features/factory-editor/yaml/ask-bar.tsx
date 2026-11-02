@@ -21,7 +21,7 @@ export function AskBar() {
         placeholder="Ask the factory to change it, for example: give Review a 4th reviewer"
         className="min-w-0 flex-1 basis-64 bg-transparent text-body text-ink outline-none placeholder:text-muted disabled:cursor-not-allowed disabled:opacity-60"
       />
-      <span className="shrink-0 text-meta whitespace-nowrap text-muted">Becomes an item, reviewed like any change</span>
+      <span className="hidden shrink-0 text-meta whitespace-nowrap text-muted md:inline">Becomes an item, reviewed like any change</span>
       <NotAvailable>
         <Button type="submit" size="icon" variant="ghost" aria-label="Send" className="text-muted">
           <ArrowUp size={16} strokeWidth={1.75} aria-hidden="true" />

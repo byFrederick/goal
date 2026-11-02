@@ -294,7 +294,7 @@ describe('the Jonah overview, its four states', () => {
 });
 
 describe('the Jonah header', () => {
-  it('draws the tabs as links on one pill: the current one has aria-current, none is underlined', async () => {
+  it('draws the tabs as links on an underline row: the current one has aria-current', async () => {
     vi.mocked(getJonahOverview).mockResolvedValue(overview);
     renderOverview();
 
@@ -318,8 +318,7 @@ describe('the Jonah header', () => {
     expect(within(nav).getByRole('link', { name: 'Judges' }).getAttribute('href')).toBe(
       '/o/acme/f/software/jonah/judges',
     );
-    for (const link of links) expect(link.className).not.toMatch(/underline|border-b/);
-    expect(nav.className).not.toMatch(/border-b/);
+    expect(nav.className).toMatch(/border-b/);
   });
 });
 
@@ -369,16 +368,30 @@ describe('the pass rate by judge', () => {
   });
 });
 
+describe('the top bar', () => {
+  it('shows the breadcrumb Software › Jonah on the overview', async () => {
+    vi.mocked(getJonahOverview).mockResolvedValue(overview);
+    vi.mocked(listProposals).mockResolvedValue(listOf([proposal8, proposal7]));
+    renderOverview();
+
+    await screen.findByRole('heading', { name: 'Waiting for your review' });
+    const crumbs = screen.getByRole('navigation', { name: /breadcrumb/i });
+    expect(within(crumbs).getByText('Software')).toBeTruthy();
+    expect(within(crumbs).getAllByText('Jonah')).toHaveLength(1);
+  });
+});
+
 describe('Look for improvements now', () => {
-  it('is disabled until the review loop ships, with the meta line, and sends no request', async () => {
+  it('is a secondary button that is not available yet, with no explanation beside it, and sends no request', async () => {
     vi.mocked(getJonahOverview).mockResolvedValue(overview);
     vi.mocked(listProposals).mockResolvedValue(listOf([proposal8, proposal7]));
     renderOverview();
 
     await screen.findByRole('heading', { name: 'Waiting for your review' });
     const look = screen.getByRole('button', { name: 'Look for improvements now' });
-    expect((look as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText("Reviews start when Jonah's review loop ships")).toBeTruthy();
+    expect(look.getAttribute('aria-disabled')).toBe('true');
+    expect(look.className).toContain('border-rule');
+    expect(screen.queryByText("Reviews start when Jonah's review loop ships")).toBeNull();
     fireEvent.click(look);
     await waitFor(() => expect(queueJonahReview).not.toHaveBeenCalled());
   });

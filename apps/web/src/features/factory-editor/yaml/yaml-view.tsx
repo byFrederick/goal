@@ -11,7 +11,7 @@
 // waits.
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
-import { Copy, Download, WandSparkles } from 'lucide-react';
+import { Copy, Download } from 'lucide-react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '../../../api/client';
@@ -473,7 +473,6 @@ export function YamlView({ search }: SectionViewProps) {
                   disabled={unparseable || text === undefined}
                   aria-describedby={unparseable ? formatHint : undefined}
                 >
-                  <WandSparkles size={14} strokeWidth={1.75} aria-hidden="true" />
                   Format
                 </Button>
               ) : null}

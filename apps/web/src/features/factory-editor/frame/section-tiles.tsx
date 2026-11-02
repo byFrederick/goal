@@ -9,7 +9,6 @@ import { useEffect, useRef } from 'react';
 import type { ParseError, SectionSummary } from '../../../api/types';
 import { type Section, sections } from '../../../shared/definition/model';
 import { useFactoryParams } from '../../../shared/factory';
-import { Chip } from '../../../ui/chip';
 import { cn } from '../../../ui/cn';
 import { useModel } from '../draft/use-draft';
 import { type EditorSection, sectionInfo } from '../sections';
@@ -21,6 +20,8 @@ interface TilesProps {
   changeCount: number;
   problemCount: number;
   hasDraft: boolean;
+  /** The version number the draft started from. */
+  base?: number | null;
   /** The YAML view is open: tiles jump to their block. */
   yaml: boolean;
   parseError: ParseError | null;
@@ -34,6 +35,7 @@ export function SectionTiles({
   changeCount,
   problemCount,
   hasDraft,
+  base,
   yaml,
   parseError,
   viewOnly = false,
@@ -52,13 +54,14 @@ export function SectionTiles({
       >
         {shown.map((s) => {
           const summary = summaries.find((x) => x.section === s);
-          const tile = parseError
+          const tile: { state: string; text: string; badge?: string } = parseError
             ? parseErrorTile(s, parseError)
             : s === 'review'
-              ? reviewTile({ problems: problemCount, changes: changeCount, hasDraft })
+              ? reviewTile({ problems: problemCount, changes: changeCount, hasDraft, base })
               : viewOnly
                 ? { state: 'view' as const, text: viewTileText(s, model) }
-                : sectionTile(summary);
+                : sectionTile(summary, s, model);
+          const badge = tile.badge;
           const line = yaml ? summary?.lines[0] : undefined;
           return (
             <li key={s} className="min-w-[176px] shrink-0 @[880px]:min-w-0">
@@ -66,6 +69,7 @@ export function SectionTiles({
                 section={s}
                 current={current === s}
                 problem={tile.state === 'problem'}
+                badge={yaml ? undefined : badge}
                 text={yaml ? yamlTileText(s, summary?.lines) : tile.text}
                 state={yaml ? tile.text : undefined}
                 line={yaml ? (line && line > 0 ? line : null) : undefined}
@@ -82,6 +86,7 @@ function Tile({
   section,
   current,
   problem,
+  badge,
   text,
   state,
   line,
@@ -89,6 +94,8 @@ function Tile({
   section: Section;
   current: boolean;
   problem: boolean;
+  /** What needs attention, beside the label ("2 changes"). */
+  badge?: string | undefined;
   text: string;
   /** In YAML mode the state is spoken after the block ("…, 2 changes"). */
   state?: string | undefined;
@@ -103,10 +110,6 @@ function Tile({
     search: line === undefined ? {} : { mode: 'yaml' as const, ...(line ? { line } : {}) },
   });
   const label = sectionInfo[section].label;
-  // A section's own problem count is a red chip next to its caption ("1 change" + "1 problem").
-  const split = problem && state === undefined ? /^(.*?)(?:, )?(\d+ problems?)$/.exec(text) : null;
-  const chip = split ? split[2] : null;
-  const caption = split ? split[1] : text;
   // In the scrolling row (phones), the current tile scrolls into view.
   const ref = useRef<HTMLAnchorElement>(null);
   useEffect(() => {
@@ -120,22 +123,20 @@ function Tile({
       aria-current={current ? 'location' : undefined}
       className={cn(
         // relative: the screen-reader name stays inside the tile, not past the scrolling row.
-        'relative flex min-h-11 items-center rounded-control px-2.5 py-2 text-sm no-underline transition-colors duration-(--duration-quick) hover:bg-hover',
-        current ? 'bg-hover text-ink' : 'text-ink-soft',
+        'relative flex min-h-11 items-center gap-2.5 rounded-control border px-3 py-1.5 text-sm no-underline transition-colors duration-(--duration-quick)',
+        current ? 'border-transparent bg-hover text-ink' : 'border-transparent text-ink hover:bg-hover',
       )}
     >
       {/* One name for screen readers ("Connections, 1 change, 1 problem"); two lines on screen. */}
-      <span className="sr-only">{state ? `${label}, ${text}, ${state}` : `${label}, ${text}`}</span>
-      <span aria-hidden="true" className="flex min-w-0 flex-col leading-tight">
-        <span className="truncate font-medium">{label}</span>
-        <span className="flex min-w-0 items-center gap-1">
-          {caption ? (
-            <span className={cn('truncate text-xs', problem && !chip ? 'text-rework-ink' : 'text-muted')}>
-              {caption}
-            </span>
+      <span className="sr-only">{[label, badge, text, state].filter(Boolean).join(', ')}</span>
+      <span aria-hidden="true" className="flex min-w-0 flex-1 flex-col leading-tight">
+        <span className="flex items-baseline justify-between gap-2">
+          <span className="truncate font-medium">{label}</span>
+          {badge ? (
+            <span className={cn('shrink-0 text-xs', problem ? 'text-rework-ink' : 'text-muted')}>{badge}</span>
           ) : null}
-          {chip ? <Chip tone="rework">{chip}</Chip> : null}
         </span>
+        <span className={cn('truncate text-xs', problem && !badge ? 'text-rework-ink' : 'text-muted')}>{text}</span>
       </span>
     </a>
   );
