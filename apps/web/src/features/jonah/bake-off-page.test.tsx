@@ -324,10 +324,17 @@ describe('the bake-offs tab', () => {
     expect(document.querySelector('[aria-busy="true"]')).toBeTruthy();
   });
 
-  it('shows an error with Try again when the list fails', async () => {
+  it('shows the empty state at once when goald has no evals, with New bake-off not available yet', async () => {
     renderIndex(problemError(503, 'evals-unavailable'));
+    expect(await screen.findByText('No bake-offs yet')).toBeTruthy();
+    expect(screen.queryByText('Bake-offs could not be loaded')).toBeNull();
+    expect(screen.getByRole('button', { name: 'New bake-off' }).getAttribute('aria-disabled')).toBe('true');
+    expect(listBakeOffs).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows an error with Try again when the list fails for another reason', async () => {
+    renderIndex(problemError(502, 'bad-gateway'));
     expect(await screen.findByText('Bake-offs could not be loaded')).toBeTruthy();
-    expect(screen.getByText('Evals are not available on this goald yet.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
   });
 });
