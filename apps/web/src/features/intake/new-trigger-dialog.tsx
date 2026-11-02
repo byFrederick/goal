@@ -1,10 +1,13 @@
 // New trigger, step 1 of 2: what starts it (intake-new, MASTER.md's two-pane picker). The left pane lists the
 // sources; the right pane has the chosen source's events. Continue goes to the trigger page with the choice in
 // the address. On phones the panes take turns, with Back from the details.
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
 import { useId, useState } from 'react';
+import { connectionsQuery } from '../../api/queries';
 import { useFactoryParams } from '../../shared/factory';
+import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
@@ -27,6 +30,11 @@ import { isChoosable, type Suggestion, suggestionHref, suggestions } from './sug
 export function NewTriggerDialog() {
   const navigate = useNavigate();
   const params = useFactoryParams();
+  const org = useOrg();
+  // The organization's own connections decide the Connected and Not connected groups; until they load, none is.
+  const { data: connections } = useQuery(connectionsQuery(org.id));
+  const connectedKinds = new Set((connections ?? []).map((c) => c.kind));
+  const groups = pickerGroups(connectedKinds);
   const [source, setSource] = useState<SourceKey>('github');
   const [event, setEvent] = useState<string>(defaultEvent);
   const [filter, setFilter] = useState('');
@@ -70,7 +78,7 @@ export function NewTriggerDialog() {
                   className="min-w-0 flex-1 bg-transparent text-body text-ink outline-none placeholder:text-muted"
                 />
               </label>
-              {pickerGroups.map((group) => {
+              {groups.map((group) => {
                 const shown = group.keys
                   .map((key) => pickerSources.find((s) => s.key === key))
                   .filter((s): s is PickerSource => s !== undefined)
@@ -84,7 +92,7 @@ export function NewTriggerDialog() {
                         key={s.key}
                         source={s}
                         connectHref={`/o/${params.org}/connections`}
-                        showConnect={group.title === 'Not connected'}
+                        showConnect={group.title === 'Not connected' && s.available}
                         pressed={source === s.key}
                         onPick={() => {
                           setSource(s.key);

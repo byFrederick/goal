@@ -6,6 +6,7 @@ import { Link } from '@tanstack/react-router';
 import { webhookDeliveriesQuery } from '../../api/queries';
 import type { WebhookDelivery } from '../../api/webhooks';
 import { formatClock } from '../../shared/format';
+import { useArrivals } from '../../ui/arrivals';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { cn } from '../../ui/cn';
@@ -23,6 +24,10 @@ export interface DeliveriesScope {
 
 export function Deliveries({ scope, onView }: { scope: DeliveriesScope; onView: (target: RequestTarget) => void }) {
   const deliveries = useQuery(webhookDeliveriesQuery(scope.org, scope.factory, scope.endpoint));
+
+  const rows = deliveries.data?.deliveries ?? [];
+  // A delivery that arrives after the list first had rows fades in (MOTION.md, A new item appears in a list).
+  const arrived = useArrivals(rows.map((d) => d.id));
 
   if (deliveries.isPending) {
     return (
@@ -43,7 +48,6 @@ export function Deliveries({ scope, onView }: { scope: DeliveriesScope; onView: 
       </div>
     );
   }
-  const rows = deliveries.data.deliveries;
   if (rows.length === 0) {
     return <p className="m-0 border-t border-line px-4 py-3 text-secondary text-muted">No deliveries yet.</p>;
   }
@@ -52,6 +56,7 @@ export function Deliveries({ scope, onView }: { scope: DeliveriesScope; onView: 
       {rows.map((delivery) => (
         <DeliveryRow
           key={delivery.id}
+          arrived={arrived(delivery.id)}
           delivery={delivery}
           scope={scope}
           onView={() =>
@@ -73,9 +78,11 @@ export function Deliveries({ scope, onView }: { scope: DeliveriesScope; onView: 
 function DeliveryRow({
   delivery,
   scope,
+  arrived,
   onView,
 }: {
   delivery: WebhookDelivery;
+  arrived: boolean;
   scope: DeliveriesScope;
   onView: () => void;
 }) {
@@ -86,12 +93,13 @@ function DeliveryRow({
       className={cn(
         'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t border-line px-4 py-3 text-secondary sm:grid-cols-[auto_minmax(0,1fr)_auto]',
         refused && 'bg-rework-tint',
+        arrived && 'motion-safe:animate-item-in motion-reduce:animate-fade-in',
       )}
     >
       <time dateTime={delivery.received_at} className="col-span-2 text-meta text-muted sm:col-span-1">
         {formatClock(delivery.received_at)}
       </time>
-      <span className={cn('min-w-0', refused ? 'font-medium text-rework-ink' : 'text-ink')}>
+      <span className={cn('min-w-0', refused ? 'font-medium text-rework-ink' : 'text-ink-soft')}>
         {outcome.kind === 'created' && delivery.item ? (
           <>
             {outcome.text}{' '}
