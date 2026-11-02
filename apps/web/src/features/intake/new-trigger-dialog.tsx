@@ -269,7 +269,7 @@ function EventOption({
     <div
       className={cn(
         'flex min-h-10 items-center gap-3 rounded-cell border border-line px-3 text-secondary text-ink',
-        checked && 'border-run bg-run-tint text-run-ink',
+        checked && 'border-ink bg-card text-ink',
         disabled && 'text-muted',
       )}
     >

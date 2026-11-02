@@ -24,7 +24,7 @@ function Setting({ label, children }: { label: string; children: ReactNode }) {
 /** "Own value" when the agent sets it, "Default" when the factory does. */
 function Origin({ own }: { own: boolean }) {
   return own ? (
-    <span className="rounded-chip bg-run-tint px-2 text-meta font-control text-run-ink">Own value</span>
+    <span className="text-meta font-control text-ink">Own value</span>
   ) : (
     <span className="rounded-chip border border-line px-2 text-meta text-muted">Default</span>
   );
