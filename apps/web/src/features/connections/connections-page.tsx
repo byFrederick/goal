@@ -22,6 +22,7 @@ import { cn } from '../../ui/cn';
 import { EmptyState } from '../../ui/empty-state';
 import { Field, Input, NativeSelect } from '../../ui/field';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../ui/menu';
+import { Skeleton } from '../../ui/skeleton';
 import { Monogram, Status } from './parts';
 import { ReplaceSecretDialog } from './replace-secret-dialog';
 import { useTestConnection } from './use-test';
@@ -48,7 +49,9 @@ function groupOf(kind: ConnectionKind | undefined): GroupKey {
 /** A connection needs attention when its test failed or its secret is missing. */
 const needsAttention = (c: Connection) => c.status === 'failing' || c.status === 'missing-secret';
 
-const tileClass = 'flex min-w-0 w-full flex-col gap-2 rounded-card border border-line bg-card p-4 text-left';
+// The stat strip of the export: three plain figures divided by a hairline, no cards.
+const tileClass =
+  'flex min-w-0 w-full flex-col gap-1 border-line py-2 text-left @[640px]:border-l @[640px]:pl-6 first:border-l-0 first:pl-0';
 
 export function ConnectionsPage() {
   const org = useOrg();
@@ -138,11 +141,18 @@ export function ConnectionsPage() {
       ))}
 
       {list.isPending && !missing ? (
-        <div aria-busy="true" className="rounded-card border border-line bg-card p-4">
-          <span role="status" className="sr-only">
-            Loading connections
-          </span>
-        </div>
+        <Skeleton
+          ready={false}
+          placeholder={
+            <div className="flex flex-col gap-3 rounded-card border border-line bg-card p-4">
+              <div className="h-12 rounded-control bg-hover" />
+              <div className="h-12 rounded-control bg-hover" />
+              <div className="h-12 rounded-control bg-hover" />
+            </div>
+          }
+        >
+          <span />
+        </Skeleton>
       ) : list.isError ? (
         <div
           className="flex max-w-xl flex-col items-start gap-3 rounded-card border border-line bg-card p-4"
@@ -161,7 +171,7 @@ export function ConnectionsPage() {
         </EmptyState>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-3 @[640px]:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 @[640px]:grid-cols-3 @[640px]:gap-6">
             <div className={cn(tileClass, 'justify-between')}>
               <SummaryLabel>Connected</SummaryLabel>
               <SummaryValue>{all.filter((c) => c.status === 'ok').length}</SummaryValue>
@@ -277,6 +287,7 @@ export function ConnectionsPage() {
                             <th scope="col">Connection</th>
                             <th scope="col">Status</th>
                             <th scope="col">Used by</th>
+                            <th scope="col">{g.key === 'model' ? 'Models' : 'Tools'}</th>
                             <th scope="col">Last used</th>
                             <th scope="col">
                               <span className="sr-only">Actions</span>
@@ -303,10 +314,18 @@ export function ConnectionsPage() {
                                 <td className="max-w-[220px]">
                                   <UsedBy connection={c} />
                                 </td>
+                                <td className="whitespace-nowrap tabular-nums">
+                                  {c.tools.length > 0 ? c.tools.length : <span className="text-muted">None</span>}
+                                </td>
                                 <td className="whitespace-nowrap text-secondary text-muted">
                                   {c.last_used_at ? since(c.last_used_at, now) : 'Never'}
                                 </td>
-                                <td className="text-right">
+                                <td className="whitespace-nowrap text-right">
+                                  {manage && c.status === 'missing-secret' ? (
+                                    <Button variant="white" className="mr-2 h-8.5" onClick={() => replaceSecret(c)}>
+                                      Connect
+                                    </Button>
+                                  ) : null}
                                   <RowMenu
                                     org={org.slug}
                                     connection={c}
@@ -398,9 +417,7 @@ function SummaryLabel({ children }: { children: ReactNode }) {
 }
 
 function SummaryValue({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <span className={cn('text-kpi font-numeral tracking-numeral tabular-nums text-ink', className)}>{children}</span>
-  );
+  return <span className={cn('text-kpi tabular-nums text-ink', className)}>{children}</span>;
 }
 
 function ConnectionName({

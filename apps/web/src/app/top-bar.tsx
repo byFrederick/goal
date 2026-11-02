@@ -118,7 +118,7 @@ export function TopBar({ state }: { state: TopBarState | null }) {
   const routeId = useMatches({ select: (matches) => matches.at(-1)?.routeId ?? '' });
   const inFactory = routeId.startsWith('/o/$org/f/$factory/');
   return (
-    <header className="hidden h-14 flex-none items-center gap-2 border-b border-rule bg-shell px-7 md:flex">
+    <header className="shell-topbar hidden h-14 flex-none items-center gap-2 border-b border-rule bg-shell px-7 md:flex">
       {inFactory ? (
         <FactoryCrumbs routeId={routeId} crumb={state?.crumb} parent={state?.parent} />
       ) : (

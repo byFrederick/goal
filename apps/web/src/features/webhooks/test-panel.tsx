@@ -29,8 +29,8 @@ export function TestPanel({
       <p className="m-0 text-secondary text-ink-soft">
         Post JSON to the address with the signature header. The delivery shows in the list once the page refreshes.
       </p>
-      <pre className="m-0 overflow-x-auto rounded-control bg-andon p-4 font-mono text-meta leading-relaxed text-andon-text">
-        <span className="text-run-soft">curl</span> -X POST \{'\n'} {url} \{'\n'} -H &quot;Content-Type:
+      <pre className="m-0 overflow-x-auto rounded-control bg-panel p-4 font-mono text-meta leading-relaxed text-ink-soft">
+        <span className="text-run">curl</span> -X POST \{'\n'} {url} \{'\n'} -H &quot;Content-Type:
         application/json&quot; \{'\n'} -H &quot;{signatureHeader(endpoint.kind)}: sha256=…&quot; \{'\n'} -d &apos;{'{'}
         {'\n'} &quot;event&quot;: &quot;deploy.failed&quot;,
         {'\n'} &quot;service&quot;: &quot;goal-api&quot;,

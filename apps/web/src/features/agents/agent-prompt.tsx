@@ -9,6 +9,7 @@ import { useFactory, useFactoryParams } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
+import { Skeleton, SkeletonRows } from '../../ui/skeleton';
 
 /** The lines the Overview shows before "Show the full prompt". */
 const previewLines = 6;
@@ -37,9 +38,9 @@ function PromptText({
   const { running, path, text } = usePrompt(agent);
   if (running.isPending || (path !== '' && text.isPending)) {
     return (
-      <p aria-busy="true" className="m-0">
-        <span className="sr-only">Loading the prompt</span>
-      </p>
+      <Skeleton ready={false} placeholder={<SkeletonRows rows={lines ?? 4} />}>
+        <span />
+      </Skeleton>
     );
   }
   if (running.isError || text.isError) {

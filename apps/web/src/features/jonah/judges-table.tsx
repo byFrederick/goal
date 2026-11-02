@@ -98,7 +98,7 @@ export function JudgesTable({
                         points={summary.days.map((d) => d.pass_rate)}
                       />
                     ) : null}
-                    <span className="font-numeral font-semibold tabular-nums">
+                    <span className="font-semibold tabular-nums">
                       {summary.scored === 0 ? none : formatPercent(summary.pass_rate)}
                     </span>
                   </div>

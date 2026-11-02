@@ -109,7 +109,7 @@ function Stepper({ step }: { step: OnboardingStepKey }) {
           >
             <span
               aria-hidden="true"
-              className={cn('block h-1 rounded-full', isCurrent ? 'bg-run' : done ? 'bg-run-soft' : 'bg-line')}
+              className={cn('block h-1 rounded-full', isCurrent ? 'bg-run' : done ? 'bg-run' : 'bg-line')}
             />
             {s.label}
           </li>
@@ -123,24 +123,24 @@ function Panel({ preview }: { preview: PreviewSlots | undefined }) {
   return (
     <aside
       aria-label="Preview of your factory"
-      className="flex min-w-0 flex-col gap-3 bg-andon px-6 py-7 text-white md:px-9"
+      className="flex min-w-0 flex-col gap-3 bg-panel px-6 py-7 text-ink md:px-9"
     >
-      <div className="flex items-center justify-between gap-4 text-secondary text-andon-text">
-        <h2 className="m-0 font-control text-body text-white">Your factory, as you build it</h2>
+      <div className="flex items-center justify-between gap-4 text-secondary text-ink-soft">
+        <h2 className="m-0 font-control text-body text-ink">Your factory, as you build it</h2>
         <span>Updates as you go</span>
       </div>
       <div className="grid grid-cols-2 gap-3">
         {preview?.organization ?? <PreviewPlaceholder className="min-h-26" />}
         {preview?.second ?? (
           <PreviewPlaceholder className="justify-start py-4">
-            <span className="block h-2.5 w-2/5 rounded-full bg-andon-line" />
-            <span className="block h-2.5 w-7/10 rounded-full bg-andon-line" />
+            <span className="block h-2.5 w-2/5 rounded-full bg-line" />
+            <span className="block h-2.5 w-7/10 rounded-full bg-line" />
           </PreviewPlaceholder>
         )}
       </div>
       {preview?.line ?? (
         <PreviewPlaceholder className="min-h-42 items-center justify-center text-center">
-          <span className="text-secondary text-andon-text">The line appears when you pick a template</span>
+          <span className="text-secondary text-ink-soft">The line appears when you pick a template</span>
         </PreviewPlaceholder>
       )}
       <div className="grid grid-cols-3 gap-3">
@@ -175,16 +175,16 @@ export function PreviewCard({
   return (
     <div
       className={cn(
-        'flex min-w-0 flex-col gap-2 rounded-card border border-andon-line bg-andon-raised p-4',
-        active && 'border-run-soft ring-4 ring-run-soft/25',
+        'flex min-w-0 flex-col gap-2 rounded-card border border-line bg-hover p-4',
+        active && 'border-run ring-4 ring-run/25',
       )}
     >
-      <span className="text-meta text-andon-text">{label}</span>
-      <span className="flex min-w-0 items-center gap-2 font-control text-heading break-words text-white">
+      <span className="text-meta text-ink-soft">{label}</span>
+      <span className="flex min-w-0 items-center gap-2 font-control text-heading break-words text-ink">
         {icon}
         {value}
       </span>
-      {detail ? <span className="text-secondary break-all text-andon-text">{detail}</span> : null}
+      {detail ? <span className="text-secondary break-all text-ink-soft">{detail}</span> : null}
     </div>
   );
 }
@@ -192,9 +192,7 @@ export function PreviewCard({
 /** An empty slot: a dashed outline the step's card replaces. */
 export function PreviewPlaceholder({ className, children }: { className?: string; children?: ReactNode }) {
   return (
-    <div
-      className={cn('flex min-w-0 flex-col gap-2 rounded-card border border-dashed border-andon-line p-4', className)}
-    >
+    <div className={cn('flex min-w-0 flex-col gap-2 rounded-card border border-dashed border-line p-4', className)}>
       {children}
     </div>
   );

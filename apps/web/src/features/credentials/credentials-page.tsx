@@ -4,7 +4,7 @@
 // Owners and admins (credential:manage) get New credential, Replace value and Delete; members read.
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { KeyRound, Lock, Search } from 'lucide-react';
+import { KeyRound, Search } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
 import { credentialsQuery, factoriesQuery } from '../../api/queries';
 import type { Credential, CredentialType } from '../../api/types';
@@ -19,6 +19,7 @@ import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../ui/menu';
 import { NotAvailable } from '../../ui/not-available';
 import { descriptionClass, eyebrowClass, PageHeader } from '../../ui/page-header';
 import { SegmentedControl } from '../../ui/segmented-control';
+import { Skeleton } from '../../ui/skeleton';
 import { DeleteCredentialDialog, ReplaceCredentialDialog } from './credential-dialogs';
 import { ExpiryText, FactoryChips, RowMenu, TypeTile } from './credential-parts';
 import { credentialsSearch } from './search';
@@ -102,25 +103,25 @@ export function CredentialsPage() {
         actions={newCredential}
       />
 
-      <div className="flex flex-wrap items-center gap-3 rounded-card bg-ok-tint px-4 py-3 text-body text-ok-ink">
-        <Lock size={18} strokeWidth={1.5} aria-hidden="true" className="flex-none" />
-        <p className="m-0 min-w-0 flex-1">
-          Values are encrypted before they are stored and never shown again. Agents get them only inside their run’s
-          box.
-        </p>
-        <NotAvailable label="Encrypt in your browser">
-          <button type="button" className="font-semibold whitespace-nowrap text-ok-ink">
-            Encrypt in your browser instead
-          </button>
-        </NotAvailable>
-      </div>
+      <NotAvailable label="Encrypt in your browser">
+        <button type="button" className="text-sm text-muted underline underline-offset-3 hover:text-ink">
+          Encrypt in your browser instead
+        </button>
+      </NotAvailable>
 
       {list.isPending ? (
-        <div aria-busy="true" className="rounded-card border border-line bg-card p-5">
-          <span role="status" className="sr-only">
-            Loading credentials
-          </span>
-        </div>
+        <Skeleton
+          ready={false}
+          placeholder={
+            <div className="flex flex-col gap-3 rounded-card border border-line bg-card p-5">
+              <div className="h-8 w-64 rounded-control bg-hover" />
+              <div className="h-12 rounded-control bg-hover" />
+              <div className="h-12 rounded-control bg-hover" />
+            </div>
+          }
+        >
+          <span />
+        </Skeleton>
       ) : list.isError ? (
         <div
           className="flex max-w-xl flex-col items-start gap-3 rounded-card border border-line bg-card p-5"

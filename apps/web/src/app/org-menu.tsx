@@ -2,7 +2,7 @@
 // the caller is in, each with its factory count and role and a check on the current one; Create
 // organization for whoever may create one (platform admins, or everyone with sign-in off); and the
 // current organization's pages. Members and roles shows the member count once it loads. Spend and
-// billing has no page yet, so it renders disabled (ADR 0016, decision 4).
+// billing opens the organization's spend page.
 // A Radix DropdownMenu under the sidebar's top row (sidebar.tsx); a bottom sheet on phones, opened by
 // the organization mark (org-mark.tsx). The sheet ends with the account (account-menu.tsx).
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
@@ -14,7 +14,6 @@ import type { OrgSummary } from '../api/types';
 import { factoryCount, useOrgGrants } from '../shared/org';
 import { cn } from '../ui/cn';
 import { MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, menuRow } from '../ui/menu';
-import { NotAvailable } from '../ui/not-available';
 import { SheetContent, SheetLabel } from '../ui/sheet';
 import { AccountBlock } from './account-menu';
 import { apiKeysScreen, membersScreen, modelsScreen, screensFor, settingsScreen } from './screens';
@@ -161,12 +160,18 @@ export function OrgMenuContent({ org, onCreate, navigating }: OrgMenuProps) {
             </Link>
           </MenuItem>
         ) : null}
-        <NotAvailable>
-          <MenuItem className={rowClass}>
+        <MenuItem
+          asChild
+          className={rowClass}
+          onSelect={() => {
+            navigating.current = model.leaves(orgPath('/o/$org/spend', org.slug));
+          }}
+        >
+          <Link to="/o/$org/spend" params={{ org: org.slug }}>
             <CreditCard {...iconProps} />
             Spend and billing
-          </MenuItem>
-        </NotAvailable>
+          </Link>
+        </MenuItem>
         <MenuItem
           asChild
           className={rowClass}
@@ -282,12 +287,15 @@ export function OrgSheetContent({ org, onCreate, onClose, navigating }: OrgSheet
           </li>
         ) : null}
         <li>
-          <NotAvailable>
-            <button type="button" className={sheetRow}>
-              <CreditCard {...iconProps} />
-              Spend and billing
-            </button>
-          </NotAvailable>
+          <Link
+            to="/o/$org/spend"
+            params={{ org: org.slug }}
+            onClick={() => go(orgPath('/o/$org/spend', org.slug))}
+            className={sheetRow}
+          >
+            <CreditCard {...iconProps} />
+            Spend and billing
+          </Link>
         </li>
         <li>
           <Link

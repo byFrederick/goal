@@ -129,7 +129,7 @@ export function SkillsEditor({ agent, index, openPicker }: { agent: ModelAgent; 
                     type="button"
                     aria-label={`Remove ${name}`}
                     onClick={() => session.edit(removeSkillFromAgent(agents, agent.name, name))}
-                    className="inline-flex size-9 items-center justify-center rounded-chip text-muted transition-colors duration-200 hover:bg-shell hover:text-ink md:size-6"
+                    className="inline-flex size-9 items-center justify-center rounded-chip text-muted transition-colors duration-(--duration-quick) hover:bg-shell hover:text-ink md:size-6"
                   >
                     <X size={14} strokeWidth={1.5} aria-hidden="true" />
                   </button>
@@ -151,7 +151,7 @@ export function SkillsEditor({ agent, index, openPicker }: { agent: ModelAgent; 
 
       {viewOnly ? null : (
         <div className="relative">
-          <div className="flex h-11 items-center gap-2 rounded-control border border-rule bg-card px-3 text-muted transition-colors duration-200 hover:border-muted has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-run md:h-10">
+          <div className="flex h-11 items-center gap-2 rounded-control border border-rule bg-card px-3 text-muted transition-colors duration-(--duration-quick) hover:border-muted has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-run md:h-10">
             <Search size={16} strokeWidth={1.5} aria-hidden="true" />
             <input
               ref={input}

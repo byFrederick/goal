@@ -130,15 +130,12 @@ describe('the Judges page, its four states', () => {
     expect(listJudges).toHaveBeenCalledTimes(2);
   });
 
-  it('is ready: the intro, the three steps, the table with the 30-day cost and its footnote', async () => {
+  it('is ready: the intro, the table with the 30-day cost and its footnote', async () => {
     renderJudges();
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Jonah' })).toBeTruthy();
     expect(screen.getByText('Judges read a sample of runs and score them against a rubric you write.')).toBeTruthy();
-    const steps = within(screen.getByRole('region', { name: 'How judges work' }));
-    expect(steps.getByText('Sample')).toBeTruthy();
-    expect(steps.getByText('Score')).toBeTruthy();
-    expect(steps.getByText('Learn')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'How judges work' })).toBeNull();
 
     const table = screen.getByRole('table');
     expect(within(table).getAllByRole('row')).toHaveLength(5);

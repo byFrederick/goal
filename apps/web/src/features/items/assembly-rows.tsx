@@ -125,7 +125,12 @@ export function ItemTableRow({
   const label = describeState(item, { decides });
   const status = itemStatus(item);
   return (
-    <tr className={cn('border-t border-line', selected ? 'bg-run-tint' : 'hover:bg-panel')}>
+    <tr
+      className={cn(
+        'border-t border-line motion-safe:animate-row-in motion-reduce:animate-fade-in',
+        selected ? 'bg-run-tint' : 'hover:bg-panel',
+      )}
+    >
       <td className={cn(cell, 'w-px')}>
         <SelectBox label={`Select ${item.ref}`} checked={selected} onChange={() => onSelect(item.id)} />
       </td>

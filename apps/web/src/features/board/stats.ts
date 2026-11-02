@@ -210,3 +210,30 @@ export function waitsOn(item: Pick<ItemCard, 'state' | 'waiting'>): ItemCard['wa
 function waitingReason(waiting: NonNullable<ItemCard['waiting']>): StateLabel {
   return { text: waitingShort(waiting), tone: 'muted' };
 }
+
+/** How many cards a column's In progress group shows before "Show N more". */
+export const columnLimit = 6;
+
+/** One group of a column's standard zone: the cards working, or the buffer's Ready cards. */
+export interface ColumnGroup {
+  kind: 'in-progress' | 'ready';
+  items: ItemCard[];
+}
+
+/**
+ * A column's standard zone as ordered groups. A column with a buffer (the drum) lists its In progress
+ * cards first, then the buffer's Ready cards, which the column dims below; any other column is one In
+ * progress group (MASTER.md, Board column). Each group keeps the order the board gave.
+ */
+export function columnGroups(standard: ItemCard[], buffered: boolean): ColumnGroup[] {
+  if (!buffered) return [{ kind: 'in-progress', items: standard }];
+  return [
+    { kind: 'in-progress', items: standard.filter((it) => !it.in_buffer) },
+    { kind: 'ready', items: standard.filter((it) => it.in_buffer) },
+  ];
+}
+
+/** The cards a group shows: the first `limit`, or all of them once the person asked for more. */
+export function visibleCards(items: ItemCard[], expanded: boolean, limit = columnLimit): ItemCard[] {
+  return expanded ? items : items.slice(0, limit);
+}

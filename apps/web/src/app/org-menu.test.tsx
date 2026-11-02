@@ -163,13 +163,13 @@ describe('the organization menu', () => {
     );
   });
 
-  it('renders Spend and billing disabled, with the not-available tooltip', async () => {
+  it("links Spend and billing to the organization's spend page", async () => {
     renderMenu();
     const m = await menu();
     const item = within(m).getByRole('menuitem', { name: 'Spend and billing' });
-    expect(item.getAttribute('aria-disabled')).toBe('true');
-    fireEvent.focus(item);
-    expect(await screen.findByText('Not available yet')).toBeTruthy();
+    expect(item.getAttribute('aria-disabled')).toBeNull();
+    expect(item.getAttribute('href')).toBe('/o/goal/spend');
+    expect(screen.queryByText('Not available yet')).toBeNull();
   });
 
   it("links Models and policies to the organization's page", async () => {

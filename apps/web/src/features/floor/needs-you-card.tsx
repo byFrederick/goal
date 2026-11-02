@@ -13,7 +13,6 @@ import { type DecidableItem, RejectDialog, useDecision } from '../../shared/item
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
-import { cn } from '../../ui/cn';
 import { Count } from '../../ui/count';
 import { CardEmpty, CardFailed, CardLoading } from './card-states';
 import { type InboxRow, inboxGroups } from './needs-you-groups';
@@ -22,14 +21,14 @@ function decidable(item: ItemCard): DecidableItem {
   return { key: item.ref, ref: item.ref, title: item.title, state: item.state, pull_requests: item.pull_requests };
 }
 
-/** The tile's icon and tone: a decision is violet, a sent-back warning or a stop is red. */
+/** The row's icon: a decision is orange, a sent-back warning or a stop is red. No tile behind it. */
 function Tile({ row }: { row: InboxRow }) {
   const kind = row.entry.kind;
-  const tone = kind === 'decision' ? 'bg-you-tint text-you-ink' : 'bg-rework-tint text-rework-ink';
+  const tone = kind === 'decision' ? 'text-you-ink' : 'text-rework-ink';
   const Icon = kind === 'decision' ? ShieldCheck : kind === 'rework_warning' ? RotateCcw : CircleAlert;
   return (
-    <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-control', tone)} aria-hidden="true">
-      <Icon size={18} strokeWidth={1.75} />
+    <span className={`flex size-4 shrink-0 items-center justify-center ${tone}`} aria-hidden="true">
+      <Icon size={16} strokeWidth={1.75} />
     </span>
   );
 }

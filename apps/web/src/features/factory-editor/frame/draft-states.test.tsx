@@ -7,11 +7,11 @@ import { DraftFailed, DraftLoading } from './draft-states';
 afterEach(cleanup);
 
 describe('the Definition states', () => {
-  it('loading: the app background with an sr-only "Loading" and aria-busy, no placeholder shapes', () => {
+  it('loading: a skeleton of the rows with an sr-only "Loading" and aria-busy, never a blank page', () => {
     const { container } = render(<DraftLoading />);
     const busy = container.querySelector('[aria-busy="true"]');
     expect(busy?.textContent).toBe('Loading');
-    expect(busy?.querySelectorAll('div').length).toBe(0);
+    expect(busy?.querySelectorAll('.bg-hover').length).toBeGreaterThan(0);
   });
 
   it('error: says the draft could not load and offers Try again', () => {

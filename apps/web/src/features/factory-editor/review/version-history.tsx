@@ -66,9 +66,7 @@ export function VersionRow({
   const name = `v${n}`;
   return (
     <li className={cn(rowClass, 'border-t border-line')}>
-      <Chip tone={version.current ? 'quiet' : 'plain'} className={cn(version.current && 'bg-ink text-white')}>
-        {name}
-      </Chip>
+      <Chip tone={version.current ? 'quiet' : 'plain'}>{name}</Chip>
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="min-w-0">
           <p className="m-0 min-w-0 break-words text-body font-medium">{version.message || 'No note'}</p>

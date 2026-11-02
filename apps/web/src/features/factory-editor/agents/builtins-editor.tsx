@@ -88,7 +88,7 @@ export function BuiltinsEditor({ agent, index }: { agent: ModelAgent; index: num
                       <button
                         type="button"
                         onClick={() => setLimiting(true)}
-                        className="min-h-6 text-[13px] text-ink underline underline-offset-3 transition-colors duration-200 hover:text-run"
+                        className="min-h-6 text-[13px] text-ink underline underline-offset-3 transition-colors duration-(--duration-quick) hover:text-run"
                       >
                         Limit to commands…
                       </button>

@@ -66,7 +66,7 @@ function NoFactory({ org, search, message }: { org: OrgSummary; search: Onboardi
   return (
     <OnboardingLayout step="intake" org={org} back={<Back org={org} search={search} />}>
       <div className="flex flex-col gap-2">
-        <h1 className="m-0 font-numeral text-kpi tracking-display">Choose where work comes from</h1>
+        <h1 className="m-0 text-kpi tracking-display">Choose where work comes from</h1>
       </div>
       <Callout tone="rework">{message}</Callout>
     </OnboardingLayout>
@@ -109,7 +109,7 @@ function Triggers({
     return (
       <OnboardingLayout step="intake" org={org} back={<Back org={org} search={search} factory={factoryId} />}>
         <div className="flex flex-col gap-2">
-          <h1 className="m-0 font-numeral text-kpi tracking-display">Choose where work comes from</h1>
+          <h1 className="m-0 text-kpi tracking-display">Choose where work comes from</h1>
         </div>
         <Callout tone="rework">
           <span>The factory’s triggers can’t be read.</span>
@@ -276,7 +276,7 @@ function Ready({
       }}
     >
       <div className="flex flex-col gap-2">
-        <h1 className="m-0 font-numeral text-kpi tracking-display">Choose where work comes from</h1>
+        <h1 className="m-0 text-kpi tracking-display">Choose where work comes from</h1>
         <p className="m-0 text-heading font-normal text-ink-soft">
           Triggers turn events and schedules into items on the line. You can change them any time in Intake.
         </p>
@@ -378,19 +378,19 @@ export function IntakeCard({ names }: { names: string[] }) {
   return (
     <section
       aria-label="Intake"
-      className="flex min-w-0 flex-col gap-2 rounded-card border border-run-soft bg-andon-raised p-4 ring-4 ring-run-soft/25"
+      className="flex min-w-0 flex-col gap-2 rounded-card border border-run bg-hover p-4 ring-4 ring-run/25"
     >
-      <span className="text-meta text-andon-text">Intake</span>
+      <span className="text-meta text-ink-soft">Intake</span>
       {names.length > 0 ? (
         <ul className="m-0 flex list-none flex-col gap-1 p-0">
           {names.map((name) => (
-            <li key={name} className="text-secondary break-words text-white">
+            <li key={name} className="text-secondary break-words text-ink">
               {name}
             </li>
           ))}
         </ul>
       ) : null}
-      <span className="text-secondary break-words text-andon-text">And New item, CLI, API</span>
+      <span className="text-secondary break-words text-ink-soft">And New item, CLI, API</span>
     </section>
   );
 }

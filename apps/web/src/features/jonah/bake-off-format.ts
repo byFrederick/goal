@@ -20,10 +20,10 @@ export function modelFamily(model: string): string {
 }
 
 /**
- * The dot colour of an arm, by its number: 1 ok, 2 run-soft, 3 run, and a fourth arm muted. The same
+ * The dot colour of an arm, by its number: 1 ok, 2 run-ink, 3 run, and a fourth arm muted. The same
  * colour marks the arm on the plot, in the table and in the grid's header, so an arm reads one way.
  */
-const armDots = ['bg-ok', 'bg-run-soft', 'bg-run', 'bg-muted'] as const;
+const armDots = ['bg-ok', 'bg-run-ink', 'bg-run', 'bg-muted'] as const;
 
 export function armDot(arm: number): string {
   return armDots[arm - 1] ?? 'bg-muted';

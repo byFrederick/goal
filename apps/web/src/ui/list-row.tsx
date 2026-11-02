@@ -36,7 +36,7 @@ export function ListRow({ icon, tone = 'you', title, sub, aside, end, children }
   return (
     <Slot.Root
       className={cn(
-        'grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t border-line px-1 py-3 text-ink no-underline transition-colors duration-200',
+        'grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t border-line px-1 py-3 text-ink no-underline transition-colors duration-(--duration-quick)',
         "[grid-template-areas:'tile_body_end'_'tile_aside_end']",
         "@[480px]:grid-cols-[36px_minmax(0,1fr)_auto_auto] @[480px]:[grid-template-areas:'tile_body_aside_end']",
         '[a&]:hover:bg-shell [button&]:hover:bg-shell',
