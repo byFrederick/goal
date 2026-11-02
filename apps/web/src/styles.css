@@ -573,6 +573,16 @@
     visibility: visible;
   }
 
+  /* A disclosure that peeks: closed, it still shows its first three lines (leading-relaxed, 1.625), so one copy
+     of the text grows from the clamp to its full height and back. */
+  .motion-disclosure-peek {
+    visibility: visible;
+  }
+
+  .motion-disclosure.motion-disclosure-peek > * {
+    min-height: 4.875em;
+  }
+
   .motion-disclosure > * {
     min-height: 0;
     overflow: hidden;
@@ -721,6 +731,10 @@
   .motion-disclosure {
     transition-property: visibility;
     transition-duration: var(--duration-quick);
+  }
+
+  .motion-disclosure-peek {
+    transition: none;
   }
 
   .motion-chevron {
