@@ -1,5 +1,5 @@
 // A range input for the judge page's Pass mark and Sample. MASTER.md has no slider, so this one is local to
-// the judge page: a native range input, styled with the accent and the tokens only, with its value shown
+// the judge page: a native range input, styled with the ink accent and the tokens only, with its value shown
 // beside it. It takes its id and its help line from the Field around it.
 import { useFieldControl } from '../../ui/field';
 
@@ -24,7 +24,7 @@ export function RangeInput({
 }) {
   const field = useFieldControl();
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-4">
       <input
         id={field?.id}
         aria-describedby={field?.describedBy}
@@ -35,11 +35,11 @@ export function RangeInput({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="h-2 min-w-0 flex-1 cursor-pointer accent-run"
+        className="h-2 min-w-0 flex-1 cursor-pointer accent-ink"
       />
       <span
         aria-hidden="true"
-        className="min-w-14 rounded-chip border border-rule bg-card px-2 py-1 text-center font-semibold tabular-nums"
+        className="grid h-8 w-16 shrink-0 place-items-center rounded-control border border-rule bg-card font-control font-medium tabular-nums"
       >
         {shown}
       </span>
