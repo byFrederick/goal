@@ -463,4 +463,15 @@ test('add connection at 390 px keeps the tab bar fully visible below the catalog
   expect(bar.y).toBeGreaterThanOrEqual(0);
   expect(bar.y + bar.height).toBeLessThanOrEqual(844);
   expect(last.y + last.height).toBeLessThanOrEqual(bar.y);
+  // Nothing is painted over the bar: the topmost element at its centre and near both bottom corners is in the bar.
+  const covered = await page.evaluate(
+    ({ x, y, w, h }) =>
+      [
+        [x + w / 2, y + h / 2],
+        [x + 4, y + h - 4],
+        [x + w - 4, y + h - 4],
+      ].filter(([px = 0, py = 0]) => !document.elementFromPoint(px, py)?.closest('nav[aria-label="Tabs"]')).length,
+    { x: bar.x, y: bar.y, w: bar.width, h: bar.height },
+  );
+  expect(covered).toBe(0);
 });
