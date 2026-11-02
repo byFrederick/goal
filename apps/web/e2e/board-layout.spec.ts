@@ -107,3 +107,25 @@ test.describe('at 1680 px', () => {
     expect(layout.some((column) => column.cards.length > 0)).toBe(true);
   });
 });
+
+// The pictures for the pull request: the software factory's Board, whose Build column is the drum with
+// its buffer (#7 and #8 under "Ready, buffer"), at 1440 and 390 px in both themes. They are attached to
+// the test report; nothing is compared.
+for (const theme of ['light', 'dark'] as const) {
+  for (const size of [
+    { name: '1440', width: 1440, height: 1000, path: '/o/acme/f/software/board' },
+    { name: '390', width: 390, height: 844, path: '/o/acme/f/software/board?station=build' },
+  ]) {
+    test(`board screenshot, ${size.name} px, ${theme}`, async ({ page }, testInfo) => {
+      await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+      await page.setViewportSize({ width: size.width, height: size.height });
+      await page.goto(size.path);
+      await expect(page.getByText(/^Ready, buffer/).first()).toBeVisible();
+      await page.waitForLoadState('networkidle');
+      await testInfo.attach(`board-${size.name}-${theme}`, {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: 'image/png',
+      });
+    });
+  }
+}

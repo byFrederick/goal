@@ -1,7 +1,6 @@
-// The Board's header controls from 768 px: the search over the cards, the Board | List view, and the
-// top bar's actions (Pull andon and New item). The search and the view sit on the title row, because
-// the top bar beside its breadcrumb has no room for them at 768 px (MASTER.md "Top bar"). The phone
-// keeps its search in the filters row and its andon in the status line (board-page.tsx).
+// The Board's top bar from 768 px (board.html): the search over the cards, the Board | List view, then
+// Pull andon and New item. The phone keeps its search in the filters row and its andon in the status
+// line (board-page.tsx).
 import { useNavigate } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
 import type { Board, Factory } from '../../api/types';
@@ -31,7 +30,7 @@ export function SearchItems({ value, onChange }: { value: string; onChange: (q: 
         value={value}
         placeholder="Search items"
         onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-56 max-w-full rounded-control border border-line bg-card pr-3 pl-8 text-sm text-ink placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run"
+        className="h-11 w-40 max-w-full md:h-8 lg:w-56 rounded-control border border-line bg-card pr-3 pl-8 text-sm text-ink placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run"
       />
     </label>
   );
@@ -53,10 +52,22 @@ export function BoardViewControl() {
   );
 }
 
-/** The top bar's actions on the Board page: Pull andon and New item. */
-export function BoardTopBarActions({ factory, andon }: { factory: Factory; andon: Board['line']['andon'] }) {
+/** The top bar's actions on the Board page: the search, Board | List, Pull andon and New item. */
+export function BoardTopBarActions({
+  factory,
+  andon,
+  q,
+  onSearch,
+}: {
+  factory: Factory;
+  andon: Board['line']['andon'];
+  q: string;
+  onSearch: (q: string) => void;
+}) {
   return (
     <div className="flex min-w-0 items-center justify-end gap-2">
+      <SearchItems value={q} onChange={onSearch} />
+      <BoardViewControl />
       <AndonButton factory={factory} andon={andon} />
       <NewItemButton factory={factory} />
     </div>

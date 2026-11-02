@@ -72,21 +72,31 @@ export function ListShape() {
 
 function BoardColumn() {
   return (
-    <div className="flex w-64 flex-none flex-col gap-3">
+    <div className="flex w-64 flex-none flex-col gap-2">
       <div className={cn(block, 'h-5 w-24')} />
-      <div className={cn(block, 'h-20')} />
-      <div className={cn(block, 'h-20')} />
-      <div className={cn(block, 'h-20')} />
+      <div className={cn(block, 'h-1 w-full')} />
+      <div className={cn(block, 'h-10')} />
+      <div className="flex flex-col gap-2 rounded-cell bg-panel p-2">
+        <div className={cn(block, 'h-24')} />
+        <div className={cn(block, 'h-24')} />
+        <div className={cn(block, 'h-24')} />
+      </div>
     </div>
   );
 }
 
-/** The Board: a heading, then its station columns side by side, the last ones cut off at the edge. */
+/** The Board: its title and the four filter buttons, then its station columns side by side, the last ones cut off at the edge. */
 export function BoardShape() {
   return (
     <div className="flex w-full min-w-0 flex-col gap-5">
-      <Heading />
-      <div className="flex min-w-0 gap-4 overflow-hidden">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className={cn(block, 'h-7 w-24')} />
+        <div className={cn(block, 'h-7 w-24')} />
+        <div className={cn(block, 'h-7 w-16')} />
+        <div className={cn(block, 'h-7 w-24')} />
+        <div className={cn(block, 'h-7 w-24')} />
+      </div>
+      <div className="flex min-w-0 gap-3 overflow-hidden">
         <BoardColumn />
         <BoardColumn />
         <BoardColumn />

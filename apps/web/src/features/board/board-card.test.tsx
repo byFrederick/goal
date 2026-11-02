@@ -105,7 +105,7 @@ describe('BoardCard as the screen draws it', () => {
   const article = async () =>
     (await screen.findByRole('link', { name: 'Adjust the export handler' })).closest('article') as HTMLElement;
 
-  it('shows the ref, the type and lane chips, the age, the agent with its cost, and its state chip', async () => {
+  it('shows the mono number, plain type and lane text, the age inline, the agent with its cost, and its state chip', async () => {
     renderMovable(
       card({
         type: 'feature',
@@ -116,18 +116,57 @@ describe('BoardCard as the screen draws it', () => {
         cost_usd: 0.7,
         slot: 1,
         turn: 2,
+        touch_count: 2,
       }),
     );
 
     const card_ = await article();
-    expect(within(card_).getByText('sre#21')).toBeTruthy();
-    expect(within(card_).getByText('Feature')).toBeTruthy();
-    expect(within(card_).getByText('Backend')).toBeTruthy();
-    expect(within(card_).getByText('10 min')).toBeTruthy();
+    const number = within(card_).getByText('#21');
+    expect(number.classList).toContain('font-mono');
+    expect(card_.textContent).not.toContain('sre#21');
+    // Type, lane and age are plain text on the one meta row with the number, not bordered chips.
+    const type = within(card_).getByText('feature');
+    const lane = within(card_).getByText('backend');
+    const age = within(card_).getByText('10 min');
+    expect(type.parentElement).toBe(number.parentElement);
+    expect(lane.parentElement).toBe(number.parentElement);
+    expect(age.parentElement).toBe(number.parentElement);
+    expect(type.classList).not.toContain('border');
+    expect(lane.classList).not.toContain('border');
+    expect(within(card_).queryByText('Feature')).toBeNull();
     expect(within(card_).getByText('builder')).toBeTruthy();
     expect(within(card_).getByText('$0.70')).toBeTruthy();
     expect(within(card_).getByText('Needs your OK')).toBeTruthy();
     expect(card_.textContent).not.toMatch(/copy/i);
+    // 12 px padding, as the design's card.
+    expect(card_.classList).toContain('p-3');
+    // Touches are muted text, not red.
+    const touches = within(card_).getByText('2 touches');
+    expect(touches.classList).toContain('text-muted');
+    expect(touches.className).not.toMatch(/you|rework|rose|red/);
+    // The agent's mark is an outlined-tone avatar with no bold weight.
+    const mark = within(card_).getByText('B');
+    expect(mark.className).not.toMatch(/font-bold/);
+    expect(mark.classList).toContain('font-semibold');
+    expect(mark.classList).not.toContain('bg-run');
+  });
+
+  it('shows its Move button only on hover or focus on a desktop card, not as an arrow on every card', async () => {
+    renderMovable(card({ state: 'queued' }));
+
+    const button = within(await article()).getByRole('button', { name: /move/i });
+    expect(button.className).toMatch(/md:opacity-0/);
+    expect(button.className).toMatch(/md:group-hover:opacity-100/);
+    expect(button.className).toMatch(/md:focus-visible:opacity-100/);
+  });
+
+  it('keeps the Move button in the status row on a phone and reserves room for it from md', async () => {
+    renderMovable(card({ state: 'queued' }));
+
+    const button = within(await article()).getByRole('button', { name: /move/i });
+    expect(button.className).not.toMatch(/(^|\s)absolute(\s|$)/);
+    expect(button.className).toMatch(/md:absolute/);
+    expect(button.parentElement?.className).toMatch(/md:pr-10/);
   });
 
   it('shows the assembly line: the part, one pip per part with the merged ones filled', async () => {
