@@ -207,6 +207,30 @@ test('Ask the factory is not built yet: the input is disabled and Ask stays unav
   await expectNoHorizontalScroll(page);
 });
 
+// The pictures for the pull request: the Line at desktop and phone width, in both themes. They are
+// attached to the report, not compared; docs/design/screens/build/definition-form.jpg is the reference.
+for (const theme of ['light', 'dark'] as const) {
+  for (const [name, size] of [
+    ['1440', { width: 1440, height: 900 }],
+    ['390', { width: 390, height: 844 }],
+  ] as const) {
+    test(`line screenshot at ${name}, ${theme}`, async ({ page }, testInfo) => {
+      await page.setViewportSize(size);
+      await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+      await page.goto('/o/acme/f/goal/definition/line');
+      await expect(page.getByRole('list', { name: 'Stations, in order' })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Checks on this line' })).toBeVisible();
+      // The table scrolls in its own box; the page does not scroll sideways.
+      const wide = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+      expect(wide).toBe(true);
+      await testInfo.attach(`line-${name}-${theme}`, {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: 'image/png',
+      });
+    });
+  }
+}
+
 for (const theme of ['light', 'dark'] as const) {
   for (const [name, size] of [
     ['1440', { width: 1440, height: 900 }],
