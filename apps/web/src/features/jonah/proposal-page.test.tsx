@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ApiError,
@@ -17,6 +18,8 @@ import { TopBar, TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { renderFactoryPage } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
 import { ProposalPage } from './proposal-page';
+
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster: () => null }));
 
 vi.mock('../../api/client', async (original) => ({
   ...(await original<typeof import('../../api/client')>()),
@@ -176,10 +179,12 @@ describe('the proposal page, its four states', () => {
     expect(screen.getByText('Waiting for your review')).toBeTruthy();
     expect(screen.getByText(/Proposed by Jonah .* after 4 runs sent back\. Rejecting tells Jonah why/)).toBeTruthy();
 
-    expect(screen.getByText('18%').tagName).toBe('S');
-    expect(screen.getByText('about 10%')).toBeTruthy();
-    expect(screen.getByText('Estimated from the 4 runs and their reasons')).toBeTruthy();
-    expect(screen.getByText('+$0.04')).toBeTruthy();
+    const strip = screen.getByRole('region', { name: 'Expected effect' });
+    expect(within(strip).getByText('about 10%')).toBeTruthy();
+    expect(within(strip).getByText('Now 18%')).toBeTruthy();
+    expect(within(strip).getByText('−8 pts').className).toContain('text-ok-ink');
+    expect(within(strip).getByText('+$0.04')).toBeTruthy();
+    expect(within(strip).getByText('Based on 4 runs sent back')).toBeTruthy();
 
     expect(screen.getByText('2 files, v21 to v22')).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Changes to agents/frontend-engineer.md' })).toBeTruthy();
@@ -197,19 +202,21 @@ describe('the proposal page, its four states', () => {
     expect(screen.getByText('Owners and admins')).toBeTruthy();
   });
 
-  it('shows the not-built controls as not available: the eval tile, Found by, Tested on and Eval results', async () => {
+  it('shows the not-built parts as not available: the eval figure, Found by, Tested on and Eval results', async () => {
     vi.mocked(getJonahOverview).mockResolvedValue(overview);
     vi.mocked(getProposal).mockResolvedValue(proposal7);
     renderProposal();
 
     await screen.findByRole('heading', { level: 1 });
+    const strip = screen.getByRole('region', { name: 'Expected effect' });
+    expect(within(strip).getByText('New eval case')).toBeTruthy();
+    expect(within(strip).getByText('No data yet')).toBeTruthy();
     const notAvailable = [
-      screen.getByRole('button', { name: /New eval case/ }),
       screen.getByRole('button', { name: 'The judge' }),
       ...screen.getAllByRole('button', { name: 'Not available yet' }),
     ];
     for (const control of notAvailable) expect(control.getAttribute('aria-disabled')).toBe('true');
-    expect(notAvailable).toHaveLength(4);
+    expect(notAvailable).toHaveLength(3);
   });
 
   it('a decided proposal shows its state and its reason, and no actions', async () => {
@@ -253,6 +260,21 @@ describe('the decisions', () => {
     expect(approveProposal).toHaveBeenCalledWith('org-1', 'factory-1', 7);
   });
 
+  it('Approve swaps its label to a check', async () => {
+    vi.mocked(getJonahOverview).mockResolvedValue(overview);
+    vi.mocked(getProposal)
+      .mockResolvedValueOnce(proposal7)
+      .mockResolvedValue({ ...proposal7, state: 'published', published_version: 22 });
+    vi.mocked(approveProposal).mockResolvedValue({ number: 7, state: 'published' } as never);
+    renderProposal();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve and publish v22' }));
+
+    const done = await screen.findByRole('button', { name: 'Published' });
+    expect(done.querySelector('svg')).toBeTruthy();
+    expect((done as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('Edit shows the draft-conflict message when the draft changed the same files', async () => {
     vi.mocked(getJonahOverview).mockResolvedValue(overview);
     vi.mocked(getProposal).mockResolvedValue(proposal7);
@@ -292,5 +314,6 @@ describe('the decisions', () => {
         'Ask for the screenshot in the pull request.',
       ),
     );
+    await vi.waitFor(() => expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Proposal rejected')));
   });
 });
