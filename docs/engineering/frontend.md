@@ -381,7 +381,6 @@ Differences from `docs/design/screens/build/agents.jpg`, each for a reason:
 - "7 triggers" under a queue with no agent is left out: Intake triggers are not built.
 - The reviewer's "Read only" is left out; the page does not read the agent's tool policy yet.
 - Agent cards show no copy count and no slot marks: the brief forbids a copy number.
-- Station rings show the WIP limit, not the items in the station: the page does not read the live board.
 - The "53 merged this week" cell under Done is left out: the statistics do not count merged items per factory.
 - Agent marks are one colour, not one per agent: the design tokens have no per-agent palette.
 - The summary counts the agents' positions at stations, not copies, so it reads "4 agents" where the picture reads 15.
