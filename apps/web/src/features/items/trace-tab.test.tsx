@@ -287,7 +287,7 @@ describe('TraceTab following', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Watch live' }));
 
     expect(screen.getByRole('status').textContent).toBe('following');
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'end', behavior: 'auto' });
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'end', behavior: 'smooth' });
     fireEvent.click(screen.getByRole('button', { name: 'Step arrives' }));
     await screen.findByRole('button', { name: /Edit\s*two\.ts/ });
     expect(scrollIntoView).toHaveBeenCalledTimes(2);

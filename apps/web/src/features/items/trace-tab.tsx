@@ -355,15 +355,12 @@ function useFollowScroll(
   watchSeq: number,
   onStop: (() => void) | undefined,
 ) {
-  const lastSeq = useRef(watchSeq);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `trigger` re-runs the scroll when a step arrives
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!following) return;
-    const pressed = lastSeq.current !== watchSeq;
-    lastSeq.current = watchSeq;
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-    // A press jumps; steps that arrive afterwards glide, unless motion is reduced.
-    end.current?.scrollIntoView({ block: 'end', behavior: pressed || reduced ? 'auto' : 'smooth' });
+    // A press and the steps that arrive afterwards glide, unless motion is reduced.
+    end.current?.scrollIntoView({ block: 'end', behavior: reduced ? 'auto' : 'smooth' });
   }, [following, trigger, watchSeq, end]);
   const stop = useRef(onStop);
   stop.current = onStop;

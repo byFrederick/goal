@@ -51,6 +51,7 @@ export function renderFactoryPage({
   station,
   search,
   topBar = false,
+  loader,
 }: {
   page: () => ReactNode;
   /** The page's route under the factory: 'board', 'items/', 'items/$ref' or '/' (the Floor). */
@@ -67,6 +68,8 @@ export function renderFactoryPage({
   search?: Record<string, string> | undefined;
   /** Draw the shell's top bar above the page, for a page whose crumbs or actions live there (TopBarSlot). */
   topBar?: boolean;
+  /** Holds a navigation to the page open, as a browser's async route loading does. */
+  loader?: () => Promise<unknown> | undefined;
 }) {
   polyfillLayout();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
@@ -86,7 +89,14 @@ export function renderFactoryPage({
     beforeLoad: () => ({ factory }),
     component: Outlet,
   });
-  const pageRoute = createRoute({ getParentRoute: () => factoryRoute, path, component: page });
+  const pageRoute = createRoute({
+    getParentRoute: () => factoryRoute,
+    path,
+    component: page,
+    ...(loader
+      ? { loader, loaderDeps: ({ search }: { search: Record<string, unknown> }) => ({ tab: search.tab }) }
+      : {}),
+  });
   // The item route exists for links between pages; a page on it is the item route itself.
   const itemRoute = createRoute({ getParentRoute: () => factoryRoute, path: itemPath, component: () => null });
   const children = path === itemPath ? [pageRoute] : [pageRoute, itemRoute];
