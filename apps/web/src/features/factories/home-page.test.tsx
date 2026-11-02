@@ -373,6 +373,15 @@ describe('Home: the ready state', () => {
     );
   });
 
+  it('denies a tool approval without a note, which the API would refuse empty', async () => {
+    await renderReady({ inboxList: inboxEntries([toolApproval]) });
+    const needs = screen.getByRole('region', { name: 'Needs you first' });
+    fireEvent.click(within(needs).getByRole('button', { name: 'Deny' }));
+    await waitFor(() =>
+      expect(decideToolApproval).toHaveBeenCalledWith('org-1', 'id-software#14', { decision: 'deny' }),
+    );
+  });
+
   it('lists what needs you, with a type and an action', async () => {
     await renderReady();
 
