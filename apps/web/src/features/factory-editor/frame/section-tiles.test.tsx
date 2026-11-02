@@ -12,7 +12,7 @@ vi.mock('@tanstack/react-router', () => ({
   }),
 }));
 vi.mock('../../../shared/factory', () => ({ useFactoryParams: () => ({ org: 'acme', factory: 'f' }) }));
-vi.mock('../draft/use-draft', () => ({ useModel: () => ({ line: {}, agents: {}, connections: {}, basics: {} }) }));
+vi.mock('../draft/use-draft', () => ({ useModel: () => ({ line: {}, agents: {}, connections: [], basics: {} }) }));
 
 Element.prototype.scrollIntoView = () => {};
 afterEach(cleanup);
@@ -33,15 +33,16 @@ const props = {
 };
 
 describe('the section nav', () => {
-  it('lists five links, marks the current one and shows a problem as a chip', () => {
+  it('lists five links, marks the current one and names the changes and the problem', () => {
     render(<SectionTiles {...props} />);
     const nav = screen.getByRole('navigation', { name: 'Definition sections' });
     expect(nav.querySelectorAll('a')).toHaveLength(5);
     const current = nav.querySelectorAll('a[aria-current="location"]');
     expect(current).toHaveLength(1);
     expect(current[0]?.textContent).toContain('Basics');
-    expect(screen.getByText('1 problem').closest('span.rounded-chip')?.className).toContain('rounded-chip');
-    expect(screen.getByText('1 change')).toBeTruthy();
+    const connections = screen.getByRole('link', { name: /^Connections/ });
+    expect(connections.textContent).toContain('1 change');
+    expect(connections.textContent).toContain('1 problem');
   });
 
   it('view only shows four links', () => {

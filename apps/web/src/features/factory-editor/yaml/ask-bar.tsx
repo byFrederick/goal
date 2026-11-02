@@ -10,7 +10,7 @@ import { NotAvailable } from '../../../ui/not-available';
 export function AskBar() {
   const inputId = useId();
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-control border border-rule bg-card py-1 pr-1 pl-3 transition-[border-color,box-shadow] duration-(--duration-quick) focus-within:border-run">
+    <div className="flex min-w-0 items-center gap-2 rounded-control border border-rule bg-card py-1 pr-1 pl-3 transition-[border-color,box-shadow] duration-(--duration-quick) focus-within:border-run">
       <label htmlFor={inputId} className="sr-only">
         Ask the factory to change its definition
       </label>
@@ -19,7 +19,7 @@ export function AskBar() {
         type="text"
         disabled
         placeholder="Ask the factory to change it, for example: give Review a 4th reviewer"
-        className="min-w-0 flex-1 basis-64 bg-transparent text-body text-ink outline-none placeholder:text-muted disabled:cursor-not-allowed disabled:opacity-60"
+        className="min-w-0 flex-1 bg-transparent text-body text-ink outline-none placeholder:text-muted disabled:cursor-not-allowed disabled:opacity-60"
       />
       <span className="hidden shrink-0 text-meta whitespace-nowrap text-muted md:inline">Becomes an item, reviewed like any change</span>
       <NotAvailable>

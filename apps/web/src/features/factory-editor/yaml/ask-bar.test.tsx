@@ -62,9 +62,10 @@ describe('the Ask the factory bar, not built yet', () => {
 });
 
 describe('the ask bar layout', () => {
-  it('has no glyph, so no agent icon sits before the input', async () => {
+  it('has no glyph before the input; the only icon is the Send button\'s', async () => {
     const input = await renderBar();
-    expect(input.parentElement?.querySelector('svg')).toBeNull();
+    const icons = [...(input.parentElement?.querySelectorAll('svg') ?? [])];
+    expect(icons.every((icon) => icon.closest('button'))).toBe(true);
   });
 
   it('keeps its hint, hidden below md so the bar stays one row on a phone', async () => {
