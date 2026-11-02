@@ -73,7 +73,7 @@ export function WebhooksPage() {
           title="No webhooks yet"
           actions={
             canManage ? (
-              <Button variant="primary" onClick={() => setCreating(true)}>
+              <Button variant="secondary" onClick={() => setCreating(true)}>
                 <Plus size={15} strokeWidth={1.5} aria-hidden="true" />
                 New webhook
               </Button>
