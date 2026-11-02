@@ -12,8 +12,7 @@ import { yamlView } from '../section-views';
 import type { EditorSection } from '../sections';
 import { validateDefinitionSearch } from '../sections';
 
-const segment =
-  'inline-flex h-7 items-center rounded-chip px-3 text-secondary font-control transition-colors duration-(--duration-quick)';
+type View = 'form' | 'yaml';
 
 export function ViewToggle({ section, yaml }: { section: EditorSection; yaml: boolean }) {
   const params = useFactoryParams();
