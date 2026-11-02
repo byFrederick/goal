@@ -225,7 +225,7 @@ export function AssemblyLine({
       aria-label={`Part ${assembly.part} of ${assembly.parts} of ${assembly.title}`}
       className={cn(
         'relative z-10 flex min-w-0 items-center no-underline hover:text-run',
-        parts ? 'gap-1.5 text-meta font-medium text-ink-soft' : 'gap-1 text-xs text-muted',
+        parts ? 'gap-2 text-meta font-medium text-ink-soft' : 'gap-1 text-xs text-muted',
       )}
     >
       <span className="min-w-0 truncate" title={assembly.title}>
@@ -243,12 +243,12 @@ export function AssemblyLine({
 /** One pip per part of the assembly; the merged parts are filled. Decorative: the count says the same. */
 function PartPips({ total, merged }: { total: number; merged: number }) {
   return (
-    <span aria-hidden="true" className="flex shrink-0 gap-0.5">
+    <span aria-hidden="true" className="flex shrink-0 gap-1">
       {Array.from({ length: total }, (_, i) => (
         <i
           // biome-ignore lint/suspicious/noArrayIndexKey: the pips are fixed slots by position, never reordered
           key={i}
-          className={cn('block h-1 w-2 rounded-[1px]', i < merged ? 'bg-ink' : 'bg-rule')}
+          className={cn('block h-1 w-2 rounded-chip', i < merged ? 'bg-ink' : 'bg-rule')}
         />
       ))}
     </span>

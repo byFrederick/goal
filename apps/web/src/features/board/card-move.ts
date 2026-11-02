@@ -118,7 +118,7 @@ function flip(cards: HTMLElement[], apply: () => void, deps: CardMoveDeps): void
   }
 }
 
-/** A CSS time token ("250ms") in milliseconds, for the drag's settle; 0 under reduced motion. */
+/** A CSS time token in milliseconds, for the drag's settle; 0 under reduced motion. */
 export function tokenMs(name: string, deps: Pick<CardMoveDeps, 'reducedMotion'> = browserDeps()): number {
   if (deps.reducedMotion()) return 0;
   const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();

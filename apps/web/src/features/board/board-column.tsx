@@ -38,14 +38,14 @@ function WipMeter({ station }: { station: BoardStation }) {
   const waiting = Math.min(waitingOnYou(station), limit - busy);
   const label = `${station.in_progress} of ${limit} in progress`;
   return (
-    <span role="img" aria-label={label} className="flex gap-0.5">
+    <span role="img" aria-label={label} className="flex gap-1">
       {Array.from({ length: limit }, (_, i) => (
         <i
           // biome-ignore lint/suspicious/noArrayIndexKey: the segments are fixed slots by position, never reordered
           key={i}
           aria-hidden="true"
           className={cn(
-            'block h-1 flex-1 rounded-[1px]',
+            'block h-1 flex-1 rounded-chip',
             i < busy ? 'bg-ink' : i < busy + waiting ? 'bg-you' : 'bg-line',
           )}
         />
@@ -87,12 +87,12 @@ function ColumnHeader({
 }) {
   const [left, right] = meta(station, decides, finishedThisWeek);
   return (
-    <header className="flex flex-col gap-1.5 px-0.5 pb-0.5">
-      <div className="flex min-h-[22px] items-center gap-2">
+    <header className="flex flex-col gap-2 px-1">
+      <div className="flex min-h-6 items-center gap-2">
         <h2 className="m-0 min-w-0 truncate text-heading font-semibold">{humanize(station.id)}</h2>
         {constraint ? (
-          <span className="inline-flex items-center gap-1.5 text-meta font-medium text-ink-soft">
-            <i aria-hidden="true" className="block size-1.5 rounded-[1px] bg-amber" />
+          <span className="inline-flex items-center gap-2 text-meta font-medium text-ink-soft">
+            <i aria-hidden="true" className="block size-1.5 rounded-chip bg-amber" />
             Constraint
           </span>
         ) : null}
@@ -112,7 +112,7 @@ function ColumnHeader({
 /** A zone's label row, as in the picture: "Ready, buffer 2 of 2" with "Next in", or "In progress". */
 function ZoneLabel({ children, aside }: { children: string; aside?: string | undefined }) {
   return (
-    <div className="flex items-center justify-between gap-2 px-1 py-0.5 text-meta font-medium text-muted">
+    <div className="flex items-center justify-between gap-2 px-1 text-meta font-medium text-muted">
       <span>{children}</span>
       {aside ? <span>{aside}</span> : null}
     </div>

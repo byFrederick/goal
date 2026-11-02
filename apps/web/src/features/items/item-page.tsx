@@ -285,7 +285,10 @@ export function ItemPage() {
           {tab === 'timeline' ? (
             <section
               aria-label="Timeline"
-              className={cn('order-6 flex flex-col gap-4 @[720px]:order-none', !fullTrace && 'hidden @[720px]:flex')}
+              className={cn(
+                'order-6 flex animate-fade-in flex-col gap-4 @[720px]:order-none',
+                !fullTrace && 'hidden @[720px]:flex',
+              )}
             >
               <p aria-live="polite" className="m-0 inline-flex items-center gap-2 text-sm text-run">
                 {run ? (
@@ -299,7 +302,7 @@ export function ItemPage() {
             </section>
           ) : null}
           {tab === 'spec' ? (
-            <div className="order-6 flex flex-col gap-4 @[720px]:order-none">
+            <div className="order-6 flex animate-fade-in flex-col gap-4 @[720px]:order-none">
               {item.body ? (
                 <SectionCard title="Request">
                   <p className="m-0 text-body leading-relaxed whitespace-pre-wrap">{item.body}</p>
@@ -309,7 +312,7 @@ export function ItemPage() {
             </div>
           ) : null}
           {tab === 'changes' ? (
-            <div className="order-6 flex flex-col gap-4 @[720px]:order-none">
+            <div className="order-6 flex animate-fade-in flex-col gap-4 @[720px]:order-none">
               {Object.keys(item.outputs).length > 0 ? (
                 <OutputsCard factory={factory} outputs={item.outputs} />
               ) : (
@@ -318,7 +321,7 @@ export function ItemPage() {
             </div>
           ) : null}
           {tab === 'checks' ? (
-            <SectionCard title="Checks" className="order-6 @[720px]:order-none">
+            <SectionCard title="Checks" className="order-6 animate-fade-in @[720px]:order-none">
               {checks.length > 0 ? (
                 <EventList entries={checks} />
               ) : (
