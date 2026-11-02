@@ -7,11 +7,21 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useRouterState } from '@tanstack/react-router';
 import { Ellipsis, Inbox, Kanban, LayoutGrid, type LucideIcon, TextAlignStart, X } from 'lucide-react';
 import { Dialog as D } from 'radix-ui';
-import { type ReactNode, type RefObject, useEffect, useRef, useSyncExternalStore } from 'react';
+import {
+  Children,
+  Fragment,
+  isValidElement,
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useRef,
+  useSyncExternalStore,
+} from 'react';
 import { attentionQuery, factoriesQuery } from '../api/queries';
 import type { Factory, OrgSummary } from '../api/types';
 import { lastFactory } from '../shared/org';
 import { GoalMark } from '../ui/goal-mark';
+import { Menu, MenuContent, MenuTrigger } from '../ui/menu';
 import { SidebarContent, useSidebarBusy } from './sidebar';
 
 const phoneQuery = '(max-width: 767px)';
@@ -60,9 +70,52 @@ export function PhoneTopBar({ title, actions, back, onMenu, drawerOpen, menuRef 
         <GoalMark size="shell" />
       </button>
       {back ? <div className="flex-none">{back}</div> : null}
-      <p className="m-0 min-w-0 flex-1 truncate text-heading text-ink">{title}</p>
-      {actions ? <div className="flex min-w-0 flex-none items-center gap-2">{actions}</div> : null}
+      <p className="m-0 min-w-16 flex-1 truncate text-heading text-ink">{title}</p>
+      <TopBarActions>{actions}</TopBarActions>
     </header>
+  );
+}
+
+/** One level of fragments and arrays flattened, so a page's actions count one by one. */
+function flattenActions(node: ReactNode): ReactNode[] {
+  return Children.toArray(node).flatMap((child) =>
+    isValidElement<{ children?: ReactNode }>(child) && child.type === Fragment
+      ? flattenActions(child.props.children)
+      : [child],
+  );
+}
+
+/**
+ * The page's actions: the last (the primary one) stays in the bar, the others sit behind More actions, so the
+ * title keeps its room. Keycap hints are hidden and every control is 44 px tall.
+ */
+function TopBarActions({ children }: { children: ReactNode }) {
+  const actions = flattenActions(children);
+  if (actions.length === 0) return null;
+  const primary = actions[actions.length - 1];
+  const more = actions.slice(0, -1);
+  return (
+    <div className="flex min-w-0 flex-none items-center gap-1 [&_a]:min-h-11 [&_button]:min-h-11 [&_kbd]:hidden">
+      {more.length > 0 ? (
+        <Menu>
+          <MenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="More actions"
+              className="flex size-11 flex-none items-center justify-center rounded-control text-ink-soft hover:bg-hover hover:text-ink"
+            >
+              <Ellipsis size={18} strokeWidth={1.5} aria-hidden="true" />
+            </button>
+          </MenuTrigger>
+          <MenuContent align="end" side="bottom">
+            <div className="flex flex-col gap-1 p-1 [&_a]:min-h-11 [&_button]:min-h-11 [&_button]:w-full [&_kbd]:hidden">
+              {more}
+            </div>
+          </MenuContent>
+        </Menu>
+      ) : null}
+      {primary}
+    </div>
   );
 }
 
@@ -146,9 +199,10 @@ function PageWatch({ onChange }: { onChange: () => void }) {
   return null;
 }
 
+// The current tab (aria-current) has ink text and a 2px ink indicator along its top edge. The indicator only
+// fades, so reduced motion needs no transform to drop (MOTION.md, Phone tab bar indicator).
 const tab =
-  'flex min-h-16 flex-col items-center justify-center gap-1 text-meta font-medium text-muted no-underline transition-colors duration-200';
-const tabActive = { className: 'font-semibold text-run-ink' } as const;
+  'relative flex min-h-16 flex-col items-center justify-center gap-1 text-meta font-medium text-muted no-underline transition-colors duration-quick after:pointer-events-none after:absolute after:inset-x-4 after:top-0 after:h-0.5 after:rounded-chip after:bg-ink after:opacity-0 after:transition-opacity after:duration-fast after:ease-out aria-[current=page]:font-semibold aria-[current=page]:text-ink aria-[current=page]:after:opacity-100';
 
 interface PhoneTabBarProps {
   org: OrgSummary;
@@ -192,7 +246,6 @@ function NeedsYouTab({ org }: { org: OrgSummary }) {
       to="/o/$org/needs-you"
       params={{ org: org.slug }}
       className={tab}
-      activeProps={tabActive}
       aria-label={waiting > 0 ? `Needs you, ${waiting} waiting on you` : 'Needs you'}
     >
       <span className="relative">
@@ -235,13 +288,13 @@ function FactoryTab({ org, factory, to, exact = false, label, icon: Icon }: Fact
   );
   if (factory === undefined) {
     return (
-      <Link to="/o/$org" params={{ org: org.slug }} className={tab} activeProps={tabActive}>
+      <Link to="/o/$org" params={{ org: org.slug }} className={tab}>
         {body}
       </Link>
     );
   }
   return (
-    <Link to={to} params={{ org: org.slug, factory }} activeOptions={{ exact }} className={tab} activeProps={tabActive}>
+    <Link to={to} params={{ org: org.slug, factory }} activeOptions={{ exact }} className={tab}>
       {body}
     </Link>
   );

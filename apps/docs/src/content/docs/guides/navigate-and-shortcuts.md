@@ -46,7 +46,7 @@ Use `↑` and `↓` to move between results, `Enter` to open the one you chose, 
 
 ## The phone
 
-Below 768 px, the sidebar is hidden. The top bar has the Goal mark, which opens the drawer. The drawer holds the same content as the sidebar: the organization menu, search, New item, the organization's pages, the factories and the account. The tab bar at the bottom opens Needs you, Floor, Board, Items and More. More opens the drawer.
+Below 768 px, the sidebar is hidden. The top bar has the Goal mark, which opens the drawer, then the page title, then the page's main action. Other actions sit behind More actions. The drawer holds the same content as the sidebar: the organization menu, search, New item, the organization's pages, the factories and the account. The tab bar at the bottom opens Needs you, Floor, Board, Items and More. More opens the drawer. The current tab shows its label in ink with a thin ink line along its top edge.
 
 ## Shortcuts
 
