@@ -21,6 +21,11 @@ interface ContentProps {
    * a dialog whose content is lost on closing, such as a secret shown once.
    */
   dismissible?: boolean;
+  /**
+   * true: no transition on open or close (MOTION.md, rule 1). For a dialog a key opens, such as the
+   * shortcuts list on ?, where a fade would only slow a keyboard user down.
+   */
+  instant?: boolean;
 }
 
 /**
@@ -36,6 +41,7 @@ export function DialogContent({
   initialFocus,
   onCloseAutoFocus,
   dismissible = true,
+  instant = false,
 }: ContentProps) {
   const keep = (e: Event) => {
     if (!dismissible) e.preventDefault();
@@ -43,7 +49,7 @@ export function DialogContent({
   const opener = useRef<HTMLElement | null>(null);
   return (
     <D.Portal>
-      <D.Overlay className="fixed inset-0 z-40 bg-ink/45 data-[state=open]:animate-[fade-in_150ms_ease-out]" />
+      <D.Overlay className={cn('fixed inset-0 z-40 bg-ink/45', !instant && 'motion-panel')} />
       <D.Content
         onCloseAutoFocus={(e) => {
           onCloseAutoFocus?.(e);
@@ -55,7 +61,8 @@ export function DialogContent({
         }}
         className={cn(
           'fixed z-50 flex flex-col gap-4 bg-card p-5 shadow-pop outline-none',
-          'top-1/2 left-1/2 max-h-[calc(100dvh-32px)] w-[calc(100vw-32px)] max-w-[480px] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-contain rounded-card',
+          !instant && 'motion-panel motion-dialog',
+          'top-1/2 left-1/2 max-h-[calc(100dvh-32px)] w-[calc(100vw-32px)] max-w-[480px] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-contain rounded-dialog',
           className,
         )}
         onEscapeKeyDown={keep}

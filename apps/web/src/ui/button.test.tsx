@@ -60,6 +60,24 @@ describe('Button', () => {
     expect(classes('Close')).toContain('size-8');
   });
 
+  it('presses with the press utility, and has no ad-hoc duration', () => {
+    for (const size of ['md', 'icon'] as const) {
+      const { unmount } = render(
+        size === 'icon' ? (
+          <Button size="icon" aria-label={`Press ${size}`}>
+            <span aria-hidden="true">x</span>
+          </Button>
+        ) : (
+          <Button>{`Press ${size}`}</Button>
+        ),
+      );
+      const names = classes(`Press ${size}`);
+      expect(names).toContain('press');
+      expect(names).not.toContain('duration-200');
+      unmount();
+    }
+  });
+
   it('gives an icon button its accessible name from aria-label', () => {
     render(
       <Button size="icon" aria-label="Actions for Ada">

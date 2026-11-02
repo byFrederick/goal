@@ -21,6 +21,7 @@ import { Chip, type ChipTone } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { EmptyState } from '../../ui/empty-state';
 import { Field, Input, useFieldControl } from '../../ui/field';
+import { Skeleton, SkeletonRows } from '../../ui/skeleton';
 import { Switch } from '../../ui/switch';
 import { formErrors, formOf, type JudgeForm, type JudgeFormErrors, judgeWrite } from './judge-form';
 import { RangeInput } from './judge-range';
@@ -38,12 +39,12 @@ import {
   tryFailure,
 } from './judges-format';
 
-/** Loading shows the app background and an empty region for the screen reader, never a placeholder shape. */
+/** Loading shows the page's rows as a skeleton while the data waits. */
 function Loading() {
   return (
-    <div aria-busy="true" className="min-h-40">
-      <p className="sr-only">Loading</p>
-    </div>
+    <Skeleton ready={false} placeholder={<SkeletonRows rows={4} className="min-h-40" />}>
+      <span />
+    </Skeleton>
   );
 }
 
@@ -253,7 +254,7 @@ function JudgeEditor({
                     aria-label={`Outcome ${i + 1} score`}
                     value={outcome.score}
                     onChange={(e) => setOutcome(i, { score: Number(e.target.value) })}
-                    className="w-20 font-numeral"
+                    className="w-20"
                   />
                   <Input
                     aria-label={`Outcome ${i + 1} label`}

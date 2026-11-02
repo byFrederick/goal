@@ -31,7 +31,7 @@ export function TokenField({
   /** B's problem with the list. */
   problem?: string | undefined;
   help: ReactNode;
-  /** Values in JetBrains Mono (tool specs). */
+  /** Values in IBM Plex Mono (tool specs). */
   mono?: boolean;
   onAdd: (value: string) => void;
   onRemove: (value: string) => void;
@@ -73,7 +73,7 @@ export function TokenField({
       <fieldset
         aria-labelledby={`${id}-label`}
         className={cn(
-          'm-0 flex min-h-11 flex-wrap items-center gap-1.5 rounded-control border bg-card px-1.5 py-1 transition-colors duration-200 md:min-h-10',
+          'm-0 flex min-h-11 flex-wrap items-center gap-1.5 rounded-control border bg-card px-1.5 py-1 transition-colors duration-(--duration-quick) md:min-h-10',
           // The input inside draws no ring of its own: the whole field shows focus.
           'has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-run',
           viewOnly ? 'border-line bg-shell' : shownError ? 'border-rework' : 'border-rule hover:border-muted',
@@ -96,7 +96,7 @@ export function TokenField({
                 type="button"
                 aria-label={`Remove ${noun} ${value}`}
                 onClick={() => onRemove(value)}
-                className="inline-flex size-6 items-center justify-center rounded-chip text-muted transition-colors duration-200 hover:bg-shell hover:text-ink"
+                className="inline-flex size-6 items-center justify-center rounded-chip text-muted transition-colors duration-(--duration-quick) hover:bg-shell hover:text-ink"
               >
                 <X size={14} strokeWidth={1.5} aria-hidden="true" />
               </button>

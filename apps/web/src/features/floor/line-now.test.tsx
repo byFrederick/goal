@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { Board, BoardStation, ItemCard } from '../../api/types';
-import { LinePanel } from './line-panel';
+import type { Board, BoardStation, Factory, ItemCard } from '../../api/types';
+import { LineNow } from './line-now';
 
 afterEach(cleanup);
+
+const factory = { id: 'factory-2', name: 'software', title: 'Software' } as Factory;
 
 const card = (number: number, state: ItemCard['state']): ItemCard => ({
   id: `item-${number}`,
@@ -117,16 +119,16 @@ const line: Board = {
   },
 };
 
-describe('LinePanel', () => {
+describe('LineNow', () => {
   it('draws the line with its legend and the stations in order, from intake to done', () => {
-    render(<LinePanel board={line} constraint="build" doneThisWeek={53} />);
+    render(<LineNow factory={factory} board={line} constraint="build" doneThisWeek={53} />);
 
     expect(screen.getByRole('heading', { level: 2, name: 'The line, now' })).toBeTruthy();
     const legend = screen.getByRole('list', { name: 'Legend' });
     const stations = within(screen.getByRole('list', { name: 'Stations from intake to done' })).getAllByRole(
       'listitem',
     );
-    for (const name of ['Agent working', 'Waiting on you', 'Free']) {
+    for (const name of ['Working', 'Waiting on you', 'Free']) {
       expect(within(legend).getByText(name)).toBeTruthy();
     }
     const names = stations.map(
@@ -136,16 +138,16 @@ describe('LinePanel', () => {
   });
 
   it('numbers each station by the items waiting and in progress there', () => {
-    render(<LinePanel board={line} constraint="build" doneThisWeek={53} />);
+    render(<LineNow factory={factory} board={line} constraint="build" doneThisWeek={53} />);
 
     const build = screen.getByText('Build').closest('li') as HTMLElement;
-    expect(within(build).getByText('8')).toBeTruthy();
+    expect(within(build).getAllByText('8')[0]).toBeTruthy();
     const intake = screen.getByText('Intake').closest('li') as HTMLElement;
-    expect(within(intake).getByText('4')).toBeTruthy();
+    expect(within(intake).getAllByText('4')[0]).toBeTruthy();
   });
 
   it('says what waits at each station: the queue, the buffer at the drum, and the work in progress', () => {
-    render(<LinePanel board={line} constraint="build" doneThisWeek={53} />);
+    render(<LineNow factory={factory} board={line} constraint="build" doneThisWeek={53} />);
 
     expect(screen.getByText('4 waiting')).toBeTruthy();
     expect(screen.getByText('Oldest 3 h')).toBeTruthy();
@@ -154,7 +156,7 @@ describe('LinePanel', () => {
   });
 
   it('draws each agent slot as working, waiting on you or free, and names the role', () => {
-    render(<LinePanel board={line} constraint="build" doneThisWeek={53} />);
+    render(<LineNow factory={factory} board={line} constraint="build" doneThisWeek={53} />);
 
     expect(screen.getByRole('img', { name: 'Architect: 1 working, 1 waiting on you, 1 free' })).toBeTruthy();
     expect(screen.getByRole('img', { name: 'Engineer: 5 working, 1 waiting on you, 0 free' })).toBeTruthy();
@@ -162,7 +164,7 @@ describe('LinePanel', () => {
   });
 
   it('gives the busy share, or the send-back share where the station has no busy share', () => {
-    render(<LinePanel board={line} constraint="build" doneThisWeek={53} />);
+    render(<LineNow factory={factory} board={line} constraint="build" doneThisWeek={53} />);
 
     expect(screen.getByText('Busy 41%')).toBeTruthy();
     expect(screen.getByText('Busy 94%')).toBeTruthy();
@@ -170,16 +172,16 @@ describe('LinePanel', () => {
   });
 
   it('marks the constraint with a Constraint tag and gives Done its counts', () => {
-    render(<LinePanel board={line} constraint="build" doneThisWeek={53} />);
+    render(<LineNow factory={factory} board={line} constraint="build" doneThisWeek={53} />);
 
     const build = screen.getByText('Build').closest('li') as HTMLElement;
     expect(within(build).getByText('Constraint')).toBeTruthy();
-    expect(within(screen.getByText('Done').closest('li') as HTMLElement).getByText('7 done today')).toBeTruthy();
+    expect(within(screen.getByText('Done').closest('li') as HTMLElement).getByText('7 merged today')).toBeTruthy();
     expect(screen.getByText('53 this week')).toBeTruthy();
   });
 
   it('footer: in progress, release to the drum, the expedite lane and the andon state', () => {
-    const { container } = render(<LinePanel board={line} constraint="build" doneThisWeek={53} />);
+    const { container } = render(<LineNow factory={factory} board={line} constraint="build" doneThisWeek={53} />);
 
     const footer = container.querySelector('footer')?.textContent ?? '';
     expect(footer).toContain('In progress 10 of 18, ready 2');
@@ -190,7 +192,8 @@ describe('LinePanel', () => {
 
   it('leaves out release and expedite when the policy has no drum or no lane is set', () => {
     render(
-      <LinePanel
+      <LineNow
+        factory={factory}
         board={{
           ...line,
           line: { ...line.line, release: { ...line.line.release, policy: 'push', drum: null }, expedite: null },
@@ -205,7 +208,7 @@ describe('LinePanel', () => {
   });
 
   it('shows an empty line when the factory has no stations yet', () => {
-    render(<LinePanel board={{ ...line, stations: [] }} constraint={null} doneThisWeek={null} />);
+    render(<LineNow factory={factory} board={{ ...line, stations: [] }} constraint={null} doneThisWeek={null} />);
 
     expect(screen.getByText('This factory has no stations yet.')).toBeTruthy();
   });

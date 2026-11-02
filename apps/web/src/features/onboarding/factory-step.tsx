@@ -141,7 +141,7 @@ function ContinueFactory({ org, search }: { org: OrgSummary; search: OnboardingS
       }}
     >
       <div className="flex flex-col gap-2">
-        <h1 className="m-0 font-numeral text-kpi tracking-display">Start your first factory</h1>
+        <h1 className="m-0 text-kpi tracking-display">Start your first factory</h1>
         <p className="m-0 text-heading font-normal text-ink-soft">Your factory is made. Shape its line next.</p>
       </div>
     </OnboardingLayout>
@@ -281,7 +281,7 @@ function CreateFactory({
       preview={panel(trimmed, purpose)}
     >
       <div className="flex flex-col gap-2">
-        <h1 className="m-0 font-numeral text-kpi tracking-display">Start your first factory</h1>
+        <h1 className="m-0 text-kpi tracking-display">Start your first factory</h1>
         <p className="m-0 text-heading font-normal text-ink-soft">
           A factory is one line of stations staffed by agents. Start from a template and change anything.
         </p>
@@ -465,7 +465,7 @@ function SaveDraft({
       }
     >
       <div className="flex flex-col gap-2">
-        <h1 className="m-0 font-numeral text-kpi tracking-display">Start your first factory</h1>
+        <h1 className="m-0 text-kpi tracking-display">Start your first factory</h1>
       </div>
       {failed ? (
         <Callout tone="rework">

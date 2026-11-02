@@ -34,6 +34,7 @@ import {
   typeOptions,
 } from './board-filters';
 import { BoardTopBarActions, BoardViewControl, SearchItems } from './board-header';
+import { useCardMoves } from './card-move';
 import { columnCount, expediteHeader, expediteUse, firstStation, isExpedite } from './stats';
 
 /** Opens the Move menu for a card, with the station a drop chose; undefined: the caller may not move work. */
@@ -157,7 +158,7 @@ function StationTabs({
             value={s.id}
             data-station={s.id}
             className={cn(
-              'flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-andon border border-line bg-card px-4 text-sm font-medium text-ink-soft',
+              'flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-dialog border border-line bg-card px-4 text-sm font-medium text-ink-soft',
               'data-[state=active]:border-ink data-[state=active]:bg-ink data-[state=active]:text-white',
             )}
           >
@@ -351,7 +352,9 @@ function focusCard(id: string) {
 export function BoardPage() {
   const factory = useFactory();
   const org = useOrg();
-  const { data: board } = useSuspenseQuery(boardQuery(org.id, factory.id));
+  const { data: fetched } = useSuspenseQuery(boardQuery(org.id, factory.id));
+  // A card that changes column or lane travels there (card-move.ts).
+  const board = useCardMoves(fetched);
   const search = useSearch({ from: '/o/$org/f/$factory/board' });
   const navigate = useNavigate({ from: '/o/$org/f/$factory/board' });
   // The filters and the grouping: the URL's choices, those the board offers only.

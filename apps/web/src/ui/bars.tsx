@@ -63,7 +63,7 @@ export function Bars({
               {b.value > 0 ? (
                 <div
                   className={cn(
-                    'w-full overflow-hidden rounded-t-[3px] rounded-b-[1px] transition-[height] duration-300 motion-reduce:transition-none',
+                    'w-full overflow-hidden rounded-t-[3px] rounded-b-[1px] transition-[height] duration-(--duration-fast) ease-out motion-reduce:transition-none',
                     latest && 'bg-run',
                   )}
                   style={{ height: `${pct(b.value)}%` }}

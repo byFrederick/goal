@@ -7,7 +7,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { ChevronDown, Inbox } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { factoriesQuery, inboxQuery } from '../../api/queries';
 import type { InboxEntry } from '../../api/types';
 import { usePhone } from '../../app/phone-chrome';
@@ -32,6 +32,9 @@ function decidable(entry: InboxEntry | undefined): DecidedEntry['entry'] | undef
     : undefined;
 }
 
+/** How long an approved entry stays in view for its check: the swap, then a beat to read it. */
+const approvedHoldMs = 900;
+
 export function NeedsYouPage() {
   const org = useOrg();
   const navigate = useNavigate({ from: '/o/$org/needs-you' });
@@ -50,14 +53,29 @@ export function NeedsYouPage() {
 
   const entries = inbox.data?.entries ?? [];
   const visible = visibleEntries(entries, search);
-  const selected = visible.find((e) => e.id === search.entry) ?? visible[0];
+  // An entry just approved stays in view while its button shows the check, though the inbox no longer lists it.
+  const [held, setHeld] = useState<InboxEntry | undefined>(undefined);
+  useEffect(() => {
+    if (!held) return;
+    const timer = setTimeout(() => setHeld(undefined), approvedHoldMs);
+    return () => clearTimeout(timer);
+  }, [held]);
+  const heldGone = held !== undefined && !visible.some((e) => e.id === held.id);
+  const selected = heldGone ? held : (visible.find((e) => e.id === search.entry) ?? visible[0]);
   const current = decidable(selected);
   const allowAlways = current !== undefined && alwaysAllowOffered(current, canManageConnections);
   const alwaysAllow = current !== undefined && alwaysAllowFor === current.id;
   const setAlwaysAllow = (checked: boolean) => setAlwaysAllowFor(checked && current ? current.id : undefined);
   const approvalCurrent = current !== undefined && typeOf(current) === 'approval';
-  const approving = phone && visible.some((e) => e.id === search.entry);
+  const approving = phone && (heldGone || visible.some((e) => e.id === search.entry));
+  // A phone slides the list in from the left when it comes back from an entry, and the entry in from the right.
+  const wasApproving = useRef(false);
+  const cameBack = phone && !approving && wasApproving.current;
+  useEffect(() => {
+    wasApproving.current = approving;
+  }, [approving]);
   const counts = tabCounts(entries, search.factory);
+  const approvedId = held?.id;
   const factoryOf = (entry: InboxEntry) => factories.data?.find((f) => f.id === entry.factory.id);
 
   const setSearch = (next: NeedsSearch) => navigate({ search: (prev) => ({ ...prev, ...clean(next) }) });
@@ -65,11 +83,14 @@ export function NeedsYouPage() {
   const approve = () => {
     if (!current) return;
     if (approvalCurrent) {
-      decide.mutate({ entry: current, decision: { kind: 'tool_approve', always_allow: allowAlways && alwaysAllow } });
+      decide.mutate(
+        { entry: current, decision: { kind: 'tool_approve', always_allow: allowAlways && alwaysAllow } },
+        { onSuccess: () => setHeld(current) },
+      );
       return;
     }
     const decision = decisionOf(current) === 'merge' ? ({ kind: 'merge' } as const) : ({ kind: 'approve' } as const);
-    decide.mutate({ entry: current, decision });
+    decide.mutate({ entry: current, decision }, { onSuccess: () => setHeld(current) });
   };
 
   // Deny asks for the reason; the dialog is the same on the phone's approve view and on the split.
@@ -112,7 +133,7 @@ export function NeedsYouPage() {
           break;
         }
         case 'a':
-          if (current && !decide.isPending) approve();
+          if (current && !decide.isPending && approvedId !== current.id) approve();
           break;
         case 'd':
           if (current) setDenying(true);
@@ -178,7 +199,7 @@ export function NeedsYouPage() {
     );
   }
 
-  if (entries.length === 0) {
+  if (entries.length === 0 && !held) {
     return (
       <>
         {header}
@@ -201,7 +222,7 @@ export function NeedsYouPage() {
 
   if (approving && selected) {
     return (
-      <>
+      <div className="flex min-h-0 flex-1 animate-pane-forward flex-col">
         <header className="flex items-center gap-3 border-b border-line px-4 py-3">
           <Link
             to="/o/$org/needs-you"
@@ -218,7 +239,8 @@ export function NeedsYouPage() {
           entry={selected}
           factory={factoryOf(selected)}
           phone
-          pending={decide.isPending}
+          pending={decide.isPending || approvedId === selected.id}
+          approved={approvedId === selected.id}
           allowAlways={allowAlways}
           alwaysAllow={alwaysAllow}
           onAlwaysAllow={setAlwaysAllow}
@@ -226,12 +248,12 @@ export function NeedsYouPage() {
           onDeny={() => setDenying(true)}
         />
         {deny}
-      </>
+      </div>
     );
   }
 
   return (
-    <>
+    <div className={cn('flex min-h-0 flex-1 flex-col', cameBack && 'animate-pane-back')}>
       {header}
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <section
@@ -258,7 +280,8 @@ export function NeedsYouPage() {
             <Detail
               entry={selected}
               factory={factoryOf(selected)}
-              pending={decide.isPending}
+              pending={decide.isPending || approvedId === selected.id}
+              approved={approvedId === selected.id}
               allowAlways={allowAlways}
               alwaysAllow={alwaysAllow}
               onAlwaysAllow={setAlwaysAllow}
@@ -269,7 +292,7 @@ export function NeedsYouPage() {
         </div>
       </div>
       {deny}
-    </>
+    </div>
   );
 }
 
@@ -293,7 +316,7 @@ function TabGroup({
   onChange: (tab: NeedsTab) => void;
 }) {
   return (
-    <fieldset className="m-0 inline-flex flex-wrap gap-1 rounded-control border border-line bg-panel p-1">
+    <fieldset className="m-0 inline-flex flex-wrap gap-1 rounded-control bg-hover p-1">
       <legend className="sr-only">Show</legend>
       {tabs.map((tab) => {
         const pressed = value === tab.value;
@@ -306,6 +329,7 @@ function TabGroup({
             className={cn(
               'inline-flex h-11 items-center gap-2 rounded-chip px-3 font-control text-secondary whitespace-nowrap text-ink-soft hover:text-ink md:h-7',
               pressed && 'bg-card text-ink shadow-raised',
+              'transition-colors duration-(--duration-quick)',
             )}
           >
             {tab.label}

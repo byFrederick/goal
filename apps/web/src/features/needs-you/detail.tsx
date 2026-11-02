@@ -6,6 +6,7 @@
 // one column (mobile/approve).
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
+import { Check } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { eventsQuery } from '../../api/queries';
 import type { Factory, InboxEntry, ToolApproval } from '../../api/types';
@@ -27,6 +28,8 @@ export interface DetailProps {
   /** The phone's approve view: one column, with the actions stacked under the brief. */
   phone?: boolean;
   pending: boolean;
+  /** The Approve (or Merge) this entry was just given went through: its label shows the check. */
+  approved?: boolean;
   /** Whether the Always allow checkbox is offered for an Approval (the API offers it and the caller may manage connections). */
   allowAlways: boolean;
   alwaysAllow: boolean;
@@ -41,6 +44,7 @@ export function Detail({
   factory,
   phone = false,
   pending,
+  approved = false,
   allowAlways,
   alwaysAllow,
   onAlwaysAllow,
@@ -80,6 +84,7 @@ export function Detail({
             approval
             phone={phone}
             pending={pending}
+            approved={approved}
             allowAlways={allowAlways}
             alwaysAllow={alwaysAllow}
             onAlwaysAllow={onAlwaysAllow}
@@ -90,7 +95,14 @@ export function Detail({
       ) : type === 'decision' ? (
         <>
           <Brief entry={entry} />
-          <ActionBar entry={entry} phone={phone} pending={pending} onApprove={onApprove} onDeny={onDeny} />
+          <ActionBar
+            entry={entry}
+            phone={phone}
+            pending={pending}
+            approved={approved}
+            onApprove={onApprove}
+            onDeny={onDeny}
+          />
         </>
       ) : type === 'question' ? (
         entry.item && entry.question ? (
@@ -220,8 +232,12 @@ function ToolCall({ call }: { call: ToolApproval }) {
   );
 }
 
+/** The label and the check swap places: opacity, a little scale and a small blur (MOTION.md, Approve succeeds). */
+const swap = 'transition-[opacity,transform,filter] duration-(--duration-emphasis) ease-out';
+const swapOut = 'scale-90 opacity-0 blur-(--blur-small)';
+
 /**
- * Approve (violet, A), Edit then approve (not built yet) and Deny (D). An Approval also gets the
+ * Approve (orange, A), Edit then approve (not built yet) and Deny (D). An Approval also gets the
  * Always allow checkbox when the API offers it to this caller (ADR 0031, decision 8).
  */
 function ActionBar({
@@ -229,6 +245,7 @@ function ActionBar({
   approval = false,
   phone,
   pending,
+  approved = false,
   allowAlways = false,
   alwaysAllow = false,
   onAlwaysAllow,
@@ -239,6 +256,7 @@ function ActionBar({
   approval?: boolean;
   phone: boolean;
   pending: boolean;
+  approved?: boolean;
   allowAlways?: boolean;
   alwaysAllow?: boolean;
   onAlwaysAllow?: (checked: boolean) => void;
@@ -251,8 +269,21 @@ function ActionBar({
   return (
     <div className={phone ? 'flex flex-col gap-2' : 'flex flex-wrap items-center gap-2'}>
       <Button variant="approve" onClick={onApprove} disabled={pending} className={full}>
-        {merge ? 'Merge' : 'Approve'}
-        <kbd className="font-control text-meta opacity-80">A</kbd>
+        <span className="relative inline-flex items-center gap-2">
+          <span className={cn(swap, approved && swapOut)}>
+            {merge ? 'Merge' : 'Approve'}
+            <kbd className="ml-2 font-control text-meta opacity-80">A</kbd>
+          </span>
+          <Check
+            size={16}
+            strokeWidth={2}
+            aria-hidden="true"
+            className={cn('absolute inset-x-0 mx-auto', swap, !approved && swapOut)}
+          />
+          <span role="status" className="sr-only">
+            {approved ? (merge ? 'Merged' : 'Approved') : ''}
+          </span>
+        </span>
       </Button>
       <NotAvailable label="Edit, then approve">
         <Button variant="secondary" className={full}>

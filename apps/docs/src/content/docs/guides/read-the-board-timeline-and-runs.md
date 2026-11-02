@@ -12,8 +12,13 @@ Open a factory's Board at `/o/<org>/f/<factory>/board`.
 - **Columns** are the line's stations, in the order work moves through them. Each card is an item.
 - **Lanes** split each column by agent role, so you can see which role has the work.
 - **Cards** show what the run on the item is doing now, and its plan's steps when it has one.
+- **Column order:** a station with a buffer, such as Build, shows its **In progress** cards first, at the top. The **Ready, buffer n of m** cards sit below them, dimmed, under their own label. The same order holds on a phone.
+- **Show N more:** a column shows its first six In progress cards, then a **Show N more** button that reveals the rest. In a station with a buffer, the button ends the In progress group, above the Ready cards. **Show fewer** folds the column back.
+- **Assembly line:** a card that is part of an assembly shows the assembly's title, one pip per part (filled for each merged part) and its place, such as `2 of 4`.
 - **Waiting** items say what they wait on: a person's decision, another item, or a clock. A waiting card and its row in the list use the same words.
 - **Expedite** items appear in their own tinted card in their station.
+
+A card that moves to another column or lane, because an agent finished or because you moved it, travels there instead of jumping, and the cards around it shift to make room. When your system asks for reduced motion, the card appears in its new place at once. A card you drag follows the pointer and settles into place when you drop it; the drop then opens the Move menu to confirm.
 
 Filter the Board by assembly, agent role or status, and group it by assembly or not at all. On a phone, the Board has one tab per station.
 

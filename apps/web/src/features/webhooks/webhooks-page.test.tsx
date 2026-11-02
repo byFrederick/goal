@@ -4,8 +4,8 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../api/client';
-import { webhooksQuery } from '../../api/queries';
-import type { Factory, OrgSummary } from '../../api/types';
+import { intakeQuery, webhooksQuery } from '../../api/queries';
+import type { Factory, Intake, OrgSummary } from '../../api/types';
 import {
   createWebhookEndpoint,
   getWebhookDelivery,
@@ -79,17 +79,17 @@ const software: Factory = {
 
 const viewer: Factory = { ...software, role: 'viewer', can: ['factory:read'] };
 
-/** Seven UTC days, oldest first; the picture's cf-deploys week has 7 delivered and 2 refused. */
+/** Seven UTC days, oldest first; the picture's acme-deploys week has 7 delivered and 2 refused. */
 function week(delivered: number[], refused: number[]): WebhookDeliveryDay[] {
   return delivered.map((d, i) => ({ day: `2026-10-${21 + i}`, delivered: d, refused: refused[i] ?? 0 }));
 }
 
 const cfDeploys: WebhookEndpoint = {
-  id: 'cf-endpoint',
-  name: 'cf-deploys',
+  id: 'acme-endpoint',
+  name: 'acme-deploys',
   kind: 'generic',
-  address: '/hooks/cf-endpoint',
-  secret_name: 'cf-deploys-hook-secret',
+  address: '/hooks/acme-endpoint',
+  secret_name: 'acme-deploys-hook-secret',
   created_at: '2026-10-01T00:00:00Z',
   rotated_at: null,
   triggers: ['Deploy failed'],
@@ -143,7 +143,7 @@ const request: WebhookDeliveryRequest = {
 function answers() {
   api.listWebhookEndpoints.mockResolvedValue([cfDeploys, uptime]);
   api.listWebhookDeliveries.mockImplementation(async (_org, _factory, endpoint) =>
-    endpoint === 'cf-endpoint' ? page([refused, accepted, created]) : page([accepted, accepted, refused]),
+    endpoint === 'acme-endpoint' ? page([refused, accepted, created]) : page([accepted, accepted, refused]),
   );
   api.getWebhookDelivery.mockResolvedValue(request);
 }
@@ -183,12 +183,13 @@ function secretIsKept(queryClient: QueryClient, secret: string): boolean {
 }
 
 describe('the Webhooks page states', () => {
-  it('says it is loading, with aria-busy and no placeholder shape', async () => {
+  it('shows a skeleton of the list, announced as loading and aria-busy, while the endpoints wait', async () => {
     api.listWebhookEndpoints.mockReturnValue(new Promise(() => {}));
     renderPage(software, []);
 
-    expect(await screen.findByText('Loading webhooks')).toBeTruthy();
+    expect(await screen.findByText('Loading')).toBeTruthy();
     expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(screen.queryByText('No webhooks yet')).toBeNull();
   });
 
   it('says the list could not load, and retries it', async () => {
@@ -201,7 +202,7 @@ describe('the Webhooks page states', () => {
     expect(alert.textContent).toContain('Couldn’t load the webhooks');
     fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
 
-    expect(await screen.findByRole('heading', { name: 'cf-deploys' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'acme-deploys' })).toBeTruthy();
   });
 
   it('shows the empty state with New webhook when the factory has no endpoints', async () => {
@@ -222,10 +223,10 @@ describe('the Webhooks page states', () => {
     answers();
     renderPage();
 
-    const card = await screen.findByRole('region', { name: 'cf-deploys' });
+    const card = await screen.findByRole('region', { name: 'acme-deploys' });
     expect(within(card).getByText('2 refused this week')).toBeTruthy();
-    expect(within(card).getByText('HMAC SHA-256')).toBeTruthy();
-    expect(within(card).getByText('cf-deploys-hook-secret')).toBeTruthy();
+    expect(within(card).getByText('in Credentials, HMAC SHA-256')).toBeTruthy();
+    expect(within(card).getByText('acme-deploys-hook-secret')).toBeTruthy();
     expect(within(card).getByText('Deploy failed')).toBeTruthy();
     expect(within(card).getByText('7 delivered, 2 refused')).toBeTruthy();
 
@@ -247,6 +248,41 @@ describe('the Webhooks page states', () => {
     expect(create.getAttribute('href')).toBe('/o/acme/f/software/intake/new');
     expect(within(card).queryByText(/refused this week/)).toBeNull();
   });
+  it('shows each fed trigger with its type, station and lane, and No trigger yet for an endpoint with none', async () => {
+    answers();
+    const intake = {
+      triggers: [
+        {
+          name: 'Deploy failed',
+          enabled: true,
+          source: 'webhook',
+          on: 'webhook.acme-deploys',
+          when: 'webhook.acme-deploys',
+          create: { type: 'fix', station: 'Spec', lane: null, expedite: true },
+          days: [0, 0, 0, 0, 0, 0, 0],
+          problem: null,
+        },
+      ],
+    } as unknown as Intake;
+    renderPage(software, [...seeds(), [intakeQuery(acme.id, software.id).queryKey, intake]]);
+
+    const card = await screen.findByRole('region', { name: 'acme-deploys' });
+    expect(within(card).getByText('Deploy failed')).toBeTruthy();
+    expect(within(card).getByText('fix')).toBeTruthy();
+    expect(within(card).getByText('Spec')).toBeTruthy();
+    expect(within(card).getByText('expedite')).toBeTruthy();
+    expect(within(await screen.findByRole('region', { name: 'uptime' })).getByText('No trigger yet')).toBeTruthy();
+  });
+
+  it('names the signing secret by its credential and never shows a value', async () => {
+    answers();
+    renderPage();
+
+    const card = await screen.findByRole('region', { name: 'uptime' });
+    expect(within(card).getByText('uptime-hook-secret')).toBeTruthy();
+    expect(within(card).getByText('in Credentials, HMAC SHA-256')).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/[0-9a-f]{64}/);
+  });
 });
 
 describe('an endpoint card', () => {
@@ -254,10 +290,10 @@ describe('an endpoint card', () => {
     answers();
     renderPage();
 
-    const card = await screen.findByRole('region', { name: 'cf-deploys' });
+    const card = await screen.findByRole('region', { name: 'acme-deploys' });
     fireEvent.click(within(card).getByRole('button', { name: 'Copy' }));
 
-    const url = `${window.location.origin}/hooks/cf-endpoint`;
+    const url = `${window.location.origin}/hooks/acme-endpoint`;
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(url));
     expect(within(card).getByText(url)).toBeTruthy();
   });
@@ -266,7 +302,7 @@ describe('an endpoint card', () => {
     answers();
     renderPage();
 
-    const card = await screen.findByRole('region', { name: 'cf-deploys' });
+    const card = await screen.findByRole('region', { name: 'acme-deploys' });
     fireEvent.click((await within(card).findAllByRole('button', { name: /View request/ }))[1] as HTMLElement);
 
     const dialog = await screen.findByRole('dialog', { name: 'Request' });
@@ -276,7 +312,7 @@ describe('an endpoint card', () => {
     expect(api.getWebhookDelivery).toHaveBeenCalledWith(
       'org-1',
       'software-id',
-      'cf-endpoint',
+      'acme-endpoint',
       'd-accepted',
       expect.anything(),
     );
@@ -287,7 +323,7 @@ describe('an endpoint card', () => {
     api.getWebhookDelivery.mockResolvedValue({ ...request, body: '/wD/', body_encoding: 'base64' });
     renderPage();
 
-    const card = await screen.findByRole('region', { name: 'cf-deploys' });
+    const card = await screen.findByRole('region', { name: 'acme-deploys' });
     fireEvent.click((await within(card).findAllByRole('button', { name: /View request/ }))[0] as HTMLElement);
 
     const dialog = await screen.findByRole('dialog', { name: 'Request' });
@@ -297,6 +333,18 @@ describe('an endpoint card', () => {
 });
 
 describe('the Send a test panel', () => {
+  it('copies the curl sample with its signature header', async () => {
+    answers();
+    renderPage();
+
+    const panel = await screen.findByRole('complementary', { name: 'Send a test' });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Copy' }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalled());
+    const written = vi.mocked(navigator.clipboard.writeText).mock.calls[0]?.[0] ?? '';
+    expect(written).toContain('curl -X POST');
+    expect(written).toContain('X-Goal-Signature: sha256=');
+  });
+
   it('shows a curl sample for the first address with its signature header, and the fields the trigger can read', async () => {
     answers();
     renderPage();
@@ -304,7 +352,7 @@ describe('the Send a test panel', () => {
     const panel = await screen.findByRole('complementary', { name: 'Send a test' });
     const sample = panel.querySelector('pre')?.textContent ?? '';
     expect(sample).toContain('X-Goal-Signature');
-    expect(sample).toContain('/hooks/cf-endpoint');
+    expect(sample).toContain('/hooks/acme-endpoint');
     for (const field of ['event', 'service', 'commit']) {
       expect(await within(panel).findByText(field)).toBeTruthy();
     }
@@ -342,7 +390,7 @@ describe('New webhook', () => {
       secret: zeros,
     });
     const { queryClient } = renderPage();
-    await screen.findByRole('region', { name: 'cf-deploys' });
+    await screen.findByRole('region', { name: 'acme-deploys' });
     const reads = api.listWebhookEndpoints.mock.calls.length;
 
     fireEvent.click(screen.getByRole('button', { name: 'New webhook' }));
@@ -370,10 +418,10 @@ describe('New webhook', () => {
       new ApiError({ status: 409, title: 'Conflict', code: 'webhook-name-taken', detail: 'taken' } as never),
     );
     renderPage();
-    await screen.findByRole('region', { name: 'cf-deploys' });
+    await screen.findByRole('region', { name: 'acme-deploys' });
 
     fireEvent.click(screen.getByRole('button', { name: 'New webhook' }));
-    fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), { target: { value: 'cf-deploys' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), { target: { value: 'acme-deploys' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create webhook' }));
 
     expect(await screen.findByText('Another webhook in this factory has this name.')).toBeTruthy();
@@ -383,10 +431,10 @@ describe('New webhook', () => {
   it('asks for a name a slug can hold before it sends the form', async () => {
     answers();
     renderPage();
-    await screen.findByRole('region', { name: 'cf-deploys' });
+    await screen.findByRole('region', { name: 'acme-deploys' });
 
     fireEvent.click(screen.getByRole('button', { name: 'New webhook' }));
-    fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), { target: { value: 'Cloudflare Deploys' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), { target: { value: 'Acme Deploys' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create webhook' }));
 
     expect(await screen.findByText('Use lower-case letters, digits and single hyphens')).toBeTruthy();
@@ -399,7 +447,7 @@ describe('Rotate', () => {
     answers();
     api.rotateWebhookSecret.mockResolvedValue({ ...cfDeploys, secret: ones, rotated_at: '2026-10-27T10:00:00Z' });
     const { queryClient } = renderPage();
-    const card = await screen.findByRole('region', { name: 'cf-deploys' });
+    const card = await screen.findByRole('region', { name: 'acme-deploys' });
     const reads = api.listWebhookEndpoints.mock.calls.length;
 
     fireEvent.click(within(card).getByRole('button', { name: 'Rotate' }));
@@ -408,7 +456,7 @@ describe('Rotate', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Secret rotated' });
     expect(within(dialog).getByText(ones)).toBeTruthy();
-    expect(api.rotateWebhookSecret).toHaveBeenCalledWith('org-1', 'software-id', 'cf-endpoint');
+    expect(api.rotateWebhookSecret).toHaveBeenCalledWith('org-1', 'software-id', 'acme-endpoint');
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -421,7 +469,7 @@ describe('Rotate', () => {
     answers();
     api.rotateWebhookSecret.mockResolvedValue({ ...cfDeploys, secret: ones });
     renderPage();
-    const card = await screen.findByRole('region', { name: 'cf-deploys' });
+    const card = await screen.findByRole('region', { name: 'acme-deploys' });
 
     fireEvent.click(within(card).getByRole('button', { name: 'Rotate' }));
     fireEvent.click(
@@ -441,7 +489,7 @@ describe('Rotate', () => {
       new ApiError({ status: 503, title: 'Unavailable', code: 'webhooks-unavailable', detail: 'try later' } as never),
     );
     renderPage();
-    const card = await screen.findByRole('region', { name: 'cf-deploys' });
+    const card = await screen.findByRole('region', { name: 'acme-deploys' });
 
     fireEvent.click(within(card).getByRole('button', { name: 'Rotate' }));
     const confirm = await screen.findByRole('dialog', { name: /Rotate the signing secret/ });
@@ -457,7 +505,7 @@ describe('Rotate', () => {
     answers();
     api.rotateWebhookSecret.mockRejectedValue(new TypeError('Failed to fetch'));
     renderPage();
-    const card = await screen.findByRole('region', { name: 'cf-deploys' });
+    const card = await screen.findByRole('region', { name: 'acme-deploys' });
 
     fireEvent.click(within(card).getByRole('button', { name: 'Rotate' }));
     const confirm = await screen.findByRole('dialog', { name: /Rotate the signing secret/ });
@@ -472,7 +520,7 @@ describe('Rotate', () => {
     answers();
     renderPage(viewer);
 
-    const card = await screen.findByRole('region', { name: 'cf-deploys' });
+    const card = await screen.findByRole('region', { name: 'acme-deploys' });
     expect(within(card).queryByRole('button', { name: 'Rotate' })).toBeNull();
   });
 });

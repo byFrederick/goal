@@ -62,7 +62,8 @@ export function FloorHeader({ factory, board, metrics }: { factory: Factory; boa
           }
         />
         <NeedsYouLink factory={factory} />
-        <AndonButton factory={factory} andon={andon} />
+        {/* While the cord is pulled, its strip under the line holds the Clear control instead. */}
+        {andon ? null : <AndonButton factory={factory} andon={andon} />}
         <NewItemButton factory={factory} />
       </div>
     </header>

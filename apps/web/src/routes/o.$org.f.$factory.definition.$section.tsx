@@ -1,11 +1,13 @@
 import { createFileRoute, notFound } from '@tanstack/react-router';
 import { pageTitle } from '../app/route-focus';
+import { PendingScreen } from '../app/states';
 import { SectionView } from '../features/factory-editor/definition-page';
 import { isEditorSection, sectionInfo, validateDefinitionSearch } from '../features/factory-editor/sections';
 
 // One section of the Definition: basics, line, agents, connections, review or versions, with the
 // entity it shows in the search params (?station=, ?agent=, ?connection=, ?mode=yaml, …).
 export const Route = createFileRoute('/o/$org/f/$factory/definition/$section')({
+  pendingComponent: PendingScreen,
   validateSearch: validateDefinitionSearch,
   beforeLoad: ({ params }) => {
     if (!isEditorSection(params.section)) throw notFound();

@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { pageTitle } from '../app/route-focus';
+import { PendingScreen } from '../app/states';
 import { JonahOverviewPage, JonahProposalsPage } from '../features/jonah/jonah-page';
 import { type JonahSearch, jonahSearchOf } from '../features/jonah/jonah-search';
 
@@ -7,6 +8,7 @@ import { type JonahSearch, jonahSearchOf } from '../features/jonah/jonah-search'
 // opens the Proposals tab, filtered by ?state=. The pages read their own data and show their own states, so
 // the route never waits on them.
 export const Route = createFileRoute('/o/$org/f/$factory/jonah/')({
+  pendingComponent: PendingScreen,
   validateSearch: (search: Record<string, unknown>): JonahSearch => jonahSearchOf(search),
   head: ({ match: { context } }) => pageTitle('Jonah', context.factory.name),
   component: JonahRoute,

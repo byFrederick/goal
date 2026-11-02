@@ -111,7 +111,7 @@ export function CodeStep({ org, search }: { org: OrgSummary; search: OnboardingS
       preview={{ organization: organizationCard(org, host), second: codeCard(chosen[0]) }}
     >
       <div className="flex flex-col gap-2">
-        <h1 className="m-0 font-numeral text-kpi tracking-display">Connect your code</h1>
+        <h1 className="m-0 text-kpi tracking-display">Connect your code</h1>
         <p className="m-0 text-heading font-normal text-ink-soft">
           Agents clone the repositories you choose, work on branches and open pull requests.
         </p>

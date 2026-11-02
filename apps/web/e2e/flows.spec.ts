@@ -23,7 +23,7 @@ async function showTrace(page: Page) {
 }
 
 for (const [name, path, heading] of [
-  ['factories', '/o/acme', /^Good /],
+  ['factories', '/o/acme', 'Home'],
   ['floor', '/o/acme/f/goal', 'Floor'],
   ['board', '/o/acme/f/goal/board', 'Goal board'],
   ['item', '/o/acme/f/goal/items/6', 'Floor: throughput bars per day'],
@@ -44,14 +44,14 @@ for (const [name, path, heading] of [
 test('the root opens the factories of the first organization', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveURL(/\/o\/acme$/);
-  await expect(page.getByRole('heading', { level: 1, name: /^Good / })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
   await expect(page.getByRole('article')).toHaveCount(4);
   await expect(page).toHaveTitle('Home · Acme · Goal');
 });
 
 test('the root returns to the organization used last', async ({ page }) => {
   await page.goto('/o/goal');
-  await expect(page.getByRole('heading', { level: 1, name: /^Good / })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
   await page.goto('/');
   await expect(page).toHaveURL(/\/o\/goal$/);
   await expect(page.getByRole('article')).toHaveCount(1);
@@ -130,7 +130,7 @@ test('pages are titled most specific first', async ({ page }) => {
 test('the sidebar opens a factory and marks its pages', async ({ page }) => {
   test.skip(isPhone(page), 'the sidebar is the 768 px and wider navigation');
   await page.goto('/o/acme');
-  await expect(page.getByRole('heading', { level: 1, name: /^Good / })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
 
   const sidebar = orgNav(page);
   const sre = sidebar.getByRole('link', { name: 'S, sre factory, 3 waiting on you' });
@@ -199,7 +199,7 @@ test('the sidebar marks Home on the organization pages', async ({ page }) => {
   await expect(page).toHaveURL(/\/o\/acme$/);
   const sidebar = orgNav(page);
   await expect(sidebar.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByRole('heading', { level: 1, name: /^Good / })).toBeFocused();
+  await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeFocused();
 
   await page.getByRole('link', { name: 'Open sre' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
@@ -573,7 +573,7 @@ test('on a phone: More opens the drawer, which leads to the organization pages',
   await more.click();
   await drawer.getByRole('link', { name: 'Home' }).click();
   await expect(page).toHaveURL(/\/o\/acme$/);
-  await expect(page.getByRole('heading', { level: 1, name: /^Good / })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
   await expect(drawer).toBeHidden();
   // The tab bar stays on the organization's pages; with no factory open it follows the last one visited.
   await expect(page.getByRole('navigation', { name: 'Tabs' }).getByRole('link', { name: 'Board' })).toHaveAttribute(
@@ -618,7 +618,7 @@ test('switch organization from the menu by keyboard', async ({ page }) => {
   await expect(menu.getByRole('menuitem', { name: /^Goal/ })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/o\/goal$/);
-  await expect(page.getByRole('heading', { level: 1, name: /^Good / })).toBeFocused();
+  await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeFocused();
   await expect(orgNav(page).getByRole('link', { name: /, \S+ factory/ })).toHaveCount(1);
   await expect(orgMarkOf(page, 'Goal')).toBeVisible();
 
@@ -640,7 +640,7 @@ test('switch organization from the drawer on a phone', async ({ page }) => {
   await menu.getByRole('menuitem', { name: /^Goal/ }).click();
   await expect(page).toHaveURL(/\/o\/goal$/);
   await expect(page.getByRole('dialog', { name: 'Acme' })).toBeHidden();
-  await expect(page.getByRole('heading', { level: 1, name: /^Good / })).toBeFocused();
+  await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeFocused();
   await expect(orgNav(page).getByRole('link', { name: /, \S+ factory/ })).toHaveCount(1);
 });
 
@@ -678,7 +678,7 @@ test('create an organization and land on its empty factories', async ({ page }) 
 
   await expect(page).toHaveURL(/\/o\/acme-two$/);
   await expect(dialog).toBeHidden();
-  await expect(page.getByRole('heading', { level: 1, name: /^Good / })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
   await expect(orgNav(page).getByRole('link', { name: /, \S+ factory/ })).toHaveCount(0);
   const newMark = orgMarkOf(page, 'Acme Two');
   await expect(newMark).toBeVisible();

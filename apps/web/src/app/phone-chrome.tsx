@@ -47,7 +47,7 @@ interface PhoneTopBarProps {
 /** The top bar: the Goal mark (opens the drawer), the page title and the page's actions. */
 export function PhoneTopBar({ title, actions, back, onMenu, drawerOpen, menuRef }: PhoneTopBarProps) {
   return (
-    <header className="sticky top-0 z-20 flex min-h-14 flex-none items-center gap-1 border-b border-rule bg-shell pt-[env(safe-area-inset-top)] px-1 md:hidden">
+    <header className="shell-topbar sticky top-0 z-20 flex min-h-14 flex-none items-center gap-1 border-b border-rule bg-shell pt-[env(safe-area-inset-top)] px-1 md:hidden">
       <button
         ref={menuRef}
         type="button"
@@ -93,7 +93,7 @@ export function PhoneDrawer({ org, open, onOpenChange, returnFocus }: PhoneDrawe
         }}
       />
       <D.Portal>
-        <D.Overlay className="fixed inset-0 z-40 bg-ink/45 md:hidden data-[state=open]:animate-[fade-in_150ms_ease-out]" />
+        <D.Overlay className="motion-panel fixed inset-0 z-40 bg-ink/45 md:hidden" />
         <D.Content
           aria-describedby={undefined}
           onOpenAutoFocus={() => {
@@ -105,7 +105,7 @@ export function PhoneDrawer({ org, open, onOpenChange, returnFocus }: PhoneDrawe
             e.preventDefault();
             if (!navigated) returnFocus.current?.focus();
           }}
-          className="fixed inset-y-0 left-0 z-50 flex h-dvh w-80 flex-col overflow-y-auto overscroll-contain border-r border-line bg-sidebar px-2 pt-[calc(8px_+_env(safe-area-inset-top))] pb-[calc(12px_+_env(safe-area-inset-bottom))] shadow-pop outline-none data-[state=open]:animate-[fade-in_150ms_ease-out] md:hidden"
+          className="motion-panel motion-drawer-left fixed inset-y-0 left-0 z-50 flex h-dvh w-80 flex-col overflow-y-auto overscroll-contain border-r border-line bg-sidebar px-2 pt-[calc(8px_+_env(safe-area-inset-top))] pb-[calc(12px_+_env(safe-area-inset-bottom))] shadow-pop outline-none md:hidden"
         >
           <D.Title className="sr-only">{org.name}</D.Title>
           <nav aria-label="Organization and factories" aria-busy={busy} className="flex min-h-full flex-1 flex-col">

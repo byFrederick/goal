@@ -24,7 +24,7 @@ function Setting({ label, children }: { label: string; children: ReactNode }) {
 /** "Own value" when the agent sets it, "Default" when the factory does. */
 function Origin({ own }: { own: boolean }) {
   return own ? (
-    <span className="rounded-chip bg-run-tint px-2 text-meta font-control text-run-ink">Own value</span>
+    <span className="text-meta font-control text-ink">Own value</span>
   ) : (
     <span className="rounded-chip border border-line px-2 text-meta text-muted">Default</span>
   );
@@ -51,7 +51,7 @@ export function AgentSettings({ agent }: { agent: string }) {
           </Setting>
           <Setting label="Turns per run">
             <span className="flex flex-wrap items-center gap-2">
-              <b className="font-numeral">{found.max_turns ?? defaults?.max_turns_per_task ?? none}</b>
+              <b>{found.max_turns ?? defaults?.max_turns_per_task ?? none}</b>
               <Origin own={found.max_turns !== undefined} />
               {found.max_turns !== undefined && defaults?.max_turns_per_task !== undefined ? (
                 <span className="text-meta text-muted">Default {defaults.max_turns_per_task}</span>
@@ -60,7 +60,7 @@ export function AgentSettings({ agent }: { agent: string }) {
           </Setting>
           <Setting label="Per item">
             <span className="flex flex-wrap items-center gap-2">
-              <b className="font-numeral">
+              <b>
                 {found.per_item_usd !== undefined
                   ? formatUsd(found.per_item_usd)
                   : defaults?.per_item_usd !== undefined

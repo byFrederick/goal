@@ -40,7 +40,7 @@ An item is `<factory>#<number>`, its id, or a bare number when only one factory 
 
 ## Submit from the web app
 
-Open the factory's Board and choose New item. The sidebar's New item does the same from any page, and the keyboard shortcut is `C`. Choose the factory, fill in the brief and choose Create item. The new item opens on the Board in the station where it entered the line.
+Open the factory's Board and choose New item. The sidebar's New item does the same from any page, and the keyboard shortcut is `C` (every shortcut is listed in [Navigate and use shortcuts](../navigate-and-shortcuts/)). Choose the factory, fill in the brief and choose Create item. The new item opens on the Board in the station where it entered the line.
 
 ## Create items from events and schedules
 
@@ -48,7 +48,7 @@ A factory can also create items on its own, from an event or a schedule. Those t
 
 On that page you can:
 
-- create a trigger with New trigger,
+- create a trigger with New trigger. The dialog's "Or start from a suggestion" lists the factory's suggested triggers; Use opens the trigger page with that source and event chosen. A suggestion whose event Goal cannot create yet has Use turned off.
 - try a trigger on one of its recent past events, which shows whether it would have created an item and why, without creating one,
 - see the items each trigger created in the last seven days.
 
