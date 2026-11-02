@@ -245,6 +245,23 @@ describe('the Webhooks page states', () => {
     expect(screen.getByRole('complementary', { name: 'Send a test' })).toBeTruthy();
   });
 
+  it('draws today in ink, earlier days in rule and a day with a refusal in rework', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-27T12:00:00Z'));
+    try {
+      answers();
+      renderPage();
+      const card = await screen.findByRole('region', { name: 'cf-deploys' });
+      const day = (d: string) => card.querySelector(`[title^="${d}:"]`);
+      expect(day('2026-10-27')?.className).toContain('bg-ink');
+      expect(day('2026-10-21')?.className).toContain('bg-rule');
+      expect(day('2026-10-22')?.className).toContain('bg-rework');
+      expect(card.querySelector('[title^="2026-"].bg-run')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('says what an endpoint with no trigger feeds, with a way to create one', async () => {
     answers();
     renderPage();

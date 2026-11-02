@@ -269,8 +269,8 @@ export function AssemblyTableRow({
                   className="relative h-1.5 w-20 flex-none overflow-hidden rounded-full bg-hover"
                 >
                   <span
-                    className={cn('absolute inset-y-0 left-0 rounded-full', percent === 100 ? 'bg-ok' : 'bg-run')}
-                    style={{ width: `${percent}%` }}
+                    className="absolute inset-0 origin-left rounded-full bg-ink transition-transform duration-(--duration-fast) ease-out motion-reduce:transition-none"
+                    style={{ transform: `scaleX(${percent / 100})` }}
                   />
                 </span>
               ) : null}
