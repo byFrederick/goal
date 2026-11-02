@@ -39,11 +39,11 @@ function Outcome({ tone, children }: { tone: Tone; children: string }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 whitespace-nowrap text-meta',
+        'inline-flex items-center gap-2 whitespace-nowrap text-meta',
         tone === 'bad' ? 'text-rework-ink' : 'text-ink-soft',
       )}
     >
-      <i aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', dotOf[tone])} />
+      <i aria-hidden="true" className={cn('size-2 shrink-0 rounded-full', dotOf[tone])} />
       {children}
     </span>
   );
@@ -138,8 +138,8 @@ function StationBar({ station, total }: { station: TeardownStation; total: numbe
   );
 }
 
-const th = 'h-9 px-1.5 text-right text-meta font-medium text-muted first:pl-4 last:pr-4';
-const td = 'h-11 border-t border-line px-1.5 text-right tabular-nums first:pl-4 last:pr-4';
+const th = 'h-9 px-2 text-right text-meta font-medium text-muted first:pl-4 last:pr-4';
+const td = 'h-11 border-t border-line px-2 text-right tabular-nums first:pl-4 last:pr-4';
 const waiting = 'max-[1000px]:hidden';
 
 function TimeByStation({ td: data }: { td: Teardown }) {
@@ -149,13 +149,13 @@ function TimeByStation({ td: data }: { td: Teardown }) {
         <h2 id="td-time" className={cardTitle}>
           Time by station
         </h2>
-        <span className="ml-auto flex gap-3.5 text-meta text-ink-soft">
-          <span className="inline-flex items-center gap-1.5">
-            <i aria-hidden="true" className="size-2.5 rounded-chip bg-ink" />
+        <span className="ml-auto flex gap-3 text-meta text-ink-soft">
+          <span className="inline-flex items-center gap-2">
+            <i aria-hidden="true" className="size-2 rounded-chip bg-ink" />
             Working
           </span>
-          <span className="inline-flex items-center gap-1.5">
-            <i aria-hidden="true" className="size-2.5 rounded-chip bg-rule" />
+          <span className="inline-flex items-center gap-2">
+            <i aria-hidden="true" className="size-2 rounded-chip bg-rule" />
             Waiting
           </span>
         </span>
@@ -170,13 +170,13 @@ function TimeByStation({ td: data }: { td: Teardown }) {
             <th scope="col" className={th}>
               <span className="sr-only">Working against waiting</span>
             </th>
-            <th scope="col" className={cn(th, 'w-16 min-[1000px]:w-19')}>
+            <th scope="col" className={cn(th, 'w-16 min-[1000px]:w-20')}>
               Working
             </th>
-            <th scope="col" className={cn(th, 'w-19', waiting)}>
+            <th scope="col" className={cn(th, 'w-20', waiting)}>
               Waiting
             </th>
-            <th scope="col" className={cn(th, 'w-16 min-[1000px]:w-19')}>
+            <th scope="col" className={cn(th, 'w-16 min-[1000px]:w-20')}>
               Total
             </th>
           </tr>
