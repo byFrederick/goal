@@ -94,3 +94,24 @@ test.describe('the New credential page', () => {
     await expect(page.getByRole('row').filter({ hasText: 'sentry-token' })).toBeVisible();
   });
 });
+
+// Screenshots of both screens at the design's two widths, in light and dark. Not run in the box (no
+// browser); they run in CI with `task web:e2e`.
+for (const scheme of ['light', 'dark'] as const) {
+  for (const [name, path] of [
+    ['credentials', '/o/acme/credentials'],
+    ['credential-new', '/o/acme/credentials/new'],
+  ] as const) {
+    for (const width of [1440, 390]) {
+      test(`${name} at ${width} px in ${scheme} mode`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await page.emulateMedia({ colorScheme: scheme });
+        await page.goto(path);
+        await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+
+        await expectNoHorizontalScroll(page);
+        await page.screenshot({ path: `test-results/${name}-${width}-${scheme}.png`, fullPage: true });
+      });
+    }
+  }
+}
