@@ -60,12 +60,13 @@ export function ApiKeysPage() {
     },
   });
 
-  const newKey = manage ? (
-    <Button variant="primary" className="h-11 md:h-8.5" onClick={() => setCreating(true)}>
-      <Plus size={15} strokeWidth={1.75} aria-hidden="true" />
-      New key
-    </Button>
-  ) : null;
+  const newKey = (variant: 'primary' | 'secondary') =>
+    manage ? (
+      <Button variant={variant} className="h-11 md:h-8.5" onClick={() => setCreating(true)}>
+        <Plus size={15} strokeWidth={1.75} aria-hidden="true" />
+        New key
+      </Button>
+    ) : null;
 
   const live = (list.data ?? []).filter((k) => !k.revoked_at);
   const revoked = (list.data ?? []).filter((k) => k.revoked_at);
@@ -73,7 +74,7 @@ export function ApiKeysPage() {
 
   return (
     <>
-      <TopBarSlot actions={newKey} />
+      <TopBarSlot actions={newKey('primary')} />
       <div className="flex min-w-0 flex-col gap-1 md:gap-2">
         <h1 className="m-0 text-page-title tracking-display">API keys</h1>
         {readKeys ? (
@@ -103,7 +104,11 @@ export function ApiKeysPage() {
                 </Button>
               </div>
             ) : live.length === 0 && revoked.length === 0 ? (
-              <EmptyState icon={<SquareTerminal size={20} strokeWidth={1.5} />} title="No keys yet" actions={newKey}>
+              <EmptyState
+                icon={<SquareTerminal size={20} strokeWidth={1.5} />}
+                title="No keys yet"
+                actions={newKey('secondary')}
+              >
                 Create one for CI or a script.
               </EmptyState>
             ) : (

@@ -212,6 +212,13 @@ describe('the Webhooks page states', () => {
     expect(screen.getAllByRole('button', { name: 'New webhook' }).length).toBeGreaterThan(0);
   });
 
+  it('renders at most one primary button in the empty state', async () => {
+    renderPage(software, seeds([]));
+
+    await screen.findByText('No webhooks yet');
+    expect(document.querySelectorAll('[data-variant="primary"]').length).toBeLessThanOrEqual(1);
+  });
+
   it('keeps New webhook out of the empty state for someone who cannot manage webhooks', async () => {
     renderPage(viewer, seeds([]));
 
