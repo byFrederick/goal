@@ -96,7 +96,7 @@ export function BoardCard({
       onKeyDown={moveKeys(onMove, drag)}
       style={drag?.style}
       className={cn(
-        'group relative flex rounded-control border bg-card transition-[border-color,box-shadow,opacity] duration-(--duration-quick)',
+        'group relative flex w-full min-w-0 rounded-control border bg-card transition-[border-color,box-shadow,opacity] duration-(--duration-quick)',
         'hover:border-muted has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-run',
         compact ? 'items-center gap-2 p-3' : 'flex-col gap-2 rounded-cell p-3',
         // The desktop card keeps its border plain: an expedite item is tinted by its column's zone.
@@ -136,10 +136,18 @@ export function BoardCard({
       ) : (
         <>
           <div className="flex min-w-0 items-center gap-2 text-meta text-muted tabular-nums">
-            <span className="font-mono text-ink-soft">#{item.number}</span>
-            {item.type ? <span className="whitespace-nowrap">{item.type}</span> : null}
-            {item.lane ? <span className="whitespace-nowrap">{item.lane}</span> : null}
-            <span className="ml-auto whitespace-nowrap">{age}</span>
+            <span className="shrink-0 font-mono text-ink-soft">#{item.number}</span>
+            {item.type ? (
+              <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={item.type}>
+                {item.type}
+              </span>
+            ) : null}
+            {item.lane ? (
+              <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={item.lane}>
+                {item.lane}
+              </span>
+            ) : null}
+            <span className="ml-auto shrink-0 whitespace-nowrap">{age}</span>
           </div>
           {expediteLabel}
           <CardTitle item={item} describedBy={drag?.describedBy} movable={Boolean(onMove)} />

@@ -166,6 +166,18 @@ describe('the constraint mark and the zone labels', () => {
     expect(within(spec).queryByText(/^Ready, buffer/)).toBeNull();
   });
 
+  it('lets the drum’s zone label shrink to its column, with a title, and keeps "Next in" whole', async () => {
+    renderBoardPage({ page: ShellBoard, org, factory, board: board(items) });
+    const build = await buildColumn();
+    const label = within(build).getByText(/^Ready, buffer/);
+    expect(label.className).toContain('min-w-0');
+    expect(label.className).toContain('truncate');
+    expect(label.getAttribute('title')).toBe(label.textContent);
+    const next = within(build).getByText('Next in');
+    expect(next.className).toContain('shrink-0');
+    expect(next.className).toContain('whitespace-nowrap');
+  });
+
   it('on a phone, the drum’s tab is marked and its column holds In progress, then Ready, buffer', async () => {
     stubPhone();
     renderBoardPage({ page: ShellBoard, org, factory, board: board(items), search: { station: 'build' } });
