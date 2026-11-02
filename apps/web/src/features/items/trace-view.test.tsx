@@ -72,6 +72,26 @@ describe('TraceList: a run', () => {
     expect(document.body.textContent).not.toMatch(/investigator-\d/);
   });
 
+  it('shimmers the outcome of a running run and no other outcome', async () => {
+    const { endedAt: _ended, ...rest } = run;
+    const running: Entry = { ...rest, status: 'running' };
+    renderBoardPage({
+      page: () => <TraceList entries={[running]} itemState="in_progress" />,
+      org,
+      factory,
+      builderMeta,
+    });
+    expect((await screen.findByText('Running')).classList).toContain('thinking');
+    cleanup();
+    renderBoardPage({
+      page: () => <TraceList entries={[run]} itemState="done" />,
+      org,
+      factory,
+      builderMeta,
+    });
+    expect((await screen.findByText('Finished')).classList).not.toContain('thinking');
+  });
+
   it('names the factory rules the run ran with, and shows none for a run without them', async () => {
     const withRules: Entry = {
       ...run,

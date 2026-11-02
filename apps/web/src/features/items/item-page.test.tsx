@@ -205,6 +205,24 @@ describe('the item layout', () => {
       }) as unknown as MediaQueryList;
   }
 
+  it('shimmers the working line while an agent runs the item', async () => {
+    stubWidth(false);
+    const ev = (id: number, kind: string, data = {}): ItemEvent => ({
+      id,
+      item_id: 'item-147',
+      at: '2026-10-25T10:00:00Z',
+      kind,
+      station: 'build',
+      actor: 'builder',
+      data,
+      run_id: 'r1',
+    });
+    renderPage(item({ state: 'in_progress' }), [ev(1, 'claimed', { slot: 0, agent: 'builder' }), ev(2, 'run_started')]);
+
+    const line = await screen.findByText(/working, 0 tool calls/);
+    expect(line.classList).toContain('thinking');
+  });
+
   it('puts the timeline before the Details card, with the tabs as tabs', async () => {
     stubWidth(false);
     renderPage(item());
