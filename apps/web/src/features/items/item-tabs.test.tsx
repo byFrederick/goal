@@ -83,18 +83,18 @@ describe('ItemTabs', () => {
     expect(document.activeElement).toBe(within(list).getByRole('tab', { name: 'Spec' }));
   });
 
-  it('keeps the URL clean when Home returns to Timeline, and ends at Trace, skipping Teardown', async () => {
+  it('keeps the URL clean when Home returns to Timeline, and End reaches Teardown', async () => {
     const { router } = renderTabs('spec');
 
     const list = await screen.findByRole('tablist', { name: 'Item views' });
     const spec = within(list).getByRole('tab', { name: 'Spec' });
     fireEvent.keyDown(spec, { key: 'End' });
-    await waitFor(() => expect(router.state.location.search).toEqual({ tab: 'trace' }));
-    fireEvent.keyDown(within(list).getByRole('tab', { name: 'Trace' }), { key: 'Home' });
+    await waitFor(() => expect(router.state.location.search).toEqual({ tab: 'teardown' }));
+    fireEvent.keyDown(within(list).getByRole('tab', { name: 'Teardown' }), { key: 'Home' });
     await waitFor(() => expect(router.state.location.search).toEqual({}));
   });
 
-  it('never disables Trace, and keeps Teardown inert until it is built', async () => {
+  it('never disables Trace or Teardown: both are links to their view', async () => {
     renderTabs('timeline');
 
     const list = await screen.findByRole('tablist', { name: 'Item views' });
@@ -102,8 +102,8 @@ describe('ItemTabs', () => {
     expect(trace.getAttribute('aria-disabled')).toBeNull();
     expect(trace.getAttribute('href')).toContain('tab=trace');
     const teardown = within(list).getByRole('tab', { name: 'Teardown' });
-    expect(teardown.getAttribute('aria-disabled')).toBe('true');
-    expect(teardown.getAttribute('aria-selected')).toBe('false');
+    expect(teardown.getAttribute('aria-disabled')).toBeNull();
+    expect(teardown.getAttribute('href')).toContain('tab=teardown');
   });
 
   it('reaches Trace with ArrowRight from Checks', async () => {
@@ -116,9 +116,9 @@ describe('ItemTabs', () => {
 });
 
 describe('isItemTab', () => {
-  it('accepts the five views and nothing else', () => {
-    expect(['timeline', 'spec', 'changes', 'checks', 'trace'].every(isItemTab)).toBe(true);
-    expect(isItemTab('teardown')).toBe(false);
+  it('accepts the six views and nothing else', () => {
+    expect(['timeline', 'spec', 'changes', 'checks', 'trace', 'teardown'].every(isItemTab)).toBe(true);
+    expect(isItemTab('watch')).toBe(false);
     expect(isItemTab(undefined)).toBe(false);
   });
 });

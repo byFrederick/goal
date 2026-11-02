@@ -91,6 +91,7 @@ import { orgRunsOf, runsCsvOf } from './runs.ts';
 import { type SearchSource, search } from './search.ts';
 import { createSpend } from './spend.ts';
 import { starterItem } from './starter.ts';
+import { teardownOf } from './teardown.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
 import { createViews } from './views.ts';
 import { createWebhooks } from './webhooks.ts';
@@ -2206,7 +2207,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     }
 
     m = rest.match(
-      /^\/items\/([^/]+)(?:\/(events|runs|parts|notes|approve|reject|merge|retry|move|pause|lane|cancel|answer|tool-approval))?$/,
+      /^\/items\/([^/]+)(?:\/(events|runs|teardown|parts|notes|approve|reject|merge|retry|move|pause|lane|cancel|answer|tool-approval))?$/,
     );
     if (!m) return problem(res, 404, 'Not found', path);
 
@@ -2231,6 +2232,23 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       const runs = state.runs.filter((r) => r.item_id === it.id);
       const body: RunList = { runs: runs.slice(0, 200), truncated: runs.length > 200 };
       return json(res, 200, body);
+    }
+    if (action === 'teardown' && method === 'GET') {
+      const flow = flowOf(it);
+      return json(
+        res,
+        200,
+        teardownOf({
+          spans: it.spans,
+          runs: state.runs.filter((r) => r.item_id === it.id),
+          events: state.events.filter((e) => e.item_id === it.id),
+          touches: itemTouches(it),
+          done: it.state === 'done' || it.state === 'cancelled',
+          now: clock(),
+          targetSeconds: flow.target_seconds,
+          budgetUsd: flow.budget.per_item_usd,
+        }),
+      );
     }
     // The mock has no assemblies: an item has no parts, and adding one is refused as the API refuses it.
     if (action === 'parts' && method === 'GET') {

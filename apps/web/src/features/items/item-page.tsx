@@ -23,6 +23,7 @@ import { OutputsCard } from './outputs';
 import { QuestionCard } from './question-card';
 import { CostCard, DetailsCard, OverlapsCard, RulesCard } from './side-cards';
 import { noFlow, stepsOf, summaryOf } from './steps';
+import { TeardownTab } from './teardown-tab';
 import { activeRun, buildTrace, criteriaOf, editedFiles, latestToolCalls, runRole, type Trace } from './timeline';
 import { TouchesCard } from './touches-card';
 import { TraceTab } from './trace-tab';
@@ -119,7 +120,7 @@ export function ItemPage() {
   const navigate = useNavigate();
   const showTrace = () =>
     void navigate({ to: '/o/$org/f/$factory/items/$ref', params: { ...params, ref }, search: { tab: 'trace' } });
-  const { tab = 'timeline' } = useSearch({ from: '/o/$org/f/$factory/items/$ref' });
+  const { tab = 'timeline', step } = useSearch({ from: '/o/$org/f/$factory/items/$ref' });
   // Watch live: following lives here, not in the URL. `watchSeq` counts presses so a second press scrolls again.
   const [following, setFollowing] = useState(false);
   const [watchSeq, setWatchSeq] = useState(0);
@@ -322,7 +323,18 @@ export function ItemPage() {
                 following={following}
                 watchSeq={watchSeq}
                 onStopFollowing={() => setFollowing(false)}
+                step={step}
               />
+            </section>
+          ) : null}
+          {tab === 'teardown' ? (
+            <section
+              id={panelId}
+              role="tabpanel"
+              aria-labelledby={tabId('teardown')}
+              className="order-6 animate-fade-in @[720px]:order-none"
+            >
+              <TeardownTab number={item.number} />
             </section>
           ) : null}
           {tab === 'spec' ? (

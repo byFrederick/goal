@@ -390,6 +390,7 @@ export function TraceTab({
   itemState,
   status = 'ready',
   now = Date.now(),
+  step,
   following = false,
   watchSeq = 0,
   onStopFollowing,
@@ -398,6 +399,8 @@ export function TraceTab({
   itemState: ItemState;
   status?: TimelineStatus;
   now?: number;
+  /** An event id: the step it drew (`ev-<id>`) is selected first, as the Teardown's "In the trace" link asks. */
+  step?: number | undefined;
   /** Watch live is on: new steps are kept in view and rise in. */
   following?: boolean;
   /** Counts presses of Watch live; each one scrolls to the newest step again. */
@@ -408,7 +411,7 @@ export function TraceTab({
   const phone = usePhone();
   const groups = useMemo(() => groupsOf(trace.entries), [trace.entries]);
   const steps = useMemo(() => groups.flatMap((g) => g.steps), [groups]);
-  const [selected, setSelected] = useState<string>();
+  const [selected, setSelected] = useState<string | undefined>(step === undefined ? undefined : `ev-${step}`);
   const run = itemState === 'in_progress' ? activeRun(trace) : undefined;
   const lastRun = trace.entries.findLast((e) => e.kind === 'run');
 

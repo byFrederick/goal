@@ -100,7 +100,7 @@ function trace(entries: Entry[]): Trace {
 
 function renderTab(
   t: Trace,
-  props: { itemState?: 'in_progress' | 'done'; status?: 'loading' | 'error' | 'ready' } = {},
+  props: { itemState?: 'in_progress' | 'done'; status?: 'loading' | 'error' | 'ready'; step?: number } = {},
 ) {
   return renderBoardPage({
     page: () => (
@@ -109,6 +109,7 @@ function renderTab(
         itemState={props.itemState ?? 'done'}
         status={props.status ?? 'ready'}
         now={Date.parse('2026-10-25T08:30:00Z')}
+        step={props.step}
       />
     ),
     org,
@@ -145,6 +146,14 @@ describe('TraceTab', () => {
     fireEvent.click(screen.getByRole('button', { name: /Read\s*src\/deliver\.ts/ }));
     expect(within(screen.getByRole('complementary')).getByRole('heading', { name: 'Read' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Read\s*src\/deliver\.ts/ }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('selects the step of the event a link names, and the latest step without one', async () => {
+    const failed: CheckEntry = { ...check, key: 'ev-41', passed: false, command: 'unit tests' };
+    renderTab(trace([specRun, failed, buildRun]), { step: 41 });
+
+    const panel = await screen.findByRole('complementary');
+    expect(within(panel).getByRole('heading', { name: 'Check' })).toBeTruthy();
   });
 
   it('keeps the live line in its header while a run works', async () => {

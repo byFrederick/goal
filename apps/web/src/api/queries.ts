@@ -28,6 +28,7 @@ import {
   getInbox,
   getItem,
   getItemParts,
+  getItemTeardown,
   getJonahOverview,
   getJudge,
   getLeadTime,
@@ -237,6 +238,7 @@ export const keys = {
   item: (org: string, item: string) => ['org', org, 'item', item] as const,
   events: (org: string, item: string) => ['org', org, 'item', item, 'events'] as const,
   itemRuns: (org: string, item: string) => ['org', org, 'item', item, 'runs'] as const,
+  itemTeardown: (org: string, item: string) => ['org', org, 'item', item, 'teardown'] as const,
   /** The organization's agent runs across factories (the Runs page). Rooted at ['org', org, 'runs']: the stream invalidates that prefix. */
   runs: (org: string, filter?: RunsFilter) =>
     filter ? (['org', org, 'runs', filter] as const) : (['org', org, 'runs'] as const),
@@ -932,6 +934,13 @@ function retryUnlessRefused(failures: number, error: Error): boolean {
 /** An item's runs: under the item's key, so every event of the item refreshes them. */
 export const itemRunsQuery = (org: string, item: string) =>
   queryOptions({ queryKey: keys.itemRuns(org, item), queryFn: ({ signal }) => listItemRuns(org, item, signal) });
+
+/** An item's teardown: under the item's key, so every event of the item refreshes it. Nothing polls. */
+export const teardownQuery = (org: string, item: string) =>
+  queryOptions({
+    queryKey: keys.itemTeardown(org, item),
+    queryFn: ({ signal }) => getItemTeardown(org, item, signal),
+  });
 
 /** The organization's runs in one window and filter (the Runs page). The stream refreshes them; nothing polls. */
 export const runsQuery = (org: string, filter: RunsFilter) =>

@@ -58,6 +58,14 @@ const pages: { name: string; open: (page: Page) => Promise<void> }[] = [
     },
   },
   {
+    name: 'Item teardown',
+    open: async (page) => {
+      await page.goto('/o/acme/f/goal/items/4?tab=teardown');
+      await expect(page.getByRole('tabpanel', { name: 'Teardown' })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Totals' })).toBeVisible();
+    },
+  },
+  {
     name: 'New trigger',
     open: async (page) => {
       await page.goto('/o/acme/f/software/intake/new');
