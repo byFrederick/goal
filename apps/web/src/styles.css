@@ -141,6 +141,8 @@
   --animate-number-pop-in: number-pop-in var(--duration-emphasis) var(--ease-bounce) both;
   /* A skeleton pulses once while it waits (MOTION.md, Loading). */
   --animate-skeleton-pulse: skeleton-pulse var(--duration-pulse) linear;
+  /* Four segments of --duration-micro: an invalid field's short shake (MOTION.md, Invalid form field). */
+  --animate-error-shake: error-shake calc(var(--duration-micro) * 4) var(--ease-out);
 
   @keyframes pulse-dot {
     50% {
@@ -180,6 +182,18 @@
   @keyframes skeleton-pulse {
     50% {
       opacity: 0.5;
+    }
+  }
+
+  @keyframes error-shake {
+    25% {
+      transform: translateX(calc(var(--distance-micro) * -1));
+    }
+    50% {
+      transform: translateX(var(--distance-micro));
+    }
+    75% {
+      transform: translateX(calc(var(--distance-micro) * -1));
     }
   }
 

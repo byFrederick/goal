@@ -16,7 +16,7 @@ import { Skeleton } from '../../../ui/skeleton';
 import { Tooltip } from '../../../ui/tooltip';
 import { useDraft, useDraftSession, useSection, useViewOnly } from '../draft/use-draft';
 import { useProblemText } from '../frame/use-editor';
-import { CodeEditor, LinedText } from '../yaml/code-editor';
+import { CodeEditor } from '../yaml/code-editor';
 
 const MarkdownPreview = lazyRetrying(() => import('./markdown-preview').then((m) => m.default));
 

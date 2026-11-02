@@ -46,9 +46,12 @@ export function Field({ label, aside, help, error, className, children }: FieldP
           {label}
         </label>
       )}
-      <FieldContext value={{ id, describedBy, invalid: Boolean(error) }}>{children}</FieldContext>
+      {/* The control shakes each time the field turns invalid; the message fades in (MOTION.md, Invalid form field). */}
+      <div className={cn('min-w-0', error && 'motion-safe:animate-error-shake')}>
+        <FieldContext value={{ id, describedBy, invalid: Boolean(error) }}>{children}</FieldContext>
+      </div>
       {error ? (
-        <p id={errorId} className="col-span-full m-0 text-[13px] leading-snug text-rework-ink">
+        <p id={errorId} className="col-span-full m-0 animate-fade-in text-[13px] leading-snug text-rework-ink">
           {error}
         </p>
       ) : null}

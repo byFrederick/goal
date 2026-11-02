@@ -21,6 +21,7 @@ import { Count } from '../../ui/count';
 import { EmptyState } from '../../ui/empty-state';
 import { NotAvailable } from '../../ui/not-available';
 import { SegmentedControl, type SegmentedOption } from '../../ui/segmented-control';
+import { Skeleton, SkeletonRows } from '../../ui/skeleton';
 import { modelText, observationChip, proposalStateLabels, proposeAfterText, reviewersText } from './jonah-format';
 import { JonahHeader } from './jonah-header';
 import { proposalStates } from './jonah-search';
@@ -29,9 +30,9 @@ import { ProposalCard } from './proposal-card';
 /** Loading shows the app background and an empty region for the screen reader, never a placeholder shape. */
 export function Loading() {
   return (
-    <div aria-busy="true" className="min-h-40">
-      <p className="sr-only">Loading</p>
-    </div>
+    <Skeleton ready={false} placeholder={<SkeletonRows rows={4} className="min-h-40" />}>
+      <span />
+    </Skeleton>
   );
 }
 

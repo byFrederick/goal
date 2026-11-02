@@ -6,6 +6,7 @@ import { Search } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useFactoryParams } from '../../shared/factory';
 import { Button } from '../../ui/button';
+import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { Dialog, DialogClose, DialogContent } from '../../ui/dialog';
 import { NotAvailable } from '../../ui/not-available';
@@ -20,6 +21,7 @@ import {
   type SourceKey,
   sourceByKey,
 } from './sources';
+import { isChoosable, type Suggestion, suggestionHref, suggestions } from './suggestions';
 
 export function NewTriggerDialog() {
   const navigate = useNavigate();
@@ -105,6 +107,8 @@ export function NewTriggerDialog() {
             </div>
           </div>
 
+          <SuggestionsBlock />
+
           <div className="flex flex-wrap items-center gap-3 border-t border-line p-4">
             <span className="text-secondary text-muted">Next: filters, what it creates and its limits</span>
             <div className="ml-auto flex items-center gap-2">
@@ -119,6 +123,48 @@ export function NewTriggerDialog() {
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * The suggested triggers for this factory, as starting points for the picker. Use goes to the trigger
+ * page with the suggestion in the address, which closes this dialog (the dialog is the route).
+ */
+function SuggestionsBlock() {
+  const navigate = useNavigate();
+  const params = useFactoryParams();
+  const shown = suggestions.filter((s) => s.group === 'software');
+  if (shown.length === 0) return null;
+
+  return (
+    <section aria-labelledby="suggestions-heading" className="flex flex-col gap-2 border-t border-line p-4">
+      <h3 id="suggestions-heading" className="m-0 text-meta font-semibold text-muted">
+        Or start from a suggestion
+      </h3>
+      <ul className="m-0 grid list-none gap-2 p-0 md:grid-cols-2">
+        {shown.map((suggestion) => (
+          <li key={suggestion.id}>
+            <SuggestionRow
+              suggestion={suggestion}
+              onUse={() => navigate({ href: suggestionHref(params.org, params.factory, suggestion) })}
+            />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function SuggestionRow({ suggestion, onUse }: { suggestion: Suggestion; onUse: () => void }) {
+  const choosable = isChoosable(suggestion);
+  return (
+    <div className="flex min-h-10 items-center gap-3 rounded-cell border border-line px-3 py-2">
+      <Chip>{suggestion.station}</Chip>
+      <span className="min-w-0 flex-1 text-secondary text-ink">{suggestion.title}</span>
+      <Button size="sm" disabled={!choosable} onClick={onUse}>
+        Use
+      </Button>
+    </div>
   );
 }
 

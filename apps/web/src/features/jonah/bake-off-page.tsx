@@ -17,6 +17,7 @@ import { Callout } from '../../ui/callout';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { EmptyState } from '../../ui/empty-state';
+import { Skeleton, SkeletonRows } from '../../ui/skeleton';
 import { RecommendationBanner } from './bake-off-banner';
 import { CaseGrid } from './bake-off-cases';
 import {
@@ -39,9 +40,9 @@ const bakeOffsCrumb = { label: 'Bake-offs', to: '/o/$org/f/$factory/jonah/bake-o
 /** Loading shows the app background and an empty region for the screen reader, never a placeholder shape. */
 export function BakeOffLoading() {
   return (
-    <div aria-busy="true" className="min-h-40">
-      <p className="sr-only">Loading</p>
-    </div>
+    <Skeleton ready={false} placeholder={<SkeletonRows rows={4} className="min-h-40" />}>
+      <span />
+    </Skeleton>
   );
 }
 
