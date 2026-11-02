@@ -59,3 +59,19 @@ describe('the Ask the factory bar, not built yet', () => {
     expect((await screen.findAllByText('Not available yet')).length).toBeGreaterThan(0);
   });
 });
+
+describe('the ask bar layout', () => {
+  it('has no glyph, so no agent icon sits before the input', async () => {
+    const input = await renderBar();
+    expect(input.parentElement?.querySelector('svg')).toBeNull();
+  });
+
+  it('keeps its hint, hidden below md so the bar stays one row on a phone', async () => {
+    const input = await renderBar();
+    const hint = screen.getByText('Becomes an item, reviewed like any change');
+    // jsdom cannot measure layout: the classes stand in for it (hidden below md, shown from md up).
+    expect(hint.className).toContain('hidden');
+    expect(hint.className).toContain('md:inline');
+    expect(input.parentElement?.className).not.toContain('flex-wrap');
+  });
+});
