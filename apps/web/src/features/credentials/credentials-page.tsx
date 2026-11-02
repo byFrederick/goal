@@ -17,7 +17,7 @@ import { EmptyState } from '../../ui/empty-state';
 import { Field, Input } from '../../ui/field';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../ui/menu';
 import { NotAvailable } from '../../ui/not-available';
-import { descriptionClass, eyebrowClass, PageHeader } from '../../ui/page-header';
+import { descriptionClass, PageHeader } from '../../ui/page-header';
 import { SegmentedControl } from '../../ui/segmented-control';
 import { Skeleton } from '../../ui/skeleton';
 import { DeleteCredentialDialog, ReplaceCredentialDialog } from './credential-dialogs';
@@ -93,7 +93,6 @@ export function CredentialsPage() {
   return (
     <>
       <PageHeader
-        eyebrow={<p className={cn(eyebrowClass, 'md:hidden')}>{org.name}</p>}
         title="Credentials"
         description={
           <p className={cn(descriptionClass, 'max-w-3xl')}>
