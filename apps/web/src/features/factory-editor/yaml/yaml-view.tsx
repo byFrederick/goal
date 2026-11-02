@@ -11,7 +11,7 @@
 // waits.
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
-import { Copy, Download } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '../../../api/client';
@@ -38,6 +38,7 @@ import { useFactory } from '../../../shared/factory';
 import { formatClock } from '../../../shared/format';
 import { Button } from '../../../ui/button';
 import { cn } from '../../../ui/cn';
+import { CopyButton } from '../../../ui/copy-button';
 import { Skeleton } from '../../../ui/skeleton';
 import { useDraft, useDraftSession, useModel, useViewOnly } from '../draft/use-draft';
 import { useValidation } from '../frame/use-editor';
@@ -320,16 +321,6 @@ export function YamlView({ search }: SectionViewProps) {
       toast.error(`Not formatted: ${err instanceof ApiError ? (err.detail ?? err.title) : 'goald can’t be reached'}`);
     }
   };
-  const copy = async () => {
-    if (text === undefined) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      toast(`Copied ${path}`);
-    } catch {
-      toast.error('The browser did not allow copying');
-    }
-  };
-
   const version = hasDraft
     ? draft && (draft.base || current)
       ? `draft of v${draft.next_number}`
@@ -476,12 +467,7 @@ export function YamlView({ search }: SectionViewProps) {
                   Format
                 </Button>
               ) : null}
-              {binary ? null : (
-                <Button size="sm" variant="white" onClick={() => void copy()} disabled={text === undefined}>
-                  <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
-                  Copy
-                </Button>
-              )}
+              {binary ? null : <CopyFileButton text={text} disabled={text === undefined} />}
               <span role="status">
                 {path === factoryFile ? 'Checked as you type. ' : ''}
                 {savedLine}
@@ -523,4 +509,16 @@ async function download(org: string, factory: string, version: string, path: str
   } catch {
     toast.error(`${path} couldn’t be downloaded. Try again.`);
   }
+}
+
+export function CopyFileButton({ text, disabled }: { text: string | undefined; disabled?: boolean }) {
+  return (
+    <CopyButton
+      variant="white"
+      label="Copy"
+      text={text ?? ''}
+      disabled={disabled}
+      onFailed={() => toast.error('The browser did not allow copying')}
+    />
+  );
 }

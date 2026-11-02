@@ -316,6 +316,7 @@ describe('Models and policies', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Copy all' }));
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('192.0.2.0/24\n2001:db8::/32'));
+    expect(await screen.findByTestId('copy-check')).toBeTruthy();
   });
 
   it('shows the policy read-only without org:manage and takes no change', async () => {

@@ -28,6 +28,7 @@ import { NotAvailable } from '../../ui/not-available';
 import { Skeleton } from '../../ui/skeleton';
 import { Spinner } from '../../ui/spinner';
 import { StatStrip } from '../../ui/stat-strip';
+import { WorkingLine } from '../../ui/working-line';
 import { type RunsRange, type RunsSearch, rangeWord, runsWindow } from './search';
 
 /** The rows one page asks for: the footer counts what is shown, and paging is not built yet. */
@@ -81,7 +82,7 @@ function Outcome({ status }: { status: RunStatus }) {
     case 'running':
       return (
         <Chip tone="run" dot>
-          <span className="thinking">Running</span>
+          <WorkingLine text="Running" running />
         </Chip>
       );
     case 'failed':

@@ -161,7 +161,7 @@
   /* A changed digit pops in from below with a blur (MOTION.md, A number changes). */
   --animate-number-pop-in: number-pop-in var(--duration-emphasis) var(--ease-bounce) both;
   /* The check that replaces Publish after a version publishes: it grows in at the emphasis duration (MOTION.md, Approve, publish, merge succeed). */
-  --animate-success-check: success-check var(--duration-emphasis) var(--ease-bounce) both;
+  --animate-success-check: success-check var(--duration-emphasis) var(--ease-out) both;
   /* A new row in a list fades in and rises 4 px (MOTION.md, A new item appears in a list). */
   --animate-item-in: item-in var(--duration-fast) var(--ease-out) both;
   /* A skeleton pulses once while it waits (MOTION.md, Loading). */
@@ -176,6 +176,8 @@
   --animate-pane-back: pane-back var(--duration-fast) var(--ease-out) both;
   --animate-row-in: row-in var(--duration-fast) var(--ease-out) both;
   /* The sweep across an agent's working status line (MOTION.md, An agent working). See the thinking utility below. */
+  --animate-icon-swap: icon-swap var(--duration-fast) var(--ease-out) both;
+
   --animate-thinking-shimmer: thinking-shimmer var(--duration-shimmer) linear infinite;
 
   @keyframes pulse-dot {
@@ -194,6 +196,14 @@
     from {
       opacity: 0;
       transform: scale(var(--scale-tooltip));
+    }
+  }
+
+  @keyframes icon-swap {
+    from {
+      opacity: 0;
+      transform: scale(0.8);
+      filter: blur(var(--blur-small));
     }
   }
 
@@ -558,6 +568,23 @@
     );
   }
 
+  /* The andon strip slides down from above its place, then back up faster (MOTION.md, Andon pulled). A line that
+     loads stopped sets data-initial, so the strip is there without the entrance. */
+  .motion-andon {
+    --motion-open: var(--duration-fast);
+    --motion-close: var(--duration-quick);
+    --motion-ease: var(--ease-out);
+    --motion-from: translateY(calc(-1 * var(--distance-base)));
+    --motion-to: translateY(calc(-1 * var(--distance-base)));
+  }
+
+  @starting-style {
+    .motion-andon[data-state="open"][data-initial] {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
   /* Dialogs scale from the centre. */
   .motion-dialog {
     --motion-from: scale(var(--scale-dialog));
@@ -630,31 +657,34 @@
     transform: rotate(180deg);
   }
 
-  /* The sidebar's body (the expanded sidebar or the rail) enters with its labels: it slides in from the left edge
-     and fades, on the in-out curve. The column's width changes at once, so no layout animates (MOTION.md, Sidebar
-     collapse). Under reduced motion only the fade remains, at the quick duration. */
+  /* Sidebar collapse, expand and the snap to the rail: the column's width changes at once, and its inner wrapper
+     starts scaled to the width it had (--sidebar-from-scale, from the left edge) and eases to none, while the labels
+     fade. Set only by a click or a drag release, never by a key or during a drag. Under reduced motion the wrapper
+     does not scale and the labels fade at the quick duration. */
+  .motion-sidebar-resize {
+    transform-origin: left;
+    transition: transform var(--duration-fast) var(--ease-in-out);
+  }
+
+  @starting-style {
+    .motion-sidebar-resize {
+      transform: scaleX(var(--sidebar-from-scale, 1));
+    }
+  }
+
   .motion-sidebar {
-    transition:
-      opacity var(--duration-fast) var(--ease-in-out),
-      transform var(--duration-fast) var(--ease-in-out);
+    transition: opacity var(--duration-fast) var(--ease-in-out);
   }
 
   @starting-style {
     .motion-sidebar {
       opacity: 0;
-      transform: translateX(calc(var(--distance-base) * -1));
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
     .motion-sidebar {
       transition: opacity var(--duration-quick) var(--ease-out);
-    }
-
-    @starting-style {
-      .motion-sidebar {
-        transform: none;
-      }
     }
   }
 }

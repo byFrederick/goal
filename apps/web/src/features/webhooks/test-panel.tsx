@@ -2,11 +2,10 @@
 // sample delivery that is not built yet (ADR 0016, decision 4). The browser never holds a secret, so it
 // cannot sign a request to /hooks/{id}; the sample is for the sender's side.
 import { useQuery } from '@tanstack/react-query';
-import { Check, Copy } from 'lucide-react';
-import { useState } from 'react';
 import { webhookDeliveryQuery } from '../../api/queries';
 import type { WebhookEndpoint } from '../../api/webhooks';
 import { Button } from '../../ui/button';
+import { CopyButton } from '../../ui/copy-button';
 import { NotAvailable } from '../../ui/not-available';
 import type { DeliveriesScope } from './deliveries';
 import { addressUrl, signatureHeader } from './words';
@@ -23,18 +22,7 @@ export function TestPanel({
 }) {
   const fields = useFields(scope, newestAccepted);
   const url = addressUrl(endpoint, window.location.origin);
-  const [copied, setCopied] = useState(false);
   const curl = curlSample(url, signatureHeader(endpoint.kind));
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(curl);
-      setCopied(true);
-      // The check goes back to the copy icon after 1.5 s (MOTION.md, Copy to clipboard).
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      setCopied(false);
-    }
-  };
   return (
     <aside aria-labelledby="send-a-test" className="flex min-w-0 flex-col gap-3 rounded-card border border-line p-5">
       <h2 id="send-a-test" className="m-0 text-heading">
@@ -45,19 +33,7 @@ export function TestPanel({
         <pre className="m-0 overflow-x-auto rounded-control border border-line bg-panel p-4 font-mono text-meta leading-relaxed text-ink">
           {curl}
         </pre>
-        <Button variant="secondary" size="sm" className="absolute top-2 right-2" onClick={() => void copy()}>
-          <span key={String(copied)} className="inline-flex motion-safe:animate-fade-in motion-reduce:animate-none">
-            {copied ? (
-              <Check size={14} strokeWidth={1.5} aria-hidden="true" />
-            ) : (
-              <Copy size={14} strokeWidth={1.5} aria-hidden="true" />
-            )}
-          </span>
-          Copy
-        </Button>
-        <span role="status" className="sr-only">
-          {copied ? 'Copied.' : ''}
-        </span>
+        <CopyButton text={curl} className="absolute top-2 right-2" />
       </div>
       <div className="flex flex-col gap-2">
         <span className="text-secondary font-medium">What the trigger can read</span>
