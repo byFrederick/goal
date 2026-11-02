@@ -79,7 +79,7 @@ export function DateRange({
           sideOffset={6}
           collisionPadding={8}
           aria-label="Date range"
-          className="z-50 flex w-72 max-w-[calc(100vw-16px)] flex-col gap-3 rounded-card border border-rule bg-card p-2 text-ink shadow-pop outline-none data-[state=open]:animate-[fade-in_150ms_ease-out]"
+          className="z-50 flex w-72 max-w-[calc(100vw-16px)] flex-col gap-3 rounded-card border border-rule bg-card p-2 text-ink shadow-pop outline-none data-[state=open]:animate-fade-in"
         >
           <ul className="m-0 flex list-none flex-col p-0">
             {presets.map((days) => (

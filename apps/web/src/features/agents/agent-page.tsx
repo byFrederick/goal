@@ -151,7 +151,7 @@ export function AgentPage({ agent, view }: { agent: string; view: AgentView }) {
       <header className="flex flex-wrap items-start gap-4">
         <span
           aria-hidden="true"
-          className="grid size-12 shrink-0 place-items-center rounded-card bg-run font-numeral text-heading text-white"
+          className="grid size-12 shrink-0 place-items-center rounded-card bg-run text-heading text-white"
         >
           {initialsOf(agent)}
         </span>

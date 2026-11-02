@@ -108,7 +108,7 @@ function Tile({
   return (
     <div className="flex min-w-0 flex-col gap-1 rounded-card border border-line bg-card px-4 py-3">
       <span className="text-secondary text-ink-soft">{label}</span>
-      <span className={cn('text-kpi font-numeral tracking-numeral tabular-nums', valueClass)}>{value}</span>
+      <span className={cn('text-kpi tabular-nums', valueClass)}>{value}</span>
       <span className="text-meta text-muted">{note}</span>
       {children}
     </div>
@@ -301,7 +301,7 @@ export function RunsPage() {
                 className="flex min-w-0 w-full flex-col gap-1 rounded-card border border-line bg-card px-4 py-3 text-left"
               >
                 <span className="text-secondary text-ink-soft">Waiting on you</span>
-                <span className="text-kpi font-numeral tracking-numeral text-you-ink tabular-nums">—</span>
+                <span className="text-kpi text-you-ink tabular-nums">—</span>
                 <span className="text-meta text-muted">Paused until you answer</span>
               </button>
             </NotAvailable>

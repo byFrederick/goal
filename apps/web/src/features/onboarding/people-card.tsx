@@ -14,15 +14,15 @@ export function PeopleCard({ org }: { org: OrgSummary }) {
 
   if (members.isError || invitations.isError) {
     return (
-      <section aria-label="People" className="flex min-w-0 flex-col gap-2 rounded-card border border-andon-line p-4">
-        <span className="text-meta text-andon-text">People</span>
-        <span className="text-secondary text-andon-text">The people can’t be read.</span>
+      <section aria-label="People" className="flex min-w-0 flex-col gap-2 rounded-card border border-line p-4">
+        <span className="text-meta text-ink-soft">People</span>
+        <span className="text-secondary text-ink-soft">The people can’t be read.</span>
       </section>
     );
   }
   if (members.isPending || invitations.isPending) {
     return (
-      <section aria-label="People" aria-busy="true" className="min-w-0 rounded-card border border-andon-line p-4">
+      <section aria-label="People" aria-busy="true" className="min-w-0 rounded-card border border-line p-4">
         <span role="status" className="sr-only">
           Loading
         </span>
@@ -43,11 +43,8 @@ export function PeopleCard({ org }: { org: OrgSummary }) {
   const people = [...(you ? [you.user] : []), ...pending.map((i) => ({ name: '', email: i.email }))];
 
   return (
-    <section
-      aria-label="People"
-      className="flex min-w-0 flex-col gap-3 rounded-card border border-andon-line bg-andon-raised p-4"
-    >
-      <span className="text-meta text-andon-text">People</span>
+    <section aria-label="People" className="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-hover p-4">
+      <span className="text-meta text-ink-soft">People</span>
       <ul className="m-0 flex list-none gap-1 p-0" aria-hidden="true">
         {people.map((p) => (
           <li key={p.email}>
@@ -57,7 +54,7 @@ export function PeopleCard({ org }: { org: OrgSummary }) {
       </ul>
       <ul className="m-0 flex list-none flex-col gap-1 p-0">
         {lines.map((line) => (
-          <li key={line.key} className="text-secondary break-words text-white">
+          <li key={line.key} className="text-secondary break-words text-ink">
             {line.text}
           </li>
         ))}

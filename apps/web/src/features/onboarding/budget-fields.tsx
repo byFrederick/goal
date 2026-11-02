@@ -142,7 +142,7 @@ function BudgetSlider({
           <span id={hintId} className="text-secondary text-muted">
             {hint}
           </span>
-          <output htmlFor={id} className="font-numeral text-heading">
+          <output htmlFor={id} className="text-heading">
             {shown}
           </output>
         </span>
@@ -175,7 +175,7 @@ function Estimate({ itemsPerDay }: { itemsPerDay: number }) {
   const estimate = estimateForTarget(itemsPerDay);
   return (
     <div className="flex items-center gap-4 rounded-card bg-panel p-4">
-      <span className="font-numeral text-kpi text-run-ink">~{formatUsdCompact(estimate)}</span>
+      <span className="text-kpi text-run-ink">~{formatUsdCompact(estimate)}</span>
       <span className="text-secondary text-ink-soft">
         a day reaches your target of {plural(itemsPerDay, 'item')}, at about {formatUsd(averageItemUsd)} each for a
         typical item.

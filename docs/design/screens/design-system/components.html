@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Design system: components</title>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#FFFFFF}
+a{color:#2B5BD7}a:hover{color:#1E46B0}
+*{box-sizing:border-box}
+h1,h2,h3,p,ol,ul{margin:0}
+ol,ul{padding:0;list-style:none}
+.g{--bg:#FFFFFF;--side:#F8F8F7;--panel:#FAFAF9;--hover:#F0F0EE;--rule:#EAEAE7;--rule2:#D6D6D2;--ink:#171717;--ink2:#4A4A47;--ink3:#6B6B67;--pri:#2B5BD7;--pri-ink:#1E46B0;--pri-t:#EEF2FC;--you:#C2410C;--you-t:#FDF2EC;--you-ink:#9A3412;--red:#C93030;--red-t:#FDF0F0;--red-ink:#A42525;--yel:#EAB308;--yel-t:#FEF8E1;--yel-ink:#6F5000;--grn:#1F8A4C;--grn-t:#EEF7F1;--grn-ink:#17663A;--navy:#FAFAF9;--navy2:#FFFFFF;--navy3:#EAEAE7;--act:#171717;--act-ink:#FFFFFF;--act-hover:#333331;--shadow-pop:0 0 0 1px rgba(0,0,0,.06),0 10px 28px -10px rgba(0,0,0,.18);--dur-stagger:40ms;--dur-micro:80ms;--dur-quick:150ms;--dur-fast:250ms;--dur-medium:350ms;--dur-slow:400ms;--ease-out:cubic-bezier(.22,1,.36,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-bounce:cubic-bezier(.34,1.36,.64,1);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:14px;line-height:1.5;color:var(--ink);background:var(--bg);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.g.dark{--bg:#0F0F0F;--side:#141414;--panel:#171717;--hover:#1F1F1F;--rule:#262626;--rule2:#363636;--ink:#EDEDEC;--ink2:#B4B4B0;--ink3:#8F8F8A;--pri:#3D6BE0;--pri-ink:#A9C1FA;--pri-t:#17213A;--you:#B84D1C;--you-t:#341C10;--you-ink:#FDBA94;--red:#C73A3A;--red-t:#361616;--red-ink:#FCA5A5;--yel-t:#30270C;--yel-ink:#F5D46B;--grn:#2E9E5E;--grn-t:#11291B;--grn-ink:#7EDBA4;--navy:#171717;--navy2:#0F0F0F;--navy3:#262626;--act:#EDEDEC;--act-ink:#111111;--act-hover:#D4D4D0;--shadow-pop:0 0 0 1px rgba(255,255,255,.08),0 12px 32px -10px rgba(0,0,0,.6)}
+.h1{font-size:20px;line-height:1.25;font-weight:600;letter-spacing:-0.01em}
+.h2{font-size:14px;line-height:1.35;font-weight:600}
+.num{font-weight:500;letter-spacing:-0.01em}
+.m2{color:var(--ink2)}.m3{color:var(--ink3)}.sm{font-size:13px}.xs{font-size:12px}
+.code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px}
+.app{display:flex;flex-wrap:wrap;align-items:stretch;min-height:100vh;background:var(--bg)}
+.side{width:248px;flex:none;background:var(--side);border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:1px;padding:10px 8px 12px;min-height:100vh}
+.srow{display:flex;align-items:center;gap:2px;margin-bottom:6px}
+.orgb{flex:1;min-width:0;display:flex;align-items:center;gap:9px;height:36px;padding:0 6px;border:0;border-radius:6px;background:none;font:inherit;font-weight:600;font-size:14px;color:var(--ink);cursor:pointer;text-align:left}
+.omk{width:24px;height:24px;flex:none;border-radius:6px;background:#171717;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:600}
+.ib{width:30px;height:30px;flex:none;border:0;border-radius:6px;background:none;color:var(--ink3);display:grid;place-items:center;cursor:pointer;padding:0}
+.orgb,.ib,.ni,.fh,.sub a,.me,.newb,.use,.btn,.chip,.seg button,.pk,.in,.inrow,.card,.box{transition:background-color var(--dur-quick) ease,color var(--dur-quick) ease,border-color var(--dur-quick) ease,box-shadow var(--dur-quick) ease,transform var(--dur-quick) var(--ease-out)}
+.orgb:hover,.ib:hover,.ni:hover,.fh:hover,.sub a:hover,.me:hover{background:var(--hover);color:var(--ink)}
+.newb{display:flex;align-items:center;gap:8px;height:34px;padding:0 6px 0 10px;border-radius:6px;background:var(--bg);border:1px solid var(--rule2);color:var(--ink);font-weight:500;text-decoration:none;margin:0 0 8px}
+.newb:hover{border-color:var(--ink3);color:var(--ink)}
+.kb{margin-left:auto;min-width:20px;height:20px;padding:0 5px;border-radius:4px;background:var(--panel);border:1px solid var(--rule);color:var(--ink3);font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;font-weight:500;display:grid;place-items:center}
+.ni{display:flex;align-items:center;gap:10px;height:32px;padding:0 8px;border-radius:6px;color:var(--ink2);text-decoration:none;font-weight:500}
+.ni svg{flex:none;color:var(--ink3)}
+.ni.on{background:var(--hover);color:var(--ink)}.ni.on svg{color:var(--ink)}
+.cnt{margin-left:auto;min-width:18px;height:18px;padding:0 5px;border-radius:9px;font-size:11.5px;font-weight:600;display:inline-grid;place-items:center;background:var(--you);color:#fff}
+.cnt.n{background:none;color:var(--ink3);font-weight:500}
+.sec{display:flex;align-items:center;justify-content:space-between;height:28px;margin-top:14px;padding:0 2px 0 8px;font-size:12px;font-weight:500;color:var(--ink3)}
+.sec .ib{width:24px;height:24px}
+.fh{display:flex;align-items:center;gap:10px;height:32px;padding:0 8px;border-radius:6px;color:var(--ink);text-decoration:none;font-weight:500}
+.fh .chev{margin-left:auto;color:var(--ink3);flex:none}
+.fb{width:18px;height:18px;flex:none;border-radius:4px;display:grid;place-items:center;color:#fff;font-size:10.5px;font-weight:600}
+.sub{display:flex;flex-direction:column;gap:1px;margin:2px 0 6px 16px;padding-left:8px;border-left:1px solid var(--rule)}
+.sub a{display:flex;align-items:center;height:28px;padding:0 8px;border-radius:6px;color:var(--ink2);text-decoration:none;font-size:13px;font-weight:400}
+.sub a.on{background:var(--hover);color:var(--ink);font-weight:500;box-shadow:none}
+.sdot{width:6px;height:6px;border-radius:50%;flex:none}
+.sbot{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-top:12px}
+.use{display:flex;flex-direction:column;gap:6px;padding:8px 8px;border-radius:6px;border:0;background:none;text-decoration:none;color:var(--ink)}
+.use:hover{background:var(--hover);color:var(--ink)}
+.bar{height:4px;border-radius:2px;background:var(--hover);overflow:hidden;display:flex}
+.bar span{display:block;height:100%}
+.me{display:flex;align-items:center;gap:10px;width:100%;padding:6px;border:0;border-radius:6px;background:none;font:inherit;color:var(--ink);cursor:pointer;text-align:left}
+.av{width:28px;height:28px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:11.5px;font-weight:600;color:#fff;background:#4A5A52}
+.main{flex:999 1 560px;min-width:0;display:flex;flex-direction:column}
+.top{display:flex;align-items:center;gap:10px;min-height:52px;padding:8px 28px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.crumb{display:flex;align-items:center;gap:8px;font-weight:500;color:var(--ink2);min-width:0}
+.crumb a{color:var(--ink3);text-decoration:none}.crumb a:hover{color:var(--ink)}
+.tact{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 12px;border-radius:6px;border:1px solid var(--rule2);background:var(--bg);color:var(--ink);font:inherit;font-weight:500;font-size:13px;text-decoration:none;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--panel);border-color:var(--ink3);color:var(--ink)}
+.btn:active,.ib:active,.newb:active,.pk:active,.me:active{transform:scale(.97)}
+.btn.pri{background:var(--act);border-color:var(--act);color:var(--act-ink)}.btn.pri:hover{background:var(--act-hover);border-color:var(--act-hover);color:var(--act-ink)}
+.btn.warn{color:var(--red-ink)}
+.btn.sm{height:28px;padding:0 10px;font-size:12.5px}
+.seg{display:inline-flex;padding:2px;border-radius:7px;background:var(--hover);border:0;gap:2px;flex-wrap:wrap}
+.seg button{height:26px;padding:0 10px;border:0;border-radius:5px;background:none;font:inherit;font-size:12.5px;font-weight:500;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08),0 0 0 1px var(--rule)}
+.seg .k{font-size:12px;color:var(--ink3)}
+.page{padding:24px 28px 40px;display:flex;flex-direction:column;gap:20px}
+.page>*{animation:enter var(--dur-fast) var(--ease-out) both}
+.page>*:nth-child(2){animation-delay:var(--dur-stagger)}.page>*:nth-child(3){animation-delay:calc(var(--dur-stagger)*2)}.page>*:nth-child(n+4){animation-delay:calc(var(--dur-stagger)*3)}
+@keyframes enter{from{opacity:0;transform:translateY(4px)}}
+.card{border:1px solid var(--rule);border-radius:8px;background:var(--bg);padding:16px 18px;min-width:0;display:flex;flex-direction:column}
+a.card:hover{border-color:var(--rule2)}
+.chip{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 7px;border-radius:4px;font-size:12px;font-weight:500;background:var(--bg);color:var(--ink2);border:1px solid var(--rule);white-space:nowrap;text-decoration:none}
+.chip.run{color:var(--ink2)}.chip.run .dot{color:var(--pri)}
+.chip.you{background:var(--you-t);color:var(--you-ink);border-color:transparent}
+.chip.red{background:var(--red-t);color:var(--red-ink);border-color:transparent}
+.chip.yel{color:var(--ink2)}.chip.yel .dot{color:var(--yel)}
+.chip.grn{color:var(--ink2)}.chip.grn .dot{color:var(--grn)}
+.chip.big{height:26px;padding:0 9px;font-size:12.5px;border-radius:5px}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.live{animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:0s!important}}
+@media (max-width:760px){.side{width:100%;min-height:0;border-right:0;border-bottom:1px solid var(--rule)}.side .navs,.side .sbot{display:none}.top{padding:8px 16px}.page{padding:16px}}
+.g{--dur-emphasis:500ms;--ease-drawer:cubic-bezier(.32,.72,0,1);--scale-dialog:.96;--scale-menu:.97;--scale-tooltip:.98;--scale-press:.97;--dist-micro:4px;--dist-base:8px;--blur-small:2px;--on-fill:#FFFFFF;--scrim:rgba(23,23,23,.22);--mark:#171717;--mark-rule:rgba(255,255,255,.12);--mark-node:#EAB308;--spec-l:#FFFFFF;--spec-l-ink:#171717;--spec-l-rule:#EAEAE7;--spec-d:#0F0F0F;--spec-d-ink:#EDEDEC;--spec-d-rule:#262626;--f-cobalt:#2B5BD7;--f-teal:#0E7C6E;--f-rust:#B4461A;--f-green:#1F7A3A;--f-ocean:#0B6493;--f-ochre:#7E5A00;--f-slate:#55595F;--f-plum:#6B3A5E;min-height:100vh}
+.g.dark{--scrim:rgba(0,0,0,.55)}
+.ds{padding:32px 40px 56px;gap:40px}
+.ds-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-bottom:20px;border-bottom:1px solid var(--rule)}
+.ds-head p{margin-top:2px}
+.ds-nav{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.ds-nav .btn.cur{background:var(--hover);border-color:var(--hover)}
+.mk{width:28px;height:28px;flex:none;border-radius:6px;background:var(--mark);box-shadow:inset 0 0 0 1px var(--mark-rule);display:grid;place-items:center}
+.mk path{stroke:var(--on-fill)}.mk circle{fill:var(--mark-node)}
+.mk.lg{width:56px;height:56px;border-radius:12px}
+.sect{display:flex;flex-direction:column;gap:14px;min-width:0}
+.sh{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.cols2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px 48px}
+.cols3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
+.span2{grid-column:span 2}.span3{grid-column:1/-1}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+.fl{display:block;height:8px;border-radius:4px;background:var(--hover)}
+.fbx{width:18px;height:18px;flex:none;border-radius:4px;display:grid;place-items:center;color:var(--on-fill);font-size:10.5px;font-weight:600}
+@media (max-width:900px){.cols2,.cols3{grid-template-columns:minmax(0,1fr)}.span2,.span3{grid-column:auto}.ds{padding:16px}}
+.ex{border:1px solid var(--rule);border-radius:8px;background:var(--bg);display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.ex-h{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--rule)}
+.ex-b{flex:1;padding:20px 16px;background:var(--panel);display:flex;flex-wrap:wrap;gap:16px 20px;align-items:flex-start;min-width:0}
+.ex-b.pl{background:var(--bg)}
+.ex-b.col{flex-direction:column;flex-wrap:nowrap}
+.lb{display:flex;flex-direction:column;gap:8px;align-items:flex-start;min-width:0}
+.lbl{font-size:12px;color:var(--ink3)}
+.btn.yo,.btn.yo:hover{background:var(--you);border-color:var(--you);color:var(--on-fill)}
+.btn.del,.btn.del:hover{background:var(--red);border-color:var(--red);color:var(--on-fill)}
+.btn:disabled,.btn:disabled:hover{opacity:.45;cursor:not-allowed;background:var(--bg);border-color:var(--rule2);color:var(--ink)}
+.btn:disabled:active{transform:none}
+.ib.hov{background:var(--hover);color:var(--ink)}
+.chip.exp{background:var(--yel-t);color:var(--yel-ink);border-color:transparent}
+.chip.exp .dot{color:var(--yel)}
+.fld{display:flex;flex-direction:column;gap:6px;width:220px}
+.fld label{font-size:13px;font-weight:500}
+.in2{height:32px;width:100%;padding:0 10px;border:1px solid var(--rule2);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px}
+.in2::placeholder{color:var(--ink3)}
+.in2.focus,.in2:focus{border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-t);outline:none}
+.in2.err{border-color:var(--red)}
+.msg{font-size:12px;color:var(--red-ink)}
+.ctl{display:flex;align-items:center;gap:10px;font-size:13px}
+.swt{position:relative;width:32px;height:18px;flex:none;border-radius:9px;border:0;padding:0;background:var(--rule2);cursor:pointer;transition:background-color var(--dur-quick) ease}
+.swt::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--bg);transition:transform var(--dur-medium) var(--ease-bounce)}
+.swt.on{background:var(--ink)}
+.swt.on::after{transform:translateX(14px)}
+.cbx{width:16px;height:16px;flex:none;border-radius:4px;border:1px solid var(--rule2);background:var(--bg);padding:0;display:grid;place-items:center;color:var(--bg);cursor:pointer;transition:background-color var(--dur-quick) ease,border-color var(--dur-quick) ease}
+.cbx svg{opacity:0}
+.cbx.on{background:var(--ink);border-color:var(--ink)}
+.cbx.on svg{opacity:1}
+@keyframes pop{from{opacity:0;transform:scale(var(--scale-menu))}}
+@keyframes popd{from{opacity:0;transform:scale(var(--scale-dialog))}}
+@keyframes popt{from{opacity:0;transform:scale(var(--scale-tooltip))}}
+@keyframes fade{from{opacity:0}}
+.mnw{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.mn{width:216px;padding:4px;border-radius:8px;background:var(--bg);box-shadow:var(--shadow-pop);animation:pop var(--dur-fast) var(--ease-out) both;transform-origin:top left}
+.mn button{display:flex;align-items:center;gap:8px;width:100%;height:30px;padding:0 8px;border:0;border-radius:6px;background:none;font:inherit;font-size:13px;color:var(--ink);text-align:left;cursor:pointer;transition:background-color var(--dur-quick) ease}
+.mn button:hover,.mn button.hov{background:var(--hover)}
+.mn button svg{color:var(--ink3);flex:none}
+.mn .k{margin-left:auto;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;color:var(--ink3)}
+.mn .rd{color:var(--red-ink)}
+.mn hr{border:0;border-top:1px solid var(--rule);margin:4px -4px}
+.dst{position:relative;width:100%;height:230px;border-radius:6px;overflow:hidden;background:var(--bg);border:1px solid var(--rule)}
+.dst-bg{padding:16px;display:flex;flex-direction:column;gap:10px}
+.scrim{position:absolute;inset:0;background:var(--scrim);animation:fade var(--dur-fast) ease both}
+.dw{position:absolute;inset:0;display:grid;place-items:center;padding:12px}
+.dlg{width:100%;max-width:300px;background:var(--bg);border-radius:12px;box-shadow:var(--shadow-pop);padding:18px;display:flex;flex-direction:column;gap:6px;animation:popd var(--dur-fast) var(--ease-out) both}
+.dlg .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.tst{display:inline-flex;align-items:center;gap:12px;height:40px;padding:0 6px 0 14px;border-radius:8px;background:var(--ink);color:var(--bg);font-size:13px;box-shadow:var(--shadow-pop)}
+.tst button{height:28px;padding:0 8px;border:0;border-radius:6px;background:none;color:var(--bg);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.tipw{display:inline-flex;flex-direction:column;align-items:center;gap:6px}
+.tip{display:inline-flex;align-items:center;gap:8px;height:26px;padding:0 8px;border-radius:6px;background:var(--ink);color:var(--bg);font-size:12px;white-space:nowrap;animation:popt var(--dur-quick) var(--ease-out) both;transform-origin:bottom center}
+.tip .kc{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;opacity:.7}
+.ss{display:flex;width:100%}
+.ss>div{flex:1;min-width:0;padding:2px 24px;border-left:1px solid var(--rule);display:flex;flex-direction:column;gap:4px}
+.ss>div:first-child{border-left:0;padding-left:0}
+.ss .v{font-size:24px;font-weight:500;letter-spacing:-.01em;line-height:1.2}
+.ss .u{font-size:13px;font-weight:400;color:var(--ink3);margin-left:3px}
+.pg{height:2px;width:100%;max-width:160px;border-radius:1px;background:var(--rule);overflow:hidden}
+.pg span{display:block;height:100%;background:var(--ink)}
+.up{color:var(--grn-ink)}.dn{color:var(--red-ink)}
+.ln{display:flex;align-items:flex-start;width:100%}
+.st{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.st-n{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;height:20px}
+.st-n .cm{width:6px;height:6px;border-radius:50%;background:var(--yel);flex:none}
+.st-n .ct{font-size:12px;font-weight:400;color:var(--yel-ink)}
+.st-c{font-size:24px;font-weight:500;line-height:1.2;letter-spacing:-.01em}
+.ld{height:4px;width:100%;border-radius:2px;background:var(--rule);overflow:hidden}
+.ld span{display:block;height:100%;background:var(--ink)}
+.ld.y span{background:var(--yel)}
+.sl{display:flex;gap:4px}
+.sl span{width:8px;height:8px;border-radius:2px;border:1px solid var(--rule2)}
+.sl .w{background:var(--ink);border-color:var(--ink)}
+.sl .y{background:var(--you);border-color:var(--you)}
+.cn{flex:none;width:44px;display:flex;align-items:center;margin-top:38px;color:var(--ink3)}
+.cn span{flex:1;height:1px;background:var(--rule2)}
+.bc{width:100%;display:flex;flex-direction:column;gap:8px}
+.bc-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:24px}
+.wm{display:flex;gap:2px}
+.wm span{width:10px;height:4px;border-radius:1px;background:var(--rule2)}
+.wm .f{background:var(--ink)}
+.bc-c{background:var(--panel);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:8px}
+.ic{background:var(--bg);border:1px solid var(--rule);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:6px;text-decoration:none;color:var(--ink);transition:border-color var(--dur-quick) ease}
+.ic:hover{border-color:var(--rule2);color:var(--ink)}
+.ic.you,.ic.you:hover{border-color:var(--you)}
+.ic-r{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink3)}
+.ic-r .yd{width:6px;height:6px;border-radius:50%;background:var(--you);margin-left:auto}
+.ic-t{font-size:13px;font-weight:500;line-height:1.35}
+.rn{width:100%;display:flex;flex-direction:column}
+.rn-h{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid var(--rule)}
+.ev{display:grid;grid-template-columns:64px 14px minmax(0,1fr) auto;gap:0 10px;align-items:start}
+.ev .t{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;color:var(--ink3);padding-top:8px}
+.ev .rl{position:relative;align-self:stretch}
+.ev .rl::before{content:"";position:absolute;left:6px;top:0;bottom:0;width:1px;background:var(--rule2)}
+.ev:first-child .rl::before{top:15px}
+.ev:last-child .rl::before{bottom:auto;height:15px}
+.ev .rl i{position:absolute;left:4px;top:13px;width:6px;height:6px;border-radius:50%;background:var(--ink3)}
+.ev .rl i.ok{background:var(--grn)}.ev .rl i.bad{background:var(--red)}.ev .rl i.you{background:var(--you)}
+.ev .tx{font-size:13px;padding:6px 0}
+.ev .me2{font-size:12px;color:var(--ink3);padding-top:8px}
+.ny{display:grid;grid-template-columns:18px 72px minmax(0,1fr) auto auto;gap:12px;align-items:center;min-height:52px;padding:8px 12px;border-radius:6px;width:100%}
+.ny.sel{background:var(--you-t)}
+.ny .ty2{font-size:13px;font-weight:500;color:var(--you-ink)}
+.ny .ty2.al{color:var(--red-ink)}
+.ny .tt{display:flex;flex-direction:column;min-width:0}
+.ny .tt b{font-size:14px;font-weight:500}
+.ny .acts{display:flex;gap:6px}
+.stp{display:flex;width:100%}
+.stp li{flex:1;display:flex;flex-direction:column;gap:8px;min-width:0}
+.stp li:last-child{flex:none}
+.sd{display:flex;align-items:center;height:10px}
+.sd i{width:8px;height:8px;border-radius:50%;flex:none;border:1px solid var(--rule2);background:var(--bg)}
+.sd i.dn2{background:var(--ink);border-color:var(--ink)}
+.sd i.cu{width:10px;height:10px;border:2px solid var(--ink)}
+.sd i.wy{width:10px;height:10px;border:2px solid var(--you)}
+.sd span{flex:1;height:1px;background:var(--rule2);margin:0 4px}
+.sd span.dn2{background:var(--ink)}
+.stp .xs{white-space:nowrap}
+.stp .cur{color:var(--ink);font-weight:500}
+.em{display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:12px 4px}
+.skl{width:100%;display:flex;flex-direction:column}
+.skr{display:grid;grid-template-columns:72px minmax(0,1fr) 96px 88px 44px;gap:16px;align-items:center;height:44px;border-bottom:1px solid var(--rule)}
+.skr:last-child{border-bottom:0}
+.skr .b{display:block;height:10px;border-radius:3px;background:var(--hover)}
+.skr .b.chip2{height:22px;width:76px;border-radius:4px}
+.skr.sk .b{animation:skp 1s linear 1 both}
+@keyframes skp{50%{opacity:.5}}
+</style>
+</helmet>
+<div class="g {{theme}}"><main class="page ds">
+<header class="ds-head"><span class="mk" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9"></circle></svg></span><div><h1 class="h1">Design system: components</h1><p class="sm m3">Version 3, Plain. Each component as it renders, with the rule that shapes it.</p></div><nav class="ds-nav" aria-label="Design system"><a class="btn" href="DS-Foundations.dc.html">Foundations</a><a class="btn cur" href="DS-Components.dc.html" aria-current="page">Components</a><a class="btn" href="DS-Motion.dc.html">Motion</a></nav></header>
+<div class="cols3">
+
+<section class="ex span2" aria-labelledby="c-btn"><div class="ex-h"><h2 class="h2" id="c-btn">Buttons</h2><span class="xs m3">32px, 6px radius, 13px at 500; 28px small. Every button scales to .97 while pressed.</span></div>
+<div class="ex-b">
+<div class="lb"><button class="btn pri" type="button">Publish</button><span class="lbl">Primary</span></div>
+<div class="lb"><button class="btn" type="button">Cancel</button><span class="lbl">Secondary</span></div>
+<div class="lb"><button class="btn warn" type="button">Delete factory</button><span class="lbl">Danger</span></div>
+<div class="lb"><button class="btn yo" type="button">Approve</button><span class="lbl">Approve, in Needs you</span></div>
+<div class="lb"><button class="btn sm" type="button">Reply</button><span class="lbl">Small</span></div>
+<div class="lb"><button class="ib" type="button" aria-label="More actions"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.5" cy="8" r="1.25" fill="currentColor"></circle><circle cx="8" cy="8" r="1.25" fill="currentColor"></circle><circle cx="12.5" cy="8" r="1.25" fill="currentColor"></circle></svg></button><span class="lbl">Icon, 30px</span></div>
+<div class="lb"><button class="btn" type="button" disabled="disabled" title="Not available yet">Export</button><span class="lbl">Disabled: Not available yet</span></div>
+</div></section>
+
+<section class="ex" aria-labelledby="c-chip"><div class="ex-h"><h2 class="h2" id="c-chip">Chips</h2><span class="xs m3">22px, 4px radius, a 6px dot</span></div>
+<div class="ex-b">
+<div class="lb"><span class="chip">Feature</span><span class="lbl">Neutral</span></div>
+<div class="lb"><span class="chip run"><span class="dot live"></span>Running</span><span class="lbl">Running</span></div>
+<div class="lb"><span class="chip you"><span class="dot"></span>Needs you</span><span class="lbl">Needs you</span></div>
+<div class="lb"><span class="chip red"><span class="dot"></span>Sent back</span><span class="lbl">Sent back</span></div>
+<div class="lb"><span class="chip yel"><span class="dot"></span>Constraint</span><span class="lbl">Constraint</span></div>
+<div class="lb"><span class="chip grn"><span class="dot"></span>Done</span><span class="lbl">Done</span></div>
+<div class="lb"><span class="chip exp"><span class="dot"></span>Expedite</span><span class="lbl">Expedite lane</span></div>
+</div></section>
+
+<section class="ex" aria-labelledby="c-seg"><div class="ex-h"><h2 class="h2" id="c-seg">Segmented control</h2><span class="xs m3">Grey track, white selected segment</span></div>
+<div class="ex-b col">
+<div class="lb"><div class="seg" role="group" aria-label="Time window"><button type="button" aria-pressed="false">24h</button><button type="button" aria-pressed="true">7 days</button><button type="button" aria-pressed="false">30 days</button></div><span class="lbl">Time window</span></div>
+<div class="lb"><div class="seg" role="group" aria-label="View"><button type="button" aria-pressed="true">Board</button><button type="button" aria-pressed="false">List</button></div><span class="lbl">View</span></div>
+<div class="lb"><div class="seg" role="group" aria-label="Editor"><button type="button" aria-pressed="false">Form</button><button type="button" aria-pressed="true">YAML</button></div><span class="lbl">Editor</span></div>
+</div></section>
+
+<section class="ex" aria-labelledby="c-in"><div class="ex-h"><h2 class="h2" id="c-in">Inputs</h2><span class="xs m3">32px, rule border; focus is run plus a 3px tint ring</span></div>
+<div class="ex-b col">
+<div class="fld"><label for="in-a">Factory name</label><input id="in-a" class="in2" type="text" placeholder="Software"></div>
+<div class="fld"><label for="in-b">Webhook URL</label><input id="in-b" class="in2 focus" type="text" value="https://hooks.example.com/goal"></div>
+<div class="fld"><label for="in-c">WIP limit</label><input id="in-c" class="in2 err" type="text" value="0" aria-invalid="true" aria-describedby="in-c-m"><span class="msg" id="in-c-m">Set a limit of 1 or more.</span></div>
+</div></section>
+
+<section class="ex" aria-labelledby="c-sw"><div class="ex-h"><h2 class="h2" id="c-sw">Switch and checkbox</h2><span class="xs m3">32 by 18 track; 16px box</span></div>
+<div class="ex-b col">
+<div class="lb"><span class="ctl"><button class="swt" type="button" role="switch" aria-checked="false" aria-label="Hands-off off"></button>Hands-off</span><span class="lbl">Switch, off</span></div>
+<div class="lb"><span class="ctl"><button class="swt on" type="button" role="switch" aria-checked="true" aria-label="Expedite lane on"></button>Expedite lane</span><span class="lbl">Switch, on</span></div>
+<div class="lb"><span class="ctl"><button class="cbx" type="button" role="checkbox" aria-checked="false" aria-label="Approvals by email"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>Approvals by email</span><span class="lbl">Checkbox</span></div>
+<div class="lb"><span class="ctl"><button class="cbx on" type="button" role="checkbox" aria-checked="true" aria-label="Approvals in Goal"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>Approvals in Goal</span><span class="lbl">Checkbox, checked</span></div>
+</div></section>
+
+<section class="ex" aria-labelledby="c-mn"><div class="ex-h"><h2 class="h2" id="c-mn">Menu</h2><span class="xs m3">8px, shadow-pop, 30px items; grows from its trigger</span></div>
+<div class="ex-b">
+<div class="mnw"><button class="btn sm" type="button" aria-haspopup="menu" aria-expanded="true">Move to<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+<div class="mn" role="menu" aria-label="Move to">
+<button type="button" role="menuitem">Spec</button>
+<button type="button" role="menuitem">Build<span class="k">current</span></button>
+<button class="hov" type="button" role="menuitem">Review</button>
+<button type="button" role="menuitem">Ship</button>
+<hr>
+<button type="button" role="menuitem">Expedite<span class="k">E</span></button>
+<button class="rd" type="button" role="menuitem">Remove from board</button>
+</div></div>
+</div></section>
+
+<section class="ex" aria-labelledby="c-dl"><div class="ex-h"><h2 class="h2" id="c-dl">Dialog</h2><span class="xs m3">12px radius, from the centre at .96</span></div>
+<div class="ex-b">
+<div class="dst"><div class="dst-bg" aria-hidden="true"><span class="fl" style="width: 40%"></span><span class="fl" style="width: 72%"></span><span class="fl" style="width: 58%"></span><span class="fl" style="width: 66%"></span></div>
+<div class="scrim"></div>
+<div class="dw"><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-t"><h3 class="h2" id="dlg-t">Delete factory Software?</h3><p class="sm m2">Its items, runs and definitions are removed. This cannot be undone.</p>
+<div class="acts"><button class="btn sm" type="button">Cancel</button><button class="btn sm del" type="button">Delete factory</button></div></div></div>
+</div>
+</div></section>
+
+<section class="ex" aria-labelledby="c-tt"><div class="ex-h"><h2 class="h2" id="c-tt">Toast and tooltip</h2><span class="xs m3">Ink fill, inverted in dark</span></div>
+<div class="ex-b col">
+<div class="lb"><div class="tst" role="status"><span>GOAL-147 moved to Review</span><button type="button">Undo</button></div><span class="lbl">Toast, bottom-right, one line and an action</span></div>
+<div class="lb"><div class="tipw"><span class="tip" role="tooltip" id="tip-a">Search<span class="kc">⌘K</span></span><button class="ib hov" type="button" aria-label="Search" aria-describedby="tip-a"><svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><circle cx="8" cy="8" r="5.25" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="m12 12 3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button></div><span class="lbl">Tooltip, with its shortcut</span></div>
+</div></section>
+
+<section class="ex span3" aria-labelledby="c-ss"><div class="ex-h"><h2 class="h2" id="c-ss">Stat strip</h2><span class="xs m3">Up to four numbers, 1px rules between, no boxes; each with a target and a signed delta</span></div>
+<div class="ex-b pl">
+<div class="ss">
+<div><span class="xs m3">Throughput</span><span class="v">18<span class="u">items / week</span></span><span class="pg"><span style="width: 90%"></span></span><span class="xs m3">Target 20 <span class="up">+3 vs last week</span></span></div>
+<div><span class="xs m3">Lead time</span><span class="v">4.2<span class="u">h</span></span><span class="xs m3">Target 6 h <span class="up">-0.8 h</span></span></div>
+<div><span class="xs m3">Cost per item</span><span class="v">$3.10</span><span class="xs m3">Target $4.00 <span class="up">-$0.40</span></span></div>
+<div><span class="xs m3">First-pass yield</span><span class="v">82<span class="u">%</span></span><span class="pg"><span style="width: 91%"></span></span><span class="xs m3">Target 90% <span class="dn">-4 pts</span></span></div>
+</div>
+</div></section>
+
+<section class="ex span3" aria-labelledby="c-ln"><div class="ex-h"><h2 class="h2" id="c-ln">The line</h2><span class="xs m3">Stations joined by a rule; load bar ink busy, rule free, yellow for the constraint; slots ink working, orange waiting on you, outlined free</span></div>
+<div class="ex-b pl">
+<div class="ln" role="list" aria-label="Software line">
+<div class="st" role="listitem"><span class="st-n">Spec</span><span class="st-c">3</span><span class="ld"><span style="width: 50%"></span></span><span class="sl" aria-label="2 agents working, 1 free"><span class="w"></span><span class="w"></span><span></span></span><span class="xs m3">1 waiting</span></div>
+<div class="cn" aria-hidden="true"><span></span><svg width="10" height="10" viewBox="0 0 16 16"><path d="m6 4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+<div class="st" role="listitem"><span class="st-n">Design</span><span class="st-c">2</span><span class="ld"><span style="width: 40%"></span></span><span class="sl" aria-label="1 agent working, 1 free"><span class="w"></span><span></span></span><span class="xs m3">Nothing waiting</span></div>
+<div class="cn" aria-hidden="true"><span></span><svg width="10" height="10" viewBox="0 0 16 16"><path d="m6 4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+<div class="st" role="listitem"><span class="st-n"><span class="cm" aria-hidden="true"></span>Build<span class="ct">Constraint</span></span><span class="st-c">6</span><span class="ld y"><span style="width: 100%"></span></span><span class="sl" aria-label="3 agents working"><span class="w"></span><span class="w"></span><span class="w"></span></span><span class="xs m3">4 waiting</span></div>
+<div class="cn" aria-hidden="true"><span></span><svg width="10" height="10" viewBox="0 0 16 16"><path d="m6 4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+<div class="st" role="listitem"><span class="st-n">Review</span><span class="st-c">2</span><span class="ld"><span style="width: 50%"></span></span><span class="sl" aria-label="1 agent working, 1 waiting on you"><span class="w"></span><span class="y"></span></span><span class="xs m3">1 needs you</span></div>
+<div class="cn" aria-hidden="true"><span></span><svg width="10" height="10" viewBox="0 0 16 16"><path d="m6 4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+<div class="st" role="listitem"><span class="st-n">Ship</span><span class="st-c">1</span><span class="ld"><span style="width: 20%"></span></span><span class="sl" aria-label="1 agent working, 1 free"><span class="w"></span><span></span></span><span class="xs m3">Nothing waiting</span></div>
+</div>
+</div></section>
+
+<section class="ex" aria-labelledby="c-bc"><div class="ex-h"><h2 class="h2" id="c-bc">Board column</h2><span class="xs m3">Header over a panel cell, no header card</span></div>
+<div class="ex-b pl">
+<div class="bc">
+<div class="bc-h"><span class="h2">Review</span><span class="xs m3">2 of 3</span><span class="wm" aria-label="2 of 3 WIP"><span class="f"></span><span class="f"></span><span></span></span><span class="xs m3" style="margin-left: auto">2 agents, 70% busy</span></div>
+<div class="bc-c">
+<a class="ic" href="#c-bc"><span class="ic-r"><span class="mono">GOAL-147</span><span>Feature</span></span><span class="ic-t">Add retry with backoff to the webhook sender</span><span class="xs m3">Webhook reliability, part 2 of 3</span><span class="ic-r"><span>Reviewer</span><span>$0.42</span><span class="chip run" style="margin-left: auto"><span class="dot live"></span>Running</span></span></a>
+<a class="ic you" href="#c-bc"><span class="ic-r"><span class="mono">GOAL-151</span><span>Bug</span><span class="yd" aria-label="Waiting on you"></span></span><span class="ic-t">Fix the double charge when a retry overlaps a refund</span><span class="xs m3">Payments, part 1 of 1</span><span class="ic-r"><span>Reviewer</span><span>$0.18</span><span class="chip you" style="margin-left: auto"><span class="dot"></span>Needs you</span></span></a>
+</div>
+</div>
+</div></section>
+
+<section class="ex span2" aria-labelledby="c-rn"><div class="ex-h"><h2 class="h2" id="c-rn">Run timeline</h2><span class="xs m3">A 6px dot on a 1px rule: red failed, green passed, orange a person</span></div>
+<div class="ex-b pl">
+<div class="rn">
+<div class="rn-h"><span class="h2">Build</span><span class="sm m2">Builder</span><span class="chip red"><span class="dot"></span>Sent back</span><span class="xs m3">6m 12s</span><span class="xs m3">14 turns</span><span class="xs m3">$0.42</span></div>
+<div class="evs">
+<div class="ev"><span class="t">10:42:03</span><span class="rl"><i></i></span><span class="tx">Started on GOAL-147</span><span class="me2 mono">worktree goal-147</span></div>
+<div class="ev"><span class="t">10:43:10</span><span class="rl"><i></i></span><span class="tx">Wrote <span class="mono">apps/web/src/webhooks/retry.ts</span></span><span class="me2">+84 -12</span></div>
+<div class="ev"><span class="t">10:46:55</span><span class="rl"><i class="bad"></i></span><span class="tx">Check failed: unit tests, 2 of 38 failed</span><span class="me2">vitest</span></div>
+<div class="ev"><span class="t">10:47:30</span><span class="rl"><i class="you"></i></span><span class="tx">Freddy answered: honour Retry-After when it is present</span><span class="me2">Needs you</span></div>
+<div class="ev"><span class="t">10:48:40</span><span class="rl"><i class="ok"></i></span><span class="tx">Check passed: lint</span><span class="me2">eslint</span></div>
+</div>
+</div>
+</div></section>
+
+<section class="ex span2" aria-labelledby="c-ny"><div class="ex-h"><h2 class="h2" id="c-ny">Needs you row</h2><span class="xs m3">Selected: orange tint, no edge bar; actions on the row</span></div>
+<div class="ex-b pl col" style="gap: 2px">
+<div class="ny sel" aria-current="true"><span class="fbx" style="background: var(--f-cobalt)">S</span><span class="ty2">Approval</span><span class="tt"><b>Merge GOAL-151 into main</b><span class="xs m3"><span class="mono">GOAL-151</span> in Review</span></span><span class="xs m3">12m</span><span class="acts"><button class="btn sm" type="button">Deny</button><button class="btn sm yo" type="button">Approve</button></span></div>
+<div class="ny"><span class="fbx" style="background: var(--f-teal)">D</span><span class="ty2">Question</span><span class="tt"><b>Which retention period for audit logs?</b><span class="xs m3"><span class="mono">DOC-22</span> in Spec</span></span><span class="xs m3">1h</span><span class="acts"><button class="btn sm" type="button">Reply</button></span></div>
+<div class="ny"><span class="fbx" style="background: var(--f-rust)">O</span><span class="ty2 al">Alert</span><span class="tt"><b>Andon pulled on Build: tests fail on main</b><span class="xs m3">Pulled by Builder</span></span><span class="xs m3">3h</span><span class="acts"><button class="btn sm" type="button">Open</button></span></div>
+</div></section>
+
+<section class="ex" aria-labelledby="c-st"><div class="ex-h"><h2 class="h2" id="c-st">Stepper</h2><span class="xs m3">8px dots on a 1px track</span></div>
+<div class="ex-b pl col" style="gap: 24px">
+<div class="lb" style="width: 100%"><ol class="stp" aria-label="Onboarding, step 3 of 5"><li><span class="sd"><i class="dn2"></i><span class="dn2"></span></span><span class="xs m3">Organization</span></li><li><span class="sd"><i class="dn2"></i><span class="dn2"></span></span><span class="xs m3">Factory</span></li><li aria-current="step"><span class="sd"><i class="cu"></i><span></span></span><span class="xs cur">Connections</span></li><li><span class="sd"><i></i><span></span></span><span class="xs m3">Agents</span></li><li><span class="sd"><i></i></span><span class="xs m3">Ready</span></li></ol><span class="lbl">Current step</span></div>
+<div class="lb" style="width: 100%"><ol class="stp" aria-label="Onboarding, step 3 waits on you"><li><span class="sd"><i class="dn2"></i><span class="dn2"></span></span><span class="xs m3">Organization</span></li><li><span class="sd"><i class="dn2"></i><span class="dn2"></span></span><span class="xs m3">Factory</span></li><li aria-current="step"><span class="sd"><i class="wy"></i><span></span></span><span class="xs cur">Connections</span></li><li><span class="sd"><i></i><span></span></span><span class="xs m3">Agents</span></li><li><span class="sd"><i></i></span><span class="xs m3">Ready</span></li></ol><span class="lbl">Waiting on you</span></div>
+</div></section>
+
+<section class="ex" aria-labelledby="c-em"><div class="ex-h"><h2 class="h2" id="c-em">Empty state</h2><span class="xs m3">One sentence, one action</span></div>
+<div class="ex-b pl">
+<div class="em"><p class="sm m2">No triggers yet. Add one to start items from an issue, a webhook or a schedule.</p><a class="btn pri" href="#c-em">New trigger</a></div>
+</div></section>
+
+<section class="ex span2" aria-labelledby="c-sk"><div class="ex-h"><h2 class="h2" id="c-sk">Skeleton row</h2><span class="xs m3">The row's own geometry; pulses once, then reveals</span></div>
+<div class="ex-b pl">
+<div class="skl" aria-busy="true" aria-label="Loading items">
+<div class="skr"><span class="mono xs m3">GOAL-147</span><span class="sm" style="font-weight: 500">Add retry with backoff to the webhook sender</span><span class="chip run"><span class="dot"></span>Running</span><span class="xs m3">Builder</span><span class="xs m3">4m</span></div>
+<div class="skr sk" aria-hidden="true"><span class="b" style="width: 56px"></span><span class="b" style="width: 62%"></span><span class="b chip2"></span><span class="b" style="width: 56px"></span><span class="b" style="width: 24px"></span></div>
+<div class="skr sk" aria-hidden="true"><span class="b" style="width: 56px"></span><span class="b" style="width: 45%"></span><span class="b chip2"></span><span class="b" style="width: 64px"></span><span class="b" style="width: 20px"></span></div>
+</div>
+</div></section>
+
+</div>
+</main></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":2414}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { theme: this.props.dark ? 'dark' : '' };
+  }
+}
+</script>
+</body>
+</html>

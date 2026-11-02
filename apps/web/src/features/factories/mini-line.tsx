@@ -42,7 +42,7 @@ export function MiniLine({
   }
   if (!board) {
     return (
-      <span aria-busy="true" className={cn('block h-18 rounded-control bg-andon', className)}>
+      <span aria-busy="true" className={cn('block h-18 rounded-control bg-panel', className)}>
         <span className="sr-only">Loading the line of {name}</span>
       </span>
     );
@@ -70,7 +70,7 @@ function Line({
       // biome-ignore lint/a11y/noNoninteractiveTabindex: a labelled scroll box is focusable, so keyboard users can scroll a long line
       tabIndex={0}
       className={cn(
-        'min-w-0 overflow-x-auto rounded-control bg-andon px-3 py-3 text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run',
+        'min-w-0 overflow-x-auto rounded-control bg-panel px-3 py-3 text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run',
         className,
       )}
     >
@@ -94,9 +94,9 @@ function Station({ station: s, tone }: { station: BoardStation; tone: StationNod
   return (
     <li className="relative flex min-w-16 flex-col items-center gap-1 text-center">
       <StationNode size="compact" tone={tone} count={done ? undefined : s.waiting + s.in_progress} />
-      <span className="text-meta whitespace-nowrap text-andon-text">{done ? 'Done today' : humanize(s.id)}</span>
+      <span className="text-meta whitespace-nowrap text-ink-soft">{done ? 'Done today' : humanize(s.id)}</span>
       {done ? (
-        <span className="text-meta whitespace-nowrap text-andon-text tabular-nums">
+        <span className="text-meta whitespace-nowrap text-ink-soft tabular-nums">
           {s.done_today !== null ? plural(s.done_today, 'item') : 'No count'}
         </span>
       ) : (

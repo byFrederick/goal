@@ -187,10 +187,7 @@ function Line({ model, statsByAgent }: { model: Model; statsByAgent: Map<string,
   return (
     <div className="-mx-4 overflow-x-auto px-4 md:-mx-7 md:px-7">
       <div className="relative md:min-w-max">
-        <span
-          aria-hidden="true"
-          className="hidden md:absolute md:inset-x-16 md:top-5 md:block md:h-0.5 md:bg-run-soft"
-        />
+        <span aria-hidden="true" className="hidden md:absolute md:inset-x-16 md:top-5 md:block md:h-0.5 md:bg-run" />
         <ol className="m-0 flex list-none flex-col gap-6 p-0 md:flex-row md:gap-4">
           {stations.map((station, index) => {
             const staffed = staffingOf(station, agents);

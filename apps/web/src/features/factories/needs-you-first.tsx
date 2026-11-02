@@ -96,7 +96,7 @@ function AskRow({
     <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 border-t border-line py-3 @[480px]:grid-cols-[auto_minmax(0,1fr)_auto]">
       <span
         aria-hidden="true"
-        className="flex size-6 items-center justify-center rounded-control bg-run font-numeral text-meta font-semibold text-white"
+        className="flex size-6 items-center justify-center rounded-control bg-run text-meta font-semibold text-white"
       >
         {mark}
       </span>
