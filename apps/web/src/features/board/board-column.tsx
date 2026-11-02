@@ -1,6 +1,6 @@
 // The board's columns (from 768 px, and the phone's picked station): one column per station, headed by a
 // row (name, count, WIP meter and what the station says), then the expedite zone and the standard zone of
-// cards. The drum's column lists its In progress cards first and the buffer's Ready cards below them, dimmed;
+// cards. On the desktop each column is a subgrid of the board's rows, so headers, the Expedite band and cards line up. The drum's column lists its In progress cards first and the buffer's Ready cards below them, dimmed;
 // every column's In progress group ends in "Show N more" past a few cards. The columns have no fixed heights:
 // a body starts directly under its header.
 import { Zap } from 'lucide-react';
@@ -42,7 +42,8 @@ function ColumnCard({
 /** The WIP meter: one 4 px segment per slot, in progress (ink), waiting on you (orange), free (rule). */
 function WipMeter({ station }: { station: BoardStation }) {
   const limit = station.wip_limit;
-  if (limit === null) return null;
+  // No limit (Inbox, Done): an empty row of the meter's height, so every header is as tall as the others.
+  if (limit === null) return <span aria-hidden="true" data-meter="reserved" className="block h-1" />;
   const busy = Math.min(station.in_progress, limit);
   const waiting = Math.min(waitingOnYou(station), limit - busy);
   const label = `${station.in_progress} of ${limit} in progress`;
@@ -132,6 +133,16 @@ function ZoneLabel({ children, aside }: { children: string; aside?: string | und
   );
 }
 
+/** The lane's label: the lightning icon and "Expedite", and nothing else. */
+export function ExpediteLabel({ className }: { className?: string }) {
+  return (
+    <span className={cn('flex items-center gap-2 px-1 text-secondary font-medium text-amber-ink', className)}>
+      <Zap size={14} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+      Expedite
+    </span>
+  );
+}
+
 export interface StationColumnProps {
   board: Board;
   station: BoardStation;
@@ -142,8 +153,13 @@ export interface StationColumnProps {
   draggable: boolean;
   /** Items the line finished this week: the Done column's "this week" count. */
   finishedThisWeek: number;
-  /** The expedite row's caption ("Expedite, 1 of 1 in use, jumps every queue"); the desktop gives it to one column only. */
-  expediteCaption?: string | undefined;
+  /**
+   * The desktop's board grid: the column is a subgrid of its rows (header, expedite, cards), and the expedite
+   * lane is the board's one band behind every column. It is the column's 1-based grid column: the band fills
+   * its row in every column, so auto-placement would push the columns into new tracks. Without it (the phone)
+   * the column draws its own lane.
+   */
+  inBoard?: number | undefined;
   /** A test for the cards that arrived after the board first had cards. */
   arrived?: ((id: string) => boolean) | undefined;
 }
@@ -157,7 +173,7 @@ export function StationColumn({
   onMove,
   draggable,
   finishedThisWeek,
-  expediteCaption,
+  inBoard,
   arrived,
 }: StationColumnProps) {
   const constraint = station.id === board.constraint;
@@ -183,23 +199,32 @@ export function StationColumn({
   }`;
 
   return (
-    <DropColumn station={station} className="flex min-w-0 flex-col gap-2">
+    <DropColumn
+      station={station}
+      className={cn('min-w-0', inBoard !== undefined ? 'grid grid-rows-subgrid' : 'flex flex-col gap-2')}
+      {...(inBoard !== undefined
+        ? { style: { gridColumn: inBoard, gridRow: `1 / span ${showExpedite ? 3 : 2}` } }
+        : {})}
+    >
       <ColumnHeader station={station} constraint={constraint} decides={decides} finishedThisWeek={finishedThisWeek} />
       {showExpedite ? (
-        <div
-          data-zone="expedite"
-          className="flex min-h-10 flex-col gap-2 rounded-cell bg-amber-tint p-2 transition-colors duration-(--duration-quick)"
-        >
-          {expediteCaption ? (
-            <p className="m-0 flex items-start gap-2 px-1 text-meta font-medium text-amber-ink">
-              <Zap size={12} strokeWidth={1.75} aria-hidden="true" className="mt-1 shrink-0" />
-              {expediteCaption}
-            </p>
-          ) : null}
-          {expedite.map(card)}
-        </div>
+        inBoard !== undefined ? (
+          // Transparent: the board's band shows through; its label row is reserved above the cards.
+          <div data-zone="expedite" className="flex flex-col gap-2 px-2 pt-10 pb-2">
+            {expedite.map(card)}
+          </div>
+        ) : (
+          <fieldset
+            data-zone="expedite"
+            aria-label="Expedite lane"
+            className="m-0 flex min-h-10 min-w-0 flex-col gap-2 rounded-cell border-0 bg-amber-tint p-2 transition-colors duration-(--duration-quick)"
+          >
+            <ExpediteLabel />
+            {expedite.map(card)}
+          </fieldset>
+        )
       ) : null}
-      <div className="flex min-h-10 flex-col gap-2 rounded-cell bg-panel p-2">
+      <div className="flex min-h-10 flex-col gap-2 self-start rounded-cell bg-panel p-2">
         {columnGroups(standard, isDrum).map((group) => {
           const shown = group.kind === 'in-progress' ? visibleCards(group.items, expanded) : group.items;
           const hidden = group.items.length - shown.length;

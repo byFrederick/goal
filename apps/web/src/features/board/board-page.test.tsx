@@ -172,14 +172,14 @@ describe('BoardPage', () => {
     expect(card).not.toBeNull();
     // Expedite first within the station, as the server orders it.
     expect(within(investigate).getAllByRole('article')[0]).toBe(card);
-    // The expedite zone is tinted; the card keeps its own border and says Expedite in text.
-    expect(card?.parentElement?.classList).toContain('bg-amber-tint');
+    // The card sits in its station's cell of the one tinted band; it keeps its own border and says Expedite in text.
+    expect(card?.parentElement?.getAttribute('data-zone')).toBe('expedite');
     expect(card?.classList).not.toContain('bg-rework-tint');
     expect(within(card as HTMLElement).getByText('Expedite')).toBeTruthy();
 
     // A standard card in the same station has neither the tint nor the label.
     const standard = within(investigate).getByRole('link', { name: STANDARD }).closest('article');
-    expect(standard?.parentElement?.classList).not.toContain('bg-amber-tint');
+    expect(standard?.closest('[data-zone="expedite"]')).toBeNull();
     expect(within(standard as HTMLElement).queryByText('Expedite')).toBeNull();
   });
 
@@ -198,17 +198,48 @@ describe('BoardPage', () => {
     expect(within(buildPanel).queryByRole('link', { name: STANDARD })).toBeNull();
   });
 
-  it('heads the columns with the expedite lane and its count in use', async () => {
+  it('draws the expedite lane as one band across the columns, labelled only Expedite', async () => {
     renderBoardPage({ page: ShellBoard, org, factory, board: board() });
 
     const columns = await screen.findByRole('region', { name: 'Stations' });
-    // The tinted row's caption, and the card's own Expedite label; the old chip is gone.
-    expect(within(columns).getByText('Expedite, 1 of 1 in use, jumps every queue')).toBeTruthy();
-    expect(within(columns).getAllByText('Expedite')).toHaveLength(1);
-    // Every column has the row, tinted amber.
+    const bands = within(columns).getAllByRole('group', { name: 'Expedite lane' });
+    expect(bands).toHaveLength(1);
+    const band = bands[0] as HTMLElement;
+    expect(band.classList).toContain('bg-amber-tint');
+    expect(band.classList).toContain('col-span-full');
+    // The label (the band's) and the card's own Expedite mark; no caption, no use count.
+    expect(within(band).getByText('Expedite')).toBeTruthy();
+    expect(band.textContent).toBe('Expedite');
+    expect(within(columns).getAllByText('Expedite')).toHaveLength(2);
+    expect(within(columns).queryByText(/jumps every queue|1 of 1 in use/)).toBeNull();
+    // Every column has its cell of the band, itself untinted.
     for (const column of within(columns).getAllByRole('region')) {
-      expect(column.querySelector('[data-zone="expedite"]')?.classList).toContain('bg-amber-tint');
+      const cell = column.querySelector('[data-zone="expedite"]');
+      expect(cell).not.toBeNull();
+      expect(cell?.classList).not.toContain('bg-amber-tint');
     }
+  });
+
+  it('shows only the Expedite chip in the phone lane', async () => {
+    renderBoardPage({ page: ShellBoard, org, factory, board: board(), station: 'investigate' });
+    const panel = await screen.findByRole('tabpanel');
+    const lane = within(panel).getByRole('group', { name: 'Expedite lane' });
+    expect(lane.classList).toContain('bg-amber-tint');
+    expect(lane.textContent?.startsWith('Expedite')).toBe(true);
+    expect(within(panel).queryByText(/jumps every queue|1 of 1 in use/)).toBeNull();
+  });
+
+  it('gives a station without a WIP limit the same header as the others', async () => {
+    const intake = station({ id: 'intake', kind: 'queue', agents: [], wip_limit: null, items: [standardItem] });
+    renderBoardPage({ page: ShellBoard, org, factory, board: { ...board(), stations: [intake, ...board().stations] } });
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const headers = within(columns)
+      .getAllByRole('region')
+      .map((column) => column.querySelector(':scope > header'));
+    for (const header of headers) {
+      expect(header?.querySelector('[role="img"], [data-meter="reserved"]')).not.toBeNull();
+    }
+    expect(columns.querySelector('[data-meter="reserved"]')).not.toBeNull();
   });
 
   it('leaves the expedite lane out when the line has no lane and no expedite item', async () => {
@@ -218,6 +249,7 @@ describe('BoardPage', () => {
     await screen.findByRole('region', { name: 'Stations' });
     expect(screen.queryByText(/jumps every queue/)).toBeNull();
     expect(screen.queryByText('Expedite')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Expedite lane' })).toBeNull();
     expect(document.querySelector('[data-zone="expedite"]')).toBeNull();
   });
 

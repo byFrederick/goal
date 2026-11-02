@@ -17,7 +17,7 @@ Open a factory's Board at `/o/<org>/f/<factory>/board`.
 - **Assembly line:** a card that is part of an assembly shows the assembly's title, one pip per part (filled for each merged part) and its place, such as `2 of 4`.
 - **Waiting** items say what they wait on: a person's decision, another item, or a clock. A waiting card and its row in the list use the same words.
 - **Constraint:** the column of the line's constraint, the drum, carries a yellow mark and the word **Constraint** in its header. The buffer's **Ready, buffer n of m** group is in that column, whichever station it is. Which station that is comes from the factory definition's `flow.constraint`; without it, the line's detected constraint.
-- **Expedite** items sit in a yellow-tinted **Expedite** row at the top of each column. Its caption gives the lane's use, such as `Expedite, 1 of 1 in use, jumps every queue`. The row stays when the lane is empty, and shows whenever the line has an expedite lane.
+- **Expedite** items sit in one yellow-tinted **Expedite** band that runs across every column, from Inbox to Done. The band shows whenever the line has an expedite lane, even when it is empty; each expedite card sits in its station's part of the band. On a phone the lane shows just the **Expedite** chip above the station's expedite cards.
 
 A card that moves to another column or lane, because an agent finished or because you moved it, travels there instead of jumping, and the cards around it shift to make room. When your system asks for reduced motion, the card appears in its new place at once. A card you drag follows the pointer and settles into place when you drop it; the drop then opens the Move menu to confirm.
 
