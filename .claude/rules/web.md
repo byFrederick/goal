@@ -10,7 +10,7 @@ The UI is one product, so its look comes from one design system: [MASTER.md](../
 
 ## Design
 
-- Follow `docs/design/MASTER.md` exactly: its tokens, Archivo, radii, spacing, vocabulary and components. Each screen's reference is `docs/design/screens/<flow>/<screen>.jpg` and `.html` ([index](../../docs/design/screens/README.md)): match it, and list any difference in the pull request ([ADR 0016](../../docs/adr/0016-ui-revamp.md)). Drift between screens is what users notice first.
+- Follow `docs/design/MASTER.md` exactly: its tokens, IBM Plex, radii, spacing, vocabulary and components, and [MOTION.md](../../docs/design/MOTION.md) for every transition (ADR 0036). Each screen's reference is `docs/design/screens/<flow>/<screen>.jpg` and `.html` ([index](../../docs/design/screens/README.md)): match it, and list any difference in the pull request ([ADR 0016](../../docs/adr/0016-ui-revamp.md)). Drift between screens is what users notice first.
 - Use token names only, never a hex, `rgb()` or `hsl()` value, and no gradients. A theme switch then needs no edits, and `apps/web/src/ui/raw-colors.test.ts` enforces it.
 - Support light and dark from the same tokens. People choose the theme, so both must read well.
 - Lay out for a phone first and check 375, 768 and 1440 px by reasoning about the CSS. The app fills the viewport with no framed shell.
@@ -20,7 +20,7 @@ The UI is one product, so its look comes from one design system: [MASTER.md](../
 ## The four states
 
 - Every screen renders loading, empty, error and ready. A missing state shows as a blank page or a crash.
-- Loading shows the app background with an sr-only "Loading" and `aria-busy`, never a gray placeholder shape. Placeholders flash and then shift when the page arrives.
+- Loading shows the page's skeleton: `Skeleton` (`apps/web/src/ui/skeleton.tsx`), with an sr-only "Loading" and `aria-busy`. The skeleton's pulse and reveal are the Loading row of [MOTION.md](../../docs/design/MOTION.md). Never a blank page, and never a placeholder that does not match the layout it stands for.
 
 ## Data and routing
 

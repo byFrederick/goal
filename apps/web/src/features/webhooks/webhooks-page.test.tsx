@@ -183,12 +183,13 @@ function secretIsKept(queryClient: QueryClient, secret: string): boolean {
 }
 
 describe('the Webhooks page states', () => {
-  it('says it is loading, with aria-busy and no placeholder shape', async () => {
+  it('shows a skeleton of the list, announced as loading and aria-busy, while the endpoints wait', async () => {
     api.listWebhookEndpoints.mockReturnValue(new Promise(() => {}));
     renderPage(software, []);
 
-    expect(await screen.findByText('Loading webhooks')).toBeTruthy();
+    expect(await screen.findByText('Loading')).toBeTruthy();
     expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(screen.queryByText('No webhooks yet')).toBeNull();
   });
 
   it('says the list could not load, and retries it', async () => {

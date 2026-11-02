@@ -14,6 +14,7 @@ import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { EmptyState } from '../../ui/empty-state';
+import { Skeleton, SkeletonRows } from '../../ui/skeleton';
 import type { DeliveriesScope } from './deliveries';
 import { EndpointCard } from './endpoint-card';
 import { NewWebhookDialog } from './new-webhook-dialog';
@@ -56,11 +57,9 @@ export function WebhooksPage() {
       </header>
 
       {webhooks.isPending ? (
-        <div aria-busy="true">
-          <span role="status" className="sr-only">
-            Loading webhooks
-          </span>
-        </div>
+        <Skeleton ready={false} placeholder={<SkeletonRows rows={3} className="min-h-40" />}>
+          <span />
+        </Skeleton>
       ) : webhooks.isError ? (
         <div role="alert" className="flex flex-col items-start gap-3 rounded-card border border-line bg-card p-5">
           <Callout tone="rework">Couldn’t load the webhooks. Check your connection and try again.</Callout>

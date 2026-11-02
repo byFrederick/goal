@@ -57,6 +57,17 @@ describe('ItemTabs', () => {
     expect(within(nav).getByRole('link', { name: 'Timeline' }).getAttribute('aria-current')).toBeNull();
   });
 
+  it('draws one underline that slides between tabs, on the motion tokens', async () => {
+    renderTabs('spec');
+
+    const nav = await screen.findByRole('navigation', { name: 'Item views' });
+    const underline = nav.querySelector('span[aria-hidden="true"]');
+    expect(underline).not.toBeNull();
+    expect(underline?.className).toContain('duration-(--duration-fast)');
+    expect(underline?.className).toContain('ease-out');
+    expect(within(nav).getByRole('link', { name: 'Spec' }).className).not.toContain('border-b-2');
+  });
+
   it('keeps Trace and Teardown inert until they are built', async () => {
     renderTabs('timeline');
 

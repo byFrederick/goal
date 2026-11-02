@@ -6,6 +6,7 @@
 // revision and the version it saw running, and on success closes the draft.
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
+import { Check } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '../../../api/client';
@@ -53,6 +54,8 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
   const [start, setStart] = useState(false);
   const [pending, setPending] = useState(false);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
+  // The version this card published: its check shows after the draft closes (MOTION.md, Approve, publish, merge succeed).
+  const [published, setPublished] = useState<number | null>(null);
   const [rows, setRows] = useState<MoveNeed[]>([]);
   const reason = useId();
 
@@ -102,6 +105,7 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
         ...(first ? { start } : {}),
       });
       session.closeDraft();
+      setPublished(version.number);
       onMoves({});
       setRows([]);
       setMessage(null);
@@ -151,9 +155,16 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
   if (!hasDraft) {
     return (
       <SectionCard title="Publish">
-        <p className="m-0 text-body">
-          {current ? `No draft. v${current.number} is running.` : 'Nothing to publish yet.'}
-        </p>
+        {published !== null ? (
+          <p role="status" className="m-0 flex items-center gap-2 text-body">
+            <Check size={16} strokeWidth={1.5} aria-hidden="true" className="motion-safe:animate-success-check" />v
+            {published} is published and running.
+          </p>
+        ) : (
+          <p className="m-0 text-body">
+            {current ? `No draft. v${current.number} is running.` : 'Nothing to publish yet.'}
+          </p>
+        )}
         <p className="m-0 text-secondary text-muted">Your first change in any section opens a draft of v{next}.</p>
       </SectionCard>
     );

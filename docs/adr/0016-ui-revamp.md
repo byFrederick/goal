@@ -1,6 +1,6 @@
 # ADR 0016 — The UI revamp: the canvas screens are the UI's contract
 
-Status: accepted · 2026-10-26 · Replaces the look in [ADR 0004](0004-frontend-and-monorepo.md)'s "tokens generated from MASTER.md"; the stack in ADR 0004 is unchanged.
+Status: accepted · 2026-10-26 · Replaces the look in [ADR 0004](0004-frontend-and-monorepo.md)'s "tokens generated from MASTER.md"; the stack in ADR 0004 is unchanged. Amended 2026-11-02: the look (the palette, the type, the radii and the shell) is superseded by [ADR 0036](0036-design-system-v3-plain-and-motion-binding.md); decisions 1 (the screens are the contract) and 4 ("Not available yet") stay.
 
 ## Context
 

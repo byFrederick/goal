@@ -46,9 +46,12 @@ export function Field({ label, aside, help, error, className, children }: FieldP
           {label}
         </label>
       )}
-      <FieldContext value={{ id, describedBy, invalid: Boolean(error) }}>{children}</FieldContext>
+      {/* The control shakes each time the field turns invalid; the message fades in (MOTION.md, Invalid form field). */}
+      <div className={cn('min-w-0', error && 'motion-safe:animate-error-shake')}>
+        <FieldContext value={{ id, describedBy, invalid: Boolean(error) }}>{children}</FieldContext>
+      </div>
       {error ? (
-        <p id={errorId} className="col-span-full m-0 text-[13px] leading-snug text-rework-ink">
+        <p id={errorId} className="col-span-full m-0 animate-fade-in text-[13px] leading-snug text-rework-ink">
           {error}
         </p>
       ) : null}
@@ -80,7 +83,7 @@ export function Input({ className, readOnly, ...props }: ComponentProps<'input'>
       aria-invalid={field?.invalid || undefined}
       readOnly={readOnly || shown}
       className={cn(
-        'h-11 w-full min-w-0 rounded-control border border-rule bg-card px-3 text-base text-ink transition-colors duration-200 md:h-10 md:text-[15px]',
+        'h-11 w-full min-w-0 rounded-control border border-rule bg-card px-3 text-base text-ink transition-colors duration-(--duration-quick) md:h-10 md:text-[15px]',
         'hover:border-muted aria-[invalid=true]:border-rework',
         readOnlyControl,
         className,
@@ -101,7 +104,7 @@ export function Textarea({ className, readOnly, ...props }: ComponentProps<'text
       aria-invalid={field?.invalid || undefined}
       readOnly={readOnly || shown}
       className={cn(
-        'w-full min-w-0 resize-y rounded-control border border-rule bg-card px-3 py-2.5 text-base leading-normal text-ink transition-colors duration-200 md:text-[15px]',
+        'w-full min-w-0 resize-y rounded-control border border-rule bg-card px-3 py-2.5 text-base leading-normal text-ink transition-colors duration-(--duration-quick) md:text-[15px]',
         'hover:border-muted aria-[invalid=true]:border-rework',
         readOnlyControl,
         'read-only:resize-none',
@@ -124,7 +127,7 @@ export function NativeSelect({ className, disabled, ...props }: ComponentProps<'
       aria-invalid={field?.invalid || undefined}
       disabled={disabled || shown}
       className={cn(
-        'h-11 w-full min-w-0 cursor-pointer rounded-control border border-rule bg-card px-3 text-base text-ink transition-colors duration-200 md:h-10 md:text-[15px]',
+        'h-11 w-full min-w-0 cursor-pointer rounded-control border border-rule bg-card px-3 text-base text-ink transition-colors duration-(--duration-quick) md:h-10 md:text-[15px]',
         'hover:border-muted aria-[invalid=true]:border-rework',
         'disabled:cursor-default disabled:border-line disabled:bg-shell disabled:hover:border-line',
         className,

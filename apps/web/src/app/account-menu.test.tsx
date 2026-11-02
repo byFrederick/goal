@@ -138,14 +138,30 @@ describe('the account menu', () => {
     const at = order.map((label) => text.indexOf(label));
     expect(at.every((i) => i >= 0)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
-    for (const name of ['Notifications', 'Connected apps', 'Keyboard shortcuts']) {
-      expect(
-        within(panel)
-          .getByRole('button', { name: new RegExp(`^${name}`) })
-          .getAttribute('aria-disabled'),
-      ).toBe('true');
-    }
+    expect(
+      within(panel)
+        .getByRole('button', { name: /^Connected apps/ })
+        .getAttribute('aria-disabled'),
+    ).toBe('true');
     expect(within(panel).getByRole('button', { name: /^Keyboard shortcuts/ }).textContent).toContain('?');
+  });
+
+  it('links Notifications to the notifications section of the account page', async () => {
+    renderAccount();
+    const panel = await openPanel();
+
+    expect(within(panel).getByRole('link', { name: 'Notifications' }).getAttribute('href')).toBe(
+      '/account#notifications',
+    );
+  });
+
+  it('opens the keyboard shortcuts list from its entry, and closes the menu', async () => {
+    renderAccount();
+    const panel = await openPanel();
+    fireEvent.click(within(panel).getByRole('button', { name: /^Keyboard shortcuts/ }));
+
+    expect(await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: 'Account' })).toBeNull();
   });
 
   it('links Profile to the account page, which holds the name', async () => {

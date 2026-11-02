@@ -129,4 +129,27 @@ describe('Factory settings page', () => {
     expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
   });
+
+  it('shows the sections in order and lists the same ones in On this page', async () => {
+    await renderSettings({ can: ['factory:archive', 'factory:delete'], members: [] });
+
+    const ids = Array.from(document.querySelectorAll('section[id]')).map((section) => section.id);
+    expect(ids).toEqual(['general', 'repository', 'runtime', 'budgets', 'flow', 'people', 'danger']);
+    const nav = screen.getByRole('navigation', { name: 'On this page' });
+    expect(
+      within(nav)
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['General', 'Repository', 'Runtime', 'Budgets and targets', 'Flow', 'People with access', 'Danger zone']);
+  });
+
+  it('shows Loading in each settings group while the draft loads', async () => {
+    await renderSettings({ members: [] });
+
+    for (const name of ['Repository', 'Runtime', 'Budgets and targets', 'Flow']) {
+      const group = screen.getByRole('region', { name });
+      expect(within(group).getByText('Loading')).toBeTruthy();
+      expect(group.querySelector('[aria-busy="true"]')).toBeTruthy();
+    }
+  });
 });

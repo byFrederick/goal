@@ -1,12 +1,12 @@
-// Jonah's header (MASTER.md "Jonah"): the navy mark, the name and the intro of the tab the page is on,
+// Jonah's header (MASTER.md "Jonah"): the name and the intro of the tab the page is on,
 // then the tabs Overview, Proposals, Judges, Evals and Bake-offs. The tab the page is on is current, and
 // each tab can show a count. A tab with no page yet renders through NotAvailable, so it stays in the tab
 // order and says "Not available yet". A page that sets its own title uses JonahTabs, the tab bar alone.
 import { Link } from '@tanstack/react-router';
-import { SearchCheck } from 'lucide-react';
 import { useFactory, useFactoryParams } from '../../shared/factory';
 import { cn } from '../../ui/cn';
 import { NotAvailable } from '../../ui/not-available';
+import { TabNav, tabNavItem } from '../../ui/tab-nav';
 
 export type JonahTab = 'overview' | 'proposals' | 'judges' | 'evals' | 'bake-offs';
 
@@ -35,9 +35,6 @@ const introOf: Record<Exclude<JonahTab, 'overview' | 'proposals'>, string> = {
   'bake-offs': evalsIntro,
 };
 
-const tabClass =
-  '-mb-px inline-flex h-10 shrink-0 items-center gap-2 border-b-2 px-3 text-body transition-colors duration-200';
-
 export function JonahHeader({
   tab,
   counts = {},
@@ -50,9 +47,6 @@ export function JonahHeader({
   return (
     <div className="flex flex-col gap-4">
       <header className="flex flex-wrap items-center gap-3">
-        <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-card bg-andon text-white">
-          <SearchCheck size={24} strokeWidth={2} />
-        </span>
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="m-0 text-page-title tracking-display">Jonah</h1>
           <p className="m-0 text-body text-ink-soft">{intro}</p>
@@ -73,13 +67,10 @@ export function JonahTabs({
 }) {
   const params = useFactoryParams();
   return (
-    <nav aria-label="Jonah" className="flex gap-1 overflow-x-auto border-b border-line">
+    <TabNav label="Jonah">
       {tabOrder.map((t) => {
         const current = t === tab;
-        const classes = cn(
-          tabClass,
-          current ? 'border-run font-control text-ink' : 'border-transparent text-ink-soft hover:text-ink',
-        );
+        const classes = tabNavItem;
         const count = counts[t];
         const label = (
           <>
@@ -151,6 +142,6 @@ export function JonahTabs({
           </Link>
         );
       })}
-    </nav>
+    </TabNav>
   );
 }

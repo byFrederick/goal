@@ -27,7 +27,7 @@ export function SpendWeek({
         <h2 id="spend-week" className="m-0 text-heading">
           Spend this week
         </h2>
-        <p className="m-0 font-numeral text-heading font-semibold tabular-nums">
+        <p className="m-0 text-heading font-semibold tabular-nums">
           {formatUsd(overview.spend_usd)}
           {budget !== null ? (
             <span className="text-secondary font-normal text-muted"> of {formatUsd(budget)}</span>
@@ -42,7 +42,7 @@ export function SpendWeek({
               <span className="flex min-w-0 items-center gap-2">
                 <span
                   aria-hidden="true"
-                  className="flex size-5 shrink-0 items-center justify-center rounded-chip bg-run font-numeral text-meta font-semibold text-white"
+                  className="flex size-5 shrink-0 items-center justify-center rounded-chip bg-run text-meta font-semibold text-white"
                 >
                   {mark(o.factory)}
                 </span>

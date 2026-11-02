@@ -27,15 +27,31 @@ test('the overview shows the two proposals waiting, the policy and what Jonah no
   await expectNoHorizontalScroll(page);
 });
 
-test('each proposal links to its page, the Evals control is not available, and the pass rates are not shown', async ({
-  page,
-}) => {
+test('each proposal links to its page, and the overview shows each judge against its pass mark', async ({ page }) => {
   await page.goto('/o/acme/f/software/jonah');
   await expect(page.getByRole('link', { name: 'Review' }).first()).toHaveAttribute('href', /\/jonah\/proposals\/8$/);
-  await expect(page.getByRole('button', { name: 'Evals' }).first()).toHaveAttribute('aria-disabled', 'true');
-  await expect(page.getByText('Pass rate by judge, last 30 days')).toBeVisible();
-  await expect(page.getByText('Not available yet').first()).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Jonah' }).getByRole('link', { name: 'Evals' })).toBeVisible();
+  const section = page.getByRole('region', { name: 'Pass rate by judge, last 30 days' });
+  await expect(section.getByRole('article')).toHaveCount(4);
+  await expect(section.getByRole('link', { name: 'Review reason actionable' })).toHaveAttribute(
+    'href',
+    /\/jonah\/judges\/review-reason-actionable$/,
+  );
 });
+
+// Screenshots of the overview at 1440 and 375 px in light and dark, for the pull request.
+for (const scheme of ['light', 'dark'] as const) {
+  for (const width of [1440, 375]) {
+    test(`screenshot: the overview at ${width} px, ${scheme}`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/o/acme/f/software/jonah');
+      await expect(page.getByRole('region', { name: 'Pass rate by judge, last 30 days' })).toBeVisible();
+      await expectNoHorizontalScroll(page);
+      await page.screenshot({ path: `test-results/jonah-overview-${width}-${scheme}.png`, fullPage: true });
+    });
+  }
+}
 
 test("Look for improvements now is disabled, with the meta line, until Jonah's review loop ships", async ({ page }) => {
   await page.goto('/o/acme/f/software/jonah');

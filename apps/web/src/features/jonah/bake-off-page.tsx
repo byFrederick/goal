@@ -17,6 +17,7 @@ import { Callout } from '../../ui/callout';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { EmptyState } from '../../ui/empty-state';
+import { Skeleton, SkeletonRows } from '../../ui/skeleton';
 import { RecommendationBanner } from './bake-off-banner';
 import { CaseGrid } from './bake-off-cases';
 import {
@@ -36,12 +37,12 @@ import { JonahTabs } from './jonah-header';
 /** The breadcrumb's parent crumb: the list of the factory's bake-offs. A constant, so the top bar's effect runs once. */
 const bakeOffsCrumb = { label: 'Bake-offs', to: '/o/$org/f/$factory/jonah/bake-offs' } as const;
 
-/** Loading shows the app background and an empty region for the screen reader, never a placeholder shape. */
+/** Loading shows the page's rows as a skeleton while the data waits. */
 export function BakeOffLoading() {
   return (
-    <div aria-busy="true" className="min-h-40">
-      <p className="sr-only">Loading</p>
-    </div>
+    <Skeleton ready={false} placeholder={<SkeletonRows rows={4} className="min-h-40" />}>
+      <span />
+    </Skeleton>
   );
 }
 

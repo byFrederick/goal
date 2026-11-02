@@ -48,7 +48,7 @@ export function fieldOf(pointer: string | undefined, index: number): StationFiel
 
 const rule = 'flex min-w-0 flex-wrap items-center gap-2';
 const smallInput = cn(
-  'h-11 rounded-control border border-rule bg-card px-2 text-base text-ink transition-colors duration-200 hover:border-muted md:h-8 md:text-sm aria-[invalid=true]:border-rework',
+  'h-11 rounded-control border border-rule bg-card px-2 text-base text-ink transition-colors duration-(--duration-quick) hover:border-muted md:h-8 md:text-sm aria-[invalid=true]:border-rework',
   readOnlyControl,
   'disabled:cursor-default disabled:border-line disabled:bg-shell disabled:hover:border-line',
 );
@@ -173,7 +173,7 @@ export function StationRules({
 }
 
 const addLink =
-  'inline-flex min-h-11 items-center px-0.5 text-[13px] text-ink-soft underline underline-offset-3 transition-colors duration-200 hover:text-ink md:min-h-6';
+  'inline-flex min-h-11 items-center px-0.5 text-[13px] text-ink-soft underline underline-offset-3 transition-colors duration-(--duration-quick) hover:text-ink md:min-h-6';
 
 function Lanes({ station, index }: { station: ModelStation; index: number }) {
   const editor = useLineEditor();
@@ -200,7 +200,7 @@ function Lanes({ station, index }: { station: ModelStation; index: number }) {
           onClick={() => setOpen(true)}
           aria-haspopup="dialog"
           aria-label={`Edit lanes of ${label}`}
-          className="inline-flex min-h-6 items-center px-0.5 text-[13px] text-ink-soft underline underline-offset-3 transition-colors duration-200 hover:text-ink"
+          className="inline-flex min-h-6 items-center px-0.5 text-[13px] text-ink-soft underline underline-offset-3 transition-colors duration-(--duration-quick) hover:text-ink"
         >
           Edit lanes
         </button>
@@ -271,7 +271,7 @@ function Checks({
                 type="button"
                 aria-label={`Remove check ${text} from ${label}`}
                 onClick={() => editor.edit(removeCheck(editor.line, station.id, i))}
-                className="inline-flex size-6 shrink-0 items-center justify-center rounded-chip text-muted transition-colors duration-200 hover:bg-shell hover:text-ink"
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded-chip text-muted transition-colors duration-(--duration-quick) hover:bg-shell hover:text-ink"
               >
                 <X size={13} strokeWidth={1.5} aria-hidden="true" />
               </button>
@@ -378,7 +378,7 @@ function GateRule({
           type="button"
           onClick={() => editor.edit(setGate(editor.line, station.id, null))}
           aria-label={`Remove the rework rule of ${label}`}
-          className="inline-flex size-11 items-center justify-center rounded-chip text-muted transition-colors duration-200 hover:bg-shell hover:text-ink md:size-7"
+          className="inline-flex size-11 items-center justify-center rounded-chip text-muted transition-colors duration-(--duration-quick) hover:bg-shell hover:text-ink md:size-7"
         >
           <X size={14} strokeWidth={1.5} aria-hidden="true" />
         </button>
@@ -478,7 +478,7 @@ function Note({
         }}
         readOnly={editor.viewOnly}
         autoComplete="off"
-        className="h-11 min-w-0 flex-1 rounded-control border border-transparent bg-transparent px-1.5 text-base text-muted transition-colors duration-200 placeholder:text-muted hover:border-rule focus-visible:border-rule focus-visible:bg-card focus-visible:text-ink md:h-8 md:text-sm"
+        className="h-11 min-w-0 flex-1 rounded-control border border-transparent bg-transparent px-1.5 text-base text-muted transition-colors duration-(--duration-quick) placeholder:text-muted hover:border-rule focus-visible:border-rule focus-visible:bg-card focus-visible:text-ink md:h-8 md:text-sm"
       />
       <EditedMark section="line" pointer={`${at}/description`} label={`the note on ${label}`} />
     </div>

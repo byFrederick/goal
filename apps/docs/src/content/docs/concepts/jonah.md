@@ -25,7 +25,7 @@ Before a version is published, the cases run on the draft. The publish gate publ
 
 ## Bake-offs
 
-A bake-off runs one agent's eval cases on two to four models, and by default one of them is the agent's current model. It compares the models by pass rate, then by cost per item. Applying the result writes the winning model into the draft. `goal bake-off run <agent>` starts one.
+A bake-off runs one agent's eval cases on two to four models, and by default one of them is the agent's current model. It compares the models by pass rate, then by cost per item. Applying the result writes the winning model into the draft. `goal bake-off run <agent>` starts one. The Bake-offs tab lists the factory's bake-offs, newest first; each opens its own page.
 
 ## Reviews and proposals
 
@@ -49,6 +49,7 @@ goald starts the review loop and sweeps for threshold reviews every minute by de
 
 ## Where you meet it
 
+- The Jonah overview shows each judge's pass rate over the last 30 days against its pass mark: the latest period in black, the earlier ones in grey, and the pass mark as a dashed line. Each chart opens that judge.
 - `goal jonah` lists proposals. `show` displays the evidence and a unified diff, and `approve`, `edit` and `reject` decide one.
 - `goal judge` and `goal eval` manage judges and eval runs. `goal bake-off` runs the comparisons.
 - `goal spend` shows what runs cost, judges and reviews included.

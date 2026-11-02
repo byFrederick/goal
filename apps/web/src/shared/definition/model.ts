@@ -80,6 +80,8 @@ export interface Flow {
   release?: string;
   andon?: { rework_rate?: number; window?: number };
   targets?: { throughput_per_day?: number; lead_time_hours?: number; expedite_lead_time_minutes?: number };
+  /** Items that touch the same files: `overlap` (serialize: take turns; allow: side by side) and how branches catch up. */
+  assemblies?: { overlap?: 'serialize' | 'allow'; fresh_base?: 'rebase' | 'merge' };
 }
 
 export interface LineSection {

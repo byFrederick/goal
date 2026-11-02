@@ -40,7 +40,7 @@ export function Mark({ kind, size = 'phone', current = false, badge = 0, dot = f
     <span
       aria-hidden="true"
       className={cn(
-        'relative box-border flex shrink-0 items-center justify-center tracking-[-0.01em] transition-[border-color,background-color,box-shadow] duration-200',
+        'relative box-border flex shrink-0 items-center justify-center tracking-[-0.01em] transition-[border-color,background-color,box-shadow] duration-(--duration-quick)',
         kind === 'org' ? sizes[size].org : sizes[size].square,
         kinds[kind],
         current && kind === 'org' && 'shadow-[0_0_0_2px_var(--color-shell),0_0_0_4px_var(--color-ink)]',

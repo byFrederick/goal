@@ -12,9 +12,9 @@ import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
-import { cn } from '../../ui/cn';
 import { Meter } from '../../ui/hatch';
-import { KpiTile } from '../../ui/kpi-tile';
+import { StatStrip } from '../../ui/stat-strip';
+import { TabNav, tabNavItem } from '../../ui/tab-nav';
 import { PromptFull, PromptPreview } from './agent-prompt';
 import { AgentSettings } from './agent-settings';
 import { AskJonahButton } from './ask-jonah-button';
@@ -41,30 +41,28 @@ export function initialsOf(name: string): string {
 /** The last 7 days: the measures of the agent's finished tasks, one tile each. */
 function AgentMeasures({ stats }: { stats: AgentStats }) {
   const ratio = stats.sent_back.ratio;
+  const p85 = stats.task_time_p85_minutes;
   return (
-    <section aria-label="Last 7 days" className="grid grid-cols-2 gap-3 md:grid-cols-3">
-      <KpiTile label="Tasks finished" value={stats.tasks_finished} />
-      <KpiTile
-        label="Sent back by review"
-        value={
-          <span className={cn(stats.sent_back.count > 0 && 'text-rework-ink')}>
-            {ratio === null ? none : formatPercent(ratio)}
-          </span>
-        }
-      />
-      <KpiTile
-        label="Spend per task"
-        value={stats.spend_per_task_usd === null ? none : formatUsd(stats.spend_per_task_usd)}
-      />
-      <KpiTile
-        label="Median turns"
-        value={stats.median_turns === null ? none : String(Math.round(stats.median_turns))}
-      />
-      <KpiTile
-        label="Time per task, p85"
-        value={stats.task_time_p85_minutes === null ? none : formatDuration(stats.task_time_p85_minutes * 60_000)}
-      />
-    </section>
+    <StatStrip
+      label="Last 7 days"
+      stats={[
+        { label: 'Tasks finished', value: stats.tasks_finished },
+        {
+          label: 'Sent back by review',
+          value: ratio === null ? none : formatPercent(ratio),
+          ...(stats.sent_back.count > 0 ? { delta: { text: `${stats.sent_back.count} sent back`, good: false } } : {}),
+        },
+        {
+          label: 'Spend per task',
+          value: stats.spend_per_task_usd === null ? none : formatUsd(stats.spend_per_task_usd),
+        },
+        {
+          label: 'Median turns',
+          value: stats.median_turns === null ? none : String(Math.round(stats.median_turns)),
+          ...(p85 === null ? {} : { note: `p85 time ${formatDuration(p85 * 60_000)}` }),
+        },
+      ]}
+    />
   );
 }
 
@@ -151,7 +149,7 @@ export function AgentPage({ agent, view }: { agent: string; view: AgentView }) {
       <header className="flex flex-wrap items-start gap-4">
         <span
           aria-hidden="true"
-          className="grid size-12 shrink-0 place-items-center rounded-card bg-run font-numeral text-heading text-white"
+          className="grid size-12 shrink-0 place-items-center rounded-full bg-hover text-heading text-ink-soft"
         >
           {initialsOf(agent)}
         </span>
@@ -170,7 +168,7 @@ export function AgentPage({ agent, view }: { agent: string; view: AgentView }) {
         ) : null}
       </header>
 
-      <nav aria-label="Agent views" className="flex gap-1 overflow-x-auto border-b border-line">
+      <TabNav label="Agent views">
         {agentViews.map((v) => {
           const current = v === view;
           return (
@@ -180,16 +178,13 @@ export function AgentPage({ agent, view }: { agent: string; view: AgentView }) {
               params={agentParams}
               search={{ view: v }}
               aria-current={current ? 'page' : undefined}
-              className={cn(
-                '-mb-px inline-flex h-10 shrink-0 items-center border-b-2 px-3 text-body transition-colors duration-200 hover:text-ink',
-                current ? 'border-run font-control text-ink' : 'border-transparent text-ink-soft',
-              )}
+              className={tabNavItem}
             >
               {tabLabels[v]}
             </Link>
           );
         })}
-      </nav>
+      </TabNav>
 
       <DraftChangesNote agent={agent} />
 

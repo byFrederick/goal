@@ -24,8 +24,8 @@ export function PopoverContent({
         sideOffset={sideOffset}
         collisionPadding={8}
         className={cn(
-          'z-50 flex w-80 max-w-[calc(100vw-16px)] flex-col overflow-y-auto rounded-card border border-rule bg-card p-2 text-ink shadow-pop outline-none',
-          'max-h-[var(--radix-popover-content-available-height)] data-[state=open]:animate-[fade-in_150ms_ease-out]',
+          'motion-panel motion-menu z-50 flex w-80 max-w-[calc(100vw-16px)] flex-col overflow-y-auto rounded-card bg-card p-1 text-ink shadow-pop outline-none',
+          'max-h-[var(--radix-popover-content-available-height)]',
           className,
         )}
         {...props}

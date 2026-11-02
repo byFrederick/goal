@@ -8,11 +8,12 @@ import { plural } from '../../../shared/format';
 import { SectionCard } from '../../../ui/card';
 import { cn } from '../../../ui/cn';
 import { NotAvailable } from '../../../ui/not-available';
+import { Skeleton, SkeletonRows } from '../../../ui/skeleton';
 import { placeSearch, problemPlace } from '../frame/state';
 import { SectionLink } from '../search-link';
 import { type EditorSection, sectionInfo } from '../sections';
 
-const linkClass = 'underline underline-offset-3 transition-colors duration-200';
+const linkClass = 'underline underline-offset-3 transition-colors duration-(--duration-quick)';
 
 /** A link to where a problem is fixed: its section, and the entity in it. */
 function FixLink({
@@ -91,9 +92,9 @@ export function ChecksCard({ validation, model }: { validation: Validation | und
       }
     >
       {!validation ? (
-        <div aria-busy="true">
-          <span className="sr-only">Loading the checks</span>
-        </div>
+        <Skeleton ready={false} placeholder={<SkeletonRows rows={4} />}>
+          {null}
+        </Skeleton>
       ) : (
         <ul className="m-0 flex list-none flex-col p-0">
           {checks.map((c, i) => {

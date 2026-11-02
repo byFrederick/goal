@@ -34,8 +34,8 @@ export function MenuContent({
         sideOffset={sideOffset}
         collisionPadding={8}
         className={cn(
-          'z-50 flex w-80 max-w-[calc(100vw-16px)] flex-col overflow-y-auto rounded-card border border-rule bg-card p-2 text-ink shadow-pop outline-none',
-          'max-h-[var(--radix-dropdown-menu-content-available-height)] data-[state=open]:animate-[fade-in_150ms_ease-out]',
+          'motion-panel motion-menu z-50 flex w-80 max-w-[calc(100vw-16px)] flex-col overflow-y-auto rounded-card bg-card p-1 text-ink shadow-pop outline-none',
+          'max-h-[var(--radix-dropdown-menu-content-available-height)]',
           className,
         )}
         {...props}
@@ -44,9 +44,12 @@ export function MenuContent({
   );
 }
 
-/** A row of a menu or of a sheet's list: 44 px, an 18 px icon, the label. */
+/**
+ * A row of a menu or of a sheet's list: 44 px on a phone, 30 px from 768 px up, an 18 px icon, the label.
+ * The row is the same on a sheet's list, so both take the phone's touch target.
+ */
 export const menuRow =
-  'flex min-h-11 w-full items-center gap-3 rounded-control px-2.5 text-left text-[15px] text-ink no-underline transition-colors duration-200';
+  'flex min-h-11 md:min-h-7.5 w-full items-center gap-3 rounded-control px-2.5 text-left text-body text-ink no-underline transition-colors duration-quick';
 
 /**
  * One action. With `asChild` it wraps a Link (a menu link). A disabled item (a screen a later
@@ -70,7 +73,7 @@ export function MenuRadioItem({ className, children, ...props }: ComponentProps<
   return (
     <M.RadioItem
       className={cn(
-        'grid min-h-[52px] cursor-pointer grid-cols-[36px_minmax(0,1fr)_20px] items-center gap-3 rounded-control px-2 py-1.5 text-ink transition-colors duration-200 focus-visible:-outline-offset-2 data-[highlighted]:bg-shell data-[state=checked]:bg-shell',
+        'grid min-h-[52px] cursor-pointer grid-cols-[36px_minmax(0,1fr)_20px] items-center gap-3 rounded-control px-2 py-1.5 text-ink transition-colors duration-quick focus-visible:-outline-offset-2 data-[highlighted]:bg-shell data-[state=checked]:bg-shell',
         className,
       )}
       {...props}
@@ -104,7 +107,7 @@ export function MenuChoice({ className, children, ...props }: ComponentProps<typ
 
 /** A group's heading ("Organizations", "Acme"). Give it an id and label the group with it. */
 export function MenuLabel({ className, ...props }: ComponentProps<typeof M.Label>) {
-  return <M.Label className={cn('mx-2.5 mt-2.5 mb-1 text-[13px] font-medium text-muted', className)} {...props} />;
+  return <M.Label className={cn('mx-2.5 mt-2.5 mb-1 text-secondary font-medium text-muted', className)} {...props} />;
 }
 
 export function MenuSeparator({ className, ...props }: ComponentProps<typeof M.Separator>) {

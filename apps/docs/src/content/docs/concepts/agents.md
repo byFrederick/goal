@@ -21,6 +21,8 @@ An agent is one entry of the `agents` list in the factory definition. Its schema
 | `connections` | The organization's connections this agent may use. See [connections](../connections/). |
 | `tools` or `builtins` | Which tools the agent may call. An agent has one or the other, never both. |
 
+The Definition's Agents section edits the prompt. Reset to default in it restores the running version's prompt file, as described in [Add an agent, skill or rule](../guides/add-an-agent-skill-or-rule/).
+
 `builtins` sets each group of Claude Code's built-in tools to `off`, `ask` or `allowed`:
 
 - `read` (Read, Grep, Glob), `edit` (Edit, Write), `run` (Bash, optionally limited to named commands), `web` (WebFetch, WebSearch) and `subagents` (Task).
