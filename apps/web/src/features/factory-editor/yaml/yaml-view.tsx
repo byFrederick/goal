@@ -61,7 +61,6 @@ import {
 import { outlineOf } from './outline';
 import { Outline, ProblemBlock, ProblemsPanel } from './panels';
 
-/** The editor's place while a file loads: lines of code in muted blocks (MOTION.md, Loading). */
 /** A file waiting on its text: the Loading skeleton, with its path for screen readers. */
 export function FileLoading({ path }: { path: string }) {
   return (
@@ -74,6 +73,7 @@ export function FileLoading({ path }: { path: string }) {
   );
 }
 
+/** The editor's place while a file loads: lines of code in muted blocks (MOTION.md, Loading). */
 function FileShape() {
   return (
     <div className="flex h-64 flex-col gap-3 p-5">
