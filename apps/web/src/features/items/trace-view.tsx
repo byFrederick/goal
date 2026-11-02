@@ -1,16 +1,3 @@
-import {
-  Circle,
-  CircleCheck,
-  CircleHelp,
-  CircleX,
-  FileText,
-  type LucideIcon,
-  MessageSquare,
-  Pencil,
-  Search,
-  Terminal,
-  Wrench,
-} from 'lucide-react';
 import { Fragment, type ReactNode, useId, useState } from 'react';
 import type { ItemState } from '../../api/types';
 import { formatClock, formatDuration, formatUsd, humanize } from '../../shared/format';
@@ -18,6 +5,7 @@ import { useModelLabel } from '../../shared/models';
 import { Button } from '../../ui/button';
 import { Chip, type ChipTone } from '../../ui/chip';
 import { cn } from '../../ui/cn';
+import { Disclosure } from '../../ui/disclosure';
 import { outputLead } from './outputs';
 import {
   type CheckEntry,
@@ -52,53 +40,42 @@ export function ToolRow({ call }: { call: ToolCall }) {
   );
 }
 
-/** A tool's icon: reads, edits, shell commands, searches, the web; a wrench for the rest. */
-function toolIcon(tool: string): LucideIcon {
-  if (tool === 'Read') return FileText;
-  if (tool === 'Edit' || tool === 'Write' || tool === 'MultiEdit') return Pencil;
-  if (tool === 'Bash') return Terminal;
-  if (tool === 'Grep' || tool === 'Glob') return Search;
-  return Wrench;
-}
-
-/** A 22 px icon tile: plain for the agent's work, green and red for checks, violet for people. */
-const tileTone = {
-  plain: 'bg-panel text-muted',
-  ok: 'bg-ok-tint text-ok-ink',
-  rework: 'bg-rework-tint text-rework-ink',
-  you: 'bg-you-tint text-you-ink',
+/** The 6 px dot on the timeline's rule: muted for the agent's work, green and red for checks, orange for people. */
+const dotTone = {
+  plain: 'bg-muted',
+  ok: 'bg-ok',
+  rework: 'bg-rework',
+  you: 'bg-you',
 } as const;
-type TileTone = keyof typeof tileTone;
+type TileTone = keyof typeof dotTone;
 
 /**
- * One row of a run's timeline: the time, the icon tile, the sentence and a short right label. On a
+ * One row of a run's timeline: the time, the dot on the rule, the sentence and a short right label. On a
  * phone the label drops under the sentence. `output` is a failed step's raw output, behind a disclosure.
  */
 function EventRow({
   at,
   tone,
-  icon: Icon,
   children,
   right,
   output,
 }: {
   at: string;
   tone: TileTone;
-  icon: LucideIcon;
   children: ReactNode;
   right?: ReactNode;
   output?: string[] | undefined;
 }) {
   return (
-    <li className="grid grid-cols-[44px_22px_minmax(0,1fr)] items-start gap-x-2 py-2 text-body md:grid-cols-[44px_22px_minmax(0,1fr)_auto]">
-      <time dateTime={at} className="pt-1 text-meta text-muted tabular-nums">
+    <li className="grid grid-cols-[44px_12px_minmax(0,1fr)] items-start gap-x-2 py-2 text-body md:grid-cols-[44px_12px_minmax(0,1fr)_auto]">
+      <time dateTime={at} className="pt-1 font-mono text-meta text-muted tabular-nums">
         {formatClock(at)}
       </time>
       <span
         aria-hidden="true"
-        className={cn('flex size-5.5 shrink-0 items-center justify-center rounded-chip', tileTone[tone])}
+        className="relative flex justify-center self-stretch before:absolute before:-inset-y-2 before:w-px before:bg-line"
       >
-        <Icon size={13} strokeWidth={1.75} />
+        <i className={cn('relative mt-2 block size-1.5 rounded-full', dotTone[tone])} />
       </span>
       <div className="min-w-0 leading-normal wrap-break-word">
         {children}
@@ -114,12 +91,15 @@ function EventRow({
 /** A step's raw output, collapsed: a mono block with a height limit that scrolls. */
 function OutputDisclosure({ lines }: { lines: string[] }) {
   return (
-    <details className="mt-1 text-secondary">
-      <summary className="w-fit cursor-pointer text-muted">Show the output</summary>
-      <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap wrap-break-word rounded-control bg-shell p-2 font-mono text-secondary leading-normal">
+    <Disclosure
+      summary="Show the output"
+      className="mt-1 text-secondary"
+      triggerClassName="min-h-7 w-fit justify-start px-0 text-secondary text-muted hover:text-ink"
+    >
+      <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap wrap-break-word rounded-control bg-panel p-2 font-mono text-secondary leading-normal">
         {lines.join('\n\n')}
       </pre>
-    </details>
+    </Disclosure>
   );
 }
 
@@ -169,7 +149,6 @@ type Row = {
   key: string;
   at: string;
   tone: TileTone;
-  icon: LucideIcon;
   children: ReactNode;
   right?: ReactNode;
   output?: string[] | undefined;
@@ -180,7 +159,6 @@ function stepRow(step: StepRow): Row {
     key: step.key,
     at: step.at,
     tone: step.failed ? 'rework' : 'plain',
-    icon: toolIcon(step.tool),
     children: <Sentence segments={step.segments} />,
     right: step.right ? <span className={cn(step.failed && 'text-rework-ink')}>{step.right}</span> : undefined,
     output: step.output,
@@ -193,7 +171,6 @@ function checkRow(check: CheckEntry): Row {
     key: check.key,
     at: check.at,
     tone: check.passed ? 'ok' : 'rework',
-    icon: check.passed ? CircleCheck : CircleX,
     children: <Sentence segments={step.segments} />,
     right: step.right,
   };
@@ -207,7 +184,6 @@ function noteRow(note: NoteEntry): Row {
     key: note.key,
     at: note.at,
     tone,
-    icon: note.question ? CircleHelp : people ? MessageSquare : Circle,
     // An open question's row says Now, in the you ink.
     right: note.open ? <span className="text-you-ink">Now</span> : undefined,
     children: (
@@ -314,7 +290,7 @@ function RunCard({
         {rows.length > 0 ? (
           <ol aria-label={`Events by ${label}`} className="m-0 flex list-none flex-col p-0">
             {shown.map((r) => (
-              <EventRow key={r.key} at={r.at} tone={r.tone} icon={r.icon} right={r.right} output={r.output}>
+              <EventRow key={r.key} at={r.at} tone={r.tone} right={r.right} output={r.output}>
                 {r.children}
               </EventRow>
             ))}
@@ -349,7 +325,7 @@ export function EventList({ entries }: { entries: Entry[] }) {
         if (e.kind === 'run') return null;
         const r = e.kind === 'check' ? checkRow(e) : noteRow(e);
         return (
-          <EventRow key={r.key} at={r.at} tone={r.tone} icon={r.icon} right={r.right} output={r.output}>
+          <EventRow key={r.key} at={r.at} tone={r.tone} right={r.right} output={r.output}>
             {r.children}
           </EventRow>
         );
