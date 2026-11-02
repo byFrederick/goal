@@ -1,14 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { pageTitle } from '../app/route-focus';
-import { PendingScreen } from '../app/states';
 import { IntakePage } from '../features/intake/intake-page';
+import { IntakeSkeleton } from '../features/intake/intake-skeleton';
 import { type SuggestionGroup, suggestionGroups } from '../features/intake/suggestions';
 
 // The Intake page (intake): sources, triggers and suggested triggers. Its states are the page's own: the
 // route does not wait for the data, so loading, error and empty show on the page. The suggestion tab is in
 // the URL (?group=), so a link opens the same tab.
 export const Route = createFileRoute('/o/$org/f/$factory/intake/')({
-  pendingComponent: PendingScreen,
+  pendingComponent: IntakeSkeleton,
   validateSearch: (search: Record<string, unknown>): { group?: SuggestionGroup | undefined } => ({
     group: suggestionGroups.find((g) => g === search.group),
   }),

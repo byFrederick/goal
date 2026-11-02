@@ -64,6 +64,18 @@ async function openPerson(page: Page, name: string) {
   return page.getByRole('dialog', { name });
 }
 
+test('the Members heading does not clip at 768 and 1024 px', async ({ page }) => {
+  await signedInAs(page.request);
+  for (const width of [768, 1024]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/o/acme/members');
+    const h2 = page.getByRole('heading', { level: 2, name: 'Members', exact: true });
+    await expect(h2).toBeVisible();
+    const fits = await h2.evaluate((el) => el.scrollWidth <= el.clientWidth);
+    expect(fits).toBe(true);
+  }
+});
+
 test('an owner sees everyone, why a role cannot change, and changes factory roles at once', async ({ page }) => {
   await signedInAs(page.request);
   await page.goto('/o/acme/members');
@@ -75,10 +87,9 @@ test('an owner sees everyone, why a role cannot change, and changes factory role
   await expectNoHorizontalScroll(page);
 
   if (!listsCards(page)) {
-    // The only owner's role cannot change, and the page says why; an admin's can.
-    const own = page.getByRole('combobox', { name: 'Role of F. Cruz in Acme' });
-    await expect(own).toBeDisabled();
-    await expect(own).toHaveAccessibleDescription('Acme needs at least one owner');
+    // The only owner's role is a chip, not a select; an admin's can.
+    await expect(page.getByRole('combobox', { name: 'Role of F. Cruz in Acme' })).toHaveCount(0);
+    await expect(personOf(page, 'F. Cruz')).toContainText('Owner');
     await expect(page.getByRole('combobox', { name: 'Role of M. Okafor in Acme' })).toBeEnabled();
     await expect(personOf(page, 'J. Lindqvist')).toContainText('goal approver, sre editor');
   }

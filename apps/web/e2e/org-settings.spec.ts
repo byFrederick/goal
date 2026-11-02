@@ -208,3 +208,24 @@ test('delete is enabled only by the typed name, then opens the next organization
   await page.getByRole('button', { name: 'Delete organization', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'No organization yet' })).toBeVisible();
 });
+
+test('the address prefix is never clipped and Save changes is in the top bar', async ({ page }) => {
+  for (const width of [768, 1024, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/o/acme/settings');
+    await expect(heading(page)).toBeVisible();
+    const prefix = page.getByText('/o/', { exact: false }).first();
+    const fits = await prefix.evaluate((el) => el.scrollWidth <= el.clientWidth);
+    expect(fits).toBe(true);
+    await expect(page.getByRole('banner').getByRole('button', { name: 'Save changes' })).toBeVisible();
+  }
+});
+
+test('the section nav marks the section in view', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/o/acme/settings');
+  const toc = page.getByRole('navigation', { name: 'On this page' });
+  await expect(toc.getByRole('link', { name: 'General' })).toHaveAttribute('aria-current', 'location');
+  await toc.getByRole('link', { name: 'Data' }).click();
+  await expect(toc.getByRole('link', { name: 'Data' })).toHaveAttribute('aria-current', 'location');
+});

@@ -25,6 +25,8 @@ Templates inside a kind are limited. `{{field}}` names one of the kind's fields.
 
 A secret field can hold its value directly, or refer to a credential. A credential is an organization's named secret, sealed in goald and never shown again. A connection's field refers to it with `{{name}}`, and the reference is stored in the clear. A credential cannot be deleted while a connection refers to it.
 
+On the Credentials screen, the **New credential** menu in the top bar either creates one credential or imports many from a `.env` or YAML file. The import is checked before anything is saved. The search field next to it filters by name and description, and keeps its text in the page's address (`?q=`), so a link opens the same list.
+
 Values come in only through standard input or an import file, never on the command line, and no command prints one. Changing a credential needs an owner or admin who has signed in within the last 10 minutes.
 
 ## What a run receives
@@ -57,6 +59,6 @@ Flags and output are in the [CLI reference](../../reference/).
 
 ## Where you meet connections
 
-The connections screen lists each connection with its kind, status and the factories that use it. The factory builder picks connections for an agent from this list.
+The connections screen lists each connection with its kind, its status and the factories that use it. A connection that works shows a green dot and “Connected”; one that failed its test or lacks a secret shows a red dot and says so. Under Used by, each factory appears as its letter badge, and knowledge sources keep their name. Search connections, in the top bar, narrows the list by name, description or kind; the screen has no kind or factory filter. The factory builder picks connections for an agent from this list.
 
-A connection's page has a Test button until the connection has a test result. After that, the result shows inside the page with a Test again button, which runs the test once more. Each credential type filter on the credentials screen shows how many credentials it holds, and All shows the total.
+A connection's page has a Test button in the top bar. It runs the connection's kind's test, and runs it again whenever you press it. The result shows in the page, under the connection's name. Each credential type filter on the credentials screen shows how many credentials it holds, and All shows the total.

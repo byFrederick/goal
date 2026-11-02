@@ -8,6 +8,8 @@ import { cn } from './cn';
 const variants = {
   /** Cobalt: the one primary action on a surface. */
   primary: 'border-run bg-run text-white hover:bg-run/90',
+  /** Near-black (`--color-action`): the design's primary action where a screen follows MASTER.md Buttons. */
+  action: 'border-action bg-action text-action-ink hover:bg-action/90',
   /** White with a rule border: the secondary action. */
   secondary: 'border-rule bg-card text-ink hover:bg-panel',
   /** Alias of secondary, kept so callers do not change. */

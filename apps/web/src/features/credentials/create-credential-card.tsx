@@ -315,7 +315,7 @@ export function CreateCredentialCard({ org, slug, factories }: { org: string; sl
             Replaces nothing. The old {similar} keeps working until you remove it.
           </p>
         ) : null}
-        <Button type="submit" variant="primary" className="ml-auto" disabled={create.isPending}>
+        <Button type="submit" variant="action" className="ml-auto" disabled={create.isPending}>
           {create.isPending ? 'Creating…' : 'Create credential'}
         </Button>
       </div>
