@@ -15,7 +15,8 @@ The sidebar sits on the left of every organization page, from 768 px wide up.
 - **New item.** Choose New item, or press `C`, to open the composer. See [Submit and follow items](../submit-and-follow-items/).
 - **Organization pages.** Home, Needs you (with the number of items waiting on you), Runs, Connections, Credentials and Knowledge. Pages you may not open are not listed.
 - **Factories.** Each factory opens to its pages: Floor, Board, Items, Agents, Intake, Jonah, Definition and Settings. A factory's count shows the items waiting on you. A red dot means a connection or the line needs attention.
-- **Account.** The person at the bottom of the sidebar opens the account menu.
+- **Spend this week.** A row above the account shows this week's spend, with a bar against the budget when one is set. It opens Spend and billing.
+- **Account.** The person at the bottom of the sidebar, marked with an up and down chevron, opens the account menu.
 
 ## The rail
 
@@ -30,6 +31,7 @@ Choose the avatar and name at the bottom of the sidebar, or the avatar in the ra
 - **Notifications.** Opens the notifications section of your account page.
 - **Connected apps.** Shows "Not available yet" for now.
 - **Keyboard shortcuts.** Opens the shortcuts list.
+- **Help and docs.** Opens this documentation in the same tab.
 - **Sign out** and **Sign out everywhere.**
 
 ## Search

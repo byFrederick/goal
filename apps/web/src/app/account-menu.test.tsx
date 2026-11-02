@@ -132,6 +132,7 @@ describe('the account menu', () => {
       'Personal tokens',
       'Connected apps',
       'Keyboard shortcuts',
+      'Help and docs',
       'Sign out',
       'Sign out everywhere',
     ];
@@ -144,6 +145,22 @@ describe('the account menu', () => {
         .getAttribute('aria-disabled'),
     ).toBe('true');
     expect(within(panel).getByRole('button', { name: /^Keyboard shortcuts/ }).textContent).toContain('?');
+  });
+
+  it('links Help and docs to /docs in the same tab', async () => {
+    renderAccount();
+    const panel = await openPanel();
+    const link = within(panel).getByRole('link', { name: 'Help and docs' });
+
+    expect(link.getAttribute('href')).toBe('/docs');
+    expect(link.getAttribute('target')).toBeNull();
+  });
+
+  it('ends the sidebar person row with a chevron', async () => {
+    renderAccount();
+    const trigger = await screen.findByRole('button', { name: /account$/ });
+
+    expect(trigger.querySelector('svg.lucide-chevrons-up-down')).toBeTruthy();
   });
 
   it('links Notifications to the notifications section of the account page', async () => {
@@ -220,5 +237,6 @@ describe('the account menu', () => {
     const panel = await openPanel();
     expect(within(panel).getByText('Local user')).toBeTruthy();
     expect(within(panel).queryByRole('button', { name: 'Sign out' })).toBeNull();
+    expect(within(panel).getByRole('link', { name: 'Help and docs' }).getAttribute('href')).toBe('/docs');
   });
 });
