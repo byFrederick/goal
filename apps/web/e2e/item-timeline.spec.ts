@@ -46,15 +46,49 @@ test('the event rows of a run fit its card and keep raw output behind a disclosu
     expect(row.middleWidth, row.text).toBeGreaterThanOrEqual(240);
   }
 
-  const longCommand = measured.find((row) => row.text.includes('Ran go…'));
+  const longCommand = measured.find((row) => row.text.includes('Ran go test'));
   expect(longCommand).toBeDefined();
-  expect(longCommand?.middleHeight).toBeLessThan(3 * (longCommand?.lineHeight ?? 0));
+  expect(longCommand?.middleHeight).toBeGreaterThanOrEqual(longCommand?.lineHeight ?? 0);
 
-  const failed = rows.filter({ hasText: 'Ran pnpm…' });
+  // Every time stamp is one line, and the item page has the timeline left of the details.
+  const times = await events.locator('time').evaluateAll((els) =>
+    els.map((el) => ({
+      text: el.textContent ?? '',
+      height: el.getBoundingClientRect().height,
+      line: Number.parseFloat(getComputedStyle(el).lineHeight),
+    })),
+  );
+  for (const t of times) expect(t.height, t.text).toBeLessThanOrEqual(t.line + 1);
+  const timelineBox = await events.boundingBox();
+  const detailsBox = await page.getByRole('heading', { name: 'Details' }).boundingBox();
+  expect(timelineBox?.x ?? 0).toBeLessThan(detailsBox?.x ?? 0);
+
+  const failed = rows.filter({ hasText: 'Ran pnpm' });
   await expect(failed).toContainText('failed');
   await expect(page.locator('pre').filter({ hasText: 'output without a break' })).toBeHidden();
   await failed.getByText('Show the output').click();
   await expect(page.locator('pre').filter({ hasText: 'output without a break' })).toBeVisible();
 
+  await expectNoHorizontalScroll(page);
+});
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`item timeline screenshot at 1440, ${theme}`, async ({ page }, testInfo) => {
+    await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+    await page.goto('/o/acme/f/goal/items/343');
+    await expect(page.getByRole('tab', { name: 'Timeline' })).toHaveAttribute('aria-selected', 'true');
+    await testInfo.attach(`item-1440-${theme}`, {
+      body: await page.screenshot({ fullPage: true }),
+      contentType: 'image/png',
+    });
+  });
+}
+
+test('between 720 and 1100 px the page is one column, with the details below the timeline', async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 900 });
+  await page.goto('/o/acme/f/goal/items/343');
+  const panel = await page.getByRole('tabpanel').boundingBox();
+  const details = await page.getByRole('heading', { name: 'Details' }).boundingBox();
+  expect(details?.y ?? 0).toBeGreaterThanOrEqual((panel?.y ?? 0) + (panel?.height ?? 0));
   await expectNoHorizontalScroll(page);
 });

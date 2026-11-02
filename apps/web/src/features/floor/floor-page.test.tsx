@@ -8,6 +8,7 @@ import {
   boardQuery,
   constraintQuery,
   inboxQuery,
+  itemsQuery,
   metricsQuery,
   overviewQuery,
   touchesQuery,
@@ -366,7 +367,7 @@ function renderFloor({
   activity = feed,
   touches = touchesNow,
   subject = factory,
-  topBar = false,
+  merged = true,
 }: {
   entries?: InboxEntry[];
   line?: Board;
@@ -380,8 +381,8 @@ function renderFloor({
   touches?: TouchMetrics;
   /** The factory the page is for, with the permissions the test gives it. */
   subject?: Factory;
-  /** Draw the shell's top bar above the page, where a phone's actions go. */
-  topBar?: boolean;
+  /** An item has merged: a mature factory. False seeds a new one, which shows the setup checklist. */
+  merged?: boolean;
 } = {}) {
   const range = rangeOf({});
   return renderFactoryPage({
@@ -392,10 +393,17 @@ function renderFloor({
       </TooltipProvider>
     ),
     path: '/',
-    topBar,
     org,
     factory: subject,
+    topBar: true,
     seed: [
+      [
+        itemsQuery(org.id, factory.id, { state: 'done', limit: 1 }).queryKey,
+        {
+          items: merged ? [{ id: 'item-1', ref: 'sre#1', number: 1, state: 'done' } as ItemCard] : [],
+          next_after: null,
+        },
+      ],
       [touchesQuery(org.id, factory.id, range).queryKey, touches],
       [touchesQuery(org.id, factory.id, previousRange(range)).queryKey, touchesBefore],
       [boardQuery(org.id, factory.id).queryKey, line],
@@ -411,12 +419,29 @@ function renderFloor({
 }
 
 describe('FloorPage', () => {
-  it('the header Needs you link counts what waits on this factory and leads to its page', async () => {
-    renderFloor({ entries: [ship] });
+  it('puts the window and Pull andon in the top bar, not in the page body', async () => {
+    renderFloor();
 
-    const link = await screen.findByRole('link', { name: /^Needs you/ });
-    expect(link.getAttribute('href')).toBe('/o/acme/needs-you?factory=sre');
-    expect(link.textContent).toContain('1');
+    const pull = await screen.findByRole('button', { name: 'Pull andon' });
+    const bar = pull.closest('header');
+    expect(bar).toBeTruthy();
+    expect(within(bar as HTMLElement).getByRole('radio', { name: '7 days' })).toBeTruthy();
+    const title = screen.getByRole('heading', { level: 1, name: 'Floor' });
+    expect(title.closest('header')).not.toBe(bar);
+    expect(screen.queryByRole('link', { name: /^Needs you/ })).toBeNull();
+  });
+
+  it('shows the setup checklist and how work gets in only while no item has merged', async () => {
+    renderFloor({ merged: false });
+    expect(await screen.findByRole('heading', { name: 'Finish setting up' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'How work gets in' })).toBeTruthy();
+  });
+
+  it('hides the setup checklist and how work gets in on a factory with a merged item', async () => {
+    renderFloor();
+    await screen.findByRole('region', { name: 'Needs you' });
+    expect(screen.queryByRole('heading', { name: 'Finish setting up' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'How work gets in' })).toBeNull();
   });
 
   it('shows Needs you, Where work waits, Throughput by week and Activity below the figures, in that order', async () => {
@@ -463,7 +488,7 @@ describe('FloorPage', () => {
     expect(await screen.findByText('Answers cite a retired runbook')).toBeTruthy();
     expect(screen.queryByText('Line running')).toBeNull();
     expect(screen.getByRole('button', { name: 'Clear the andon' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Pull the andon cord' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Pull andon' })).toBeNull();
   });
 
   it('writes the 30-day window to the URL and presses it', async () => {
@@ -692,6 +717,11 @@ describe('the cards below the figures', () => {
     const card = await screen.findByRole('region', { name: 'Throughput by week' });
     expect(within(card).getByRole('img', { name: /Items merged a day by week/ })).toBeTruthy();
     expect(within(card).getByText('Target 10')).toBeTruthy();
+    // Every week is a solid bar: the past one in the rule colour, this week in ink; no hatch, no run blue.
+    expect(card.querySelectorAll('.bg-rule')).toHaveLength(1);
+    expect(card.querySelectorAll('.bg-ink')).toHaveLength(1);
+    expect(card.querySelector('.bg-run')).toBeNull();
+    expect(card.querySelector('[class*="hatch"], svg pattern')).toBeNull();
   });
 
   it('Activity shows Live and a sentence per event, naming the actor by role, never by copy number', async () => {
@@ -702,6 +732,21 @@ describe('the cards below the figures', () => {
     expect(card.textContent).toContain('sre#146 merged by reviewer at Review');
     expect(card.textContent).toContain('sre#147 moved by frontend-engineer at Build');
     expect(card.textContent).not.toContain('frontend-engineer-2');
+  });
+
+  it('Activity rows are one line each: a time, a dot and a truncating sentence, with no avatar', async () => {
+    renderFloor();
+
+    const card = await screen.findByRole('region', { name: 'Activity' });
+    const rows = within(card).getAllByRole('listitem');
+    expect(rows).toHaveLength(2);
+    const sentence = rows[0]?.querySelector('p');
+    expect(sentence?.classList.contains('truncate')).toBe(true);
+    expect(sentence?.getAttribute('title')).toBe('sre#146 merged by reviewer at Review');
+    expect(rows[0]?.querySelector('.bg-ok.size-1\\.5')).toBeTruthy();
+    expect(rows[1]?.querySelector('.bg-muted.size-1\\.5')).toBeTruthy();
+    expect(card.querySelector('.rounded-full.size-7')).toBeNull();
+    expect(card.textContent).not.toMatch(/\bFE\b|\bRE\b/);
   });
 
   it('Activity says what failed and offers Retry', async () => {
@@ -720,50 +765,5 @@ describe('the cards below the figures', () => {
     const card = await screen.findByRole('region', { name: 'Activity' });
     expect(card.getAttribute('aria-busy')).toBe('true');
     expect(within(card).getByText('Loading')).toBeTruthy();
-  });
-});
-
-describe('the Floor actions at each width', () => {
-  function stubWidth(phone: boolean) {
-    window.matchMedia = (query: string) =>
-      ({
-        matches: phone && query === '(max-width: 767px)',
-        media: query,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        addListener: () => {},
-        removeListener: () => {},
-        dispatchEvent: () => false,
-      }) as unknown as MediaQueryList;
-  }
-
-  afterEach(() => {
-    delete (window as { matchMedia?: unknown }).matchMedia;
-  });
-
-  it('puts Needs you, Pull the andon cord and New item in the phone top bar and not in the page', async () => {
-    stubWidth(true);
-    renderFloor({ topBar: true, subject: { ...factory, can: [...(factory.can ?? []), 'item:create'] } });
-
-    const heading = await screen.findByRole('heading', { level: 1, name: 'Floor' });
-    const bar = document.querySelector('.shell-topbar') as HTMLElement;
-    const header = heading.closest('header') as HTMLElement;
-    await waitFor(() => expect(within(bar).getByRole('link', { name: /^Needs you/ })).toBeTruthy());
-    expect(within(bar).getByRole('button', { name: /Pull the andon cord/ })).toBeTruthy();
-    expect(within(bar).getByRole('button', { name: /New item/ })).toBeTruthy();
-    expect(within(header).queryByRole('link', { name: /^Needs you/ })).toBeNull();
-    expect(within(header).queryByRole('button', { name: /Pull the andon cord/ })).toBeNull();
-    expect(within(header).queryByRole('button', { name: /New item/ })).toBeNull();
-  });
-
-  it('keeps the actions in the page header from 768 px', async () => {
-    stubWidth(false);
-    renderFloor({ topBar: true, subject: { ...factory, can: [...(factory.can ?? []), 'item:create'] } });
-
-    const heading = await screen.findByRole('heading', { level: 1, name: 'Floor' });
-    const header = heading.closest('header') as HTMLElement;
-    expect(within(header).getByRole('link', { name: /^Needs you/ })).toBeTruthy();
-    expect(within(header).getByRole('button', { name: /Pull the andon cord/ })).toBeTruthy();
-    expect(within(header).getByRole('button', { name: /New item/ })).toBeTruthy();
   });
 });

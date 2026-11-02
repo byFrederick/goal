@@ -24,6 +24,8 @@ export interface Stat {
   progress?: number | undefined;
   /** The meta text when there is no target and no delta: "No target set". */
   note?: string | undefined;
+  /** Colours the figure by meaning: rework-ink for failures, you-ink for what waits on a person. */
+  tone?: 'rework' | 'you' | undefined;
 }
 
 /** Columns from `md` up: one per figure. Below `md` the strip is two columns, so four figures sit two by two. */
@@ -67,7 +69,10 @@ function StatFigure({ stat }: { stat: Stat }) {
   }
   return (
     <span className="flex items-baseline gap-1">
-      <NumberRoll value={stat.value} className="text-kpi" />
+      <NumberRoll
+        value={stat.value}
+        className={cn('text-kpi', stat.tone === 'rework' && 'text-rework-ink', stat.tone === 'you' && 'text-you-ink')}
+      />
       {stat.unit ? <span className="text-secondary text-muted">{stat.unit}</span> : null}
     </span>
   );

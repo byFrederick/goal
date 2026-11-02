@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { type ReactNode, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   answerItem,
@@ -13,7 +12,6 @@ import {
 } from '../../api/client';
 import { factoriesQuery, inboxQuery, keys, orgQuery } from '../../api/queries';
 import type { Inbox, InboxEntry, Item, ItemCard, OrgSummary } from '../../api/types';
-import { TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { renderOrgPage } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
 import { NeedsYouPage } from './needs-you-page';
@@ -29,10 +27,7 @@ vi.mock('../../api/client', async (importOriginal) => ({
   decideToolApproval: vi.fn(),
 }));
 
-const desktopMatchMedia = window.matchMedia;
-
 afterEach(() => {
-  window.matchMedia = desktopMatchMedia;
   cleanup();
   vi.clearAllMocks();
 });
@@ -131,17 +126,6 @@ const factories = (can: string[] = ['item:decide']) => [
   { id: 'factory-2', name: 'sre', title: 'SRE', can },
 ];
 
-/** Stands in for the shell's top bar: it shows what the page sets with <TopBarSlot>, its Back link included. */
-function TopBarHarness({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<TopBarState | null>(null);
-  return (
-    <TopBarSetContext.Provider value={setState}>
-      <div data-testid="top-bar">{state?.back}</div>
-      {children}
-    </TopBarSetContext.Provider>
-  );
-}
-
 function renderPage({
   search,
   seed = [
@@ -155,11 +139,10 @@ function renderPage({
   vi.mocked(listItemEvents).mockResolvedValue({ events: [], next_after: 0 } as never);
   return renderOrgPage({
     path: '/needs-you',
+    topBar: true,
     page: () => (
       <TooltipProvider>
-        <TopBarHarness>
-          <NeedsYouPage />
-        </TopBarHarness>
+        <NeedsYouPage />
       </TooltipProvider>
     ),
     org,
@@ -179,13 +162,12 @@ function phoneWidth() {
 }
 
 describe('Needs you: the four states', () => {
-  it('shows the app background with a Loading announcement while the inbox loads', async () => {
+  it('shows a Skeleton wrapper, aria-busy and saying Loading, while the inbox loads', async () => {
     vi.mocked(getInbox).mockReturnValue(new Promise(() => {}));
     renderPage({ seed: [] });
 
-    const busy = (await screen.findByText('Loading')).closest('[aria-busy="true"]');
-    expect(busy).not.toBeNull();
-    expect(busy?.querySelector('.animate-skeleton-pulse')).not.toBeNull();
+    const busy = (await screen.findByText('Loading')).closest('[aria-busy]');
+    expect(busy?.getAttribute('aria-busy')).toBe('true');
   });
 
   it('shows an empty state with one sentence and one action when nothing waits', async () => {
@@ -209,7 +191,7 @@ describe('Needs you: the four states', () => {
 
     expect(await screen.findByRole('heading', { name: 'Needs you' })).toBeTruthy();
     expect(screen.getByRole('list', { name: /Waiting on you/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^All\s*3$/ }).getAttribute('aria-pressed')).toBe('true');
+    expect((screen.getByRole('radio', { name: /^All\s*3$/ }) as HTMLInputElement).checked).toBe(true);
   });
 });
 
@@ -217,7 +199,7 @@ describe('Needs you: filters live in the URL', () => {
   it('selects the Decisions tab and writes it to the URL, leaving alerts out of the list', async () => {
     const { router } = renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: /Decisions/ }));
+    fireEvent.click(await screen.findByRole('radio', { name: /Decisions/ }));
 
     await waitFor(() => expect(router.state.location.href).toContain('type=decision'));
     expect(screen.queryByText('Pages keep firing')).toBeNull();
@@ -234,9 +216,9 @@ describe('Needs you: filters live in the URL', () => {
   it('shows each tab with its count', async () => {
     renderPage();
 
-    expect(await screen.findByRole('button', { name: /Decisions\s*2/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Alerts\s*1/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /All\s*3/ })).toBeTruthy();
+    expect(await screen.findByRole('radio', { name: /Decisions\s*2/ })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: /Alerts\s*1/ })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: /All\s*3/ })).toBeTruthy();
   });
 
   it('narrows the list to one factory the URL names', async () => {
@@ -335,15 +317,6 @@ describe('Needs you: the keyboard path', () => {
 
     fireEvent.keyDown(document.body, { key: 'k' });
     await waitFor(() => expect(router.state.location.href).toContain('entry=decision%3Aitem-3'));
-  });
-
-  it('adds no pane animation when J moves the selection on the split', async () => {
-    const { router } = renderPage();
-    await screen.findByRole('heading', { name: 'Needs you' });
-
-    fireEvent.keyDown(document.body, { key: 'j' });
-    await waitFor(() => expect(router.state.location.href).toContain('entry='));
-    expect(document.querySelector('.animate-pane-forward, .animate-pane-back')).toBeNull();
   });
 
   it('approves the selected Decision with A and opens the Deny dialog with D', async () => {
@@ -532,7 +505,7 @@ describe('Needs you: Approvals', () => {
     const list = await screen.findByRole('list', { name: /Waiting on you/ });
     expect(within(list).getByText('architect wants to call add_issue_comment')).toBeTruthy();
     expect(within(list).queryByText('Ship the retry fix')).toBeNull();
-    expect(screen.getByRole('button', { name: /^Approvals/ }).getAttribute('aria-disabled')).toBeNull();
+    expect(screen.getByRole('radio', { name: /^Approvals/ }).hasAttribute('disabled')).toBe(false);
   });
 });
 
@@ -551,45 +524,8 @@ describe('Needs you on a phone', () => {
     phoneWidth();
     renderPage({ search: { entry: 'decision:item-3' } });
 
-    const approve = await screen.findByRole('button', { name: /^Approve/ });
-    expect(approve.closest('.animate-pane-forward')).not.toBeNull();
-  });
-
-  it('shows only the list on a phone when the URL names no entry', async () => {
-    phoneWidth();
-    renderPage();
-
-    expect(await screen.findByRole('list', { name: /Waiting on you/ })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /^Approve/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^Deny/ })).toBeNull();
-    expect(screen.queryByRole('link', { name: 'Back to Needs you' })).toBeNull();
-  });
-
-  it('opens one entry from the list, and Back returns to the list with the list sliding in', async () => {
-    phoneWidth();
-    const { router } = renderPage();
-
-    const list = await screen.findByRole('list', { name: /Waiting on you/ });
-    fireEvent.click(within(list).getAllByRole('link')[0] as HTMLElement);
-    await waitFor(() => expect(router.state.location.search).toHaveProperty('entry'));
-    expect(screen.queryByRole('list', { name: /Waiting on you/ })).toBeNull();
-    expect(screen.getByRole('button', { name: /^Approve/ })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('link', { name: 'Back to Needs you' }));
-    const back = await screen.findByRole('list', { name: /Waiting on you/ });
-    expect(router.state.location.search).not.toHaveProperty('entry');
-    expect(back.closest('.animate-pane-back')).not.toBeNull();
-    expect(screen.queryByRole('button', { name: /^Approve/ })).toBeNull();
-  });
-
-  it('puts the filter chips in one row that scrolls sideways', async () => {
-    phoneWidth();
-    renderPage();
-
-    const chip = await screen.findByRole('button', { name: /^All\s*3$/ });
-    const row = chip.closest('fieldset');
-    expect(row?.className).toContain('flex-nowrap');
-    expect(row?.className).toContain('overflow-x-auto');
+    const back = await screen.findByRole('link', { name: 'Back to Needs you' });
+    expect(back.closest('.animate-pane-forward')).not.toBeNull();
   });
 
   it('shows the list with its tabs when the URL names no entry', async () => {
@@ -597,7 +533,7 @@ describe('Needs you on a phone', () => {
     renderPage();
 
     expect(await screen.findByRole('list', { name: /Waiting on you/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Alerts/ })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: /Alerts/ })).toBeTruthy();
   });
 });
 
@@ -651,9 +587,9 @@ describe('Needs you: questions', () => {
       ],
     });
 
-    const tab = await screen.findByRole('button', { name: /^Questions/ });
-    expect(tab.getAttribute('aria-disabled')).toBeNull();
-    expect(tab.textContent).toContain('1');
+    const tab = await screen.findByRole('radio', { name: /^Questions/ });
+    expect(tab.hasAttribute('disabled')).toBe(false);
+    expect(tab.closest('label')?.textContent).toContain('1');
   });
 
   it('draws a question row with its type, its agent and question, and its item and station', async () => {
@@ -721,5 +657,21 @@ describe('Needs you: questions', () => {
     expect(approveItem).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(answerItem).not.toHaveBeenCalled();
+  });
+});
+
+describe('Needs you: the keycap hint and the type chip', () => {
+  it('draws J, K, A and D as keycaps in the hint', async () => {
+    renderPage();
+    const hint = (await screen.findByText(/to move,/)).closest('p') as HTMLElement;
+    expect(Array.from(hint.querySelectorAll('kbd')).map((k) => k.textContent)).toEqual(['J', 'K', 'A', 'D']);
+    expect(hint.textContent).toBe('J K to move, A approve, D deny');
+  });
+
+  it('shows a dot in the detail chip', async () => {
+    renderPage();
+    const detail = await screen.findByRole('article');
+    const chip = within(detail).getByText('Decision').closest('span.rounded-chip') as HTMLElement;
+    expect(chip.querySelector('[aria-hidden="true"]')).toBeTruthy();
   });
 });

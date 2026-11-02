@@ -226,7 +226,7 @@ describe('TraceList: the event rows', () => {
     const events = await screen.findByRole('list', { name: 'Events by Investigator' });
     const row = within(events).getByRole('listitem');
     expect(row.textContent).toContain('failed');
-    expect(row.textContent).toContain('Ran go…');
+    expect(row.textContent).toContain('Ran go test ./internal/engine/');
     const toggle = within(row).getByRole('button', { name: 'Show the output' });
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(toggle);

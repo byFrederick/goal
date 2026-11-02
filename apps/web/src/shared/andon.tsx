@@ -5,7 +5,7 @@
 // andon:manage (approvers and editors); without it the button stays in view, disabled, with who
 // may pull it beside it (canvas Board-Viewer).
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Hand, Play } from 'lucide-react';
+import { Flag, Play } from 'lucide-react';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
 import { toast } from 'sonner';
 import { clearAndon, pullAndon } from '../api/client';
@@ -111,9 +111,9 @@ export function AndonButton({
       {andon ? (
         <Play size={16} strokeWidth={1.75} aria-hidden="true" />
       ) : (
-        <Hand size={16} strokeWidth={1.75} aria-hidden="true" />
+        <Flag size={16} strokeWidth={1.75} aria-hidden="true" />
       )}
-      {andon ? 'Clear the andon' : 'Pull the andon cord'}
+      {andon ? 'Clear the andon' : 'Pull andon'}
     </>
   );
 
@@ -124,7 +124,12 @@ export function AndonButton({
         <span id={reasonId} className="max-w-[150px] text-[13px] leading-tight text-muted md:text-right">
           {reasons.andon(andon !== null)}
         </span>
-        <Button variant={andon ? 'secondary' : 'rework'} aria-disabled="true" aria-describedby={reasonId}>
+        <Button
+          variant="secondary"
+          className={andon ? undefined : 'text-rework-ink'}
+          aria-disabled="true"
+          aria-describedby={reasonId}
+        >
           {label}
         </Button>
       </span>
@@ -133,7 +138,11 @@ export function AndonButton({
 
   return (
     <>
-      <Button variant={andon ? 'secondary' : 'rework'} className={className} onClick={() => setDialog(true)}>
+      <Button
+        variant="secondary"
+        className={cn(!andon && 'text-rework-ink', className)}
+        onClick={() => setDialog(true)}
+      >
         {label}
       </Button>
       {andon ? (

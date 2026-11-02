@@ -24,10 +24,13 @@ export function Stepper({
   label,
   steps,
   waiting = false,
+  compact = false,
 }: {
   label: string;
   steps: readonly Step[];
   waiting?: boolean;
+  /** Phones: each name stays on one line and only the current step shows its detail. */
+  compact?: boolean;
 }) {
   return (
     <ol aria-label={label} className="m-0 flex list-none p-0">
@@ -59,13 +62,15 @@ export function Stepper({
                 )}
               />
             </div>
-            <div className="flex min-w-0 flex-col gap-1 pr-2">
-              <span className="text-secondary font-medium break-words text-ink">
+            <div className={cn('flex min-w-0 flex-col gap-1 pr-2', compact && 'pr-1')}>
+              <span className={cn('text-secondary font-medium text-ink', compact && 'truncate text-meta')}>
                 {step.name}
                 <span className="sr-only">, {state}</span>
               </span>
-              {step.detail ? (
-                <span className={cn('text-meta break-words text-muted', waits && 'text-you-ink')}>{step.detail}</span>
+              {step.detail && (!compact || current) ? (
+                <span className={cn('text-meta text-muted', compact && 'truncate', waits && 'text-you-ink')}>
+                  {step.detail}
+                </span>
               ) : null}
             </div>
           </li>

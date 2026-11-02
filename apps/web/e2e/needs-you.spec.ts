@@ -7,7 +7,7 @@ test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
 });
 
-test('the page lists what waits on you, with the count in the header', async ({ page }) => {
+test('the page lists what waits on you, with the count in the top bar', async ({ page }) => {
   await page.goto('/o/acme/needs-you');
   await expect(page.getByRole('heading', { name: 'Needs you' })).toBeVisible();
   await expect(page.getByRole('list', { name: /Waiting on you/ })).toBeVisible();
@@ -16,15 +16,15 @@ test('the page lists what waits on you, with the count in the header', async ({ 
 
 test('the Decisions tab writes its type to the URL and hides the alerts', async ({ page }) => {
   await page.goto('/o/acme/needs-you');
-  await page.getByRole('button', { name: /^Decisions/ }).click();
+  await page.getByRole('radio', { name: /^Decisions/ }).check({ force: true });
   await expect(page).toHaveURL(/type=decision/);
-  await expect(page.getByRole('button', { name: /^Decisions/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('radio', { name: /^Decisions/ })).toBeChecked();
 });
 
 test('Approvals lists the waiting tool call, and Approve with Always allow removes it', async ({ page }) => {
   // The mock seeds the architect's add_issue_comment call on software#151 (mock/fixtures.ts).
   await page.goto('/o/acme/needs-you');
-  await page.getByRole('button', { name: /^Approvals/ }).click();
+  await page.getByRole('radio', { name: /^Approvals/ }).check({ force: true });
   await expect(page).toHaveURL(/type=approval/);
 
   const list = page.getByRole('list', { name: /Waiting on you/ });
@@ -39,7 +39,7 @@ test('Approvals lists the waiting tool call, and Approve with Always allow remov
 test('the Questions filter shows the agent question and answering it removes the row', async ({ page }) => {
   // Item 14 of the goal factory holds the pictured question (see question.spec.ts); the caller decides there.
   await page.goto('/o/acme/needs-you');
-  await page.getByRole('button', { name: /^Questions/ }).click();
+  await page.getByRole('radio', { name: /^Questions/ }).check({ force: true });
   await expect(page).toHaveURL(/type=question/);
 
   const list = page.getByRole('list', { name: /Waiting on you/ });
@@ -126,3 +126,30 @@ test('the sidebar Needs you link shows the page', async ({ page }) => {
     .click();
   await expect(page).toHaveURL(/\/o\/acme\/needs-you$/);
 });
+
+test('nothing scrolls sideways at 768 px, where the list narrows beside the detail', async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto('/o/acme/needs-you');
+  await expect(page.getByRole('list', { name: /Waiting on you/ })).toBeVisible();
+  const width = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(width).toBeLessThanOrEqual(768);
+  await expectNoHorizontalScroll(page);
+});
+
+// The pictures for the pull request: this screen at 1440 and 390 px, in both themes. They are attached
+// to the report, not compared; the design exports are the reference.
+for (const theme of ['light', 'dark'] as const) {
+  for (const width of [1440, 390]) {
+    test(`needs you screenshot, ${width} px, ${theme}`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: width === 1440 ? 900 : 844 });
+      await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+      await page.goto('/o/acme/needs-you');
+      await expect(page.getByRole('list', { name: /Waiting on you/ })).toBeVisible();
+      await expectNoHorizontalScroll(page);
+      await testInfo.attach(`needs-you-${width}-${theme}`, {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: 'image/png',
+      });
+    });
+  }
+}

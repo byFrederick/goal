@@ -14,7 +14,7 @@ const as = (role: Role) =>
 
 /** The andon cord on the board, as the current width shows it. */
 const andon = (page: Page) =>
-  page.getByRole('button', { name: /^(Pull the andon cord|Clear the andon)$/ }).filter({ visible: true });
+  page.getByRole('button', { name: /^(Pull andon|Clear the andon)$/ }).filter({ visible: true });
 
 const newFactory = (page: Page) => orgNav(page).filter({ visible: true }).getByRole('link', { name: 'New factory' });
 

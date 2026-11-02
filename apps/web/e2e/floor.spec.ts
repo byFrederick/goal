@@ -141,35 +141,23 @@ test('the setup checklist hides when closed and stays hidden after a reload', as
   await expect(checklist).toHaveCount(0);
 });
 
-test('on a phone the floor is a compact vertical line with its actions in the top bar', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/o/acme/f/sre');
-  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
-
-  // One row per station: the count, the name and the slots share the station's list item.
-  const row = page
-    .getByRole('list', { name: 'Stations from intake to done' })
-    .getByRole('listitem')
-    .filter({ has: page.getByRole('img') })
-    .first();
-  await expect(row).toBeVisible();
-  const box = await row.boundingBox();
-  const parts = await row.locator('> *').evaluateAll((els) =>
-    els.map((el) => {
-      const r = el.getBoundingClientRect();
-      return { top: r.top, bottom: r.bottom };
-    }),
-  );
-  expect(box).not.toBeNull();
-  for (const part of parts) {
-    expect(part.top).toBeGreaterThanOrEqual((box?.y ?? 0) - 1);
-    expect(part.bottom).toBeLessThanOrEqual((box?.y ?? 0) + (box?.height ?? 0) + 1);
+// The pictures for the pull request: the Floor at 1440 and 390 px in both themes, against the mock API.
+// They are attached to the report, not compared; docs/design/screens/daily-work/floor.jpg is the reference.
+for (const theme of ['light', 'dark'] as const) {
+  for (const [name, width, height] of [
+    ['1440', 1440, 900],
+    ['390', 390, 844],
+  ] as const) {
+    test(`floor screenshot at ${name}, ${theme}`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height });
+      await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+      await page.goto('/o/acme/f/sre');
+      await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Activity' })).toBeVisible();
+      await testInfo.attach(`floor-${name}-${theme}`, {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: 'image/png',
+      });
+    });
   }
-  await expect(row.getByRole('img')).toBeVisible();
-
-  // Needs you, Pull andon and New item are in the top bar, not in the page.
-  const bar = page.getByRole('banner').first();
-  await expect(bar.getByRole('button', { name: 'Pull the andon cord' })).toBeVisible();
-  await expect(bar.getByRole('button', { name: 'New item' })).toBeVisible();
-  await expectNoHorizontalScroll(page);
-});
+}

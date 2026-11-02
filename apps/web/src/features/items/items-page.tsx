@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { ChevronDown } from 'lucide-react';
-import { useId, useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { itemsQuery, viewsQuery } from '../../api/queries';
 import type { ItemState } from '../../api/types';
 import { TopBarSlot } from '../../app/top-bar';
@@ -16,9 +16,7 @@ import { Menu, MenuChoice, MenuContent, MenuRadioGroup, MenuTrigger } from '../.
 import { NotAvailable } from '../../ui/not-available';
 import { descriptionClass } from '../../ui/page-header';
 import { Skeleton } from '../../ui/skeleton';
-import { Switch } from '../../ui/switch';
-import { touchTarget } from '../../ui/touch-target';
-import { AssemblyTableRow, ItemTableRow, listRows } from './assembly-rows';
+import { AssemblyTableRow, hideBelowLg, hideBelowXl, ItemTableRow, listRows } from './assembly-rows';
 import { BulkActions } from './bulk-actions';
 import {
   applyFilters,
@@ -33,7 +31,7 @@ import {
   stateChoices,
 } from './items-filters';
 import { SaveViewDialog } from './save-view-dialog';
-import { SavedViewLinks, tabLink } from './saved-views';
+import { SavedViewLinks, tabLink, tabUnderline, useTabUnderline } from './saved-views';
 
 /** The value a filter menu shows for "any": no filter in the URL. */
 const any = '*';
@@ -89,20 +87,14 @@ function ItemsActions() {
         <Link
           to="/o/$org/f/$factory/board"
           params={params}
-          className={cn(
-            touchTarget,
-            'inline-flex min-h-9 items-center rounded-chip px-3 text-secondary font-medium text-ink-soft no-underline hover:text-ink md:min-h-7',
-          )}
+          className="inline-flex min-h-9 items-center rounded-chip px-3 text-secondary font-medium text-ink-soft no-underline hover:text-ink md:min-h-7"
         >
           Board
         </Link>
         <button
           type="button"
           aria-pressed="true"
-          className={cn(
-            touchTarget,
-            'inline-flex min-h-9 items-center rounded-chip border border-line bg-card px-3 text-secondary font-semibold text-ink md:min-h-7',
-          )}
+          className="inline-flex min-h-9 items-center rounded-chip border border-line bg-card px-3 text-secondary font-semibold text-ink md:min-h-7"
         >
           List
         </button>
@@ -120,7 +112,6 @@ export function ItemsPage() {
   const { state, show, view, type, lane, assembly, sel } = useSearch({ from: '/o/$org/f/$factory/items/' });
   const org = useOrg();
   const navigate = useNavigate({ from: '/o/$org/f/$factory/items/' });
-  const groupedId = useId();
   // The Done this week view lists the done items; its seven-day window is applied in the browser.
   const listState = view === 'done-week' ? 'done' : state;
   const everything = useQuery(itemsQuery(org.id, factory.id, { limit: 200 }));
@@ -128,6 +119,9 @@ export function ItemsPage() {
   const actions = useMemo(() => <ItemsActions />, []);
   const savedViews = useQuery(viewsQuery(org.id, factory.id));
   const [saving, setSaving] = useState(false);
+  const tabsNav = useRef<HTMLElement>(null);
+  const tabsUnderline = useRef<HTMLSpanElement>(null);
+  useTabUnderline(tabsNav, tabsUnderline);
 
   const canOperate = holds(factory, 'item:operate');
   const decides = holds(factory, 'item:decide');
@@ -254,8 +248,10 @@ export function ItemsPage() {
       <nav
         aria-label="Saved views"
         aria-busy={savedViews.isPending || undefined}
-        className="-mx-4 flex gap-1 overflow-x-auto border-b border-line px-4 md:mx-0 md:px-0"
+        ref={tabsNav}
+        className="relative -mx-4 flex gap-1 overflow-x-auto border-b border-line px-4 md:mx-0 md:px-0"
       >
+        <span ref={tabsUnderline} aria-hidden="true" className={tabUnderline} />
         {/* A tab is active by its whole search, and inactive tabs take their aria-current from the view. */}
         {views.map((v) => (
           <Link
@@ -265,11 +261,7 @@ export function ItemsPage() {
             search={v.search}
             activeOptions={{ exact: true, includeSearch: true }}
             inactiveProps={{ 'aria-current': v.current ? 'page' : 'false' }}
-            className={cn(
-              tabLink,
-              '-mb-px',
-              v.current ? 'border-run font-semibold text-ink' : 'border-transparent text-ink-soft hover:text-ink',
-            )}
+            className={cn(tabLink, v.current ? 'font-semibold text-ink' : 'text-ink-soft hover:text-ink')}
           >
             {v.label}
             <span className="text-meta text-muted tabular-nums">{v.count}</span>
@@ -285,11 +277,7 @@ export function ItemsPage() {
           onRetry={() => void savedViews.refetch()}
         />
         {savedViews.isPending ? <span className="sr-only">Loading</span> : null}
-        <button
-          type="button"
-          className={cn(tabLink, 'border-transparent text-run-ink')}
-          onClick={() => setSaving(true)}
-        >
+        <button type="button" className={cn(tabLink, 'text-run-ink')} onClick={() => setSaving(true)}>
           + Save view
         </button>
       </nav>
@@ -329,14 +317,14 @@ export function ItemsPage() {
             <ChevronDown size={12} strokeWidth={1.75} aria-hidden="true" />
           </button>
         </NotAvailable>
-        <div className="ml-auto flex items-center gap-2 text-secondary text-muted">
-          <span id={groupedId}>Grouped by assembly</span>
-          <Switch
-            checked={!flat}
-            aria-labelledby={groupedId}
-            onCheckedChange={(on) => setSearch({ show: on ? undefined : 'flat' })}
-          />
-        </div>
+        <button
+          type="button"
+          aria-pressed={!flat}
+          onClick={() => setSearch({ show: flat ? undefined : 'flat' })}
+          className="ml-auto rounded-chip text-secondary text-muted transition-colors duration-(--duration-quick) hover:text-ink motion-reduce:transition-none"
+        >
+          Grouped by assembly
+        </button>
       </fieldset>
 
       {saving ? (
@@ -378,6 +366,8 @@ export function ItemsPage() {
                       className={cn(
                         'px-3 py-2 text-left font-medium whitespace-nowrap',
                         column === 'Cost' && 'text-right',
+                        (column === 'Agent' || column === 'Age') && hideBelowXl,
+                        (column === 'Lane' || column === 'Cost') && hideBelowLg,
                       )}
                     >
                       {column}
@@ -432,6 +422,7 @@ function ItemsPlaceholder() {
   return (
     <div className="flex flex-col gap-5">
       <span className="block h-10 w-40 rounded-control bg-hover" />
+      <span className="block h-11 w-full max-w-lg rounded-control bg-hover md:h-9" />
       <span className="block h-8 w-full max-w-md rounded-control bg-hover" />
       <div className="flex flex-col gap-2">
         {Array.from({ length: 8 }, (_, i) => (
